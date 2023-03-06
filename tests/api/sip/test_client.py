@@ -45,7 +45,7 @@ class TestSIPClientTLS:
         """Connecting to a server that returns a trusted certificate works."""
 
         def create_context(protocol):
-            self.context = ssl.SSLContext()
+            self.context = ssl.SSLContext(protocol)
             self.context.load_verify_locations(tls_server.ca_cert_file)
             return self.context
 
@@ -57,15 +57,10 @@ class TestSIPClientTLS:
     def test_connect_trusted_ignored(self, tls_server: TLSServerFixture):
         """Connecting to a server that returns a trusted certificate works if we ignore certificates."""
 
-        def create_context(protocol):
-            self.context = ssl.SSLContext()
-            return self.context
-
         c = SIPClient(
             "localhost",
             tls_server.port,
             use_ssl=True,
-            ssl_contexts=create_context,
             ssl_no_verification=True,
         )
         c.connect()
@@ -73,13 +68,7 @@ class TestSIPClientTLS:
     def test_connect_untrusted(self, tls_server: TLSServerFixture):
         """Connecting to a server that returns an untrusted certificate fails."""
 
-        def create_context(protocol):
-            self.context = ssl.SSLContext()
-            return self.context
-
-        c = SIPClient(
-            "localhost", tls_server.port, use_ssl=True, ssl_contexts=create_context
-        )
+        c = SIPClient("localhost", tls_server.port, use_ssl=True)
         with pytest.raises(Exception) as e:
             c.connect()
         assert "CERTIFICATE_VERIFY_FAILED" in str(e)
@@ -87,15 +76,10 @@ class TestSIPClientTLS:
     def test_connect_untrusted_ignored(self, tls_server: TLSServerFixture):
         """Connecting to a server that returns an untrusted certificate works if we ignore certificates."""
 
-        def create_context(protocol):
-            self.context = ssl.SSLContext()
-            return self.context
-
         c = SIPClient(
             "localhost",
             tls_server.port,
             use_ssl=True,
-            ssl_contexts=create_context,
             ssl_no_verification=True,
         )
         c.connect()
@@ -104,7 +88,7 @@ class TestSIPClientTLS:
         """Connecting to a server that returns an invalid certificate fails."""
 
         def create_context(protocol):
-            self.context = ssl.SSLContext()
+            self.context = ssl.SSLContext(protocol)
             self.context.load_verify_locations(tls_server_wrong_cert.ca_cert_file)
             return self.context
 
@@ -122,7 +106,7 @@ class TestSIPClientTLS:
         """Connecting to a server that returns an invalid certificate works if we ignore certificates."""
 
         def create_context(protocol):
-            self.context = ssl.SSLContext()
+            self.context = ssl.SSLContext(protocol)
             self.context.load_verify_locations(tls_server_wrong_cert.ca_cert_file)
             return self.context
 

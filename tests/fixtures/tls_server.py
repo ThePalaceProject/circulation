@@ -1,13 +1,13 @@
+import logging
 import os
 import ssl
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from socket import socket, AF_INET, SOCK_STREAM
-from typing import Generator, Any, Deque
-from collections import deque
+from socket import AF_INET, SOCK_STREAM, socket
+from typing import Any, Deque, Generator
 
 import pytest
-import logging
 
 
 class TLSServerFixture:
@@ -16,7 +16,15 @@ class TLSServerFixture:
     _responses: Deque[bytes]
     _address: Any
 
-    def __init__(self, context, server_key: str, server_cert: str, client_key: str, client_cert: str, ca_cert: str):
+    def __init__(
+        self,
+        context,
+        server_key: str,
+        server_cert: str,
+        client_key: str,
+        client_cert: str,
+        ca_cert: str,
+    ):
         self._sock = socket(family=AF_INET, type=SOCK_STREAM)
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._open = True
@@ -32,7 +40,7 @@ class TLSServerFixture:
 
     def start(self):
         logging.debug("server: bind")
-        self._sock.bind(('', 0))
+        self._sock.bind(("", 0))
         self._address = self._sock.getsockname()
         logging.debug(f"server: bound {str(self.address)}")
         self._sock.listen(10)
@@ -100,6 +108,8 @@ class TLSServerFixture:
 
 @pytest.fixture(scope="function")
 def tls_server() -> Generator[TLSServerFixture, Any, Any]:
+    """A TLS server that serves a valid certificate (assuming you trust the CA)"""
+
     base_path = Path(__file__).parent
     ca_path = os.path.join(base_path, "fake_ca")
     ca_file_cert = os.path.join(ca_path, "fake_ca.pem")
@@ -118,7 +128,7 @@ def tls_server() -> Generator[TLSServerFixture, Any, Any]:
         server_cert=server_file_cert,
         client_key=client_file_key,
         client_cert=client_file_cert,
-        ca_cert=ca_file_cert
+        ca_cert=ca_file_cert,
     )
     server.start()
     yield server
@@ -127,6 +137,8 @@ def tls_server() -> Generator[TLSServerFixture, Any, Any]:
 
 @pytest.fixture(scope="function")
 def tls_server_wrong_cert() -> Generator[TLSServerFixture, Any, Any]:
+    """A TLS server that serves a certificate with the wrong hostname (not "localhost")"""
+
     base_path = Path(__file__).parent
     ca_path = os.path.join(base_path, "fake_ca")
     ca_file_cert = os.path.join(ca_path, "fake_ca.pem")
@@ -145,7 +157,7 @@ def tls_server_wrong_cert() -> Generator[TLSServerFixture, Any, Any]:
         server_cert=server_file_cert,
         client_key=client_file_key,
         client_cert=client_file_cert,
-        ca_cert=ca_file_cert
+        ca_cert=ca_file_cert,
     )
     server.start()
     yield server

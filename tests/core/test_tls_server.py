@@ -16,7 +16,9 @@ class TestTLSServerFixture:
         context.load_verify_locations(cafile=tls_server.ca_cert_file)
 
         with socket.socket() as sock:
-            ssock = context.wrap_socket(sock, server_side=False, server_hostname="localhost")
+            ssock = context.wrap_socket(
+                sock, server_side=False, server_hostname="localhost"
+            )
             ssock.connect(tls_server.address)
             ssock.send(bytes("x", "UTF-8"))
             data = ssock.recv(1024)
@@ -27,7 +29,9 @@ class TestTLSServerFixture:
 
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         with socket.socket() as sock:
-            ssock = context.wrap_socket(sock, server_side=False, server_hostname="localhost")
+            ssock = context.wrap_socket(
+                sock, server_side=False, server_hostname="localhost"
+            )
 
             with pytest.raises(ssl.SSLCertVerificationError):
                 ssock.connect(tls_server.address)
@@ -42,7 +46,9 @@ class TestTLSServerFixture:
         context.verify_mode = ssl.CERT_NONE
 
         with socket.socket() as sock:
-            ssock = context.wrap_socket(sock, server_side=False, server_hostname="localhost")
+            ssock = context.wrap_socket(
+                sock, server_side=False, server_hostname="localhost"
+            )
             ssock.connect(tls_server.address)
             ssock.send(bytes("x", "UTF-8"))
             data = ssock.recv(1024)
@@ -58,7 +64,9 @@ class TestTLSServerFixture:
 
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         with socket.socket() as sock:
-            ssock = context.wrap_socket(sock, server_side=False, server_hostname="localhost")
+            ssock = context.wrap_socket(
+                sock, server_side=False, server_hostname="localhost"
+            )
 
             with pytest.raises(ssl.SSLCertVerificationError):
                 ssock.connect(tls_server_wrong_cert.address)
@@ -73,7 +81,9 @@ class TestTLSServerFixture:
         context.verify_mode = ssl.CERT_NONE
 
         with socket.socket() as sock:
-            ssock = context.wrap_socket(sock, server_side=False, server_hostname="localhost")
+            ssock = context.wrap_socket(
+                sock, server_side=False, server_hostname="localhost"
+            )
             ssock.connect(tls_server_wrong_cert.address)
             ssock.send(bytes("x", "UTF-8"))
             data = ssock.recv(1024)

@@ -69,4 +69,3 @@ openssl x509 \
 -out fake_client.pem \
 -days 36500 \
 -sha256
-
