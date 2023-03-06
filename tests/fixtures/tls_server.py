@@ -1,5 +1,6 @@
 import logging
 import os
+import select
 import ssl
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -44,17 +45,18 @@ class TLSServerFixture:
         self._address = self._sock.getsockname()
         logging.debug(f"server: bound {str(self.address)}")
         self._sock.listen(10)
+        self._sock.settimeout(2)
         self._tls_socket = self._context.wrap_socket(self._sock, server_side=True)
         self._executor.submit(self._server_main)
 
     def _server_main(self):
         while self._open:
             try:
-                logging.debug("server: waiting for client connection")
-                self._tls_socket.settimeout(2)
-                (client, _) = self._tls_socket.accept()
-                logging.debug("server: client connected")
-                self._executor.submit(lambda: self._client_main(client))
+                readable, _, _ = select.select([self._tls_socket], [], [], 1.0)
+                if self._tls_socket in readable:
+                    (client, _) = self._tls_socket.accept()
+                    logging.debug("server: client connected")
+                    self._executor.submit(lambda: self._client_main(client))
             except Exception as e:
                 logging.debug("server: exception: " + str(e))
 
