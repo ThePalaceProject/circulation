@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
-from werkzeug.urls import url_fix, url_parse, url_quote, url_unparse
+from werkzeug.urls import url_fix, url_parse, url_quote, url_quote_plus, url_unparse
 from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
@@ -367,26 +367,13 @@ class ViewController(AdminController):
         if not setting_up:
             admin = self.authenticated_admin_from_request()
             if isinstance(admin, ProblemDetail):
-                url = urlparse(flask.request.url)
-                redirect_url = url_unparse(
-                    (
-                        url.scheme,
-                        url.netloc,
-                        quote(url.path),
-                        quote(url.query),
-                        quote(url.fragment),
-                    )
-                )
+                redirect_url = flask.request.url
                 if collection:
-                    quoted_collection = urllib.parse.quote(collection)
                     redirect_url = redirect_url.replace(
-                        quoted_collection, quoted_collection.replace("/", "%2F")
+                        collection, url_quote_plus(collection)
                     )
                 if book:
-                    quoted_book = urllib.parse.quote(book)
-                    redirect_url = redirect_url.replace(
-                        quoted_book, quoted_book.replace("/", "%2F")
-                    )
+                    redirect_url = redirect_url.replace(book, url_quote_plus(book))
                 return redirect(
                     url_for("admin_sign_in", redirect=redirect_url, _external=True)
                 )
