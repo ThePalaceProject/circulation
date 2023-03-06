@@ -194,7 +194,9 @@ class TestSIPClient:
         wrap_called = self.context_without.wrap_socket.call_args
         assert wrap_called.kwargs["server_hostname"] == target_server
 
-    def test_secure_connect_with_cert(self, mock_socket: MockSocketFixture, monkeypatch: MonkeyPatch):
+    def test_secure_connect_with_cert(
+        self, mock_socket: MockSocketFixture, monkeypatch: MonkeyPatch
+    ):
         self.context_with: MagicMock = MagicMock()
 
         def create_context(protocol):
