@@ -70,7 +70,7 @@ class TLSServerFixture:
         logging.debug("server: closing")
         self._open = False
         self._sock.close()
-        self._executor.shutdown(cancel_futures=True)
+        self._executor.shutdown()
         logging.debug("server: closed")
 
     @property
