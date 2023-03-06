@@ -38,6 +38,18 @@ class MockSocket:
         return block
 
 
+class MockSocketFixture:
+    def __init__(self, monkeypatch: MonkeyPatch):
+        self.monkeypatch = monkeypatch
+
+
+@pytest.fixture(scope="function")
+def mock_socket(monkeypatch: MonkeyPatch) -> MockSocketFixture:
+    # Patch the socket method so that we don't create a real network socket.
+    monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
+    return MockSocketFixture(monkeypatch)
+
+
 class TestSIPClientTLS:
     """Test the real SIPClient class against a local TLS server."""
 
@@ -142,7 +154,7 @@ class TestSIPClient:
             # Un-mock the socket.socket function
             socket.socket = old_socket
 
-    def test_secure_connect_insecure(self, monkeypatch: MonkeyPatch):
+    def test_secure_connect_insecure(self, mock_socket: MockSocketFixture):
         self.context: Optional[MagicMock] = None
 
         def create_context(protocol):
@@ -154,14 +166,11 @@ class TestSIPClient:
             target_server, 999, use_ssl=False, ssl_contexts=create_context
         )
 
-        # Patch the socket method so that we don't create a real network socket.
-        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
-
         # When an insecure connection is created, no context is created.
         insecure.connect()
         assert self.context is None
 
-    def test_secure_connect_without_cert(self, monkeypatch: MonkeyPatch):
+    def test_secure_connect_without_cert(self, mock_socket: MockSocketFixture):
         self.context_without: MagicMock = MagicMock()
 
         def create_context(protocol):
@@ -174,9 +183,6 @@ class TestSIPClient:
             target_server, 999, use_ssl=True, ssl_contexts=create_context
         )
 
-        # Patch the socket method so that we don't create a real network socket.
-        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
-
         # When a secure connection is created with no SSL
         # certificate, a context is created and the right methods are called.
         no_cert.connect()
@@ -188,7 +194,7 @@ class TestSIPClient:
         wrap_called = self.context_without.wrap_socket.call_args
         assert wrap_called.kwargs["server_hostname"] == target_server
 
-    def test_secure_connect_with_cert(self, monkeypatch: MonkeyPatch):
+    def test_secure_connect_with_cert(self, mock_socket: MockSocketFixture, monkeypatch: MonkeyPatch):
         self.context_with: MagicMock = MagicMock()
 
         def create_context(protocol):
@@ -204,9 +210,6 @@ class TestSIPClient:
             ssl_key="key",
             ssl_contexts=create_context,
         )
-
-        # Patch the socket method so that we don't create a real network socket.
-        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
 
         # Record the temporary files created.
         self.old_mkstemp = tempfile.mkstemp
@@ -237,7 +240,7 @@ class TestSIPClient:
         assert called.kwargs["certfile"] == self.temporary_files[0]
         assert called.kwargs["keyfile"] == self.temporary_files[1]
 
-    def test_secure_connect_without_verification(self, monkeypatch: MonkeyPatch):
+    def test_secure_connect_without_verification(self, mock_socket: MockSocketFixture):
         self.context_without_verification: MagicMock = MagicMock()
 
         def create_context(protocol):
@@ -254,9 +257,6 @@ class TestSIPClient:
             ssl_no_verification=True,
         )
 
-        # Patch the socket method so that we don't create a real network socket.
-        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
-
         # When a secure connection is created with no SSL
         # certificate, a context is created and the right methods are called.
         no_cert.connect()
@@ -271,7 +271,7 @@ class TestSIPClient:
         wrap_called = self.context_without_verification.wrap_socket.call_args
         assert wrap_called.kwargs["server_hostname"] == target_server
 
-    def test_secure_connect_with_verification(self, monkeypatch: MonkeyPatch):
+    def test_secure_connect_with_verification(self, mock_socket: MockSocketFixture):
         self.context_with_verification: MagicMock = MagicMock()
 
         def create_context(protocol):
@@ -287,9 +287,6 @@ class TestSIPClient:
             ssl_contexts=create_context,
             ssl_no_verification=False,
         )
-
-        # Patch the socket method so that we don't create a real network socket.
-        monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
 
         # When a secure connection is created with no SSL
         # certificate, a context is created and the right methods are called.
