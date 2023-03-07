@@ -328,13 +328,14 @@ class TestSIP2AuthenticationProvider:
         auth = SIP2AuthenticationProvider(
             db.default_library(), integration, client=client
         )
-        patron = auth._remote_patron_lookup(patron)
-        assert patron.__class__ == PatronData
-        assert "25891000331441" == patron.authorization_identifier
-        assert "foo@bar.com" == patron.email_address
-        assert 9.25 == patron.fines
-        assert "Falk, Jen" == patron.personal_name
-        assert datetime(2018, 6, 9, 23, 59, 59) == patron.authorization_expires
+        patron_data = auth._remote_patron_lookup(patron)
+        assert patron_data is not None
+        assert patron_data.__class__ == PatronData
+        assert "25891000331441" == patron_data.authorization_identifier
+        assert "foo@bar.com" == patron_data.email_address
+        assert 9.25 == patron_data.fines
+        assert "Falk, Jen" == patron_data.personal_name
+        assert datetime(2018, 6, 9, 23, 59, 59) == patron_data.authorization_expires
         assert client.patron_information == "1234"
         assert client.password == None
 
@@ -351,13 +352,14 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_valid_login
         )
         patron = provider.info_to_patrondata(info)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "foo@example.com" == patron.email_address
         assert "LE CARRÉ, JOHN" == patron.personal_name
         assert 0 == patron.fines
-        assert None == patron.authorization_expires
-        assert None == patron.external_type
+        assert patron.authorization_expires is None
+        assert patron.external_type is None
         assert PatronData.NO_VALUE == patron.block_reason
 
         # Test with invalid login, should return None
@@ -365,7 +367,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_invalid_login
         )
         patron = provider.info_to_patrondata(info)
-        assert None == patron
+        assert patron is None
 
     def test_info_to_patrondata_no_validate_password(
         self, db: DatabaseTransactionFixture
@@ -382,13 +384,14 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_valid_login
         )
         patron = provider.info_to_patrondata(info, validate_password=False)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "foo@example.com" == patron.email_address
         assert "LE CARRÉ, JOHN" == patron.personal_name
         assert 0 == patron.fines
-        assert None == patron.authorization_expires
-        assert None == patron.external_type
+        assert patron.authorization_expires is None
+        assert patron.external_type is None
         assert PatronData.NO_VALUE == patron.block_reason
 
         # Test with invalid login, should return PatronData
@@ -396,13 +399,14 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_invalid_login
         )
         patron = provider.info_to_patrondata(info, validate_password=False)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "foo@example.com" == patron.email_address
         assert "SHELDON, ALICE" == patron.personal_name
         assert 0 == patron.fines
-        assert None == patron.authorization_expires
-        assert None == patron.external_type
+        assert patron.authorization_expires is None
+        assert patron.external_type is None
         assert "no borrowing privileges" == patron.block_reason
 
     def test_patron_block_setting(self, db: DatabaseTransactionFixture):
@@ -424,6 +428,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.evergreen_expired_card
         )
         patron = p.info_to_patrondata(info)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "863716" == patron.permanent_id
@@ -441,6 +446,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.evergreen_expired_card
         )
         patron = p.info_to_patrondata(info)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "863716" == patron.permanent_id
@@ -469,6 +475,7 @@ class TestSIP2AuthenticationProvider:
         )
         info["fee_limit"] = "10.0"
         patron = p.info_to_patrondata(info)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "863718" == patron.permanent_id
@@ -486,6 +493,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.evergreen_excessive_fines
         )
         patron = p.info_to_patrondata(info)
+        assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
         assert "863718" == patron.permanent_id

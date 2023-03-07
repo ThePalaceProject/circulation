@@ -25,6 +25,7 @@ from core.util.http import HTTP
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import APIFilesFixture
 
 
 class MonkeyPatchedODLFixture:
@@ -65,7 +66,7 @@ class ODLTestFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        files: ODLAPIFilesFixture,
+        files: APIFilesFixture,
         patched: MonkeyPatchedODLFixture,
     ):
         self.db = db
@@ -276,8 +277,8 @@ class ODL2TestFixture(ODLTestFixture):
 
     def api(self, collection) -> ODL2API:
         api = ODL2API(self.db.session, collection)
-        api.requests = []
-        api.responses = []
+        api.requests = []  # type: ignore
+        api.responses = []  # type: ignore
         return api
 
 

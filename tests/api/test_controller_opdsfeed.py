@@ -1,4 +1,3 @@
-import datetime
 import json
 from typing import Any, Dict
 from unittest.mock import MagicMock
@@ -17,7 +16,6 @@ from core.external_search import SortKeyPagination
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import CachedFeed, ConfigurationSetting, Edition
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
-from core.util.datetime_helpers import utc_now
 from core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 
@@ -434,30 +432,6 @@ class TestOPDSFeedController:
         facets = kwargs["facets"]
         assert isinstance(facets, NavigationFacets)
         NavigationFeed.navigation = old_navigation  # type: ignore
-
-    def _set_update_times(self, circulation_fixture: CirculationControllerFixture):
-        """Set the last update times so we can create a crawlable feed."""
-        now = utc_now()
-
-        def _set(work, time):
-            """Set all fields used when calculating a work's update date for
-            purposes of the crawlable feed.
-            """
-            work.last_update_time = time
-            for lp in work.license_pools:
-                lp.availability_time = time
-
-        the_far_future = now + datetime.timedelta(hours=2)
-        the_future = now + datetime.timedelta(hours=1)
-        the_past = now - datetime.timedelta(hours=1)
-
-        assert circulation_fixture.english_2 is WorkSpec
-        assert circulation_fixture.french_1 is WorkSpec
-
-        _set(circulation_fixture.english_2, now + datetime.timedelta(hours=2))
-        _set(circulation_fixture.french_1, now + datetime.timedelta(hours=1))
-        _set(circulation_fixture.english_1, now - datetime.timedelta(hours=1))
-        circulation_fixture.db.session.commit()
 
     def mock_search(self, *args, **kwargs):
         self.called_with = (args, kwargs)

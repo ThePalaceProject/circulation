@@ -5,6 +5,7 @@ import re
 from contextlib import contextmanager
 from datetime import timedelta
 from io import StringIO
+from typing import Optional
 from unittest import mock
 
 import feedparser
@@ -1709,10 +1710,10 @@ class TestCustomListsController(AdminControllerTest):
 
     @define
     class ShareLocallySetup:
-        shared_with: Library = None
-        primary_library: Library = None
-        collection1: Collection = None
-        list: CustomList = None
+        shared_with: Optional[Library] = None
+        primary_library: Optional[Library] = None
+        collection1: Optional[Collection] = None
+        list: Optional[CustomList] = None
 
     def _setup_share_locally(self):
         shared_with = self._library("shared_with")
