@@ -234,7 +234,7 @@ Werkzeug = "^2.2.3"
 dunamai = "^1.16.0"
 pre-commit = "~2.21"
 tox = "^3.26.0"
-tox-docker = "^3.1.0"
+tox-docker = "^4.0.0"
 tox-gh-actions = "^2.10.0"
 
 [tool.poetry.group.dev.dependencies]
