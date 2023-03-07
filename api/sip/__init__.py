@@ -238,7 +238,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
-    def _remote_patron_lookup(self, patron_or_patrondata) -> Union[None, PatronData]:
+    def _remote_patron_lookup(self, patron_or_patrondata) -> Optional[PatronData]:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
