@@ -105,7 +105,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
             return fulfillment
 
         token = self.get_authentication_token(patron, token_auth.value)
-        if type(token) == ProblemDetail:
+        if isinstance(token, ProblemDetail):
             raise CannotFulfill()
 
         fulfillment.content_link = templated.expand(authentication_token=token)
@@ -117,8 +117,14 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         cls, patron: Patron, token_auth_url: str
     ) -> ProblemDetail | str:
         """Get the authentication token for a patron"""
-        url = URITemplate(token_auth_url).expand(patron_id=patron.username)
         log = logging.getLogger("OPDS2API")
+        if patron.username is None:
+            log.error(
+                f"Could not authenticate the patron({patron.authorization_identifier}), username is None."
+            )
+            return INVALID_CREDENTIALS
+
+        url = URITemplate(token_auth_url).expand(patron_id=patron.username)
         response = HTTP.get_with_timeout(url)
         if response.status_code != 200:
             log.error(

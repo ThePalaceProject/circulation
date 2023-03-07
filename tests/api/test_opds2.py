@@ -243,8 +243,10 @@ class TestTokenAuthenticationFulfillmentProcessor:
         resp.status_code = 200
         resp.raw = io.BytesIO(b"plaintext-auth-token")
         mock_http.get_with_timeout.return_value = resp
+        patron = db.patron()
+        patron.username = "test"
         token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
-            db.patron(), "http://example.org/token"
+            patron, "http://example.org/token"
         )
 
         assert token == "plaintext-auth-token"
