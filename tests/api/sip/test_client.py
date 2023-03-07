@@ -73,7 +73,7 @@ class TestSIPClientTLS:
             "localhost",
             tls_server.port,
             use_ssl=True,
-            ssl_no_verification=True,
+            ssl_verification=False,
         )
         c.connect()
 
@@ -92,7 +92,7 @@ class TestSIPClientTLS:
             "localhost",
             tls_server.port,
             use_ssl=True,
-            ssl_no_verification=True,
+            ssl_verification=False,
         )
         c.connect()
 
@@ -127,7 +127,7 @@ class TestSIPClientTLS:
             tls_server_wrong_cert.port,
             use_ssl=True,
             ssl_contexts=create_context,
-            ssl_no_verification=True,
+            ssl_verification=False,
         )
         c.connect()
 
@@ -256,7 +256,7 @@ class TestSIPClient:
             999,
             use_ssl=True,
             ssl_contexts=create_context,
-            ssl_no_verification=True,
+            ssl_verification=False,
         )
 
         # When a secure connection is created with no SSL
@@ -287,7 +287,7 @@ class TestSIPClient:
             999,
             use_ssl=True,
             ssl_contexts=create_context,
-            ssl_no_verification=False,
+            ssl_verification=True,
         )
 
         # When a secure connection is created with no SSL

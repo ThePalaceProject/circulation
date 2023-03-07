@@ -285,7 +285,7 @@ class SIPClient(Constants):
         use_ssl=False,
         ssl_cert=None,
         ssl_key=None,
-        ssl_no_verification=False,
+        ssl_verification=True,
         ssl_contexts: Callable[[ssl._SSLMethod], ssl.SSLContext] = ssl.SSLContext,
         encoding=Constants.DEFAULT_ENCODING,
         dialect=GenericILS,
@@ -315,7 +315,7 @@ class SIPClient(Constants):
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
         self.ssl_contexts = ssl_contexts
-        self.ssl_no_verification = ssl_no_verification
+        self.ssl_verification = ssl_verification
         self.encoding = encoding
 
         # Turn the separator string into a regular expression that splits
@@ -438,12 +438,12 @@ class SIPClient(Constants):
                 certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
             )
 
-        if self.ssl_no_verification:
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-        else:
+        if self.ssl_verification:
             context.check_hostname = True
             context.verify_mode = ssl.CERT_REQUIRED
+        else:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
 
         connection = context.wrap_socket(
             insecure_connection, server_hostname=self.target_server
