@@ -2839,14 +2839,14 @@ full = ["numpy"]
 
 [[package]]
 name = "redmail"
-version = "0.5.0"
+version = "0.6.0"
 description = "Email sending library"
 category = "main"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "redmail-0.5.0-py3-none-any.whl", hash = "sha256:7803260b79ce2c54f8dfffd22fb5a655b5e54ba46e7f5fc38352597ca504fcf6"},
-    {file = "redmail-0.5.0.tar.gz", hash = "sha256:29f362a89ff03a561c2f7fccfc9cf583c0b8d53f2cb126b2a7d42092e72dc070"},
+    {file = "redmail-0.6.0-py3-none-any.whl", hash = "sha256:8e64a680ffc8aaf8054312bf8b216da8fed20669181b77b1f1ccbdf4ee064427"},
+    {file = "redmail-0.6.0.tar.gz", hash = "sha256:0447cbd76deb2788b2d831c12e22b513587e99f725071d9951a01b0f2b8d0a72"},
 ]
 
 [package.dependencies]
@@ -2854,7 +2854,8 @@ jinja2 = "*"
 
 [package.extras]
 docs = ["pydata-sphinx-theme", "sphinx (>=1.7.5)", "sphinx-book-theme", "sphinx-copybutton", "sphinx-material"]
-test = ["Pillow", "jinja2", "matplotlib", "openpyxl", "pandas", "pytest"]
+style = ["css-inline"]
+test = ["Pillow", "css-inline", "jinja2", "matplotlib", "openpyxl", "pandas", "pytest"]
 
 [[package]]
 name = "regex"
@@ -3784,4 +3785,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "c4edac6a021b290eb6e339de54295fbdbbf1055ce11913554b536233616489ed"
+content-hash = "8c04e6e7c8a7c5ae30d32f49a3e991e672bf37c39e81c7b47076ffc7ece5069a"
