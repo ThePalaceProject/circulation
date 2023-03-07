@@ -24,6 +24,10 @@ profile = "black"
 # However this currently causes a number of errors to surface that will
 # need to be cleaned up before we can enable the option.
 # check_untyped_defs = true
+# When we enable this option, we should remove this disable. Its just here
+# to silence the noise in the mypy output for now, so its easier to see when
+# there are errors in the output.
+disable_error_code = "annotation-unchecked"
 exclude = [
     'core/bin/repair/startup\.py',
     'core/classifier',
