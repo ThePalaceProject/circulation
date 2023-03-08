@@ -7,11 +7,15 @@ from flask_pydantic_spec import FlaskPydanticSpec
 
 from api.config import Configuration
 from core.flask_sqlalchemy_session import flask_scoped_session
+from core.local_analytics_provider import LocalAnalyticsProvider
 from core.log import LogConfiguration
-from core.model import SessionManager
+from core.model import ConfigurationSetting, SessionManager
 from core.util import LanguageCodes
+from core.util.cache import CachedData
 
 from .util.flask import PalaceFlask
+from .admin.controller import setup_admin_controllers
+from .controller import CirculationManager
 from .util.profilers import (
     PalaceCProfileProfiler,
     PalacePyInstrumentProfiler,
@@ -42,7 +46,12 @@ PalaceCProfileProfiler.configure(app)
 PalaceXrayProfiler.configure(app)
 
 
-@app.before_first_request
+def initialize():
+    initialize_database()
+    initialize_circulation_manager()
+    setup_admin()
+
+
 def initialize_database(autoinitialize=True):
     testing = "TESTING" in os.environ
 
@@ -59,6 +68,37 @@ def initialize_database(autoinitialize=True):
     app.debug = debug
     _db.commit()
     logging.getLogger().info("Application debug mode==%r" % app.debug)
+
+
+def setup_admin(_db=None):
+    if getattr(app, "manager", None) is not None:
+        setup_admin_controllers(app.manager)
+    _db = _db or app._db
+    # The secret key is used for signing cookies for admin login
+    app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+    # Create a default Local Analytics service if one does not
+    # already exist.
+    local_analytics = LocalAnalyticsProvider.initialize(_db)
+
+
+def initialize_circulation_manager():
+    if os.environ.get("AUTOINITIALIZE") == "False":
+        # It's the responsibility of the importing code to set app.manager
+        # appropriately.
+        pass
+    else:
+        if getattr(app, "manager", None) is None:
+            try:
+                app.manager = CirculationManager(app._db)
+            except Exception:
+                logging.exception("Error instantiating circulation manager!")
+                raise
+            # Make sure that any changes to the database (as might happen
+            # on initial setup) are committed before continuing.
+            app.manager._db.commit()
+
+            # setup the cache data object
+            CachedData.initialize(app._db)
 
 
 from . import routes  # noqa
@@ -87,6 +127,7 @@ def run(url=None):
 
         socket.setdefaulttimeout(None)
 
+    initialize()
     logging.info("Starting app on %s:%s", host, port)
     sslContext = "adhoc" if scheme == "https" else None
     app.run(debug=debug, host=host, port=port, threaded=True, ssl_context=sslContext)
