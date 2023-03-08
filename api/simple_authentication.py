@@ -13,6 +13,9 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
     manager before connecting it to an ILS.
     """
 
+    def logging_name(self) -> str:
+        return "SimpleAuthenticationProvider"
+
     NAME = "Simple Authentication Provider"
 
     DESCRIPTION = _(

@@ -11,6 +11,8 @@ from .config import CannotLoadConfiguration
 
 
 class KansasAuthenticationAPI(BasicAuthenticationProvider):
+    def logging_name(self) -> str:
+        return "KansasAuthenticationAPI"
 
     NAME = "Kansas"
 

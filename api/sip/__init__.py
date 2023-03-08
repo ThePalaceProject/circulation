@@ -13,6 +13,8 @@ from core.util.http import RemoteIntegrationException
 
 
 class SIP2AuthenticationProvider(BasicAuthenticationProvider):
+    def logging_name(self) -> str:
+        return "SIP2AuthenticationProvider"
 
     NAME = "SIP2"
 

@@ -1,5 +1,6 @@
 import json
 import os
+from abc import ABC
 from typing import Any, Dict, List
 
 from flask_babel import lazy_gettext as lgt
@@ -76,7 +77,9 @@ def external_type_from_clever_grade(grade):
     return CLEVER_GRADE_TO_EXTERNAL_TYPE_MAP.get(grade, None)
 
 
-class CleverAuthenticationAPI(OAuthAuthenticationProvider):
+class CleverAuthenticationAPI(OAuthAuthenticationProvider, ABC):
+    def logging_name(self) -> str:
+        return "CleverAuthenticationAPI"
 
     URI = "http://librarysimplified.org/terms/auth/clever"
 

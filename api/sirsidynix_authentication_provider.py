@@ -38,6 +38,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     have an identifiying App ID attached to them, which is the recommended approach as per the SirsiDynix docs.
     """
 
+    def logging_name(self) -> str:
+        return "SirsiDynixHorizonAuthenticationProvider"
+
     NAME = "SirsiDynix Horizon Authentication"
     DESCRIPTION = "SirsiDynix Horizon Webservice Authentication"
     FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix-horizon"

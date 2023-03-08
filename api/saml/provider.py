@@ -43,6 +43,9 @@ class SAMLWebSSOAuthenticationProvider(
     - HTTP-POST Binding for responses
     """
 
+    def logging_name(self) -> str:
+        return "SAMLWebSSOAuthenticationProvider"
+
     NAME = "SAML 2.0 Web SSO"
 
     DESCRIPTION = _(

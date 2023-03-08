@@ -12,6 +12,8 @@ from .config import CannotLoadConfiguration
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
+    def logging_name(self) -> str:
+        return "FirstBookAuthenticationAPI"
 
     NAME = "First Book (deprecated)"
 
