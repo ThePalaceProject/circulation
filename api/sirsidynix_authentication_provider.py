@@ -40,7 +40,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
     NAME = "SirsiDynix Horizon Authentication"
     DESCRIPTION = "SirsiDynix Horizon Webservice Authentication"
-    FLOW_TYPE = "http://librarysimplified.org/authtype/sirsidynix-horizon"
 
     DEFAULT_APP_ID = "PALACE"
 
