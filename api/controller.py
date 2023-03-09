@@ -2698,10 +2698,7 @@ class SharedCollectionController(CirculationManagerController):
 
 class StaticFileController(CirculationManagerController):
     def static_file(self, directory, filename):
-        max_age = ConfigurationSetting.sitewide(
-            self._db, Configuration.STATIC_FILE_CACHE_TIME
-        ).int_value
-        return flask.send_from_directory(directory, filename, max_age=max_age)
+        return flask.send_from_directory(directory, filename)
 
     def image(self, filename):
         directory = os.path.join(

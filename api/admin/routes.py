@@ -36,6 +36,14 @@ def setup_admin(_db=None):
     # already exist.
     local_analytics = LocalAnalyticsProvider.initialize(_db)
 
+    # Configure the default max age for the static file cache.
+    max_age = ConfigurationSetting.sitewide(
+        _db, Configuration.STATIC_FILE_CACHE_TIME
+    ).int_value
+
+    if max_age:
+        app.config["SEND_FILE_MAX_AGE_DEFAULT"] = max_age
+
 
 def allows_admin_auth_setup(f):
     @wraps(f)
