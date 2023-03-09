@@ -3260,14 +3260,14 @@ telegram = ["requests"]
 
 [[package]]
 name = "types-aws-xray-sdk"
-version = "2.11.0.13"
+version = "2.11.0.14"
 description = "Typing stubs for aws-xray-sdk"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-aws-xray-sdk-2.11.0.13.tar.gz", hash = "sha256:2a426eb11a58e11c9f65be97586478d5363bf95c07c14e946097028172d06b8f"},
-    {file = "types_aws_xray_sdk-2.11.0.13-py3-none-any.whl", hash = "sha256:c3fea4e71d341afe52f1a8594206988a6fd6b8774403ab8000374818810228d1"},
+    {file = "types-aws-xray-sdk-2.11.0.14.tar.gz", hash = "sha256:ae86176acbba3e4b0070a65502601f11d34a875c080f4a204bd47c81b5fd5628"},
+    {file = "types_aws_xray_sdk-2.11.0.14-py3-none-any.whl", hash = "sha256:301348249704a0fbe6221bfb7afe496891abed28e07800b0c0d397c4d847ff7f"},
 ]
 
 [[package]]
