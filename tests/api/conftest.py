@@ -37,5 +37,6 @@ pytest_plugins = [
     "tests.fixtures.sample_covers",
     "tests.fixtures.search",
     "tests.fixtures.time",
+    "tests.fixtures.tls_server",
     "tests.fixtures.vendor_id",
 ]

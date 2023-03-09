@@ -1,12 +1,16 @@
 """Standalone tests of the SIP2 client."""
-import os
 import socket
 import ssl
+import tempfile
+from typing import List, Optional
+from unittest.mock import MagicMock, Mock
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 from api.sip.client import MockSIPClient, SIPClient
 from api.sip.dialect import AutoGraphicsVerso, GenericILS
+from tests.fixtures.tls_server import TLSServerFixture
 
 
 class MockSocket:
@@ -34,13 +38,98 @@ class MockSocket:
         return block
 
 
-class MockWrapSocket:
-    def __init__(self):
-        self.called_with = None
+class MockSocketFixture:
+    def __init__(self, monkeypatch: MonkeyPatch):
+        self.monkeypatch = monkeypatch
 
-    def __call__(self, connection, **kwargs):
-        self.called_with = (connection, kwargs)
-        return connection
+
+@pytest.fixture(scope="function")
+def mock_socket(monkeypatch: MonkeyPatch) -> MockSocketFixture:
+    # Patch the socket method so that we don't create a real network socket.
+    monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
+    return MockSocketFixture(monkeypatch)
+
+
+class TestSIPClientTLS:
+    """Test the real SIPClient class against a local TLS server."""
+
+    def test_connect_trusted(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns a trusted certificate works."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext(protocol)
+            self.context.load_verify_locations(tls_server.ca_cert_file)
+            return self.context
+
+        c = SIPClient(
+            "localhost", tls_server.port, use_ssl=True, ssl_contexts=create_context
+        )
+        c.connect()
+
+    def test_connect_trusted_ignored(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns a trusted certificate works if we ignore certificates."""
+
+        c = SIPClient(
+            "localhost",
+            tls_server.port,
+            use_ssl=True,
+            ssl_verification=False,
+        )
+        c.connect()
+
+    def test_connect_untrusted(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns an untrusted certificate fails."""
+
+        c = SIPClient("localhost", tls_server.port, use_ssl=True)
+        with pytest.raises(Exception) as e:
+            c.connect()
+        assert "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+    def test_connect_untrusted_ignored(self, tls_server: TLSServerFixture):
+        """Connecting to a server that returns an untrusted certificate works if we ignore certificates."""
+
+        c = SIPClient(
+            "localhost",
+            tls_server.port,
+            use_ssl=True,
+            ssl_verification=False,
+        )
+        c.connect()
+
+    def test_connect_invalid_untrusted(self, tls_server_wrong_cert: TLSServerFixture):
+        """Connecting to a server that returns an invalid certificate fails."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext(protocol)
+            self.context.load_verify_locations(tls_server_wrong_cert.ca_cert_file)
+            return self.context
+
+        c = SIPClient(
+            "localhost",
+            tls_server_wrong_cert.port,
+            use_ssl=True,
+            ssl_contexts=create_context,
+        )
+        with pytest.raises(Exception) as e:
+            c.connect()
+        assert "CERTIFICATE_VERIFY_FAILED" in str(e)
+
+    def test_connect_invalid_ignored(self, tls_server_wrong_cert: TLSServerFixture):
+        """Connecting to a server that returns an invalid certificate works if we ignore certificates."""
+
+        def create_context(protocol):
+            self.context = ssl.SSLContext(protocol)
+            self.context.load_verify_locations(tls_server_wrong_cert.ca_cert_file)
+            return self.context
+
+        c = SIPClient(
+            "localhost",
+            tls_server_wrong_cert.port,
+            use_ssl=True,
+            ssl_contexts=create_context,
+            ssl_verification=False,
+        )
+        c.connect()
 
 
 class TestSIPClient:
@@ -65,58 +154,153 @@ class TestSIPClient:
             # Un-mock the socket.socket function
             socket.socket = old_socket
 
-    def test_secure_connect(self):
+    def test_secure_connect_insecure(self, mock_socket: MockSocketFixture):
+        self.context: Optional[MagicMock] = None
 
-        target_server = object()
-        insecure = SIPClient(target_server, 999, use_ssl=False)
-        no_cert = SIPClient(target_server, 999, use_ssl=True)
-        with_cert = SIPClient(target_server, 999, ssl_cert="cert", ssl_key="key")
+        def create_context(protocol):
+            self.context = Mock(spec=ssl.SSLContext)
+            return self.context
 
-        # Mock the socket.socket function.
-        old_socket = socket.socket
-        socket.socket = MockSocket
+        target_server = "www.example.com"
+        insecure = SIPClient(
+            target_server, 999, use_ssl=False, ssl_contexts=create_context
+        )
 
-        # Mock the ssl.wrap_socket function
-        old_wrap_socket = ssl.wrap_socket
-        wrap_socket = MockWrapSocket()
-        ssl.wrap_socket = wrap_socket
+        # When an insecure connection is created, no context is created.
+        insecure.connect()
+        assert self.context is None
 
-        try:
-            # When an insecure connection is created, wrap_socket is
-            # not called.
-            insecure.connect()
-            assert None == wrap_socket.called_with
+    def test_secure_connect_without_cert(self, mock_socket: MockSocketFixture):
+        self.context_without: MagicMock = MagicMock()
 
-            # When a secure connection is created with no SSL
-            # certificate, wrap_socket() is called on the connection
-            # (in this case, a MockSocket), but no other arguments are
-            # passed in to wrap_socket().
-            no_cert.connect()
-            connection, kwargs = wrap_socket.called_with
-            assert isinstance(connection, MockSocket)
-            assert dict(keyfile=None, certfile=None) == kwargs
+        def create_context(protocol):
+            assert protocol == ssl.PROTOCOL_TLS_CLIENT
+            self.context_without = MagicMock(ssl.SSLContext)
+            return self.context_without
 
-            # When a secure connection is created with an SSL
-            # certificate, the certificate and key are written to
-            # temporary files, and the paths to those files are passed
-            # in along with the collection to wrap_socket().
-            wrap_socket.called_with = None
-            with_cert.connect()
-            connection, kwargs = wrap_socket.called_with
-            assert isinstance(connection, MockSocket)
-            assert {"keyfile", "certfile"} == set(kwargs.keys())
-            for tmpfile in list(kwargs.values()):
-                tmpfile = os.path.abspath(tmpfile)
-                assert os.path.basename(tmpfile).startswith("tmp")
-                # By the time the SSL socket has been wrapped, the
-                # temporary file has already been removed.  Because of
-                # that we can't verify from within a unit test that the
-                # correct contents were written to the file.
-                assert not os.path.exists(tmpfile)
-        finally:
-            # Un-mock the old functions.
-            socket.socket = old_socket
-            ssl.wrap_socket = old_wrap_socket
+        target_server = "www.example.com"
+        no_cert = SIPClient(
+            target_server, 999, use_ssl=True, ssl_contexts=create_context
+        )
+
+        # When a secure connection is created with no SSL
+        # certificate, a context is created and the right methods are called.
+        no_cert.connect()
+        assert self.context_without.minimum_version == ssl.TLSVersion.TLSv1_2
+        self.context_without.load_cert_chain.assert_not_called()
+        self.context_without.wrap_socket.assert_called_once()
+
+        # Check that the right things were passed to wrap_socket
+        wrap_called = self.context_without.wrap_socket.call_args
+        assert wrap_called.kwargs["server_hostname"] == target_server
+
+    def test_secure_connect_with_cert(
+        self, mock_socket: MockSocketFixture, monkeypatch: MonkeyPatch
+    ):
+        self.context_with: MagicMock = MagicMock()
+
+        def create_context(protocol):
+            assert protocol == ssl.PROTOCOL_TLS_CLIENT
+            self.context_with = MagicMock(ssl.SSLContext)
+            return self.context_with
+
+        target_server = "www.example.com"
+        with_cert = SIPClient(
+            target_server,
+            999,
+            ssl_cert="cert",
+            ssl_key="key",
+            ssl_contexts=create_context,
+        )
+
+        # Record the temporary files created.
+        self.old_mkstemp = tempfile.mkstemp
+        self.temporary_files: List[str] = []
+
+        def create_temporary_file():
+            (fd, name) = self.old_mkstemp()
+            self.temporary_files.append(name)
+            return fd, name
+
+        # Patch the temporary file creation methods.
+        monkeypatch.setattr("tempfile.mkstemp", create_temporary_file)
+
+        # When a secure connection is created with SSL certificates,
+        # a context is created and the right methods are called.
+        with_cert.connect()
+        assert self.context_with.minimum_version == ssl.TLSVersion.TLSv1_2
+        self.context_with.load_cert_chain.assert_called_once()
+        self.context_with.wrap_socket.assert_called_once()
+
+        # Check that the right things were passed to wrap_socket
+        wrap_called = self.context_with.wrap_socket.call_args
+        assert wrap_called.kwargs["server_hostname"] == target_server
+
+        # Check that the certificate and key were copied to temporary files
+        assert len(self.temporary_files) == 2
+        called = self.context_with.load_cert_chain.call_args
+        assert called.kwargs["certfile"] == self.temporary_files[0]
+        assert called.kwargs["keyfile"] == self.temporary_files[1]
+
+    def test_secure_connect_without_verification(self, mock_socket: MockSocketFixture):
+        self.context_without_verification: MagicMock = MagicMock()
+
+        def create_context(protocol):
+            assert protocol == ssl.PROTOCOL_TLS_CLIENT
+            self.context_without_verification = MagicMock(ssl.SSLContext)
+            return self.context_without_verification
+
+        target_server = "www.example.com"
+        no_cert = SIPClient(
+            target_server,
+            999,
+            use_ssl=True,
+            ssl_contexts=create_context,
+            ssl_verification=False,
+        )
+
+        # When a secure connection is created with no SSL
+        # certificate, a context is created and the right methods are called.
+        no_cert.connect()
+        assert (
+            self.context_without_verification.minimum_version == ssl.TLSVersion.TLSv1_2
+        )
+        self.context_without_verification.load_cert_chain.assert_not_called()
+        self.context_without_verification.wrap_socket.assert_called_once()
+        assert self.context_without_verification.verify_mode == ssl.CERT_NONE
+
+        # Check that the right things were passed to wrap_socket
+        wrap_called = self.context_without_verification.wrap_socket.call_args
+        assert wrap_called.kwargs["server_hostname"] == target_server
+
+    def test_secure_connect_with_verification(self, mock_socket: MockSocketFixture):
+        self.context_with_verification: MagicMock = MagicMock()
+
+        def create_context(protocol):
+            assert protocol == ssl.PROTOCOL_TLS_CLIENT
+            self.context_with_verification = MagicMock(ssl.SSLContext)
+            return self.context_with_verification
+
+        target_server = "www.example.com"
+        no_cert = SIPClient(
+            target_server,
+            999,
+            use_ssl=True,
+            ssl_contexts=create_context,
+            ssl_verification=True,
+        )
+
+        # When a secure connection is created with no SSL
+        # certificate, a context is created and the right methods are called.
+        no_cert.connect()
+        assert self.context_with_verification.minimum_version == ssl.TLSVersion.TLSv1_2
+        self.context_with_verification.load_cert_chain.assert_not_called()
+        self.context_with_verification.wrap_socket.assert_called_once()
+        assert self.context_with_verification.verify_mode == ssl.CERT_REQUIRED
+
+        # Check that the right things were passed to wrap_socket
+        wrap_called = self.context_with_verification.wrap_socket.call_args
+        assert wrap_called.kwargs["server_hostname"] == target_server
 
     def test_read_message(self):
         target_server = object()
