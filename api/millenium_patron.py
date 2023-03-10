@@ -19,7 +19,6 @@ from .config import CannotLoadConfiguration
 
 
 class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
-
     NAME = "Millenium"
 
     ERROR_MESSAGE_FIELD = "ERRMSG"

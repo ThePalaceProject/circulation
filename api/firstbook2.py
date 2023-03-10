@@ -14,7 +14,6 @@ from .config import CannotLoadConfiguration
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
-
     NAME = "First Book"
 
     DESCRIPTION = _(
