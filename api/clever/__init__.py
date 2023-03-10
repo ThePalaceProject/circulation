@@ -77,7 +77,7 @@ def external_type_from_clever_grade(grade):
     return CLEVER_GRADE_TO_EXTERNAL_TYPE_MAP.get(grade, None)
 
 
-class CleverAuthenticationAPI(OAuthAuthenticationProvider, ABC):
+class CleverAuthenticationAPI(OAuthAuthenticationProvider):
     URI = "http://librarysimplified.org/terms/auth/clever"
 
     NAME = "Clever"
