@@ -798,7 +798,7 @@ class TestLibraryAuthenticator:
         db = authenticator_fixture.db
         # Create an integration destined to raise CannotLoadConfiguration..
         misconfigured = db.external_integration(
-            "api.firstbook",
+            "api.millenium_patron",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
 
@@ -818,7 +818,7 @@ class TestLibraryAuthenticator:
         # initialization_exceptions.
         not_configured = auth.initialization_exceptions[misconfigured.id]
         assert isinstance(not_configured, CannotLoadConfiguration)
-        assert "First Book server not configured." == str(not_configured)
+        assert "Millenium Patron API server not configured." == str(not_configured)
 
         not_found = auth.initialization_exceptions[unknown.id]
         assert isinstance(not_found, ImportError)
