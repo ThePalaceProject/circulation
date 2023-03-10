@@ -8,7 +8,6 @@ from api.admin.controller.patron_auth_services import PatronAuthServicesControll
 from api.admin.exceptions import *
 from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
 from api.clever import CleverAuthenticationAPI
-from api.firstbook import FirstBookAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
 from api.problem_details import *
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
@@ -34,7 +33,7 @@ class TestPatronAuth(SettingsControllerTest):
             )
             assert response.get("patron_auth_services") == []
             protocols = response.get("protocols")
-            assert 9 == len(protocols)
+            assert 8 == len(protocols)
             assert SimpleAuthenticationProvider.__module__ == protocols[0].get("name")
             assert "settings" in protocols[0]
             assert "library_settings" in protocols[0]
@@ -199,39 +198,6 @@ class TestPatronAuth(SettingsControllerTest):
             assert "," == service.get("settings").get(
                 SIP2AuthenticationProvider.FIELD_SEPARATOR
             )
-            [library] = service.get("libraries")
-            assert self._default_library.short_name == library.get("short_name")
-            assert "^(u)" == library.get(
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
-            )
-
-    def test_patron_auth_services_get_with_firstbook_auth_service(self):
-        auth_service, ignore = create(
-            self._db,
-            ExternalIntegration,
-            protocol=FirstBookAuthenticationAPI.__module__,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-        auth_service.url = "url"
-        auth_service.password = "pass"
-        auth_service.libraries += [self._default_library]
-        ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
-            AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            self._default_library,
-            auth_service,
-        ).value = "^(u)"
-
-        with self.request_context_with_admin("/"):
-            response = (
-                self.manager.admin_patron_auth_services_controller.process_patron_auth_services()
-            )
-            [service] = response.get("patron_auth_services")
-
-            assert auth_service.id == service.get("id")
-            assert FirstBookAuthenticationAPI.__module__ == service.get("protocol")
-            assert "url" == service.get("settings").get(ExternalIntegration.URL)
-            assert "pass" == service.get("settings").get(ExternalIntegration.PASSWORD)
             [library] = service.get("libraries")
             assert self._default_library.short_name == library.get("short_name")
             assert "^(u)" == library.get(
