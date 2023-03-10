@@ -11,7 +11,6 @@ from .config import CannotLoadConfiguration
 
 
 class KansasAuthenticationAPI(BasicAuthenticationProvider):
-
     NAME = "Kansas"
 
     DESCRIPTION = _(

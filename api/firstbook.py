@@ -12,7 +12,6 @@ from .config import CannotLoadConfiguration
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
-
     NAME = "First Book (deprecated)"
 
     DESCRIPTION = _(

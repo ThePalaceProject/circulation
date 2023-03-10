@@ -7,7 +7,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from abc import ABCMeta
+from abc import ABC, ABCMeta
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import flask
@@ -49,7 +49,7 @@ from core.util.authentication_for_opds import (
 )
 from core.util.datetime_helpers import utc_now
 from core.util.http import RemoteIntegrationException
-from core.util.log import log_elapsed_time
+from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.problem_detail import ProblemDetail
 from core.util.problem_detail import json as pd_json
 
@@ -1277,7 +1277,7 @@ class LibraryAuthenticator:
         return headers
 
 
-class AuthenticationProvider(OPDSAuthenticationFlow):
+class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     """Handle a specific patron authentication scheme."""
 
     # NOTE: Each subclass MUST define an attribute called NAME, which
@@ -1589,6 +1589,10 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 
+    @classmethod
+    def _logger(cls) -> logging.Logger:
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
     def authenticated_patron(self, _db, header):
         """Go from a WWW-Authenticate header (or equivalent) to a Patron object.
 
@@ -1598,7 +1602,13 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
         :return: A Patron if one can be authenticated; a ProblemDetail
             if an error occurs; None if the credentials are missing or wrong.
         """
-        patron = self.authenticate(_db, header)
+
+        with elapsed_time_logging(
+            log_method=self._logger().info,
+            message_prefix="authenticated_patron - authenticate",
+        ):
+            patron = self.authenticate(_db, header)
+
         if not isinstance(patron, Patron):
             return patron
         if PatronUtility.needs_external_sync(patron):
@@ -1616,7 +1626,13 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
 
         :param patron: A Patron object.
         """
-        remote_patron_info = self.remote_patron_lookup(patron)
+
+        with elapsed_time_logging(
+            log_method=self._logger().info,
+            message_prefix=f"update_patron_metadata - remote_patron_lookup",
+        ):
+            remote_patron_info = self.remote_patron_lookup(patron)
+
         if isinstance(remote_patron_info, PatronData):
             self.apply_patrondata(remote_patron_info, patron)
 
@@ -1710,7 +1726,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow):
         raise NotImplementedError()
 
 
-class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests):
+class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """

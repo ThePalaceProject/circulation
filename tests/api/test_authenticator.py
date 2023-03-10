@@ -8,6 +8,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from abc import ABC
 from copy import deepcopy
 from decimal import Decimal
 from typing import Any
@@ -68,6 +69,11 @@ from core.util.http import IntegrationException
 from ..fixtures.api_controller import ControllerFixture
 from ..fixtures.database import DatabaseTransactionFixture
 from ..fixtures.vendor_id import VendorIDFixture
+
+
+class BasicConcreteAuthenticationProvider(BasicAuthenticationProvider):
+    def __init__(self, library, integration, analytics=None):
+        super().__init__(library, integration, analytics)
 
 
 class MockAuthenticationProvider:
@@ -145,7 +151,7 @@ class MockBasic(BasicAuthenticationProvider):
 
 
 class MockOAuthAuthenticationProvider(
-    OAuthAuthenticationProvider, MockAuthenticationProvider
+    OAuthAuthenticationProvider, MockAuthenticationProvider, ABC
 ):
     """A mock OAuth authentication provider for use in testing the overall
     authentication process.
@@ -1915,7 +1921,7 @@ class TestAuthenticationProvider:
     def test_remote_patron_lookup(self, authenticator_fixture: AuthenticatorFixture):
         """The default implementation of remote_patron_lookup returns whatever was passed in."""
         db = authenticator_fixture.db
-        provider = BasicAuthenticationProvider(
+        provider = BasicConcreteAuthenticationProvider(
             db.default_library(), db.external_integration(db.fresh_str())
         )
         assert None == provider.remote_patron_lookup(None)
@@ -2258,7 +2264,7 @@ class TestBasicAuthenticationProvider:
 
         # You don't have to have a testing patron.
         integration = db.external_integration(db.fresh_str())
-        no_testing_patron = BasicAuthenticationProvider(
+        no_testing_patron = BasicConcreteAuthenticationProvider(
             db.default_library(), integration
         )
         assert (None, None) == no_testing_patron.testing_patron(db.session)
@@ -2399,7 +2405,7 @@ class TestBasicAuthenticationProvider:
         ConfigurationSetting objects.
         """
         db = authenticator_fixture.db
-        b = BasicAuthenticationProvider
+        b = BasicConcreteAuthenticationProvider
         integration = db.external_integration(db.fresh_str())
         integration.setting(b.IDENTIFIER_KEYBOARD).value = b.EMAIL_ADDRESS_KEYBOARD
         integration.setting(b.PASSWORD_KEYBOARD).value = b.NUMBER_PAD
@@ -2417,7 +2423,7 @@ class TestBasicAuthenticationProvider:
 
     def test_server_side_validation(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
-        b = BasicAuthenticationProvider
+        b = BasicConcreteAuthenticationProvider
         integration = db.external_integration(db.fresh_str())
         integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = "foo"
         integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = "bar"
@@ -2609,7 +2615,9 @@ class TestBasicAuthenticationProvider:
         integration = db.external_integration(
             db.fresh_str(), ExternalIntegration.PATRON_AUTH_GOAL
         )
-        provider = BasicAuthenticationProvider(db.default_library(), integration)
+        provider = BasicConcreteAuthenticationProvider(
+            db.default_library(), integration
+        )
         m = provider.scrub_credential
 
         assert None == provider.scrub_credential(None)
