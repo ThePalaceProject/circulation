@@ -29,7 +29,6 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app)
-
 # The autodoc spec, can be accessed at "/apidoc/swagger"
 api_spec = FlaskPydanticSpec(
     "Palace Manager", mode="strict", title="Palace Manager API"
@@ -49,7 +48,7 @@ PalaceXrayProfiler.configure(app)
 def initialize():
     initialize_database()
     initialize_circulation_manager()
-    setup_admin()
+    initialize_admin()
 
 
 def initialize_database(autoinitialize=True):
@@ -70,7 +69,7 @@ def initialize_database(autoinitialize=True):
     logging.getLogger().info("Application debug mode==%r" % app.debug)
 
 
-def setup_admin(_db=None):
+def initialize_admin(_db=None):
     if getattr(app, "manager", None) is not None:
         setup_admin_controllers(app.manager)
     _db = _db or app._db
@@ -78,7 +77,9 @@ def setup_admin(_db=None):
     app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
     # Create a default Local Analytics service if one does not
     # already exist.
+
     local_analytics = LocalAnalyticsProvider.initialize(_db)
+    _db.commit()
 
 
 def initialize_circulation_manager():
@@ -100,6 +101,9 @@ def initialize_circulation_manager():
             # setup the cache data object
             CachedData.initialize(app._db)
 
+
+# initialize the application
+initialize()
 
 from . import routes  # noqa
 from .admin import routes as admin_routes  # noqa
@@ -127,7 +131,6 @@ def run(url=None):
 
         socket.setdefaulttimeout(None)
 
-    initialize()
     logging.info("Starting app on %s:%s", host, port)
     sslContext = "adhoc" if scheme == "https" else None
     app.run(debug=debug, host=host, port=port, threaded=True, ssl_context=sslContext)

@@ -27,7 +27,7 @@ from api.admin.password_admin_authentication_provider import (
 from api.admin.problem_details import *
 from api.admin.validator import Validator
 from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
-from api.app import setup_admin
+from api.app import initialize_admin
 from api.authenticator import PatronData
 from api.config import Configuration
 from core.classifier import genres
@@ -62,6 +62,7 @@ from tests.fixtures.api_controller import ControllerFixture
 
 class TestViewController:
     def test_setting_up(self, admin_ctrl_fixture: AdminControllerFixture):
+
         # Test that the view is in setting-up mode if there's no auth service
         # and no admin with a password.
         admin_ctrl_fixture.admin.password_hashed = None
