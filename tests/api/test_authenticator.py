@@ -34,12 +34,12 @@ from api.authenticator import (
 )
 from api.clever import CleverAuthenticationAPI
 from api.config import CannotLoadConfiguration, Configuration
-from api.firstbook import FirstBookAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
 from api.opds import LibraryAnnotator
 from api.problem_details import *
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
+from api.sip import SIP2AuthenticationProvider
 from api.sirsidynix_authentication_provider import (
     SirsiBlockReasons,
     SirsiDynixHorizonAuthenticationProvider,
@@ -723,13 +723,13 @@ class TestLibraryAuthenticator:
 
         library = db.default_library()
         # A basic auth provider and an oauth provider.
-        firstbook = db.external_integration(
-            "api.firstbook",
+        sip2 = db.external_integration(
+            "api.sip",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
-        firstbook.url = "http://url/"
-        firstbook.password = "secret"
-        library.integrations.append(firstbook)
+        sip2.url = "http://url/"
+        sip2.password = "secret"
+        library.integrations.append(sip2)
 
         oauth = db.external_integration(
             "api.clever",
@@ -743,7 +743,7 @@ class TestLibraryAuthenticator:
         auth = LibraryAuthenticator.from_config(db.session, library, analytics)
 
         assert auth.basic_auth_provider != None
-        assert isinstance(auth.basic_auth_provider, FirstBookAuthenticationAPI)
+        assert isinstance(auth.basic_auth_provider, SIP2AuthenticationProvider)
         assert analytics == auth.basic_auth_provider.analytics
 
         assert 1 == len(auth.oauth_providers_by_name)
@@ -804,7 +804,7 @@ class TestLibraryAuthenticator:
         db = authenticator_fixture.db
         # Create an integration destined to raise CannotLoadConfiguration..
         misconfigured = db.external_integration(
-            "api.firstbook",
+            "api.millenium_patron",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
 
@@ -824,7 +824,7 @@ class TestLibraryAuthenticator:
         # initialization_exceptions.
         not_configured = auth.initialization_exceptions[misconfigured.id]
         assert isinstance(not_configured, CannotLoadConfiguration)
-        assert "First Book server not configured." == str(not_configured)
+        assert "Millenium Patron API server not configured." == str(not_configured)
 
         not_found = auth.initialization_exceptions[unknown.id]
         assert isinstance(not_found, ImportError)
@@ -903,16 +903,16 @@ class TestLibraryAuthenticator:
         self, authenticator_fixture: AuthenticatorFixture
     ):
         db = authenticator_fixture.db
-        firstbook = db.external_integration(
-            "api.firstbook",
+        sip2 = db.external_integration(
+            "api.sip",
             ExternalIntegration.PATRON_AUTH_GOAL,
         )
-        firstbook.url = "http://url/"
-        firstbook.password = "secret"
-        db.default_library().integrations.append(firstbook)
+        sip2.url = "http://url/"
+        sip2.password = "secret"
+        db.default_library().integrations.append(sip2)
         auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
-        auth.register_provider(firstbook)
-        assert isinstance(auth.basic_auth_provider, FirstBookAuthenticationAPI)
+        auth.register_provider(sip2)
+        assert isinstance(auth.basic_auth_provider, SIP2AuthenticationProvider)
 
     def test_register_oauth_provider(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db

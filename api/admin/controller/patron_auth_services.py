@@ -9,7 +9,6 @@ from api.admin.problem_details import *
 from api.admin.validator import PatronAuthenticationValidatorFactory
 from api.authenticator import AuthenticationProvider
 from api.clever import CleverAuthenticationAPI
-from api.firstbook import FirstBookAuthenticationAPI as OldFirstBookAuthenticationAPI
 from api.firstbook2 import FirstBookAuthenticationAPI
 from api.kansas_patron import KansasAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
@@ -32,7 +31,6 @@ class PatronAuthServicesController(SettingsController):
             MilleniumPatronAPI,
             SIP2AuthenticationProvider,
             FirstBookAuthenticationAPI,
-            OldFirstBookAuthenticationAPI,
             CleverAuthenticationAPI,
             KansasAuthenticationAPI,
             SAMLWebSSOAuthenticationProvider,
@@ -44,7 +42,6 @@ class PatronAuthServicesController(SettingsController):
             MilleniumPatronAPI.__module__,
             SIP2AuthenticationProvider.__module__,
             FirstBookAuthenticationAPI.__module__,
-            OldFirstBookAuthenticationAPI.__module__,
             KansasAuthenticationAPI.__module__,
             SirsiDynixHorizonAuthenticationProvider.__module__,
         ]
