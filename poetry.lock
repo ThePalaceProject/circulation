@@ -3314,15 +3314,18 @@ types-Werkzeug = "*"
 
 [[package]]
 name = "types-flask-cors"
-version = "3.0.10"
+version = "3.0.10.3"
 description = "Typing stubs for Flask-Cors"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-Flask-Cors-3.0.10.tar.gz", hash = "sha256:8d2dad18f3f5d2b3a22bc4235c97629b701b784fd428e671564093ca293ae91d"},
-    {file = "types_Flask_Cors-3.0.10-py3-none-any.whl", hash = "sha256:17ba57b32a97dde31d136e2b312f06714533d1e828bf5328adde64b49c9cdbd8"},
+    {file = "types-Flask-Cors-3.0.10.3.tar.gz", hash = "sha256:e5efa0db238b8fec60c72e94cac8ecaad43deba7e4091b3af10f1b7079d0378b"},
+    {file = "types_Flask_Cors-3.0.10.3-py3-none-any.whl", hash = "sha256:b459ce9cc78b5b3e4928cac0cfb23a6c5780d79c74827781a766c5fb26fb8519"},
 ]
+
+[package.dependencies]
+Flask = ">=2.0.0"
 
 [[package]]
 name = "types-freezegun"
