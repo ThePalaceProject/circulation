@@ -78,9 +78,6 @@ def external_type_from_clever_grade(grade):
 
 
 class CleverAuthenticationAPI(OAuthAuthenticationProvider, ABC):
-    def logging_name(self) -> str:
-        return "CleverAuthenticationAPI"
-
     URI = "http://librarysimplified.org/terms/auth/clever"
 
     NAME = "Clever"

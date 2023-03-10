@@ -3,9 +3,6 @@ from core.util.http import RemoteIntegrationException
 
 
 class MockExplodingAuthenticationProvider(BasicAuthenticationProvider):
-    def logging_name(self) -> str:
-        return "MockExplodingAuthenticationProvider"
-
     def __init__(
         self,
         library,

@@ -7,7 +7,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, ABCMeta
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import flask
@@ -1280,9 +1280,6 @@ class LibraryAuthenticator:
 class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     """Handle a specific patron authentication scheme."""
 
-    # The logger used for logging timing information for authentication requests (amongst other things).
-    log = logging.getLogger("api.authenticator.AuthenticationProvider")
-
     # NOTE: Each subclass MUST define an attribute called NAME, which
     # is displayed in the admin interface when configuring patron auth,
     # used to create the name of the log channel used by this
@@ -1592,12 +1589,10 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 
-    @abstractmethod
-    def logging_name(self) -> str:
-        """The name used for this authentication provider in log messages."""
-        raise NotImplementedError()
+    @classmethod
+    def _logger(cls) -> logging.Logger:
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
-    @log_elapsed_time(log_method=log.info, message_prefix="authenticated_patron")
     def authenticated_patron(self, _db, header):
         """Go from a WWW-Authenticate header (or equivalent) to a Patron object.
 
@@ -1609,9 +1604,8 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
         """
 
         with elapsed_time_logging(
-            log_method=self.log.debug,
-            skip_start=True,
-            message_prefix=f"authenticated_patron - authenticate ({self.logging_name()})",
+            log_method=self._logger().info,
+            message_prefix="authenticated_patron - authenticate",
         ):
             patron = self.authenticate(_db, header)
 
@@ -1627,7 +1621,6 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
             patron.neighborhood = patron.cached_neighborhood
         return patron
 
-    @log_elapsed_time(log_method=log.info, message_prefix="update_patron_metadata")
     def update_patron_metadata(self, patron):
         """Refresh our local record of this patron's account information.
 
@@ -1635,9 +1628,8 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
         """
 
         with elapsed_time_logging(
-            log_method=self.log.debug,
-            skip_start=True,
-            message_prefix=f"update_patron_metadata - remote_patron_lookup ({self.logging_name()})",
+            log_method=self._logger().info,
+            message_prefix=f"update_patron_metadata - remote_patron_lookup",
         ):
             remote_patron_info = self.remote_patron_lookup(patron)
 

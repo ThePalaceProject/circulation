@@ -75,9 +75,6 @@ class BasicConcreteAuthenticationProvider(BasicAuthenticationProvider):
     def __init__(self, library, integration, analytics=None):
         super().__init__(library, integration, analytics)
 
-    def logging_name(self) -> str:
-        return "BasicConcreteAuthenticationProvider"
-
 
 class MockAuthenticationProvider:
     """An AuthenticationProvider that always authenticates requests for
@@ -99,9 +96,6 @@ class MockBasicAuthenticationProvider(
     """A mock basic authentication provider for use in testing the overall
     authentication process.
     """
-
-    def logging_name(self) -> str:
-        return "MockBasicAuthenticationProvider"
 
     def __init__(
         self,
@@ -135,9 +129,6 @@ class MockBasic(BasicAuthenticationProvider):
     NAME = "Mock Basic Auth provider"
     LOGIN_BUTTON_IMAGE = "BasicButton.png"
 
-    def logging_name(self) -> str:
-        return "MockBasic"
-
     def __init__(
         self,
         library,
@@ -166,9 +157,6 @@ class MockOAuthAuthenticationProvider(
     authentication process.
     """
 
-    def logging_name(self) -> str:
-        return "MockOAuthAuthenticationProvider"
-
     def __init__(self, library, provider_name, patron=None, patrondata=None):
         self.library_id = library.id
         self.NAME = provider_name
@@ -183,9 +171,6 @@ class MockOAuth(OAuthAuthenticationProvider):
     """A second mock basic authentication provider for use in testing
     the workflow around OAuth.
     """
-
-    def logging_name(self) -> str:
-        return "MockOAuth"
 
     URI = "http://example.org/"
     NAME = "Mock provider"
@@ -1958,9 +1943,6 @@ class TestAuthenticationProvider:
         class MockProvider(AuthenticationProvider):
             NAME = "Just a mock"
 
-            def logging_name(self) -> str:
-                return "MockProvider"
-
         setting = ConfigurationSetting.for_library_and_externalintegration(
             db.session,
             MockProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
@@ -2185,9 +2167,6 @@ class TestAuthenticationProvider:
         integration = db.external_integration(db.fresh_str())
 
         class MockProvider(AuthenticationProvider):
-            def logging_name(self) -> str:
-                return "MockProvider"
-
             NAME = "Just a mock"
 
         string_setting = ConfigurationSetting.for_library_and_externalintegration(
@@ -2241,9 +2220,6 @@ class TestBasicAuthenticationProvider:
         b = BasicAuthenticationProvider
 
         class ConfigAuthenticationProvider(BasicAuthenticationProvider):
-            def logging_name(self) -> str:
-                return "ConfigAuthenticationProvider"
-
             NAME = "Config loading test"
 
         integration = db.external_integration(
@@ -2385,9 +2361,6 @@ class TestBasicAuthenticationProvider:
             def __init__(self):
                 pass
 
-            def logging_name(self) -> str:
-                return "CantAuthenticateTestPatron"
-
             def testing_patron_or_bust(self, _db):
                 self.called_with = _db
                 raise Exception("Nope")
@@ -2404,9 +2377,6 @@ class TestBasicAuthenticationProvider:
         # password are passed into the next test.
 
         class Mock(BasicAuthenticationProvider):
-            def logging_name(self) -> str:
-                return "Mock"
-
             def __init__(self, patron, password):
                 self.patron = patron
                 self.password = password
@@ -2614,9 +2584,6 @@ class TestBasicAuthenticationProvider:
         db = authenticator_fixture.db
 
         class Mock(BasicAuthenticationProvider):
-            def logging_name(self) -> str:
-                return "Mock"
-
             def _remote_patron_lookup(self, patron_or_patrondata):
                 self._remote_patron_lookup_called_with = patron_or_patrondata
                 return patron_or_patrondata
@@ -2985,9 +2952,6 @@ class TestOAuthAuthenticationProvider:
         db = authenticator_fixture.db
 
         class ConfigAuthenticationProvider(OAuthAuthenticationProvider):
-            def logging_name(self) -> str:
-                return "ConfigAuthenticationProvider"
-
             NAME = "Config loading test"
 
         integration = db.external_integration(
@@ -3056,9 +3020,6 @@ class TestOAuthAuthenticationProvider:
         )
 
         class CallbackImplementation(MockOAuth):
-            def logging_name(self) -> str:
-                return "CallbackImplementation"
-
             def remote_exchange_code_for_access_token(self, _db, access_code):
                 self.used_code = access_code
                 return "a token"
