@@ -46,9 +46,10 @@ PalaceXrayProfiler.configure(app)
 
 
 def initialize():
-    initialize_database()
-    initialize_circulation_manager()
-    initialize_admin()
+    if "TESTING" not in os.environ:
+        initialize_database()
+        initialize_circulation_manager()
+        initialize_admin()
 
 
 def initialize_database(autoinitialize=True):
@@ -102,7 +103,6 @@ def initialize_circulation_manager():
             CachedData.initialize(app._db)
 
 
-# initialize the application
 initialize()
 
 from . import routes  # noqa
