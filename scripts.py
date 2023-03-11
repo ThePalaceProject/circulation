@@ -9,6 +9,7 @@ from pathlib import Path
 from alembic import command, config
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
+from api.axis import Axis360BibliographicCoverageProvider
 from api.bibliotheca import BibliothecaCirculationSweep
 from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManager
