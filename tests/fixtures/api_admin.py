@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from typing import List
 
 import flask
 import pytest
@@ -17,7 +18,7 @@ class AdminControllerFixture:
     ctrl: ControllerFixture
     admin: Admin
 
-    BOOKS: list[WorkSpec] = []
+    BOOKS: List[WorkSpec] = []
 
     def __init__(self, controller_fixture: ControllerFixture):
         self.ctrl = controller_fixture
