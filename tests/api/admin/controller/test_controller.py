@@ -4,6 +4,7 @@ import json
 import re
 from datetime import timedelta
 from io import StringIO
+from typing import Optional
 from unittest import mock
 
 import feedparser
@@ -92,8 +93,8 @@ class TestViewController:
             location = response.headers.get("Location")
             assert "sign_in" in location
             assert "admin%2Fweb" in location
-            assert "collection%2Fa%252F%2528b%2529" in location
-            assert "book%2Fc%252F%2528d%2529" in location
+            assert "collection%2Fa%252F(b)" in location
+            assert "book%2Fc%252F(d)" in location
 
     def test_redirect_to_library(self, admin_ctrl_fixture: AdminControllerFixture):
         # If the admin doesn't have access to any libraries, they get a message
@@ -1974,10 +1975,10 @@ class TestCustomListsController:
 
     @define
     class ShareLocallySetup:
-        shared_with: Library = None
-        primary_library: Library = None
-        collection1: Collection = None
-        list: CustomList = None
+        shared_with: Optional[Library] = None
+        primary_library: Optional[Library] = None
+        collection1: Optional[Collection] = None
+        list: Optional[CustomList] = None
 
     def _setup_share_locally(self, admin_librarian_fixture: AdminLibrarianFixture):
         shared_with = admin_librarian_fixture.ctrl.db.library("shared_with")

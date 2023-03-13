@@ -166,7 +166,7 @@ class DatabaseTransactionFixture:
             "9780316075978",
         ]
 
-    def _make_default_library(self):
+    def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
         library, ignore = get_one_or_create(
             self._session,

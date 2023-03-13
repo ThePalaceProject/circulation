@@ -9,13 +9,15 @@ from api.admin.problem_details import *
 from api.admin.validator import PatronAuthenticationValidatorFactory
 from api.authenticator import AuthenticationProvider
 from api.clever import CleverAuthenticationAPI
-from api.firstbook import FirstBookAuthenticationAPI as OldFirstBookAuthenticationAPI
 from api.firstbook2 import FirstBookAuthenticationAPI
 from api.kansas_patron import KansasAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
+from api.sirsidynix_authentication_provider import (
+    SirsiDynixHorizonAuthenticationProvider,
+)
 from core.model import ConfigurationSetting, ExternalIntegration, get_one
 from core.util.cache import memoize
 from core.util.problem_detail import ProblemDetail
@@ -29,10 +31,10 @@ class PatronAuthServicesController(SettingsController):
             MilleniumPatronAPI,
             SIP2AuthenticationProvider,
             FirstBookAuthenticationAPI,
-            OldFirstBookAuthenticationAPI,
             CleverAuthenticationAPI,
             KansasAuthenticationAPI,
             SAMLWebSSOAuthenticationProvider,
+            SirsiDynixHorizonAuthenticationProvider,
         ]
 
         self.basic_auth_protocols = [
@@ -40,8 +42,8 @@ class PatronAuthServicesController(SettingsController):
             MilleniumPatronAPI.__module__,
             SIP2AuthenticationProvider.__module__,
             FirstBookAuthenticationAPI.__module__,
-            OldFirstBookAuthenticationAPI.__module__,
             KansasAuthenticationAPI.__module__,
+            SirsiDynixHorizonAuthenticationProvider.__module__,
         ]
         self.type = _("patron authentication service")
         self._validator_factory = PatronAuthenticationValidatorFactory()

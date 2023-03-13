@@ -7,6 +7,7 @@ import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
+from urllib.parse import quote, urlparse, urlunparse
 
 import flask
 from flask import Request, Response, redirect, url_for
@@ -16,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
+from werkzeug.urls import url_fix, url_parse, url_quote, url_quote_plus, url_unparse
 from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
@@ -367,15 +369,11 @@ class ViewController(AdminController):
             if isinstance(admin, ProblemDetail):
                 redirect_url = flask.request.url
                 if collection:
-                    quoted_collection = urllib.parse.quote(collection)
                     redirect_url = redirect_url.replace(
-                        quoted_collection, quoted_collection.replace("/", "%2F")
+                        collection, url_quote_plus(collection)
                     )
                 if book:
-                    quoted_book = urllib.parse.quote(book)
-                    redirect_url = redirect_url.replace(
-                        quoted_book, quoted_book.replace("/", "%2F")
-                    )
+                    redirect_url = redirect_url.replace(book, url_quote_plus(book))
                 return redirect(
                     url_for("admin_sign_in", redirect=redirect_url, _external=True)
                 )

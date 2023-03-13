@@ -654,3 +654,7 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
           renderer = HTMLRenderer()
           renderer.open_in_browser(session)
       ```
+
+### Other Environment Variables
+
+- `SIMPLIFIED_SIRSI_DYNIX_APP_ID`: The Application ID for the SirsiDynix Authentication API (optional)

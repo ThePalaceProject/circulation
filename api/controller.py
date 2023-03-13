@@ -1038,7 +1038,12 @@ class OPDSFeedController(CirculationManagerController):
         )
         annotator = self.manager.annotator(lane, facets)
         return NavigationFeed.navigation(
-            self._db, title, url, lane, annotator, facets=facets
+            _db=self._db,
+            title=title,
+            url=url,
+            worklist=lane,
+            annotator=annotator,
+            facets=facets,
         )
 
     def crawlable_library_feed(self):
@@ -2694,12 +2699,10 @@ class SharedCollectionController(CirculationManagerController):
 
 class StaticFileController(CirculationManagerController):
     def static_file(self, directory, filename):
-        cache_timeout = ConfigurationSetting.sitewide(
+        max_age = ConfigurationSetting.sitewide(
             self._db, Configuration.STATIC_FILE_CACHE_TIME
         ).int_value
-        return flask.send_from_directory(
-            directory, filename, cache_timeout=cache_timeout
-        )
+        return flask.send_from_directory(directory, filename, max_age=max_age)
 
     def image(self, filename):
         directory = os.path.join(

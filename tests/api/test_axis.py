@@ -4,7 +4,7 @@ import socket
 import ssl
 import urllib
 from functools import partial
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
 
@@ -1831,8 +1831,11 @@ class TestAxis360AcsFulfillmentInfo:
     @pytest.fixture
     def mock_request(self):
         # Create a mock request object that we can use in the tests
+        response = MagicMock(return_value="")
+        type(response).headers = PropertyMock(return_value=[])
+        type(response).status = PropertyMock(return_value=200)
         mock_request = MagicMock()
-        mock_request.__enter__.return_value = MagicMock(return_value="")
+        mock_request.__enter__.return_value = response
         mock_request.__exit__.return_value = None
         return mock_request
 
@@ -1922,14 +1925,15 @@ class TestAxis360AcsFulfillmentInfo:
         verify,
         verify_mode,
         check_hostname,
+        mock_request,
     ):
         # Make sure that when the verify parameter of the fulfillment method is set we use the
         # correct SSL context to either verify or not verify the ssl certificate for the
         # URL we are fetching.
-        patch_urllib_urlopen(MagicMock())
+        mock = MagicMock(return_value=mock_request)
+        patch_urllib_urlopen(mock)
         fulfillment = fulfillment_info(verify=verify)
         response = fulfillment.as_response
-        mock = urllib.request.urlopen
         mock.assert_called()
         assert "context" in mock.call_args[1]
         context = mock.call_args[1]["context"]

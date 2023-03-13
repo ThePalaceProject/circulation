@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from textwrap import dedent
-from typing import Callable, Tuple
+from typing import Callable, Generator, Tuple
 
 import pytest
 from Crypto.PublicKey.RSA import import_key
@@ -61,7 +61,7 @@ def get_mock_config_key_pair(
 
 
 @pytest.fixture(scope="session")
-def mock_config_key_pair() -> KeyPairFixture:
+def mock_config_key_pair() -> Generator[KeyPairFixture, None, None]:
     """
     Key pair generation takes a significant amount of time, and has to be done each time
     we set up for testing. This mocks out the Configuration.key_pair function to reduce the amount

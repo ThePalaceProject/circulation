@@ -14,22 +14,38 @@ if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
+class AdminStatisticsSessionFixture:
+    admin: Admin
+    db: DatabaseTransactionFixture
+
+    def __init__(self, admin: Admin, db: DatabaseTransactionFixture):
+        self.admin = admin
+        self.db = db
+
+    def get_statistics(self):
+        return generate_statistics(self.admin, self.db.session)
+
+
 @pytest.fixture
-def admin(db: DatabaseTransactionFixture) -> Admin:
-    admin, ignore = create(db.session, Admin, email="example@nypl.org")
+def admin_statistics_session(
+    db: DatabaseTransactionFixture,
+) -> AdminStatisticsSessionFixture:
+    admin, _ = create(db.session, Admin, email="example@nypl.org")
     admin.password = "password"
-    return admin
+    return AdminStatisticsSessionFixture(admin, db)
 
 
-def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
-    db_session = db.session
+def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
     default_library = db.library("Default Library", "default")
 
     # At first, there are no patrons in the database.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -56,7 +72,7 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     patron3 = db.patron()
     open_access_pool.loan_to(patron3)
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -75,7 +91,7 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     patron5 = db.patron(library=l2)
     pool.on_hold_to(patron5)
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     assert 3 == library_data.get("patrons").get("total")
@@ -94,7 +110,7 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     admin.remove_role(AdminRole.SYSTEM_ADMIN)
     admin.add_role(AdminRole.LIBRARIAN, default_library)
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     assert 3 == library_data.get("patrons").get("total")
@@ -109,15 +125,17 @@ def test_stats_patrons(admin: Admin, db: DatabaseTransactionFixture):
     assert 1 == total_data.get("patrons").get("holds")
 
 
-def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
-    db_session = db.session
+def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture):
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
     default_library = db.library("Default Library", "default")
 
     # At first, there are no titles in the database.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -148,7 +166,7 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
     pool3.licenses_owned = 5
     pool3.licenses_available = 4
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -165,7 +183,7 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
     pool4.licenses_owned = 2
     pool4.licenses_available = 2
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     assert 2 == library_data.get("inventory").get("titles")
@@ -180,7 +198,7 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
 
     # The admin can no longer see the other collection, so it's not
     # counted in the totals.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
@@ -190,8 +208,10 @@ def test_stats_inventory(admin: Admin, db: DatabaseTransactionFixture):
         assert 4 == inventory_data.get("available_licenses")
 
 
-def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
-    db_session = db.session
+def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixture):
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
@@ -206,17 +226,20 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
 
     # At first, there is 1 open access title in the database,
     # created in CirculationControllerTest.setup.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
         collections_data = data.get("collections")
         assert 1 == len(collections_data)
-        collection_data = collections_data.get(default_collection.name)
-        assert 0 == collection_data.get("licensed_titles")
-        assert 1 == collection_data.get("open_access_titles")
-        assert 0 == collection_data.get("licenses")
-        assert 0 == collection_data.get("available_licenses")
+        assert 0 == collections_data.get(default_collection.name).get("licensed_titles")
+        assert 1 == collections_data.get(default_collection.name).get(
+            "open_access_titles"
+        )
+        assert 0 == collections_data.get(default_collection.name).get("licenses")
+        assert 0 == collections_data.get(default_collection.name).get(
+            "available_licenses"
+        )
 
     c2 = db.collection()
     c3 = db.collection()
@@ -246,6 +269,7 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.BIBLIOTHECA,
+        collection=default_collection,
     )
     pool3.open_access = False
     pool3.licenses_owned = 3
@@ -261,7 +285,7 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
     pool4.licenses_owned = 5
     pool4.licenses_available = 5
 
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     library_collections_data = library_data.get("collections")
@@ -269,17 +293,15 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
     assert 2 == len(library_collections_data)
     assert 3 == len(total_collections_data)
     for data in [library_collections_data, total_collections_data]:
-        c1_data = data.get(default_collection.name)
-        assert 1 == c1_data.get("licensed_titles")
-        assert 1 == c1_data.get("open_access_titles")
-        assert 3 == c1_data.get("licenses")
-        assert 0 == c1_data.get("available_licenses")
+        assert 1 == data.get(default_collection.name).get("licensed_titles")
+        assert 1 == data.get(default_collection.name).get("open_access_titles")
+        assert 3 == data.get(default_collection.name).get("licenses")
+        assert 0 == data.get(default_collection.name).get("available_licenses")
 
-        c3_data = data.get(c3.name)
-        assert 0 == c3_data.get("licensed_titles")
-        assert 0 == c3_data.get("open_access_titles")
-        assert 0 == c3_data.get("licenses")
-        assert 0 == c3_data.get("available_licenses")
+        assert 0 == data.get(c3.name).get("licensed_titles")
+        assert 0 == data.get(c3.name).get("open_access_titles")
+        assert 0 == data.get(c3.name).get("licenses")
+        assert 0 == data.get(c3.name).get("available_licenses")
 
     assert None == library_collections_data.get(c2.name)
     c2_data = total_collections_data.get(c2.name)
@@ -293,31 +315,38 @@ def test_stats_collections(admin: Admin, db: DatabaseTransactionFixture):
 
     # c2 is no longer included in the totals since the admin's library does
     # not use it.
-    response = generate_statistics(admin, db_session)
+    response = session.get_statistics()
     library_data = response.get(default_library.short_name)
     total_data = response.get("total")
     for data in [library_data, total_data]:
         collections_data = data.get("collections")
         assert 2 == len(collections_data)
-        assert None == collections_data.get(c2.name)
+        assert collections_data.get(c2.name) is None
 
-        c1_data = collections_data.get(default_collection.name)
-        assert 1 == c1_data.get("licensed_titles")
-        assert 1 == c1_data.get("open_access_titles")
-        assert 3 == c1_data.get("licenses")
-        assert 0 == c1_data.get("available_licenses")
+        assert 1 == collections_data.get(default_collection.name).get("licensed_titles")
+        assert 1 == collections_data.get(default_collection.name).get(
+            "open_access_titles"
+        )
+        assert 3 == collections_data.get(default_collection.name).get("licenses")
+        assert 0 == collections_data.get(default_collection.name).get(
+            "available_licenses"
+        )
 
-        c3_data = collections_data.get(c3.name)
-        assert 0 == c3_data.get("licensed_titles")
-        assert 0 == c3_data.get("open_access_titles")
-        assert 0 == c3_data.get("licenses")
-        assert 0 == c3_data.get("available_licenses")
+        assert 0 == collections_data.get(c3.name).get("licensed_titles")
+        assert 0 == collections_data.get(c3.name).get("open_access_titles")
+        assert 0 == collections_data.get(c3.name).get("licenses")
+        assert 0 == collections_data.get(c3.name).get("available_licenses")
 
 
 def test_stats_parent_collection_permissions(
-    admin: Admin, db: DatabaseTransactionFixture
+    admin_statistics_session: AdminStatisticsSessionFixture,
 ):
     """A parent collection may be dissociated from a library"""
+
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
+
     parent: Collection = db.collection()
     child: Collection = db.collection()
     child.parent = parent
@@ -325,7 +354,7 @@ def test_stats_parent_collection_permissions(
     child.libraries.append(library)
     admin.add_role(AdminRole.LIBRARIAN, library)
 
-    response = generate_statistics(admin, db.session)
+    response = session.get_statistics()
     stats = response["total"]["collections"]
 
     # Child is in stats, but parent is not

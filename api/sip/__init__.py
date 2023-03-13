@@ -1,19 +1,18 @@
 import json
 from datetime import datetime
-from typing import Union
+from typing import Optional, Union
 
 from flask_babel import lazy_gettext as _
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
 from api.sip.client import SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
 
 
 class SIP2AuthenticationProvider(BasicAuthenticationProvider):
-
     NAME = "SIP2"
 
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
@@ -27,6 +26,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
     USE_SSL = "use_ssl"
     SSL_CERTIFICATE = "ssl_certificate"
     SSL_KEY = "ssl_key"
+    SSL_VERIFICATION = "ssl_verification"
     ILS = "ils"
     PATRON_STATUS_BLOCK = "patron status block"
 
@@ -62,6 +62,26 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             ],
             "default": "false",
             "required": True,
+        },
+        {
+            "key": SSL_VERIFICATION,
+            "label": _("Perform SSL certificate verification."),
+            "description": _(
+                "Strict certificate verification may be optionally turned off for hosts that have misconfigured or untrusted certificates."
+            ),
+            "type": "select",
+            "options": [
+                {
+                    "key": "true",
+                    "label": _("Perform SSL certificate verification."),
+                },
+                {
+                    "key": "false",
+                    "label": _("Do not perform SSL certificate verification."),
+                },
+            ],
+            "default": "true",
+            "required": False,
         },
         {
             "key": ILS,
@@ -182,6 +202,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.use_ssl = integration.setting(self.USE_SSL).json_value
         self.ssl_cert = integration.setting(self.SSL_CERTIFICATE).value
         self.ssl_key = integration.setting(self.SSL_KEY).value
+        self.ssl_verification = integration.setting(self.SSL_VERIFICATION).value
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
 
@@ -221,6 +242,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             use_ssl=self.use_ssl,
             ssl_cert=self.ssl_cert,
             ssl_key=self.ssl_key,
+            ssl_verification=self.ssl_verification,
             encoding=self.encoding.lower(),
             dialect=self.dialect,
         )
@@ -238,7 +260,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
-    def _remote_patron_lookup(self, patron_or_patrondata):
+    def _remote_patron_lookup(self, patron_or_patrondata) -> Optional[PatronData]:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
@@ -305,7 +327,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     ("Raw test patron information"), raw_patron_information
                 )
 
-    def info_to_patrondata(self, info, validate_password=True):
+    def info_to_patrondata(self, info, validate_password=True) -> Optional[PatronData]:
 
         """Convert the SIP-specific dictionary obtained from
         SIPClient.patron_information() to an abstract,
