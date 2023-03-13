@@ -1088,7 +1088,7 @@ class DisappearingBookReportScript(Script):
         ]
         data.append(", ".join(title_removals))
 
-        print("\t".join([str(x).encode("utf8") for x in data]))
+        print("\t".join([str(x) for x in data]))
 
 
 class NYTBestSellerListsScript(TimestampScript):
