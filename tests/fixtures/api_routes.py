@@ -1,13 +1,14 @@
 import logging
+from typing import Any, Generator, Optional
 
 import flask
 import pytest
-from flask import Response
 from werkzeug.exceptions import MethodNotAllowed
 
 from api import routes
-from api.controller import CirculationManager
-from tests.api.test_controller import ControllerTest
+from api.controller import CirculationManager, CirculationManagerController
+from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class MockApp:
@@ -53,7 +54,7 @@ class MockControllerMethod:
         """
         self.args = args
         self.kwargs = kwargs
-        response = Response("I called %s" % repr(self), 200)
+        response = flask.Response("I called %s" % repr(self), 200)
         response.method = self
         return response
 
@@ -92,7 +93,7 @@ class MockController(MockControllerMethod):
             flask.request.patron = self.AUTHENTICATED_PATRON
             return self.AUTHENTICATED_PATRON
         else:
-            return Response(
+            return flask.Response(
                 "authenticated_patron_from_request called without authorizing", 401
             )
 
@@ -106,7 +107,56 @@ class MockController(MockControllerMethod):
         return "<MockControllerMethod %s>" % self.name
 
 
-class RouteTestFixtures:
+class RouteTestFixture:
+
+    # The first time __init__() is called, it will instantiate a real
+    # CirculationManager object and store it in REAL_CIRCULATION_MANAGER.
+    # We only do this once because it takes about a second to instantiate
+    # this object. Calling any of this object's methods could be problematic,
+    # since it's probably left over from a previous test, but we won't be
+    # calling any methods -- we just want to verify the _existence_,
+    # in a real CirculationManager, of the methods called in
+    # routes.py.
+
+    REAL_CIRCULATION_MANAGER = None
+
+    def __init__(
+        self, vendor_id: VendorIDFixture, controller_fixture: ControllerFixture
+    ):
+        self.db = vendor_id.db
+        self.controller_fixture = controller_fixture
+        self.setup_circulation_manager = False
+        if not RouteTestFixture.REAL_CIRCULATION_MANAGER:
+            library = self.db.default_library()
+            # Set up the necessary configuration so that when we
+            # instantiate the CirculationManager it gets an
+            # adobe_vendor_id controller -- this wouldn't normally
+            # happen because most circulation managers don't need such a
+            # controller.
+            vendor_id.initialize_adobe(library, [library])
+            vendor_id.adobe_vendor_id.password = vendor_id.TEST_NODE_VALUE
+            manager = CirculationManager(self.db.session, testing=True)
+            RouteTestFixture.REAL_CIRCULATION_MANAGER = manager
+
+        app = MockApp()
+        self.routes = routes
+        self.manager = app.manager
+        self.original_app = self.routes.app
+        self.resolver = self.original_app.url_map.bind("", "/")
+
+        self.controller: Optional[CirculationManagerController] = None
+        self.real_controller: Optional[CirculationManagerController] = None
+        self.routes.app = app  # type: ignore
+
+    def set_controller_name(self, name: str):
+        self.controller = getattr(self.manager, name)
+        # Make sure there's a controller by this name in the real
+        # CirculationManager.
+        self.real_controller = getattr(self.REAL_CIRCULATION_MANAGER, name)
+
+    def close(self):
+        self.routes.app = self.original_app
+
     def request(self, url, method="GET"):
         """Simulate a request to a URL without triggering any code outside
         routes.py.
@@ -118,7 +168,7 @@ class RouteTestFixtures:
         mock_function = getattr(self.routes, function_name)
 
         # Call it in the context of the mock app.
-        with self.app.test_request_context():
+        with self.controller_fixture.app.test_request_context():
             return mock_function(**kwargs)
 
     def assert_request_calls(self, url, method, *args, **kwargs):
@@ -220,60 +270,10 @@ class RouteTestFixtures:
             logging.debug("And it was.")
 
 
-class RouteTest(ControllerTest, RouteTestFixtures):
-    """Test what happens when an HTTP request is run through the
-    routes we've registered with Flask.
-    """
-
-    # The first time setup_method() is called, it will instantiate a real
-    # CirculationManager object and store it in REAL_CIRCULATION_MANAGER.
-    # We only do this once because it takes about a second to instantiate
-    # this object. Calling any of this object's methods could be problematic,
-    # since it's probably left over from a previous test, but we won't be
-    # calling any methods -- we just want to verify the _existence_,
-    # in a real CirculationManager, of the methods called in
-    # routes.py.
-    @classmethod
-    def setup_class(cls):
-        super().setup_class()
-        cls.REAL_CIRCULATION_MANAGER = None
-
-    def setup_method(self):
-        self.setup_circulation_manager = False
-        super().setup_method()
-        if not self.REAL_CIRCULATION_MANAGER:
-            library = self._default_library
-            # Set up the necessary configuration so that when we
-            # instantiate the CirculationManager it gets an
-            # adobe_vendor_id controller -- this wouldn't normally
-            # happen because most circulation managers don't need such a
-            # controller.
-            self.initialize_adobe(library, [library])
-            self.adobe_vendor_id.password = self.TEST_NODE_VALUE
-            manager = CirculationManager(self._db, testing=True)
-            self.REAL_CIRCULATION_MANAGER = manager
-        app = MockApp()
-        self.routes = routes
-        self.manager = app.manager
-        self.original_app = self.routes.app
-        self.resolver = self.original_app.url_map.bind("", "/")
-
-        # For convenience, set self.controller to a specific controller
-        # whose routes are being tested.
-        controller_name = getattr(self, "CONTROLLER_NAME", None)
-        if controller_name:
-            self.controller = getattr(self.manager, controller_name)
-
-            # Make sure there's a controller by this name in the real
-            # CirculationManager.
-            self.real_controller = getattr(
-                self.REAL_CIRCULATION_MANAGER, controller_name
-            )
-        else:
-            self.real_controller = None
-
-        self.routes.app = app
-
-    def teardown_method(self):
-        super().teardown_method()
-        self.routes.app = self.original_app
+@pytest.fixture(scope="function")
+def route_test(
+    vendor_id_fixture: VendorIDFixture, controller_fixture: ControllerFixture
+) -> Generator[RouteTestFixture, Any, None]:
+    fix = RouteTestFixture(vendor_id_fixture, controller_fixture)
+    yield fix
+    fix.close()

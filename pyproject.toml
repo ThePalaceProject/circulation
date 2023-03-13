@@ -29,8 +29,9 @@ exclude = [
     'core/classifier',
     'core/model/listeners\.py',
     'integration_tests/',
-    # TODO: Post test-suite refactoring.
     'tests/api/admin/controller/',
+    # TODO: Post test-suite refactoring.
+    'tests/api/admin/test_routes.py',
     'tests/api/saml/metadata',
     'tests/api/saml/test_auth\.py',
     'tests/api/saml/test_provider\.py',
