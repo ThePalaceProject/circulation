@@ -17,7 +17,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
-from werkzeug.urls import url_fix, url_parse, url_quote, url_quote_plus, url_unparse
+from werkzeug.urls import (
+    BaseURL,
+    url_fix,
+    url_parse,
+    url_quote,
+    url_quote_plus,
+    url_unparse,
+)
 from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
@@ -591,7 +598,20 @@ class SignInController(AdminController):
             headers["Content-Type"] = "text/html"
             return Response(html, 200, headers)
         elif admin:
-            return redirect(flask.request.args.get("redirect"), Response=Response)
+            # Because the URL redirect is effectively untrusted user input,
+            # we extract the URL path and forbid redirecting to external
+            # hosts.
+            redirect_target = flask.request.args.get("redirect")
+            redirect_url: BaseURL = url_parse(redirect_target)
+            if redirect_url.netloc not in (None, ""):
+                logging.warning(
+                    f"Redirecting to {redirect_url.netloc} is not permitted"
+                )
+                return Response(
+                    _("Redirecting to an external domain is not allowed."), 400
+                )
+
+            return redirect(redirect_url.path, Response=Response)
 
     def password_sign_in(self):
         if not self.admin_auth_providers:

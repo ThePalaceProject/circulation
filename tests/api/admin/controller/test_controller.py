@@ -446,6 +446,21 @@ class TestSignInController(AdminControllerTest):
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
 
+    def test_admin_signin_no_external_domain(self):
+        # We don't permit redirecting to an external domain
+        self.admin.password = "password"
+        with self.app.test_request_context(
+            "/admin/sign_in?redirect=http%3A%2F%2Fwww.example.com%2Fxyz"
+        ):
+            flask.session["admin_email"] = self.admin.email
+            flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
+            response = self.manager.admin_sign_in_controller.sign_in()
+            assert 400 == response.status_code
+            assert (
+                "Redirecting to an external domain is not allowed."
+                == response.get_data(as_text=True)
+            )
+
     def test_password_sign_in(self):
         # Returns an error if there's no admin auth service and no admins.
         with self.app.test_request_context("/admin/sign_in_with_password"):
