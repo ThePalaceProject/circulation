@@ -29,6 +29,7 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app)
+
 # The autodoc spec, can be accessed at "/apidoc/swagger"
 api_spec = FlaskPydanticSpec(
     "Palace Manager", mode="strict", title="Palace Manager API"
@@ -46,9 +47,7 @@ PalaceXrayProfiler.configure(app)
 
 
 def initialize_application() -> Flask:
-    """
-    Callable entrypoint for uwsgi
-    """
+
     initialize_database()
     initialize_circulation_manager()
     initialize_admin()
@@ -130,6 +129,7 @@ def run(url=None):
 
         socket.setdefaulttimeout(None)
 
+    initialize_application()
     logging.info("Starting app on %s:%s", host, port)
     sslContext = "adhoc" if scheme == "https" else None
     app.run(debug=debug, host=host, port=port, threaded=True, ssl_context=sslContext)
