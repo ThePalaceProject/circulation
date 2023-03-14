@@ -514,6 +514,20 @@ class TestSignInController(AdminControllerTest):
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
 
+        # Refuses to redirect to an unsafe location.
+        with self.app.test_request_context(
+            "/admin/sign_in_with_password", method="POST"
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("email", self.admin.email),
+                    ("password", "password"),
+                    ("redirect", "http://www.example.com/passwordstealer"),
+                ]
+            )
+            response = self.manager.admin_sign_in_controller.password_sign_in()
+            assert 400 == response.status_code
+
     def test_change_password(self):
         admin, ignore = create(self._db, Admin, email=self._str)
         admin.password = "old"

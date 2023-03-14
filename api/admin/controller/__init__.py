@@ -6,11 +6,22 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 from urllib.parse import quote, urlparse, urlunparse
 
 import flask
-from flask import Request, Response, redirect, url_for
+import werkzeug
+from flask import Request, Response, current_app, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
@@ -232,6 +243,39 @@ def setup_admin_controllers(manager):
     manager.admin_announcement_service = AnnouncementSettings(manager)
 
     manager.admin_search_controller = AdminSearchController(manager)
+
+
+class SanitizedRedirections:
+    """Functions to sanitize redirects."""
+
+    @staticmethod
+    def _check_redirect(target: str) -> Tuple[bool, str]:
+        """Check that a redirect is allowed.
+        Because the URL redirect is assumed to be untrusted user input,
+        we extract the URL path and forbid redirecting to external
+        hosts.
+        """
+        redirect_url: BaseURL = url_parse(target)
+
+        # If the redirect isn't asking for a particular host, then it's safe.
+        if redirect_url.netloc in (None, ""):
+            return True, ""
+
+        # Otherwise, if the redirect is asking for a different host, it's unsafe.
+        if redirect_url.netloc != flask.request.host:
+            logging.warning(f"Redirecting to {redirect_url.netloc} is not permitted")
+            return False, _("Redirecting to an external domain is not allowed.")
+
+        return True, ""
+
+    @staticmethod
+    def redirect(target: str) -> Response:
+        """Check that a redirect is allowed before performing it."""
+        ok, message = SanitizedRedirections._check_redirect(target)
+        if ok:
+            return redirect(target, Response=Response)
+        else:
+            return Response(message, 400)
 
 
 class AdminController:
@@ -598,20 +642,7 @@ class SignInController(AdminController):
             headers["Content-Type"] = "text/html"
             return Response(html, 200, headers)
         elif admin:
-            # Because the URL redirect is effectively untrusted user input,
-            # we extract the URL path and forbid redirecting to external
-            # hosts.
-            redirect_target = flask.request.args.get("redirect")
-            redirect_url: BaseURL = url_parse(redirect_target)
-            if redirect_url.netloc not in (None, ""):
-                logging.warning(
-                    f"Redirecting to {redirect_url.netloc} is not permitted"
-                )
-                return Response(
-                    _("Redirecting to an external domain is not allowed."), 400
-                )
-
-            return redirect(redirect_url.path, Response=Response)
+            return SanitizedRedirections.redirect(flask.request.args.get("redirect"))
 
     def password_sign_in(self):
         if not self.admin_auth_providers:
@@ -626,7 +657,7 @@ class SignInController(AdminController):
             return self.error_response(INVALID_ADMIN_CREDENTIALS)
 
         admin = self.authenticated_admin(admin_details)
-        return redirect(redirect_url, Response=Response)
+        return SanitizedRedirections.redirect(redirect_url)
 
     def change_password(self):
         admin = flask.request.admin
@@ -645,7 +676,7 @@ class SignInController(AdminController):
             redirect=url_for("admin_view", _external=True),
             _external=True,
         )
-        return redirect(redirect_url)
+        return SanitizedRedirections.redirect(redirect_url)
 
     def error_response(self, problem_detail):
         """Returns a problem detail as an HTML response"""
