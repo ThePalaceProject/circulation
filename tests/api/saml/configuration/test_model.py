@@ -382,7 +382,7 @@ class TestSAMLSettings:
         # Without an active database session there are no federated IdPs and no options
         assert None == federated_identity_provider_entity_ids["options"]
 
-        initialize_database(autoinitialize=False)
+        initialize_database(autoinitialize=False, is_testing=True)
 
         federation = SAMLFederation(
             incommon.FEDERATION_TYPE, "http://incommon.org/metadata"
