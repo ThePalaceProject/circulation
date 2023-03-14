@@ -386,7 +386,7 @@ class SIPClient(Constants):
             else:
                 self.connection = self.make_insecure_connection()
 
-            self.connection.settimeout(12)
+            self.connection.settimeout(2)
             self.connection.connect((self.target_server, self.target_port))
         except OSError as message:
             raise OSError(
