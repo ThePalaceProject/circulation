@@ -83,6 +83,6 @@ class TestAdminSearchController(AdminControllerTest):
         }
         assert response["audiences"] == {"Adult": 3, "Young Adult": 10}
         assert response["genres"] == {"Education": 2, "Horror": 1, "Drama": 10}
-        assert response["languages"] == {"eng": 2, "spa": 1, "man": 10}
+        assert response["languages"] == {"English": 2, "Spanish": 1, "Mandingo": 10}
         assert response["publishers"] == {"Publisher 1": 3, "Publisher 10": 10}
         assert response["distributors"] == {"Gutenberg": 13}
