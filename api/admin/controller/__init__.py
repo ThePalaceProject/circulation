@@ -6,7 +6,17 @@ import os
 import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import flask
 from flask import Request, Response, redirect, url_for
