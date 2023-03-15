@@ -135,7 +135,6 @@ class CirculationManager:
     log = logging.getLogger("api.controller.CirculationManager")
 
     def __init__(self, _db, testing=False):
-        self.admin_analytics_services_controller = None
         self._db = _db
 
         self.testing = testing

@@ -31,7 +31,7 @@ class TestCollectionSettings:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.get("collections") == []
 
@@ -53,7 +53,7 @@ class TestCollectionSettings:
         # setting for covers or books.
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             protocols = response.get("protocols")
             for protocol in protocols:
@@ -90,7 +90,7 @@ class TestCollectionSettings:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             controller = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller
+                settings_ctrl_fixture.manager.admin_collection_settings_controller
             )
             response = controller.process_collections()
             protocols = response.get("protocols")
@@ -209,7 +209,7 @@ class TestCollectionSettings:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             controller = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller
+                settings_ctrl_fixture.manager.admin_collection_settings_controller
             )
             response = controller.process_collections()
             # The system admin can see all collections.
@@ -306,7 +306,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == MISSING_COLLECTION_NAME
 
@@ -317,7 +317,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
@@ -329,7 +329,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == UNKNOWN_PROTOCOL
 
@@ -342,7 +342,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == MISSING_COLLECTION
 
@@ -358,7 +358,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == COLLECTION_NAME_ALREADY_IN_USE
 
@@ -373,7 +373,7 @@ class TestCollectionSettings:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections,
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections,
             )
 
         settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
@@ -386,7 +386,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == CANNOT_CHANGE_PROTOCOL
 
@@ -399,7 +399,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == PROTOCOL_DOES_NOT_SUPPORT_PARENTS
 
@@ -412,7 +412,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == MISSING_PARENT
 
@@ -427,7 +427,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.uri == NO_SUCH_LIBRARY.uri
 
@@ -439,7 +439,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -454,7 +454,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -468,7 +468,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -482,7 +482,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -529,7 +529,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 201
 
@@ -593,7 +593,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 201
 
@@ -656,7 +656,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 200
 
@@ -700,7 +700,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 200
 
@@ -744,7 +744,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 200
 
@@ -787,7 +787,7 @@ class TestCollectionSettings:
             )
             flask.request.form = request
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 200
 
@@ -801,9 +801,7 @@ class TestCollectionSettings:
             assert storage.id == external_integration_link.other_integration_id
 
         # It's possible to unset the mirror integration.
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_collection_settings_controller
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             request = MultiDict(
                 base_request
@@ -829,7 +827,7 @@ class TestCollectionSettings:
             request = MultiDict(base_request + [("books_mirror_integration_id", -200)])
             flask.request.form = request
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == MISSING_SERVICE
 
@@ -859,7 +857,7 @@ class TestCollectionSettings:
             )
             flask.request.form = request
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response == INTEGRATION_GOAL_CONFLICT
 
@@ -895,7 +893,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 200
 
@@ -925,7 +923,7 @@ class TestCollectionSettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_collections()
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
             assert response.status_code == 200
 
@@ -952,12 +950,12 @@ class TestCollectionSettings:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_delete,
                 collection.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_collection_settings_controller.process_delete(
                 collection.id
             )
             assert response.status_code == 200
@@ -983,7 +981,7 @@ class TestCollectionSettings:
         child.parent = parent
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_settings_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_collection_settings_controller.process_delete(
                 parent.id
             )
             assert CANNOT_DELETE_COLLECTION_WITH_CHILDREN == response

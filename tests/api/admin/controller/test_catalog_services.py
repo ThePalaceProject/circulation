@@ -24,7 +24,7 @@ class TestCatalogServicesController:
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.get("catalog_services") == []
             protocols = response.get("protocols")
@@ -37,7 +37,7 @@ class TestCatalogServicesController:
             settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services,
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services,
             )
 
     def test_catalog_services_get_with_marc_exporter(
@@ -72,7 +72,7 @@ class TestCatalogServicesController:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             [service] = response.get("catalog_services")
             assert integration.id == service.get("id")
@@ -97,7 +97,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == UNKNOWN_PROTOCOL
 
@@ -108,7 +108,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == MISSING_SERVICE
 
@@ -128,7 +128,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == CANNOT_CHANGE_PROTOCOL
 
@@ -140,7 +140,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
@@ -163,7 +163,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.uri == MISSING_INTEGRATION.uri
 
@@ -186,7 +186,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.uri == MISSING_INTEGRATION.uri
 
@@ -202,7 +202,7 @@ class TestCatalogServicesController:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services,
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services,
             )
 
         # This should be the last test to check since rolling back database
@@ -233,7 +233,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.uri == MULTIPLE_SERVICES_FOR_LIBRARY.uri
 
@@ -271,7 +271,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.status_code == 201
 
@@ -359,7 +359,7 @@ class TestCatalogServicesController:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.status_code == 200
 
@@ -409,12 +409,12 @@ class TestCatalogServicesController:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_delete,
                 service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_catalog_services_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_catalog_services_controller.process_delete(
                 service.id
             )
             assert response.status_code == 200

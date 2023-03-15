@@ -56,7 +56,7 @@ class TestCollectionRegistration:
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="GET"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_collection_library_registrations_controller.process_collection_library_registrations()
+                settings_ctrl_fixture.manager.admin_collection_library_registrations_controller.process_collection_library_registrations()
             )
 
             serviceInfo = response.get("library_registrations")
@@ -74,7 +74,7 @@ class TestCollectionRegistration:
             db.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_collection_library_registrations_controller.process_collection_library_registrations,
+                settings_ctrl_fixture.manager.admin_collection_library_registrations_controller.process_collection_library_registrations,
             )
 
     def test_collection_library_registrations_post(
@@ -84,7 +84,7 @@ class TestCollectionRegistration:
         # First test the failure cases.
 
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_collection_library_registrations_controller.process_collection_library_registrations
+            settings_ctrl_fixture.manager.admin_collection_library_registrations_controller.process_collection_library_registrations
         )
 
         # Here, the user doesn't have permission to start the

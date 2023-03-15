@@ -6,7 +6,7 @@ from core.selftest import HasSelfTests
 class TestSearchServiceSelfTests:
     def test_search_service_self_tests_with_no_identifier(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
                 None
             )
             assert response.title == MISSING_IDENTIFIER.title
@@ -17,7 +17,7 @@ class TestSearchServiceSelfTests:
         self, settings_ctrl_fixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
                 -1
             )
             assert response == MISSING_SERVICE
@@ -35,7 +35,7 @@ class TestSearchServiceSelfTests:
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
                 search_service.id
             )
             response_search_service = response.get("self_test_results")
@@ -65,7 +65,7 @@ class TestSearchServiceSelfTests:
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_search_service_self_tests_controller.self_tests_process_post
+            settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.self_tests_process_post
         )
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             response = m(search_service.id)

@@ -29,9 +29,7 @@ class TestAnnouncementService:
         global_announcements = Announcements.for_all(admin_ctrl_fixture.ctrl.db.session)
 
         with admin_ctrl_fixture.request_context_with_admin("/", method="GET") as ctx:
-            response = AnnouncementSettings(
-                admin_ctrl_fixture.ctrl.manager
-            ).process_many()
+            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
 
         assert set(response.keys()) == {"settings", "announcements"}
         announcements_in_response = response["announcements"]
@@ -50,9 +48,7 @@ class TestAnnouncementService:
             ctx.request.form = MultiDict(
                 [("announcements", json.dumps([announcement_fixture.active]))]
             )
-            response = AnnouncementSettings(
-                admin_ctrl_fixture.ctrl.manager
-            ).process_many()
+            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
 
         announcements = Announcements.for_all(admin_ctrl_fixture.ctrl.db.session)
         assert len(announcements.announcements) == 1
@@ -65,23 +61,17 @@ class TestAnnouncementService:
     ):
         with admin_ctrl_fixture.request_context_with_admin("/", method="POST") as ctx:
             ctx.request.form = None
-            response = AnnouncementSettings(
-                admin_ctrl_fixture.ctrl.manager
-            ).process_many()
+            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
             assert response == INVALID_INPUT
 
             ctx.request.form = MultiDict(
                 [("somethingelse", json.dumps([announcement_fixture.active]))]
             )
-            response = AnnouncementSettings(
-                admin_ctrl_fixture.ctrl.manager
-            ).process_many()
+            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
             assert response == INVALID_INPUT
 
             ctx.request.form = MultiDict(
                 [("announcements", json.dumps([{"id": "xxx"}]))]
             )
-            response = AnnouncementSettings(
-                admin_ctrl_fixture.ctrl.manager
-            ).process_many()
+            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
             assert "Missing required field: content" == response.detail

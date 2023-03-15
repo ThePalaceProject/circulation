@@ -27,7 +27,7 @@ class TestDiscoveryServices:
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.process_discovery_services()
+                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
             )
             [service] = response.get("discovery_services")
             protocols = response.get("protocols")
@@ -46,7 +46,7 @@ class TestDiscoveryServices:
             settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.process_discovery_services,
+                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services,
             )
 
     def test_discovery_services_get_with_one_service(
@@ -60,9 +60,7 @@ class TestDiscoveryServices:
         )
         discovery_service.url = settings_ctrl_fixture.ctrl.db.fresh_str()
 
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_discovery_services_controller
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = controller.process_discovery_services()
@@ -77,9 +75,7 @@ class TestDiscoveryServices:
     def test_discovery_services_post_errors(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_discovery_services_controller
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -176,7 +172,7 @@ class TestDiscoveryServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.process_discovery_services()
+                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
             )
             assert response.status_code == 201
 
@@ -210,7 +206,7 @@ class TestDiscoveryServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.process_discovery_services()
+                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
             )
             assert response.status_code == 200
 
@@ -238,7 +234,7 @@ class TestDiscoveryServices:
         )
 
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.check_name_unique
+            settings_ctrl_fixture.manager.admin_discovery_services_controller.check_name_unique
         )
 
         # Try to change new service so that it has the same name as existing service
@@ -267,12 +263,12 @@ class TestDiscoveryServices:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_delete,
                 discovery_service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_discovery_services_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_discovery_services_controller.process_delete(
                 discovery_service.id
             )
             assert response.status_code == 200

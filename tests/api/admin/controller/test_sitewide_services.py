@@ -18,7 +18,7 @@ class TestSitewideServices:
             def _delete_integration(self, *args):
                 self.delete_called_with = args
 
-        controller = MockSearch(settings_ctrl_fixture.ctrl.manager)
+        controller = MockSearch(settings_ctrl_fixture.manager)
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             controller.process_services()

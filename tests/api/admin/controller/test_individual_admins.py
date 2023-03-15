@@ -40,7 +40,7 @@ class TestIndividualAdmins:
         with settings_ctrl_fixture.request_context_with_admin("/", admin=admin1):
             # A system admin can see all other admins' roles.
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
             assert sorted(
@@ -101,7 +101,7 @@ class TestIndividualAdmins:
         with settings_ctrl_fixture.request_context_with_admin("/", admin=admin2):
             # A sitewide librarian or library manager can also see all admins' roles.
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
             assert sorted(
@@ -141,12 +141,12 @@ class TestIndividualAdmins:
             # A librarian cannot view this API anymore
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_get,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get,
             )
 
         with settings_ctrl_fixture.request_context_with_admin("/", admin=admin4):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
             assert sorted(
@@ -188,12 +188,12 @@ class TestIndividualAdmins:
         with settings_ctrl_fixture.request_context_with_admin("/", admin=admin5):
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_get,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get,
             )
 
         with settings_ctrl_fixture.request_context_with_admin("/", admin=admin6):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
             assert sorted(
@@ -253,7 +253,7 @@ class TestIndividualAdmins:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([])
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -271,7 +271,7 @@ class TestIndividualAdmins:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.uri == LIBRARY_NOT_FOUND.uri
 
@@ -290,7 +290,7 @@ class TestIndividualAdmins:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.uri == UNKNOWN_ROLE.uri
 
@@ -349,12 +349,12 @@ class TestIndividualAdmins:
                     ]
                 )
                 if allowed:
-                    settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                    settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
                     db.session.rollback()
                 else:
                     pytest.raises(
                         AdminNotAuthorized,
-                        settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post,
+                        settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post,
                     )
 
         # Various types of user trying to change a system admin's roles
@@ -432,12 +432,12 @@ class TestIndividualAdmins:
                     ]
                 )
                 if allowed:
-                    settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                    settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
                     db.session.rollback()
                 else:
                     pytest.raises(
                         AdminNotAuthorized,
-                        settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post,
+                        settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post,
                     )
 
         # Various types of user trying to change a system admin's password
@@ -521,7 +521,7 @@ class TestIndividualAdmins:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.status_code == 201
 
@@ -557,7 +557,7 @@ class TestIndividualAdmins:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.status_code == 201
 
@@ -602,7 +602,7 @@ class TestIndividualAdmins:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.status_code == 200
 
@@ -645,28 +645,28 @@ class TestIndividualAdmins:
         ):
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete,
                 librarian.email,
             )
 
         with settings_ctrl_fixture.request_context_with_admin(
             "/", method="DELETE", admin=sitewide_manager
         ):
-            response = settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete(
                 librarian.email
             )
             assert response.status_code == 200
 
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete,
                 system_admin.email,
             )
 
         with settings_ctrl_fixture.request_context_with_admin(
             "/", method="DELETE", admin=system_admin
         ):
-            response = settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete(
                 system_admin.email
             )
             assert response.status_code == 200
@@ -705,7 +705,7 @@ class TestIndividualAdmins:
             flask.request.files = {}
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post,
             )
 
     def test_individual_admins_post_create_requires_password(
@@ -726,7 +726,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 400 == response.status_code
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
@@ -750,7 +750,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 400 == response.status_code
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
@@ -772,7 +772,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 201 == response.status_code
 
@@ -807,7 +807,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 201 == response.status_code
 
@@ -831,7 +831,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 201 == response.status_code
 
@@ -858,7 +858,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 400 == response.status_code
 
@@ -886,7 +886,7 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 400 == response.status_code
 
@@ -914,6 +914,6 @@ class TestIndividualAdmins:
             )
             flask.request.files = {}
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 400 == response.status_code

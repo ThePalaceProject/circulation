@@ -65,7 +65,7 @@ class TestLibrarySettings:
 
         with settings_ctrl_fixture.ctrl.app.test_request_context("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
             assert response.get("libraries") == []
 
@@ -85,7 +85,7 @@ class TestLibrarySettings:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
             library_settings = response.get("libraries")[0].get("settings")
             assert library_settings.get("focus_area") == {
@@ -120,7 +120,7 @@ class TestLibrarySettings:
         # When we request information about this library...
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
             library_settings = response.get("libraries")[0].get("settings")
 
@@ -176,7 +176,7 @@ class TestLibrarySettings:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
             libraries = response.get("libraries")
             assert 2 == len(libraries)
@@ -215,7 +215,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response == MISSING_LIBRARY_SHORT_NAME
 
@@ -223,7 +223,7 @@ class TestLibrarySettings:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = self.library_form(library, {"uuid": "1234"})
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.uri == LIBRARY_NOT_FOUND.uri
 
@@ -235,7 +235,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
@@ -251,7 +251,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
@@ -264,7 +264,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -279,7 +279,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
             assert (
@@ -298,7 +298,7 @@ class TestLibrarySettings:
                 },
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
             assert "contrast-ratio.com/#%23e0e0e0-on-%23ffffff" in response.detail
@@ -325,7 +325,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
 
@@ -453,7 +453,7 @@ class TestLibrarySettings:
                 geographic=geographic_validator,
                 announcements=announcement_validator,
             )
-            response = settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post(
+            response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_post(
                 validators
             )
             assert response.status_code == 201
@@ -587,7 +587,7 @@ class TestLibrarySettings:
             )
             flask.request.files = MultiDict([])
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.status_code == 200
 
@@ -645,7 +645,7 @@ class TestLibrarySettings:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.status_code == 200
 
@@ -675,7 +675,7 @@ class TestLibrarySettings:
                 ]
             )
             response: Response = (
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.status_code == 201
             uuid = response.get_data(as_text=True)
@@ -702,12 +702,12 @@ class TestLibrarySettings:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_delete,
                 library.uuid,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_library_settings_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_delete(
                 library.uuid
             )
             assert response.status_code == 200
@@ -746,7 +746,7 @@ class TestLibrarySettings:
                     return INVALID_INPUT.detailed("invalid!")
 
         # Run library_configuration_settings in a situation where all validations succeed.
-        controller = MockController(settings_ctrl_fixture.ctrl.manager)
+        controller = MockController(settings_ctrl_fixture.manager)
         library = settings_ctrl_fixture.ctrl.db.default_library()
         result = controller.library_configuration_settings(
             library, validators, settings
@@ -860,7 +860,7 @@ class TestLibrarySettings:
             )
 
         # First test some simple cases: scalar values.
-        controller = MockController(settings_ctrl_fixture.ctrl.manager)
+        controller = MockController(settings_ctrl_fixture.manager)
         m = controller._validate_setting
 
         # The incoming request has a value for this setting.

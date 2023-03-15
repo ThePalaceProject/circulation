@@ -9,7 +9,7 @@ class TestMetadataServiceSelfTests:
         self, settings_ctrl_fixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
                 None
             )
             assert response.title == MISSING_IDENTIFIER.title
@@ -20,7 +20,7 @@ class TestMetadataServiceSelfTests:
         self, settings_ctrl_fixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
                 -1
             )
             assert response == MISSING_SERVICE
@@ -38,7 +38,7 @@ class TestMetadataServiceSelfTests:
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
                 metadata_service.id
             )
             response_metadata_service = response.get("self_test_results")
@@ -67,7 +67,7 @@ class TestMetadataServiceSelfTests:
             goal=ExternalIntegration.METADATA_GOAL,
         )
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_service_self_tests_controller.self_tests_process_post
+            settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.self_tests_process_post
         )
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             response = m(metadata_service.id)

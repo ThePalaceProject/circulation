@@ -27,7 +27,7 @@ class TestPatronAuth:
     def test_patron_auth_services_get_with_no_services(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response.get("patron_auth_services") == []
             protocols = response.get("protocols")
@@ -40,7 +40,7 @@ class TestPatronAuth:
             settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services,
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services,
             )
 
     def test_patron_auth_services_get_with_simple_auth_service(
@@ -58,7 +58,7 @@ class TestPatronAuth:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -76,7 +76,7 @@ class TestPatronAuth:
         auth_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -100,7 +100,7 @@ class TestPatronAuth:
         ).value = "^(u)"
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -140,7 +140,7 @@ class TestPatronAuth:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -193,7 +193,7 @@ class TestPatronAuth:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -235,7 +235,7 @@ class TestPatronAuth:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -262,7 +262,7 @@ class TestPatronAuth:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             [service] = response.get("patron_auth_services")
 
@@ -297,14 +297,14 @@ class TestPatronAuth:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == UNKNOWN_PROTOCOL
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([])
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
@@ -315,7 +315,7 @@ class TestPatronAuth:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == MISSING_SERVICE
 
@@ -335,7 +335,7 @@ class TestPatronAuth:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == CANNOT_CHANGE_PROTOCOL
 
@@ -347,7 +347,7 @@ class TestPatronAuth:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
@@ -373,7 +373,7 @@ class TestPatronAuth:
                 + common_args
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
 
@@ -392,7 +392,7 @@ class TestPatronAuth:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -405,7 +405,7 @@ class TestPatronAuth:
                 + common_args
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response.uri == NO_SUCH_LIBRARY.uri
 
@@ -437,7 +437,7 @@ class TestPatronAuth:
                 + common_args
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response.uri == MULTIPLE_BASIC_AUTH_SERVICES.uri
 
@@ -463,7 +463,7 @@ class TestPatronAuth:
                 + common_args
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == INVALID_EXTERNAL_TYPE_REGULAR_EXPRESSION
 
@@ -488,7 +488,7 @@ class TestPatronAuth:
                 + common_args
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response == INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION
 
@@ -503,7 +503,7 @@ class TestPatronAuth:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services,
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services,
             )
 
     def _get_mock(self, manager):
@@ -520,7 +520,7 @@ class TestPatronAuth:
         return manager.admin_patron_auth_services_controller
 
     def test_patron_auth_services_post_create(self, settings_ctrl_fixture):
-        mock_controller = self._get_mock(settings_ctrl_fixture.ctrl.manager)
+        mock_controller = self._get_mock(settings_ctrl_fixture.manager)
 
         library, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
@@ -645,7 +645,7 @@ class TestPatronAuth:
         assert [] == auth_service2.libraries
 
     def test_patron_auth_services_post_edit(self, settings_ctrl_fixture):
-        mock_controller = self._get_mock(settings_ctrl_fixture.ctrl.manager)
+        mock_controller = self._get_mock(settings_ctrl_fixture.manager)
 
         l1, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
@@ -696,7 +696,7 @@ class TestPatronAuth:
                 + self._common_basic_auth_arguments()
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_patron_auth_services()
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
             )
             assert response.status_code == 200
             assert mock_controller.validate_formats_call_count == 1
@@ -747,12 +747,12 @@ class TestPatronAuth:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_delete,
                 auth_service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_services_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_delete(
                 auth_service.id
             )
             assert response.status_code == 200

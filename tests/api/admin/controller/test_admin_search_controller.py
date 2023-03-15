@@ -9,6 +9,7 @@ from tests.fixtures.api_admin import AdminControllerFixture
 class AdminSearchFixture:
     def __init__(self, admin_ctrl_fixture: AdminControllerFixture):
         self.admin_ctrl_fixture = admin_ctrl_fixture
+        self.manager = admin_ctrl_fixture.manager
 
         db = self.admin_ctrl_fixture.ctrl.db
 
@@ -73,7 +74,9 @@ class AdminSearchFixture:
 
 
 @pytest.fixture(scope="function")
-def admin_search_fixture(admin_ctrl_fixture) -> AdminSearchFixture:
+def admin_search_fixture(
+    admin_ctrl_fixture: AdminControllerFixture,
+) -> AdminSearchFixture:
     return AdminSearchFixture(admin_ctrl_fixture)
 
 
@@ -84,7 +87,7 @@ class TestAdminSearchController:
             library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
         ):
             response = (
-                admin_search_fixture.admin_ctrl_fixture.ctrl.manager.admin_search_controller.search_field_values()
+                admin_search_fixture.manager.admin_search_controller.search_field_values()
             )
 
         assert response["subjects"] == {

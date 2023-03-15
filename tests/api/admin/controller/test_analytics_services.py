@@ -24,7 +24,7 @@ class TestAnalyticsServices:
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert len(response.get("analytics_services")) == 1
             local_analytics = response.get("analytics_services")[0]
@@ -57,7 +57,7 @@ class TestAnalyticsServices:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             [service] = response.get("analytics_services")
 
@@ -76,7 +76,7 @@ class TestAnalyticsServices:
         ).value = "trackingid"
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             [service] = response.get("analytics_services")
 
@@ -99,7 +99,7 @@ class TestAnalyticsServices:
         local_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             [local_analytics] = response.get("analytics_services")
 
@@ -118,7 +118,7 @@ class TestAnalyticsServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([])
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == MISSING_ANALYTICS_NAME
 
@@ -131,7 +131,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == UNKNOWN_PROTOCOL
 
@@ -143,7 +143,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
@@ -156,7 +156,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == MISSING_SERVICE.uri
 
@@ -177,7 +177,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
@@ -198,7 +198,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == CANNOT_CHANGE_PROTOCOL
 
@@ -212,7 +212,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -227,7 +227,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == NO_SUCH_LIBRARY.uri
 
@@ -249,7 +249,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -265,7 +265,7 @@ class TestAnalyticsServices:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services,
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services,
             )
 
     def test_analytics_services_post_create(
@@ -290,7 +290,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.status_code == 201
 
@@ -335,7 +335,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.status_code == 201
 
@@ -378,7 +378,7 @@ class TestAnalyticsServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.status_code == 200
 
@@ -415,7 +415,7 @@ class TestAnalyticsServices:
         )
 
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.check_name_unique
+            settings_ctrl_fixture.manager.admin_analytics_services_controller.check_name_unique
         )
 
         # Try to change new service so that it has the same name as existing service
@@ -451,12 +451,12 @@ class TestAnalyticsServices:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_delete,
                 ga_service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_analytics_services_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_analytics_services_controller.process_delete(
                 ga_service.id
             )
             assert response.status_code == 200

@@ -60,13 +60,13 @@ class WorkFixture(AdminControllerFixture):
         self.english_1.license_pools[0].collection = self.ctrl.collection
         self.works = [self.english_1]
 
-        self.ctrl.manager.external_search.bulk_update(self.works)
+        self.manager.external_search.bulk_update(self.works)
 
         self.admin.add_role(AdminRole.LIBRARIAN, self.ctrl.db.default_library())
 
 
 @pytest.fixture(scope="function")
-def work_fixture(controller_fixture) -> WorkFixture:
+def work_fixture(controller_fixture: ControllerFixture) -> WorkFixture:
     return WorkFixture(controller_fixture)
 
 
@@ -76,7 +76,7 @@ class TestWorkController:
 
         lp.suppressed = False
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.ctrl.manager.admin_work_controller.details(
+            response = work_fixture.manager.admin_work_controller.details(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -98,7 +98,7 @@ class TestWorkController:
 
         lp.suppressed = True
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.ctrl.manager.admin_work_controller.details(
+            response = work_fixture.manager.admin_work_controller.details(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -124,13 +124,13 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.details,
+                work_fixture.manager.admin_work_controller.details,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
 
     def test_roles(self, work_fixture: WorkFixture):
-        roles = work_fixture.ctrl.manager.admin_work_controller.roles()
+        roles = work_fixture.manager.admin_work_controller.roles()
         assert Contributor.ILLUSTRATOR_ROLE in list(roles.values())
         assert Contributor.NARRATOR_ROLE in list(roles.values())
         assert (
@@ -143,7 +143,7 @@ class TestWorkController:
         )
 
     def test_languages(self, work_fixture: WorkFixture):
-        languages = work_fixture.ctrl.manager.admin_work_controller.languages()
+        languages = work_fixture.manager.admin_work_controller.languages()
         assert "en" in list(languages.keys())
         assert "fre" in list(languages.keys())
         names = [name for sublist in list(languages.values()) for name in sublist]
@@ -151,14 +151,14 @@ class TestWorkController:
         assert "French" in names
 
     def test_media(self, work_fixture: WorkFixture):
-        media = work_fixture.ctrl.manager.admin_work_controller.media()
+        media = work_fixture.manager.admin_work_controller.media()
         assert Edition.BOOK_MEDIUM in list(media.values())
         assert Edition.medium_to_additional_type[Edition.BOOK_MEDIUM] in list(
             media.keys()
         )
 
     def test_rights_status(self, work_fixture: WorkFixture):
-        rights_status = work_fixture.ctrl.manager.admin_work_controller.rights_status()
+        rights_status = work_fixture.manager.admin_work_controller.rights_status()
 
         public_domain = rights_status.get(RightsStatus.PUBLIC_DOMAIN_USA)
         assert RightsStatus.NAMES.get(
@@ -188,7 +188,7 @@ class TestWorkController:
         [lp] = fixture.english_1.license_pools
         with fixture.request_context_with_library_and_admin("/"):
             flask.request.form = ImmutableMultiDict(data)
-            return fixture.ctrl.manager.admin_work_controller.edit(
+            return fixture.manager.admin_work_controller.edit(
                 lp.identifier.type, lp.identifier.identifier
             )
 
@@ -285,7 +285,7 @@ class TestWorkController:
                     ("summary", "<p>New summary</p>"),
                 ]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.edit(
+            response = work_fixture.manager.admin_work_controller.edit(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -348,7 +348,7 @@ class TestWorkController:
                     ("summary", "abcd"),
                 ]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.edit(
+            response = work_fixture.manager.admin_work_controller.edit(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -387,7 +387,7 @@ class TestWorkController:
                     ("summary", ""),
                 ]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.edit(
+            response = work_fixture.manager.admin_work_controller.edit(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -415,7 +415,7 @@ class TestWorkController:
                     ("summary", "<p>Final summary</p>"),
                 ]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.edit(
+            response = work_fixture.manager.admin_work_controller.edit(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -444,7 +444,7 @@ class TestWorkController:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.edit,
+                work_fixture.manager.admin_work_controller.edit,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
@@ -484,10 +484,8 @@ class TestWorkController:
                 ]
             )
             requested_genres = flask.request.form.getlist("genres")
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
             assert response.status_code == 200
 
@@ -517,10 +515,8 @@ class TestWorkController:
             flask.request.form = MultiDict(
                 [("audience", "Adult"), ("fiction", "fiction")]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
             assert response.status_code == 200
 
@@ -556,10 +552,8 @@ class TestWorkController:
                 ]
             )
             requested_genres = flask.request.form.getlist("genres")
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
             assert response.status_code == 200
 
@@ -583,10 +577,8 @@ class TestWorkController:
                 ]
             )
             requested_genres = flask.request.form.getlist("genres")
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
             assert response.status_code == 200
 
@@ -612,10 +604,8 @@ class TestWorkController:
                     ("genres", "Urban Fantasy"),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
 
         assert response == INCOMPATIBLE_GENRE
@@ -638,10 +628,8 @@ class TestWorkController:
                     ("genres", "Urban Fantasy"),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
             assert response == EROTICA_FOR_ADULTS_ONLY
 
@@ -664,10 +652,8 @@ class TestWorkController:
                     ("genres", "Cooking"),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
             assert 400 == response.status_code
             assert INVALID_EDIT.uri == response.uri
@@ -688,10 +674,8 @@ class TestWorkController:
                 ]
             )
             requested_genres = flask.request.form.getlist("genres")
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
 
         new_genre_names = [work_genre.genre.name for work_genre in lp.work.work_genres]
@@ -711,10 +695,8 @@ class TestWorkController:
                 ]
             )
             requested_genres = flask.request.form.getlist("genres")
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.edit_classifications(
+                lp.identifier.type, lp.identifier.identifier
             )
 
         assert "Adult" == work.audience
@@ -735,7 +717,7 @@ class TestWorkController:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.edit_classifications,
+                work_fixture.manager.admin_work_controller.edit_classifications,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
@@ -744,7 +726,7 @@ class TestWorkController:
         [lp] = work_fixture.english_1.license_pools
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.ctrl.manager.admin_work_controller.suppress(
+            response = work_fixture.manager.admin_work_controller.suppress(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
@@ -757,7 +739,7 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.suppress,
+                work_fixture.manager.admin_work_controller.suppress,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
@@ -774,7 +756,7 @@ class TestWorkController:
         broken_lp.suppressed = True
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.ctrl.manager.admin_work_controller.unsuppress(
+            response = work_fixture.manager.admin_work_controller.unsuppress(
                 lp.identifier.type, lp.identifier.identifier
             )
 
@@ -791,7 +773,7 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.unsuppress,
+                work_fixture.manager.admin_work_controller.unsuppress,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
@@ -815,14 +797,14 @@ class TestWorkController:
 
         with work_fixture.request_context_with_library_and_admin("/"):
             [lp] = work_fixture.english_1.license_pools
-            response = work_fixture.ctrl.manager.admin_work_controller.refresh_metadata(
+            response = work_fixture.manager.admin_work_controller.refresh_metadata(
                 lp.identifier.type, lp.identifier.identifier, provider=success_provider
             )
             assert 200 == response.status_code
             # Also, the work has a coverage record now for the wrangler.
             assert CoverageRecord.lookup(lp.identifier, wrangler)
 
-            response = work_fixture.ctrl.manager.admin_work_controller.refresh_metadata(
+            response = work_fixture.manager.admin_work_controller.refresh_metadata(
                 lp.identifier.type, lp.identifier.identifier, provider=failure_provider
             )
             assert METADATA_REFRESH_FAILURE.status_code == response.status_code
@@ -830,7 +812,7 @@ class TestWorkController:
 
             # If we don't pass in a provider, it will also fail because there
             # isn't one connfigured.
-            response = work_fixture.ctrl.manager.admin_work_controller.refresh_metadata(
+            response = work_fixture.manager.admin_work_controller.refresh_metadata(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert METADATA_REFRESH_FAILURE.status_code == response.status_code
@@ -842,7 +824,7 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.refresh_metadata,
+                work_fixture.manager.admin_work_controller.refresh_metadata,
                 lp.identifier.type,
                 lp.identifier.identifier,
                 provider=success_provider,
@@ -873,7 +855,7 @@ class TestWorkController:
         [lp] = work.license_pools
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.ctrl.manager.admin_work_controller.classifications(
+            response = work_fixture.manager.admin_work_controller.classifications(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert response["book"]["identifier_type"] == lp.identifier.type
@@ -895,7 +877,7 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.classifications,
+                work_fixture.manager.admin_work_controller.classifications,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
@@ -908,7 +890,7 @@ class TestWorkController:
         path = os.path.join(resource_path, "blue_small.jpg")
         too_small = Image.open(path)
 
-        result = work_fixture.ctrl.manager.admin_work_controller._validate_cover_image(
+        result = work_fixture.manager.admin_work_controller._validate_cover_image(
             too_small
         )
         assert INVALID_IMAGE.uri == result.uri
@@ -919,9 +901,7 @@ class TestWorkController:
 
         path = os.path.join(resource_path, "blue.jpg")
         valid = Image.open(path)
-        result = work_fixture.ctrl.manager.admin_work_controller._validate_cover_image(
-            valid
-        )
+        result = work_fixture.manager.admin_work_controller._validate_cover_image(valid)
         assert True == result
 
     def test_process_cover_image(self, work_fixture: WorkFixture):
@@ -954,10 +934,8 @@ class TestWorkController:
         logging.info("image after processing (with title): %s", tmpfile_after_1.name)
 
         # Without a title position, the image won't be changed.
-        processed = (
-            work_fixture.ctrl.manager.admin_work_controller._process_cover_image(
-                work, processed, "none"
-            )
+        processed = work_fixture.manager.admin_work_controller._process_cover_image(
+            work, processed, "none"
         )
 
         original.save(fp=tmpfile_before_0.name, format="PNG")
@@ -980,10 +958,8 @@ class TestWorkController:
         # Here the title and author are added in the center. Compare the result
         # with a pre-generated version.
         processed = Image.open(path)
-        processed = (
-            work_fixture.ctrl.manager.admin_work_controller._process_cover_image(
-                work, processed, "center"
-            )
+        processed = work_fixture.manager.admin_work_controller._process_cover_image(
+            work, processed, "center"
         )
 
         path = os.path.join(resource_path, "blue_with_title_author.png")
@@ -1016,10 +992,8 @@ class TestWorkController:
         identifier = work.license_pools[0].identifier
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.preview_book_cover(
-                    identifier.type, identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.preview_book_cover(
+                identifier.type, identifier.identifier
             )
             assert INVALID_IMAGE.uri == response.uri
             assert "Image file or image URL is required." == response.detail
@@ -1030,10 +1004,8 @@ class TestWorkController:
                     ("cover_url", "bad_url"),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.preview_book_cover(
-                    identifier.type, identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.preview_book_cover(
+                identifier.type, identifier.identifier
             )
             assert INVALID_URL.uri == response.uri
             assert '"bad_url" is not a valid URL.' == response.detail
@@ -1057,10 +1029,8 @@ class TestWorkController:
                     ("cover_file", TestFileUpload(image_data)),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.preview_book_cover(
-                    identifier.type, identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.preview_book_cover(
+                identifier.type, identifier.identifier
             )
             assert 200 == response.status_code
             assert "data:image/png;base64,%s" % base64.b64encode(
@@ -1073,7 +1043,7 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.preview_book_cover,
+                work_fixture.manager.admin_work_controller.preview_book_cover,
                 identifier.type,
                 identifier.identifier,
             )
@@ -1088,12 +1058,8 @@ class TestWorkController:
             process_called_with.append((work, image, position))
             return image
 
-        old_process = (
-            work_fixture.ctrl.manager.admin_work_controller._process_cover_image
-        )
-        work_fixture.ctrl.manager.admin_work_controller._process_cover_image = (
-            mock_process
-        )
+        old_process = work_fixture.manager.admin_work_controller._process_cover_image
+        work_fixture.manager.admin_work_controller._process_cover_image = mock_process
 
         work = work_fixture.ctrl.db.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
@@ -1107,10 +1073,8 @@ class TestWorkController:
                     ("rights_explanation", "explanation"),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.change_book_cover(
-                    identifier.type, identifier.identifier, mirrors
-                )
+            response = work_fixture.manager.admin_work_controller.change_book_cover(
+                identifier.type, identifier.identifier, mirrors
             )
             assert INVALID_IMAGE.uri == response.uri
             assert "Image file or image URL is required." == response.detail
@@ -1123,10 +1087,8 @@ class TestWorkController:
                 ]
             )
             flask.request.files = MultiDict([])
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.change_book_cover(
-                    identifier.type, identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.change_book_cover(
+                identifier.type, identifier.identifier
             )
             assert INVALID_IMAGE.uri == response.uri
             assert "You must specify the image's license." == response.detail
@@ -1139,10 +1101,8 @@ class TestWorkController:
                     ("rights_status", RightsStatus.CC_BY),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.change_book_cover(
-                    identifier.type, identifier.identifier, mirrors
-                )
+            response = work_fixture.manager.admin_work_controller.change_book_cover(
+                identifier.type, identifier.identifier, mirrors
             )
             assert INVALID_URL.uri == response.uri
             assert '"bad_url" is not a valid URL.' == response.detail
@@ -1157,10 +1117,8 @@ class TestWorkController:
                 ]
             )
             flask.request.files = MultiDict([])
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.change_book_cover(
-                    identifier.type, identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.change_book_cover(
+                identifier.type, identifier.identifier
             )
             assert INVALID_CONFIGURATION_OPTION.uri == response.uri
             assert "Could not find a storage integration" in response.detail
@@ -1195,10 +1153,8 @@ class TestWorkController:
                     ("cover_file", TestFileUpload(image_data)),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.change_book_cover(
-                    identifier.type, identifier.identifier, mirrors
-                )
+            response = work_fixture.manager.admin_work_controller.change_book_cover(
+                identifier.type, identifier.identifier, mirrors
             )
             assert 200 == response.status_code
 
@@ -1246,10 +1202,8 @@ class TestWorkController:
                     ("cover_file", TestFileUpload(image_data)),
                 ]
             )
-            response = (
-                work_fixture.ctrl.manager.admin_work_controller.change_book_cover(
-                    identifier.type, identifier.identifier, mirrors
-                )
+            response = work_fixture.manager.admin_work_controller.change_book_cover(
+                identifier.type, identifier.identifier, mirrors
             )
             assert 200 == response.status_code
 
@@ -1311,14 +1265,12 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.preview_book_cover,
+                work_fixture.manager.admin_work_controller.preview_book_cover,
                 identifier.type,
                 identifier.identifier,
             )
 
-        work_fixture.ctrl.manager.admin_work_controller._process_cover_image = (
-            old_process
-        )
+        work_fixture.manager.admin_work_controller._process_cover_image = old_process
 
     def test_custom_lists_get(self, work_fixture: WorkFixture):
         staff_data_source = DataSource.lookup(
@@ -1336,7 +1288,7 @@ class TestWorkController:
         identifier = work.presentation_edition.primary_identifier
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.ctrl.manager.admin_work_controller.custom_lists(
+            response = work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
             lists = response.get("custom_lists")
@@ -1350,7 +1302,7 @@ class TestWorkController:
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.custom_lists,
+                work_fixture.manager.admin_work_controller.custom_lists,
                 identifier.type,
                 identifier.identifier,
             )
@@ -1370,9 +1322,7 @@ class TestWorkController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
 
-            response = (
-                work_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
-            )
+            response = work_fixture.manager.admin_custom_lists_controller.custom_lists()
             assert MISSING_CUSTOM_LIST == response
 
     def test_custom_lists_edit_success(self, work_fixture: WorkFixture):
@@ -1403,7 +1353,7 @@ class TestWorkController:
             flask.request.form = MultiDict(
                 [("lists", json.dumps([{"id": str(list.id), "name": list.name}]))]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.custom_lists(
+            response = work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
             assert 200 == response.status_code
@@ -1425,7 +1375,7 @@ class TestWorkController:
                     ("lists", json.dumps([])),
                 ]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.custom_lists(
+            response = work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
         assert 200 == response.status_code
@@ -1440,7 +1390,7 @@ class TestWorkController:
             flask.request.form = MultiDict(
                 [("lists", json.dumps([{"name": "new list"}]))]
             )
-            response = work_fixture.ctrl.manager.admin_work_controller.custom_lists(
+            response = work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
         assert 200 == response.status_code
@@ -1463,7 +1413,7 @@ class TestWorkController:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.ctrl.manager.admin_work_controller.custom_lists,
+                work_fixture.manager.admin_work_controller.custom_lists,
                 identifier.type,
                 identifier.identifier,
             )

@@ -115,7 +115,7 @@ class TestLibraryRegistration:
         )
 
         controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_discovery_service_library_registrations_controller
+            settings_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
         )
         m = controller.process_discovery_service_library_registrations
         with settings_ctrl_fixture.request_context_with_admin("/", method="GET"):
@@ -197,7 +197,7 @@ class TestLibraryRegistration:
         """
 
         controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_discovery_service_library_registrations_controller
+            settings_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
         )
         m = controller.process_discovery_service_library_registrations
 

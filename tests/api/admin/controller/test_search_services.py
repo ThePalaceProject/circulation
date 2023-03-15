@@ -11,7 +11,7 @@ class TestSearchServices:
     def test_search_services_get_with_no_services(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_services()
+                settings_ctrl_fixture.manager.admin_search_services_controller.process_services()
             )
             assert response.get("search_services") == []
             protocols = response.get("protocols")
@@ -24,7 +24,7 @@ class TestSearchServices:
             settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_services,
+                settings_ctrl_fixture.manager.admin_search_services_controller.process_services,
             )
 
     def test_search_services_get_with_one_service(self, settings_ctrl_fixture):
@@ -44,7 +44,7 @@ class TestSearchServices:
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_services()
+                settings_ctrl_fixture.manager.admin_search_services_controller.process_services()
             )
             [service] = response.get("search_services")
 
@@ -59,7 +59,7 @@ class TestSearchServices:
             )
 
     def test_search_services_post_errors(self, settings_ctrl_fixture):
-        controller = settings_ctrl_fixture.ctrl.manager.admin_search_services_controller
+        controller = settings_ctrl_fixture.manager.admin_search_services_controller
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
@@ -163,7 +163,7 @@ class TestSearchServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_services()
+                settings_ctrl_fixture.manager.admin_search_services_controller.process_services()
             )
             assert response.status_code == 201
 
@@ -217,7 +217,7 @@ class TestSearchServices:
                 ]
             )
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_services()
+                settings_ctrl_fixture.manager.admin_search_services_controller.process_services()
             )
             assert response.status_code == 200
 
@@ -249,12 +249,12 @@ class TestSearchServices:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_search_services_controller.process_delete,
                 search_service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_search_services_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_search_services_controller.process_delete(
                 search_service.id
             )
             assert response.status_code == 200

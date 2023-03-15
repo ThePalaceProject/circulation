@@ -30,7 +30,7 @@ class TestMetadataServices:
             def process_post(self):
                 return "POST"
 
-        controller = Mock(settings_ctrl_fixture.ctrl.manager)
+        controller = Mock(settings_ctrl_fixture.manager)
         with settings_ctrl_fixture.request_context_with_admin("/"):
             assert "GET" == controller.process_metadata_services()
 
@@ -47,7 +47,7 @@ class TestMetadataServices:
     def test_process_get_with_no_services(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller.process_get()
+                settings_ctrl_fixture.manager.admin_metadata_services_controller.process_get()
             )
             assert response.get("metadata_services") == []
             protocols = response.get("protocols")
@@ -61,9 +61,7 @@ class TestMetadataServices:
         novelist_service.username = "user"
         novelist_service.password = "pass"
 
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = controller.process_get()
@@ -92,7 +90,7 @@ class TestMetadataServices:
             for x in ["NYT", "NOVELIST", "FAKE"]
         ]
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller.find_protocol_class
+            settings_ctrl_fixture.manager.admin_metadata_services_controller.find_protocol_class
         )
 
         assert m(nyt)[0] == NYTBestSellerAPI
@@ -100,9 +98,7 @@ class TestMetadataServices:
         pytest.raises(NotImplementedError, m, fake)
 
     def test_metadata_services_post_errors(self, settings_ctrl_fixture):
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -187,9 +183,7 @@ class TestMetadataServices:
             assert response.uri == NO_SUCH_LIBRARY.uri
 
     def test_metadata_services_post_create(self, settings_ctrl_fixture):
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
         library, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             Library,
@@ -242,9 +236,7 @@ class TestMetadataServices:
         novelist_service.password = "oldpass"
         novelist_service.libraries = [l1]
 
-        controller = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller
-        )
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -278,7 +270,7 @@ class TestMetadataServices:
         )
 
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller.check_name_unique
+            settings_ctrl_fixture.manager.admin_metadata_services_controller.check_name_unique
         )
 
         # Try to change new service so that it has the same name as existing service
@@ -310,12 +302,12 @@ class TestMetadataServices:
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_metadata_services_controller.process_delete,
                 novelist_service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.ctrl.manager.admin_metadata_services_controller.process_delete(
+            response = settings_ctrl_fixture.manager.admin_metadata_services_controller.process_delete(
                 novelist_service.id
             )
             assert response.status_code == 200

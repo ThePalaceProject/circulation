@@ -12,7 +12,7 @@ class TestStorageServices:
             def _delete_integration(self, *args):
                 self.delete_called_with = args
 
-        controller = MockStorage(settings_ctrl_fixture.ctrl.manager)
+        controller = MockStorage(settings_ctrl_fixture.manager)
         EI = ExternalIntegration
         with settings_ctrl_fixture.request_context_with_admin("/"):
             controller.process_services()

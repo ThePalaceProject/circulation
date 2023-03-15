@@ -66,7 +66,7 @@ class TestViewController:
         admin_ctrl_fixture.admin.password_hashed = None
 
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(None, None)
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
             assert 200 == response.status_code
             html = response.get_data(as_text=True)
             assert "settingUp: true" in html
@@ -75,7 +75,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+            response = admin_ctrl_fixture.manager.admin_view_controller(
                 "collection", "book"
             )
             assert 200 == response.status_code
@@ -86,7 +86,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/web/collection/a/(b)/book/c/(d)"
         ):
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+            response = admin_ctrl_fixture.manager.admin_view_controller(
                 "a/(b)", "c/(d)"
             )
             assert 302 == response.status_code
@@ -102,7 +102,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(None, None)
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
             assert 200 == response.status_code
             assert (
                 "Your admin account doesn't have access to any libraries"
@@ -116,7 +116,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(None, None)
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
             assert 200 == response.status_code
             assert "<body>" in response.get_data(as_text=True)
 
@@ -129,7 +129,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(None, None)
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
             assert 302 == response.status_code
             location = response.headers.get("Location")
             assert "admin/web/collection/%s" % l1.short_name in location
@@ -139,7 +139,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/web/config"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+            response = admin_ctrl_fixture.manager.admin_view_controller(
                 None, None, "config"
             )
             assert 200 == response.status_code
@@ -147,7 +147,7 @@ class TestViewController:
     def test_csrf_token(self, admin_ctrl_fixture: AdminControllerFixture):
         admin_ctrl_fixture.admin.password_hashed = None
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(None, None)
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
             assert 200 == response.status_code
             html = response.get_data(as_text=True)
 
@@ -169,7 +169,7 @@ class TestViewController:
         ):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+            response = admin_ctrl_fixture.manager.admin_view_controller(
                 "collection", "book"
             )
             assert 200 == response.status_code
@@ -182,7 +182,7 @@ class TestViewController:
             with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
                 flask.session["admin_email"] = admin_ctrl_fixture.admin.email
                 flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-                response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+                response = admin_ctrl_fixture.manager.admin_view_controller(
                     "collection", "book"
                 )
                 assert 200 == response.status_code
@@ -221,7 +221,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+            response = admin_ctrl_fixture.manager.admin_view_controller(
                 "collection", "book"
             )
             assert 200 == response.status_code
@@ -236,7 +236,7 @@ class TestViewController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = admin_ctrl_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = admin_ctrl_fixture.ctrl.manager.admin_view_controller(
+            response = admin_ctrl_fixture.manager.admin_view_controller(
                 "collection", "book"
             )
             assert 200 == response.status_code
@@ -254,11 +254,11 @@ class TestAdminCirculationManagerController:
         with admin_ctrl_fixture.request_context_with_admin("/admin"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_system_admin,
+                admin_ctrl_fixture.manager.admin_work_controller.require_system_admin,
             )
 
             admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_system_admin()
+            admin_ctrl_fixture.manager.admin_work_controller.require_system_admin()
 
     def test_require_sitewide_library_manager(
         self, admin_ctrl_fixture: AdminControllerFixture
@@ -266,24 +266,24 @@ class TestAdminCirculationManagerController:
         with admin_ctrl_fixture.request_context_with_admin("/admin"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_sitewide_library_manager,
+                admin_ctrl_fixture.manager.admin_work_controller.require_sitewide_library_manager,
             )
 
             admin_ctrl_fixture.admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-            admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_sitewide_library_manager()
+            admin_ctrl_fixture.manager.admin_work_controller.require_sitewide_library_manager()
 
     def test_require_library_manager(self, admin_ctrl_fixture: AdminControllerFixture):
         with admin_ctrl_fixture.request_context_with_admin("/admin"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_library_manager,
+                admin_ctrl_fixture.manager.admin_work_controller.require_library_manager,
                 admin_ctrl_fixture.ctrl.db.default_library(),
             )
 
             admin_ctrl_fixture.admin.add_role(
                 AdminRole.LIBRARY_MANAGER, admin_ctrl_fixture.ctrl.db.default_library()
             )
-            admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_library_manager(
+            admin_ctrl_fixture.manager.admin_work_controller.require_library_manager(
                 admin_ctrl_fixture.ctrl.db.default_library()
             )
 
@@ -291,14 +291,14 @@ class TestAdminCirculationManagerController:
         with admin_ctrl_fixture.request_context_with_admin("/admin"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_librarian,
+                admin_ctrl_fixture.manager.admin_work_controller.require_librarian,
                 admin_ctrl_fixture.ctrl.db.default_library(),
             )
 
             admin_ctrl_fixture.admin.add_role(
                 AdminRole.LIBRARIAN, admin_ctrl_fixture.ctrl.db.default_library()
             )
-            admin_ctrl_fixture.ctrl.manager.admin_work_controller.require_librarian(
+            admin_ctrl_fixture.manager.admin_work_controller.require_librarian(
                 admin_ctrl_fixture.ctrl.db.default_library()
             )
 
@@ -317,7 +317,7 @@ def sign_in_fixture(controller_fixture: ControllerFixture) -> SignInFixture:
 class TestSignInController:
     def test_admin_auth_providers(self, sign_in_fixture: SignInFixture):
         with sign_in_fixture.ctrl.app.test_request_context("/admin"):
-            ctrl = sign_in_fixture.ctrl.manager.admin_sign_in_controller
+            ctrl = sign_in_fixture.manager.admin_sign_in_controller
 
             # An admin exists, but they have no password and there's
             # no auth service set up.
@@ -346,7 +346,7 @@ class TestSignInController:
 
     def test_admin_auth_provider(self, sign_in_fixture: SignInFixture):
         with sign_in_fixture.ctrl.app.test_request_context("/admin"):
-            ctrl = sign_in_fixture.ctrl.manager.admin_sign_in_controller
+            ctrl = sign_in_fixture.manager.admin_sign_in_controller
 
             # We can't find a password auth provider, since no admin has a password.
             auth = ctrl.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
@@ -367,7 +367,7 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context("/admin"):
             # You get back a problem detail when you're not authenticated.
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.authenticated_admin_from_request()
+                sign_in_fixture.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
             assert 500 == response.status_code
             assert ADMIN_AUTH_NOT_CONFIGURED.detail == response.detail
@@ -378,7 +378,7 @@ class TestSignInController:
             flask.session["admin_email"] = sign_in_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.authenticated_admin_from_request()
+                sign_in_fixture.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
             assert sign_in_fixture.admin == response
 
@@ -386,7 +386,7 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.authenticated_admin_from_request()
+                sign_in_fixture.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
             assert 401 == response.status_code
             assert INVALID_ADMIN_CREDENTIALS.detail == response.detail
@@ -394,7 +394,7 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context("/admin"):
             flask.session["admin_email"] = sign_in_fixture.admin.email
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.authenticated_admin_from_request()
+                sign_in_fixture.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
             assert 401 == response.status_code
             assert INVALID_ADMIN_CREDENTIALS.detail == response.detail
@@ -404,7 +404,7 @@ class TestSignInController:
             flask.session["admin_email"] = sign_in_fixture.admin.email
             flask.session["auth_type"] = "unknown"
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.authenticated_admin_from_request()
+                sign_in_fixture.manager.admin_sign_in_controller.authenticated_admin_from_request()
             )
             assert 400 == response.status_code
             assert ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.detail == response.detail
@@ -414,7 +414,7 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context(
             "/admin/sign_in?redirect=foo"
         ):
-            response = sign_in_fixture.ctrl.manager.admin_sign_in_controller.sign_in()
+            response = sign_in_fixture.manager.admin_sign_in_controller.sign_in()
             assert ADMIN_AUTH_NOT_CONFIGURED == response
 
         # Shows the login page if there's an auth service
@@ -423,7 +423,7 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context(
             "/admin/sign_in?redirect=foo"
         ):
-            response = sign_in_fixture.ctrl.manager.admin_sign_in_controller.sign_in()
+            response = sign_in_fixture.manager.admin_sign_in_controller.sign_in()
             assert 200 == response.status_code
             response_data = response.get_data(as_text=True)
             assert "Email" in response_data
@@ -435,7 +435,7 @@ class TestSignInController:
         ):
             flask.session["admin_email"] = sign_in_fixture.admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = sign_in_fixture.ctrl.manager.admin_sign_in_controller.sign_in()
+            response = sign_in_fixture.manager.admin_sign_in_controller.sign_in()
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
 
@@ -445,7 +445,7 @@ class TestSignInController:
             "/admin/sign_in_with_password"
         ):
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.password_sign_in()
+                sign_in_fixture.manager.admin_sign_in_controller.password_sign_in()
             )
             assert ADMIN_AUTH_NOT_CONFIGURED == response
 
@@ -466,7 +466,7 @@ class TestSignInController:
                 ]
             )
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.password_sign_in()
+                sign_in_fixture.manager.admin_sign_in_controller.password_sign_in()
             )
             assert 401 == response.status_code
 
@@ -483,7 +483,7 @@ class TestSignInController:
                 ]
             )
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.password_sign_in()
+                sign_in_fixture.manager.admin_sign_in_controller.password_sign_in()
             )
             assert 401 == response.status_code
 
@@ -499,7 +499,7 @@ class TestSignInController:
                 ]
             )
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.password_sign_in()
+                sign_in_fixture.manager.admin_sign_in_controller.password_sign_in()
             )
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
@@ -520,7 +520,7 @@ class TestSignInController:
                 ]
             )
             response = (
-                sign_in_fixture.ctrl.manager.admin_sign_in_controller.change_password()
+                sign_in_fixture.manager.admin_sign_in_controller.change_password()
             )
             assert 200 == response.status_code
             assert admin == Admin.authenticate(
@@ -540,7 +540,7 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context("/admin/sign_out"):
             flask.session["admin_email"] = admin.email
             flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-            response = sign_in_fixture.ctrl.manager.admin_sign_in_controller.sign_out()
+            response = sign_in_fixture.manager.admin_sign_in_controller.sign_out()
             assert 302 == response.status_code
 
             # The admin's credentials have been removed from the session.
@@ -550,9 +550,7 @@ class TestSignInController:
 
 class TestResetPasswordController:
     def test_forgot_password_get(self, admin_ctrl_fixture: AdminControllerFixture):
-        reset_password_ctrl = (
-            admin_ctrl_fixture.ctrl.manager.admin_reset_password_controller
-        )
+        reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
         # If there is no admin with password then there is no auth providers and we should get error response
         admin_ctrl_fixture.admin.password_hashed = None
@@ -582,7 +580,7 @@ class TestResetPasswordController:
                 ]
             )
             sign_in_response = (
-                admin_ctrl_fixture.ctrl.manager.admin_sign_in_controller.password_sign_in()
+                admin_ctrl_fixture.manager.admin_sign_in_controller.password_sign_in()
             )
 
             # Check that sign in is successful
@@ -595,9 +593,7 @@ class TestResetPasswordController:
             assert "admin/web" in response.headers.get("Location")
 
     def test_forgot_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
-        reset_password_ctrl = (
-            admin_ctrl_fixture.ctrl.manager.admin_reset_password_controller
-        )
+        reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
         # If there is no admin sent in the request we should get error response
         with admin_ctrl_fixture.ctrl.app.test_request_context(
@@ -650,9 +646,7 @@ class TestResetPasswordController:
                 assert receivers[0] == admin_ctrl_fixture.admin.email
 
     def test_reset_password_get(self, admin_ctrl_fixture: AdminControllerFixture):
-        reset_password_ctrl = (
-            admin_ctrl_fixture.ctrl.manager.admin_reset_password_controller
-        )
+        reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
         token = "token"
 
         # If there is no admin with password then there is no auth providers and we should get error response
@@ -680,7 +674,7 @@ class TestResetPasswordController:
                 ]
             )
             sign_in_response = (
-                admin_ctrl_fixture.ctrl.manager.admin_sign_in_controller.password_sign_in()
+                admin_ctrl_fixture.manager.admin_sign_in_controller.password_sign_in()
             )
 
             # Check that sign in is successful
@@ -735,9 +729,7 @@ class TestResetPasswordController:
         return token
 
     def test_reset_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
-        reset_password_ctrl = (
-            admin_ctrl_fixture.ctrl.manager.admin_reset_password_controller
-        )
+        reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
         # Let's get valid token first
         with mock.patch(
@@ -838,9 +830,7 @@ class TestPatronController:
         identifier = "Patron"
 
         form = MultiDict([("identifier", identifier)])
-        m = (
-            patron_controller_fixture.ctrl.manager.admin_patron_controller._load_patrondata
-        )
+        m = patron_controller_fixture.manager.admin_patron_controller._load_patrondata
 
         # User doesn't have admin permission
         with patron_controller_fixture.ctrl.request_context_with_library("/"):
@@ -894,7 +884,7 @@ class TestPatronController:
                     personal_name="A Patron",
                 )
 
-        controller = MockPatronController(patron_controller_fixture.ctrl.manager)
+        controller = MockPatronController(patron_controller_fixture.manager)
 
         authenticator = object()
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
@@ -930,7 +920,7 @@ class TestPatronController:
                 self.called_with = authenticator
                 return self.mock_patrondata
 
-        controller = MockPatronController(patron_controller_fixture.ctrl.manager)
+        controller = MockPatronController(patron_controller_fixture.manager)
         controller.mock_patrondata = PatronData(
             authorization_identifier=patron.authorization_identifier
         )
@@ -1028,7 +1018,7 @@ class TestTimestampsController:
         with timestamps_fixture.admin_ctrl_fixture.request_context_with_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                timestamps_fixture.admin_ctrl_fixture.ctrl.manager.timestamps_controller.diagnostics,
+                timestamps_fixture.admin_ctrl_fixture.manager.timestamps_controller.diagnostics,
             )
 
     def test_diagnostics(self, timestamps_fixture: TimestampsFixture):
@@ -1039,7 +1029,7 @@ class TestTimestampsController:
         with timestamps_fixture.admin_ctrl_fixture.request_context_with_admin("/"):
             timestamps_fixture.admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
             response = (
-                timestamps_fixture.admin_ctrl_fixture.ctrl.manager.timestamps_controller.diagnostics()
+                timestamps_fixture.admin_ctrl_fixture.manager.timestamps_controller.diagnostics()
             )
 
         assert set(response.keys()) == {
@@ -1118,7 +1108,7 @@ class TestFeedController:
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_feed_controller.suppressed()
+                admin_librarian_fixture.manager.admin_feed_controller.suppressed()
             )
             feed = feedparser.parse(response.get_data(as_text=True))
             entries = feed["entries"]
@@ -1131,14 +1121,12 @@ class TestFeedController:
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_librarian_fixture.ctrl.manager.admin_feed_controller.suppressed,
+                admin_librarian_fixture.manager.admin_feed_controller.suppressed,
             )
 
     def test_genres(self, admin_librarian_fixture):
         with admin_librarian_fixture.ctrl.app.test_request_context("/"):
-            response = (
-                admin_librarian_fixture.ctrl.manager.admin_feed_controller.genres()
-            )
+            response = admin_librarian_fixture.manager.admin_feed_controller.genres()
 
             for name in genres:
                 top = "Fiction" if genres[name].is_fiction else "Nonfiction"
@@ -1195,7 +1183,7 @@ class TestCustomListsController:
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert 2 == len(response.get("custom_lists"))
             lists = response.get("custom_lists")
@@ -1231,7 +1219,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists,
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists,
             )
 
     def test_custom_lists_post_errors(
@@ -1250,7 +1238,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert MISSING_CUSTOM_LIST == response
 
@@ -1278,7 +1266,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST == response
 
@@ -1301,7 +1289,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert CUSTOM_LIST_NAME_ALREADY_IN_USE == response
 
@@ -1332,7 +1320,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert CUSTOM_LIST_NAME_ALREADY_IN_USE == response
 
@@ -1349,7 +1337,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert MISSING_COLLECTION == response
 
@@ -1372,7 +1360,7 @@ class TestCustomListsController:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists,
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists,
             )
 
     def test_custom_lists_post_collection_with_wrong_library(
@@ -1393,7 +1381,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY == response
 
@@ -1422,7 +1410,7 @@ class TestCustomListsController:
             )
 
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert 201 == response.status_code
 
@@ -1457,7 +1445,7 @@ class TestCustomListsController:
             )
 
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert 400 == response.status_code
             # List was not created
@@ -1491,7 +1479,7 @@ class TestCustomListsController:
             )
 
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
             assert 400 == response.status_code
@@ -1517,7 +1505,7 @@ class TestCustomListsController:
             )
 
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert 201 == response.status_code
             [list] = (
@@ -1551,7 +1539,7 @@ class TestCustomListsController:
         list.add_entry(work2)
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
             feed = feedparser.parse(response.get_data())
@@ -1575,7 +1563,7 @@ class TestCustomListsController:
         self, admin_librarian_fixture: AdminLibrarianFixture
     ):
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 123
             )
             assert MISSING_CUSTOM_LIST == response
@@ -1597,7 +1585,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list,
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list,
                 list.id,
             )
 
@@ -1701,7 +1689,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
 
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
 
@@ -1753,7 +1741,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
 
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
 
@@ -1781,7 +1769,7 @@ class TestCustomListsController:
 
             pytest.raises(
                 AdminNotAuthorized,
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list,
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list,
                 list.id,
             )
 
@@ -1811,7 +1799,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
 
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
             assert type(response) == ProblemDetail
@@ -1896,7 +1884,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
             assert 200 == response.status_code
@@ -1945,7 +1933,7 @@ class TestCustomListsController:
         ):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list,
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list,
                 list.id,
             )
 
@@ -1955,7 +1943,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 123
             )
             assert MISSING_CUSTOM_LIST == response
@@ -1968,7 +1956,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_list(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
             assert response == CANNOT_DELETE_SHARED_LIST
@@ -2011,7 +1999,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", library=library, method="POST"
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.share_locally(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
                 customlist.id
             )
         return response
@@ -2027,7 +2015,7 @@ class TestCustomListsController:
                     ("collection", collection.id),
                 ]
             )
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.share_locally_with_library_collection(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally_with_library_collection(
                 customlist.id
             )
         return response
@@ -2094,7 +2082,7 @@ class TestCustomListsController:
             "/", method="GET", library=s.shared_with
         ):
             response = (
-                admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.custom_lists()
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
             assert len(response["custom_lists"]) == 1
             collections = [
@@ -2134,7 +2122,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE", library=s.primary_library
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.share_locally(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
                 s.list.id
             )
             assert type(response) == ProblemDetail
@@ -2147,7 +2135,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE", library=s.primary_library
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.share_locally(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
                 s.list.id
             )
             assert response.status_code == 204
@@ -2168,7 +2156,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE", library=s.primary_library
         ):
-            response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller.share_locally(
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
                 s.list.id
             )
             assert response.status_code == 204
@@ -2187,7 +2175,7 @@ class TestCustomListsController:
         custom_list.auto_update_status = CustomList.UPDATED
         admin_librarian_fixture.ctrl.db.session.commit()
 
-        response = admin_librarian_fixture.ctrl.manager.admin_custom_lists_controller._create_or_update_list(
+        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
             custom_list.library,
             custom_list.name,
             [],
@@ -2269,10 +2257,10 @@ class TestLanesController:
             # The admin is not a librarian for this library.
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.lanes,
+                alm_fixture.manager.admin_lanes_controller.lanes,
             )
             alm_fixture.admin.add_role(AdminRole.LIBRARIAN, library)
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
 
             assert 3 == len(response.get("lanes"))
             [english_info, spanish_info, list_info] = response.get("lanes")
@@ -2317,7 +2305,7 @@ class TestLanesController:
     def test_lanes_post_errors(self, alm_fixture: AdminLibraryManagerFixture):
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = MultiDict([])
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert NO_DISPLAY_NAME_FOR_LANE == response
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
@@ -2326,7 +2314,7 @@ class TestLanesController:
                     ("display_name", "lane"),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert NO_CUSTOM_LISTS_FOR_LANE == response
 
         list, ignore = alm_fixture.ctrl.db.customlist(
@@ -2342,7 +2330,7 @@ class TestLanesController:
                     ("custom_list_ids", json.dumps([list.id])),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert MISSING_LANE == response
 
         library = alm_fixture.ctrl.db.library()
@@ -2356,7 +2344,7 @@ class TestLanesController:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.lanes,
+                alm_fixture.manager.admin_lanes_controller.lanes,
             )
 
         lane1 = alm_fixture.ctrl.db.lane("lane1")
@@ -2371,7 +2359,7 @@ class TestLanesController:
                     ("custom_list_ids", json.dumps([list.id])),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
@@ -2381,7 +2369,7 @@ class TestLanesController:
                     ("custom_list_ids", json.dumps([list.id])),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
@@ -2392,7 +2380,7 @@ class TestLanesController:
                     ("custom_list_ids", json.dumps([list.id])),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert MISSING_LANE.uri == response.uri
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
@@ -2403,7 +2391,7 @@ class TestLanesController:
                     ("custom_list_ids", json.dumps(["12345"])),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert MISSING_CUSTOM_LIST.uri == response.uri
 
     def test_lanes_create(self, alm_fixture: AdminLibraryManagerFixture):
@@ -2425,7 +2413,7 @@ class TestLanesController:
                     ("inherit_parent_restrictions", "false"),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert 201 == response.status_code
 
             [lane] = alm_fixture.ctrl.db.session.query(Lane).filter(
@@ -2462,7 +2450,7 @@ class TestLanesController:
                     ("inherit_parent_restrictions", "false"),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert 404 == response.status_code
 
         success = CustomListQueries.share_locally_with_library(
@@ -2480,7 +2468,7 @@ class TestLanesController:
                     ("inherit_parent_restrictions", "false"),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert 201 == response.status_code
             lane_id = int(response.data)
 
@@ -2523,7 +2511,7 @@ class TestLanesController:
                 ]
             )
 
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert 200 == response.status_code
             assert lane.id == int(response.get_data(as_text=True))
 
@@ -2547,7 +2535,7 @@ class TestLanesController:
                     ("inherit_parent_restrictions", "false"),
                 ]
             )
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lanes()
+            response = alm_fixture.manager.admin_lanes_controller.lanes()
 
         assert 200 == response.status_code
         assert lane.id == int(response.get_data(as_text=True))
@@ -2576,7 +2564,7 @@ class TestLanesController:
 
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
             flask.request.library = library
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lane(lane.id)
+            response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert 200 == response.status_code
 
             # The lane has been deleted.
@@ -2612,7 +2600,7 @@ class TestLanesController:
 
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
             flask.request.library = library
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lane(lane.id)
+            response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert 200 == response.status_code
 
             # The lanes have all been deleted.
@@ -2633,7 +2621,7 @@ class TestLanesController:
 
     def test_lane_delete_errors(self, alm_fixture: AdminLibraryManagerFixture):
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lane(123)
+            response = alm_fixture.manager.admin_lanes_controller.lane(123)
             assert MISSING_LANE == response
 
         lane = alm_fixture.ctrl.db.lane("lane")
@@ -2642,27 +2630,25 @@ class TestLanesController:
             flask.request.library = library
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.lane,
+                alm_fixture.manager.admin_lanes_controller.lane,
                 lane.id,
             )
 
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.lane(lane.id)
+            response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert CANNOT_EDIT_DEFAULT_LANE == response
 
     def test_show_lane_success(self, alm_fixture: AdminLibraryManagerFixture):
         lane = alm_fixture.ctrl.db.lane("lane")
         lane.visible = False
         with alm_fixture.request_context_with_library_and_admin("/"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.show_lane(
-                lane.id
-            )
+            response = alm_fixture.manager.admin_lanes_controller.show_lane(lane.id)
             assert 200 == response.status_code
             assert True == lane.visible
 
     def test_show_lane_errors(self, alm_fixture: AdminLibraryManagerFixture):
         with alm_fixture.request_context_with_library_and_admin("/"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.show_lane(123)
+            response = alm_fixture.manager.admin_lanes_controller.show_lane(123)
             assert MISSING_LANE == response
 
         parent = alm_fixture.ctrl.db.lane("parent")
@@ -2671,9 +2657,7 @@ class TestLanesController:
         child.visible = False
         child.parent = parent
         with alm_fixture.request_context_with_library_and_admin("/"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.show_lane(
-                child.id
-            )
+            response = alm_fixture.manager.admin_lanes_controller.show_lane(child.id)
             assert CANNOT_SHOW_LANE_WITH_HIDDEN_PARENT == response
 
         alm_fixture.admin.remove_role(
@@ -2682,7 +2666,7 @@ class TestLanesController:
         with alm_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.show_lane,
+                alm_fixture.manager.admin_lanes_controller.show_lane,
                 parent.id,
             )
 
@@ -2690,17 +2674,13 @@ class TestLanesController:
         lane = alm_fixture.ctrl.db.lane("lane")
         lane.visible = True
         with alm_fixture.request_context_with_library_and_admin("/"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.hide_lane(
-                lane.id
-            )
+            response = alm_fixture.manager.admin_lanes_controller.hide_lane(lane.id)
             assert 200 == response.status_code
             assert False == lane.visible
 
     def test_hide_lane_errors(self, alm_fixture: AdminLibraryManagerFixture):
         with alm_fixture.request_context_with_library_and_admin("/"):
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.hide_lane(
-                123456789
-            )
+            response = alm_fixture.manager.admin_lanes_controller.hide_lane(123456789)
             assert MISSING_LANE == response
 
         lane = alm_fixture.ctrl.db.lane()
@@ -2710,7 +2690,7 @@ class TestLanesController:
         with alm_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.show_lane,
+                alm_fixture.manager.admin_lanes_controller.show_lane,
                 lane.id,
             )
 
@@ -2722,11 +2702,11 @@ class TestLanesController:
             flask.request.library = library
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.reset,
+                alm_fixture.manager.admin_lanes_controller.reset,
             )
 
             alm_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library)
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.reset()
+            response = alm_fixture.manager.admin_lanes_controller.reset()
             assert 200 == response.status_code
 
             # The old lane is gone.
@@ -2768,11 +2748,11 @@ class TestLanesController:
 
             pytest.raises(
                 AdminNotAuthorized,
-                alm_fixture.ctrl.manager.admin_lanes_controller.change_order,
+                alm_fixture.manager.admin_lanes_controller.change_order,
             )
 
             alm_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library)
-            response = alm_fixture.ctrl.manager.admin_lanes_controller.change_order()
+            response = alm_fixture.manager.admin_lanes_controller.change_order()
             assert 200 == response.status_code
 
             assert 0 == parent2.priority
@@ -2795,7 +2775,7 @@ class DashboardFixture(AdminControllerFixture):
         self.english_1.license_pools[0].collection = self.ctrl.collection
         self.works = [self.english_1]
 
-        self.ctrl.manager.external_search.bulk_update(self.works)
+        self.manager.external_search.bulk_update(self.works)
 
 
 @pytest.fixture(scope="function")
@@ -2827,10 +2807,10 @@ class TestDashboardController:
 
         with dashboard_fixture.request_context_with_library_and_admin("/"):
             response = (
-                dashboard_fixture.ctrl.manager.admin_dashboard_controller.circulation_events()
+                dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
             )
             url = AdminAnnotator(
-                dashboard_fixture.ctrl.manager.d_circulation,
+                dashboard_fixture.manager.d_circulation,
                 dashboard_fixture.ctrl.db.default_library(),
             ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
 
@@ -2844,10 +2824,10 @@ class TestDashboardController:
         # request fewer events
         with dashboard_fixture.request_context_with_library_and_admin("/?num=2"):
             response = (
-                dashboard_fixture.ctrl.manager.admin_dashboard_controller.circulation_events()
+                dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
             )
             url = AdminAnnotator(
-                dashboard_fixture.ctrl.manager.d_circulation,
+                dashboard_fixture.manager.d_circulation,
                 dashboard_fixture.ctrl.db.default_library(),
             ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
 
@@ -2886,7 +2866,7 @@ class TestDashboardController:
                 date_end,
                 library_short_name,
             ) = (
-                dashboard_fixture.ctrl.manager.admin_dashboard_controller.bulk_circulation_events()
+                dashboard_fixture.manager.admin_dashboard_controller.bulk_circulation_events()
             )
         reader = csv.reader(
             [row for row in response.split("\r\n") if row], dialect=csv.excel
@@ -2916,7 +2896,7 @@ class TestDashboardController:
                 requested_date,
                 date_end,
                 library_short_name,
-            ) = dashboard_fixture.ctrl.manager.admin_dashboard_controller.bulk_circulation_events(
+            ) = dashboard_fixture.manager.admin_dashboard_controller.bulk_circulation_events(
                 analytics_exporter=exporter
             )
 
@@ -2957,7 +2937,7 @@ class TestDashboardController:
         with dashboard_fixture.request_context_with_admin(
             "/", admin=dashboard_fixture.admin
         ):
-            response = dashboard_fixture.ctrl.manager.admin_dashboard_controller.stats(
+            response = dashboard_fixture.manager.admin_dashboard_controller.stats(
                 stats_function=stats_mock
             )
         assert 1 == stats_mock.call_count
@@ -3011,7 +2991,7 @@ class TestSettingsController:
     ):
         """Test the _get_integration_info helper method."""
         m = (
-            settings_ctrl_fixture.ctrl.manager.admin_settings_controller._get_integration_info
+            settings_ctrl_fixture.manager.admin_settings_controller._get_integration_info
         )
 
         # Test the case where there are integrations in the database
@@ -3026,9 +3006,7 @@ class TestSettingsController:
     def test_create_integration(self, settings_ctrl_fixture: SettingsControllerFixture):
         """Test the _create_integration helper method."""
 
-        m = (
-            settings_ctrl_fixture.ctrl.manager.admin_settings_controller._create_integration
-        )
+        m = settings_ctrl_fixture.manager.admin_settings_controller._create_integration
 
         protocol_definitions = [
             dict(name="allow many"),
@@ -3099,7 +3077,7 @@ class TestSettingsController:
                 ]
             )
             flask.request.files = MultiDict([(Configuration.LOGO, StringIO())])
-            response = settings_ctrl_fixture.ctrl.manager.admin_settings_controller.validate_formats(
+            response = settings_ctrl_fixture.manager.admin_settings_controller.validate_formats(
                 Configuration.LIBRARY_SETTINGS, validator
             )
             assert response == None
@@ -3112,7 +3090,7 @@ class TestSettingsController:
 
             validator.validate = validator.validate_error
             # If the validator returns an problem detail, validate_formats returns it.
-            response = settings_ctrl_fixture.ctrl.manager.admin_settings_controller.validate_formats(
+            response = settings_ctrl_fixture.manager.admin_settings_controller.validate_formats(
                 Configuration.LIBRARY_SETTINGS, validator
             )
             assert response == INVALID_EMAIL
@@ -3122,7 +3100,7 @@ class TestSettingsController:
     ):
         # If no storage integrations are available, return none
         mirror_integration_settings = (
-            settings_ctrl_fixture.ctrl.manager.admin_settings_controller._mirror_integration_settings
+            settings_ctrl_fixture.manager.admin_settings_controller._mirror_integration_settings
         )
 
         assert None == mirror_integration_settings()
@@ -3145,20 +3123,20 @@ class TestSettingsController:
         assert settings[0]["label"] == "Covers Mirror"
         assert (
             settings[0]["options"][0]["key"]
-            == settings_ctrl_fixture.ctrl.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
+            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
         )
         assert settings[0]["options"][1]["key"] == str(storage1.id)
         assert settings[1]["key"] == "books_mirror_integration_id"
         assert settings[1]["label"] == "Open Access Books Mirror"
         assert (
             settings[1]["options"][0]["key"]
-            == settings_ctrl_fixture.ctrl.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
+            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
         )
         assert settings[1]["options"][1]["key"] == str(storage1.id)
         assert settings[2]["label"] == "Protected Access Books Mirror"
         assert (
             settings[2]["options"][0]["key"]
-            == settings_ctrl_fixture.ctrl.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
+            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
         )
         assert settings[2]["options"][1]["key"] == str(storage1.id)
 
@@ -3178,7 +3156,7 @@ class TestSettingsController:
         assert settings[0]["label"] == "Covers Mirror"
         assert (
             settings[0]["options"][0]["key"]
-            == settings_ctrl_fixture.ctrl.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
+            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
         )
         assert settings[0]["options"][1]["key"] == str(storage1.id)
         assert settings[0]["options"][2]["key"] == str(storage2.id)
@@ -3186,23 +3164,21 @@ class TestSettingsController:
         assert settings[1]["label"] == "Open Access Books Mirror"
         assert (
             settings[1]["options"][0]["key"]
-            == settings_ctrl_fixture.ctrl.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
+            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
         )
         assert settings[1]["options"][1]["key"] == str(storage1.id)
         assert settings[1]["options"][2]["key"] == str(storage2.id)
         assert settings[2]["label"] == "Protected Access Books Mirror"
         assert (
             settings[2]["options"][0]["key"]
-            == settings_ctrl_fixture.ctrl.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
+            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
         )
         assert settings[2]["options"][1]["key"] == str(storage1.id)
 
     def test_check_url_unique(self, settings_ctrl_fixture: SettingsControllerFixture):
         # Verify our ability to catch duplicate integrations for a
         # given URL.
-        m = (
-            settings_ctrl_fixture.ctrl.manager.admin_settings_controller.check_url_unique
-        )
+        m = settings_ctrl_fixture.manager.admin_settings_controller.check_url_unique
 
         # Here's an ExternalIntegration.
         protocol = "a protocol"

@@ -12,7 +12,7 @@ class TestCollectionSelfTests:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 None
             )
             assert response.title == MISSING_IDENTIFIER.title
@@ -23,7 +23,7 @@ class TestCollectionSelfTests:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 -1
             )
             assert response == NO_SUCH_COLLECTION
@@ -41,7 +41,7 @@ class TestCollectionSelfTests:
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's collection object.
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 collection.id
             )
 
@@ -70,7 +70,7 @@ class TestCollectionSelfTests:
 
         # Failed to run self tests
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 collection.id
             )
 
@@ -93,7 +93,7 @@ class TestCollectionSelfTests:
         collection = settings_ctrl_fixture.ctrl.db.collection()
         # Successfully ran new self tests for the OPDSImportMonitor provider API
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 collection.id
             )
 
@@ -114,7 +114,7 @@ class TestCollectionSelfTests:
         )
         # Successfully ran new self tests
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 collection.id
             )
 
@@ -139,7 +139,7 @@ class TestCollectionSelfTests:
 
         # No protocol found so run_self_tests was not called
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_collection_self_tests_controller.process_collection_self_tests(
+            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
                 collection.id
             )
 

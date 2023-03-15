@@ -21,7 +21,7 @@ class TestPatronAuthSelfTests:
 
     def test_patron_auth_self_tests_with_no_identifier(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
                 None
             )
             assert response.title == MISSING_IDENTIFIER.title
@@ -32,7 +32,7 @@ class TestPatronAuthSelfTests:
         self, settings_ctrl_fixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
                 -1
             )
             assert response == MISSING_SERVICE
@@ -41,7 +41,7 @@ class TestPatronAuthSelfTests:
     def test_patron_auth_self_tests_get_with_no_libraries(self, settings_ctrl_fixture):
         auth_service = self._auth_service(settings_ctrl_fixture.ctrl.db.session)
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
             results = response.get("self_test_results").get("self_test_results")
@@ -62,7 +62,7 @@ class TestPatronAuthSelfTests:
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
         with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
             response_auth_service = response.get("self_test_results")
@@ -81,7 +81,7 @@ class TestPatronAuthSelfTests:
     def test_patron_auth_self_tests_post_with_no_libraries(self, settings_ctrl_fixture):
         auth_service = self._auth_service(settings_ctrl_fixture.ctrl.db.session)
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
             assert response.title == FAILED_TO_RUN_SELF_TESTS.title
@@ -100,7 +100,7 @@ class TestPatronAuthSelfTests:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.ctrl.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+            response = settings_ctrl_fixture.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
             assert response._status == "200 OK"
