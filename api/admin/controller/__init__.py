@@ -2413,12 +2413,14 @@ class AdminSearchController(AdminController):
         collection_ids = [coll.id for coll in library.collections]
         return self._search_field_values_cached(collection_ids)
 
+    @classmethod
+    def _unzip(cls, values: List[Tuple[str, int]]) -> dict:
+        """Covert a list of tuples to a {value0: value1} dictionary"""
+        return {a[0]: a[1] for a in values if type(a[0]) is str}
+
     # 1 hour in-memory cache
     @memoize(ttls=3600)
     def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
-        def _unzip(values: List[Tuple[str, int]]) -> dict:
-            """Covert a list of tuples to a {value0: value1} dictionary"""
-            return {a[0]: a[1] for a in values if type(a[0]) is str}
 
         # Reusable queries
         classification_query = (
@@ -2442,28 +2444,28 @@ class AdminSearchController(AdminController):
                 func.distinct(Subject.name), func.count(Subject.name)
             )
         )
-        subjects = _unzip(subjects_list)
+        subjects = self._unzip(subjects_list)
 
         audiences_list = list(
             classification_query.group_by(Subject.audience).values(
                 func.distinct(Subject.audience), func.count(Subject.audience)
             )
         )
-        audiences = _unzip(audiences_list)
+        audiences = self._unzip(audiences_list)
 
         genres_list = list(
             classification_query.join(Subject.genre)
             .group_by(Genre.name)
             .values(func.distinct(Genre.name), func.count(Genre.name))
         )
-        genres = _unzip(genres_list)
+        genres = self._unzip(genres_list)
 
         distributors_list = list(
             editions_query.join(Edition.data_source)
             .group_by(DataSource.name)
             .values(func.distinct(DataSource.name), func.count(DataSource.name))
         )
-        distributors = _unzip(distributors_list)
+        distributors = self._unzip(distributors_list)
 
         languages_list = list(
             editions_query.group_by(Edition.language).values(
@@ -2477,14 +2479,14 @@ class AdminSearchController(AdminController):
             # Language codes are an array of multiple choices, we only want one
             full_name = full_name_set[0] if len(full_name_set) > 0 else name
             converted_languages_list.append((full_name, num))
-        languages = _unzip(converted_languages_list)
+        languages = self._unzip(converted_languages_list)
 
         publishers_list = list(
             editions_query.group_by(Edition.publisher).values(
                 func.distinct(Edition.publisher), func.count(Edition.publisher)
             )
         )
-        publishers = _unzip(publishers_list)
+        publishers = self._unzip(publishers_list)
 
         return {
             "subjects": subjects,
