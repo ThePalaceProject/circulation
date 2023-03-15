@@ -47,14 +47,15 @@ PalaceXrayProfiler.configure(app)
 
 
 def initialize_application() -> Flask:
-
-    initialize_database()
-    initialize_circulation_manager()
-    initialize_admin()
+    with app.app_context(), flask_babel.force_locale("en"):
+        initialize_database()
+        initialize_circulation_manager()
+        initialize_admin()
     return app
 
 
-def initialize_database(autoinitialize=True, is_testing=False):
+def initialize_database(autoinitialize=True):
+    testing = "TESTING" in os.environ
     db_url = Configuration.database_url()
     if autoinitialize:
         SessionManager.initialize(db_url)
@@ -62,11 +63,13 @@ def initialize_database(autoinitialize=True, is_testing=False):
     _db = flask_scoped_session(session_factory, app)
     app._db = _db
 
-    log_level = LogConfiguration.initialize(_db, testing=is_testing)
+    _db.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
+    log_level = LogConfiguration.initialize(_db, testing=testing)
     debug = log_level == "DEBUG"
     app.config["DEBUG"] = debug
     app.debug = debug
     _db.commit()
+
     logging.getLogger().info("Application debug mode==%r" % app.debug)
 
 
@@ -74,6 +77,8 @@ def initialize_admin(_db=None):
     if getattr(app, "manager", None) is not None:
         setup_admin_controllers(app.manager)
     _db = _db or app._db
+
+    _db.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
     # The secret key is used for signing cookies for admin login
     app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
     # Create a default Local Analytics service if one does not
@@ -90,6 +95,9 @@ def initialize_circulation_manager():
         pass
     else:
         if getattr(app, "manager", None) is None:
+            app._db.execute(
+                "LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;"
+            )
             try:
                 app.manager = CirculationManager(app._db)
             except Exception:
@@ -97,7 +105,7 @@ def initialize_circulation_manager():
                 raise
             # Make sure that any changes to the database (as might happen
             # on initial setup) are committed before continuing.
-            app.manager._db.commit()
+            app._db.commit()
 
             # setup the cache data object
             CachedData.initialize(app._db)
