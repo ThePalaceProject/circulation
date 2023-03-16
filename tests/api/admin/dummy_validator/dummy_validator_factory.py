@@ -1,4 +1,4 @@
-from tests.api.admin.fixtures.dummy_validator import (
+from tests.api.admin.dummy_validator.dummy_validator import (
     DummyAuthenticationProviderValidator,
 )
 

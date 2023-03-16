@@ -6,7 +6,7 @@ from werkzeug.datastructures import MultiDict
 from api.admin.validator import PatronAuthenticationValidatorFactory, Validator
 from api.config import Configuration
 from api.shared_collection import BaseSharedCollectionAPI
-from tests.api.admin.fixtures.dummy_validator import (
+from tests.api.admin.dummy_validator.dummy_validator import (
     DummyAuthenticationProviderValidator,
 )
 
