@@ -408,12 +408,32 @@ class SessionManager:
         return session
 
     @classmethod
-    def initialize_data(cls, session, set_site_configuration=True):
+    def initialize_data(cls, session):
         # Create initial content.
         from .classification import Genre
         from .datasource import DataSource
         from .licensing import DeliveryMechanism
 
+        # lock the configuration settings table to prevent processes from trying to
+        # run this code simultaneously.
+        session.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
+
+        # check if this method as already been run:
+        timestamp = get_one(
+            session,
+            Timestamp,
+            collection=None,
+            service=Configuration.SITE_CONFIGURATION_CHANGED,
+        )
+
+        # if timestamp exists, then another process has already completed this routine and
+        # we can stop here.
+        if timestamp:
+            # commit session to release the lock
+            session.commit()
+            return session
+
+        # otherwise  continue with the initialization
         list(DataSource.well_known_sources(session))
 
         # Create any genres not in the database.
