@@ -62,8 +62,6 @@ def initialize_database(autoinitialize=True):
     session_factory = SessionManager.sessionmaker(db_url)
     _db = flask_scoped_session(session_factory, app)
     app._db = _db
-
-    _db.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
     log_level = LogConfiguration.initialize(_db, testing=testing)
     debug = log_level == "DEBUG"
     app.config["DEBUG"] = debug
@@ -77,7 +75,6 @@ def initialize_admin(_db=None):
     if getattr(app, "manager", None) is not None:
         setup_admin_controllers(app.manager)
     _db = _db or app._db
-
     _db.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
     # The secret key is used for signing cookies for admin login
     app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
@@ -95,9 +92,6 @@ def initialize_circulation_manager():
         pass
     else:
         if getattr(app, "manager", None) is None:
-            app._db.execute(
-                "LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;"
-            )
             try:
                 app.manager = CirculationManager(app._db)
             except Exception:
