@@ -432,6 +432,7 @@ class TestAnnotator:
         record = Record()
         Annotator.add_summary(record, work)
         self._check_field(record, "520", {"a": b" Summary "})
+        record.as_marc()
 
     def test_add_simplified_genres(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
