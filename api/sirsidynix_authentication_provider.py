@@ -57,7 +57,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "label": _("Server URL"),
             "description": _("The external server url."),
             "required": True,
-            "default": "https://vendor1-sym.sirsidynix.net/ilsws_current/",
+            "default": "",
         },
         {
             "key": Keys.CLIENT_ID,
