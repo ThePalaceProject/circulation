@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from core.model import (  # noqa: autoflake
         Collection,
         DataSource,
+        Identifier,
         Resource,
     )
 

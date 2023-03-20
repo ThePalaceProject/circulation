@@ -160,6 +160,7 @@ The `SIMPLIFIED_FCM_CREDENTIALS_FILE` env variable should hold the path to the J
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
 export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 ```
+
 The FCM credentials file can be downloaded once a Google Service account is created
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
