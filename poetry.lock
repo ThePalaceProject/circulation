@@ -524,18 +524,19 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.91"
+version = "1.29.93.post1"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "botocore_stubs-1.29.91-py3-none-any.whl", hash = "sha256:7c606b88534f9bf4b86c69fab42633738a67afd402fd5809e48edcf68ffdea23"},
-    {file = "botocore_stubs-1.29.91.tar.gz", hash = "sha256:2026a606620c75663a24e144a2fd4254240b517589e54405d502387e639761e9"},
+    {file = "botocore_stubs-1.29.93.post1-py3-none-any.whl", hash = "sha256:a5c04cacc791643257cd136bbaa539a9791b3039d6559bf1ef75f4f85116970f"},
+    {file = "botocore_stubs-1.29.93.post1.tar.gz", hash = "sha256:b8857881d225f201ef0b533e30949745cff3caff5804135538c8d896aea10410"},
 ]
 
 [package.dependencies]
 types-awscrt = "*"
+typing-extensions = {version = ">=4.1.0", markers = "python_version < \"3.9\""}
 
 [[package]]
 name = "cachetools"
