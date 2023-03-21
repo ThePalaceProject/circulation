@@ -155,7 +155,11 @@ class Patron(Base):
 
     loans = relationship("Loan", backref="patron", cascade="delete", uselist=True)
     holds = relationship(
-        "Hold", back_populates="patron", cascade="delete", uselist=True
+        "Hold",
+        back_populates="patron",
+        cascade="delete",
+        uselist=True,
+        order_by="Hold.id",
     )
 
     annotations = relationship(
