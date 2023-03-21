@@ -39,7 +39,7 @@ class IntegrationClient(Base):
     last_accessed = Column(DateTime(timezone=True))
 
     loans = relationship("Loan", backref="integration_client")
-    holds = relationship("Hold", backref="integration_client")
+    holds = relationship("Hold", back_populates="integration_client")
 
     def __repr__(self):
         return f"<IntegrationClient: URL={self.url} ID={self.id}>"
