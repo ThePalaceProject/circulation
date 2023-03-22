@@ -7,7 +7,7 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, TypeVar
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import Column, DateTime
@@ -18,10 +18,10 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
 from core.model.hybrid import hybrid_property
-from core.util.datetime_helpers import utc_now
 
 from ..config import CannotLoadConfiguration, Configuration
 from ..mirror import MirrorUploader
+from ..util.datetime_helpers import utc_now
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
@@ -891,7 +891,7 @@ class HasExternalIntegration(metaclass=ABCMeta):
     """Interface allowing to get access to an external integration"""
 
     @abstractmethod
-    def external_integration(self, db: Session) -> ExternalIntegration:
+    def external_integration(self, db: Session) -> Optional[ExternalIntegration]:
         """Returns an external integration associated with this object
 
         :param db: Database session

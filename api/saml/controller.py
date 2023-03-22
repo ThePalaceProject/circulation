@@ -13,8 +13,6 @@ from flask import redirect
 from flask_babel import lazy_gettext as _
 
 from api.problem_details import *
-from api.saml.configuration.model import SAMLConfigurationFactory
-from api.saml.metadata.parser import SAMLMetadataParser
 from core.util.problem_detail import ProblemDetail
 from core.util.problem_detail import json as pd_json
 
@@ -58,23 +56,6 @@ class SAMLController:
         self._authenticator = authenticator
 
         self._logger = logging.getLogger(__name__)
-        self._configuration_factory = SAMLConfigurationFactory(SAMLMetadataParser())
-
-    @staticmethod
-    def _get_authentication_manager(db, authentication_provider):
-        """Returns an instance of SAML authentication manager
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :param authentication_provider: SAML authentication provider
-        :type authentication_provider: api.saml.provider.SAMLWebSSOAuthenticationProvider
-
-        :return: Authentication manager
-        :rtype: SAMLAuthenticationManager
-        """
-        with authentication_provider.get_configuration(db) as configuration:
-            return authentication_provider.get_authentication_manager(configuration)
 
     @staticmethod
     def _add_params_to_url(url, params):
@@ -256,42 +237,41 @@ class SAMLController:
         if isinstance(provider, ProblemDetail):
             return self._redirect_with_error(redirect_uri, provider)
 
-        with provider.get_configuration(db) as configuration:
-            authentication_manager = provider.get_authentication_manager(configuration)
+        authentication_manager = provider.get_authentication_manager()
 
-            # In general relay state should contain only a redirect URL.
-            # However, we need to pass additional parameters which will be required in saml_authentication_callback.
-            # There is no other way to pass them back to the Circulation Manager from the IdP.
-            # We have to add them to the query part of the relay state and then remove them
-            # before redirecting to the URL containing in the relay state.
-            # The required parameters are:
-            # - library's name
-            # - SAML provider's name
-            # - IdP's entity ID
-            relay_state = self._add_params_to_url(
-                redirect_uri,
-                {
-                    # NOTE: we cannot use @has_library decorator and append a library's name
-                    # to SAMLController.saml_callback route (e.g. https://cm.org/LIBRARY_NAME/saml_callback).
-                    # The URL of the SP's assertion consumer service (SAMLController.saml_callback) should be constant:
-                    # SP's metadata is registered in the IdP and cannot change.
-                    # If we try to append a library's name to the ACS's URL sent as a part of the SAML request,
-                    # the IdP will fail this request because the URL mentioned in the request and
-                    # the URL saved in the SP's metadata configured in this IdP will differ.
-                    # Library's name is passed as a part of the relay state and
-                    # processed in SAMLController.saml_authentication_callback
-                    self.LIBRARY_SHORT_NAME: provider.library(db).short_name,
-                    self.PROVIDER_NAME: provider_name,
-                    self.IDP_ENTITY_ID: idp_entity_id,
-                },
-            )
-            redirect_uri = authentication_manager.start_authentication(
-                db, idp_entity_id, relay_state
-            )
-            if isinstance(redirect_uri, ProblemDetail):
-                return redirect_uri
+        # In general relay state should contain only a redirect URL.
+        # However, we need to pass additional parameters which will be required in saml_authentication_callback.
+        # There is no other way to pass them back to the Circulation Manager from the IdP.
+        # We have to add them to the query part of the relay state and then remove them
+        # before redirecting to the URL containing in the relay state.
+        # The required parameters are:
+        # - library's name
+        # - SAML provider's name
+        # - IdP's entity ID
+        relay_state = self._add_params_to_url(
+            redirect_uri,
+            {
+                # NOTE: we cannot use @has_library decorator and append a library's name
+                # to SAMLController.saml_callback route (e.g. https://cm.org/LIBRARY_NAME/saml_callback).
+                # The URL of the SP's assertion consumer service (SAMLController.saml_callback) should be constant:
+                # SP's metadata is registered in the IdP and cannot change.
+                # If we try to append a library's name to the ACS's URL sent as a part of the SAML request,
+                # the IdP will fail this request because the URL mentioned in the request and
+                # the URL saved in the SP's metadata configured in this IdP will differ.
+                # Library's name is passed as a part of the relay state and
+                # processed in SAMLController.saml_authentication_callback
+                self.LIBRARY_SHORT_NAME: provider.library(db).short_name,
+                self.PROVIDER_NAME: provider_name,
+                self.IDP_ENTITY_ID: idp_entity_id,
+            },
+        )
+        redirect_uri = authentication_manager.start_authentication(
+            db, idp_entity_id, relay_state
+        )
+        if isinstance(redirect_uri, ProblemDetail):
+            return redirect_uri
 
-            return redirect(redirect_uri)
+        return redirect(redirect_uri)
 
     def saml_authentication_callback(self, request, db):
         """Creates a Patron object and a bearer token for a patron who has just
@@ -349,28 +329,27 @@ class SAMLController:
         if isinstance(provider, ProblemDetail):
             return self._redirect_with_error(redirect_uri, provider)
 
-        with provider.get_configuration(db) as configuration:
-            authentication_manager = provider.get_authentication_manager(configuration)
+        authentication_manager = provider.get_authentication_manager()
 
-            subject = authentication_manager.finish_authentication(db, idp_entity_id)
-            if isinstance(subject, ProblemDetail):
-                return self._redirect_with_error(redirect_uri, subject)
+        subject = authentication_manager.finish_authentication(db, idp_entity_id)
+        if isinstance(subject, ProblemDetail):
+            return self._redirect_with_error(redirect_uri, subject)
 
-            response = provider.saml_callback(db, subject)
-            if isinstance(response, ProblemDetail):
-                return self._redirect_with_error(redirect_uri, response)
+        response = provider.saml_callback(db, subject)
+        if isinstance(response, ProblemDetail):
+            return self._redirect_with_error(redirect_uri, response)
 
-            provider_token, patron, patron_data = response
+        provider_token, patron, patron_data = response
 
-            # Turn the provider token into a bearer token we can give to
-            # the patron
-            simplified_token = self._authenticator.create_bearer_token(
-                provider.NAME, provider_token.credential
-            )
+        # Turn the provider token into a bearer token we can give to
+        # the patron
+        simplified_token = self._authenticator.create_bearer_token(
+            provider.label(), provider_token.credential
+        )
 
-            patron_info = json.dumps(patron_data.to_response_parameters)
-            params = {"access_token": simplified_token, "patron_info": patron_info}
+        patron_info = json.dumps(patron_data.to_response_parameters)
+        params = {"access_token": simplified_token, "patron_info": patron_info}
 
-            redirect_uri = self._add_params_to_url(redirect_uri, params)
+        redirect_uri = self._add_params_to_url(redirect_uri, params)
 
-            return redirect(redirect_uri)
+        return redirect(redirect_uri)

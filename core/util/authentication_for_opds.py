@@ -1,29 +1,35 @@
-from typing import Optional
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List
+
+from sqlalchemy.orm import Session
 
 
-class OPDSAuthenticationFlow:
+class OPDSAuthenticationFlow(ABC):
     """An object that can be represented as an Authentication Flow
     in an Authentication For OPDS document.
     """
 
-    FLOW_TYPE: Optional[str] = None
+    @property
+    @abstractmethod
+    def flow_type(self) -> str:
+        """The value of the `type` field in an Authentication Flow
+        document.
+        """
+        ...
 
-    def authentication_flow_document(self, _db):
+    def authentication_flow_document(self, _db: Session) -> Dict[str, Any]:
         """Convert this object into a dictionary that can be used in the
         `authentication` list of an Authentication For OPDS document.
         """
         data = self._authentication_flow_document(_db)
-        if not data.get("type"):
-            data["type"] = self.FLOW_TYPE
-        if not data.get("type"):
-            raise ValueError(
-                "Authentication flow document for %r does not include required field 'type'"
-                % self
-            )
+        data["type"] = self.flow_type
         return data
 
-    def _authentication_flow_document(self, _db):
-        raise NotImplementedError()
+    @abstractmethod
+    def _authentication_flow_document(self, _db: Session) -> Dict[str, Any]:
+        ...
 
 
 class AuthenticationForOPDSDocument:
@@ -34,7 +40,13 @@ class AuthenticationForOPDSDocument:
     MEDIA_TYPE = "application/vnd.opds.authentication.v1.0+json"
     LINK_RELATION = "http://opds-spec.org/auth/document"
 
-    def __init__(self, id=None, title=None, authentication_flows=[], links=[]):
+    def __init__(
+        self,
+        id: str | None = None,
+        title: str | None = None,
+        authentication_flows: List[OPDSAuthenticationFlow] | None = None,
+        links: List[Dict[str, str]] | None = None,
+    ):
         """Initialize an Authentication For OPDS document.
 
         :param id: URL to use as the 'id' of the Authentication For
@@ -48,10 +60,10 @@ class AuthenticationForOPDSDocument:
         """
         self.id = id
         self.title = title
-        self.authentication_flows = authentication_flows
-        self.links = links
+        self.authentication_flows = authentication_flows or []
+        self.links = links or []
 
-    def to_dict(self, _db):
+    def to_dict(self, _db: Session) -> Dict[str, Any]:
         """Convert this data structure to a dictionary that becomes an
         Authentication For OPDS document when serialized to JSON.
 
@@ -64,14 +76,14 @@ class AuthenticationForOPDSDocument:
                     "'%s' is required in an Authentication For OPDS document." % key
                 )
 
-        for key, value in [
+        for key, value in [  # type: ignore[assignment]
             ("authentication_flows", self.authentication_flows),
             ("links", self.links),
         ]:
             if not isinstance(value, list):
                 raise ValueError("'%s' must be a list." % key)
 
-        document = dict(id=self.id, title=self.title)
+        document: Dict[str, Any] = dict(id=self.id, title=self.title)
         flow_documents = document.setdefault("authentication", [])
         for flow in self.authentication_flows:
             flow_documents.append(flow.authentication_flow_document(_db))

@@ -1,46 +1,57 @@
-import logging
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import HttpUrl
 
-from core.model import ExternalIntegration, Patron
+from core.integration.settings import ConfigurationFormItem
+from core.model import Patron
 from core.util.http import HTTP
 
-from .authenticator import BasicAuthenticationProvider, PatronData
-from .config import CannotLoadConfiguration
+from .authenticator import (
+    BasicAuthenticationProvider,
+    BasicAuthenticationProviderLibrarySettings,
+    BasicAuthenticationProviderSettings,
+    PatronData,
+)
+
+
+class KansasAuthenticationSettings(BasicAuthenticationProviderSettings):
+    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
+        url = ConfigurationFormItem(
+            label=_("URL"),
+            required=True,
+        )
+
+    # Reason for ignore: https://github.com/pydantic/pydantic/issues/1684
+    url: HttpUrl = "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails"  # type: ignore[assignment]
 
 
 class KansasAuthenticationAPI(BasicAuthenticationProvider):
-    NAME = "Kansas"
+    @classmethod
+    def label(cls) -> str:
+        return "Kansas"
 
-    DESCRIPTION = _(
-        """
-        An authentication service for the Kansas State Library.
-        """
-    )
+    @classmethod
+    def description(cls) -> str:
+        return "An authentication service for the Kansas State Library."
 
-    DISPLAY_NAME = NAME
+    @classmethod
+    def settings_class(cls) -> Type[KansasAuthenticationSettings]:
+        return KansasAuthenticationSettings
 
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "format": "url",
-            "label": _("URL"),
-            "default": "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails",
-            "required": True,
-        },
-    ] + BasicAuthenticationProvider.SETTINGS
-
-    log = logging.getLogger("Kansas authentication API")
-
-    def __init__(self, library_id, integration, analytics=None, base_url=None):
-        super().__init__(library_id, integration, analytics)
-        if base_url is None:
-            base_url = integration.url
-        if not base_url:
-            raise CannotLoadConfiguration("Kansas server url not configured.")
-        self.base_url = base_url
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: KansasAuthenticationSettings,
+        library_settings: BasicAuthenticationProviderLibrarySettings,
+        analytics=None,
+    ):
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
+        self.base_url = str(settings.url)
 
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
@@ -126,8 +137,3 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             headers={"Content-Type": "application/xml"},
             allowed_response_codes=["2xx"],
         )
-
-
-# Specify which of the classes defined in this module is the
-# authentication provider.
-AuthenticationProvider = KansasAuthenticationAPI

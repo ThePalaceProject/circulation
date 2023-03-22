@@ -1,16 +1,17 @@
+from __future__ import annotations
+
 import base64
 import json
 import os
 import random
 from datetime import timedelta
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Callable, Dict
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from requests import Response
 from sqlalchemy.orm.exc import StaleDataError
 
-from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.config import Configuration
@@ -42,9 +43,11 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.api.mockapi.overdrive import MockOverdriveAPI
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 
-from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
-from ..fixtures.time import Time
+if TYPE_CHECKING:
+    from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
+    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.database import DatabaseTransactionFixture
+    from ..fixtures.time import Time
 
 
 class OverdriveAPIFixture:
@@ -113,7 +116,11 @@ class TestOverdriveAPI:
         for i in exempt:
             assert i not in needs_lock_in
 
-    def test__run_self_tests(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test__run_self_tests(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         # Verify that OverdriveAPI._run_self_tests() calls the right
         # methods.
         db = overdrive_api_fixture.db
@@ -156,14 +163,7 @@ class TestOverdriveAPI:
         overdrive_api_fixture.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
-        integration = db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        create_simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(db.session, overdrive_api_fixture.collection)
@@ -2375,7 +2375,7 @@ class TestOverdriveManifestFulfillmentInfo:
 
 
 class TestOverdriveCirculationMonitor:
-    def test_run(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_run(self, overdrive_api_fixture: OverdriveAPIFixture, time_fixture: Time):
         db = overdrive_api_fixture.db
 
         # An end-to-end test verifying that this Monitor manages its
@@ -2401,8 +2401,8 @@ class TestOverdriveCirculationMonitor:
         #
         # (This isn't how the Overdrive collection is initially
         # populated, BTW -- that's NewTitlesOverdriveCollectionMonitor.)
-        Time.time_eq(start, now - monitor.OVERLAP)
-        Time.time_eq(cutoff, now)
+        time_fixture.time_eq(start, now - monitor.OVERLAP)
+        time_fixture.time_eq(cutoff, now)
         timestamp = monitor.timestamp()
         assert start == timestamp.start
         assert cutoff == timestamp.finish
@@ -2413,7 +2413,7 @@ class TestOverdriveCirculationMonitor:
         new_start, new_cutoff, new_progress = monitor.catch_up_from_called_with
         now = utc_now()
         assert new_start == cutoff - monitor.OVERLAP
-        Time.time_eq(new_cutoff, now)
+        time_fixture.time_eq(new_cutoff, now)
 
     def test_catch_up_from(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db

@@ -1,30 +1,43 @@
 """Test the base authentication framework: that is, the classes that
 don't interact with any particular source of truth.
 """
+from __future__ import annotations
+
 import datetime
 import json
 import os
 import re
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from functools import partial
+from typing import TYPE_CHECKING, Callable, Literal, Optional, Tuple, cast
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import flask
 import pytest
 from flask import url_for
-from flask_babel import lazy_gettext as _
+from freezegun import freeze_time
 from money import Money
+from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
 from api.authenticator import (
     Authenticator,
+    BarcodeFormats,
+    BaseSAMLAuthenticationProvider,
     BasicAuthenticationProvider,
+    BasicAuthenticationProviderLibrarySettings,
+    BasicAuthenticationProviderSettings,
     CirculationPatronProfileStorage,
+    Keyboards,
     LibraryAuthenticator,
+    LibraryIdentifierRestriction,
     PatronData,
 )
 from api.config import CannotLoadConfiguration, Configuration
+from api.custom_patron_catalog import CustomPatronCatalog
+from api.integration.registry.patron_auth import patron_auth_registry
 from api.millenium_patron import MilleniumPatronAPI
 from api.opds import LibraryAnnotator
 from api.problem_details import *
@@ -32,53 +45,28 @@ from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from api.util.patron import PatronUtility
+from core.analytics import Analytics
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import (
-    CirculationEvent,
-    ConfigurationSetting,
-    ExternalIntegration,
-    Library,
-    Patron,
-    Session,
-    create,
-)
+from core.model import CirculationEvent, ConfigurationSetting, Library, Patron, create
 from core.model.constants import LinkRelations
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from core.opds import OPDSFeed
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
-from core.util.http import IntegrationException
+from core.util.http import IntegrationException, RemoteIntegrationException
+from core.util.problem_detail import ProblemDetail
 
-from ..fixtures.api_controller import ControllerFixture
-from ..fixtures.database import DatabaseTransactionFixture
-from ..fixtures.vendor_id import VendorIDFixture
-
-
-class MockBasicAuthenticationProvider(BasicAuthenticationProvider):
-    """A mock basic authentication provider for use in testing the overall
-    authentication process.
-    """
-
-    def __init__(
-        self,
-        library,
-        integration,
-        analytics=None,
-        patron=None,
-        patrondata=None,
-    ):
-        super().__init__(library, integration, analytics)
-        self.patron = patron
-        self.patrondata = patrondata
-
-    def authenticate(self, _db, header):
-        return self.patron
-
-    def remote_authenticate(self, username, password):
-        return self.patrondata
-
-    def remote_patron_lookup(self, patrondata):
-        return self.patrondata
+if TYPE_CHECKING:
+    from ..fixtures.api_controller import ControllerFixture
+    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.database import DatabaseTransactionFixture
+    from ..fixtures.vendor_id import VendorIDFixture
 
 
 class MockBasic(BasicAuthenticationProvider):
@@ -86,83 +74,114 @@ class MockBasic(BasicAuthenticationProvider):
     the workflow around Basic Auth.
     """
 
-    NAME = "Mock Basic Auth provider"
-    LOGIN_BUTTON_IMAGE = "BasicButton.png"
-
     def __init__(
         self,
-        library,
-        integration,
-        analytics=None,
-        patrondata=None,
-        remote_patron_lookup_patrondata=None,
-        *args,
-        **kwargs,
+        library_id: int,
+        integration_id: int,
+        settings: BasicAuthenticationProviderSettings | None = None,
+        library_settings: BasicAuthenticationProviderLibrarySettings | None = None,
+        analytics: Analytics | None = None,
+        patrondata: PatronData | ProblemDetail | None = None,
+        lookup_patrondata: PatronData | ProblemDetail | None | Literal[False] = False,
     ):
-        super().__init__(library, integration, analytics)
+        settings = settings or self.settings_class()()
+        library_settings = library_settings or self.library_settings_class()()
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
         self.patrondata = patrondata
-        self.remote_patron_lookup_patrondata = remote_patron_lookup_patrondata
+        if lookup_patrondata is False:
+            lookup_patrondata = patrondata
+        self.lookup_patrondata = lookup_patrondata
+
+    @classmethod
+    def label(cls) -> str:
+        return "Mock"
+
+    @classmethod
+    def description(cls) -> str:
+        return "A mock authentication provider"
+
+    @property
+    def login_button_image(self) -> str | None:
+        return "login.png"
 
     def remote_authenticate(self, username, password):
         return self.patrondata
 
     def remote_patron_lookup(self, patrondata):
-        return self.remote_patron_lookup_patrondata
+        return self.lookup_patrondata
 
 
-class AuthenticatorFixture:
-
-    db: DatabaseTransactionFixture
-    mock_basic_integration: ExternalIntegration
-
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-        self.mock_basic_integration = self.db.external_integration(
-            self.db.fresh_str(), ExternalIntegration.PATRON_AUTH_GOAL
-        )
-
-    def mock_basic(self, *args, **kwargs):
-        """Convenience method to instantiate a MockBasic object with the
-        default library.
-        """
-        return MockBasic(
-            self.db.default_library(), self.mock_basic_integration, *args, **kwargs
-        )
+MockBasicFixture = Callable[..., MockBasic]
 
 
-@pytest.fixture(scope="function")
-def authenticator_fixture(db: DatabaseTransactionFixture) -> AuthenticatorFixture:
-    return AuthenticatorFixture(db)
+@pytest.fixture
+def mock_integration_id() -> int:
+    return 1
 
 
-class PatronDataFixture:
-    def __init__(self, auth: AuthenticatorFixture):
-        self.auth = auth
-        self.expiration_time = utc_now()
-        self.data = PatronData(
-            permanent_id="1",
-            authorization_identifier="2",
-            username="3",
-            personal_name="4",
-            email_address="5",
-            authorization_expires=self.expiration_time,
-            fines=Money(6, "USD"),
-            block_reason=PatronData.NO_VALUE,
-        )
+@pytest.fixture
+def mock_basic(
+    db: DatabaseTransactionFixture, mock_integration_id: int
+) -> MockBasicFixture:
+    return partial(
+        MockBasic,
+        library_id=db.default_library().id,
+        integration_id=mock_integration_id,
+    )
 
 
-@pytest.fixture(scope="function")
-def patron_data_fixture(
-    authenticator_fixture: AuthenticatorFixture,
-) -> PatronDataFixture:
-    return PatronDataFixture(authenticator_fixture)
+@pytest.fixture
+def patron_data() -> PatronData:
+    return PatronData(
+        permanent_id="1",
+        authorization_identifier="2",
+        username="3",
+        personal_name="4",
+        email_address="5",
+        authorization_expires=utc_now(),
+        fines=Money(6, "USD"),
+        block_reason=PatronData.NO_VALUE,
+    )
+
+
+InactivePatronFixture = Tuple[Patron, PatronData]
+
+
+@pytest.fixture
+def inactive_patron(db: DatabaseTransactionFixture) -> InactivePatronFixture:
+    """Simulate a patron who has not logged in for a really long time.
+
+    :return: A 2-tuple (Patron, PatronData). The Patron contains
+    'out-of-date' data and the PatronData containing 'up-to-date'
+    data.
+    """
+    now = utc_now()
+    long_ago = now - datetime.timedelta(hours=10000)
+    patron = db.patron()
+    patron.last_external_sync = long_ago
+
+    # All of their authorization information has changed in the
+    # meantime, but -- crucially -- their permanent ID has not.
+    patron.authorization_identifier = "old auth id"
+    patron.username = "old username"
+
+    # Here is the up-to-date information about this patron,
+    # as found in the 'ILS'.
+    patrondata = PatronData(
+        permanent_id=patron.external_identifier,
+        username="new username",
+        authorization_identifier="new authorization identifier",
+        complete=True,
+    )
+
+    return patron, patrondata
 
 
 class TestPatronData:
-    def test_to_dict(self, patron_data_fixture: PatronDataFixture):
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
-
-        data = p_data.to_dict
+    def test_to_dict(self, patron_data: PatronData):
+        data = patron_data.to_dict
         expect = dict(
             permanent_id="1",
             authorization_identifier="2",
@@ -171,7 +190,7 @@ class TestPatronData:
             username="3",
             personal_name="4",
             email_address="5",
-            authorization_expires=patron_data_fixture.expiration_time.strftime(
+            authorization_expires=patron_data.authorization_expires.strftime(
                 "%Y-%m-%d"
             ),
             fines="6",
@@ -180,65 +199,63 @@ class TestPatronData:
         assert data == expect
 
         # Test with an empty fines field
-        p_data.fines = PatronData.NO_VALUE
-        data = p_data.to_dict
+        patron_data.fines = PatronData.NO_VALUE
+        data = patron_data.to_dict
         expect["fines"] = None
         assert data == expect
 
         # Test with a zeroed-out fines field
-        p_data.fines = Decimal(0.0)
-        data = p_data.to_dict
+        patron_data.fines = Decimal(0.0)
+        data = patron_data.to_dict
         expect["fines"] = "0"
         assert data == expect
 
         # Test with an empty expiration time
-        p_data.authorization_expires = PatronData.NO_VALUE
-        data = p_data.to_dict
+        patron_data.authorization_expires = PatronData.NO_VALUE
+        data = patron_data.to_dict
         expect["authorization_expires"] = None
         assert data == expect
 
-    def test_apply(self, patron_data_fixture: PatronDataFixture):
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
-
+    def test_apply(self, patron_data: PatronData, db: DatabaseTransactionFixture):
         patron = db.patron()
-        p_data.cached_neighborhood = "Little Homeworld"
+        patron_data.cached_neighborhood = "Little Homeworld"
 
-        p_data.apply(patron)
-        assert p_data.permanent_id == patron.external_identifier
-        assert p_data.authorization_identifier == patron.authorization_identifier
-        assert p_data.username == patron.username
-        assert p_data.authorization_expires == patron.authorization_expires
-        assert p_data.fines == patron.fines
+        patron_data.apply(patron)
+        assert patron_data.permanent_id == patron.external_identifier
+        assert patron_data.authorization_identifier == patron.authorization_identifier
+        assert patron_data.username == patron.username
+        assert patron_data.authorization_expires == patron.authorization_expires
+        assert patron_data.fines == patron.fines
         assert None == patron.block_reason
         assert "Little Homeworld" == patron.cached_neighborhood
 
         # This data is stored in PatronData but not applied to Patron.
-        assert "4" == p_data.personal_name
+        assert "4" == patron_data.personal_name
         assert False == hasattr(patron, "personal_name")
-        assert "5" == p_data.email_address
+        assert "5" == patron_data.email_address
         assert False == hasattr(patron, "email_address")
 
         # This data is stored on the Patron object as a convenience,
         # but it's not stored in the database.
         assert "Little Homeworld" == patron.neighborhood
 
-    def test_apply_block_reason(self, patron_data_fixture: PatronDataFixture):
+    def test_apply_block_reason(
+        self, patron_data: PatronData, db: DatabaseTransactionFixture
+    ):
         """If the PatronData has a reason why a patron is blocked,
         the reason is put into the Patron record.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
-        p_data.block_reason = PatronData.UNKNOWN_BLOCK
+        patron_data.block_reason = PatronData.UNKNOWN_BLOCK
         patron = db.patron()
-        p_data.apply(patron)
+        patron_data.apply(patron)
         assert PatronData.UNKNOWN_BLOCK == patron.block_reason
 
     def test_apply_multiple_authorization_identifiers(
-        self, patron_data_fixture: PatronDataFixture
+        self, db: DatabaseTransactionFixture
     ):
         """If there are multiple authorization identifiers, the first
         one is chosen.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
         patron = db.patron()
         patron.authorization_identifier = None
         data = PatronData(authorization_identifier=["2", "3"], complete=True)
@@ -258,73 +275,66 @@ class TestPatronData:
         assert "3" == patron.authorization_identifier
 
     def test_apply_sets_last_external_sync_if_data_is_complete(
-        self, patron_data_fixture: PatronDataFixture
+        self, patron_data: PatronData, db: DatabaseTransactionFixture
     ):
         """Patron.last_external_sync is only updated when apply() is called on
         a PatronData object that represents a full set of metadata.
         What constitutes a 'full set' depends on the authentication
         provider.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
         patron = db.patron()
-        p_data.complete = False
-        p_data.apply(patron)
+        patron_data.complete = False
+        patron_data.apply(patron)
         assert None == patron.last_external_sync
-        p_data.complete = True
-        p_data.apply(patron)
+        patron_data.complete = True
+        patron_data.apply(patron)
         assert None != patron.last_external_sync
 
     def test_apply_sets_first_valid_authorization_identifier(
-        self, patron_data_fixture: PatronDataFixture
+        self, patron_data: PatronData, db: DatabaseTransactionFixture
     ):
         """If the ILS has multiple authorization identifiers for a patron, the
         first one is used.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
         patron = db.patron()
         patron.authorization_identifier = None
-        p_data.set_authorization_identifier(["identifier 1", "identifier 2"])
-        p_data.apply(patron)
+        patron_data.set_authorization_identifier(["identifier 1", "identifier 2"])
+        patron_data.apply(patron)
         assert "identifier 1" == patron.authorization_identifier
 
     def test_apply_leaves_valid_authorization_identifier_alone(
-        self, patron_data_fixture: PatronDataFixture
+        self, patron_data: PatronData, db: DatabaseTransactionFixture
     ):
         """If the ILS says a patron has a new preferred authorization
         identifier, but our Patron record shows them using an
         authorization identifier that still works, we don't change it.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
         patron = db.patron()
         patron.authorization_identifier = "old identifier"
-        p_data.set_authorization_identifier(
+        patron_data.set_authorization_identifier(
             ["new identifier", patron.authorization_identifier]
         )
-        p_data.apply(patron)
+        patron_data.apply(patron)
         assert "old identifier" == patron.authorization_identifier
 
     def test_apply_overwrites_invalid_authorization_identifier(
-        self, patron_data_fixture: PatronDataFixture
+        self, patron_data: PatronData, db: DatabaseTransactionFixture
     ):
         """If the ILS says a patron has a new preferred authorization
         identifier, and our Patron record shows them using an
         authorization identifier that no longer works, we change it.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
         patron = db.patron()
-        p_data.set_authorization_identifier(["identifier 1", "identifier 2"])
-        p_data.apply(patron)
+        patron_data.set_authorization_identifier(["identifier 1", "identifier 2"])
+        patron_data.apply(patron)
         assert "identifier 1" == patron.authorization_identifier
 
-    def test_apply_on_incomplete_information(
-        self, patron_data_fixture: PatronDataFixture
-    ):
+    def test_apply_on_incomplete_information(self, db: DatabaseTransactionFixture):
         """When we call apply() based on incomplete information (most
         commonly, the fact that a given string was successfully used
         to authenticate a patron), we are very careful about modifying
         data already in the database.
         """
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
         now = utc_now()
 
         # If the only thing we know about a patron is that a certain
@@ -365,14 +375,15 @@ class TestPatronData:
         assert "1234" == patron.authorization_identifier
         assert None == patron.last_external_sync
 
-    def test_get_or_create_patron(self, patron_data_fixture: PatronDataFixture):
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
+    def test_get_or_create_patron(
+        self, patron_data: PatronData, db: DatabaseTransactionFixture
+    ):
         analytics = MockAnalyticsProvider()
 
         # The patron didn't exist yet, so it was created
         # and an analytics event was sent.
         default_library = db.default_library()
-        patron, is_new = p_data.get_or_create_patron(
+        patron, is_new = patron_data.get_or_create_patron(
             db.session, default_library.id, analytics
         )
         assert "2" == patron.authorization_identifier
@@ -386,11 +397,11 @@ class TestPatronData:
         assert None == patron.neighborhood
 
         # Set a neighborhood and try again.
-        p_data.neighborhood = "Achewood"
+        patron_data.neighborhood = "Achewood"
 
         # The same patron is returned, and no analytics
         # event was sent.
-        patron, is_new = p_data.get_or_create_patron(
+        patron, is_new = patron_data.get_or_create_patron(
             db.session, default_library.id, analytics
         )
         assert "2" == patron.authorization_identifier
@@ -398,13 +409,12 @@ class TestPatronData:
         assert "Achewood" == patron.neighborhood
         assert 1 == analytics.count
 
-    def test_to_response_parameters(self, patron_data_fixture: PatronDataFixture):
-        db, p_data = patron_data_fixture.auth.db, patron_data_fixture.data
-        params = p_data.to_response_parameters
+    def test_to_response_parameters(self, patron_data: PatronData):
+        params = patron_data.to_response_parameters
         assert dict(name="4") == params
 
-        p_data.personal_name = None
-        params = p_data.to_response_parameters
+        patron_data.personal_name = None
+        params = patron_data.to_response_parameters
         assert dict() == params
 
 
@@ -460,25 +470,12 @@ class TestCirculationPatronProfileStorage:
         assert annotations_link["type"] == AnnotationWriter.CONTENT_TYPE
 
 
-class MockAuthenticator(Authenticator):
-    """Allows testing Authenticator methods outside of a request context."""
-
-    def __init__(self, current_library, authenticators, analytics=None):
-        _db = Session.object_session(current_library)
-        super().__init__(_db, [current_library], analytics)
-        self.current_library_name = current_library.short_name
-        self.library_authenticators = authenticators
-
-    def populate_authenticators(self, *args, **kwargs):
-        """Do nothing -- authenticators were set in the constructor."""
-
-    @property
-    def current_library_short_name(self):
-        return self.current_library_name
-
-
 class TestAuthenticator:
-    def test_init(self, controller_fixture: ControllerFixture):
+    def test_init(
+        self,
+        controller_fixture: ControllerFixture,
+        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         db = controller_fixture.db
 
         # The default library has already been configured to use the
@@ -488,15 +485,11 @@ class TestAuthenticator:
 
         # This library uses Millenium Patron.
         l2, ignore = create(db.session, Library, short_name="l2")
-        integration = db.external_integration(
-            "api.millenium_patron", goal=ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        integration.url = "http://url/"
-        l2.integrations.append(integration)
+        create_millenium_auth_integration(l2)
 
-        db.session.commit()
+        db.session.flush()
 
-        analytics = MockAnalyticsProvider()
+        analytics = cast(Analytics, MockAnalyticsProvider())
 
         auth = Authenticator(db.session, db.session.query(Library), analytics)
 
@@ -509,12 +502,15 @@ class TestAuthenticator:
         # Each LibraryAuthenticator has been associated with an
         # appropriate AuthenticationProvider.
 
+        assert auth.library_authenticators["l1"].basic_auth_provider is not None
         assert isinstance(
             auth.library_authenticators["l1"].basic_auth_provider,
             SimpleAuthenticationProvider,
         )
+        assert auth.library_authenticators["l2"].basic_auth_provider is not None
         assert isinstance(
-            auth.library_authenticators["l2"].basic_auth_provider, MilleniumPatronAPI
+            auth.library_authenticators["l2"].basic_auth_provider,
+            MilleniumPatronAPI,
         )
 
         # Each provider has the analytics set.
@@ -564,11 +560,11 @@ class TestAuthenticator:
 
         with app.test_request_context("/"):
             flask.request.library = l3  # type:ignore
-            assert LIBRARY_NOT_FOUND == auth.authenticated_patron(db.session, {})  # type: ignore
-            assert LIBRARY_NOT_FOUND == auth.create_authentication_document()  # type: ignore
-            assert LIBRARY_NOT_FOUND == auth.create_authentication_headers()  # type: ignore
-            assert LIBRARY_NOT_FOUND == auth.get_credential_from_header({})  # type: ignore
-            assert LIBRARY_NOT_FOUND == auth.create_bearer_token()  # type: ignore
+            assert LIBRARY_NOT_FOUND == auth.authenticated_patron(db.session, {})
+            assert LIBRARY_NOT_FOUND == auth.create_authentication_document()
+            assert LIBRARY_NOT_FOUND == auth.create_authentication_headers()
+            assert LIBRARY_NOT_FOUND == auth.get_credential_from_header({})
+            assert LIBRARY_NOT_FOUND == auth.create_bearer_token()
 
         # The other libraries are in the authenticator.
         with app.test_request_context("/"):
@@ -606,29 +602,24 @@ class TestAuthenticator:
 
 class TestLibraryAuthenticator:
     def test_from_config_basic_auth_only(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
+        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
     ):
-        db = authenticator_fixture.db
-
         # Only a basic auth provider.
-        millenium = db.external_integration(
-            "api.millenium_patron",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[db.default_library()],
-        )
-        millenium.url = "http://url/"
+        create_millenium_auth_integration(db.default_library())
         auth = LibraryAuthenticator.from_config(db.session, db.default_library())
 
-        assert auth.basic_auth_provider != None
+        assert auth.basic_auth_provider is not None
         assert isinstance(auth.basic_auth_provider, MilleniumPatronAPI)
 
     def test_with_custom_patron_catalog(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
     ):
         """Instantiation of a LibraryAuthenticator may
         include instantiation of a CustomPatronCatalog.
         """
-        db = authenticator_fixture.db
         mock_catalog = object()
 
         class MockCustomPatronCatalog:
@@ -640,7 +631,7 @@ class TestLibraryAuthenticator:
         authenticator = LibraryAuthenticator.from_config(
             db.session,
             db.default_library(),
-            custom_catalog_source=MockCustomPatronCatalog,
+            custom_catalog_source=MockCustomPatronCatalog,  # type:ignore
         )
         assert (
             db.default_library() == MockCustomPatronCatalog.called_with  # type:ignore
@@ -651,7 +642,8 @@ class TestLibraryAuthenticator:
         assert mock_catalog == authenticator.authentication_document_annotator
 
     def test_config_succeeds_when_no_providers_configured(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
     ):
         # You can call from_config even when there are no authentication
         # providers configured.
@@ -659,53 +651,52 @@ class TestLibraryAuthenticator:
         # This should not happen in normal usage, but there will be an
         # interim period immediately after a library is created where
         # this will be its configuration.
-        db = authenticator_fixture.db
         authenticator = LibraryAuthenticator.from_config(
             db.session, db.default_library()
         )
         assert [] == list(authenticator.providers)
 
     def test_configuration_exception_during_from_config_stored(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
+        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
+        create_auth_integration_configuration: Callable[..., AuthProviderFixture],
     ):
         # If the initialization of an AuthenticationProvider from config
         # raises CannotLoadConfiguration or ImportError, the exception
         # is stored with the LibraryAuthenticator rather than being
         # propagated.
-        db = authenticator_fixture.db
         # Create an integration destined to raise CannotLoadConfiguration..
-        misconfigured = db.external_integration(
-            "api.millenium_patron",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-        )
+        library = db.default_library()
+        misconfigured, _ = create_millenium_auth_integration(library, url="millenium")
 
         # ... and one destined to raise ImportError.
-        unknown = db.external_integration(
-            "unknown protocol", ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        for integration in [misconfigured, unknown]:
-            db.default_library().integrations.append(integration)
+        unknown, _ = create_auth_integration_configuration("unknown protocol", library)
+
         auth = LibraryAuthenticator.from_config(db.session, db.default_library())
 
         # The LibraryAuthenticator exists but has no AuthenticationProviders.
-        assert None == auth.basic_auth_provider
+        assert auth.basic_auth_provider is None
 
         # Both integrations have left their trace in
         # initialization_exceptions.
-        not_configured = auth.initialization_exceptions[misconfigured.id]
+        not_configured = auth.initialization_exceptions[(misconfigured.id, library.id)]
         assert isinstance(not_configured, CannotLoadConfiguration)
-        assert "Millenium Patron API server not configured." == str(not_configured)
+        assert "Could not instantiate MilleniumPatronAPI" in str(not_configured)
 
-        not_found = auth.initialization_exceptions[unknown.id]
-        assert isinstance(not_found, ImportError)
-        assert "No module named 'unknown protocol'" == str(not_found)
+        not_found = auth.initialization_exceptions[(unknown.id, library.id)]
+        assert isinstance(not_configured, CannotLoadConfiguration)
+        assert "Unable to load implementation for external integration" in str(
+            not_found
+        )
 
     def test_register_fails_when_integration_has_wrong_goal(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture
     ):
-        db = authenticator_fixture.db
-        integration = db.external_integration("protocol", "some other goal")
         auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
+        integration = MagicMock(spec=IntegrationLibraryConfiguration)
+        type(integration.parent).goal = PropertyMock(return_value="some other goal")
+        type(integration.parent).protocol = PropertyMock(return_value="protocol")
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             auth.register_provider(integration)
         assert (
@@ -714,13 +705,14 @@ class TestLibraryAuthenticator:
         )
 
     def test_register_fails_when_integration_not_associated_with_library(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture
     ):
-        db = authenticator_fixture.db
-        integration = db.external_integration(
-            "protocol", ExternalIntegration.PATRON_AUTH_GOAL
-        )
         auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
+        integration = MagicMock(spec=IntegrationLibraryConfiguration)
+        type(integration.parent).goal = PropertyMock(
+            return_value=Goals.PATRON_AUTH_GOAL
+        )
+        type(integration).library_id = PropertyMock(return_value=None)
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             auth.register_provider(integration)
         assert "Was asked to register an integration with library {}, which doesn't use it.".format(
@@ -729,65 +721,62 @@ class TestLibraryAuthenticator:
             excinfo.value
         )
 
-    def test_register_fails_when_integration_module_does_not_contain_provider_class(
-        self, authenticator_fixture: AuthenticatorFixture
-    ):
-        db = authenticator_fixture.db
-        library = db.default_library()
-        integration = db.external_integration(
-            "api.lanes", ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        library.integrations.append(integration)
-        auth = LibraryAuthenticator(_db=db.session, library=library)
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            auth.register_provider(integration)
-        assert (
-            "Loaded module api.lanes but could not find a class called AuthenticationProvider inside."
-            in str(excinfo.value)
-        )
-
     def test_register_provider_fails_but_does_not_explode_on_remote_integration_error(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture
     ):
-        db = authenticator_fixture.db
-        library = db.default_library()
-        # We're going to instantiate the a mock authentication provider that
+        # We're going to instantiate a mock authentication provider that
         # immediately raises a RemoteIntegrationException, which will become
         # a CannotLoadConfiguration.
-        integration = db.external_integration(
-            "tests.api.mock_authentication_provider",
-            ExternalIntegration.PATRON_AUTH_GOAL,
+
+        class ExplodingProvider(MockBasic):
+            def __init__(self, *args, **kwargs):
+                raise RemoteIntegrationException("oops", "exploded")
+
+        library = db.default_library()
+        registry = MagicMock(spec=IntegrationRegistry)
+        registry.get = MagicMock(return_value=ExplodingProvider)
+        integration = MagicMock(spec=IntegrationLibraryConfiguration)
+        type(integration.parent).goal = PropertyMock(
+            return_value=Goals.PATRON_AUTH_GOAL
         )
-        library.integrations.append(integration)
-        auth = LibraryAuthenticator(_db=db.session, library=library)
+        type(integration.parent).settings = PropertyMock(return_value={})
+        type(integration).library_id = PropertyMock(return_value=library.id)
+        type(integration).settings = PropertyMock(return_value={})
+        auth = LibraryAuthenticator(
+            _db=db.session, library=library, integration_registry=registry
+        )
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             auth.register_provider(integration)
         assert "Could not instantiate" in str(excinfo.value)
-        assert "authentication provider for library {}, possibly due to a network connection problem.".format(
-            db.default_library().name
-        ) in str(
+        assert f"authentication provider for library {library.name}." in str(
             excinfo.value
         )
 
     def test_register_provider_basic_auth(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
+        create_auth_integration_configuration: Callable[..., AuthProviderFixture],
     ):
-        db = authenticator_fixture.db
-        sip2 = db.external_integration(
-            "api.sip",
-            ExternalIntegration.PATRON_AUTH_GOAL,
+        library = db.default_library()
+        protocol = patron_auth_registry().get_protocol(SIP2AuthenticationProvider)
+        _, integration = create_auth_integration_configuration(
+            protocol,
+            library,
+            settings={
+                "url": "http://url/",
+                "password": "secret",
+            },
         )
-        sip2.url = "http://url/"
-        sip2.password = "secret"
-        db.default_library().integrations.append(sip2)
-        auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
-        auth.register_provider(sip2)
+        assert isinstance(integration, IntegrationLibraryConfiguration)
+        auth = LibraryAuthenticator(_db=db.session, library=library)
+        auth.register_provider(integration)
+        assert auth.basic_auth_provider is not None
         assert isinstance(auth.basic_auth_provider, SIP2AuthenticationProvider)
 
     def test_supports_patron_authentication(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
     ):
-        db = authenticator_fixture.db
         authenticator = LibraryAuthenticator.from_config(
             db.session, db.default_library()
         )
@@ -801,59 +790,62 @@ class TestLibraryAuthenticator:
 
         # Adding a basic auth provider will make it start supporting
         # patron authentication.
-        authenticator.basic_auth_provider = object()
+        authenticator.basic_auth_provider = MagicMock(spec=BasicAuthenticationProvider)
         assert True == authenticator.supports_patron_authentication
         authenticator.basic_auth_provider = None
 
-    def test_identifies_individuals(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
+    def test_identifies_individuals(self, db: DatabaseTransactionFixture):
         # This LibraryAuthenticator does not authenticate patrons at
         # all, so it does not identify patrons as individuals.
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
         )
+        assert authenticator.identifies_individuals is False
 
         # This LibraryAuthenticator has two Authenticators, but
         # neither of them identify patrons as individuals.
-        class MockAuthenticator:
-            NAME = "mock"
-            IDENTIFIES_INDIVIDUALS = False
 
-        basic = MockAuthenticator()
-        saml = MockAuthenticator()
+        basic = MagicMock(spec=BasicAuthenticationProvider)
+        type(basic).identifies_individuals = PropertyMock(return_value=False)
+        basic_auth_info = basic
+
+        saml = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        type(saml).identifies_individuals = PropertyMock(return_value=False)
+        saml_auth_info = saml
+
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
-            basic_auth_provider=basic,
-            saml_providers=[saml],
+            basic_auth_provider=basic_auth_info,
+            saml_providers=[saml_auth_info],
             bearer_token_signing_secret=db.fresh_str(),
         )
-        assert False == authenticator.identifies_individuals
+        assert authenticator.identifies_individuals is False
 
         # If some Authenticators identify individuals and some do not,
         # the library as a whole does not (necessarily) identify
         # individuals.
-        basic.IDENTIFIES_INDIVIDUALS = True
-        assert False == authenticator.identifies_individuals
+        type(basic).identifies_individuals = PropertyMock(return_value=True)
+        assert authenticator.identifies_individuals is False
 
         # If every Authenticator identifies individuals, then so does
         # the library as a whole.
-        saml.IDENTIFIES_INDIVIDUALS = True
-        assert True == authenticator.identifies_individuals
+        type(saml).identifies_individuals = PropertyMock(return_value=True)
+        assert authenticator.identifies_individuals is True
 
-    def test_provider_registration(self, authenticator_fixture: AuthenticatorFixture):
+    def test_provider_registration(
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+    ):
         """You can register the same provider multiple times,
         but you can't register two different basic auth providers
         """
-        db = authenticator_fixture.db
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
         )
-        integration = db.external_integration(db.fresh_str())
-        basic1 = MockBasicAuthenticationProvider(db.default_library(), integration)
-        basic2 = MockBasicAuthenticationProvider(db.default_library(), integration)
+        basic1 = mock_basic()
+        basic2 = mock_basic()
 
         authenticator.register_basic_auth_provider(basic1)
         authenticator.register_basic_auth_provider(basic1)
@@ -863,9 +855,8 @@ class TestLibraryAuthenticator:
         assert "Two basic auth providers configured" in str(excinfo.value)
 
     def test_authenticated_patron_basic(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         patron = db.patron()
         patrondata = PatronData(
             permanent_id=patron.external_identifier,
@@ -873,12 +864,13 @@ class TestLibraryAuthenticator:
             username=patron.username,
             neighborhood="Achewood",
         )
-        integration = db.external_integration(db.fresh_str())
-        basic = MockBasicAuthenticationProvider(
-            db.default_library(), integration, patron=patron, patrondata=patrondata
-        )
+        basic = mock_basic(patrondata=patrondata)
+        basic.authenticate = MagicMock(return_value=patron)  # type: ignore[method-assign]
+        basic.integration = PropertyMock(return_value=MagicMock(spec=IntegrationConfiguration))  # type: ignore[method-assign]
         authenticator = LibraryAuthenticator(
-            _db=db.session, library=db.default_library(), basic_auth_provider=basic
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
         )
         assert patron == authenticator.authenticated_patron(
             db.session,
@@ -895,26 +887,27 @@ class TestLibraryAuthenticator:
         problem = authenticator.authenticated_patron(
             db.session, Authorization(auth_type="bearer", token="abcd")
         )
-        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem  # type: ignore
+        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem
 
     def test_authenticated_patron_bearer(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-        integration = db.external_integration(db.fresh_str())
-        bearer = MagicMock(NAME="name")
-        bearer.external_integration.return_value = integration
+        saml = MagicMock(spec=BaseSAMLAuthenticationProvider, wraps=mock_basic())
+        integration = MagicMock(spec=IntegrationConfiguration)
+        type(integration).available = PropertyMock(return_value=True)
+        saml.integration = PropertyMock(return_value=integration)
+        saml.authenticated_patron = MagicMock(return_value="foo")
 
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
-            saml_providers=[bearer],
+            saml_providers=[saml],
             bearer_token_signing_secret="xx",
         )
 
         # Mock the sign verification
         with patch.object(authenticator, "decode_bearer_token") as decode:
-            decode.return_value = ("name", "decoded-token")
+            decode.return_value = ("Mock", "decoded-token")
             response = authenticator.authenticated_patron(
                 db.session, Authorization(auth_type="Bearer", token="some-bearer-token")
             )
@@ -922,12 +915,12 @@ class TestLibraryAuthenticator:
             assert decode.call_count == 1
             decode.assert_called_with("some-bearer-token")
             # The right saml provider was used
-            assert response == bearer.authenticated_patron.return_value
+            assert response == "foo"
+            assert saml.authenticated_patron.call_count == 1
 
     def test_authenticated_patron_unsupported_mechanism(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture
     ):
-        db = authenticator_fixture.db
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
@@ -935,14 +928,12 @@ class TestLibraryAuthenticator:
         problem = authenticator.authenticated_patron(
             db.session, Authorization(auth_type="advanced")
         )
-        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem  # type: ignore
+        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem
 
     def test_get_credential_from_header(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-        integration = db.external_integration(db.fresh_str())
-        basic = MockBasicAuthenticationProvider(db.default_library(), integration)
+        basic = mock_basic()
 
         # We can pull the password out of a Basic Auth credential
         # if a Basic Auth authentication provider is configured.
@@ -960,13 +951,11 @@ class TestLibraryAuthenticator:
             library=db.default_library(),
             basic_auth_provider=None,
         )
-        assert None == authenticator.get_credential_from_header(credential)
+        assert authenticator.get_credential_from_header(credential) is None
 
     def test_create_authentication_document(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-
         class MockAuthenticator(LibraryAuthenticator):
             """Mock the _geographic_areas method."""
 
@@ -976,9 +965,8 @@ class TestLibraryAuthenticator:
             def _geographic_areas(cls, library):
                 return cls.AREAS
 
-        integration = db.external_integration(db.fresh_str())
         library = db.default_library()
-        basic = MockBasicAuthenticationProvider(library, integration)
+        basic = mock_basic()
         library.name = "A Fabulous Library"
         authenticator = MockAuthenticator(
             _db=db.session,
@@ -986,13 +974,14 @@ class TestLibraryAuthenticator:
             basic_auth_provider=basic,
         )
 
-        class MockAuthenticationDocumentAnnotator:
-            def annotate_authentication_document(self, library, doc, url_for):
-                self.called_with = library, doc, url_for
-                doc["modified"] = "Kilroy was here"
-                return doc
+        def annotate_authentication_document(library, doc, url_for):
+            doc["modified"] = "Kilroy was here"
+            return doc
 
-        annotator = MockAuthenticationDocumentAnnotator()
+        annotator = MagicMock(spec=CustomPatronCatalog)
+        annotator.annotate_authentication_document = MagicMock(
+            side_effect=annotate_authentication_document
+        )
         authenticator.authentication_document_annotator = annotator
 
         # We're about to call url_for, so we must create an
@@ -1059,7 +1048,6 @@ class TestLibraryAuthenticator:
         # inactive.
         format = "%Y-%m-%d"
         today_date = datetime.date.today()
-        tomorrow = (today_date + datetime.timedelta(days=1)).strftime(format)
         yesterday = (today_date - datetime.timedelta(days=1)).strftime(format)
         two_days_ago = (today_date - datetime.timedelta(days=2)).strftime(format)
         today = today_date.strftime(format)
@@ -1108,7 +1096,7 @@ class TestLibraryAuthenticator:
         )
 
         with self.app.test_request_context("/"):
-            url = authenticator.authentication_document_url(library)
+            url = authenticator.authentication_document_url()
             assert url.endswith("/%s/authentication_document" % library.short_name)
 
             doc = json.loads(authenticator.create_authentication_document())
@@ -1265,7 +1253,9 @@ class TestLibraryAuthenticator:
             # The annotator's annotate_authentication_document method
             # was called and successfully modified the authentication
             # document.
-            assert (library, doc, url_for) == annotator.called_with
+            annotator.annotate_authentication_document.assert_called_with(
+                library, doc, url_for
+            )
             assert "Kilroy was here" == doc["modified"]
 
             # While we're in this context, let's also test
@@ -1281,23 +1271,22 @@ class TestLibraryAuthenticator:
             # The response contains a Link header pointing to the authentication
             # document
             expect = "<{}>; rel={}".format(
-                authenticator.authentication_document_url(db.default_library()),
+                authenticator.authentication_document_url(),
                 AuthenticationForOPDSDocument.LINK_RELATION,
             )
             assert expect == headers["Link"]
 
             # If the authenticator does not include a basic auth provider,
             # no WWW-Authenticate header is provided.
-            authenticator = LibraryAuthenticator(
+            real_authenticator = LibraryAuthenticator(
                 _db=db.session,
                 library=library,
             )
-            headers = authenticator.create_authentication_headers()
+            headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
 
-    def test_key_pair(self, authenticator_fixture: AuthenticatorFixture):
+    def test_key_pair(self, db: DatabaseTransactionFixture):
         """Test the public/private key pair associated with a library."""
-        db = authenticator_fixture.db
         library = db.default_library()
 
         # Initially, the KEY_PAIR setting is not set.
@@ -1325,9 +1314,8 @@ class TestLibraryAuthenticator:
         assert not hasattr(auth, "private_key")
         assert (public, private) == auth.key_pair
 
-    def test_key_pair_per_library(self, authenticator_fixture: AuthenticatorFixture):
+    def test_key_pair_per_library(self, db: DatabaseTransactionFixture):
         # Ensure that each library obtains its own key pair.
-        db = authenticator_fixture.db
         library1 = db.default_library()
         library2 = db.library()
 
@@ -1343,11 +1331,12 @@ class TestLibraryAuthenticator:
             assert patched.call_count == 2
             assert patched.call_args_list[0] != patched.call_args_list[1]
 
-    def test__geographic_areas(self, authenticator_fixture: AuthenticatorFixture):
+    def test__geographic_areas(self, db: DatabaseTransactionFixture):
         """Test the _geographic_areas helper method."""
-        db = authenticator_fixture.db
 
         class Mock(LibraryAuthenticator):
+            called_with: Optional[Library] = None
+
             values = {
                 Configuration.LIBRARY_FOCUS_AREA: "focus",
                 Configuration.LIBRARY_SERVICE_AREA: "service",
@@ -1359,24 +1348,23 @@ class TestLibraryAuthenticator:
                 return cls.values.get(key)
 
         # _geographic_areas calls _geographic_area twice and
-        # reutrns the results in a 2-tuple.
+        # returns the results in a 2-tuple.
         m = Mock._geographic_areas
         library = object()
-        assert ("focus", "service") == m(library)
+        assert ("focus", "service") == m(library)  # type: ignore
         assert library == Mock.called_with
 
         # If only one value is provided, the same value is given for both
         # areas.
         del Mock.values[Configuration.LIBRARY_FOCUS_AREA]
-        assert ("service", "service") == m(library)
+        assert ("service", "service") == m(library)  # type: ignore
 
         Mock.values[Configuration.LIBRARY_FOCUS_AREA] = "focus"
         del Mock.values[Configuration.LIBRARY_SERVICE_AREA]
-        assert ("focus", "focus") == m(library)
+        assert ("focus", "focus") == m(library)  # type: ignore
 
-    def test__geographic_area(self, authenticator_fixture: AuthenticatorFixture):
+    def test__geographic_area(self, db: DatabaseTransactionFixture):
         """Test the _geographic_area helper method."""
-        db = authenticator_fixture.db
         library = db.default_library()
         key = "a key"
         setting = ConfigurationSetting.for_library(key, library)
@@ -1385,7 +1373,7 @@ class TestLibraryAuthenticator:
             return LibraryAuthenticator._geographic_area(key, library)
 
         # A missing value is returned as None.
-        assert None == m()
+        assert m() is None
 
         # The literal string "everywhere" is returned as is.
         setting.value = "everywhere"
@@ -1403,43 +1391,30 @@ class TestLibraryAuthenticator:
         assert ["Arvin, CA"] == m()
 
 
-class TestAuthenticationProvider:
+class TestBasicAuthenticationProvider:
 
     credentials = dict(username="user", password="")
 
-    def test_external_integration(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
-        provider = authenticator_fixture.mock_basic(patrondata=None)
-        assert (
-            authenticator_fixture.mock_basic_integration
-            == provider.external_integration(db.session)
-        )
-
     def test_authenticated_patron_passes_on_none(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-        provider = authenticator_fixture.mock_basic(patrondata=None)
+        provider = mock_basic()
         patron = provider.authenticated_patron(db.session, self.credentials)
-        assert None == patron
+        assert patron is None
 
     def test_authenticated_patron_passes_on_problem_detail(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-        provider = authenticator_fixture.mock_basic(
-            patrondata=UNSUPPORTED_AUTHENTICATION_MECHANISM  # type: ignore
-        )
+        provider = mock_basic(patrondata=UNSUPPORTED_AUTHENTICATION_MECHANISM)
         patron = provider.authenticated_patron(db.session, self.credentials)
-        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == patron  # type: ignore
+        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == patron
 
     def test_authenticated_patron_allows_access_to_expired_credentials(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
         """Even if your card has expired, you can log in -- you just can't
         borrow books.
         """
-        db = authenticator_fixture.db
         yesterday = utc_now() - datetime.timedelta(days=1)
 
         expired = PatronData(
@@ -1447,19 +1422,17 @@ class TestAuthenticationProvider:
             authorization_identifier="2",
             authorization_expires=yesterday,
         )
-        provider = authenticator_fixture.mock_basic(
-            patrondata=expired, remote_patron_lookup_patrondata=expired
-        )
+        provider = mock_basic(patrondata=expired)
         patron = provider.authenticated_patron(db.session, self.credentials)
+        assert isinstance(patron, Patron)
         assert "1" == patron.external_identifier
         assert "2" == patron.authorization_identifier
 
     def test_authenticated_patron_updates_metadata_if_necessary(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         patron = db.patron()
-        assert True == PatronUtility.needs_external_sync(patron)
+        assert PatronUtility.needs_external_sync(patron) is True
 
         # If we authenticate this patron by username we find out their
         # permanent ID but not any other information about them.
@@ -1481,8 +1454,8 @@ class TestAuthenticationProvider:
             complete=True,
         )
 
-        provider = authenticator_fixture.mock_basic(
-            patrondata=incomplete_data, remote_patron_lookup_patrondata=complete_data
+        provider = mock_basic(
+            patrondata=incomplete_data, lookup_patrondata=complete_data
         )
         patron2 = provider.authenticated_patron(db.session, self.credentials)
 
@@ -1500,7 +1473,7 @@ class TestAuthenticationProvider:
 
         # We did a patron lookup, which means we updated
         # .last_external_sync.
-        assert patron.last_external_sync != None
+        assert patron.last_external_sync is not None
         assert barcode == patron.authorization_identifier
         assert username == patron.username
 
@@ -1508,8 +1481,10 @@ class TestAuthenticationProvider:
         # metadata refresh, because we just did a refresh and the
         # patron has borrowing privileges.
         last_sync = patron.last_external_sync
-        assert False == PatronUtility.needs_external_sync(patron)
-        patron = provider.authenticated_patron(db.session, self.credentials)
+        assert PatronUtility.needs_external_sync(patron) is False
+        patron2 = provider.authenticated_patron(db.session, self.credentials)
+        # we found the right patron
+        assert patron == patron2
         assert last_sync == patron.last_external_sync
         assert barcode == patron.authorization_identifier
         assert username == patron.username
@@ -1528,10 +1503,12 @@ class TestAuthenticationProvider:
             complete=False,
         )
         provider.patrondata = incomplete_data
-        patron = provider.authenticated_patron(
+        patron2 = provider.authenticated_patron(
             db.session,
             dict(username="someotheridentifier", password=""),
         )
+        assert patron == patron2
+        assert patron.last_external_sync is not None
         assert patron.last_external_sync > last_sync
 
         # But Patron.authorization_identifier doesn't actually change
@@ -1634,7 +1611,8 @@ class TestAuthenticationProvider:
     )
     def test_authenticated_patron_only_calls_remote_patron_lookup_once(
         self,
-        authenticator_fixture: AuthenticatorFixture,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
         auth_return,
         enforce_return,
         lookup_return,
@@ -1645,13 +1623,12 @@ class TestAuthenticationProvider:
         # The call to remote_patron_lookup is potentially expensive, so we want to avoid calling it
         # more than once. This test makes sure that if we have a complete patrondata from remote_authenticate,
         # or from enforce_library_identifier_restriction, we don't call remote_patron_lookup.
-        db = authenticator_fixture.db
-        provider = authenticator_fixture.mock_basic()
-        provider.remote_authenticate = MagicMock(return_value=auth_return)
-        provider.enforce_library_identifier_restriction = MagicMock(
+        provider = mock_basic()
+        provider.remote_authenticate = MagicMock(return_value=auth_return)  # type: ignore[method-assign]
+        provider.enforce_library_identifier_restriction = MagicMock(  # type: ignore[method-assign]
             return_value=enforce_return
         )
-        provider.remote_patron_lookup = MagicMock(return_value=lookup_return)
+        provider.remote_patron_lookup = MagicMock(return_value=lookup_return)  # type: ignore[method-assign]
 
         username = "a"
         password = "b"
@@ -1679,17 +1656,16 @@ class TestAuthenticationProvider:
         else:
             assert patron is expected
 
-    def test_update_patron_metadata(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
+    def test_update_patron_metadata(
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+    ):
         patron = db.patron()
         patron.authorization_identifier = "2345"
-        assert None == patron.last_external_sync
-        assert None == patron.username
+        assert patron.last_external_sync is None
+        assert patron.username is None
 
         patrondata = PatronData(username="user", neighborhood="Little Homeworld")
-        provider = authenticator_fixture.mock_basic(
-            remote_patron_lookup_patrondata=patrondata
-        )
+        provider = mock_basic(lookup_patrondata=patrondata)
         provider.update_patron_metadata(patron)
 
         # The patron's username has been changed.
@@ -1701,29 +1677,27 @@ class TestAuthenticationProvider:
         # .neighborhood was not stored in .cached_neighborhood.  In
         # this case, it must be cheap to get .neighborhood every time,
         # and it's better not to store information we can get cheaply.
-        assert "Little Homeworld" == patron.neighborhood
+        assert "Little Homeworld" == patron.neighborhood  # type: ignore[unreachable]
         assert patron.cached_neighborhood is None
 
     def test_update_patron_metadata_noop_if_no_remote_metadata(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         patron = db.patron()
-        provider = authenticator_fixture.mock_basic(patrondata=None)
+        provider = mock_basic(patrondata=None)
         provider.update_patron_metadata(patron)
 
         # We can tell that update_patron_metadata was a no-op because
         # patron.last_external_sync didn't change.
-        assert None == patron.last_external_sync
+        assert patron.last_external_sync is None
 
     def test_update_patron_metadata_returns_none_different_library(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         patron = db.patron()
         library1 = patron.library
         library2 = db.library()
-        provider = MockBasic(library2, authenticator_fixture.mock_basic_integration)
+        provider = mock_basic(library_id=library2.id)
         patron_metadata = provider.update_patron_metadata(patron)
 
         assert library1 != library2
@@ -1738,7 +1712,7 @@ class TestAuthenticationProvider:
             m(
                 "123",
                 None,
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                LibraryIdentifierRestriction.PREFIX,
             )
             is True
         )
@@ -1746,7 +1720,7 @@ class TestAuthenticationProvider:
             m(
                 "123",
                 None,
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
             )
             is True
         )
@@ -1754,7 +1728,7 @@ class TestAuthenticationProvider:
             m(
                 "123",
                 None,
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
             )
             is True
         )
@@ -1762,7 +1736,7 @@ class TestAuthenticationProvider:
             m(
                 "123",
                 None,
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                LibraryIdentifierRestriction.LIST,
             )
             is True
         )
@@ -1772,7 +1746,7 @@ class TestAuthenticationProvider:
             m(
                 None,
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                LibraryIdentifierRestriction.PREFIX,
             )
             is False
         )
@@ -1780,7 +1754,7 @@ class TestAuthenticationProvider:
             m(
                 None,
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
             )
             is False
         )
@@ -1788,7 +1762,7 @@ class TestAuthenticationProvider:
             m(
                 None,
                 re.compile(".*"),
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
             )
             is False
         )
@@ -1796,7 +1770,7 @@ class TestAuthenticationProvider:
             m(
                 None,
                 ["1", "2"],
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                LibraryIdentifierRestriction.LIST,
             )
             is False
         )
@@ -1806,7 +1780,7 @@ class TestAuthenticationProvider:
             m(
                 "12345a",
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                LibraryIdentifierRestriction.PREFIX,
             )
             is True
         )
@@ -1814,7 +1788,7 @@ class TestAuthenticationProvider:
             m(
                 "a1234",
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                LibraryIdentifierRestriction.PREFIX,
             )
             is False
         )
@@ -1824,7 +1798,7 @@ class TestAuthenticationProvider:
             m(
                 "12345a",
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
             )
             is False
         )
@@ -1832,7 +1806,7 @@ class TestAuthenticationProvider:
             m(
                 "a1234",
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
             )
             is False
         )
@@ -1840,7 +1814,7 @@ class TestAuthenticationProvider:
             m(
                 "1234",
                 "1234",
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
             )
             is True
         )
@@ -1851,7 +1825,7 @@ class TestAuthenticationProvider:
             == m(
                 "1234",
                 ["1234", "4321"],
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                LibraryIdentifierRestriction.LIST,
             )
             is True
         )
@@ -1859,7 +1833,7 @@ class TestAuthenticationProvider:
             m(
                 "4321",
                 ["1234", "4321"],
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                LibraryIdentifierRestriction.LIST,
             )
             is True
         )
@@ -1867,7 +1841,7 @@ class TestAuthenticationProvider:
             m(
                 "12345",
                 ["1234", "4321"],
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                LibraryIdentifierRestriction.LIST,
             )
             is False
         )
@@ -1875,7 +1849,7 @@ class TestAuthenticationProvider:
             m(
                 "54321",
                 ["1234", "4321"],
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                LibraryIdentifierRestriction.LIST,
             )
             is False
         )
@@ -1885,7 +1859,7 @@ class TestAuthenticationProvider:
             m(
                 "123",
                 re.compile("^(12|34)"),
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
             )
             is True
         )
@@ -1893,7 +1867,7 @@ class TestAuthenticationProvider:
             m(
                 "345",
                 re.compile("^(12|34)"),
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
             )
             is True
         )
@@ -1901,7 +1875,7 @@ class TestAuthenticationProvider:
             m(
                 "abc",
                 re.compile("^bc"),
-                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
             )
             is False
         )
@@ -1911,45 +1885,45 @@ class TestAuthenticationProvider:
         [
             # Test regex
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
                 "23456",
                 True,
             ),
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
                 "2365",
                 True,
             ),
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
                 "2375",
                 False,
             ),
             # Test prefix
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                LibraryIdentifierRestriction.PREFIX,
                 "2345",
                 "23456",
                 True,
             ),
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                LibraryIdentifierRestriction.PREFIX,
                 "2345",
                 "123456",
                 False,
             ),
             # Test string
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
                 "2345",
                 "2345",
                 True,
             ),
             (
-                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                LibraryIdentifierRestriction.STRING,
                 "2345",
                 "12345",
                 False,
@@ -1958,21 +1932,19 @@ class TestAuthenticationProvider:
     )
     def test_enforce_library_identifier_restriction(
         self,
-        authenticator_fixture: AuthenticatorFixture,
+        mock_basic: MockBasicFixture,
         restriction_type,
         restriction,
         identifier,
         expected,
     ):
         """Test the enforce_library_identifier_restriction method."""
-        provider = authenticator_fixture.mock_basic()
+        provider = mock_basic()
         provider.library_identifier_restriction_type = restriction_type
-        provider.library_identifier_restriction = restriction
+        provider.library_identifier_restriction_criteria = restriction
 
         # Test match applied to barcode
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
+        provider.library_identifier_field = "barcode"
         patrondata = PatronData(authorization_identifier=identifier)
         if expected:
             assert (
@@ -1999,7 +1971,7 @@ class TestAuthenticationProvider:
         remote_patrondata = PatronData(
             library_identifier=identifier, authorization_identifier="123"
         )
-        provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)
+        provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)  # type: ignore[method-assign]
         if expected:
             assert (
                 provider.enforce_library_identifier_restriction(local_patrondata)
@@ -2013,228 +1985,176 @@ class TestAuthenticationProvider:
         provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
     def test_enforce_library_identifier_restriction_library_identifier_field_none(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        mock_basic: MockBasicFixture,
     ):
         # Test library_identifier_field field is blank, we just return the patrondata passed in
-        provider = authenticator_fixture.mock_basic()
+        provider = mock_basic()
         provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
+            LibraryIdentifierRestriction.STRING
         )
-        provider.library_identifier_field = None
+        provider.library_identifier_field = None  # type: ignore[assignment]
         patrondata = PatronData(authorization_identifier="12345")
-        assert patrondata == provider.enforce_library_identifier_restriction(patrondata)
+        assert provider.enforce_library_identifier_restriction(patrondata) == patrondata
 
     def test_enforce_library_identifier_restriction_none(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        mock_basic: MockBasicFixture,
     ):
         """Test the enforce_library_identifier_restriction method."""
-        provider = authenticator_fixture.mock_basic()
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
-        )
-        provider.library_identifier_restriction = "2345"
+        provider = mock_basic()
+        provider.library_identifier_restriction_type = LibraryIdentifierRestriction.NONE
+        provider.library_identifier_restriction_criteria = "2345"
 
         patrondata = PatronData(authorization_identifier="12345")
         assert provider.enforce_library_identifier_restriction(patrondata) == patrondata
 
-    def test_patron_identifier_restriction(
-        self, authenticator_fixture: AuthenticatorFixture
-    ):
-        db = authenticator_fixture.db
-        library = db.default_library()
-        integration = db.external_integration(db.fresh_str())
-
-        string_setting = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION,
-            library,
-            integration,
-        )
-
-        type_setting = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
-            library,
-            integration,
-        )
-
+    def test_patron_identifier_restriction(self, mock_basic: MockBasicFixture):
         # If the type is regex its converted into a regular expression.
-        type_setting.value = (
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
+        provider = mock_basic(
+            library_settings=BasicAuthenticationProviderLibrarySettings(
+                library_identifier_restriction_type=LibraryIdentifierRestriction.REGEX,
+                library_identifier_restriction_criteria="^abcd",
+            )
         )
-        string_setting.value = "^abcd"
-        provider = MockBasicAuthenticationProvider(library, integration)
-        assert "^abcd" == provider.library_identifier_restriction.pattern
+        assert isinstance(provider.library_identifier_restriction_criteria, re.Pattern)
+        assert "^abcd" == provider.library_identifier_restriction_criteria.pattern
 
         # If its type is list, make sure its converted into a list
-        type_setting.value = (
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST
+        provider = mock_basic(
+            library_settings=BasicAuthenticationProviderLibrarySettings(
+                library_identifier_restriction_type=LibraryIdentifierRestriction.LIST,
+                library_identifier_restriction_criteria="a,b,c",
+            )
         )
-        string_setting.value = "a,b,c"
-        provider = MockBasicAuthenticationProvider(library, integration)
-        assert ["a", "b", "c"] == provider.library_identifier_restriction
+        assert ["a", "b", "c"] == provider.library_identifier_restriction_criteria
 
         # If its type is prefix make sure its a string
-        type_setting.value = (
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX
+        provider = mock_basic(
+            library_settings=BasicAuthenticationProviderLibrarySettings(
+                library_identifier_restriction_type=LibraryIdentifierRestriction.PREFIX,
+                library_identifier_restriction_criteria="abc",
+            )
         )
-        string_setting.value = "abc"
-        provider = MockBasicAuthenticationProvider(library, integration)
-        assert "abc" == provider.library_identifier_restriction
+        assert "abc" == provider.library_identifier_restriction_criteria
 
         # If its type is string make sure its a string
-        type_setting.value = (
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
+        provider = mock_basic(
+            library_settings=BasicAuthenticationProviderLibrarySettings(
+                library_identifier_restriction_type=LibraryIdentifierRestriction.STRING,
+                library_identifier_restriction_criteria="abc",
+            )
         )
-        string_setting.value = "abc"
-        provider = MockBasicAuthenticationProvider(library, integration)
-        assert "abc" == provider.library_identifier_restriction
+        assert "abc" == provider.library_identifier_restriction_criteria
 
         # If its type is none make sure its actually None
-        type_setting.value = (
-            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
+        provider = mock_basic(
+            library_settings=BasicAuthenticationProviderLibrarySettings(
+                library_identifier_restriction_type=LibraryIdentifierRestriction.NONE,
+                library_identifier_restriction_criteria="abc",
+            )
         )
-        string_setting.value = "abc"
-        provider = MockBasicAuthenticationProvider(library, integration)
-        assert provider.library_identifier_restriction is None
+        assert provider.library_identifier_restriction_criteria is None
 
-
-class TestBasicAuthenticationProvider:
-    def test_constructor(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
-        integration = db.external_integration(
-            db.fresh_str(), goal=ExternalIntegration.PATRON_AUTH_GOAL
+    def test_constructor(self, mock_basic: MockBasicFixture):
+        provider = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                test_identifier="username",
+                test_password="pw",
+                identifier_regular_expression="idre",  # type: ignore[arg-type]
+                password_regular_expression="pwre",  # type: ignore[arg-type]
+            ),
         )
-        db.default_library().integrations.append(integration)
-        integration.setting(
-            MockBasicAuthenticationProvider.IDENTIFIER_REGULAR_EXPRESSION
-        ).value = "idre"
-        integration.setting(
-            MockBasicAuthenticationProvider.PASSWORD_REGULAR_EXPRESSION
-        ).value = "pwre"
-        integration.setting(
-            MockBasicAuthenticationProvider.TEST_IDENTIFIER
-        ).value = "username"
-        integration.setting(MockBasicAuthenticationProvider.TEST_PASSWORD).value = "pw"
-
-        provider = MockBasicAuthenticationProvider(db.default_library(), integration)
+        assert isinstance(provider.identifier_re, re.Pattern)
         assert "idre" == provider.identifier_re.pattern
+        assert isinstance(provider.password_re, re.Pattern)
         assert "pwre" == provider.password_re.pattern
         assert "username" == provider.test_username
         assert "pw" == provider.test_password
 
         # Test the defaults.
-        integration = db.external_integration(
-            db.fresh_str(), goal=ExternalIntegration.PATRON_AUTH_GOAL
-        )
+        provider = mock_basic()
+        assert isinstance(provider.identifier_re, re.Pattern)
+        assert provider.password_re is None
 
-        provider = MockBasicAuthenticationProvider(db.default_library(), integration)
-        assert (
-            re.compile(
-                MockBasicAuthenticationProvider.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION
-            )
-            == provider.identifier_re
-        )
-        assert None == provider.password_re
-
-    def test_testing_patron(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
-
-        class MockAuthenticatedPatron(MockBasicAuthenticationProvider):
-            def __init__(self, *args, **kwargs):
-                self._authenticated_patron_returns = kwargs.pop(
-                    "_authenticated_patron_returns", None
-                )
-                super().__init__(*args, **kwargs)
-
-            def authenticated_patron(self, *args, **kwargs):
-                return self._authenticated_patron_returns
-
+    def test_testing_patron(
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+    ):
         # You don't have to have a testing patron.
-        integration = db.external_integration(db.fresh_str())
-        no_testing_patron = MockBasicAuthenticationProvider(
-            db.default_library(), integration
-        )
+        no_testing_patron = mock_basic()
         assert (None, None) == no_testing_patron.testing_patron(db.session)
 
         # But if you don't, testing_patron_or_bust() will raise an
         # exception.
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
+        with pytest.raises(CannotLoadConfiguration) as cannot_load:
             no_testing_patron.testing_patron_or_bust(db.session)
-        assert "No test patron identifier is configured" in str(excinfo.value)
+        assert "No test patron identifier is configured" in str(cannot_load.value)
 
         # We configure a testing patron but their username and
         # password don't actually authenticate anyone. We don't crash,
         # but we can't look up the testing patron either.
-        b = BasicAuthenticationProvider
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(b.TEST_IDENTIFIER).value = "1"
-        integration.setting(b.TEST_PASSWORD).value = "2"
-        missing_patron = MockBasicAuthenticationProvider(
-            db.default_library(), integration, patron=None
+        missing_patron = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                test_identifier="1",
+                test_password="2",
+            )
         )
+        missing_patron.authenticated_patron = MagicMock(return_value=None)  # type: ignore[method-assign]
         value = missing_patron.testing_patron(db.session)
         assert (None, "2") == value
+        missing_patron.authenticated_patron.assert_called_once()
 
         # And testing_patron_or_bust() still doesn't work.
-        with pytest.raises(IntegrationException) as excinfo:
+        with pytest.raises(IntegrationException) as integration_exception:
             missing_patron.testing_patron_or_bust(db.session)
-        assert "Remote declined to authenticate the test patron." in str(excinfo.value)
+        assert "Remote declined to authenticate the test patron." in str(
+            integration_exception.value
+        )
 
         # We configure a testing patron but authenticating them
         # results in a problem detail document.
-        b = BasicAuthenticationProvider
-        patron = db.patron()
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(b.TEST_IDENTIFIER).value = "1"
-        integration.setting(b.TEST_PASSWORD).value = "2"
-        problem_patron = MockAuthenticatedPatron(
-            db.default_library(),
-            integration,
-            patron=patron,
-            _authenticated_patron_returns=PATRON_OF_ANOTHER_LIBRARY,
+        problem_patron = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                test_identifier="1",
+                test_password="2",
+            )
         )
+        problem_patron.authenticated_patron = MagicMock(return_value=PATRON_OF_ANOTHER_LIBRARY)  # type: ignore[method-assign]
         value = problem_patron.testing_patron(db.session)
-        assert patron != PATRON_OF_ANOTHER_LIBRARY
         assert (PATRON_OF_ANOTHER_LIBRARY, "2") == value
 
         # And testing_patron_or_bust() still doesn't work.
-        with pytest.raises(IntegrationException) as excinfo:
+        with pytest.raises(IntegrationException) as integration_exception:
             problem_patron.testing_patron_or_bust(db.session)
-        assert "Test patron lookup returned a problem detail" in str(excinfo.value)
+        assert "Test patron lookup returned a problem detail" in str(
+            integration_exception.value
+        )
 
         # We configure a testing patron but authenticating them
         # results in something (non None) that's not a Patron
         # or a problem detail document.
         not_a_patron = "<not a patron>"
-        b = BasicAuthenticationProvider
-        patron = db.patron()
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(b.TEST_IDENTIFIER).value = "1"
-        integration.setting(b.TEST_PASSWORD).value = "2"
-        problem_patron = MockAuthenticatedPatron(
-            db.default_library(),
-            integration,
-            patron=patron,
-            _authenticated_patron_returns=not_a_patron,
-        )
+        problem_patron.authenticated_patron = MagicMock(return_value=not_a_patron)  # type: ignore[method-assign]
         value = problem_patron.testing_patron(db.session)
-        assert patron != not_a_patron
         assert (not_a_patron, "2") == value
 
         # And testing_patron_or_bust() still doesn't work.
-        with pytest.raises(IntegrationException) as excinfo:
+        with pytest.raises(IntegrationException) as integration_exception:
             problem_patron.testing_patron_or_bust(db.session)
         assert "Test patron lookup returned invalid value for patron" in str(
-            excinfo.value
+            integration_exception.value
         )
 
         # Here, we configure a testing patron who is authenticated by
         # their username and password.
         patron = db.patron()
-        present_patron = MockBasicAuthenticationProvider(
-            db.default_library(), integration, patron=patron
+        present_patron = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                test_identifier="1",
+                test_password="2",
+            )
         )
+        present_patron.authenticated_patron = MagicMock(return_value=patron)  # type: ignore[method-assign]
         value = present_patron.testing_patron(db.session)
         assert (patron, "2") == value
 
@@ -2242,82 +2162,43 @@ class TestBasicAuthenticationProvider:
         # value as testing_patron()
         assert value == present_patron.testing_patron_or_bust(db.session)
 
-    def test__run_self_tests(self, authenticator_fixture: AuthenticatorFixture):
+    def test__run_self_tests(self, mock_basic: MockBasicFixture):
         _db = MagicMock()
-
-        class CantAuthenticateTestPatron(MockBasicAuthenticationProvider):
-            def __init__(self):
-                pass
-
-            def testing_patron_or_bust(self, _db):
-                self.called_with = _db
-                raise Exception("Nope")
 
         # If we can't authenticate a test patron, the rest of the tests
         # aren't even run.
-        provider = CantAuthenticateTestPatron()
+        provider = mock_basic()
+        exception = Exception("Nope")
+        provider.testing_patron_or_bust = MagicMock(side_effect=exception)  # type: ignore[method-assign]
         [result] = list(provider._run_self_tests(_db))
-        assert _db == provider.called_with
+        provider.testing_patron_or_bust.assert_called_once_with(_db)
         assert result.success is False
-        assert "Nope" == result.exception.args[0]
+        assert exception == result.exception
 
         # If we can authenticate a test patron, the patron and their
         # password are passed into the next test.
+        provider = mock_basic()
+        provider.testing_patron_or_bust = MagicMock(return_value=("patron", "password"))  # type: ignore[method-assign]
+        provider.update_patron_metadata = MagicMock(return_value="some metadata")  # type: ignore[method-assign]
 
-        class Mock(MockBasicAuthenticationProvider):
-            def __init__(self, patron, password):
-                self.patron = patron
-                self.password = password
-
-            def testing_patron_or_bust(self, _db):
-                return self.patron, self.password
-
-            def update_patron_metadata(self, patron):
-                # The patron obtained from testing_patron_or_bust
-                # is passed into update_patron_metadata.
-                assert patron == self.patron
-                return "some metadata"
-
-        provider = Mock("patron", "password")
         [get_patron, update_metadata] = provider._run_self_tests(_db)
+        provider.testing_patron_or_bust.assert_called_once_with(_db)
+        provider.update_patron_metadata.assert_called_once_with("patron")
         assert "Authenticating test patron" == get_patron.name
-        assert True == get_patron.success
-        assert (provider.patron, provider.password) == get_patron.result
+        assert get_patron.success is True
+        assert ("patron", "password") == get_patron.result
 
         assert "Syncing patron metadata" == update_metadata.name
-        assert True == update_metadata.success
+        assert update_metadata.success is True
         assert "some metadata" == update_metadata.result
 
-    def test_client_configuration(self, authenticator_fixture: AuthenticatorFixture):
-        """Test that client-side configuration settings are retrieved from
-        ConfigurationSetting objects.
-        """
-        db = authenticator_fixture.db
-        b = MockBasicAuthenticationProvider
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(b.IDENTIFIER_KEYBOARD).value = b.EMAIL_ADDRESS_KEYBOARD
-        integration.setting(b.PASSWORD_KEYBOARD).value = b.NUMBER_PAD
-        integration.setting(b.IDENTIFIER_LABEL).value = "Your Library Card"
-        integration.setting(b.PASSWORD_LABEL).value = "Password"
-        integration.setting(b.IDENTIFIER_BARCODE_FORMAT).value = "some barcode"
-
-        provider = b(db.default_library(), integration)
-
-        assert b.EMAIL_ADDRESS_KEYBOARD == provider.identifier_keyboard
-        assert b.NUMBER_PAD == provider.password_keyboard
-        assert "Your Library Card" == provider.identifier_label
-        assert "Password" == provider.password_label
-        assert "some barcode" == provider.identifier_barcode_format
-
-    def test_server_side_validation(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
-        b = MockBasicAuthenticationProvider
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = "foo"
-        integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = "bar"
-
-        provider = b(db.default_library(), integration)
-
+    def test_server_side_validation(self, mock_basic: MockBasicFixture):
+        provider = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                identifier_regular_expression="foo",  # type: ignore[arg-type]
+                password_regular_expression="bar",  # type: ignore[arg-type]
+            )
+        )
         assert provider.server_side_validation("food", "barbecue") is True
         assert provider.server_side_validation("food", "arbecue") is False
         assert provider.server_side_validation("ood", "barbecue") is False
@@ -2326,36 +2207,42 @@ class TestBasicAuthenticationProvider:
         # If this authenticator does not look at provided passwords,
         # then the only values that will pass validation are null
         # and the empty string.
-        provider.password_keyboard = provider.NULL_KEYBOARD
+        provider = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                identifier_regular_expression="foo",  # type: ignore[arg-type]
+                password_regular_expression="bar",  # type: ignore[arg-type]
+                password_keyboard=Keyboards.NULL_KEYBOARD,
+            )
+        )
         assert provider.server_side_validation("food", "barbecue") is False
         assert provider.server_side_validation("food", "is good") is False
         assert provider.server_side_validation("food", " ") is False
         assert provider.server_side_validation("food", None) is True
         assert provider.server_side_validation("food", "") is True
-        provider.password_keyboard = provider.DEFAULT_KEYBOARD
 
         # It's okay not to provide anything for server side validation.
         # The default settings will be used.
-        integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = None
-        integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = None
-        provider = b(db.default_library(), integration)
-        assert b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION == provider.identifier_re.pattern
+        provider = mock_basic()
+        assert isinstance(provider.identifier_re, re.Pattern)
         assert provider.password_re is None
         assert provider.server_side_validation("food", "barbecue") is True
         assert provider.server_side_validation("a", "abc") is True
         assert provider.server_side_validation("!@#$", "def") is False
 
         # Test maximum length of identifier and password.
-        integration.setting(b.IDENTIFIER_MAXIMUM_LENGTH).value = "5"
-        integration.setting(b.PASSWORD_MAXIMUM_LENGTH).value = "10"
-        provider = b(db.default_library(), integration)
-
+        provider = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                identifier_maximum_length="5",  # type: ignore[arg-type]
+                password_maximum_length="10",  # type: ignore[arg-type]
+            )
+        )
         assert provider.server_side_validation("a", "1234") is True
         assert provider.server_side_validation("a", "123456789012345") is False
         assert provider.server_side_validation("abcdefghijklmnop", "1234") is False
 
-    def test_local_patron_lookup(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
+    def test_local_patron_lookup(
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+    ):
         # This patron of another library looks just like the patron
         # we're about to create, but will never be selected.
         other_library = db.library()
@@ -2372,7 +2259,7 @@ class TestBasicAuthenticationProvider:
         patron2.username = "patron2"
         db.session.commit()
 
-        provider = authenticator_fixture.mock_basic()
+        provider = mock_basic()
 
         # If we provide PatronData associated with patron1, we look up
         # patron1, even though we provided the username associated
@@ -2387,7 +2274,7 @@ class TestBasicAuthenticationProvider:
                 authorization_identifier=patron1.authorization_identifier,
             ),
         ]:
-            patrondata = PatronData(**patrondata_args)
+            patrondata = PatronData(**patrondata_args)  # type: ignore[arg-type]
             assert patron1 == provider.local_patron_lookup(
                 db.session, patron2.authorization_identifier, patrondata
             )
@@ -2405,85 +2292,87 @@ class TestBasicAuthenticationProvider:
             db.session, patron1.external_identifier, None
         )
 
-    def test_get_credential_from_header(
-        self, authenticator_fixture: AuthenticatorFixture
-    ):
-        provider = authenticator_fixture.mock_basic()
-        assert None == provider.get_credential_from_header(
-            Authorization(auth_type="bearer", token="Some Token")
+    def test_get_credential_from_header(self, mock_basic: MockBasicFixture):
+        provider = mock_basic()
+        assert (
+            provider.get_credential_from_header(
+                Authorization(auth_type="bearer", token="Some Token")
+            )
+            is None
         )
-        assert None == provider.get_credential_from_header(
-            Authorization(auth_type="basic")
+        assert (
+            provider.get_credential_from_header(Authorization(auth_type="basic"))
+            is None
         )
-        assert "foo" == provider.get_credential_from_header(
-            Authorization(auth_type="basic", data=dict(password="foo"))
+        assert (
+            provider.get_credential_from_header(
+                Authorization(auth_type="basic", data=dict(password="foo"))
+            )
+            == "foo"
         )
 
-    def test_authentication_flow_document(
-        self, authenticator_fixture: AuthenticatorFixture
-    ):
+    def test_authentication_flow_document(self, mock_basic: MockBasicFixture):
         """Test the default authentication provider document."""
-        db = authenticator_fixture.db
-        provider = authenticator_fixture.mock_basic()
-        provider.identifier_maximum_length = 22
-        provider.password_maximum_length = 7
-        provider.identifier_barcode_format = provider.BARCODE_FORMAT_CODABAR
+        provider = mock_basic(
+            settings=BasicAuthenticationProviderSettings(
+                identifier_maximum_length=22,
+                password_maximum_length=7,
+                identifier_barcode_format=BarcodeFormats.BARCODE_FORMAT_CODABAR,
+            )
+        )
 
-        # We're about to call url_for, so we must create an
-        # application context.
-        os.environ["AUTOINITIALIZE"] = "False"
-        from api.app import app
+        db = MagicMock(spec=Session)
 
-        self.app = app
-        del os.environ["AUTOINITIALIZE"]
-        with self.app.test_request_context("/"):
-            doc = provider.authentication_flow_document(db.session)
-            assert _(provider.DISPLAY_NAME) == doc["description"]
-            assert provider.FLOW_TYPE == doc["type"]
+        # Mock url_for so that the document can be generated.
+        with patch("api.authenticator.url_for") as url_for_patch:
+            url_for_patch.return_value = "http://localhost/"
+            doc = provider.authentication_flow_document(db)
+            assert doc["description"] == provider.label()
+            assert doc["type"] == provider.flow_type
 
             labels = doc["labels"]
-            assert provider.identifier_label == labels["login"]
-            assert provider.password_label == labels["password"]
+            assert labels["login"] == provider.identifier_label.value
+            assert labels["password"] == provider.password_label.value
 
             inputs = doc["inputs"]
-            assert provider.identifier_keyboard == inputs["login"]["keyboard"]
-            assert provider.password_keyboard == inputs["password"]["keyboard"]
-
-            assert provider.BARCODE_FORMAT_CODABAR == inputs["login"]["barcode_format"]
+            assert inputs["login"]["keyboard"] == provider.identifier_keyboard.value
+            assert inputs["password"]["keyboard"] == provider.password_keyboard.value
 
             assert (
-                provider.identifier_maximum_length == inputs["login"]["maximum_length"]
+                inputs["login"]["barcode_format"]
+                == provider.identifier_barcode_format.value
+            )
+
+            assert (
+                inputs["login"]["maximum_length"] == provider.identifier_maximum_length
             )
             assert (
-                provider.password_maximum_length == inputs["password"]["maximum_length"]
+                inputs["password"]["maximum_length"] == provider.password_maximum_length
             )
 
             [logo_link] = doc["links"]
             assert "logo" == logo_link["rel"]
+            assert "http://localhost/" == logo_link["href"]
+            url_for_patch.assert_called_once()
+            assert "filename" in url_for_patch.call_args.kwargs
             assert (
-                "http://localhost/images/" + MockBasic.LOGIN_BUTTON_IMAGE
-                == logo_link["href"]
+                url_for_patch.call_args.kwargs["filename"]
+                == provider.login_button_image
             )
 
-    def test_scrub_credential(self, authenticator_fixture: AuthenticatorFixture):
+    def test_scrub_credential(self, mock_basic: MockBasicFixture):
         # Verify that the scrub_credential helper method strips extra whitespace
         # and nothing else.
-        db = authenticator_fixture.db
+        provider = mock_basic()
 
-        integration = db.external_integration(
-            db.fresh_str(), ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        provider = MockBasicAuthenticationProvider(db.default_library(), integration)
-        m = provider.scrub_credential
-
-        assert None == provider.scrub_credential(None)
-        assert 1 == provider.scrub_credential(1)
+        assert provider.scrub_credential(None) is None
+        assert provider.scrub_credential(1) == 1  # type: ignore[arg-type]
         o = object()
-        assert o == provider.scrub_credential(o)
-        assert "user" == provider.scrub_credential("user")
-        assert "user" == provider.scrub_credential(" user")
-        assert "user" == provider.scrub_credential(" user ")
-        assert "user" == provider.scrub_credential("    \ruser\t     ")
+        assert provider.scrub_credential(o) == o  # type: ignore[arg-type]
+        assert provider.scrub_credential("user") == "user"
+        assert provider.scrub_credential(" user") == "user"
+        assert provider.scrub_credential(" user ") == "user"
+        assert provider.scrub_credential("    \ruser\t     ") == "user"
 
 
 class TestBasicAuthenticationProviderAuthenticate:
@@ -2493,11 +2382,12 @@ class TestBasicAuthenticationProviderAuthenticate:
     # the credentials passed in are not important.
     credentials = dict(username="user", password="pass")
 
-    def test_success(self, authenticator_fixture: AuthenticatorFixture):
-        db = authenticator_fixture.db
+    def test_success(
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+    ):
         patron = db.patron()
         patrondata = PatronData(permanent_id=patron.external_identifier)
-        provider = authenticator_fixture.mock_basic(patrondata=patrondata)
+        provider = mock_basic(patrondata=patrondata)
 
         # authenticate() calls remote_authenticate(), which returns the
         # queued up PatronData object. The corresponding Patron is then
@@ -2513,41 +2403,15 @@ class TestBasicAuthenticationProviderAuthenticate:
         # test_local_patron_lookup. This test only covers the case where
         # the server sends back the permanent ID of the patron.
 
-    def _inactive_patron(self, db: DatabaseTransactionFixture):
-        """Simulate a patron who has not logged in for a really long time.
-
-        :return: A 2-tuple (Patron, PatronData). The Patron contains
-        'out-of-date' data and the PatronData containing 'up-to-date'
-        data.
-        """
-        now = utc_now()
-        long_ago = now - datetime.timedelta(hours=10000)
-        patron = db.patron()
-        patron.last_external_sync = long_ago
-
-        # All of their authorization information has changed in the
-        # meantime, but -- crucially -- their permanent ID has not.
-        patron.authorization_identifier = "old auth id"
-        patron.username = "old username"
-
-        # Here is the up-to-date information about this patron,
-        # as found in the 'ILS'.
-        patrondata = PatronData(
-            permanent_id=patron.external_identifier,
-            username="new username",
-            authorization_identifier="new authorization identifier",
-            complete=True,
-        )
-
-        return patron, patrondata
-
+    @freeze_time()
     def test_success_but_local_patron_needs_sync(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        inactive_patron: InactivePatronFixture,
     ):
-        db = authenticator_fixture.db
-
         # This patron has not logged on in a really long time.
-        patron, complete_patrondata = self._inactive_patron(db)
+        patron, complete_patrondata = inactive_patron
 
         # The 'ILS' will respond to an authentication request with a minimal
         # set of information.
@@ -2557,9 +2421,9 @@ class TestBasicAuthenticationProviderAuthenticate:
         minimal_patrondata = PatronData(
             permanent_id=patron.external_identifier, complete=False
         )
-        provider = authenticator_fixture.mock_basic(
+        provider = mock_basic(
             patrondata=minimal_patrondata,
-            remote_patron_lookup_patrondata=complete_patrondata,
+            lookup_patrondata=complete_patrondata,
         )
 
         # The patron can be authenticated.
@@ -2572,21 +2436,23 @@ class TestBasicAuthenticationProviderAuthenticate:
         # that the patron's details were correct going forward.
         assert "new username" == patron.username
         assert "new authorization identifier" == patron.authorization_identifier
-        assert (utc_now() - patron.last_external_sync).total_seconds() < 10
+        assert utc_now() == patron.last_external_sync
 
+    @freeze_time()
     def test_success_with_immediate_patron_sync(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        inactive_patron: InactivePatronFixture,
     ):
         # This patron has not logged on in a really long time.
-        db = authenticator_fixture.db
-        patron, complete_patrondata = self._inactive_patron(db)
+        patron, complete_patrondata = inactive_patron
 
         # The 'ILS' will respond to an authentication request with a complete
         # set of information. If a remote patron lookup were to happen,
         # it would explode.
-        provider = authenticator_fixture.mock_basic(
-            patrondata=complete_patrondata, remote_patron_lookup_patrondata=object()
-        )
+        provider = mock_basic(patrondata=complete_patrondata)
+        provider.remote_patron_lookup = MagicMock(side_effect=Exception("Should not be called."))  # type: ignore[method-assign]
 
         # The patron can be authenticated.
         assert patron == provider.authenticate(db.session, self.credentials)
@@ -2597,46 +2463,39 @@ class TestBasicAuthenticationProviderAuthenticate:
         # patron lookup.
         assert "new username" == patron.username
         assert "new authorization identifier" == patron.authorization_identifier
-        assert (utc_now() - patron.last_external_sync).total_seconds() < 10
+        assert utc_now() == patron.last_external_sync
 
     def test_failure_when_remote_authentication_returns_problemdetail(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-        patron = db.patron()
-        patrondata = PatronData(permanent_id=patron.external_identifier)
-        provider = authenticator_fixture.mock_basic(
-            patrondata=UNSUPPORTED_AUTHENTICATION_MECHANISM  # type: ignore
-        )
-        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == provider.authenticate(  # type: ignore
+        provider = mock_basic(patrondata=UNSUPPORTED_AUTHENTICATION_MECHANISM)
+        assert UNSUPPORTED_AUTHENTICATION_MECHANISM == provider.authenticate(
             db.session, self.credentials
         )
 
     def test_failure_when_remote_authentication_returns_none(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
-        patron = db.patron()
-        patrondata = PatronData(permanent_id=patron.external_identifier)
-        provider = authenticator_fixture.mock_basic(patrondata=None)
-        assert None == provider.authenticate(db.session, self.credentials)
+        provider = mock_basic(patrondata=None)
+        assert provider.authenticate(db.session, self.credentials) is None
 
     def test_server_side_validation_runs(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         patron = db.patron()
         patrondata = PatronData(permanent_id=patron.external_identifier)
 
-        b = MockBasic
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = "foo"
-        integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = "bar"
-        provider = b(db.default_library(), integration, patrondata=patrondata)
+        provider = mock_basic(
+            patrondata=patrondata,
+            settings=BasicAuthenticationProviderSettings(
+                identifier_regular_expression="foo",  # type: ignore[arg-type]
+                password_regular_expression="bar",  # type: ignore[arg-type]
+            ),
+        )
 
         # This would succeed, but we don't get to remote_authenticate()
         # because we fail the regex test.
-        assert None == provider.authenticate(db.session, self.credentials)
+        assert provider.authenticate(db.session, self.credentials) is None
 
         # This succeeds because we pass the regex test.
         assert patron == provider.authenticate(
@@ -2644,14 +2503,13 @@ class TestBasicAuthenticationProviderAuthenticate:
         )
 
     def test_authentication_succeeds_but_patronlookup_fails(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
         """This case should never happen--it indicates a malfunctioning
         authentication provider. But we handle it.
         """
-        db = authenticator_fixture.db
         patrondata = PatronData(permanent_id=db.fresh_str(), complete=False)
-        provider = authenticator_fixture.mock_basic(patrondata=patrondata)
+        provider = mock_basic(patrondata=patrondata, lookup_patrondata=None)
 
         # When we call remote_authenticate(), we get patrondata, but
         # there is no corresponding local patron, so we call
@@ -2660,32 +2518,25 @@ class TestBasicAuthenticationProviderAuthenticate:
         assert provider.authenticate(db.session, self.credentials) is None
 
     def test_authentication_creates_missing_patron(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         # The authentication provider knows about this patron,
         # but this is the first we've heard about them.
+        library = db.default_library()
         patrondata = PatronData(
             permanent_id=db.fresh_str(),
             authorization_identifier=db.fresh_str(),
             fines=Money(1, "USD"),
         )
 
-        library = db.library()
-        integration = db.external_integration(
-            db.fresh_str(), ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        provider = MockBasic(
-            library,
-            integration,
+        provider = mock_basic(
             patrondata=patrondata,
-            remote_patron_lookup_patrondata=patrondata,
         )
         patron = provider.authenticate(db.session, self.credentials)
 
         # A server side Patron was created from the PatronData.
         assert isinstance(patron, Patron)
-        assert library == patron.library  # type: ignore
+        assert library == patron.library
         assert patrondata.permanent_id == patron.external_identifier
         assert patrondata.authorization_identifier == patron.authorization_identifier
 
@@ -2694,9 +2545,8 @@ class TestBasicAuthenticationProviderAuthenticate:
         assert 1 == patron.fines
 
     def test_authentication_updates_outdated_patron_on_permanent_id_match(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         # A patron's permanent ID won't change.
         permanent_id = db.fresh_str()
 
@@ -2718,7 +2568,7 @@ class TestBasicAuthenticationProviderAuthenticate:
             username=new_username,
         )
 
-        provider = authenticator_fixture.mock_basic(patrondata=patrondata)
+        provider = mock_basic(patrondata=patrondata)
         patron2 = provider.authenticate(db.session, self.credentials)
 
         # We were able to match our local patron to the patron held by the
@@ -2731,9 +2581,8 @@ class TestBasicAuthenticationProviderAuthenticate:
         assert new_username == patron.username
 
     def test_authentication_updates_outdated_patron_on_username_match(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         # This patron has no permanent ID. Their library card number has
         # changed but their username has not.
         old_identifier = "1234"
@@ -2750,7 +2599,7 @@ class TestBasicAuthenticationProviderAuthenticate:
             username=username,
         )
 
-        provider = authenticator_fixture.mock_basic(patrondata=patrondata)
+        provider = mock_basic(patrondata=patrondata)
         patron2 = provider.authenticate(db.session, self.credentials)
 
         # We were able to match our local patron to the patron held by the
@@ -2762,9 +2611,8 @@ class TestBasicAuthenticationProviderAuthenticate:
         assert new_identifier == patron.authorization_identifier
 
     def test_authentication_updates_outdated_patron_on_authorization_identifier_match(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
-        db = authenticator_fixture.db
         # This patron has no permanent ID. Their username has
         # changed but their library card number has not.
         identifier = "1234"
@@ -2782,7 +2630,7 @@ class TestBasicAuthenticationProviderAuthenticate:
             username=new_username,
         )
 
-        provider = authenticator_fixture.mock_basic(patrondata=patrondata)
+        provider = mock_basic(patrondata=patrondata)
         patron2 = provider.authenticate(db.session, self.credentials)
 
         # We were able to match our local patron to the patron held by the
