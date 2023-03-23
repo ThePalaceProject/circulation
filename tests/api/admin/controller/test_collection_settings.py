@@ -2,14 +2,14 @@ from unittest.mock import PropertyMock, create_autospec
 
 from api.admin.controller.collection_settings import CollectionSettingsController
 from api.controller import CirculationManager
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestCollectionSettingsController(DatabaseTest):
-    def test_duplicate_protocol_settings(self):
+class TestCollectionSettingsController:
+    def test_duplicate_protocol_settings(self, db: DatabaseTransactionFixture):
         """Dedupe protocol settings using the last settings of the same value"""
         manager = create_autospec(spec=CirculationManager)
-        manager._db = PropertyMock(return_value=self._db)
+        manager._db = PropertyMock(return_value=db.session)
 
         class MockProviderAPI:
             NAME = "NAME"

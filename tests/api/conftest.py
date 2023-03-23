@@ -7,6 +7,7 @@ register_assert_rewrite("tests.fixtures.vendor_id")
 pytest_plugins = [
     "core.testing",
     "tests.fixtures.announcements",
+    "tests.fixtures.api_admin",
     "tests.fixtures.api_axis_files",
     "tests.fixtures.api_bibliotheca_files",
     "tests.fixtures.api_config",
@@ -25,6 +26,7 @@ pytest_plugins = [
     "tests.fixtures.api_opds_dist_files",
     "tests.fixtures.api_opds_files",
     "tests.fixtures.api_overdrive_files",
+    "tests.fixtures.api_routes",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",
     "tests.fixtures.files",

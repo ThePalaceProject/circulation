@@ -141,14 +141,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.26.89"
-description = "Type annotations for boto3 1.26.89 generated with mypy-boto3-builder 7.12.5"
+version = "1.26.93"
+description = "Type annotations for boto3 1.26.93 generated with mypy-boto3-builder 7.13.0"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "boto3-stubs-1.26.89.tar.gz", hash = "sha256:251d1cf698e67da26a4b7c3cce4d1d0b112588613a54343014c2b06eada0320d"},
-    {file = "boto3_stubs-1.26.89-py3-none-any.whl", hash = "sha256:7cc235cf743d9223678a6f83486a7d156629ba2b1d934211fd91ff1f6770b3da"},
+    {file = "boto3-stubs-1.26.93.tar.gz", hash = "sha256:7c215d6b820cdfead3c6f0023ecc0de928603adc26360ac54305c5dea5141f95"},
+    {file = "boto3_stubs-1.26.93-py3-none-any.whl", hash = "sha256:1bc9da3bc22fd1e6669401c2dd6ee33226b51d827066aad55d859e6508081e46"},
 ]
 
 [package.dependencies]
@@ -191,7 +191,7 @@ backup-gateway = ["mypy-boto3-backup-gateway (>=1.26.0,<1.27.0)"]
 backupstorage = ["mypy-boto3-backupstorage (>=1.26.0,<1.27.0)"]
 batch = ["mypy-boto3-batch (>=1.26.0,<1.27.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.26.0,<1.27.0)"]
-boto3 = ["boto3 (==1.26.89)", "botocore (==1.29.89)"]
+boto3 = ["boto3 (==1.26.93)", "botocore (==1.29.93)"]
 braket = ["mypy-boto3-braket (>=1.26.0,<1.27.0)"]
 budgets = ["mypy-boto3-budgets (>=1.26.0,<1.27.0)"]
 ce = ["mypy-boto3-ce (>=1.26.0,<1.27.0)"]
@@ -524,18 +524,19 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.89"
+version = "1.29.94"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "botocore_stubs-1.29.89-py3-none-any.whl", hash = "sha256:a549d151a2fc9728301a6ec5ca1238cd72bbc37645ae64fb4b4dbe47249ed0ea"},
-    {file = "botocore_stubs-1.29.89.tar.gz", hash = "sha256:05696ecab532fea49b477beea17583ffae865f309862ec5c2843d2fd9b2f00c9"},
+    {file = "botocore_stubs-1.29.94-py3-none-any.whl", hash = "sha256:7ebfc5cc1b5f2a41336939210711d14c3f022b195d390d59c9560aa99ae953e9"},
+    {file = "botocore_stubs-1.29.94.tar.gz", hash = "sha256:c8b4a7bb9990b3611e0f22e94ed62476e3430ec48ecd375709497f870a447572"},
 ]
 
 [package.dependencies]
 types-awscrt = "*"
+typing-extensions = {version = ">=4.1.0", markers = "python_version < \"3.9\""}
 
 [[package]]
 name = "cachetools"
@@ -1014,14 +1015,14 @@ Six = "*"
 
 [[package]]
 name = "flask-pydantic-spec"
-version = "0.4.2"
+version = "0.4.3"
 description = "generate OpenAPI document and validate request & response with Python annotations."
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "flask_pydantic_spec-0.4.2-py3-none-any.whl", hash = "sha256:8ab0490c184ad78fe1772d2c90fd030ee766c46f7697701d3d540ba6ac8cc770"},
-    {file = "flask_pydantic_spec-0.4.2.tar.gz", hash = "sha256:fa4ff1629d3fe579e5f3885688ab989a376094f073edbbabe3c8362eb9ded066"},
+    {file = "flask_pydantic_spec-0.4.3-py3-none-any.whl", hash = "sha256:837c7f01ff6b0c045784c7f8e81089e16da4a84cfe5b0f39364e33eeae9853e9"},
+    {file = "flask_pydantic_spec-0.4.3.tar.gz", hash = "sha256:a7af33d5c812aa4900bede3ff3cb4687ff007636b09af0936e78258aca3974be"},
 ]
 
 [package.dependencies]
@@ -2031,14 +2032,14 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "pre-commit"
-version = "3.1.1"
+version = "3.2.0"
 description = "A framework for managing and maintaining multi-language pre-commit hooks."
 category = "dev"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "pre_commit-3.1.1-py2.py3-none-any.whl", hash = "sha256:b80254e60668e1dd1f5c03a1c9e0413941d61f568a57d745add265945f65bfe8"},
-    {file = "pre_commit-3.1.1.tar.gz", hash = "sha256:d63e6537f9252d99f65755ae5b79c989b462d511ebbc481b561db6a297e1e865"},
+    {file = "pre_commit-3.2.0-py2.py3-none-any.whl", hash = "sha256:f712d3688102e13c8e66b7d7dbd8934a6dda157e58635d89f7d6fecdca39ce8a"},
+    {file = "pre_commit-3.2.0.tar.gz", hash = "sha256:818f0d998059934d0f81bb3667e3ccdc32da6ed7ccaac33e43dc231561ddaaa9"},
 ]
 
 [package.dependencies]
@@ -3789,4 +3790,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "90aade41c74a43a0d7295af900aec6a264f39de96e3fc0dcf8e3f5a84ed08e1d"
+content-hash = "847c67144a41dc4c059b74defb82fb36a85a4db84bfc631369aae88f787b4db4"
