@@ -461,8 +461,8 @@ class TestIndividualAdmins:
         # Various types of user trying to change a sitewide librarian's password
         test_changing_password(system, sitewide_librarian, allowed=True)
         test_changing_password(sitewide_manager, sitewide_librarian, allowed=True)
-        test_changing_password(manager1, sitewide_librarian, allowed=True)
-        test_changing_password(manager2, sitewide_librarian, allowed=True)
+        test_changing_password(manager1, sitewide_librarian)
+        test_changing_password(manager2, sitewide_librarian)
         test_changing_password(sitewide_librarian, sitewide_librarian)
         test_changing_password(librarian1, sitewide_librarian)
         test_changing_password(librarian2, sitewide_librarian)
@@ -498,6 +498,29 @@ class TestIndividualAdmins:
         test_changing_password(sitewide_librarian, librarian2)
         test_changing_password(manager1, librarian2)
         test_changing_password(librarian1, librarian2)
+
+        # Library crossover tests
+        manager1_2, ignore = create(
+            db.session, Admin, email="library_manager_l1_l2@example.com"
+        )
+        manager1_2.add_role(AdminRole.LIBRARY_MANAGER, l1)
+        manager1_2.add_role(AdminRole.LIBRARY_MANAGER, l2)
+        # A manager of library1 should not be allowed for a manager of library1 and library2
+        test_changing_password(system, manager1_2, allowed=True)
+        test_changing_password(sitewide_manager, manager1_2, allowed=True)
+        test_changing_password(manager1_2, manager1_2, allowed=True)
+        test_changing_password(sitewide_librarian, manager1_2)
+        test_changing_password(manager1, manager1_2)
+        test_changing_password(manager2, manager1_2)
+        test_changing_password(librarian1, manager1_2)
+        # A manager of both libraries should be able to change the passwords of both
+        test_changing_password(manager1_2, manager1, allowed=True)
+        test_changing_password(manager1_2, manager2, allowed=True)
+        test_changing_password(manager1_2, librarian1, allowed=True)
+        test_changing_password(manager1_2, librarian2, allowed=True)
+        test_changing_password(manager1_2, system)
+        test_changing_password(manager1_2, sitewide_manager)
+        test_changing_password(manager1_2, sitewide_librarian)
 
     def test_individual_admins_post_create(self, settings_ctrl_fixture):
         db = settings_ctrl_fixture.ctrl.db
