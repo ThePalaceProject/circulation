@@ -17,7 +17,6 @@ from typing import (
     TypeVar,
     Union,
 )
-
 from urllib.parse import quote, urlparse, urlunparse
 
 import flask
