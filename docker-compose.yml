@@ -38,7 +38,9 @@ services:
       MINIO_SCHEME: "http"
 
   os:
-    image: opensearchproject/opensearch:1
+    build:
+      dockerfile: docker/Dockerfile.ci
+      target: opensearch
     environment:
       discovery.type: single-node
       DISABLE_SECURITY_PLUGIN: true
