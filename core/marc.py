@@ -455,10 +455,7 @@ class Annotator:
                 Field(
                     tag="520",
                     indicators=[" ", " "],
-                    subfields=[
-                        "a",
-                        stripped.encode("ascii", "ignore"),
-                    ],
+                    subfields=["a", stripped],
                 )
             )
 

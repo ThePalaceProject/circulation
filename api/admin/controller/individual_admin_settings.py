@@ -382,25 +382,28 @@ class IndividualAdminSettingsController(SettingsController):
             # NOTE: librarians can change their own passwords via SignInController.change_password(),
             # but not via this controller; this is because they don't have access to the
             # IndividualAdmins create/edit form.
+            message = None
             if not is_new and not admin.is_sitewide_library_manager():
                 can_change_pw = False
                 if not admin.roles:
                     can_change_pw = True
                 if admin.is_sitewide_librarian():
-                    # A manager of any library can change a sitewide librarian's password.
-                    if user.is_sitewide_library_manager():
+                    # Only a manager of the same or higher level can change the password
+                    if user.is_sitewide_librarian():
                         can_change_pw = True
                     else:
-                        for role in user.roles:
-                            if role.role == AdminRole.LIBRARY_MANAGER:
-                                can_change_pw = True
+                        message = "Only an administrator can change another administrators password."
                 else:
+                    # If any of the target users libraries are outside of logged-in users
+                    # libraries then they should not be able to change the password
                     for role in admin.roles:
-                        if user.is_library_manager(role.library):
-                            can_change_pw = True
+                        if not user.is_library_manager(role.library):
+                            message = f"User is part of '{role.library.name}', you are not authorized to change their password."
                             break
+                    else:
+                        can_change_pw = True
                 if not can_change_pw:
-                    raise AdminNotAuthorized()
+                    raise AdminNotAuthorized(message)
             admin.password = password
         try:
             self._db.flush()

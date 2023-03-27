@@ -22,9 +22,11 @@ from core.model import (
     LicensePool,
     MediaTypes,
     Work,
+    create,
 )
 from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierConstants
+from core.model.patron import Hold
 from core.model.resource import Hyperlink
 from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
@@ -423,6 +425,7 @@ class TestODL2API:
         response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
         # Hold was successful
         assert response.hold_position == 1
+        create(db.session, Hold, patron_id=odl2api.patron.id, license_pool=pool)
 
         # Second work should fail for the test patron due to the hold limit
         work2: Work = odl2api.fixture.work(odl2api.collection)
