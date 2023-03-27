@@ -30,6 +30,7 @@ from . import Base, get_one_or_create, numericrange_to_tuple
 from .credential import Credential
 
 if TYPE_CHECKING:
+    from core.model import IntegrationClient  # noqa: autoflake
     from core.model.library import Library  # noqa: autoflake
     from core.model.licensing import LicensePool  # noqa: autoflake
 
@@ -153,7 +154,13 @@ class Patron(Base):
     cached_neighborhood = Column(Unicode, default=None, index=True)
 
     loans = relationship("Loan", backref="patron", cascade="delete", uselist=True)
-    holds = relationship("Hold", backref="patron", cascade="delete", uselist=True)
+    holds = relationship(
+        "Hold",
+        back_populates="patron",
+        cascade="delete",
+        uselist=True,
+        order_by="Hold.id",
+    )
 
     annotations = relationship(
         "Annotation",
@@ -568,6 +575,11 @@ class Hold(Base, LoanAndHoldMixin):
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
     external_identifier = Column(Unicode, unique=True, nullable=True)
+
+    patron = relationship("Patron", back_populates="holds", lazy="joined")
+    integration_client = relationship(
+        "IntegrationClient", back_populates="holds", lazy="joined"
+    )
 
     def __lt__(self, other):
         return self.id < other.id

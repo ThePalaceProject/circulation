@@ -396,12 +396,14 @@ class HoldInfo(CirculationInfo):
         end_date,
         hold_position,
         external_identifier=None,
+        integration_client=None,
     ):
         super().__init__(collection, data_source_name, identifier_type, identifier)
         self.start_date = start_date
         self.end_date = end_date
         self.hold_position = hold_position
         self.external_identifier = external_identifier
+        self.integration_client = integration_client
 
     def __repr__(self):
         return "<HoldInfo for {}/{}, start={} end={}, position={}>".format(
@@ -1229,7 +1231,7 @@ class CirculationAPI:
         # to needing to put it on hold, but we do check for that case.
         __transaction = self._db.begin_nested()
         hold, is_new = licensepool.on_hold_to(
-            patron,
+            hold_info.integration_client or patron,
             hold_info.start_date or now,
             hold_info.end_date,
             hold_info.hold_position,
