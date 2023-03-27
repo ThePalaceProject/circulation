@@ -226,7 +226,7 @@ class ODLAPITestFixture:
         self.collection = collection
         self.work = work
         self.license = license
-        self.api = api
+        self.api: ODLAPI = api
         self.patron = patron
         self.pool = license.license_pool  # type: ignore
         self.client = client
