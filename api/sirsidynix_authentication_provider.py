@@ -57,7 +57,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "label": _("Server URL"),
             "description": _("The external server url."),
             "required": True,
-            "default": "",
         },
         {
             "key": Keys.CLIENT_ID,
