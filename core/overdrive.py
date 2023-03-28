@@ -1425,17 +1425,19 @@ class OverdriveRepresentationExtractor:
 class OverdriveAdvantageAccount:
     """Holder and parser for data associated with Overdrive Advantage."""
 
-    def __init__(self, parent_library_id, library_id, name):
+    def __init__(self, parent_library_id: int, library_id: int, name: str, token: str):
         """Constructor.
 
         :param parent_library_id: The library ID of the parent Overdrive
             account.
         :param library_id: The library ID of the Overdrive Advantage account.
         :param name: The name of the library whose Advantage account this is.
+        :param token: The collection token for this Advantage account
         """
         self.parent_library_id = parent_library_id
         self.library_id = library_id
         self.name = name
+        self.token = token
 
     @classmethod
     def from_representation(cls, content):
@@ -1454,7 +1456,13 @@ class OverdriveAdvantageAccount:
             products_link = account["links"]["products"]["href"]
             library_id = str(account.get("id"))
             name = account.get("name")
-            yield cls(parent_library_id=parent_id, library_id=library_id, name=name)
+            token = account.get("collectionToken")
+            yield cls(
+                parent_library_id=parent_id,
+                library_id=library_id,
+                name=name,
+                token=token,
+            )
 
     def to_collection(self, _db):
         """Find or create a Collection object for this Overdrive Advantage

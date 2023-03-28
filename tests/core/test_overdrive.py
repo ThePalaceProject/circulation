@@ -960,6 +960,7 @@ class TestOverdriveAdvantageAccount:
             "parent_id",
             "child_id",
             "Library Name",
+            "token value",
         )
 
         # We can't just create a Collection object for this object because
