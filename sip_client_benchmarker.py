@@ -26,7 +26,7 @@ class TestSIPClient(SIPClient):
     so that this class can be removed.
     """
 
-    def __init__(self, connection_timeout: int = 12, *args, **kwargs):
+    def __init__(self, connection_timeout: int = 2, *args, **kwargs):
         self._connection_timeout = connection_timeout
         super().__init__(*args, **kwargs)
 
@@ -63,22 +63,26 @@ class SIPClientTester:
         host: str,
         port: int,
         use_ssl: bool = True,
-        ssl_verification=False,
         sip_username: str = None,
         sip_password: str = None,
         patron_username: str = None,
         patron_password: str = None,
+        library: str = None,
+        sip_integration: str = None,
+        ils: str = None,
         timeout_in_seconds: int = 2,
         iterations: int = 25,
     ):
         self.host = host
         self.port = port
         self.use_ssl = use_ssl
-        self.ssl_verification = ssl_verification
         self.sip_username = sip_username
         self.sip_password = sip_password
         self.patron_username = patron_username
         self.patron_password = patron_password
+        self.library = library
+        self.sip_integration = sip_integration
+        self.ils = ils
         self.timeout_in_seconds = timeout_in_seconds
         self.iterations = iterations
         self.test_data = []
@@ -91,7 +95,7 @@ class SIPClientTester:
             login_user_id=self.sip_username,
             login_password=self.sip_password,
             use_ssl=self.use_ssl,
-            # ssl_verification=self.ssl_verification,
+            # dialect=self.ils,
         )
 
     def do_test(self) -> Dict:
@@ -168,7 +172,12 @@ class SIPClientTester:
             list.append(x)
 
         summary = {
+            "library": self.library,
+            "sip_integration": self.sip_integration,
+            "ils": self.ils,
             "host": self.host,
+            "port": self.port,
+            "use_ssl": self.use_ssl,
             "iterations": self.iterations,
             "timeout": self.timeout_in_seconds,
         }
@@ -245,7 +254,7 @@ def main(csvfile=None):
         "--csv",
         help="A csv file path with the following columns: sip_host, port, "
         "sip_username, sip_password, patron_username, patron_password, "
-        "use_ssl (True|False), ssl_verification (True|False), sip_connection_timeout",
+        "use_ssl (True|False), ils (GenericILS|AutoGraphicsVerso), sip_connection_timeout",
         default=None,
     )
     parser.add_argument(
@@ -273,17 +282,19 @@ def test_all(csv_file_path, iterations):
         reader = csv.DictReader(csv_file)
         summaries = []
         for row in reader:
+            library = str(row["library"])
+            sip_integration = str(row["sip_integration_name"])
             host = str(row["sip_host"])
-            port = int(row["port"])
+            port = int(row["sip_port"])
             sip_username = str(row["sip_username"])
             sip_password = str(row["sip_password"])
             patron_username = str(row["patron_username"])
             patron_password = str(row["patron_password"])
+            ils = str(row["ils"])
             use_ssl = False  # bool(row.get('use_ssl', 'True'))
-            ssl_verification = False  # bool(row.get('ssl_verification', 'False'))
             timeout = int(row.get("sip_connection_timeout", "2"))
             logging.info(
-                f"testing {host}:{port} use_ssl={use_ssl}, ssl_verification={ssl_verification}, "
+                f"testing {host}:{port} use_ssl={use_ssl}, "
                 f"sip_connection_timeout={timeout}"
             )
 
@@ -294,8 +305,10 @@ def test_all(csv_file_path, iterations):
                 sip_password=sip_password,
                 patron_username=patron_username,
                 patron_password=patron_password,
+                library=library,
+                sip_integration=sip_integration,
                 use_ssl=use_ssl,
-                ssl_verification=ssl_verification,
+                ils=ils,
                 iterations=iterations,
                 timeout_in_seconds=timeout,
             )
@@ -307,12 +320,14 @@ def test_all(csv_file_path, iterations):
             f"test_results-{datetime.datetime.now().isoformat()}.csv", mode="w"
         ) as output_file:
             fieldnames = [
+                "library",
+                "sip_integration",
                 "host",
                 "port",
                 "iterations",
                 "function",
                 "use_ssl",
-                "ssl_verification",
+                "ils",
                 "timeout",
                 "success_rate",
                 "success_mean",
@@ -334,12 +349,14 @@ def test_all(csv_file_path, iterations):
                     failure = f["failure"]
                     writer.writerow(
                         {
-                            "host": host,
-                            "port": port,
+                            "library": summary["library"],
+                            "sip_integration": summary["sip_integration"],
+                            "host": summary["host"],
+                            "port": summary["port"],
                             "iterations": iterations,
                             "function": f["function"],
-                            "use_ssl": use_ssl,
-                            "ssl_verification": ssl_verification,
+                            "use_ssl": summary["use_ssl"],
+                            "ils": summary["ils"],
                             "timeout": timeout,
                             "success_rate": f["success_rate"],
                             "success_mean": success["mean"],
