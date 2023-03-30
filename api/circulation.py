@@ -1636,11 +1636,11 @@ class CirculationAPI:
 
                 # While testing we are in a Session scope
                 # we need to only close this if api._db is a flask_scoped_session.
-                if type(api._db) != Session:
+                if getattr(self.api, "_db", None) and type(self.api._db) != Session:
                     # Since we are in a Thread using a flask_scoped_session
                     # we can assume a new Session was opened due to the thread activity.
                     # We must close this session to avoid connection pool leaks
-                    api._db.close()
+                    self.api._db.close()
 
         threads = []
         before = time.time()
