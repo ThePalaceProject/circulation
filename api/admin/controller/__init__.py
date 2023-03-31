@@ -3,7 +3,6 @@ import copy
 import json
 import logging
 import os
-import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from typing import (
@@ -17,25 +16,16 @@ from typing import (
     TypeVar,
     Union,
 )
-from urllib.parse import quote, urlparse, urlunparse
 
 import flask
-import werkzeug
-from flask import Request, Response, current_app, redirect, url_for
+from flask import Request, Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
-from werkzeug.urls import (
-    BaseURL,
-    url_fix,
-    url_parse,
-    url_quote,
-    url_quote_plus,
-    url_unparse,
-)
+from sqlalchemy.sql.expression import desc, nullslast
+from werkzeug.urls import BaseURL, url_parse, url_quote_plus
 from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
@@ -59,7 +49,7 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import CannotCreateLocalPatron, LibraryAuthenticator, PatronData
 from api.axis import Axis360API
 from api.bibliotheca import BibliothecaAPI
-from api.config import CannotLoadConfiguration, Configuration
+from api.config import Configuration
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
@@ -84,12 +74,9 @@ from core.model import (
     CustomList,
     DataSource,
     ExternalIntegration,
-    Hold,
     Identifier,
     Library,
     LicensePool,
-    Loan,
-    Patron,
     Timestamp,
     Work,
     create,
@@ -107,7 +94,7 @@ from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
 from core.util.flask_util import OPDSFeedResponse
-from core.util.languages import LanguageCodes, LanguageNames
+from core.util.languages import LanguageCodes
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
