@@ -1,0 +1,4 @@
+FROM opensearchproject/opensearch:1 as opensearch
+
+# Install ICU Analysis Plugin
+RUN /usr/share/opensearch/bin/opensearch-plugin install --batch analysis-icu

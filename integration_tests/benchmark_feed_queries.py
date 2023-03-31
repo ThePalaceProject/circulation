@@ -1,4 +1,3 @@
-# encoding: utf-8
 import random
 import time
 from threading import Thread
@@ -43,9 +42,9 @@ class QueryTimingThread(Thread):
         print("Max url: %s" % self.urls[m])
         print("Raw data:")
         for i, url in enumerate(self.urls):
-            print("(%.2f) %s" % (self.elapsed[i], url))
+            print(f"({self.elapsed[i]:.2f}) {url}")
         for (url, e) in self.exceptions:
-            print("Exception: %s: %s" % (url, e))
+            print(f"Exception: {url}: {e}")
         print("")
 
 

@@ -1,6 +1,5 @@
 from flask_babel import lazy_gettext as _
 
-from .util.http import INTEGRATION_ERROR  # noqa: autoflake
 from .util.problem_detail import ProblemDetail as pd
 
 # Generic problem detail documents that recapitulate HTTP errors.
@@ -63,4 +62,18 @@ UNRECOGNIZED_DATA_SOURCE = pd(
     400,
     _("Unrecognized data source."),
     _("I don't know anything about that data source."),
+)
+
+INTEGRATION_ERROR = pd(
+    "http://librarysimplified.org/terms/problem/remote-integration-failed",
+    502,
+    _("Third-party service failed."),
+    _("A third-party service has failed."),
+)
+
+INVALID_RESET_PASSWORD_TOKEN = pd(
+    "http://librarysimplified.org/terms/problem/reset-password-token-expired",
+    status_code=401,
+    title=_("Invalid reset password token"),
+    detail=_("Provided reset password token is not valid."),
 )

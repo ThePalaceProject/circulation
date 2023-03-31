@@ -1,15 +1,10 @@
 from unittest.mock import MagicMock, call
 
+import core
 from api.util.xray import PalaceXrayMiddleware
-from core.config import Configuration
 
 
 class TestPalaceXrayMiddleware:
-    def test_put_annotations_none(self):
-        # If no segment is passed in nothing is returned
-        value = PalaceXrayMiddleware.put_annotations(None)
-        assert value is None
-
     def test_put_annotations(self):
         # Type annotation set based on seg_type passed into put_annotation
         segment = MagicMock()
@@ -34,6 +29,6 @@ class TestPalaceXrayMiddleware:
     def test_put_annotations_version(self, monkeypatch):
         # The version number is added as an annotation
         segment = MagicMock()
-        monkeypatch.setattr(Configuration, "app_version", lambda: "foo")
+        monkeypatch.setattr(core, "__version__", "foo")
         PalaceXrayMiddleware.put_annotations(segment)
         segment.put_annotation.assert_called_once_with("version", "foo")

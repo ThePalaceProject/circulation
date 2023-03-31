@@ -19,8 +19,8 @@ class DeweyDecimalClassifier(Classifier):
     NAMES["J"] = "Juvenile Nonfiction"
     NAMES["Y"] = "Young Adult"
 
-    FICTION = set([813, 823, 833, 843, 853, 863, 873, 883, "FIC", "E", "F"])
-    NONFICTION = set(["J", "B"])
+    FICTION = {813, 823, 833, 843, 853, 863, 873, 883, "FIC", "E", "F"}
+    NONFICTION = {"J", "B"}
 
     # 791.4572 and 791.4372 is for recordings. 741.59 is for comic
     #  adaptations? This is a good sign that a identifier should

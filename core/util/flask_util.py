@@ -78,7 +78,7 @@ class Response(FlaskResponse):
         elif not isinstance(body, (bytes, str)):
             body = str(body)
 
-        super(Response, self).__init__(
+        super().__init__(
             response=body,
             status=status,
             headers=self._headers(headers or {}),
@@ -155,7 +155,7 @@ class OPDSFeedResponse(Response):
         status = status or 200
         if max_age is None:
             max_age = OPDSFeed.DEFAULT_MAX_AGE
-        super(OPDSFeedResponse, self).__init__(
+        super().__init__(
             response=response,
             status=status,
             headers=headers,
@@ -172,4 +172,10 @@ class OPDSEntryResponse(Response):
 
     def __init__(self, response=None, **kwargs):
         kwargs.setdefault("mimetype", OPDSFeed.ENTRY_TYPE)
-        super(OPDSEntryResponse, self).__init__(response, **kwargs)
+        super().__init__(response, **kwargs)
+
+
+def boolean_value(value: str) -> bool:
+    """Convert a string request value into a boolean, used for form encoded requests
+    JSON encoded requests will get automatically converted"""
+    return True if value in ["true", "True", True, "1"] else False

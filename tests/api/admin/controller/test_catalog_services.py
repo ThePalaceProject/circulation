@@ -15,15 +15,16 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
+from tests.fixtures.api_admin import SettingsControllerFixture
 
-from .test_controller import SettingsControllerTest
 
-
-class TestCatalogServicesController(SettingsControllerTest):
-    def test_catalog_services_get_with_no_services(self):
-        with self.request_context_with_admin("/"):
+class TestCatalogServicesController:
+    def test_catalog_services_get_with_no_services(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.get("catalog_services") == []
             protocols = response.get("protocols")
@@ -32,87 +33,94 @@ class TestCatalogServicesController(SettingsControllerTest):
             assert "settings" in protocols[0]
             assert "library_settings" in protocols[0]
 
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            self._db.flush()
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+            settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_catalog_services_controller.process_catalog_services,
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services,
             )
 
-        def test_catalog_services_get_with_marc_exporter(self):
-            integration, ignore = create(
-                self._db,
-                ExternalIntegration,
-                protocol=ExternalIntegration.MARC_EXPORT,
-                goal=ExternalIntegration.CATALOG_GOAL,
-                name="name",
+    def test_catalog_services_get_with_marc_exporter(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        integration, ignore = create(
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            protocol=ExternalIntegration.MARC_EXPORT,
+            goal=ExternalIntegration.CATALOG_GOAL,
+            name="name",
+        )
+        integration.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
+        ConfigurationSetting.for_library_and_externalintegration(
+            settings_ctrl_fixture.ctrl.db.session,
+            MARCExporter.MARC_ORGANIZATION_CODE,
+            settings_ctrl_fixture.ctrl.db.default_library(),
+            integration,
+        ).value = "US-MaBoDPL"
+        ConfigurationSetting.for_library_and_externalintegration(
+            settings_ctrl_fixture.ctrl.db.session,
+            MARCExporter.INCLUDE_SUMMARY,
+            settings_ctrl_fixture.ctrl.db.default_library(),
+            integration,
+        ).value = "false"
+        ConfigurationSetting.for_library_and_externalintegration(
+            settings_ctrl_fixture.ctrl.db.session,
+            MARCExporter.INCLUDE_SIMPLIFIED_GENRES,
+            settings_ctrl_fixture.ctrl.db.default_library(),
+            integration,
+        ).value = "true"
+
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
-            integration.libraries += [self._default_library]
-            ConfigurationSetting.for_library_and_externalintegration(
-                self._db,
-                MARCExporter.MARC_ORGANIZATION_CODE,
-                self._default_library,
-                integration,
-            ).value = "US-MaBoDPL"
-            ConfigurationSetting.for_library_and_externalintegration(
-                self._db,
-                MARCExporter.INCLUDE_SUMMARY,
-                self._default_library,
-                integration,
-            ).value = "false"
-            ConfigurationSetting.for_library_and_externalintegration(
-                self._db,
-                MARCExporter.INCLUDE_SIMPLIFIED_GENRES,
-                self._default_library,
-                integration,
-            ).value = "true"
+            [service] = response.get("catalog_services")
+            assert integration.id == service.get("id")
+            assert integration.name == service.get("name")
+            assert integration.protocol == service.get("protocol")
+            [library] = service.get("libraries")
+            assert (
+                settings_ctrl_fixture.ctrl.db.default_library().short_name
+                == library.get("short_name")
+            )
+            assert "US-MaBoDPL" == library.get(MARCExporter.MARC_ORGANIZATION_CODE)
+            assert "false" == library.get(MARCExporter.INCLUDE_SUMMARY)
+            assert "true" == library.get(MARCExporter.INCLUDE_SIMPLIFIED_GENRES)
 
-            with self.request_context_with_admin("/"):
-                response = (
-                    self.manager.admin_catalog_services_controller.process_catalog_services()
-                )
-                [service] = response.get("catalog_services")
-                assert integration.id == service.get("id")
-                assert integration.name == service.get("name")
-                assert integration.protocol == service.get("protocol")
-                [library] = service.get("libraries")
-                assert self._default_library.short_name == library.get("short_name")
-                assert "US-MaBoDPL" == library.get(MARCExporter.MARC_ORGANIZATION_CODE)
-                assert "false" == library.get(MARCExporter.INCLUDE_SUMMARY)
-                assert "true" == library.get(MARCExporter.INCLUDE_SIMPLIFIED_GENRES)
-
-    def test_catalog_services_post_errors(self):
-        with self.request_context_with_admin("/", method="POST"):
+    def test_catalog_services_post_errors(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("protocol", "Unknown"),
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == UNKNOWN_PROTOCOL
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", "123"),
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == MISSING_SERVICE
 
         service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol="fake protocol",
             goal=ExternalIntegration.CATALOG_GOAL,
             name="name",
         )
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", service.id),
@@ -120,11 +128,11 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == CANNOT_CHANGE_PROTOCOL
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", service.name),
@@ -132,19 +140,19 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
         service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.MARC_EXPORT,
             goal=ExternalIntegration.CATALOG_GOAL,
         )
 
         # Attempt to set an S3 mirror external integration but it does not exist!
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             ME = MARCExporter
             flask.request.form = MultiDict(
                 [
@@ -155,19 +163,19 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.uri == MISSING_INTEGRATION.uri
 
         s3, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
         )
 
         # Now an S3 integration exists, but it has no MARC bucket configured.
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             ME = MARCExporter
             flask.request.form = MultiDict(
                 [
@@ -178,13 +186,13 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.uri == MISSING_INTEGRATION.uri
 
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        self._db.flush()
-        with self.request_context_with_admin("/", method="POST"):
+        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        settings_ctrl_fixture.ctrl.db.session.flush()
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "new name"),
@@ -194,16 +202,16 @@ class TestCatalogServicesController(SettingsControllerTest):
             )
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_catalog_services_controller.process_catalog_services,
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services,
             )
 
         # This should be the last test to check since rolling back database
         # changes in the test can cause it to crash.
         s3.setting(S3UploaderConfiguration.MARC_BUCKET_KEY).value = "marc-files"
-        service.libraries += [self._default_library]
-        self.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
+        settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             ME = MARCExporter
             flask.request.form = MultiDict(
                 [
@@ -215,7 +223,7 @@ class TestCatalogServicesController(SettingsControllerTest):
                         json.dumps(
                             [
                                 {
-                                    "short_name": self._default_library.short_name,
+                                    "short_name": settings_ctrl_fixture.ctrl.db.default_library().short_name,
                                     ME.INCLUDE_SUMMARY: "false",
                                     ME.INCLUDE_SIMPLIFIED_GENRES: "true",
                                 }
@@ -225,22 +233,24 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.uri == MULTIPLE_SERVICES_FOR_LIBRARY.uri
 
-    def test_catalog_services_post_create(self):
+    def test_catalog_services_post_create(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         ME = MARCExporter
 
         s3, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
         )
         s3.setting(S3UploaderConfiguration.MARC_BUCKET_KEY).value = "marc-files"
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "exporter name"),
@@ -251,7 +261,7 @@ class TestCatalogServicesController(SettingsControllerTest):
                         json.dumps(
                             [
                                 {
-                                    "short_name": self._default_library.short_name,
+                                    "short_name": settings_ctrl_fixture.ctrl.db.default_library().short_name,
                                     ME.INCLUDE_SUMMARY: "false",
                                     ME.INCLUDE_SIMPLIFIED_GENRES: "true",
                                 }
@@ -261,18 +271,20 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.status_code == 201
 
         service = get_one(
-            self._db, ExternalIntegration, goal=ExternalIntegration.CATALOG_GOAL
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            goal=ExternalIntegration.CATALOG_GOAL,
         )
         # There was one S3 integration and it was selected. The service has an
         # External Integration Link to the storage integration that is created
         # in a POST with purpose of ExternalIntegrationLink.MARC.
         integration_link = get_one(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegrationLink,
             external_integration_id=service.id,
             purpose=ExternalIntegrationLink.MARC,
@@ -281,28 +293,36 @@ class TestCatalogServicesController(SettingsControllerTest):
         assert service.id == int(response.get_data())
         assert ME.NAME == service.protocol
         assert "exporter name" == service.name
-        assert [self._default_library] == service.libraries
+        assert [settings_ctrl_fixture.ctrl.db.default_library()] == service.libraries
         # We expect the Catalog external integration to have a link to the
         # S3 storage external integration
         assert s3.id == integration_link.other_integration_id
         assert (
             "false"
             == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, ME.INCLUDE_SUMMARY, self._default_library, service
+                settings_ctrl_fixture.ctrl.db.session,
+                ME.INCLUDE_SUMMARY,
+                settings_ctrl_fixture.ctrl.db.default_library(),
+                service,
             ).value
         )
         assert (
             "true"
             == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, ME.INCLUDE_SIMPLIFIED_GENRES, self._default_library, service
+                settings_ctrl_fixture.ctrl.db.session,
+                ME.INCLUDE_SIMPLIFIED_GENRES,
+                settings_ctrl_fixture.ctrl.db.default_library(),
+                service,
             ).value
         )
 
-    def test_catalog_services_post_edit(self):
+    def test_catalog_services_post_edit(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         ME = MARCExporter
 
         s3, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
@@ -310,14 +330,14 @@ class TestCatalogServicesController(SettingsControllerTest):
         s3.setting(S3UploaderConfiguration.MARC_BUCKET_KEY).value = "marc-files"
 
         service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ME.NAME,
             goal=ExternalIntegration.CATALOG_GOAL,
             name="name",
         )
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "exporter name"),
@@ -329,7 +349,7 @@ class TestCatalogServicesController(SettingsControllerTest):
                         json.dumps(
                             [
                                 {
-                                    "short_name": self._default_library.short_name,
+                                    "short_name": settings_ctrl_fixture.ctrl.db.default_library().short_name,
                                     ME.INCLUDE_SUMMARY: "false",
                                     ME.INCLUDE_SIMPLIFIED_GENRES: "true",
                                 }
@@ -339,12 +359,12 @@ class TestCatalogServicesController(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_catalog_services_controller.process_catalog_services()
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
             )
             assert response.status_code == 200
 
         integration_link = get_one(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegrationLink,
             external_integration_id=service.id,
             purpose=ExternalIntegrationLink.MARC,
@@ -353,43 +373,53 @@ class TestCatalogServicesController(SettingsControllerTest):
         assert ME.NAME == service.protocol
         assert "exporter name" == service.name
         assert s3.id == integration_link.other_integration_id
-        assert [self._default_library] == service.libraries
+        assert [settings_ctrl_fixture.ctrl.db.default_library()] == service.libraries
         assert (
             "false"
             == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, ME.INCLUDE_SUMMARY, self._default_library, service
+                settings_ctrl_fixture.ctrl.db.session,
+                ME.INCLUDE_SUMMARY,
+                settings_ctrl_fixture.ctrl.db.default_library(),
+                service,
             ).value
         )
         assert (
             "true"
             == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, ME.INCLUDE_SIMPLIFIED_GENRES, self._default_library, service
+                settings_ctrl_fixture.ctrl.db.session,
+                ME.INCLUDE_SIMPLIFIED_GENRES,
+                settings_ctrl_fixture.ctrl.db.default_library(),
+                service,
             ).value
         )
 
-    def test_catalog_services_delete(self):
+    def test_catalog_services_delete(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         ME = MARCExporter
         service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ME.NAME,
             goal=ExternalIntegration.CATALOG_GOAL,
             name="name",
         )
 
-        with self.request_context_with_admin("/", method="DELETE"):
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_catalog_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_catalog_services_controller.process_delete,
                 service.id,
             )
 
-            self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = self.manager.admin_catalog_services_controller.process_delete(
+            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            response = settings_ctrl_fixture.manager.admin_catalog_services_controller.process_delete(
                 service.id
             )
             assert response.status_code == 200
 
-        service = get_one(self._db, ExternalIntegration, id=service.id)
+        service = get_one(
+            settings_ctrl_fixture.ctrl.db.session, ExternalIntegration, id=service.id
+        )
         assert None == service

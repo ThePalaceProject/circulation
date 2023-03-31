@@ -1,49 +1,18 @@
 import logging
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import requests
 from flask_babel import lazy_gettext as _
 from requests import sessions
-from requests.adapters import HTTPAdapter
+from requests.adapters import HTTPAdapter, Response
 from urllib3 import Retry
 
+import core
+from core.exceptions import IntegrationException
+from core.problem_details import INTEGRATION_ERROR
+
 from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from .problem_detail import ProblemDetail as pd
-
-INTEGRATION_ERROR = pd(
-    "http://librarysimplified.org/terms/problem/remote-integration-failed",
-    502,
-    _("Third-party service failed."),
-    _("A third-party service has failed."),
-)
-
-
-class IntegrationException(Exception):
-    """An exception that happens when the site's connection to a
-    third-party service is broken.
-
-    This may be because communication failed
-    (RemoteIntegrationException), or because local configuration is
-    missing or obviously wrong (CannotLoadConfiguration).
-    """
-
-    def __init__(self, message, debug_message=None):
-        """Constructor.
-
-        :param message: The normal message passed to any Exception
-        constructor.
-
-        :param debug_message: An extra human-readable explanation of the
-        problem, shown to admins but not to patrons. This may include
-        instructions on what bits of the integration configuration might need
-        to be changed.
-
-        For example, an API key might be wrong, or the API key might
-        be correct but the API provider might not have granted that
-        key enough permissions.
-        """
-        super(IntegrationException, self).__init__(message)
-        self.debug_message = debug_message
 
 
 class RemoteIntegrationException(IntegrationException):
@@ -72,10 +41,10 @@ class RemoteIntegrationException(IntegrationException):
             self.url = self.service = url_or_service
         if not debug_message:
             debug_message = self.internal_message % (self.url, message)
-        super(RemoteIntegrationException, self).__init__(message, debug_message)
+        super().__init__(message, debug_message)
 
     def __str__(self):
-        message = super(RemoteIntegrationException, self).__str__()
+        message = super().__str__()
         return self.internal_message % (self.url, message)
 
     def document_detail(self, debug=True):
@@ -115,9 +84,7 @@ class BadResponseException(RemoteIntegrationException):
         `param url_or_service` The name of the service that failed
            (e.g. "Overdrive"), or the specific URL that had the problem.
         """
-        super(BadResponseException, self).__init__(
-            url_or_service, message, debug_message
-        )
+        super().__init__(url_or_service, message, debug_message)
         # to be set to 500, etc.
         self.status_code = status_code
 
@@ -189,28 +156,34 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
     internal_message = "Timeout accessing %s: %s"
 
 
-class HTTP(object):
+class HTTP:
     """A helper for the `requests` module."""
 
+    # In case an app version is not present, we can use this version as a fallback
+    # for all outgoing http requests without a custom user-agent
+    DEFAULT_USER_AGENT_VERSION = "1.x.x"
+
     @classmethod
-    def get_with_timeout(cls, url, *args, **kwargs):
+    def get_with_timeout(cls, url: str, *args, **kwargs) -> Response:
         """Make a GET request with timeout handling."""
         return cls.request_with_timeout("GET", url, *args, **kwargs)
 
     @classmethod
-    def post_with_timeout(cls, url, payload, *args, **kwargs):
+    def post_with_timeout(cls, url: str, payload, *args, **kwargs) -> Response:
         """Make a POST request with timeout handling."""
         kwargs["data"] = payload
         return cls.request_with_timeout("POST", url, *args, **kwargs)
 
     @classmethod
-    def put_with_timeout(cls, url, payload, *args, **kwargs):
+    def put_with_timeout(cls, url: str, payload, *args, **kwargs) -> Response:
         """Make a PUT request with timeout handling."""
         kwargs["data"] = payload
         return cls.request_with_timeout("PUT", url, *args, **kwargs)
 
     @classmethod
-    def request_with_timeout(cls, http_method, url, *args, **kwargs):
+    def request_with_timeout(
+        cls, http_method: str, url: str, *args, **kwargs
+    ) -> Response:
         """Call requests.request and turn a timeout into a RequestTimedOut
         exception.
         """
@@ -219,7 +192,9 @@ class HTTP(object):
         )
 
     @classmethod
-    def _request_with_timeout(cls, url, make_request_with, *args, **kwargs):
+    def _request_with_timeout(
+        cls, url: str, make_request_with: Callable[..., Response], *args, **kwargs
+    ) -> Response:
         """Call some kind of method and turn a timeout into a RequestTimedOut
         exception.
 
@@ -247,17 +222,24 @@ class HTTP(object):
         # Unicode data can't be sent over the wire. Convert it
         # to UTF-8.
         if "data" in kwargs and isinstance(kwargs["data"], str):
-            kwargs["data"] = kwargs.get("data").encode("utf8")
-        if "headers" in kwargs:
-            headers = kwargs["headers"]
-            new_headers = {}
-            for k, v in list(headers.items()):
-                if isinstance(k, str):
-                    k = k.encode("utf8")
-                if isinstance(v, str):
-                    v = v.encode("utf8")
-                new_headers[k] = v
-            kwargs["headers"] = new_headers
+            kwdata: str = kwargs["data"]
+            kwargs["data"] = kwdata.encode("utf8")
+
+        headers = kwargs.get("headers", {})
+        # Set a user-agent if not already present
+        if "User-Agent" not in headers:
+            version = (
+                core.__version__ if core.__version__ else cls.DEFAULT_USER_AGENT_VERSION
+            )
+            headers["User-Agent"] = f"Palace Manager/{version}"
+        new_headers = {}
+        for k, v in list(headers.items()):
+            if isinstance(k, str):
+                k = k.encode("utf8")
+            if isinstance(v, str):
+                v = v.encode("utf8")
+            new_headers[k] = v
+        kwargs["headers"] = new_headers
 
         try:
             if verbose:
@@ -315,11 +297,11 @@ class HTTP(object):
     @classmethod
     def _process_response(
         cls,
-        url,
+        url: str,
         response,
         allowed_response_codes=None,
         disallowed_response_codes=None,
-        expected_encoding="utf-8",
+        expected_encoding: str = "utf-8",
     ):
         """Raise a RequestNetworkException if the response code indicates a
         server-side failure, or behavior so unpredictable that we can't
@@ -390,14 +372,14 @@ class HTTP(object):
         return "%sxx" % (int(status_code) // 100)
 
     @classmethod
-    def debuggable_get(cls, url, **kwargs):
+    def debuggable_get(cls, url: str, **kwargs):
         """Make a GET request that returns a detailed problem
         detail document on error.
         """
         return cls.debuggable_request("GET", url, **kwargs)
 
     @classmethod
-    def debuggable_post(cls, url, payload, **kwargs):
+    def debuggable_post(cls, url: str, payload, **kwargs):
         """Make a POST request that returns a detailed problem
         detail document on error.
         """
@@ -405,7 +387,13 @@ class HTTP(object):
         return cls.debuggable_request("POST", url, **kwargs)
 
     @classmethod
-    def debuggable_request(cls, http_method, url, make_request_with=None, **kwargs):
+    def debuggable_request(
+        cls,
+        http_method: str,
+        url: str,
+        make_request_with: Optional[Callable[..., Response]] = None,
+        **kwargs,
+    ) -> Response:
         """Make a request that returns a detailed problem detail document on
         error, rather than a generic "an integration error occured"
         message.
@@ -426,13 +414,13 @@ class HTTP(object):
             make_request_with,
             http_method,
             process_response_with=cls.process_debuggable_response,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
     def process_debuggable_response(
         cls,
-        url,
+        url: str,
         response,
         disallowed_response_codes=None,
         allowed_response_codes=None,

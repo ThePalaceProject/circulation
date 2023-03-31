@@ -21,7 +21,7 @@ class AnnouncementListValidator(Validator):
         maximum_announcement_length=350,
         default_duration_days=60,
     ):
-        super(AnnouncementListValidator, self).__init__()
+        super().__init__()
         self.maximum_announcements = maximum_announcements
         self.minimum_announcement_length = minimum_announcement_length
         self.maximum_announcement_length = maximum_announcement_length

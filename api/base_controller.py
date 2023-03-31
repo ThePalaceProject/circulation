@@ -9,7 +9,7 @@ from .circulation_exceptions import *
 from .problem_details import *
 
 
-class BaseCirculationManagerController(object):
+class BaseCirculationManagerController:
     """Define minimal standards for a circulation manager controller,
     mainly around authentication.
     """
@@ -18,8 +18,6 @@ class BaseCirculationManagerController(object):
         """:param manager: A CirculationManager object."""
         self.manager = manager
         self._db = self.manager._db
-        self.url_for = self.manager.url_for
-        self.cdn_url_for = self.manager.cdn_url_for
 
     def authorization_header(self):
         """Get the authentication header."""

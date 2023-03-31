@@ -1,7 +1,4 @@
-class AdminAuthenticationProvider(object):
-    def __init__(self, integration):
-        self.integration = integration
-
+class AdminAuthenticationProvider:
     def sign_in_template(self, redirect_url):
         # Returns HTML to be rendered on the sign in page for
         # this authentication provider.

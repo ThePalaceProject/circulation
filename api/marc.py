@@ -11,7 +11,7 @@ from core.model import ConfigurationSetting, Session
 
 class LibraryAnnotator(Annotator):
     def __init__(self, library):
-        super(LibraryAnnotator, self).__init__()
+        super().__init__()
         self.library = library
         _db = Session.object_session(library)
         self.base_url = ConfigurationSetting.sitewide(
@@ -34,7 +34,7 @@ class LibraryAnnotator(Annotator):
         integration=None,
         updated=None,
     ):
-        super(LibraryAnnotator, self).annotate_work_record(
+        super().annotate_work_record(
             work, active_license_pool, edition, identifier, record, integration, updated
         )
 
@@ -91,7 +91,7 @@ class LibraryAnnotator(Annotator):
                 qualified_identifier,
             )
             encoded_link = urllib.parse.quote(link, safe="")
-            url = "{}/book/{}".format(web_client_base_url, encoded_link)
+            url = f"{web_client_base_url}/book/{encoded_link}"
             record.add_field(
                 Field(
                     tag="856",

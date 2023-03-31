@@ -18,7 +18,7 @@ class Worker(Thread):
         return cls(worker_pool)
 
     def __init__(self, jobs):
-        super(Worker, self).__init__()
+        super().__init__()
         self.daemon = True
         self.jobs = jobs
         self._log = logging.getLogger(self.name)
@@ -56,14 +56,14 @@ class DatabaseWorker(Worker):
         return cls(worker_pool, _db)
 
     def __init__(self, jobs, _db):
-        super(DatabaseWorker, self).__init__(jobs)
+        super().__init__(jobs)
         self._db = _db
 
     def do_job(self):
-        super(DatabaseWorker, self).do_job(self._db)
+        super().do_job(self._db)
 
 
-class Pool(object):
+class Pool:
     """A pool of Worker threads and a job queue to keep them busy."""
 
     log = logging.getLogger(__name__)
@@ -138,14 +138,14 @@ class DatabasePool(Pool):
         self.session_factory = session_factory
 
         self.worker_factory = worker_factory or DatabaseWorker.factory
-        super(DatabasePool, self).__init__(size, worker_factory=self.worker_factory)
+        super().__init__(size, worker_factory=self.worker_factory)
 
     def create_worker(self):
         worker_session = self.session_factory()
         return self.worker_factory(self, worker_session)
 
 
-class Job(object):
+class Job:
     """Abstract parent class for a bit o' work that can be run in a Thread.
     For use with Worker.
     """

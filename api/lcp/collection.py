@@ -66,7 +66,7 @@ class LCPFulfilmentInfo(FulfillmentInfo):
         :param content_expires: Time when the content expires
         :type content_expires: Optional[datetime.datetime]
         """
-        super(LCPFulfilmentInfo, self).__init__(
+        super().__init__(
             collection,
             data_source_name,
             identifier_type,
@@ -88,7 +88,7 @@ class LCPFulfilmentInfo(FulfillmentInfo):
             BytesIO(json.dumps(self.content)),
             mimetype=DeliveryMechanism.LCP_DRM,
             as_attachment=True,
-            attachment_filename="{0}.lcpl".format(self.identifier),
+            attachment_filename=f"{self.identifier}.lcpl",
         )
 
 
@@ -114,7 +114,7 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         """
         if collection.protocol != ExternalIntegration.LCP:
             raise ValueError(
-                "Collection protocol is {0} but must be LCPAPI".format(
+                "Collection protocol is {} but must be LCPAPI".format(
                     collection.protocol
                 )
             )

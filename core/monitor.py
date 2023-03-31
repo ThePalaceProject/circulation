@@ -1,6 +1,7 @@
 import datetime
 import logging
 import traceback
+from typing import List, Optional, Type, Union
 
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.expression import and_, or_
@@ -9,6 +10,7 @@ from . import log  # This sets the appropriate log format and level.
 from .config import Configuration
 from .metadata_layer import TimestampData
 from .model import (
+    Base,
     CachedFeed,
     CirculationEvent,
     Collection,
@@ -39,15 +41,15 @@ class CollectionMonitorLogger(logging.LoggerAdapter):
         self.logger = logger
         self.extra = extra
         collection = self.extra.get("collection", None)
-        self.log_prefix = "[{}] ".format(collection.name) if collection else ""
+        self.log_prefix = f"[{collection.name}] " if collection else ""
         # TODO: Remove the next line once all uses have adopted `warning`.
         self.warn = self.warning
 
     def process(self, msg, kwargs):
-        return "{}{}".format(self.log_prefix, msg), kwargs
+        return f"{self.log_prefix}{msg}", kwargs
 
 
-class Monitor(object):
+class Monitor:
     """A Monitor is responsible for running some piece of code on a
     regular basis. A Monitor has an associated Timestamp that tracks
     the last time it successfully ran; it may use this information on
@@ -72,7 +74,7 @@ class Monitor(object):
     # e.g. "Overdrive Circulation Monitor". All instances of your
     # subclass will give this as their service name and track their
     # Timestamps under this name.
-    SERVICE_NAME = None
+    SERVICE_NAME: Optional[str] = None
 
     # Some useful relative constants for DEFAULT_START_TIME (below).
     ONE_MINUTE_AGO = datetime.timedelta(seconds=60)
@@ -81,13 +83,13 @@ class Monitor(object):
 
     # If there is no Timestamp for this Monitor, this time will be
     # passed into `run_once()` as the `start_time` parameter.
-    DEFAULT_START_TIME = ONE_MINUTE_AGO
+    DEFAULT_START_TIME: Union[object, datetime.timedelta] = ONE_MINUTE_AGO
 
     # When the Timestamp for this Monitor is created, this value will
     # be set for `Timestamp.counter`.
     #
     # This is only used by the SweepMonitor subclass.
-    DEFAULT_COUNTER = None
+    DEFAULT_COUNTER: Optional[int] = None
 
     def __init__(self, _db, collection=None):
         self._db = _db
@@ -336,7 +338,7 @@ class CollectionMonitor(Monitor):
     # instantiated with Collections that get their licenses from this
     # provider. If this is unset, the CollectionMonitor can be
     # instantiated with any Collection, or with no Collection at all.
-    PROTOCOL = None
+    PROTOCOL: Optional[str] = None
 
     def __init__(self, _db, collection):
         cls = self.__class__
@@ -345,7 +347,7 @@ class CollectionMonitor(Monitor):
             if collection is None:
                 raise CollectionMissing()
         cls._validate_collection(collection, protocol=self.protocol)
-        super(CollectionMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
 
     @classmethod
     def _validate_collection(cls, collection, protocol=None):
@@ -432,7 +434,7 @@ class SweepMonitor(CollectionMonitor):
     # The model class corresponding to the database table that this
     # Monitor sweeps over. This class must keep its primary key in the
     # `id` field.
-    MODEL_CLASS = None
+    MODEL_CLASS: Optional[Type[Base]] = None
 
     def __init__(self, _db, collection=None, batch_size=None):
         cls = self.__class__
@@ -442,7 +444,7 @@ class SweepMonitor(CollectionMonitor):
         if not cls.MODEL_CLASS:
             raise ValueError("%s must define MODEL_CLASS" % cls.__name__)
         self.model_class = cls.MODEL_CLASS
-        super(SweepMonitor, self).__init__(_db, collection=collection)
+        super().__init__(_db, collection=collection)
 
     def run_once(self, *ignore):
         timestamp = self.timestamp()
@@ -576,7 +578,7 @@ class SubjectSweepMonitor(SweepMonitor):
         :param filter_string: Only process Subjects whose .identifier
            or .name contain this string.
         """
-        super(SubjectSweepMonitor, self).__init__(_db, None)
+        super().__init__(_db, None)
         self.subject_type = subject_type
         self.filter_string = filter_string
 
@@ -647,11 +649,7 @@ class PresentationReadyWorkSweepMonitor(WorkSweepMonitor):
     """A Monitor that does something to every presentation-ready Work."""
 
     def item_query(self):
-        return (
-            super(PresentationReadyWorkSweepMonitor, self)
-            .item_query()
-            .filter(Work.presentation_ready == True)
-        )
+        return super().item_query().filter(Work.presentation_ready == True)
 
 
 class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
@@ -663,11 +661,7 @@ class NotPresentationReadyWorkSweepMonitor(WorkSweepMonitor):
         not_presentation_ready = or_(
             Work.presentation_ready == False, Work.presentation_ready == None
         )
-        return (
-            super(NotPresentationReadyWorkSweepMonitor, self)
-            .item_query()
-            .filter(not_presentation_ready)
-        )
+        return super().item_query().filter(not_presentation_ready)
 
 
 # SweepMonitors that do something specific.
@@ -711,14 +705,14 @@ class MakePresentationReadyMonitor(NotPresentationReadyWorkSweepMonitor):
     SERVICE_NAME = "Make Works Presentation Ready"
 
     def __init__(self, _db, coverage_providers, collection=None):
-        super(MakePresentationReadyMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.coverage_providers = coverage_providers
         self.policy = PresentationCalculationPolicy(choose_edition=False)
 
     def run(self):
         """Before doing anything, consolidate works."""
         LicensePool.consolidate_works(self._db)
-        return super(MakePresentationReadyMonitor, self).run()
+        return super().run()
 
     def process_item(self, work):
         """Do the work necessary to make one Work presentation-ready,
@@ -780,9 +774,7 @@ class CoverageProvidersFailed(Exception):
 
     def __init__(self, failed_providers):
         self.failed_providers = failed_providers
-        super(CoverageProvidersFailed, self).__init__(
-            ", ".join([x.service_name for x in failed_providers])
-        )
+        super().__init__(", ".join([x.service_name for x in failed_providers]))
 
 
 class CustomListEntryWorkUpdateMonitor(CustomListEntrySweepMonitor):
@@ -820,19 +812,19 @@ class ReaperMonitor(Monitor):
     that information, improving performance.
     """
 
-    MODEL_CLASS = None
-    TIMESTAMP_FIELD = None
-    MAX_AGE = None
-    BATCH_SIZE = 1000
+    MODEL_CLASS: Type[Base]
+    TIMESTAMP_FIELD: Optional[str] = None
+    MAX_AGE: Union[datetime.timedelta, int]
+    BATCH_SIZE: int = 1000
 
-    REGISTRY = []
+    REGISTRY: List[Type["ReaperMonitor"]] = []
 
     def __init__(self, *args, **kwargs):
         self.SERVICE_NAME = "Reaper for %s" % self.MODEL_CLASS.__name__
         if self.TIMESTAMP_FIELD is not None:
             self.SERVICE_NAME += ".%s" % self.TIMESTAMP_FIELD
 
-        super(ReaperMonitor, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     @property
     def cutoff(self):
@@ -931,7 +923,7 @@ class WorkReaper(ReaperMonitor):
         from .external_search import ExternalSearchIndex
 
         search_index_client = kwargs.pop("search_index_client", None)
-        super(WorkReaper, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
 
     def query(self):
@@ -1022,8 +1014,8 @@ class ScrubberMonitor(ReaperMonitor):
         """Set the name of the Monitor based on which field is being
         scrubbed.
         """
-        super(ScrubberMonitor, self).__init__(*args, **kwargs)
-        self.SERVICE_NAME = "Scrubber for %s.%s" % (
+        super().__init__(*args, **kwargs)
+        self.SERVICE_NAME = "Scrubber for {}.{}".format(
             self.MODEL_CLASS.__name__,
             self.SCRUB_FIELD,
         )
@@ -1048,7 +1040,7 @@ class ScrubberMonitor(ReaperMonitor):
         SCRUB_FIELD. If the field is already null, there's no need to
         scrub it.
         """
-        return and_(super(ScrubberMonitor, self).where_clause, self.scrub_field != None)
+        return and_(super().where_clause, self.scrub_field != None)
 
     @property
     def scrub_field(self):

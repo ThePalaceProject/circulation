@@ -5,20 +5,20 @@ from lxml import etree
 from api.config import CannotLoadConfiguration
 from api.custom_index import COPPAGate, CustomIndexView
 from core.model import ConfigurationSetting
-from core.testing import DatabaseTest
 from core.util.opds_writer import OPDSFeed
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestCustomIndexView(DatabaseTest):
-    def test_register(self):
+class TestCustomIndexView:
+    def test_register(self, db: DatabaseTransactionFixture):
         c = CustomIndexView
         old_registry = c.BY_PROTOCOL
         c.BY_PROTOCOL = {}
 
-        class Mock1(object):
+        class Mock1:
             PROTOCOL = "A protocol"
 
-        class Mock2(object):
+        class Mock2:
             PROTOCOL = "A protocol"
 
         c.register(Mock1)
@@ -33,13 +33,13 @@ class TestCustomIndexView(DatabaseTest):
         """Verify the default contents of the registry."""
         assert {COPPAGate.PROTOCOL: COPPAGate} == CustomIndexView.BY_PROTOCOL
 
-    def test_for_library(self):
+    def test_for_library(self, db: DatabaseTransactionFixture):
         m = CustomIndexView.for_library
 
         # Set up a mock CustomView so we can watch it being
         # instantiated.
-        class MockCustomIndexView(object):
-            PROTOCOL = self._str
+        class MockCustomIndexView:
+            PROTOCOL = db.fresh_str()
 
             def __init__(self, library, integration):
                 self.instantiated_with = (library, integration)
@@ -47,87 +47,97 @@ class TestCustomIndexView(DatabaseTest):
         CustomIndexView.register(MockCustomIndexView)
 
         # By default, a library has no CustomIndexView.
-        assert None == m(self._default_library)
+        assert None == m(db.default_library())
 
         # But if a library has an ExternalIntegration that corresponds
         # to a registered CustomIndexView...
-        integration = self._external_integration(
+        integration = db.external_integration(
             MockCustomIndexView.PROTOCOL,
             CustomIndexView.GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
 
         # A CustomIndexView of the appropriate class is instantiated
         # and returned.
-        view = m(self._default_library)
+        view = m(db.default_library())
         assert isinstance(view, MockCustomIndexView)
-        assert (self._default_library, integration) == view.instantiated_with
+        assert (db.default_library(), integration) == view.instantiated_with
 
 
-class TestCOPPAGate(DatabaseTest):
-    def setup_method(self):
-        super(TestCOPPAGate, self).setup_method()
+class COPPAGateFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
         # Configure a COPPAGate for the default library.
-        self.integration = self._external_integration(
-            COPPAGate.PROTOCOL, CustomIndexView.GOAL, libraries=[self._default_library]
+        self.integration = db.external_integration(
+            COPPAGate.PROTOCOL, CustomIndexView.GOAL, libraries=[db.default_library()]
         )
-        self.lane1 = self._lane()
-        self.lane2 = self._lane()
+        self.lane1 = db.lane()
+        self.lane2 = db.lane()
         m = ConfigurationSetting.for_library_and_externalintegration
         m(
-            self._db,
+            db.session,
             COPPAGate.REQUIREMENT_MET_LANE,
-            self._default_library,
+            db.default_library(),
             self.integration,
         ).value = self.lane1.id
         m(
-            self._db,
+            db.session,
             COPPAGate.REQUIREMENT_NOT_MET_LANE,
-            self._default_library,
+            db.default_library(),
             self.integration,
         ).value = self.lane2.id
 
-    def test_lane_loading(self):
+
+@pytest.fixture(scope="function")
+def coppa_gate_fixture(db: DatabaseTransactionFixture) -> COPPAGateFixture:
+    return COPPAGateFixture(db)
+
+
+class TestCOPPAGate:
+    def test_lane_loading(self, coppa_gate_fixture: COPPAGateFixture):
+        db = coppa_gate_fixture.db
+
         # The default setup loads lane IDs properly.
-        gate = COPPAGate(self._default_library, self.integration)
-        assert self.lane1.id == gate.yes_lane_id
-        assert self.lane2.id == gate.no_lane_id
+        gate = COPPAGate(db.default_library(), coppa_gate_fixture.integration)
+        assert coppa_gate_fixture.lane1.id == gate.yes_lane_id
+        assert coppa_gate_fixture.lane2.id == gate.no_lane_id
 
         # If a lane isn't associated with the right library, the
         # COPPAGate is misconfigured and cannot be instantiated.
-        library = self._library()
-        self.lane1.library = library
-        self._db.commit()
+        library = db.library()
+        coppa_gate_fixture.lane1.library = library
+        db.session.commit()
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            COPPAGate(self._default_library, self.integration)
-        assert "Lane {} is for the wrong library".format(self.lane1.id) in str(
+            COPPAGate(db.default_library(), coppa_gate_fixture.integration)
+        assert f"Lane {coppa_gate_fixture.lane1.id} is for the wrong library" in str(
             excinfo.value
         )
-        self.lane1.library_id = self._default_library.id
+        coppa_gate_fixture.lane1.library_id = db.default_library().id
 
         # If the lane ID doesn't correspond to a real lane, the
         # COPPAGate cannot be instantiated.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             COPPAGate.REQUIREMENT_MET_LANE,
-            self._default_library,
-            self.integration,
+            db.default_library(),
+            coppa_gate_fixture.integration,
         ).value = -100
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            COPPAGate(self._default_library, self.integration)
+            COPPAGate(db.default_library(), coppa_gate_fixture.integration)
         assert "No lane with ID: -100" in str(excinfo.value)
 
-    def test_invocation(self):
+    def test_invocation(self, coppa_gate_fixture: COPPAGateFixture):
+        db = coppa_gate_fixture.db
         # Test the ability of a COPPAGate to act as a view.
 
         class MockCOPPAGate(COPPAGate):
             def _navigation_feed(self, *args, **kwargs):
                 return "fake feed"
 
-        gate = MockCOPPAGate(self._default_library, self.integration)
+        gate = MockCOPPAGate(db.default_library(), coppa_gate_fixture.integration)
 
         # Calling a COPPAGate creates a Response.
-        response = gate(self._default_library, object(), url_for=object())
+        response = gate(db.default_library(), object(), url_for=object())
         assert isinstance(response, Response)
 
         # The entity-body is the result of calling _navigation_feed,
@@ -138,10 +148,11 @@ class TestCOPPAGate(DatabaseTest):
         assert "fake feed" == response_data
         assert response_data == gate.navigation_feed
 
-    def test__navigation_feed(self):
+    def test__navigation_feed(self, coppa_gate_fixture: COPPAGateFixture):
         """Test the code that builds an OPDS navigation feed."""
+        db = coppa_gate_fixture.db
 
-        class MockAnnotator(object):
+        class MockAnnotator:
             """This annotator will have its chance to annotate
             the feed before it's finalized.
             """
@@ -154,10 +165,19 @@ class TestCOPPAGate(DatabaseTest):
         url_for_calls = []
 
         def mock_url_for(controller, library_short_name, **kwargs):
-            """Create a real-looking URL for any random controller."""
+            """
+            Create a real-looking URL for any random controller.
+
+            The URL it creates looks like: http://{library_short_name}/{controller}?{query}
+            Where query is made up of the kwargs passed into the function, just like the normal flask url_for
+            method, minus those that start with _. Since flask defines a number of special parameters to change
+            the url_for behavior.
+            See: https://flask.palletsprojects.com/en/2.0.x/api/#flask.url_for
+            """
             url_for_calls.append((controller, library_short_name, kwargs))
-            query = "&".join(["%s=%s" % (k, v) for k, v in sorted(kwargs.items())])
-            return "http://%s/%s?%s" % (library_short_name, controller, query)
+            filtered_args = {k: v for k, v in kwargs.items() if not k.startswith("_")}
+            query = "&".join([f"{k}={v}" for k, v in sorted(filtered_args.items())])
+            return f"http://{library_short_name}/{controller}?{query}"
 
         navigation_entry_calls = []
         gate_tag_calls = []
@@ -172,10 +192,10 @@ class TestCOPPAGate(DatabaseTest):
                 gate_tag_calls.append((restriction, met_uri, not_met_uri))
                 return OPDSFeed.E.gate()
 
-        self._default_library.name = "The Library"
-        self._default_library.short_name = "LIBR"
-        gate = MockCOPPAGate(self._default_library, self.integration)
-        feed = gate._navigation_feed(self._default_library, annotator, mock_url_for)
+        db.default_library().name = "The Library"
+        db.default_library().short_name = "LIBR"
+        gate = MockCOPPAGate(db.default_library(), coppa_gate_fixture.integration)
+        feed = gate._navigation_feed(db.default_library(), annotator, mock_url_for)
 
         # The feed was passed to our mock Annotator, which decided to do
         # nothing to it.
@@ -188,7 +208,7 @@ class TestCOPPAGate(DatabaseTest):
         lane_url, title, content = older
         yes_url = mock_url_for(
             "acquisition_groups",
-            self._default_library.short_name,
+            db.default_library().short_name,
             lane_identifier=gate.yes_lane_id,
         )
         assert lane_url == yes_url
@@ -198,7 +218,7 @@ class TestCOPPAGate(DatabaseTest):
         lane_url, title, content = younger
         no_url = mock_url_for(
             "acquisition_groups",
-            self._default_library.short_name,
+            db.default_library().short_name,
             lane_identifier=gate.no_lane_id,
         )
         assert lane_url == no_url
@@ -219,13 +239,13 @@ class TestCOPPAGate(DatabaseTest):
 
         # There's also a self link, a title, an ID, and an updated
         # time, which were inserted by the OPDSFeed constructor.
-        index = mock_url_for("index", self._default_library.short_name)
+        index = mock_url_for("index", db.default_library().short_name)
         assert ('<link href="%s" rel="self"/>' % index) in feed
-        assert ("<title>%s</title>" % self._default_library.name) in feed
+        assert ("<title>%s</title>" % db.default_library().name) in feed
         assert ("<id>%s</id>" % index) in feed
         assert "<updated>" in feed
 
-    def test_navigation_entry(self):
+    def test_navigation_entry(self, coppa_gate_fixture: COPPAGateFixture):
         # navigation_entry creates an OPDS entry with a subsection link.
         entry = etree.tostring(
             COPPAGate.navigation_entry("some href", "some title", "some content"),

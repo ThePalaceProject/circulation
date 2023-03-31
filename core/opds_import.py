@@ -1,10 +1,11 @@
-import datetime
+from __future__ import annotations
+
 import logging
 import traceback
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Optional
-from urllib.parse import quote, urljoin, urlparse
+from typing import TYPE_CHECKING, Iterator
+from urllib.parse import urljoin, urlparse
 
 import dateutil
 import feedparser
@@ -15,8 +16,9 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
 from .classifier import Classifier
-from .config import CannotLoadConfiguration, IntegrationException
+from .config import IntegrationException
 from .coverage import CoverageFailure
+from .importers import BaseImporterConfiguration
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -46,21 +48,22 @@ from .model import (
     get_one,
 )
 from .model.configuration import (
-    ConfigurationAttributeType,
     ConfigurationFactory,
     ConfigurationGrouping,
-    ConfigurationMetadata,
     ConfigurationStorage,
     ExternalIntegrationLink,
     HasExternalIntegration,
 )
 from .monitor import CollectionMonitor
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasSelfTests
 from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
 from .util.string_helpers import base64
 from .util.xmlparser import XMLParser
+
+if TYPE_CHECKING:
+    from .model import Work
 
 
 def parse_identifier(db, identifier):
@@ -90,24 +93,15 @@ def parse_identifier(db, identifier):
     return parsed_identifier
 
 
-class ConnectionConfiguration(ConfigurationGrouping):
-    max_retry_count = ConfigurationMetadata(
-        key="max_retry_count",
-        label=_("Max retry count"),
-        description=_(
-            "The maximum number of times to retry a request for certain connection-related errors."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-        default=3,
-    )
+class OPDSImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
+    """The basic OPDS importer configuration"""
 
 
 class AccessNotAuthenticated(Exception):
     """No authentication is configured for this service"""
 
 
-class SimplifiedOPDSLookup(object):
+class SimplifiedOPDSLookup:
     """Tiny integration class for the Simplified 'lookup' protocol."""
 
     LOOKUP_ENDPOINT = "lookup"
@@ -146,7 +140,7 @@ class SimplifiedOPDSLookup(object):
         return HTTP.get_with_timeout(url, **kwargs)
 
     def urn_args(self, identifiers):
-        return "&".join(set("urn=%s" % i.urn for i in identifiers))
+        return "&".join({"urn=%s" % i.urn for i in identifiers})
 
     def lookup(self, identifiers):
         """Retrieve an OPDS feed with metadata for the given identifiers."""
@@ -156,297 +150,11 @@ class SimplifiedOPDSLookup(object):
         return self._get(url)
 
 
-class MetadataWranglerOPDSLookup(SimplifiedOPDSLookup, HasSelfTests):
-
-    PROTOCOL = ExternalIntegration.METADATA_WRANGLER
-    NAME = _("Library Simplified Metadata Wrangler")
-    CARDINALITY = 1
-
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("URL"),
-            "default": "http://metadata.librarysimplified.org/",
-            "required": True,
-            "format": "url",
-        },
-    ]
-
-    SITEWIDE = True
-
-    ADD_ENDPOINT = "add"
-    ADD_WITH_METADATA_ENDPOINT = "add_with_metadata"
-    METADATA_NEEDED_ENDPOINT = "metadata_needed"
-    REMOVE_ENDPOINT = "remove"
-    UPDATES_ENDPOINT = "updates"
-    CANONICALIZE_ENDPOINT = "canonical-author-name"
-
-    @classmethod
-    def from_config(cls, _db, collection=None):
-        integration = ExternalIntegration.lookup(
-            _db,
-            ExternalIntegration.METADATA_WRANGLER,
-            ExternalIntegration.METADATA_GOAL,
-        )
-
-        if not integration:
-            raise CannotLoadConfiguration(
-                "No ExternalIntegration found for the Metadata Wrangler."
-            )
-
-        if not integration.url:
-            raise CannotLoadConfiguration("Metadata Wrangler improperly configured.")
-
-        return cls(
-            integration.url, shared_secret=integration.password, collection=collection
-        )
-
-    @classmethod
-    def external_integration(cls, _db):
-        return ExternalIntegration.lookup(
-            _db,
-            ExternalIntegration.METADATA_WRANGLER,
-            ExternalIntegration.METADATA_GOAL,
-        )
-
-    def _run_self_tests(self, _db, lookup_class=None):
-        """Run self-tests on every eligible Collection.
-
-        :param _db: A database connection.
-        :param lookup_class: Pass in a mock class to instantiate that
-           class as needed instead of MetadataWranglerOPDSLookup.
-        :return: A dictionary mapping Collection objects to lists of
-           SelfTestResult objects.
-        """
-        lookup_class = lookup_class or MetadataWranglerOPDSLookup
-        results = dict()
-
-        # Find all eligible Collections on the system, instantiate a
-        # _new_ MetadataWranglerOPDSLookup for each, and call
-        # its _run_collection_self_tests method.
-        for c in _db.query(Collection):
-            try:
-                metadata_identifier = c.metadata_identifier
-            except ValueError as e:
-                continue
-
-            lookup = lookup_class.from_config(_db, c)
-            for i in lookup._run_collection_self_tests():
-                yield i
-
-    def _run_collection_self_tests(self):
-        """Run the self-test suite on the Collection associated with this
-        MetadataWranglerOPDSLookup.
-        """
-        if not self.collection:
-            return
-        metadata_identifier = None
-        try:
-            metadata_identifier = self.collection.metadata_identifier
-        except ValueError as e:
-            # This collection has no metadata identifier. It's
-            # probably a "Manual intervention" collection. It cannot
-            # interact with the metadata wrangler and there's no need
-            # to test it.
-            return
-
-        # Check various endpoints that yield OPDS feeds.
-        one_day_ago = utc_now() - datetime.timedelta(days=1)
-        for title, m, args in (
-            ("Metadata updates in last 24 hours", self.updates, [one_day_ago]),
-            (
-                "Titles where we could (but haven't) provide information to the metadata wrangler",
-                self.metadata_needed,
-                [],
-            ),
-        ):
-            yield self._feed_self_test(title, m, *args)
-
-    def _feed_self_test(self, name, method, *args):
-        """Retrieve a feed from the metadata wrangler and
-        turn it into a SelfTestResult.
-        """
-        result = SelfTestResult(name)
-        result.collection = self.collection
-
-        # If the server returns a 500 error we don't want to raise an
-        # exception -- we want to record it as part of the test
-        # result.
-        kwargs = dict(allowed_response_codes=["%sxx" % f for f in range(1, 6)])
-
-        response = method(*args, **kwargs)
-        self._annotate_feed_response(result, response)
-
-        # We're all done.
-        result.end = utc_now()
-        return result
-
-    @classmethod
-    def _annotate_feed_response(cls, result, response):
-        """Parse an OPDS feed and annotate a SelfTestResult with some
-        information about it:
-
-        * How the feed was requested.
-        * What the response code was.
-        * The number of items on the first page.
-        * The title of each item on the page, if any.
-        * The total number of items in the feed, if available.
-
-        :param result: A SelfTestResult object.
-        :param response: A requests Response object.
-        """
-        lines = []
-        lines.append("Request URL: %s" % response.url)
-        lines.append(
-            "Request authorization: %s" % response.request.headers.get("Authorization")
-        )
-        lines.append("Status code: %d" % response.status_code)
-        result.success = response.status_code == 200
-        if result.success:
-            feed = feedparser.parse(response.content)
-            total_results = feed["feed"].get("opensearch_totalresults")
-            if total_results is not None:
-                lines.append(
-                    "Total identifiers registered with this collection: %s"
-                    % (total_results)
-                )
-            lines.append("Entries on this page: %d" % len(feed["entries"]))
-            for i in feed["entries"]:
-                lines.append(" " + i["title"])
-        result.result = lines
-
-    def __init__(self, url, shared_secret=None, collection=None):
-        super(MetadataWranglerOPDSLookup, self).__init__(url)
-        self.shared_secret = shared_secret
-        self.collection = collection
-
-    @property
-    def authenticated(self):
-        return bool(self.shared_secret)
-
-    @property
-    def authorization(self):
-        if self.authenticated:
-            token = "Bearer " + base64.b64encode(self.shared_secret)
-            return {"Authorization": token}
-        return None
-
-    @property
-    def lookup_endpoint(self):
-        if not (self.authenticated and self.collection):
-            return self.LOOKUP_ENDPOINT
-        return self.collection.metadata_identifier + "/" + self.LOOKUP_ENDPOINT
-
-    def _get(self, url, **kwargs):
-        if self.authenticated:
-            headers = kwargs.get("headers", {})
-            headers.update(self.authorization)
-            kwargs["headers"] = headers
-        return super(MetadataWranglerOPDSLookup, self)._get(url, **kwargs)
-
-    def _post(self, url, data="", **kwargs):
-        """Make an HTTP request. This method is overridden in the mock class."""
-        if self.authenticated:
-            headers = kwargs.get("headers", {})
-            headers.update(self.authorization)
-            kwargs["headers"] = headers
-        kwargs["timeout"] = kwargs.get("timeout", 120)
-        kwargs["allowed_response_codes"] = kwargs.get("allowed_response_codes", [])
-        kwargs["allowed_response_codes"] += ["2xx", "3xx"]
-        return HTTP.post_with_timeout(url, data, **kwargs)
-
-    def add_args(self, url, arg_string):
-        joiner = "?"
-        if joiner in url:
-            # This URL already has an argument (namely: data_source), so
-            # append the new arguments.
-            joiner = "&"
-        return url + joiner + arg_string
-
-    def get_collection_url(self, endpoint):
-        if not self.authenticated:
-            raise AccessNotAuthenticated("Metadata Wrangler access not authenticated.")
-        if not self.collection:
-            raise ValueError("No Collection provided.")
-
-        data_source = ""
-        if self.collection.protocol == ExternalIntegration.OPDS_IMPORT:
-            # Open access OPDS_IMPORT collections need to send a DataSource to
-            # allow OPDS lookups on the Metadata Wrangler.
-            data_source = "?data_source=" + quote(self.collection.data_source.name)
-
-        return (
-            self.base_url
-            + self.collection.metadata_identifier
-            + "/"
-            + endpoint
-            + data_source
-        )
-
-    def add(self, identifiers):
-        """Add items to an authenticated Metadata Wrangler Collection"""
-        add_url = self.get_collection_url(self.ADD_ENDPOINT)
-        url = self.add_args(add_url, self.urn_args(identifiers))
-
-        logging.info("Metadata Wrangler Collection Addition URL: %s", url)
-        return self._post(url)
-
-    def add_with_metadata(self, feed):
-        """Add a feed of items with metadata to an authenticated Metadata Wrangler Collection."""
-        add_with_metadata_url = self.get_collection_url(self.ADD_WITH_METADATA_ENDPOINT)
-        return self._post(add_with_metadata_url, str(feed))
-
-    def metadata_needed(self, **kwargs):
-        """Get a feed of items that need additional metadata to be processed
-        by the Metadata Wrangler.
-        """
-        metadata_needed_url = self.get_collection_url(self.METADATA_NEEDED_ENDPOINT)
-        return self._get(metadata_needed_url, **kwargs)
-
-    def remove(self, identifiers):
-        """Remove items from an authenticated Metadata Wrangler Collection"""
-        remove_url = self.get_collection_url(self.REMOVE_ENDPOINT)
-        url = self.add_args(remove_url, self.urn_args(identifiers))
-
-        logging.info("Metadata Wrangler Collection Removal URL: %s", url)
-        return self._post(url)
-
-    def updates(self, last_update_time, **kwargs):
-        """Retrieve updated items from an authenticated Metadata
-        Wrangler Collection
-
-        :param last_update_time: DateTime representing the last time
-            an update was fetched. May be None.
-        """
-        url = self.get_collection_url(self.UPDATES_ENDPOINT)
-        if last_update_time:
-            formatted_time = last_update_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            url = self.add_args(url, ("last_update_time=" + formatted_time))
-        logging.info("Metadata Wrangler Collection Updates URL: %s", url)
-        return self._get(url, **kwargs)
-
-    def canonicalize_author_name(self, identifier, working_display_name):
-        """Attempt to find the canonical name for the author of a book.
-
-        :param identifier: an ISBN-type Identifier.
-
-        :param working_display_name: The display name of the author
-            (i.e. the name format human being used as opposed to the name
-            that goes into library records).
-        """
-        args = "display_name=%s" % (quote(working_display_name.encode("utf8")))
-        if identifier:
-            args += "&urn=%s" % quote(identifier.urn)
-        url = self.base_url + self.CANONICALIZE_ENDPOINT + "?" + args
-        logging.info("GET %s", url)
-        return self._get(url)
-
-
 class MockSimplifiedOPDSLookup(SimplifiedOPDSLookup):
     def __init__(self, *args, **kwargs):
         self.requests = []
         self.responses = []
-        super(MockSimplifiedOPDSLookup, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def queue_response(self, status_code, headers={}, content=None):
         from .testing import MockRequestsResponse
@@ -464,22 +172,7 @@ class MockSimplifiedOPDSLookup(SimplifiedOPDSLookup):
         )
 
 
-class MockMetadataWranglerOPDSLookup(
-    MockSimplifiedOPDSLookup, MetadataWranglerOPDSLookup
-):
-    def _post(self, url, *args, **kwargs):
-        self.requests.append((url, args, kwargs))
-        response = self.responses.pop()
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
-
-
 class OPDSXMLParser(XMLParser):
-
     NAMESPACES = {
         "simplified": "http://librarysimplified.org/terms/",
         "app": "http://www.w3.org/2007/app",
@@ -492,7 +185,7 @@ class OPDSXMLParser(XMLParser):
     }
 
 
-class OPDSImporter(object):
+class OPDSImporter:
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -546,52 +239,58 @@ class OPDSImporter(object):
 
     # These settings are used by 'regular' OPDS but not by OPDS For
     # Distributors, which has its own way of doing authentication.
-    SETTINGS = BASE_SETTINGS + [
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Username"),
-            "description": _(
-                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
-            ),
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Password"),
-            "description": _(
-                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
-            ),
-        },
-        {
-            "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
-            "label": _("Custom accept header"),
-            "required": False,
-            "description": _(
-                "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
-            ),
-            "default": ",".join(
-                [
-                    OPDSFeed.ACQUISITION_FEED_TYPE,
-                    "application/atom+xml;q=0.9",
-                    "application/xml;q=0.8",
-                    "*/*;q=0.1",
-                ]
-            ),
-        },
-        {
-            "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
-            "label": _("Identifer"),
-            "required": False,
-            "description": _("Which book identifier to use as ID."),
-            "type": "select",
-            "options": [
-                {"key": "", "label": _("(Default) Use <id>")},
-                {
-                    "key": ExternalIntegration.DCTERMS_IDENTIFIER,
-                    "label": _("Use <dcterms:identifier> first, if not exist use <id>"),
-                },
-            ],
-        },
-    ]
+    SETTINGS = (
+        BASE_SETTINGS
+        + [
+            {
+                "key": ExternalIntegration.USERNAME,
+                "label": _("Username"),
+                "description": _(
+                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
+                ),
+            },
+            {
+                "key": ExternalIntegration.PASSWORD,
+                "label": _("Password"),
+                "description": _(
+                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
+                ),
+            },
+            {
+                "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
+                "label": _("Custom accept header"),
+                "required": False,
+                "description": _(
+                    "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
+                ),
+                "default": ",".join(
+                    [
+                        OPDSFeed.ACQUISITION_FEED_TYPE,
+                        "application/atom+xml;q=0.9",
+                        "application/xml;q=0.8",
+                        "*/*;q=0.1",
+                    ]
+                ),
+            },
+            {
+                "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
+                "label": _("Identifer"),
+                "required": False,
+                "description": _("Which book identifier to use as ID."),
+                "type": "select",
+                "options": [
+                    {"key": "", "label": _("(Default) Use <id>")},
+                    {
+                        "key": ExternalIntegration.DCTERMS_IDENTIFIER,
+                        "label": _(
+                            "Use <dcterms:identifier> first, if not exist use <id>"
+                        ),
+                    },
+                ],
+            },
+        ]
+        + OPDSImporterConfiguration.to_settings()
+    )
 
     # Subclasses of OPDSImporter may define a different parser class that's
     # a subclass of OPDSXMLParser. For example, a subclass may want to use
@@ -601,7 +300,7 @@ class OPDSImporter(object):
     # Subclasses of OPDSImporter may define a list of status codes
     # that should be treated as indicating success, rather than failure,
     # when they show up in <simplified:message> tags.
-    SUCCESS_STATUS_CODES = None
+    SUCCESS_STATUS_CODES: list[int] | None = None
 
     def __init__(
         self,
@@ -610,7 +309,6 @@ class OPDSImporter(object):
         data_source_name=None,
         identifier_mapping=None,
         http_get=None,
-        metadata_client=None,
         content_modifier=None,
         map_from_collection=None,
         mirrors=None,
@@ -632,9 +330,6 @@ class OPDSImporter(object):
 
         :param http_get: Use this method to make an HTTP GET request. This
         can be replaced with a stub method for testing purposes.
-
-        :param metadata_client: A SimplifiedOPDSLookup object that is used
-        to fill in missing metadata.
 
         :param content_modifier: A function that may modify-in-place
         representations (such as images and EPUB documents) as they
@@ -662,17 +357,6 @@ class OPDSImporter(object):
             data_source_name = data_source_name or DataSource.METADATA_WRANGLER
         self.data_source_name = data_source_name
         self.identifier_mapping = identifier_mapping
-        try:
-            self.metadata_client = (
-                metadata_client
-                or MetadataWranglerOPDSLookup.from_config(_db, collection=collection)
-            )
-        except CannotLoadConfiguration:
-            # The Metadata Wrangler isn't configured, but we can import without it.
-            self.log.warning(
-                "Metadata Wrangler integration couldn't be loaded, importing without it."
-            )
-            self.metadata_client = None
 
         # Check to see if a mirror for each purpose was passed in.
         # If not, then attempt to create one.
@@ -845,8 +529,11 @@ class OPDSImporter(object):
                 # Rather than scratch the whole import, treat this as a failure that only applies
                 # to this item.
                 self.log.error("Error importing an OPDS item", exc_info=e)
-                identifier, ignore = Identifier.parse_urn(self._db, key)
                 data_source = self.data_source
+                primary_id: IdentifierData = metadata.primary_identifier
+                identifier, ignore = Identifier.for_foreign_id(
+                    self._db, primary_id.type, primary_id.identifier
+                )
                 failure = CoverageFailure(
                     identifier,
                     traceback.format_exc(),
@@ -907,31 +594,46 @@ class OPDSImporter(object):
         metadata.apply(
             edition=edition,
             collection=self.collection,
-            metadata_client=self.metadata_client,
             replace=policy,
         )
 
         return edition
 
-    def update_work_for_edition(self, edition):
+    def update_work_for_edition(
+        self,
+        edition: Edition,
+        is_open_access=True,
+    ) -> tuple[LicensePool | None, Work | None]:
         """If possible, ensure that there is a presentation-ready Work for the
         given edition's primary identifier.
+
+        :param edition: The edition whose license pool and work we're interested in.
+        :param is_open_access: Whether this is an open access edition.
+        :return: 2-Tuple of license pool (optional) and work (optional) for edition.
         """
+
         work = None
 
-        # Find a LicensePool for the primary identifier. Any LicensePool will
-        # do--the collection doesn't have to match, since all
-        # LicensePools for a given identifier have the same Work.
+        # Looks up a license pool for the primary identifier associated with
+        # the given edition. If this is not an open access book, then the
+        # collection is also used as criteria for the lookup. Open access
+        # books don't require a collection match, according to this explanation
+        # from prior work:
+        #   Find a LicensePool for the primary identifier. Any LicensePool will
+        #   do--the collection doesn't have to match, since all
+        #   LicensePools for a given identifier have the same Work.
         #
         # If we have CirculationData, a pool was created when we
         # imported the edition. If there was already a pool from a
         # different data source or a different collection, that's fine
         # too.
+        collection_criteria = {} if is_open_access else {"collection": self.collection}
         pool = get_one(
             self._db,
             LicensePool,
             identifier=edition.primary_identifier,
             on_multiple="interchangeable",
+            **collection_criteria,
         )
 
         if pool:
@@ -951,7 +653,6 @@ class OPDSImporter(object):
         # background, and that's good enough.
         return pool, work
 
-    @classmethod
     def extract_next_links(self, feed):
         if isinstance(feed, (bytes, str)):
             parsed = feedparser.parse(feed)
@@ -1536,7 +1237,7 @@ class OPDSImporter(object):
         description = message.message
         status_code = message.status_code
         if description and status_code:
-            exception = "%s: %s" % (status_code, description)
+            exception = f"{status_code}: {description}"
         elif status_code:
             exception = str(status_code)
         elif description:
@@ -1938,7 +1639,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
 
         self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
         self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-        self._max_retry_count: Optional[int] = None
+        self._max_retry_count: int | None = None
 
         with self._get_configuration(_db) as configuration:
             self._max_retry_count = (
@@ -1947,19 +1648,19 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
                 else None
             )
 
-        super(OPDSImportMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
 
     @contextmanager
     def _get_configuration(
         self, db: sqlalchemy.orm.session.Session
-    ) -> ConnectionConfiguration:
+    ) -> Iterator[OPDSImporterConfiguration]:
         """Return the configuration object.
 
         :param db: Database session
         :return: Configuration object
         """
         with self._configuration_factory.create(
-            self._configuration_storage, db, ConnectionConfiguration
+            self._configuration_storage, db, OPDSImporterConfiguration
         ) as configuration:
             yield configuration
 
@@ -2018,7 +1719,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
         headers = dict(headers) if headers else {}
         if self.username and self.password and not "Authorization" in headers:
             headers["Authorization"] = "Basic %s" % base64.b64encode(
-                "%s:%s" % (self.username, self.password)
+                f"{self.username}:{self.password}"
             )
 
         if self.custom_accept_header:
@@ -2069,14 +1770,16 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
         last_update_dates = self.importer.extract_last_update_dates(feed)
 
         new_data = False
-        for identifier, remote_updated in last_update_dates:
+        for raw_identifier, remote_updated in last_update_dates:
 
-            identifier = self._parse_identifier(identifier)
+            identifier = self._parse_identifier(raw_identifier)
             if not identifier:
                 # Maybe this is new, maybe not, but we can't associate
                 # the information with an Identifier, so we can't do
                 # anything about it.
-                self.log.info("Ignoring %s because unable to turn into an Identifier.")
+                self.log.info(
+                    f"Ignoring {raw_identifier} because unable to turn into an Identifier."
+                )
                 continue
 
             if self.identifier_needs_import(identifier, remote_updated):
@@ -2220,7 +1923,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
     def _get_feeds(self):
         feeds = []
         queue = [self.feed_url]
-        seen_links = set([])
+        seen_links = set()
 
         # First, follow the feed's next links until we reach a page with
         # nothing new. If any link raises an exception, nothing will be imported.

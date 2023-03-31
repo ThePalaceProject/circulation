@@ -1,0 +1,154 @@
+{
+  "metadata": {
+    "title": "Test",
+    "itemsPerPage": 10,
+    "currentPage": 1,
+    "numberOfItems": 100
+  },
+  "links": [
+    {
+      "type": "application/opds+json",
+      "rel": "self",
+      "href": "https://market.feedbooks.com/api/libraries/harvest.json"
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "Past Imperfect",
+        "language": "en",
+        "modified": "2021-04-17T11:23:38Z",
+        "published": "2009-09-10T00:00:00Z",
+        "identifier": "urn:ISBN:9780792766919",
+        "author": [
+          {
+            "name": "Julian Fellowes",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=161600&lang=en"
+              }
+            ]
+          }
+        ],
+        "narrator": [
+          {
+            "name": "Richard Morant",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=1235819&lang=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Blackstone Publishing",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Blackstone+Publishing"
+            }
+          ]
+        },
+        "description": "<p>Damian Baxter is hugely wealthy and dying. He lives alone in a big house in Surrey, England, looked after by a chauffeur, butler, cook, and housemaid. He has but one concern?his fortune in excess of five hundred million and who should inherit it on his death. <i>Past Imperfect</i> is the story of a quest. Damian Baxter wishes to know if he has a living heir. By the time he married in his late thirties he was sterile (the result of adult mumps), but what about before that unfortunate illness? Had he sired a child? He sets himself (and others) to the task of finding his heir.</p>",
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC019000",
+            "name": "Literary",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC019000.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "Adult",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/top.json?age=READ0000&lang=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.feedbooks.net/item/3270952.jpg?size=large&t=1603092006",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.feedbooks.net/item/3270952.jpg?t=1603092006",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:a44b9e96-7ad6-42b5-a86d-786563f32b12",
+            "format": [
+              "application/audiobook+lcp",
+              "text/html",
+              "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction"
+            ],
+            "created": "2021-10-07T22:23:45+02:00",
+            "source": "http://www.cantook.net/",
+            "price": {
+              "currency": "USD",
+              "value": 69.95
+            },
+            "terms": {
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            },
+            "order": {
+              "name": "Palace Marketplace Test Cart - Tara & Carissa",
+              "identifier": "202110-718-013938",
+              "href": "https://market.feedbooks.com/carts/13938"
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://license.feedbooks.net/copy/status/?uuid=a44b9e96-7ad6-42b5-a86d-786563f32b12",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

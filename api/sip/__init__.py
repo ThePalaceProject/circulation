@@ -1,18 +1,18 @@
 import json
 from datetime import datetime
+from typing import Optional, Union
 
 from flask_babel import lazy_gettext as _
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
 from api.sip.client import SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
 
 
 class SIP2AuthenticationProvider(BasicAuthenticationProvider):
-
     NAME = "SIP2"
 
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
@@ -26,6 +26,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
     USE_SSL = "use_ssl"
     SSL_CERTIFICATE = "ssl_certificate"
     SSL_KEY = "ssl_key"
+    SSL_VERIFICATION = "ssl_verification"
     ILS = "ils"
     PATRON_STATUS_BLOCK = "patron status block"
 
@@ -61,6 +62,26 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             ],
             "default": "false",
             "required": True,
+        },
+        {
+            "key": SSL_VERIFICATION,
+            "label": _("Perform SSL certificate verification."),
+            "description": _(
+                "Strict certificate verification may be optionally turned off for hosts that have misconfigured or untrusted certificates."
+            ),
+            "type": "select",
+            "options": [
+                {
+                    "key": "true",
+                    "label": _("Perform SSL certificate verification."),
+                },
+                {
+                    "key": "false",
+                    "label": _("Do not perform SSL certificate verification."),
+                },
+            ],
+            "default": "true",
+            "required": False,
         },
         {
             "key": ILS,
@@ -167,9 +188,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         during testing.
 
         """
-        super(SIP2AuthenticationProvider, self).__init__(
-            library, integration, analytics
-        )
+        super().__init__(library, integration, analytics)
 
         self.server = integration.url
         self.port = integration.setting(self.PORT).int_value
@@ -183,14 +202,22 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.use_ssl = integration.setting(self.USE_SSL).json_value
         self.ssl_cert = integration.setting(self.SSL_CERTIFICATE).value
         self.ssl_key = integration.setting(self.SSL_KEY).value
+        self.ssl_verification = integration.setting(self.SSL_VERIFICATION).bool_value
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
-        patron_status_block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
-        if patron_status_block is None or patron_status_block:
-            self.fields_that_deny_borrowing = (
-                SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
-            )
+
+        # Check if patrons should be blocked based on SIP status
+        # If nothing is specified, the default is True (block patrons!)
+        _block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
+        if _block is None:
+            _block = True
+
+        if _block:
+            _deny_fields = SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
+            self.patron_status_should_block = True
+            self.fields_that_deny_borrowing = _deny_fields
         else:
+            self.patron_status_should_block = False
             self.fields_that_deny_borrowing = []
 
     @property
@@ -215,6 +242,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             use_ssl=self.use_ssl,
             ssl_cert=self.ssl_cert,
             ssl_key=self.ssl_key,
+            ssl_verification=self.ssl_verification,
             encoding=self.encoding.lower(),
             dialect=self.dialect,
         )
@@ -229,10 +257,10 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             sip.disconnect()
             return info
 
-        except IOError as e:
+        except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
-    def _remote_patron_lookup(self, patron_or_patrondata):
+    def _remote_patron_lookup(self, patron_or_patrondata) -> Optional[PatronData]:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
@@ -278,8 +306,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             results = [
                 r for r in super(SIP2AuthenticationProvider, self)._run_self_tests(_db)
             ]
-            for result in results:
-                yield result
+            yield from results
 
             if results[0].success:
 
@@ -300,7 +327,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     ("Raw test patron information"), raw_patron_information
                 )
 
-    def info_to_patrondata(self, info, validate_password=True):
+    def info_to_patrondata(self, info, validate_password=True) -> Optional[PatronData]:
 
         """Convert the SIP-specific dictionary obtained from
         SIPClient.patron_information() to an abstract,
@@ -316,10 +343,10 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             # return any data.
             return None
 
-            # TODO: I'm not 100% convinced that a missing CQ field
-            # always means "we don't have passwords so you're
-            # authenticated," rather than "you didn't provide a
-            # password so we didn't check."
+        # TODO: I'm not 100% convinced that a missing CQ field
+        # always means "we don't have passwords so you're
+        # authenticated," rather than "you didn't provide a
+        # password so we didn't check."
         patrondata = PatronData()
         if "sipserver_internal_id" in info:
             patrondata.permanent_id = info["sipserver_internal_id"]
@@ -347,11 +374,23 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     patrondata.authorization_expires = value
                     break
 
+        if self.patron_status_should_block:
+            patrondata.block_reason = self.info_to_patrondata_block_reason(
+                info, patrondata
+            )
+        else:
+            patrondata.block_reason = PatronData.NO_VALUE
+
+        return patrondata
+
+    def info_to_patrondata_block_reason(
+        self, info, patrondata: PatronData
+    ) -> Union[PatronData.NoValue, str]:
         # A True value in most (but not all) subfields of the
         # patron_status field will prohibit the patron from borrowing
         # books.
         status = info["patron_status_parsed"]
-        block_reason = PatronData.NO_VALUE
+        block_reason: Union[str, PatronData.NoValue] = PatronData.NO_VALUE
         for field in self.fields_that_deny_borrowing:
             if status.get(field) is True:
                 block_reason = self.SPECIFIC_BLOCK_REASONS.get(
@@ -363,7 +402,6 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     # error message. There's no need to look through
                     # more fields.
                     break
-        patrondata.block_reason = block_reason
 
         # If we can tell by looking at the SIP2 message that the
         # patron has excessive fines, we can use that as the reason
@@ -371,9 +409,9 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         if "fee_limit" in info:
             fee_limit = MoneyUtility.parse(info["fee_limit"]).amount
             if fee_limit and patrondata.fines > fee_limit:
-                patrondata.block_reason = PatronData.EXCESSIVE_FINES
+                block_reason = PatronData.EXCESSIVE_FINES
 
-        return patrondata
+        return block_reason
 
     @classmethod
     def parse_date(cls, value):

@@ -1,11 +1,10 @@
-# encoding: utf-8
 """Test language lookup capabilities."""
 import pytest
 
 from core.util.languages import LanguageCodes, LanguageNames, LookupTable
 
 
-class TestLookupTable(object):
+class TestLookupTable:
     def test_lookup(self):
         d = LookupTable()
         d["key"] = "value"
@@ -15,10 +14,16 @@ class TestLookupTable(object):
         assert None == d["missing"]
 
 
-class TestLanguageCodes(object):
+class TestLanguageCodes:
+    NONEXISTENT_ALPHA2 = "nq"
+    NONEXISTENT_ALPHA3 = "nqq"
+    NONEXISTENT_LABEL = "NO SUCH LANGUAGE"
+    NONEXISTENT_LOCALE = NONEXISTENT_ALPHA2 + "-none"
+
     def test_lookups(self):
         c = LanguageCodes
 
+        # test a simple case with all expected data
         assert "eng" == c.two_to_three["en"]
         assert "en" == c.three_to_two["eng"]
         assert ["English"] == c.english_names["en"]
@@ -26,6 +31,7 @@ class TestLanguageCodes(object):
         assert ["English"] == c.native_names["en"]
         assert ["English"] == c.native_names["eng"]
 
+        # test a case with multiple English and native names
         assert "spa" == c.two_to_three["es"]
         assert "es" == c.three_to_two["spa"]
         assert ["Spanish", "Castilian"] == c.english_names["es"]
@@ -33,6 +39,7 @@ class TestLanguageCodes(object):
         assert ["español", "castellano"] == c.native_names["es"]
         assert ["español", "castellano"] == c.native_names["spa"]
 
+        # test a case with no native names
         assert "chi" == c.two_to_three["zh"]
         assert "zh" == c.three_to_two["chi"]
         assert ["Chinese"] == c.english_names["zh"]
@@ -41,17 +48,48 @@ class TestLanguageCodes(object):
         assert [] == c.native_names["zh"]
         assert [] == c.native_names["chi"]
 
-        assert None == c.two_to_three["nosuchlanguage"]
-        assert None == c.three_to_two["nosuchlanguage"]
-        assert [] == c.english_names["nosuchlanguage"]
-        assert [] == c.native_names["nosuchlanguage"]
+        # test a case with no alpha-2 code
+        assert None == c.three_to_two["ssa"]
+        assert ["Nilo-Saharan languages"] == c.english_names["ssa"]
+
+        assert None == c.two_to_three[self.NONEXISTENT_ALPHA2]
+        assert None == c.three_to_two[self.NONEXISTENT_ALPHA3]
+        assert [] == c.english_names[self.NONEXISTENT_ALPHA3]
+        assert [] == c.native_names[self.NONEXISTENT_ALPHA3]
 
     def test_locale(self):
         m = LanguageCodes.iso_639_2_for_locale
         assert "eng" == m("en-US")
         assert "eng" == m("en")
         assert "eng" == m("en-GB")
-        assert None == m("nq-none")
+        # test sparse code data where there is no alpha-2
+        assert "ssa" == m("ssa")
+        # test terminologic codes
+        assert "tib" == m("bod")
+        # test reserved codes
+        assert "qab" == m("qab")
+
+        assert None == m(self.NONEXISTENT_LOCALE)
+        assert "optional default" == m(
+            self.NONEXISTENT_LOCALE, default="optional default"
+        )
+
+    def test_bcp47(self):
+        m = LanguageCodes.bcp47_for_locale
+        assert "en" == m("en-US")
+        assert "en" == m("en")
+        assert "en" == m("eng")
+        # test sparse code data where there is no alpha-2
+        assert "ssa" == m("ssa")
+        # test terminologic codes
+        assert "bo" == m("bod")
+        # test reserved codes
+        assert "qab" == m("qab")
+
+        assert None == m(self.NONEXISTENT_LOCALE)
+        assert "optional default" == m(
+            self.NONEXISTENT_LOCALE, default="optional default"
+        )
 
     def test_string_to_alpha_3(self):
         m = LanguageCodes.string_to_alpha_3
@@ -60,9 +98,20 @@ class TestLanguageCodes(object):
         assert "eng" == m("en-GB")
         assert "eng" == m("English")
         assert "eng" == m("ENGLISH")
+        # test sparse code data where there is no alpha-2
         assert "ssa" == m("Nilo-Saharan languages")
-        assert None == m("NO SUCH LANGUAGE")
-        assert None == None
+        assert "ssa" == m("ssa")
+        # test terminologic codes
+        assert "tib" == m("bod")
+        # test reserved codes
+        assert "qab" == m("qab")
+        assert "per" == m("Persian")
+        assert "per" == m("Farsi")
+        # Baker and Taylor sends "Persian Farsi" rather than "Persian" or "Farsi"
+        assert "per" == m("Persian Farsi")
+        assert "per" == m("per")
+        # test bad data
+        assert None == m(self.NONEXISTENT_LABEL)
 
     def test_name_for_languageset(self):
         m = LanguageCodes.name_for_languageset
@@ -71,13 +120,21 @@ class TestLanguageCodes(object):
         assert "English" == m(["en"])
         assert "English" == m(["eng"])
         assert "español" == m(["es"])
+        # test mixed languages
         assert "English/español" == m(["eng", "spa"])
         assert "español/English" == m("spa,eng")
         assert "español/English/Chinese" == m(["spa", "eng", "chi"])
-        pytest.raises(ValueError, m, ["eng, nxx"])
+        # test sparse code data where there is no alpha-2
+        assert "Nilo-Saharan languages" == m("ssa")
+        # test terminologic codes
+        assert "Tibetan" == m("bod")
+        # test reserved codes
+        assert LanguageCodes.RESERVED_CODE_LABEL == m("qab")
+        # test ValueError for bad data
+        pytest.raises(ValueError, m, ["eng, " + self.NONEXISTENT_ALPHA3])
 
 
-class TestLanguageNames(object):
+class TestLanguageNames:
     """Test our (very rough) ability to map from natural-language names
     of languages to ISO-639-2 language codes.
     """
@@ -90,7 +147,7 @@ class TestLanguageNames(object):
         def coded(name, code):
             # In almost all cases, a human-readable language name maps to
             # a set containing a single ISO-639-2 language code.
-            assert set([code]) == d[name]
+            assert {code} == d[name]
 
         # English-language names work.
         coded("english", "eng")
@@ -98,6 +155,11 @@ class TestLanguageNames(object):
         coded("irish", "gle")
         coded("tokelau", "tkl")
         coded("persian", "per")
+        coded("farsi", "per")
+
+        # This non-standard English name has been added to accommodate Baker and Taylor
+        # as they are not sending the correct English name and are unwilling to fix their metadata.
+        coded("persian farsi", "per")
 
         # (Some) native-language names work
         coded("francais", "fre")
@@ -125,7 +187,7 @@ class TestLanguageNames(object):
         # is the only way to distinguish them. For now, we map 'tonga'
         # to both ISO codes. (This is why name_to_codes is called that
         # rather than name_to_code.)
-        assert set(["ton", "tog"]) == d["tonga"]
+        assert {"ton", "tog"} == d["tonga"]
 
         # Language families such as "Himacahli languages" can be
         # looked up without the " languages".

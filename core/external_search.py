@@ -5,7 +5,9 @@ import logging
 import re
 import time
 from collections import defaultdict
+from typing import Any, Dict, Optional, Union
 
+from attr import define
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ElasticsearchException, RequestError
 from elasticsearch.helpers import bulk as elasticsearch_bulk
@@ -23,9 +25,12 @@ from elasticsearch_dsl.query import (
     Nested,
 )
 from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import Term, Terms
+from elasticsearch_dsl.query import Range, Regexp, Term, Terms
 from flask_babel import lazy_gettext as _
 from spellchecker import SpellChecker
+
+from core.util import Values
+from core.util.languages import LanguageNames
 
 from .classifier import (
     AgeClassifier,
@@ -53,6 +58,7 @@ from .model import (
 )
 from .problem_details import INVALID_INPUT
 from .selftest import HasSelfTests
+from .util.cache import CachedData
 from .util.datetime_helpers import from_timestamp
 from .util.personal_names import display_name_to_sort_name
 from .util.problem_detail import ProblemDetail
@@ -86,7 +92,12 @@ class ExternalSearchIndex(HasSelfTests):
     TEST_SEARCH_TERM_KEY = "test_search_term"
     DEFAULT_TEST_SEARCH_TERM = "test"
 
-    work_document_type = "work-type"
+    SEARCH_VERSION = "search_version"
+    SEARCH_VERSION_ES6_8 = "Elasticsearch 6.8"
+    SEARCH_VERSION_OS1_X = "Opensearch 1.x"
+    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_ES6_8
+
+    work_document_type: Optional[str] = None
     __client = None
 
     CURRENT_ALIAS_SUFFIX = "current"
@@ -105,7 +116,7 @@ class ExternalSearchIndex(HasSelfTests):
             "default": DEFAULT_WORKS_INDEX_PREFIX,
             "required": True,
             "description": _(
-                "Any Elasticsearch indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Elasticsearch server."
+                "Any Search indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Search server."
             ),
         },
         {
@@ -113,6 +124,20 @@ class ExternalSearchIndex(HasSelfTests):
             "label": _("Test search term"),
             "default": DEFAULT_TEST_SEARCH_TERM,
             "description": _("Self tests will use this value as the search term."),
+        },
+        {
+            "key": SEARCH_VERSION,
+            "label": _("The search service version"),
+            "default": DEFAULT_SEARCH_VERSION,
+            "description": _(
+                "Which version of the search engine is being used. Changing this value will require a CM restart."
+            ),
+            "required": True,
+            "type": "select",
+            "options": [
+                {"key": SEARCH_VERSION_ES6_8, "label": SEARCH_VERSION_ES6_8},
+                {"key": SEARCH_VERSION_OS1_X, "label": SEARCH_VERSION_OS1_X},
+            ],
         },
     ]
 
@@ -128,7 +153,7 @@ class ExternalSearchIndex(HasSelfTests):
         cls.__client = None
 
     @classmethod
-    def search_integration(cls, _db):
+    def search_integration(cls, _db) -> ExternalIntegration:
         """Look up the ExternalIntegration for ElasticSearch."""
         return ExternalIntegration.lookup(
             _db, ExternalIntegration.ELASTICSEARCH, goal=ExternalIntegration.SEARCH_GOAL
@@ -180,6 +205,7 @@ class ExternalSearchIndex(HasSelfTests):
         test_search_term=None,
         in_testing=False,
         mapping=None,
+        version=None,
     ):
         """Constructor
 
@@ -196,7 +222,27 @@ class ExternalSearchIndex(HasSelfTests):
         self.works_alias = None
         integration = None
 
-        self.mapping = mapping or CurrentMapping()
+        self.version = None
+        integration = self.search_integration(_db)
+        if not integration:
+            raise CannotLoadConfiguration("No search integration configured.")
+
+        valid_versions = [self.SEARCH_VERSION_OS1_X, self.SEARCH_VERSION_ES6_8]
+        if version and version not in valid_versions:
+            raise ValueError(
+                f"{version} is not a valid search version, must be one of {valid_versions}"
+            )
+        elif version:
+            self.version = version
+        else:
+            self.version = integration.setting(self.SEARCH_VERSION).value_or_default(
+                self.DEFAULT_SEARCH_VERSION
+            )
+
+        if self.version == self.SEARCH_VERSION_ES6_8:
+            self.work_document_type = "work-type"
+
+        self.mapping = mapping or CurrentMapping(self)
 
         if isinstance(url, ExternalIntegration):
             # This is how the self-test initializes this object.
@@ -205,26 +251,26 @@ class ExternalSearchIndex(HasSelfTests):
 
         if not _db:
             raise CannotLoadConfiguration(
-                "Cannot load Elasticsearch configuration without a database.",
+                "Cannot load Search configuration without a database.",
             )
+
+        # initialize the cached data if not already done so
+        CachedData.initialize(_db)
+
         if not url or not works_index:
-            integration = self.search_integration(_db)
-            if not integration:
-                raise CannotLoadConfiguration(
-                    "No Elasticsearch integration configured."
-                )
             url = url or integration.url
             if not works_index:
                 works_index = self.works_index_name(_db)
             test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
         if not url:
-            raise CannotLoadConfiguration("No URL configured to Elasticsearch server.")
+            raise CannotLoadConfiguration("No URL configured to the search server.")
         self.test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
+
         if not in_testing:
             if not ExternalSearchIndex.__client:
                 use_ssl = url.startswith("https://")
                 self.log.info(
-                    "Connecting to index %s in Elasticsearch cluster at %s",
+                    "Connecting to index %s in the search cluster at %s",
                     works_index,
                     url,
                 )
@@ -250,7 +296,7 @@ class ExternalSearchIndex(HasSelfTests):
                 raise
             except ElasticsearchException as e:
                 raise CannotLoadConfiguration(
-                    "Exception communicating with Elasticsearch server: %s" % repr(e)
+                    "Exception communicating with Search server: %s" % repr(e)
                 )
 
         self.search = Search(using=self.__client, index=self.works_alias)
@@ -259,6 +305,9 @@ class ExternalSearchIndex(HasSelfTests):
             return elasticsearch_bulk(self.__client, docs, **kwargs)
 
         self.bulk = bulk
+
+    def prime_query_values(self, _db):
+        JSONQuery.data_sources = _db.query(DataSource).all()
 
     def set_works_index_and_alias(self, _db):
         """Finds or creates the works_index and works_alias based on
@@ -270,12 +319,43 @@ class ExternalSearchIndex(HasSelfTests):
         if not self.indices.exists(self.works_index):
             # That index doesn't actually exist. Set it up.
             self.setup_index()
+        else:
+            # Update the mapping incase there are any new properties
+            self._update_index_mapping()
 
         # Make sure the alias points to the most recent index.
         self.setup_current_alias(_db)
 
         # Make sure the stored scripts for the latest mapping exist.
         self.set_stored_scripts()
+
+    def _update_index_mapping(self, dry_run=False) -> Dict:
+        """Updates the index mapping with any NEW properties added"""
+
+        def _properties(mapping: Dict) -> Dict:
+            """We may or may not have doc types depending on the versioning"""
+            if self.work_document_type:
+                mapping = mapping[self.work_document_type]
+            return mapping["properties"]
+
+        current_mapping: Dict = _properties(
+            self.indices.get_mapping(self.works_index)[self.works_index]["mappings"]
+        )
+        new_mapping = _properties(self.mapping.body()["mappings"])
+        puts = {}
+        for name, v in new_mapping.items():
+            split_name = name.split(".")[0]  # dot based names become dicts
+            if split_name not in current_mapping:
+                puts[name] = v
+
+        if not dry_run and puts:
+            self.indices.put_mapping(
+                dict(properties=puts),
+                index=self.works_index,
+                doc_type=self.work_document_type,
+            )
+            self.log.info(f"Updated {self.works_index} mapping with {puts}")
+        return puts
 
     def setup_current_alias(self, _db):
         """Finds or creates the works_alias as named by the current site
@@ -409,7 +489,11 @@ class ExternalSearchIndex(HasSelfTests):
 
     def create_search_doc(self, query_string, filter, pagination, debug):
 
-        query = Query(query_string, filter)
+        if filter and filter.search_type == "json":
+            query = JSONQuery(query_string, filter)
+        else:
+            query = Query(query_string, filter)
+
         search = query.build(self.search, pagination)
         if debug:
             search = search.extra(explain=True)
@@ -435,6 +519,7 @@ class ExternalSearchIndex(HasSelfTests):
         # we're asking for.
         if fields:
             search = search.source(fields)
+
         return search
 
     def query_works(self, query_string, filter=None, pagination=None, debug=False):
@@ -513,9 +598,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         if debug:
             b = time.time()
-            self.log.debug(
-                "Elasticsearch query %r completed in %.3fsec", query_string, b - a
-            )
+            self.log.debug("Search query %r completed in %.3fsec", query_string, b - a)
             for results in resultset:
                 for i, result in enumerate(results):
                     self.log.debug(
@@ -566,8 +649,9 @@ class ExternalSearchIndex(HasSelfTests):
         docs = Work.to_search_documents(needs_add)
 
         for doc in docs:
+            if self.work_document_type:
+                doc["_type"] = self.work_document_type
             doc["_index"] = self.works_index
-            doc["_type"] = self.work_document_type
         time2 = time.time()
 
         success_count, errors = self.bulk(
@@ -644,9 +728,9 @@ class ExternalSearchIndex(HasSelfTests):
 
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
-        args = dict(
-            index=self.works_index, doc_type=self.work_document_type, id=work.id
-        )
+        args = dict(index=self.works_index, id=work.id)
+        args["doc_type"] = self.work_document_type or "_doc"
+
         if self.exists(**args):
             self.delete(**args)
 
@@ -666,7 +750,7 @@ class ExternalSearchIndex(HasSelfTests):
         # The self-tests:
 
         def _search_for_term():
-            titles = [("%s (%s)" % (x.sort_title, x.sort_author)) for x in _works()]
+            titles = [(f"{x.sort_title} ({x.sort_author})") for x in _works()]
             return titles
 
         yield self.run_test(
@@ -723,15 +807,17 @@ class ExternalSearchIndex(HasSelfTests):
         yield self.run_test("Total number of documents per collection:", _collections)
 
 
-class MappingDocument(object):
+class MappingDocument:
     """This class knows a lot about how the 'properties' section of an
     Elasticsearch mapping document (or one of its subdocuments) is
     created.
     """
 
-    def __init__(self):
-        self.properties = {}
-        self.subdocuments = {}
+    def __init__(self, service: ExternalSearchIndex):
+        self.service = service
+        self.has_document_types = self.service.work_document_type is not None
+        self.properties: Dict[str, Any] = {}
+        self.subdocuments: Dict[str, Any] = {}
 
     def add_property(self, name, type, **description):
         """Add a field to the list of properties.
@@ -776,7 +862,7 @@ class MappingDocument(object):
         """Create a new HasProperties object and register it as a
         sub-document of this one.
         """
-        subdocument = MappingDocument()
+        subdocument = MappingDocument(self.service)
         self.subdocuments[name] = subdocument
         return subdocument
 
@@ -820,6 +906,10 @@ class MappingDocument(object):
             "normalizer": "filterable_string",
         }
 
+    def keyword_property_hook(self, description):
+        """Hook method to ensure the keyword type attributes are case-insensitive"""
+        description["normalizer"] = "filterable_string"
+
 
 class Mapping(MappingDocument):
     """A class that defines the mapping for a particular version of the search index.
@@ -828,7 +918,7 @@ class Mapping(MappingDocument):
     can change between versions without affecting anything.)
     """
 
-    VERSION_NAME = None
+    VERSION_NAME: Optional[str] = None
 
     @classmethod
     def version_name(cls):
@@ -848,10 +938,10 @@ class Mapping(MappingDocument):
         this application*, which may implement the same script
         differently, on this Elasticsearch server).
         """
-        return "simplified.%s.%s" % (base_name, cls.version_name())
+        return f"simplified.{base_name}.{cls.version_name()}"
 
-    def __init__(self):
-        super(Mapping, self).__init__()
+    def __init__(self, service):
+        super().__init__(service)
         self.filters = {}
         self.char_filters = {}
         self.normalizers = {}
@@ -895,7 +985,9 @@ class Mapping(MappingDocument):
         for name, subdocument in list(self.subdocuments.items()):
             properties[name] = dict(type="nested", properties=subdocument.properties)
 
-        mappings = {ExternalSearchIndex.work_document_type: dict(properties=properties)}
+        mappings = dict(properties=properties)
+        if self.has_document_types:
+            mappings = {self.service.work_document_type: mappings}
         return dict(settings=settings, mappings=mappings)
 
 
@@ -914,7 +1006,7 @@ class CurrentMapping(Mapping):
     * contributors -- these Contributors worked on the Work
     """
 
-    VERSION_NAME = "v4"
+    VERSION_NAME = "v5"
 
     # Use regular expressions to normalized values in sortable fields.
     # These regexes are applied in order; that way "H. G. Wells"
@@ -949,8 +1041,8 @@ class CurrentMapping(Mapping):
         CHAR_FILTERS[name] = normalizer
         AUTHOR_CHAR_FILTER_NAMES.append(name)
 
-    def __init__(self):
-        super(CurrentMapping, self).__init__()
+    def __init__(self, service):
+        super().__init__(service)
 
         # Set up character filters.
         #
@@ -1092,7 +1184,8 @@ class CurrentMapping(Mapping):
             "icu_collation_keyword": ["sort_title"],
             "sort_author_keyword": ["sort_author"],
             "integer": ["series_position", "work_id"],
-            "long": ["last_update_time"],
+            "long": ["last_update_time", "published"],
+            "keyword": ["audience", "language"],
         }
         self.add_properties(fields_by_type)
 
@@ -1173,7 +1266,7 @@ return champion;
 """
 
 
-class SearchBase(object):
+class SearchBase:
     """A superclass containing helper methods for creating and modifying
     Elasticsearch-dsl Query-type objects.
     """
@@ -1742,8 +1835,7 @@ class Query(SearchBase):
 
         # Ask Elasticsearch to match what was typed against
         # contributors.display_name.
-        for x in self._author_field_must_match("display_name", self.query_string):
-            yield x
+        yield from self._author_field_must_match("display_name", self.query_string)
 
         # Although almost nobody types a sort name into a search box,
         # they may copy-and-paste one. Furthermore, we may only know
@@ -1752,8 +1844,7 @@ class Query(SearchBase):
         # that against contributors.sort_name.
         sort_name = display_name_to_sort_name(self.query_string)
         if sort_name:
-            for x in self._author_field_must_match("sort_name", sort_name):
-                yield x
+            yield from self._author_field_must_match("sort_name", sort_name)
 
     def _author_field_must_match(self, base_field, query_string=None):
         """Yield queries that match either the keyword or minimally stemmed
@@ -1912,7 +2003,290 @@ class Query(SearchBase):
         return hypotheses
 
 
-class QueryParser(object):
+class JSONQuery(Query):
+    """An ES query created out of a JSON based query language
+    Eg. { "query": { "and": [{"key": "title", "value": "book" }, {"key": "author", "value": "robert" }] } }
+    Simply means "title=book and author=robert". The language is extensible, and easy to understand for clients to implement
+    """
+
+    class Conjunctives(Values):
+        AND = "and"
+        OR = "or"
+        NOT = "not"
+
+    class QueryLeaf(Values):
+        KEY = "key"
+        VALUE = "value"
+        OP = "op"
+
+    class Operators(Values):
+        EQ = "eq"
+        NEQ = "neq"
+        GTE = "gte"
+        LTE = "lte"
+        LT = "lt"
+        GT = "gt"
+        REGEX = "regex"
+        CONTAINS = "contains"
+
+    _KEYWORD_ONLY = {"keyword": True}
+    _LONG_TYPE = {"type": "long"}
+    _BOOL_TYPE = {"type": "bool"}
+
+    # The fields mappings in the search DB
+    FIELD_MAPPING: Dict[str, Dict] = {
+        "audience": dict(),
+        "author": _KEYWORD_ONLY,
+        "classifications.scheme": _KEYWORD_ONLY,
+        "classifications.term": _KEYWORD_ONLY,
+        "contributors.display_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.family_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.lc": dict(path="contributors"),
+        "contributors.role": dict(path="contributors"),
+        "contributors.sort_name": {**_KEYWORD_ONLY, **dict(path="contributors")},
+        "contributors.viaf": dict(path="contributors"),
+        "fiction": _KEYWORD_ONLY,
+        "genres.name": dict(path="genres"),
+        "genres.scheme": dict(path="genres"),
+        "genres.term": dict(path="genres", **_LONG_TYPE),
+        "genres.weight": dict(path="genres", **_LONG_TYPE),
+        "identifiers.identifier": dict(path="identifiers"),
+        "identifiers.type": dict(path="identifiers"),
+        "imprint": _KEYWORD_ONLY,
+        "language": dict(
+            type="_text"
+        ),  # Made up keyword type, because we don't want text fuzzyness on this
+        "licensepools.available": dict(path="licensepools", **_BOOL_TYPE),
+        "licensepools.availability_time": dict(path="licensepools", **_LONG_TYPE),
+        "licensepools.collection_id": dict(path="licensepools", **_LONG_TYPE),
+        "licensepools.data_source_id": dict(
+            path="licensepools", ops=[Operators.EQ], **_LONG_TYPE
+        ),
+        "licensepools.licensed": dict(path="licensepools", **_BOOL_TYPE),
+        "licensepools.medium": dict(path="licensepools"),
+        "licensepools.open_access": dict(path="licensepools", **_BOOL_TYPE),
+        "licensepools.quality": dict(path="licensepools", **_LONG_TYPE),
+        "licensepools.suppressed": dict(path="licensepools", **_BOOL_TYPE),
+        "medium": _KEYWORD_ONLY,
+        "presentation_ready": _BOOL_TYPE,
+        "publisher": _KEYWORD_ONLY,
+        "quality": _LONG_TYPE,
+        "series": _KEYWORD_ONLY,
+        "sort_author": dict(),
+        "sort_title": dict(),
+        "subtitle": _KEYWORD_ONLY,
+        "target_age": dict(),
+        "title": _KEYWORD_ONLY,
+        "published": _LONG_TYPE,
+    }
+
+    # From the client, some field names may be abstracted
+    FIELD_TRANSFORMS = {
+        "genre": "genres.name",
+        "open_access": "licensepools.open_access",
+        "available": "licensepools.available",
+        "classification": "classifications.term",
+        "data_source": "licensepools.data_source_id",
+    }
+
+    # We are using "match" queries for the "equals" operator
+    # so we must keep a tight leash on the how much of a spread
+    # in the matches we want to keep
+    # The "match" is used instead of "term" in order to have some
+    # tolerance for spelling mistakes while making a query
+    MATCH_ARGS = dict(
+        auto_generate_synonyms_phrase_query=False,
+        max_expansions=10,
+        fuzziness="AUTO",
+    )
+
+    class ValueTransforms:
+        @staticmethod
+        def data_source(value: str) -> int:
+            """Transform a datasource name into a datasource id"""
+            sources = CachedData.cache.data_sources()
+            for source in sources:
+                if source.name.lower() == value.lower():
+                    return source.id
+
+            # No such value was found, so return a non-id
+            return 0
+
+        @staticmethod
+        def published(value: str) -> float:
+            """Expects a YYYY-MM-DD format string and returns a timestamp from epoch"""
+            try:
+                values = value.split("-")
+                return datetime.datetime(
+                    int(values[0]), int(values[1]), int(values[2])
+                ).timestamp()
+            except Exception as e:
+                raise QueryParseException(
+                    detail=f"Could not parse 'published' value '{value}'. Only use 'YYYY-MM-DD'"
+                )
+
+        @staticmethod
+        def language(value: str) -> str:
+            """Transform a possibly english language name to an alpha3 code"""
+            transformed = LanguageNames.name_to_codes.get(value.lower(), {value})
+            value = list(transformed)[0] if len(transformed) > 0 else value
+            return value
+
+    VALUE_TRANSORMS = {
+        "data_source": ValueTransforms.data_source,
+        "published": ValueTransforms.published,
+        "language": ValueTransforms.language,
+    }
+
+    def __init__(self, query: Union[str, Dict], filter=None):
+        if type(query) is str:
+            try:
+                query = json.loads(query)
+            except Exception as e:
+                raise QueryParseException(
+                    detail=f"'{query}' is not a valid json"
+                ) from None
+
+        self.query = query
+        self.filter = filter
+
+    @property
+    def elasticsearch_query(self):
+        query = None
+        if "query" not in self.query:
+            raise QueryParseException("'query' key must be present as the root")
+        query = self._parse_json_query(self.query["query"])
+        return query
+
+    def _is_keyword(self, name: str) -> bool:
+        return self.FIELD_MAPPING[name].get("keyword") == True
+
+    def _nested_path(self, name: str) -> Union[str, None]:
+        return self.FIELD_MAPPING[name].get("path")
+
+    def _parse_json_query(self, query: Dict):
+        """Eventually recursive json query parser"""
+        es_query = None
+
+        # Empty query remains empty
+        if not query:
+            return {}
+
+        # This is minimal set of leaf keys, op is optional
+        leaves = {self.QueryLeaf.KEY, self.QueryLeaf.VALUE}
+
+        # Are we a {key, value, [op]} query
+        if set(query.keys()).intersection(leaves) == leaves:
+            es_query = self._parse_json_leaf(query)
+        # Are we an {and, or} query
+        elif set(self.Conjunctives.values()).issuperset(query.keys()):
+            es_query = self._parse_json_join(query)
+        else:
+            raise QueryParseException(
+                detail=f"Could not make sense of the query: {query}"
+            )
+
+        return es_query
+
+    def _parse_json_leaf(self, query: Dict) -> Dict:
+        """We have a leaf query, which means this becomes a keyword.term query"""
+        op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
+
+        if op not in self.Operators:
+            raise QueryParseException(detail=f"Unrecognized operator: {op}")
+
+        old_key = query[self.QueryLeaf.KEY]
+        value = query[self.QueryLeaf.VALUE]
+
+        # In case values need to be transformed
+        if old_key in self.VALUE_TRANSORMS:
+            value = self.VALUE_TRANSORMS[old_key](value)
+
+        key = self.FIELD_TRANSFORMS.get(
+            old_key, old_key
+        )  # Transform field name, if applicable
+
+        if key not in self.FIELD_MAPPING.keys():
+            raise QueryParseException(f"Unrecognized key: {old_key}")
+        mapping = self.FIELD_MAPPING[key]
+
+        nested_path = self._nested_path(key)
+        if self._is_keyword(key):
+            key = key + ".keyword"
+
+        # Validate operator restrictions
+        allowed_ops = mapping.get("ops")
+        if allowed_ops is not None and op not in allowed_ops:
+            raise QueryParseException(
+                detail=f"Operator '{op}' is not allowed for '{old_key}'. Only use {allowed_ops}"
+            )
+
+        es_query = None
+
+        def _match_or_term_query():
+            """Only text type mappings get a 'match' search, others use a term search
+            All variables are used from the function closure
+            """
+            if mapping.get("type", "text") != "text":
+                return Term(**{key: value})
+            else:
+                return Match(**{key: {"query": value, **self.MATCH_ARGS}})
+
+        if op == self.Operators.EQ:
+            es_query = _match_or_term_query()
+        elif op == self.Operators.NEQ:
+            es_query = Bool(must_not=[_match_or_term_query()])
+        elif op in {
+            self.Operators.GT,
+            self.Operators.GTE,
+            self.Operators.LT,
+            self.Operators.LTE,
+        }:
+            es_query = Range(**{key: {op: value}})
+        elif op == self.Operators.REGEX:
+            regex_query = dict(value=value, flags="ALL")
+            es_query = Regexp(**{key: regex_query})
+        elif op == self.Operators.CONTAINS:
+            regex_query = dict(value=f".*{value}.*", flags="ALL")
+            es_query = Regexp(**{key: regex_query})
+
+        # For nested paths
+        if nested_path:
+            es_query = Nested(path=nested_path, query=es_query)
+
+        if es_query is None:
+            raise QueryParseException(detail=f"Could not parse query: {query}")
+
+        return es_query
+
+    def _parse_json_join(self, query: Dict) -> Dict:
+        if len(query.keys()) != 1:
+            raise QueryParseException(
+                detail="A conjuction cannot have multiple parts in the same sub-query"
+            )
+
+        join = list(query.keys())[0]
+        to_join = []
+        for query_part in query[join]:
+            q = self._parse_json_query(query_part)
+            to_join.append(q)
+
+        if join == self.Conjunctives.AND:
+            joined_query = Bool(must=to_join)
+        elif join == self.Conjunctives.OR:
+            joined_query = Bool(should=to_join)
+        elif join == self.Conjunctives.NOT:
+            joined_query = Bool(must_not=to_join)
+
+        return joined_query
+
+
+@define
+class QueryParseException(Exception):
+    detail: str = ""
+
+
+class QueryParser:
     """Attempt to parse filter information out of a query string.
 
     This class is where we make sense of queries like the following:
@@ -2167,7 +2541,7 @@ class Filter(SearchBase):
         customlist_restriction_sets=None,
         facets=None,
         script_fields=None,
-        **kwargs
+        **kwargs,
     ):
         """Constructor.
 
@@ -2325,8 +2699,14 @@ class Filter(SearchBase):
         if facets:
             facets.modify_search_filter(self)
             self.scoring_functions = facets.scoring_functions(self)
+            self.search_type = getattr(facets, "search_type", "default")
         else:
             self.scoring_functions = []
+            self.search_type = "default"
+
+        # JSON type searches are exact matches and do not have scoring
+        if self.search_type == "json":
+            self.min_score = None
 
     @property
     def audiences(self):
@@ -2765,7 +3145,7 @@ class Filter(SearchBase):
         """
 
         exponent = 2
-        cutoff = self.minimum_featured_quality ** exponent
+        cutoff = self.minimum_featured_quality**exponent
         script = self.FEATURABLE_SCRIPT % dict(cutoff=cutoff, exponent=exponent)
         quality_field = SF("script_score", script=dict(source=script))
 
@@ -3022,7 +3402,7 @@ class SortKeyPagination(Pagination):
             search = search.update_from_dict(
                 dict(search_after=self.last_item_on_previous_page)
             )
-        return super(SortKeyPagination, self).modify_search_query(search)
+        return super().modify_search_query(search)
 
     @property
     def previous_page(self):
@@ -3060,7 +3440,7 @@ class SortKeyPagination(Pagination):
 
         :param page: A list of elasticsearch-dsl Hit objects.
         """
-        super(SortKeyPagination, self).page_loaded(page)
+        super().page_loaded(page)
         if page:
             last_item = page[-1]
             values = list(last_item.meta.sort)
@@ -3071,7 +3451,7 @@ class SortKeyPagination(Pagination):
         self.last_item_on_this_page = values
 
 
-class WorkSearchResult(object):
+class WorkSearchResult:
     """Wraps a Work object to give extra information obtained from
     ElasticSearch.
 
@@ -3094,9 +3474,9 @@ class WorkSearchResult(object):
 
 class MockExternalSearchIndex(ExternalSearchIndex):
 
-    work_document_type = "work-type"
+    work_document_type = None
 
-    def __init__(self, url=None):
+    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_ES6_8):
         self.url = url
         self.docs = {}
         self.works_index = "works"
@@ -3105,21 +3485,28 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.queries = []
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
+        self.version = version
+        if version == ExternalSearchIndex.SEARCH_VERSION_ES6_8:
+            self.work_document_type = "work-type"
 
-    def _key(self, index, doc_type, id):
-        return (index, doc_type, id)
+    def _key(self, index, id):
+        return (
+            (index, id)
+            if not self.work_document_type
+            else (index, self.work_document_type, id)
+        )
 
-    def index(self, index, doc_type, id, body):
-        self.docs[self._key(index, doc_type, id)] = body
+    def index(self, index, id, body):
+        self.docs[self._key(index, id)] = body
         self.search = list(self.docs.keys())
 
-    def delete(self, index, doc_type, id):
-        key = self._key(index, doc_type, id)
+    def delete(self, index, id):
+        key = self._key(index, id)
         if key in self.docs:
             del self.docs[key]
 
-    def exists(self, index, doc_type, id):
-        return self._key(index, doc_type, id) in self.docs
+    def exists(self, index, id, doc_type=None):
+        return self._key(index, id) in self.docs
 
     def create_search_doc(
         self, query_string, filter=None, pagination=None, debug=False
@@ -3180,7 +3567,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
 
     def bulk(self, docs, **kwargs):
         for doc in docs:
-            self.index(doc["_index"], doc["_type"], doc["_id"], doc)
+            self.index(doc["_index"], doc["_id"], doc)
         return len(docs), []
 
 
@@ -3195,7 +3582,7 @@ class MockMeta(dict):
         return self["_sort"]
 
 
-class MockSearchResult(object):
+class MockSearchResult:
     def __init__(self, sort_title, sort_author, meta, id):
         self.sort_title = sort_title
         self.sort_author = sort_author
@@ -3229,7 +3616,7 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
 
     def __init__(self, *args, **kwargs):
         search_index_client = kwargs.pop("search_index_client", None)
-        super(SearchIndexCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
 
     def process_batch(self, works):

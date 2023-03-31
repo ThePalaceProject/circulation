@@ -1,9 +1,14 @@
-# encoding: utf-8
 # WorkGenre, Work
+
+from __future__ import annotations
 
 import logging
 from collections import Counter
+from datetime import date, datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+import pytz
 from sqlalchemy import (
     Boolean,
     Column,
@@ -18,10 +23,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, relationship
+from sqlalchemy.orm import contains_eager, joinedload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
+
+from core.model.classification import Classification, Subject
 
 from ..classifier import Classifier, WorkClassifier
 from ..config import CannotLoadConfiguration
@@ -41,8 +48,17 @@ from .contributor import Contribution, Contributor
 from .coverage import CoverageRecord, WorkCoverageRecord
 from .datasource import DataSource
 from .edition import Edition
-from .identifier import Identifier
+from .identifier import Identifier, RecursiveEquivalencyCache
 from .measurement import Measurement
+
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import (  # noqa: autoflake
+        CachedFeed,
+        CustomListEntry,
+        Library,
+        LicensePool,
+    )
 
 
 class WorkGenre(Base):
@@ -62,6 +78,9 @@ class WorkGenre(Base):
 
     def __repr__(self):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
+
+
+WorkTypevar = TypeVar("WorkTypevar", bound="Work")
 
 
 class Work(Base):
@@ -106,10 +125,12 @@ class Work(Base):
     id = Column(Integer, primary_key=True)
 
     # One Work may have copies scattered across many LicensePools.
-    license_pools = relationship("LicensePool", backref="work", lazy="joined")
+    license_pools = relationship(
+        "LicensePool", backref="work", lazy="joined", uselist=True
+    )
 
     # A Work takes its presentation metadata from a single Edition.
-    # But this Edition is a composite of provider, metadata wrangler, admin interface, etc.-derived Editions.
+    # But this Edition is a composite of provider, admin interface, etc.-derived Editions.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
 
     # One Work may have many associated WorkCoverageRecords.
@@ -137,7 +158,7 @@ class Work(Base):
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
-    summary_id = Column(
+    summary_id: Column[int | None] = Column(
         Integer,
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,
@@ -266,12 +287,6 @@ class Work(Base):
         return None
 
     @property
-    def language_code(self):
-        if not self.presentation_edition:
-            return None
-        return self.presentation_edition.language_code
-
-    @property
     def publisher(self):
         if not self.presentation_edition:
             return None
@@ -303,14 +318,8 @@ class Work(Base):
     def has_open_access_license(self):
         return any(x.open_access for x in self.license_pools)
 
-    @property
-    def complaints(self):
-        complaints = list()
-        [complaints.extend(pool.complaints) for pool in self.license_pools]
-        return complaints
-
     def __repr__(self):
-        return '<Work #%s "%s" (by %s) %s lang=%s (%s lp)>' % (
+        return '<Work #{} "{}" (by {}) {} lang={} ({} lp)>'.format(
             self.id,
             self.title,
             self.author,
@@ -781,13 +790,10 @@ class Work(Base):
 
     @property
     def language_code(self):
-        """A single 2-letter language code for display purposes."""
+        """A single BCP47 language code for display purposes."""
         if not self.language:
             return None
-        language = self.language
-        if language in LanguageCodes.three_to_two:
-            language = LanguageCodes.three_to_two[language]
-        return language
+        return LanguageCodes.bcp47_for_locale(self.language, default=self.language)
 
     def age_appropriate_for_patron(self, patron):
         """Is this Work age-appropriate for the given Patron?
@@ -885,11 +891,10 @@ class Work(Base):
         )
         return changed
 
-    def _get_default_audience(self):
+    def _get_default_audience(self) -> str | None:
         """Return the default audience.
 
         :return: Default audience
-        :rtype: Optional[str]
         """
         for license_pool in self.license_pools:
             if license_pool.collection.default_audience:
@@ -1011,7 +1016,11 @@ class Work(Base):
             or classification_changed
             or summary != self.summary
             or summary_text != new_summary_text
-            or float(quality) != float(self.quality)
+            or (
+                policy.calculate_quality
+                and float(quality or default_quality)
+                != float(self.quality or default_quality)
+            )
         )
 
         if changed:
@@ -1084,7 +1093,7 @@ class Work(Base):
     @property
     def detailed_representation(self):
         """A description of this work more detailed than repr()"""
-        l = ["%s (by %s)" % (self.title, self.author)]
+        l = [f"{self.title} (by {self.author})"]
         l.append(" language=%s" % self.language)
         l.append(" quality=%s" % self.quality)
 
@@ -1147,7 +1156,7 @@ class Work(Base):
 
         if self.summary and self.summary.representation:
             snippet = _ensure(self.summary.representation.content)[:100]
-            d = " Description (%.2f) %s" % (self.summary.quality, snippet)
+            d = f" Description ({self.summary.quality:.2f}) {snippet}"
             l.append(d)
 
         l = [_ensure(s) for s in l]
@@ -1177,12 +1186,15 @@ class Work(Base):
             self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
         )
 
-    def active_license_pool(self):
+    def active_license_pool(self, library: Library | None = None) -> LicensePool | None:
         # The active license pool is the one that *would* be
         # associated with a loan, were a loan to be issued right
         # now.
         active_license_pool = None
+        collections = [] if not library else [c for c in library.collections]
         for p in self.license_pools:
+            if collections and p.collection not in collections:
+                continue
             if p.superceded:
                 continue
             edition = p.presentation_edition
@@ -1304,9 +1316,7 @@ class Work(Base):
         # and quality, plus any quantity that might be mapppable to the 0..1
         # range -- ratings, and measurements with an associated percentile
         # score.
-        quantities = set(
-            [Measurement.POPULARITY, Measurement.QUALITY, Measurement.RATING]
-        )
+        quantities = {Measurement.POPULARITY, Measurement.QUALITY, Measurement.RATING}
         quantities = quantities.union(list(Measurement.PERCENTILE_SCALES.keys()))
         measurements = (
             _db.query(Measurement)
@@ -1429,7 +1439,314 @@ class Work(Base):
     ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents(cls, works, policy=None):
+    def to_search_documents(
+        cls: type[WorkTypevar], works: list[WorkTypevar]
+    ) -> list[dict]:
+        """In app to search documents needed to ease off the burden
+        of complex queries from the DB cluster
+        No recursive identifier policy is taken here as using the
+        RecursiveEquivalentsCache implicitly has that set
+        """
+        _db = Session.object_session(works[0])
+
+        qu = _db.query(Work).filter(Work.id.in_([w.id for w in works]))
+        qu = qu.options(
+            joinedload(Work.presentation_edition)
+            .joinedload(Edition.contributions)
+            .joinedload(Contribution.contributor),
+            joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
+            joinedload(Work.custom_list_entries),
+        )
+
+        rows: list[Work] = qu.all()
+
+        ## IDENTIFIERS START
+        ## Identifiers is a house of cards, it comes crashing down if anything is changed here
+        ## We need a WITH statement selecting the procedural function on works_alias
+        ## then proceed to select the Identifiers for each of those outcomes
+        ## but must match works to the equivalent ids for which they were chosen
+        ## The same nonsense will be required for classifications
+        ## TODO: move this equivalence code into another job based on its required frequency
+        ## Add it to another table so it becomes faster to just query the pre-computed table
+
+        equivalent_identifiers = (
+            _db.query(RecursiveEquivalencyCache)
+            .join(
+                Edition,
+                Edition.primary_identifier_id
+                == RecursiveEquivalencyCache.parent_identifier_id,
+            )
+            .join(Work, Work.presentation_edition_id == Edition.id)
+            .filter(Work.id.in_(w.id for w in works))
+            .with_entities(
+                Work.id.label("work_id"),
+                RecursiveEquivalencyCache.identifier_id.label("equivalent_id"),
+            )
+            .cte("equivalent_cte")
+        )
+
+        identifiers_query = (
+            select(
+                [
+                    equivalent_identifiers.c.work_id,
+                    Identifier.identifier,
+                    Identifier.type,
+                ]
+            )
+            .select_from(Identifier)  # type: ignore
+            .where(Identifier.id == literal_column("equivalent_cte.equivalent_id"))
+        )
+
+        identifiers = list(_db.execute(identifiers_query))
+        ## IDENTIFIERS END
+
+        ## CLASSIFICATION START
+        ## Copied almost exactly from the previous implementation
+        ## Through trials in the local environment we find this to add
+        ## about 30% to the SQL CPU usage, this section holds back improvements
+        ## for the entire script
+        ## TODO: Improve this, maybe only run this section once a day???
+        # Map our constants for Subject type to their URIs.
+        scheme_column: Any = case(
+            [
+                (Subject.type == key, literal_column("'%s'" % val))
+                for key, val in list(Subject.uri_lookup.items())
+            ]
+        )
+
+        # If the Subject has a name, use that, otherwise use the Subject's identifier.
+        # Also, 3M's classifications have slashes, e.g. "FICTION/Adventure". Make sure
+        # we get separated words for search.
+        term_column = func.replace(
+            case([(Subject.name != None, Subject.name)], else_=Subject.identifier),
+            "/",
+            " ",
+        )
+
+        # Normalize by dividing each weight by the sum of the weights for that Identifier's Classifications.
+        weight_column = (
+            func.sum(Classification.weight)
+            / func.sum(func.sum(Classification.weight)).over()
+        )
+
+        subjects = (
+            select(
+                [
+                    equivalent_identifiers.c.work_id,
+                    scheme_column.label("scheme"),
+                    term_column.label("term"),
+                    weight_column.label("weight"),
+                ],
+                # Only include Subjects with terms that are useful for search.
+                and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
+            )
+            .group_by(scheme_column, term_column, equivalent_identifiers.c.work_id)
+            .where(
+                Classification.identifier_id
+                == literal_column("equivalent_cte.equivalent_id")
+            )
+            .select_from(
+                join(Classification, Subject, Classification.subject_id == Subject.id)  # type: ignore
+            )
+        )
+
+        all_subjects = list(_db.execute(subjects))
+
+        ## CLASSIFICATION END
+
+        # Create JSON
+        results = []
+        for item in rows:
+            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))  # type: ignore
+            item.classifications = list(  # type: ignore
+                filter(lambda idx: idx[0] == item.id, all_subjects)
+            )
+
+            try:
+                search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+                results.append(search_doc)
+            except:
+                logging.exception(f"Could not create search document for {item}")
+
+        return results
+
+    @classmethod
+    def search_doc_as_dict(cls: type[WorkTypevar], doc: WorkTypevar):
+        columns = {
+            "work": [
+                "fiction",
+                "audience",
+                "quality",
+                "rating",
+                "popularity",
+                "presentation_ready",
+                "last_update_time",
+            ],
+            "edition": [
+                "title",
+                "subtitle",
+                "series",
+                "series_position",
+                "language",
+                "sort_title",
+                "author",
+                "sort_author",
+                "medium",
+                "publisher",
+                "imprint",
+                "permanent_work_id",
+                "published",
+            ],
+            "contribution": ["role"],
+            "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
+            "licensepools": [
+                "data_source_id",
+                "collection_id",
+                "open_access",
+                "suppressed",
+                "availability_time",
+            ],
+            "identifiers": ["type", "identifier"],
+            "classifications": ["scheme", "term", "weight"],
+            "custom_list_entries": ["list_id", "featured", "first_appearance"],
+        }
+
+        result: dict = {}
+
+        def _convert(value):
+            if isinstance(value, Decimal):
+                return float(value)
+            elif isinstance(value, datetime):
+                try:
+                    # If we do not have a timezone, force UTC
+                    if value.tzinfo is None:
+                        value = value.replace(tzinfo=pytz.UTC)
+                    return value.timestamp()
+                except (ValueError, OverflowError) as e:
+                    logging.error(
+                        f"Could not convert date value {value} for document {doc.id}: {e}"
+                    )
+                    return 0
+            elif isinstance(value, date):
+                try:
+                    return datetime(
+                        value.year, value.month, value.day, tzinfo=pytz.UTC
+                    ).timestamp()
+                except (ValueError, OverflowError) as e:
+                    logging.error(
+                        f"Could not convert date value {value} for document {doc.id}: {e}"
+                    )
+                    return 0
+            return value
+
+        def _set_value(parent, key, target):
+            if parent:
+                for c in columns[key]:
+                    val = getattr(parent, c)
+                    target[c] = _convert(val)
+
+        _set_value(doc, "work", result)
+        result["_id"] = getattr(doc, "id")
+        result["work_id"] = getattr(doc, "id")
+        result["summary"] = getattr(doc, "summary_text")
+        result["fiction"] = (
+            "Fiction" if getattr(doc, "fiction") is True else "Nonfiction"
+        )
+        if result["audience"]:
+            result["audience"] = result["audience"].replace(" ", "")
+
+        target_age = doc.target_age
+        result["target_age"] = {"lower": None, "upper": None}
+        if target_age and target_age.lower is not None:
+            result["target_age"]["lower"] = target_age.lower + (
+                0 if target_age.lower_inc else 1
+            )
+        if target_age and target_age.upper is not None:
+            result["target_age"]["upper"] = target_age.upper - (
+                0 if target_age.upper_inc else 1
+            )
+
+        if doc.presentation_edition:
+            _set_value(doc.presentation_edition, "edition", result)
+
+        result["contributors"] = []
+        if doc.presentation_edition and doc.presentation_edition.contributions:
+            for item in doc.presentation_edition.contributions:
+                contributor: dict = {}
+                _set_value(item.contributor, "contributor", contributor)
+                _set_value(item, "contribution", contributor)
+                result["contributors"].append(contributor)
+
+        result["licensepools"] = []
+        if doc.license_pools:
+            for item in doc.license_pools:
+                if not (
+                    item.open_access
+                    or item.unlimited_access
+                    or item.self_hosted
+                    or item.licenses_owned > 0
+                ):
+                    continue
+
+                lc: dict = {}
+                _set_value(item, "licensepools", lc)
+                # lc["availability_time"] = getattr(item, "availability_time").timestamp()
+                lc["available"] = (
+                    item.unlimited_access
+                    or item.self_hosted
+                    or item.licenses_available > 0
+                )
+                lc["licensed"] = (
+                    item.unlimited_access or item.self_hosted or item.licenses_owned > 0
+                )
+                if doc.presentation_edition:
+                    lc["medium"] = doc.presentation_edition.medium
+                lc["licensepool_id"] = item.id
+                lc["quality"] = doc.quality
+                result["licensepools"].append(lc)
+
+        # Extra special genre massaging
+        result["genres"] = []
+        if doc.work_genres:
+            for item in doc.work_genres:  # type: ignore
+                genre = {
+                    "scheme": Subject.SIMPLIFIED_GENRE,
+                    "term": item.genre.id,
+                    "name": item.genre.name,
+                    "weight": item.affinity,
+                }
+                result["genres"].append(genre)
+
+        result["identifiers"] = []
+        if doc.identifiers:  # type: ignore
+            for item in doc.identifiers:  # type: ignore
+                identifier: dict = {}
+                _set_value(item, "identifiers", identifier)
+                result["identifiers"].append(identifier)
+
+        result["classifications"] = []
+        if doc.classifications:  # type: ignore
+            for item in doc.classifications:  # type: ignore
+                classification: dict = {}
+                _set_value(item, "classifications", classification)
+                result["classifications"].append(classification)
+
+        result["customlists"] = []
+        if doc.custom_list_entries:
+            for item in doc.custom_list_entries:  # type: ignore
+                customlist: dict = {}
+                _set_value(item, "custom_list_entries", customlist)
+                result["customlists"].append(customlist)
+
+        # No empty lists, they should be null
+        for key, val in result.items():
+            if val == []:
+                result[key] = None
+
+        return result
+
+    @classmethod
+    def to_search_documents__DONOTUSE(cls, works, policy=None):
         """Generate search documents for these Works.
         This is done by constructing an extremely complicated
         SQL query. The code is ugly, but it's about 100 times
@@ -1487,7 +1804,7 @@ class Work(Base):
                         Work.last_update_time,
                     ).label("last_update_time"),
                 ],
-                Work.id.in_((w.id for w in works)),
+                Work.id.in_(w.id for w in works),
             )
             .select_from(
                 join(Work, Edition, Work.presentation_edition_id == Edition.id)

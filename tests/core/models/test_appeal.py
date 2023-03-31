@@ -1,10 +1,10 @@
 from core.model import Work
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestAppealAssignment(DatabaseTest):
-    def test_assign_appeals(self):
-        work = self._work()
+class TestAppealAssignment:
+    def test_assign_appeals(self, db: DatabaseTransactionFixture):
+        work = db.work()
         work.assign_appeals(0.50, 0.25, 0.20, 0.05)
         assert 0.50 == work.appeal_character
         assert 0.25 == work.appeal_language

@@ -16,8 +16,8 @@ from core.model import (
     create,
     get_one_or_create,
 )
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockGoogleAnalyticsProvider(GoogleAnalyticsProvider):
@@ -27,10 +27,10 @@ class MockGoogleAnalyticsProvider(GoogleAnalyticsProvider):
         self.params = params
 
 
-class TestGoogleAnalyticsProvider(DatabaseTest):
-    def test_init(self):
+class TestGoogleAnalyticsProvider:
+    def test_init(self, db: DatabaseTransactionFixture):
         integration, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="api.google_analytics_provider",
@@ -43,44 +43,44 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         )
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            GoogleAnalyticsProvider(integration, self._default_library)
+            GoogleAnalyticsProvider(integration, db.default_library())
         assert (
-            "Missing tracking id for library %s" % self._default_library.short_name
+            "Missing tracking id for library %s" % db.default_library().short_name
             in str(excinfo.value)
         )
 
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             GoogleAnalyticsProvider.TRACKING_ID,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = GoogleAnalyticsProvider(integration, self._default_library)
+        ga = GoogleAnalyticsProvider(integration, db.default_library())
         assert GoogleAnalyticsProvider.DEFAULT_URL == ga.url
         assert "faketrackingid" == ga.tracking_id
 
-        integration.url = self._str
-        ga = GoogleAnalyticsProvider(integration, self._default_library)
+        integration.url = db.fresh_str()
+        ga = GoogleAnalyticsProvider(integration, db.default_library())
         assert integration.url == ga.url
         assert "faketrackingid" == ga.tracking_id
 
-    def test_collect_event_with_work(self):
+    def test_collect_event_with_work(self, db: DatabaseTransactionFixture):
         integration, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="api.google_analytics_provider",
         )
-        integration.url = self._str
+        integration.url = db.fresh_str()
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             GoogleAnalyticsProvider.TRACKING_ID,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = MockGoogleAnalyticsProvider(integration, self._default_library)
+        ga = MockGoogleAnalyticsProvider(integration, db.default_library())
 
-        work = self._work(
+        work = db.work(
             title="pi\u00F1ata",
             authors="chlo\u00E9",
             fiction=True,
@@ -95,7 +95,7 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         [lp] = work.license_pools
         now = utc_now()
         ga.collect_event(
-            self._default_library,
+            db.default_library(),
             lp,
             CirculationEvent.DISTRIBUTOR_CHECKIN,
             now,
@@ -129,37 +129,38 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         assert "true" == params["cd12"][0]
         assert DataSource.GUTENBERG == params["cd13"][0]
         assert EditionConstants.BOOK_MEDIUM == params["cd14"][0]
-        assert self._default_library.short_name == params["cd15"][0]
+        assert db.default_library().short_name == params["cd15"][0]
+        assert lp.collection.name == params["cd16"][0]
 
-    def test_collect_event_without_work(self):
+    def test_collect_event_without_work(self, db: DatabaseTransactionFixture):
         integration, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="api.google_analytics_provider",
         )
-        integration.url = self._str
+        integration.url = db.fresh_str()
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             GoogleAnalyticsProvider.TRACKING_ID,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = MockGoogleAnalyticsProvider(integration, self._default_library)
+        ga = MockGoogleAnalyticsProvider(integration, db.default_library())
 
-        identifier = self._identifier()
-        source = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        identifier = db.identifier()
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         pool, is_new = get_one_or_create(
-            self._db,
+            db.session,
             LicensePool,
             identifier=identifier,
             data_source=source,
-            collection=self._default_collection,
+            collection=db.default_collection(),
         )
 
         now = utc_now()
         ga.collect_event(
-            self._default_library, pool, CirculationEvent.DISTRIBUTOR_CHECKIN, now
+            db.default_library(), pool, CirculationEvent.DISTRIBUTOR_CHECKIN, now
         )
         params = urllib.parse.parse_qs(ga.params)
 
@@ -183,26 +184,27 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         assert None == params.get("cd12")
         assert [source.name] == params.get("cd13")
         assert None == params.get("cd14")
-        assert [self._default_library.short_name] == params.get("cd15")
+        assert [db.default_library().short_name] == params.get("cd15")
+        assert None == params.get("cd16")
 
-    def test_collect_event_without_license_pool(self):
+    def test_collect_event_without_license_pool(self, db: DatabaseTransactionFixture):
         integration, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="api.google_analytics_provider",
         )
-        integration.url = self._str
+        integration.url = db.fresh_str()
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             GoogleAnalyticsProvider.TRACKING_ID,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = MockGoogleAnalyticsProvider(integration, self._default_library)
+        ga = MockGoogleAnalyticsProvider(integration, db.default_library())
 
         now = utc_now()
-        ga.collect_event(self._default_library, None, CirculationEvent.NEW_PATRON, now)
+        ga.collect_event(db.default_library(), None, CirculationEvent.NEW_PATRON, now)
         params = urllib.parse.parse_qs(ga.params)
 
         assert 1 == ga.count
@@ -225,4 +227,5 @@ class TestGoogleAnalyticsProvider(DatabaseTest):
         assert None == params.get("cd12")
         assert None == params.get("cd13")
         assert None == params.get("cd14")
-        assert [self._default_library.short_name] == params.get("cd15")
+        assert [db.default_library().short_name] == params.get("cd15")
+        assert None == params.get("cd16")

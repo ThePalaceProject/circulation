@@ -1,7 +1,7 @@
 from flask_babel import lazy_gettext as _
 
 
-class FacetConstants(object):
+class FacetConstants:
 
     # A special constant, basically an additional rel, indicating that
     # an OPDS facet group represents different entry points into a

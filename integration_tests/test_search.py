@@ -1,4 +1,3 @@
-# encoding: utf-8
 #
 # These integration tests were written based primarily on real
 # searches made in October 2018 against NYPL's circulation
@@ -67,7 +66,7 @@ def known_to_fail(f):
     return decorated
 
 
-class Searcher(object):
+class Searcher:
     """A class that knows how to perform searches."""
 
     def __init__(self, library, index):
@@ -81,7 +80,7 @@ class Searcher(object):
         )
 
 
-class Evaluator(object):
+class Evaluator:
     """A class that knows how to evaluate search results."""
 
     log = logging.getLogger("Search evaluator")
@@ -303,7 +302,7 @@ class Common(Evaluator):
         :param first_must_match: In addition to any collective
         restrictions, the first search result must match the criteria.
         """
-        super(Common, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.threshold = threshold
         self.minimum = minimum
         self.first_must_match = first_must_match
@@ -326,7 +325,9 @@ class Common(Evaluator):
                 else:
                     if actual != expected:
                         logging.info(
-                            "First result did not match. %s != %s" % (expected, actual)
+                            "First result did not match. {} != {}".format(
+                                expected, actual
+                            )
                         )
                     eq_(actual, expected)
 
@@ -363,7 +364,7 @@ class Uncommon(Common):
 
     def __init__(self, threshold=1, **kwargs):
         kwargs["negate"] = True
-        super(Uncommon, self).__init__(threshold=threshold, **kwargs)
+        super().__init__(threshold=threshold, **kwargs)
 
 
 class FirstMatch(Common):
@@ -371,16 +372,12 @@ class FirstMatch(Common):
 
     def __init__(self, **kwargs):
         threshold = kwargs.pop("threshold", None)
-        super(FirstMatch, self).__init__(
-            threshold=threshold, first_must_match=True, **kwargs
-        )
+        super().__init__(threshold=threshold, first_must_match=True, **kwargs)
 
 
 class AtLeastOne(Common):
     def __init__(self, **kwargs):
-        super(AtLeastOne, self).__init__(
-            threshold=None, minimum=1, first_must_match=False, **kwargs
-        )
+        super().__init__(threshold=None, minimum=1, first_must_match=False, **kwargs)
 
 
 class SpecificGenre(Common):
@@ -394,7 +391,7 @@ class SpecificAuthor(FirstMatch):
     """
 
     def __init__(self, author, accept_title=None, threshold=0):
-        super(SpecificAuthor, self).__init__(author=author, threshold=threshold)
+        super().__init__(author=author, threshold=threshold)
         if accept_title:
             self.accept_title = accept_title.lower()
         else:
@@ -505,7 +502,7 @@ class SpecificSeries(Common):
         return (series_match or title_match) and author_match, actual
 
 
-class SearchTest(object):
+class SearchTest:
     """A test suite that runs searches and compares the actual results
     to some expected state.
     """
@@ -535,7 +532,7 @@ class VariantSearchTest(SearchTest):
     EVALUATOR = None
 
     def search(self, query):
-        return super(VariantSearchTest, self).search(query, self.EVALUATOR)
+        return super().search(query, self.EVALUATOR)
 
 
 class TestGibberish(SearchTest):
@@ -2670,7 +2667,7 @@ class TestCharacterMatch(SearchTest):
     def test_christian_grey(self):
         # This search uses a character name to stand in for a series.
         self.search(
-            "christian grey", FirstMatch(author=re.compile("E.\s*L.\s*James", re.I))
+            "christian grey", FirstMatch(author=re.compile(r"E.\s*L.\s*James", re.I))
         )
 
     def test_spiderman_hyphenated(self):

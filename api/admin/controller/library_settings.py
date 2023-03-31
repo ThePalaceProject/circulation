@@ -155,17 +155,32 @@ class LibrarySettingsController(SettingsController):
             return error
 
     def check_for_missing_settings(self, settings):
-        required = [
-            s
-            for s in Configuration.LIBRARY_SETTINGS
-            if s.get("required") and not s.get("default")
-        ]
-        missing = [s for s in required if not flask.request.form.get(s.get("key"))]
-        if missing:
+        email_label = None
+        website_label = None
+        email_or_website = None
+        for s in Configuration.LIBRARY_SETTINGS:
+            key = s.get("key")
+            if s.get("required") and not s.get("default"):
+                if not flask.request.form.get(key):
+                    return INCOMPLETE_CONFIGURATION.detailed(
+                        _(
+                            "The configuration is missing a required setting: %(setting)s",
+                            setting=s.get("label"),
+                        )
+                    )
+            # Either email or website is present
+            if key == Configuration.HELP_EMAIL:
+                email_or_website = email_or_website or flask.request.form.get(key)
+                email_label = s.get("label")
+            elif key == Configuration.HELP_WEB:
+                email_or_website = email_or_website or flask.request.form.get(key)
+                website_label = s.get("label")
+
+        if not email_or_website:
             return INCOMPLETE_CONFIGURATION.detailed(
                 _(
                     "The configuration is missing a required setting: %(setting)s",
-                    setting=missing[0].get("label"),
+                    setting=f"{email_label} or {website_label}",
                 )
             )
 
@@ -341,7 +356,9 @@ class LibrarySettingsController(SettingsController):
             if type == "image":
                 value = self.image_setting(setting) or default_value
             else:
-                value = self.scalar_setting(setting) or default_value
+                value = self.scalar_setting(setting)
+                # An empty "" value or 0 value is valid, hence check for None
+                value = default_value if value is None else value
         return value
 
     def scalar_setting(self, setting):
@@ -382,7 +399,7 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image, _format="PNG") -> str:
+    def _data_url_for_image(image: Image.Image, _format="PNG") -> str:
         """Produce the `data` URL for the setting's uploaded image file.
 
         :param image: A Pillow Image.
@@ -390,6 +407,10 @@ class LibrarySettingsController(SettingsController):
         :return: The `data` URL for the image.
         """
         buffer = BytesIO()
+        # If the image is not RGB, RGBA or P convert it
+        # https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes
+        if image.mode not in ("RGB", "RGBA", "P"):
+            image = image.convert("RGBA")
         image.save(buffer, format=_format)
         b64 = base64.b64encode(buffer.getvalue())
         return "data:image/png;base64,%s" % b64.decode("utf-8")

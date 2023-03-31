@@ -18,7 +18,12 @@ from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
-from core.lcp.credential import LCPCredentialFactory
+from core.importers import BaseImporterConfiguration
+from core.lcp.credential import (
+    LCPCredentialFactory,
+    LCPHashedPassphrase,
+    LCPUnhashedPassphrase,
+)
 from core.metadata_layer import FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
@@ -49,6 +54,7 @@ from core.model.configuration import (
     HasExternalIntegration,
 )
 from core.model.licensing import LicenseStatus
+from core.model.patron import Patron
 from core.monitor import CollectionMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.testing import DatabaseTest, MockRequestsResponse
@@ -62,7 +68,7 @@ from .lcp.hash import Hasher, HasherFactory, HashingAlgorithm
 from .shared_collection import BaseSharedCollectionAPI
 
 
-class ODLAPIConfiguration(ConfigurationGrouping):
+class ODLAPIConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     """Contains LCP License Server's settings"""
 
     DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
@@ -276,7 +282,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         username = self.username
         password = self.password
         headers = dict(headers or {})
-        auth_header = "Basic %s" % base64.b64encode("%s:%s" % (username, password))
+        auth_header = "Basic %s" % base64.b64encode(f"{username}:{password}")
         headers["Authorization"] = auth_header
 
         return HTTP.get_with_timeout(url, headers=headers)
@@ -329,15 +335,14 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 self._configuration_storage, db, ODLAPIConfiguration
             ) as configuration:
                 hasher = self._get_hasher(configuration)
-                hashed_passphrase = hasher.hash(
+
+                unhashed_pass: LCPUnhashedPassphrase = (
                     self._credential_factory.get_patron_passphrase(db, patron)
                 )
-                encoded_passphrase = base64.b64encode(
-                    binascii.unhexlify(hashed_passphrase)
-                )
-
-                self._credential_factory.set_hashed_passphrase(
-                    db, patron, hashed_passphrase
+                hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
+                self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
+                encoded_pass: str = base64.b64encode(
+                    binascii.unhexlify(hashed_pass.hashed)
                 )
 
                 notification_url = self._url_for(
@@ -354,7 +359,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                     patron_id=patron_id,
                     expires=expires.isoformat(),
                     notification_url=notification_url,
-                    passphrase=encoded_passphrase,
+                    passphrase=encoded_pass,
                     hint=configuration.passphrase_hint,
                     hint_url=configuration.passphrase_hint_url,
                 )
@@ -458,14 +463,14 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
     def _checkout(self, patron_or_client, licensepool, hold=None):
         _db = Session.object_session(patron_or_client)
 
-        if not any((l for l in licensepool.licenses if not l.is_inactive)):
+        if not any(l for l in licensepool.licenses if not l.is_inactive):
             raise NoLicenses()
 
         # Make sure pool info is updated.
         self.update_licensepool(licensepool)
 
         if hold:
-            self._update_hold_end_date(hold)
+            self._update_hold_data(hold)
 
         # If there's a holds queue, the patron or client must have a non-expired hold
         # with position 0 to check out the book.
@@ -616,14 +621,14 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             expires,
         )
 
-    def _count_holds_before(self, hold):
+    def _count_holds_before(self, holdinfo: HoldInfo, pool: LicensePool) -> int:
         # Count holds on the license pool that started before this hold and
         # aren't expired.
-        _db = Session.object_session(hold)
+        _db = Session.object_session(pool)
         return (
             _db.query(Hold)
-            .filter(Hold.license_pool_id == hold.license_pool_id)
-            .filter(Hold.start < hold.start)
+            .filter(Hold.license_pool_id == pool.id)
+            .filter(Hold.start < holdinfo.start_date)
             .filter(
                 or_(
                     Hold.end == None,
@@ -634,30 +639,48 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             .count()
         )
 
-    def _update_hold_end_date(self, hold):
-        _db = Session.object_session(hold)
-        pool = hold.license_pool
+    def _update_hold_data(self, hold: Hold):
+        pool: LicensePool = hold.license_pool
+        holdinfo = HoldInfo(
+            pool.collection,
+            pool.data_source.name,
+            pool.identifier.type,
+            pool.identifier.identifier,
+            hold.start,
+            hold.end,
+            hold.position,
+        )
+        library = hold.patron.library if hold.patron_id else None
+        client = hold.integration_client if hold.integration_client_id else None
+        self._update_hold_end_date(holdinfo, pool, library=library, client=client)
+        hold.end = holdinfo.end_date
+        hold.position = holdinfo.hold_position
+
+    def _update_hold_end_date(
+        self, holdinfo: HoldInfo, pool: LicensePool, client=None, library=None
+    ):
+        _db = Session.object_session(pool)
 
         # First make sure the hold position is up-to-date, since we'll
         # need it to calculate the end date.
-        original_position = hold.position
-        self._update_hold_position(hold)
+        original_position = holdinfo.hold_position
+        self._update_hold_position(holdinfo, pool)
 
         default_loan_period = self.collection(_db).default_loan_period(
-            hold.library or hold.integration_client
+            library or client
         )
         default_reservation_period = self.collection(_db).default_reservation_period
 
         # If the hold was already to check out and already has an end date,
         # it doesn't need an update.
-        if hold.position == 0 and original_position == 0 and hold.end:
+        if holdinfo.hold_position == 0 and original_position == 0 and holdinfo.end_date:
             return
 
         # If the patron is in the queue, we need to estimate when the book
         # will be available for check out. We can do slightly better than the
         # default calculation since we know when all current loans will expire,
         # but we're still calculating the worst case.
-        elif hold.position > 0:
+        elif holdinfo.hold_position > 0:
             # Find the current loans and reserved holds for the licenses.
             current_loans = (
                 _db.query(Loan)
@@ -687,12 +710,16 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             # The licenses will have to go through some number of cycles
             # before one of them gets to this hold. This leavs out the first cycle -
             # it's already started so we'll handle it separately.
-            cycles = (hold.position - licenses_reserved - 1) // pool.licenses_owned
+            cycles = (
+                holdinfo.hold_position - licenses_reserved - 1
+            ) // pool.licenses_owned
 
             # Each of the owned licenses is currently either on loan or reserved.
             # Figure out which license this hold will eventually get if every
             # patron keeps their loans and holds for the maximum time.
-            copy_index = (hold.position - licenses_reserved - 1) % pool.licenses_owned
+            copy_index = (
+                holdinfo.hold_position - licenses_reserved - 1
+            ) % pool.licenses_owned
 
             # In the worse case, the first cycle ends when a current loan expires, or
             # after a current reservation is checked out and then expires.
@@ -706,18 +733,19 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
 
             # Assume all cycles after the first cycle take the maximum time.
             cycle_period = default_loan_period + default_reservation_period
-            hold.end = next_cycle_start + datetime.timedelta(
+            holdinfo.end_date = next_cycle_start + datetime.timedelta(
                 days=(cycle_period * cycles)
             )
 
         # If the end date isn't set yet or the position just became 0, the
         # hold just became available. The patron's reservation period starts now.
         else:
-            hold.end = utc_now() + datetime.timedelta(days=default_reservation_period)
+            holdinfo.end_date = utc_now() + datetime.timedelta(
+                days=default_reservation_period
+            )
 
-    def _update_hold_position(self, hold):
-        _db = Session.object_session(hold)
-        pool = hold.license_pool
+    def _update_hold_position(self, holdinfo: HoldInfo, pool: LicensePool):
+        _db = Session.object_session(pool)
         loans_count = (
             _db.query(Loan)
             .filter(
@@ -726,17 +754,17 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
             .filter(or_(Loan.end == None, Loan.end > utc_now()))
             .count()
         )
-        holds_count = self._count_holds_before(hold)
+        holds_count = self._count_holds_before(holdinfo, pool)
 
         remaining_licenses = pool.licenses_owned - loans_count
 
         if remaining_licenses > holds_count:
             # The hold is ready to check out.
-            hold.position = 0
+            holdinfo.hold_position = 0
 
         else:
             # Add 1 since position 0 indicates the hold is ready.
-            hold.position = holds_count + 1
+            holdinfo.hold_position = holds_count + 1
 
     def update_licensepool(self, licensepool: LicensePool):
         # Update the pool and the next holds in the queue when a license is reserved.
@@ -748,20 +776,11 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         for hold in holds[: licensepool.licenses_reserved]:
             if hold.position != 0:
                 # This hold just got a reserved license.
-                self._update_hold_end_date(hold)
+                self._update_hold_data(hold)
 
     def place_hold(self, patron, pin, licensepool, notification_email_address):
         """Create a new hold."""
-        hold = self._place_hold(patron, licensepool)
-        return HoldInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            start_date=hold.start,
-            end_date=hold.end,
-            hold_position=hold.position,
-        )
+        return self._place_hold(patron, licensepool)
 
     def _place_hold(self, patron_or_client, licensepool):
         _db = Session.object_session(patron_or_client)
@@ -772,15 +791,44 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         if licensepool.licenses_available > 0:
             raise CurrentlyAvailable()
 
-        # Create local hold.
-        hold, is_new = licensepool.on_hold_to(patron_or_client)
+        patron_id, client_id = None, None
+        if isinstance(patron_or_client, Patron):
+            patron_id = patron_or_client.id
+        else:
+            client_id = patron_or_client.id
 
-        if not is_new:
+        # Check for local hold
+        hold = get_one(
+            _db,
+            Hold,
+            patron_id=patron_id,
+            integration_client_id=client_id,
+            license_pool_id=licensepool.id,
+        )
+
+        if hold is not None:
             raise AlreadyOnHold()
 
         licensepool.patrons_in_hold_queue += 1
-        self._update_hold_end_date(hold)
-        return hold
+        holdinfo = HoldInfo(
+            licensepool.collection,
+            licensepool.data_source.name,
+            licensepool.identifier.type,
+            licensepool.identifier.identifier,
+            utc_now(),
+            0,
+            0,
+        )
+        client = patron_or_client if client_id else None
+        library = patron_or_client.library if patron_id else None
+        self._update_hold_end_date(
+            holdinfo, licensepool, library=library, client=client
+        )
+
+        if client is not None:
+            holdinfo.integration_client = client
+
+        return holdinfo
 
     def release_hold(self, patron, pin, licensepool):
         """Cancel a hold."""
@@ -834,7 +882,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 _db.delete(hold)
                 self.update_licensepool(hold.license_pool)
             else:
-                self._update_hold_end_date(hold)
+                self._update_hold_data(hold)
                 remaining_holds.append(hold)
 
         return [
@@ -928,7 +976,7 @@ class ODLImporter(OPDSImporter):
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
-    FEEDBOOKS_AUDIO = "{0}; protection={1}".format(
+    FEEDBOOKS_AUDIO = "{}; protection={}".format(
         MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
     )
@@ -1232,7 +1280,7 @@ class ODLHoldReaper(CollectionMonitor):
     PROTOCOL = ODLAPI.NAME
 
     def __init__(self, _db, collection=None, api=None, **kwargs):
-        super(ODLHoldReaper, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
         self.api = api or ODLAPI(_db, collection)
 
     def run_once(self, progress):
@@ -1854,7 +1902,7 @@ class MockSharedODLAPI(SharedODLAPI):
         self.responses = []
         self.requests = []
         self.request_args = []
-        super(MockSharedODLAPI, self).__init__(_db, collection, *args, **kwargs)
+        super().__init__(_db, collection, *args, **kwargs)
 
     def queue_response(self, status_code, headers={}, content=None):
         self.responses.insert(0, MockRequestsResponse(status_code, headers, content))

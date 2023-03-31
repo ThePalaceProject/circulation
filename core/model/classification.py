@@ -1,8 +1,8 @@
-# encoding: utf-8
 # Subject, Classification, Genre
 
 
 import logging
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -31,6 +31,11 @@ from . import (
 )
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import WorkGenre  # noqa: autoflake
 
 
 class Subject(Base):
@@ -134,7 +139,7 @@ class Subject(Base):
     checked = Column(Boolean, default=False, index=True)
 
     # One Subject may participate in many Classifications.
-    classifications = relationship("Classification", backref="subject")
+    classifications = relationship("Classification", back_populates="subject")
 
     # Type + identifier must be unique.
     __table_args__ = (UniqueConstraint("type", "identifier"),)
@@ -164,7 +169,7 @@ class Subject(Base):
             age_range = " " + self.target_age_string
         else:
             age_range = ""
-        a = "[%s:%s%s%s%s%s%s]" % (
+        a = "[{}:{}{}{}{}{}{}]".format(
             self.type,
             self.identifier,
             name,
@@ -337,6 +342,7 @@ class Classification(Base):
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
+    subject = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # How much weight the data source gives to this classification.
@@ -366,7 +372,7 @@ class Classification(Base):
     # This goes into Classification rather than Subject because it's
     # possible that one particular data source could use a certain
     # subject type in an unreliable way.
-    _juvenile_subject_types = set([Subject.LCC])
+    _juvenile_subject_types = {Subject.LCC}
 
     _quality_as_indicator_of_target_age = {
         # Not all classifications are equally reliable as indicators

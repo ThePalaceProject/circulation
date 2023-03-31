@@ -2,7 +2,6 @@ import logging
 import re
 from enum import Enum
 
-import six
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import INCOMPLETE_CONFIGURATION
@@ -64,13 +63,13 @@ class SAMLSettingsValidator(Validator):
         """
         if not isinstance(metadata_parser, SAMLMetadataParser):
             raise ValueError(
-                "Argument 'metadata_parser' must be an instance of {0} class".format(
+                "Argument 'metadata_parser' must be an instance of {} class".format(
                     SAMLMetadataParser
                 )
             )
         if not isinstance(subject_filter, SAMLSubjectFilter):
             raise ValueError(
-                "Argument 'subject_filter' must be an instance of {0} class".format(
+                "Argument 'subject_filter' must be an instance of {} class".format(
                     SAMLSubjectFilter
                 )
             )
@@ -110,7 +109,7 @@ class SAMLSettingsValidator(Validator):
 
         if required and not setting_values:
             return INCOMPLETE_CONFIGURATION.detailed(
-                _("Required field '{0}' is missing".format(setting_name))
+                _(f"Required field '{setting_name}' is missing")
             )
 
         return setting_values[0] if setting_values else None
@@ -138,15 +137,13 @@ class SAMLSettingsValidator(Validator):
             )
 
             if provider_type == ProviderType.ServiceProvider:
-                message = (
-                    "Service Provider's metadata has incorrect format: {0}".format(
-                        six.ensure_text(str(exception))
-                    )
+                message = "Service Provider's metadata has incorrect format: {}".format(
+                    str(exception)
                 )
             else:
                 message = (
-                    "Identity Provider's metadata has incorrect format: {0}".format(
-                        six.ensure_text(str(exception))
+                    "Identity Provider's metadata has incorrect format: {}".format(
+                        str(exception)
                     )
                 )
 
@@ -275,8 +272,8 @@ class SAMLSettingsValidator(Validator):
 
                 return SAML_INCORRECT_FILTRATION_EXPRESSION.detailed(
                     _(
-                        "SAML filtration expression has an incorrect format: {0}".format(
-                            six.ensure_text(str(exception))
+                        "SAML filtration expression has an incorrect format: {}".format(
+                            str(exception)
                         )
                     )
                 )
@@ -315,17 +312,15 @@ class SAMLSettingsValidator(Validator):
                 ):
                     return SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION.detailed(
                         _(
-                            "SAML patron ID regular expression '{0}' does not have mandatory named group '{1}'".format(
-                                six.ensure_text(patron_id_regular_expression),
-                                six.ensure_text(
-                                    SAMLSubjectPatronIDExtractor.PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP
-                                ),
+                            "SAML patron ID regular expression '{}' does not have mandatory named group '{}'".format(
+                                patron_id_regular_expression,
+                                SAMLSubjectPatronIDExtractor.PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP,
                             )
                         )
                     )
             except re.error as exception:
-                error_message = "SAML patron ID regular expression '{0}' has an incorrect format: {1}".format(
-                    six.ensure_text(patron_id_regular_expression), exception
+                error_message = "SAML patron ID regular expression '{}' has an incorrect format: {}".format(
+                    patron_id_regular_expression, exception
                 )
 
                 self._logger.exception(error_message)
@@ -348,9 +343,7 @@ class SAMLSettingsValidator(Validator):
         :return: ProblemDetail in the case of any errors, None if validation succeeded
         :rtype: Optional[core.util.problem_detail.ProblemDetail]
         """
-        validation_result = super(SAMLSettingsValidator, self).validate(
-            settings, content
-        )
+        validation_result = super().validate(settings, content)
 
         if isinstance(validation_result, ProblemDetail):
             return validation_result

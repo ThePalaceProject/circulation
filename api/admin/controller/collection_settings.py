@@ -21,13 +21,32 @@ from . import SettingsController
 
 class CollectionSettingsController(SettingsController):
     def __init__(self, manager):
-        super(CollectionSettingsController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("collection")
 
     def _get_collection_protocols(self):
-        protocols = super(CollectionSettingsController, self)._get_collection_protocols(
-            self.PROVIDER_APIS
-        )
+        protocols = super()._get_collection_protocols(self.PROVIDER_APIS)
+
+        # dedupe and only keep the latest SETTINGS
+        # this will allow child objects to overwrite
+        # parent settings with the same key
+        # This relies on the fact that child settings
+        # are added after parent settings as such
+        # `SETTINGS + <configuration>.to_settings()`
+        for protocol in protocols:
+            if "settings" not in protocol:
+                continue
+            _found_settings = dict()
+            for ix, setting in enumerate(protocol["settings"]):
+                _key = setting["key"]
+                _found_settings[_key] = ix
+            _settings = []
+            # Go through the dict items and only use the latest found settings
+            # for any given key
+            for _, v in _found_settings.items():
+                _settings.append(protocol["settings"][v])
+            protocol["settings"] = _settings
+
         # If there are storage integrations, add a mirror integration
         # setting to every protocol's 'settings' block.
         mirror_integration_settings = self._mirror_integration_settings()

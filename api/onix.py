@@ -46,7 +46,7 @@ class UsageUnit(Enum):
     TIMES = "10"
 
 
-class ONIXExtractor(object):
+class ONIXExtractor:
     """Transform an ONIX file into a list of Metadata objects."""
 
     # TODO: '20' indicates a semicolon-separated list of freeform tags,
@@ -348,7 +348,7 @@ class ONIXExtractor(object):
 
             if usage_constraint_tags:
                 cls._logger.debug(
-                    "Found {0} EpubUsageConstraint tags".format(
+                    "Found {} EpubUsageConstraint tags".format(
                         len(usage_constraint_tags)
                     )
                 )
@@ -356,7 +356,7 @@ class ONIXExtractor(object):
             for usage_constraint_tag in usage_constraint_tags:
                 usage_status = parser.text_of_subtag(usage_constraint_tag, "x319")
 
-                cls._logger.debug("EpubUsageStatus: {0}".format(usage_status))
+                cls._logger.debug(f"EpubUsageStatus: {usage_status}")
 
                 if usage_status == UsageStatus.PROHIBITED.value:
                     raise Exception("The content is prohibited")
@@ -366,7 +366,7 @@ class ONIXExtractor(object):
                     )
 
                     cls._logger.debug(
-                        "Found {0} EpubUsageLimit tags".format(len(usage_limit_tags))
+                        f"Found {len(usage_limit_tags)} EpubUsageLimit tags"
                     )
 
                     if not usage_limit_tags:
@@ -376,7 +376,7 @@ class ONIXExtractor(object):
 
                     usage_unit = parser.text_of_subtag(usage_limit_tag, "x321")
 
-                    cls._logger.debug("EpubUsageUnit: {0}".format(usage_unit))
+                    cls._logger.debug(f"EpubUsageUnit: {usage_unit}")
 
                     if (
                         usage_unit == UsageUnit.COPIES.value
@@ -384,7 +384,7 @@ class ONIXExtractor(object):
                     ):
                         quantity_limit = parser.text_of_subtag(usage_limit_tag, "x320")
 
-                        cls._logger.debug("Quantity: {0}".format(quantity_limit))
+                        cls._logger.debug(f"Quantity: {quantity_limit}")
 
                         if licenses_owned == LicensePool.UNLIMITED_ACCESS:
                             licenses_owned = 0

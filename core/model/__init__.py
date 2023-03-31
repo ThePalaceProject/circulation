@@ -1,15 +1,15 @@
-# encoding: utf-8
-
 import logging
 import os
 import warnings
+from typing import TYPE_CHECKING, Dict, List
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.sql import compiler, select
 from sqlalchemy.sql.expression import literal_column, table
@@ -127,7 +127,7 @@ def numericrange_to_string(r):
         lower += 1
     if upper == lower:
         return str(lower)
-    return "%s-%s" % (lower, upper)
+    return f"{lower}-{upper}"
 
 
 def numericrange_to_tuple(r):
@@ -150,7 +150,7 @@ def tuple_to_numericrange(t):
     return NumericRange(t[0], t[1], "[]")
 
 
-class PresentationCalculationPolicy(object):
+class PresentationCalculationPolicy:
     """Which parts of the Work or Edition's presentation
     are we actually looking to update?
     """
@@ -288,13 +288,13 @@ def dump_query(query):
 DEBUG = False
 
 
-class SessionManager(object):
+class SessionManager:
 
     # A function that calculates recursively equivalent identifiers
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
-    engine_for_url = {}
+    engine_for_url: Dict[str, Engine] = {}
 
     @classmethod
     def engine(cls, url=None):
@@ -353,7 +353,7 @@ class SessionManager(object):
                 cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
             )
             if not os.path.exists(resource_file):
-                raise IOError(
+                raise OSError(
                     "Could not load recursive equivalents function from %s: file does not exist."
                     % resource_file
                 )
@@ -454,7 +454,7 @@ class SessionManager(object):
         return session
 
 
-def production_session(initialize_data=True):
+def production_session(initialize_data=True) -> Session:
     url = Configuration.database_url()
     if url.startswith('"'):
         url = url[1:]
@@ -474,6 +474,42 @@ def production_session(initialize_data=True):
     return _db
 
 
+class SessionBulkOperation:
+    """Bulk insert/update/operate on a session"""
+
+    def __init__(
+        self,
+        session,
+        batch_size,
+        bulk_method: str = "bulk_save_objects",
+        bulk_method_kwargs=None,
+    ) -> None:
+        self.session = session
+        self.bulk_method = bulk_method
+        self.bulk_method_kwargs = bulk_method_kwargs or {}
+        self.batch_size = batch_size
+        self._objects: List[Base] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self._bulk_operation()
+
+    def add(self, object):
+        self._objects.append(object)
+        if len(self._objects) == self.batch_size:
+            self._bulk_operation()
+
+    def _bulk_operation(self):
+        self.bulk_method, getattr(
+            self.session,
+            self.bulk_method,
+        )(self._objects, **self.bulk_method_kwargs)
+        self.session.commit()
+        self._objects = []
+
+
 from .admin import Admin, AdminRole
 from .cachedfeed import CachedFeed, CachedMARCFile, WillNotGenerateExpensiveFeed
 from .circulationevent import CirculationEvent
@@ -484,7 +520,6 @@ from .collection import (
     CollectionMissing,
     collections_identifiers,
 )
-from .complaint import Complaint
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,
@@ -495,6 +530,7 @@ from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverag
 from .credential import Credential, DelegatedPatronIdentifier, DRMDeviceIdentifier
 from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
+from .devicetokens import DeviceToken
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier

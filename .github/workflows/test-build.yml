@@ -1,32 +1,21 @@
 name: Test & Build
 on: [push, pull_request]
-env:
-  POSTGRES_USER: simplified_test
-  POSTGRES_PASSWORD: test
-  POSTGRES_DB: simplified_circulation_test
 
-  # Push the built docker image only in the following cases:
-  #  - The `NO_DOCKER_IMAGE` secret is not set. (Useful if you want to disable pushing
-  #    of docker images in local forks of this repo).
-  #  - The branch name does not start with `dependabot/`. The dependabot service does not
-  #    have the proper security token to push to github packages.
-  #  - The event that triggered this action was a `push`. If it was a PR the github action
-  #    context will not have permissions to push the image to github packages.
-  IMAGE_PUSH_ENABLED: ${{
-      secrets.NO_DOCKER_IMAGE == null &&
-      !startsWith(github.ref, 'refs/heads/dependabot/') &&
-      github.event_name == 'push'
-    }}
+concurrency:
+  group: test-build-${{ github.ref_name }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
         module: [Api, Core]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
@@ -36,10 +25,10 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -53,18 +42,26 @@ jobs:
 
       - name: Install Tox
         run: |
-          pip install --upgrade pip
-          pip install tox tox-gh-actions tox-docker
+          poetry install --only ci
+        env:
+          POETRY_VIRTUALENVS_CREATE: false
 
       - name: Run Tests
         run: tox
         env:
           MODULE: ${{ matrix.module }}
 
-  build-docker-exec:
-    name: Build and push circ-exec docker image
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+
+  docker-image-build:
+    name: Docker build base
     runs-on: ubuntu-latest
-    needs: [test]
+    permissions:
+      contents: read
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch. This prevents duplicated runs on internal PRs.
@@ -73,190 +70,167 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           persist-credentials: false
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate tags for circ-exec image
-        id: exec-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-exec
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
-
-      - name: Build & push circ-exec image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile.exec
-          push: ${{ env.IMAGE_PUSH_ENABLED }}
-          tags: ${{ steps.exec-tags.outputs.tags }}
-
-
-  build-docker-scripts:
-    name: Build and push circ-scripts docker image
-    runs-on: ubuntu-latest
-    needs: [test]
-
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          persist-credentials: false
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build circ-scripts image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile.scripts
-          load: true
-          tags: circ
-
-      - name: Start circ-scripts docker container
-        run: >
-          docker run --rm --name circ -d
-          --network ${{job.services.postgres.network}}
-          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
-
-      - name: Run circ-scripts tests
-        run: ./docker/ci/test_scripts.sh
-
-      - name: Stop circ-scripts docker container
-        if: always()
-        run: docker stop circ
-
-      - name: Generate tags for circ-scripts image
-        id: scripts-tags
-        uses: docker/metadata-action@v3
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-scripts
-          tags: |
-            type=semver,pattern={{major}}.{{minor}},priority=10
-            type=semver,pattern={{version}},priority=20
-            type=ref,event=branch,priority=30
-            type=sha,priority=40
-
-      - name: Push circ-scripts image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./docker/Dockerfile.scripts
-          push: ${{ env.IMAGE_PUSH_ENABLED }}
-          tags: ${{ steps.scripts-tags.outputs.tags }}
-
-
-  build-docker-webapp:
-    name: Build and push circ-webapp docker image
-    runs-on: ubuntu-latest
-    needs: [test]
-
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
-
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        uses: docker/setup-buildx-action@v2
 
       - name: Create version file
         run: git rev-parse --short HEAD > .version
 
-      - name: Build circ-webapp image
-        uses: docker/build-push-action@v2
+      - name: Build base image
+        uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./docker/Dockerfile.webapp
-          load: true
-          tags: circ
+          file: ./docker/Dockerfile
+          target: base
+          cache-to: type=gha,mode=max,scope=buildkit-${{ github.run_id }}
+          platforms: linux/amd64, linux/arm64
 
-      - name: Start circ-webapp docker container
+  docker-image-test:
+    name: Docker test circ-${{ matrix.image }} (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    needs: [docker-image-build]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["linux/amd64", "linux/arm64"]
+        image: ["scripts", "webapp"]
+    env:
+      POSTGRES_USER: palace_user
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: palace_circulation
+
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+
+    # Only push docker containers on a push event. Otherwise we won't have
+    # permissions to create the docker containers.
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Create version file
+        run: git rev-parse --short HEAD > .version
+
+      - name: Build image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          tags: test_image
+          load: true
+          target: ${{ matrix.image }}
+          cache-from: type=gha,scope=buildkit-${{ github.run_id }}
+          platforms: ${{ matrix.platform }}
+
+      - name: Start container
         run: >
-          docker run --rm --name circ -p 8000:80 -d
+          docker run --rm --name test_container -d --platform ${{ matrix.platform }}
           --network ${{job.services.postgres.network}}
           -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
-          circ
+          test_image
 
-      - name: Run circ-webapp tests
-        run: ./docker/ci/test_webapp.sh
+      - name: Run tests
+        run: ./docker/ci/test_${{ matrix.image }}.sh test_container
 
-      - name: Stop circ-webapp docker container
+      - name: Stop container
         if: always()
-        run: docker stop circ
+        run: docker stop test_container
 
-      - name: Generate tags for circ-webapp image
-        id: webapp-tags
-        uses: docker/metadata-action@v3
+  docker-image-push:
+    name: Push circ-${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [test, docker-image-test]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["scripts", "webapp", "exec"]
+
+    steps:
+      - uses: actions/checkout@v3
         with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-webapp
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      - name: Install Poetry
+        uses: ./.github/actions/poetry
+
+      - name: Setup Dunamai
+        run: poetry install --only ci
+        env:
+          POETRY_VIRTUALENVS_CREATE: false
+
+      - name: Create version file
+        run: |
+          echo "__version__ = '$(dunamai from git --style semver)'" >> core/_version.py
+          echo "__commit__ = '$(dunamai from git --format {commit} --full-commit)'" >> core/_version.py
+          echo "__branch__ = '$(dunamai from git --format {branch})'" >> core/_version.py
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate tags for image
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-${{ matrix.image }}
           tags: |
             type=semver,pattern={{major}}.{{minor}},priority=10
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
 
-      - name: Push circ-webapp image
-        uses: docker/build-push-action@v2
+      - name: Push image
+        uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./docker/Dockerfile.webapp
-          push: ${{ env.IMAGE_PUSH_ENABLED }}
-          tags: ${{ steps.webapp-tags.outputs.tags }}
+          file: ./docker/Dockerfile
+          # Push the built docker image only when the `NO_DOCKER_IMAGE` secret is not set.
+          # (Useful if you want to disable pushing of docker images in local forks of
+          # this repo).
+          push: ${{ secrets.NO_DOCKER_IMAGE == null }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          target: ${{ matrix.image }}
+          cache-from: type=gha,scope=buildkit-${{ github.run_id }}
+          platforms: linux/amd64, linux/arm64

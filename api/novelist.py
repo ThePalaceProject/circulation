@@ -37,7 +37,7 @@ from core.util import TitleProcessor
 from core.util.http import HTTP
 
 
-class NoveListAPI(object):
+class NoveListAPI:
 
     PROTOCOL = ExternalIntegration.NOVELIST
     NAME = _("Novelist API")
@@ -190,9 +190,9 @@ class NoveListAPI(object):
     def _confirm_same_identifier(self, metadata_objects):
         """Ensures that all metadata objects have the same NoveList ID"""
 
-        novelist_ids = set(
-            [metadata.primary_identifier.identifier for metadata in metadata_objects]
-        )
+        novelist_ids = {
+            metadata.primary_identifier.identifier for metadata in metadata_objects
+        }
         return len(novelist_ids) == 1
 
     def choose_best_metadata(self, metadata_objects, identifier):
@@ -262,7 +262,7 @@ class NoveListAPI(object):
             max_age=self.MAX_REPRESENTATION_AGE,
             response_reviewer=self.review_response,
             url_normalizer=normalized_url,
-            **kwargs
+            **kwargs,
         )
 
         # Commit to the database immediately to reduce the chance
@@ -682,7 +682,7 @@ class NoveListAPI(object):
 
     def make_novelist_data_object(self, items):
         return {
-            "customer": "%s:%s" % (self.profile, self.password),
+            "customer": f"{self.profile}:{self.password}",
             "records": items,
         }
 

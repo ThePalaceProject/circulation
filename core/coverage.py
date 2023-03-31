@@ -1,8 +1,12 @@
 import logging
 import traceback
+from typing import Optional, Union
 
+from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
+
+from core.model.coverage import EquivalencyCoverageRecord
 
 from . import log  # This sets the appropriate log format.
 from .metadata_layer import ReplacementPolicy, TimestampData
@@ -25,7 +29,7 @@ from .util.datetime_helpers import utc_now
 from .util.worker_pools import DatabaseJob
 
 
-class CoverageFailure(object):
+class CoverageFailure:
     """Object representing the failure to provide coverage."""
 
     def __init__(
@@ -42,7 +46,7 @@ class CoverageFailure(object):
             data_source = self.data_source.name
         else:
             data_source = None
-        return "<CoverageFailure: obj=%r data_source=%r transient=%r exception=%r>" % (
+        return "<CoverageFailure: obj={!r} data_source={!r} transient={!r} exception={!r}>".format(
             self.obj,
             data_source,
             self.transient,
@@ -76,6 +80,20 @@ class CoverageFailure(object):
             record.status = CoverageRecord.PERSISTENT_FAILURE
         return record
 
+    def to_equivalency_coverage_record(
+        self, operation: str
+    ) -> EquivalencyCoverageRecord:
+        """Convert this failure into a EquivalencyCoverageRecord."""
+        record, ignore = EquivalencyCoverageRecord.add_for(
+            self.obj, operation=operation
+        )
+        record.exception = self.exception
+        if self.transient:
+            record.status = CoverageRecord.TRANSIENT_FAILURE
+        else:
+            record.status = CoverageRecord.PERSISTENT_FAILURE
+        return record
+
 
 class CoverageProviderProgress(TimestampData):
 
@@ -84,7 +102,7 @@ class CoverageProviderProgress(TimestampData):
     """
 
     def __init__(self, *args, **kwargs):
-        super(CoverageProviderProgress, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # The offset is distinct from the counter, in that it's not written
         # to the database -- it's used to track state that's necessary within
@@ -115,7 +133,7 @@ class CoverageProviderProgress(TimestampData):
         pass
 
 
-class BaseCoverageProvider(object):
+class BaseCoverageProvider:
 
     """Run certain objects through an algorithm. If the algorithm returns
     success, add a coverage record for that object, so the object
@@ -135,13 +153,13 @@ class BaseCoverageProvider(object):
 
     # In your subclass, set this to the name of the service,
     # e.g. "Overdrive Bibliographic Coverage Provider".
-    SERVICE_NAME = None
+    SERVICE_NAME: Optional[str] = None
 
     # In your subclass, you _may_ set this to a string that distinguishes
     # two different CoverageProviders from the same data source.
     # (You may also override the operation method, if you need
     # database access to determine which operation to use.)
-    OPERATION = None
+    OPERATION: Optional[str] = None
 
     # The database session will be committed each time the
     # BaseCoverageProvider has (attempted to) provide coverage to this
@@ -149,7 +167,7 @@ class BaseCoverageProvider(object):
     # It's also possible to change it by passing in a value for
     # `batch_size` in the constructor, but generally nobody bothers
     # doing this.
-    DEFAULT_BATCH_SIZE = 100
+    DEFAULT_BATCH_SIZE: int = 100
 
     def __init__(
         self,
@@ -338,10 +356,25 @@ class BaseCoverageProvider(object):
         )
 
         qu = self.items_that_need_coverage(count_as_covered=count_as_covered)
-        self.log.info("%d items need coverage%s", qu.count(), count_as_covered_message)
-        batch = qu.limit(self.batch_size).offset(progress.offset)
 
-        if not batch.count():
+        # Running this statement only ONCE as it adds an unbounded query, very bad for the DB cluster
+        if progress.successes == 0:
+            self.log.info(
+                "%d items need coverage%s", qu.count(), count_as_covered_message
+            )
+        else:
+            self.log.info(
+                "Covering items after %d successes: %s",
+                progress.successes,
+                count_as_covered_message,
+            )
+
+        qu = qu.offset(progress.offset)
+        batch = qu.limit(self.batch_size)
+        batch_results = batch.all()
+        batch_count = len(batch_results)
+
+        if not batch_count:
             # The batch is empty. We're done.
             progress.finish = utc_now()
             return progress
@@ -350,7 +383,7 @@ class BaseCoverageProvider(object):
             successes,
             transient_failures,
             persistent_failures,
-        ), results = self.process_batch_and_handle_results(batch)
+        ), results = self.process_batch_and_handle_results(batch_results)
 
         # Update the running totals so that the service's eventual timestamp
         # will have a useful .achievements.
@@ -582,7 +615,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
 
     # In your subclass, set this to the name of the data source you
     # consult when providing coverage, e.g. DataSource.OVERDRIVE.
-    DATA_SOURCE_NAME = None
+    DATA_SOURCE_NAME: str
 
     # In your subclass, set this to a single identifier type, or a list
     # of identifier types. The CoverageProvider will attempt to give
@@ -591,7 +624,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
     # Setting this to None will attempt to give coverage to every single
     # Identifier in the system, which is probably not what you want.
     NO_SPECIFIED_TYPES = object()
-    INPUT_IDENTIFIER_TYPES = NO_SPECIFIED_TYPES
+    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = NO_SPECIFIED_TYPES
 
     # Set this to False if a given Identifier needs to be run through
     # this CoverageProvider once for every Collection that has this
@@ -625,7 +658,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
         :param replacement_policy: Optional. A ReplacementPolicy to use
            when updating local data with data from the third party.
         """
-        super(IdentifierCoverageProvider, self).__init__(_db, **kwargs)
+        super().__init__(_db, **kwargs)
 
         # We store the collection ID rather than the Collection to
         # avoid breakage if an app server with a scoped session ever
@@ -1077,14 +1110,14 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
     # By default, this type of CoverageProvider will provide coverage to
     # all Identifiers in the given Collection, regardless of their type.
-    INPUT_IDENTIFIER_TYPES = None
+    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = None
 
     DEFAULT_BATCH_SIZE = 10
 
     # Set this to the name of the protocol managed by this type of
     # CoverageProvider. If this CoverageProvider can manage collections
     # for any protocol, leave this as None.
-    PROTOCOL = None
+    PROTOCOL: Optional[str] = None
 
     # By default, Works calculated by a CollectionCoverageProvider update
     # the ExternalSearchIndex. Set this value to True for applications that
@@ -1108,7 +1141,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
                 % (collection.protocol, self.PROTOCOL)
             )
         _db = Session.object_session(collection)
-        super(CollectionCoverageProvider, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
 
     def _default_replacement_policy(self, _db):
         """Unless told otherwise, assume that we are getting
@@ -1144,15 +1177,13 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
     def run_once(self, *args, **kwargs):
         self.log.info("Considering collection %s", self.collection.name)
-        return super(CollectionCoverageProvider, self).run_once(*args, **kwargs)
+        return super().run_once(*args, **kwargs)
 
     def items_that_need_coverage(self, identifiers=None, **kwargs):
         """Find all Identifiers associated with this Collection but lacking
         coverage through this CoverageProvider.
         """
-        qu = super(CollectionCoverageProvider, self).items_that_need_coverage(
-            identifiers, **kwargs
-        )
+        qu = super().items_that_need_coverage(identifiers, **kwargs)
         qu = qu.join(Identifier.licensed_through).filter(
             LicensePool.collection_id == self.collection_id
         )
@@ -1447,6 +1478,8 @@ class WorkCoverageProvider(BaseCoverageProvider):
             count_as_missing_before=self.cutoff_time,
             **kwargs
         )
+        qu = qu.options(Load(Work).lazyload("*"))
+
         if identifiers:
             ids = [x.id for x in identifiers]
             qu = qu.join(Work.license_pools).filter(LicensePool.identifier_id.in_(ids))
@@ -1496,9 +1529,7 @@ class PresentationReadyWorkCoverageProvider(WorkCoverageProvider):
     """A WorkCoverageProvider that only covers presentation-ready works."""
 
     def items_that_need_coverage(self, identifiers=None, **kwargs):
-        qu = super(
-            PresentationReadyWorkCoverageProvider, self
-        ).items_that_need_coverage(identifiers, **kwargs)
+        qu = super().items_that_need_coverage(identifiers, **kwargs)
         qu = qu.filter(Work.presentation_ready == True)
         return qu
 

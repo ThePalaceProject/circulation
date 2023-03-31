@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app"
+      xmlns:dcterms="http://purl.org/dc/terms/" xmlns:opds="http://opds-spec.org/2010/catalog"
+      xmlns:opf="http://www.idpf.org/2007/opf" xmlns:drm="http://librarysimplified.org/terms/drm"
+      xmlns:schema="http://schema.org/" xmlns:simplified="http://librarysimplified.org/terms/"
+      xmlns:bibframe="http://bibframe.org/vocab/" xmlns:bib="http://bib.schema.org/"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:lcp="http://readium.org/lcp-specs/ns">
+    <id>http://localhost:6500/HAZELNUT/admin/custom_list/92?list_name=Other</id>
+    <title>Other</title>
+    <updated>2022-04-25T19:31:37+00:00</updated>
+    <link href="http://localhost:6500/HAZELNUT/admin/custom_list/92?list_name=Other" rel="self"/>
+
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>Snapdragon</title>
+        <author>
+            <name>Kat Leyh</name>
+            <link rel="contributor" type="application/atom+xml;profile=opds-catalog;kind=acquisition" title="Kat Leyh" href="https://ct.thepalaceproject.org/CT0118/works/contributor/Kat%20Leyh/eng/Children"/>
+        </author>
+        <summary type="html">&lt;p&gt;&lt;b&gt;Kat Leyh's &lt;i&gt;Snapdragon&lt;/i&gt; is a magical realist graphic novel about a young girl who befriends her town’s witch and discovers the strange magic within herself.&lt;/b&gt;&lt;br&gt;&lt;br&gt;Snap's town had a witch.&lt;br&gt;&lt;br&gt;At least, that’s how the rumor goes. But in reality, Jacks is just a crocks-wearing, internet-savvy old lady who sells roadkill skeletons online—after doing a little ritual to put their spirits to rest. It’s creepy, &lt;i&gt;sure&lt;/i&gt;, but Snap thinks it’s kind of cool, too.&lt;br&gt;&lt;br&gt;They make a deal: Jacks will teach Snap how to take care of the baby opossums that Snap rescued, and Snap will help Jacks with her work. But as Snap starts to get to know Jacks, she realizes that Jacks may in fact have &lt;i&gt;real &lt;/i&gt;magic—and a connection with Snap’s family’s past.&lt;/p&gt;</summary>
+        <simplified:pwid>a04c847a-5416-7565-0eeb-fde8c6ada3bd</simplified:pwid>
+        <link rel="http://opds-spec.org/image" href="https://covers.feedbooks.net/item/3381116.jpg?size=large&amp;t=1611651306" type="image/png"/>
+        <link rel="http://opds-spec.org/image/thumbnail" href="https://covers.feedbooks.net/item/3381116.jpg?t=1611651306" type="image/png"/>
+        <category scheme="http://librarysimplified.org/terms/fiction/" term="http://librarysimplified.org/terms/fiction/Fiction" label="Fiction"/>
+        <category scheme="http://librarysimplified.org/terms/genres/Simplified/" term="http://librarysimplified.org/terms/genres/Simplified/Comics%20%26%20Graphic%20Novels" label="Comics &amp; Graphic Novels"/>
+        <category scheme="http://librarysimplified.org/terms/genres/Simplified/" term="http://librarysimplified.org/terms/genres/Simplified/Fantasy" label="Fantasy"/>
+        <category scheme="http://schema.org/audience" term="Children" label="Children"/>
+        <category scheme="http://schema.org/typicalAgeRange" term="9-13" label="9-13"/>
+        <dcterms:language>en</dcterms:language>
+        <dcterms:publisher>First Second</dcterms:publisher>
+        <dcterms:issued>2020-02-03</dcterms:issued>
+        <link rel="issues" href="https://ct.thepalaceproject.org/CT0118/works/ISBN/9781250776341/report"/>
+        <id>urn:isbn:9781250776341</id>
+        <link rel="alternate" href="https://ct.thepalaceproject.org/CT0118/works/ISBN/9781250776341" type="application/atom+xml;type=entry;profile=opds-catalog"/>
+        <bibframe:distribution bibframe:ProviderName="Palace Marketplace"/>
+        <published>2021-11-19T00:00:00Z</published>
+        <updated>2022-06-21T19:03:46+00:00</updated>
+        <link type="application/atom+xml;type=entry;profile=opds-catalog" rel="http://opds-spec.org/acquisition/borrow" href="https://ct.thepalaceproject.org/CT0118/works/ISBN/9781250776341/borrow">
+            <opds:indirectAcquisition type="application/vnd.adobe.adept+xml">
+                <opds:indirectAcquisition type="application/epub+zip"/>
+            </opds:indirectAcquisition>
+            <opds:indirectAcquisition type="application/vnd.readium.lcp.license.v1.0+json">
+                <opds:indirectAcquisition type="application/epub+zip"/>
+            </opds:indirectAcquisition>
+            <opds:availability status="available"/>
+            <opds:holds total="0"/>
+            <opds:copies total="2399977" available="25"/>
+        </link>
+        <link rel="related" type="application/atom+xml;profile=opds-catalog;kind=acquisition" title="Recommended Works" href="https://ct.thepalaceproject.org/CT0118/works/ISBN/9781250776341/related_books"/>
+        <link rel="http://www.w3.org/ns/oa#annotationService" type="application/ld+json; profile=&quot;http://www.w3.org/ns/anno.jsonld&quot;" href="https://ct.thepalaceproject.org/CT0118/annotations/ISBN/9781250776341"/>
+        <link rel="http://librarysimplified.org/terms/rel/analytics/open-book" href="https://ct.thepalaceproject.org/CT0118/analytics/ISBN/9781250776341/open_book"/>
+    </entry>
+
+    <entry schema:additionalType="http://bib.schema.org/Audiobook">
+        <title>This Town Sleeps</title>
+        <author>
+            <name>Dennis E. Staples</name>
+            <link rel="contributor" type="application/atom+xml;profile=opds-catalog;kind=acquisition" title="Dennis E. Staples" href="https://ct.thepalaceproject.org/CT0118/works/contributor/Dennis%20E.%20Staples/eng/Adult%2CAdults%2BOnly%2CAll%2BAges%2CChildren%2CYoung%2BAdult"/>
+        </author>
+        <author>
+            <name>Kaipo Schwab</name>
+            <link rel="contributor" type="application/atom+xml;profile=opds-catalog;kind=acquisition" title="Kaipo Schwab" href="https://ct.thepalaceproject.org/CT0118/works/contributor/Kaipo%20Schwab/eng/Adult%2CAdults%2BOnly%2CAll%2BAges%2CChildren%2CYoung%2BAdult"/>
+        </author>
+        <summary type="html">Set on a reservation in far northern Minnesota, This Town Sleeps explores the many ways history, culture, landscape, and lineage shape our lives, our understanding of the world we inhabit, and the stories we tell ourselves to make sense of it all.On an Ojibwe reservation called Languille Lake, within the small town of Geshig at the hub of the rez, two men enter into a secret romance. Marion Lafournier, a midtwenties gay Ojibwe man, begins a relationship with his former classmate Shannon, a heavily closeted white man. While Marion is far more open about his sexuality, neither is immune to the realities of the lives of gay men in small towns and closed societies.Then one night, while roaming the dark streets of Geshig, Marion unknowingly brings to life the spirit of a dog from beneath the elementary school playground. The mysterious revenant leads him to the grave of Kayden Kelliher, an Ojibwe basketball star who was murdered at the young age of seventeen and whose presence still lingers in the memories of the townsfolk. While investigating the fallen hero's death, Marion discovers family connections and an old Ojibwe legend that may be the secret to unraveling the mystery he has found himself in.</summary>
+        <simplified:pwid>cf784a59-4bd3-ea8a-81c3-9590492a824f</simplified:pwid>
+        <link rel="http://opds-spec.org/image" href="http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9781684578740/Large/Logo" type="image/png"/>
+        <link rel="http://opds-spec.org/image/thumbnail" href="http://contentcafecloud.baker-taylor.com/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9781684578740/Medium/Logo" type="image/png"/>
+        <category scheme="http://librarysimplified.org/terms/fiction/" term="http://librarysimplified.org/terms/fiction/Fiction" label="Fiction"/>
+        <category scheme="http://librarysimplified.org/terms/genres/Simplified/" term="http://librarysimplified.org/terms/genres/Simplified/Fantasy" label="Fantasy"/>
+        <category scheme="http://schema.org/audience" term="Adult" label="Adult"/>
+        <dcterms:language>en</dcterms:language>
+        <dcterms:publisher>Highbridge Co</dcterms:publisher>
+        <bib:publisherImprint>Highbridge Co</bib:publisherImprint>
+        <dcterms:issued>2020-03-03</dcterms:issued>
+        <link rel="issues" href="https://ct.thepalaceproject.org/CT0118/works/Axis%20360%20ID/0026082126/report"/>
+        <id>urn:librarysimplified.org/terms/id/Axis%20360%20ID/0026082126</id>
+        <link rel="alternate" href="https://ct.thepalaceproject.org/CT0118/works/Axis%20360%20ID/0026082126" type="application/atom+xml;type=entry;profile=opds-catalog"/>
+        <bibframe:distribution bibframe:ProviderName="Axis 360"/>
+        <published>2021-10-18T00:00:00Z</published>
+        <updated>2022-06-23T09:56:17+00:00</updated>
+        <link type="application/atom+xml;type=entry;profile=opds-catalog" rel="http://opds-spec.org/acquisition/borrow" href="https://ct.thepalaceproject.org/CT0118/works/Axis%20360%20ID/0026082126/borrow/6">
+            <opds:indirectAcquisition type="application/vnd.librarysimplified.findaway.license+json"/>
+            <opds:availability status="unavailable"/>
+            <opds:holds total="0"/>
+            <opds:copies total="1" available="0"/>
+        </link>
+        <link rel="related" type="application/atom+xml;profile=opds-catalog;kind=acquisition" title="Recommended Works" href="https://ct.thepalaceproject.org/CT0118/works/Axis%20360%20ID/0026082126/related_books"/>
+        <link rel="http://www.w3.org/ns/oa#annotationService" type="application/ld+json; profile=&quot;http://www.w3.org/ns/anno.jsonld&quot;" href="https://ct.thepalaceproject.org/CT0118/annotations/Axis%20360%20ID/0026082126"/>
+        <link rel="http://librarysimplified.org/terms/rel/analytics/open-book" href="https://ct.thepalaceproject.org/CT0118/analytics/Axis%20360%20ID/0026082126/open_book"/>
+    </entry>
+
+    <link rel="http://opds-spec.org/auth/document" href="http://localhost:6500/HAZELNUT/authentication_document"/>
+    <link rel="search" type="application/opensearchdescription+xml" href="http://localhost:6500/HAZELNUT/search/"/>
+    <link rel="http://opds-spec.org/shelf" type="application/atom+xml;profile=opds-catalog;kind=acquisition"
+          href="http://localhost:6500/HAZELNUT/loans/"/>
+    <link rel="http://www.w3.org/ns/oa#annotationService"
+          type="application/ld+json; profile=&quot;http://www.w3.org/ns/anno.jsonld&quot;"
+          href="http://localhost:6500/HAZELNUT/annotations/"/>
+    <link rel="http://opds-spec.org/crawlable" type="application/atom+xml;profile=opds-catalog;kind=acquisition"
+          href="http://localhost:6500/HAZELNUT/lists/Other/crawlable"/>
+    <link href="mailto:someone@example.com" rel="help"/>
+</feed>

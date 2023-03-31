@@ -15,15 +15,16 @@ from core.model import (
     create,
     get_one,
 )
+from tests.fixtures.api_admin import SettingsControllerFixture
 
-from .test_controller import SettingsControllerTest
 
-
-class TestAnalyticsServices(SettingsControllerTest):
-    def test_analytics_services_get_with_one_default_service(self):
-        with self.request_context_with_admin("/"):
+class TestAnalyticsServices:
+    def test_analytics_services_get_with_one_default_service(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert len(response.get("analytics_services")) == 1
             local_analytics = response.get("analytics_services")[0]
@@ -34,25 +35,29 @@ class TestAnalyticsServices(SettingsControllerTest):
             assert GoogleAnalyticsProvider.NAME in [p.get("label") for p in protocols]
             assert "settings" in protocols[0]
 
-    def test_analytics_services_get_with_one_service(self):
+    def test_analytics_services_get_with_one_service(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         # Delete the local analytics service that gets created by default.
         local_analytics_default = get_one(
-            self._db, ExternalIntegration, protocol=LocalAnalyticsProvider.__module__
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            protocol=LocalAnalyticsProvider.__module__,
         )
 
-        self._db.delete(local_analytics_default)
+        settings_ctrl_fixture.ctrl.db.session.delete(local_analytics_default)
 
         ga_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=GoogleAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
-        ga_service.url = self._str
+        ga_service.url = settings_ctrl_fixture.ctrl.db.fresh_str()
 
-        with self.request_context_with_admin("/"):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             [service] = response.get("analytics_services")
 
@@ -62,36 +67,39 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ExternalIntegration.URL
             )
 
-        ga_service.libraries += [self._default_library]
+        ga_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             GoogleAnalyticsProvider.TRACKING_ID,
-            self._default_library,
+            settings_ctrl_fixture.ctrl.db.default_library(),
             ga_service,
         ).value = "trackingid"
-        with self.request_context_with_admin("/"):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             [service] = response.get("analytics_services")
 
             [library] = service.get("libraries")
-            assert self._default_library.short_name == library.get("short_name")
+            assert (
+                settings_ctrl_fixture.ctrl.db.default_library().short_name
+                == library.get("short_name")
+            )
             assert "trackingid" == library.get(GoogleAnalyticsProvider.TRACKING_ID)
 
-        self._db.delete(ga_service)
+        settings_ctrl_fixture.ctrl.db.session.delete(ga_service)
 
         local_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=LocalAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
 
-        local_service.libraries += [self._default_library]
-        with self.request_context_with_admin("/"):
+        local_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             [local_analytics] = response.get("analytics_services")
 
@@ -99,17 +107,22 @@ class TestAnalyticsServices(SettingsControllerTest):
             assert local_service.protocol == local_analytics.get("protocol")
             assert local_analytics.get("protocol") == LocalAnalyticsProvider.__module__
             [library] = local_analytics.get("libraries")
-            assert self._default_library.short_name == library.get("short_name")
+            assert (
+                settings_ctrl_fixture.ctrl.db.default_library().short_name
+                == library.get("short_name")
+            )
 
-    def test_analytics_services_post_errors(self):
-        with self.request_context_with_admin("/", method="POST"):
+    def test_analytics_services_post_errors(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([])
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == MISSING_ANALYTICS_NAME
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -118,11 +131,11 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == UNKNOWN_PROTOCOL
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -130,11 +143,11 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -143,19 +156,19 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == MISSING_SERVICE.uri
 
         service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=GoogleAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             name="name",
         )
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", service.name),
@@ -164,18 +177,18 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
         service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=GoogleAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -185,11 +198,11 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response == CANNOT_CHANGE_PROTOCOL
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", service.id),
@@ -199,11 +212,11 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", service.id),
@@ -214,18 +227,18 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == NO_SUCH_LIBRARY.uri
 
         library, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library",
             short_name="L",
         )
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", service.id),
@@ -236,13 +249,13 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        self.admin.remove_role(AdminRole.LIBRARY_MANAGER)
-        with self.request_context_with_admin("/", method="POST"):
+        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        settings_ctrl_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("protocol", LocalAnalyticsProvider.__module__),
@@ -252,17 +265,19 @@ class TestAnalyticsServices(SettingsControllerTest):
             )
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_analytics_services_controller.process_analytics_services,
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services,
             )
 
-    def test_analytics_services_post_create(self):
+    def test_analytics_services_post_create(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         library, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library",
             short_name="L",
         )
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Google analytics name"),
@@ -275,12 +290,12 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.status_code == 201
 
         service = get_one(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=GoogleAnalyticsProvider.__module__,
@@ -292,20 +307,23 @@ class TestAnalyticsServices(SettingsControllerTest):
         assert (
             "trackingid"
             == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, GoogleAnalyticsProvider.TRACKING_ID, library, service
+                settings_ctrl_fixture.ctrl.db.session,
+                GoogleAnalyticsProvider.TRACKING_ID,
+                library,
+                service,
             ).value
         )
 
         local_analytics_default = get_one(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=LocalAnalyticsProvider.__module__,
         )
-        self._db.delete(local_analytics_default)
+        settings_ctrl_fixture.ctrl.db.session.delete(local_analytics_default)
 
         # Creating a local analytics service doesn't require a URL.
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "local analytics name"),
@@ -317,26 +335,28 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.status_code == 201
 
-    def test_analytics_services_post_edit(self):
+    def test_analytics_services_post_edit(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         l1, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library 1",
             short_name="L1",
         )
         l2, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library 2",
             short_name="L2",
         )
 
         ga_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=GoogleAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
@@ -344,7 +364,7 @@ class TestAnalyticsServices(SettingsControllerTest):
         ga_service.url = "oldurl"
         ga_service.libraries = [l1]
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", ga_service.id),
@@ -358,7 +378,7 @@ class TestAnalyticsServices(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_analytics_services_controller.process_analytics_services()
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
             )
             assert response.status_code == 200
 
@@ -369,23 +389,34 @@ class TestAnalyticsServices(SettingsControllerTest):
         assert (
             "l2id"
             == ConfigurationSetting.for_library_and_externalintegration(
-                self._db, GoogleAnalyticsProvider.TRACKING_ID, l2, ga_service
+                settings_ctrl_fixture.ctrl.db.session,
+                GoogleAnalyticsProvider.TRACKING_ID,
+                l2,
+                ga_service,
             ).value
         )
 
-    def test_check_name_unique(self):
+    def test_check_name_unique(self, settings_ctrl_fixture: SettingsControllerFixture):
         kwargs = dict(
             protocol=GoogleAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
         existing_service, ignore = create(
-            self._db, ExternalIntegration, name="existing service", **kwargs
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            name="existing service",
+            **kwargs
         )
         new_service, ignore = create(
-            self._db, ExternalIntegration, name="new service", **kwargs
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            name="new service",
+            **kwargs
         )
 
-        m = self.manager.admin_analytics_services_controller.check_name_unique
+        m = (
+            settings_ctrl_fixture.manager.admin_analytics_services_controller.check_name_unique
+        )
 
         # Try to change new service so that it has the same name as existing service
         # -- this is not allowed.
@@ -398,15 +429,17 @@ class TestAnalyticsServices(SettingsControllerTest):
         # Changing the existing service's name is also fine.
         assert None == m(existing_service, "new name")
 
-    def test_analytics_service_delete(self):
+    def test_analytics_service_delete(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
         l1, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library 1",
             short_name="L1",
         )
         ga_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=GoogleAnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
@@ -414,19 +447,21 @@ class TestAnalyticsServices(SettingsControllerTest):
         ga_service.url = "oldurl"
         ga_service.libraries = [l1]
 
-        with self.request_context_with_admin("/", method="DELETE"):
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_analytics_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_delete,
                 ga_service.id,
             )
 
-            self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = self.manager.admin_analytics_services_controller.process_delete(
+            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            response = settings_ctrl_fixture.manager.admin_analytics_services_controller.process_delete(
                 ga_service.id
             )
             assert response.status_code == 200
 
-        service = get_one(self._db, ExternalIntegration, id=ga_service.id)
+        service = get_one(
+            settings_ctrl_fixture.ctrl.db.session, ExternalIntegration, id=ga_service.id
+        )
         assert None == service

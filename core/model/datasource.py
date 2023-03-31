@@ -1,8 +1,8 @@
-# encoding: utf-8
 # DataSource
 
 
 from collections import defaultdict
+from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
@@ -14,6 +14,23 @@ from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants, IdentifierConstants
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePoolDeliveryMechanism
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import (  # noqa: autoflake
+        Classification,
+        CoverageRecord,
+        Credential,
+        CustomList,
+        Edition,
+        Equivalency,
+        Hyperlink,
+        IntegrationClient,
+        LicensePool,
+        Measurement,
+        Resource,
+    )
 
 
 class DataSource(Base, HasSessionCache, DataSourceConstants):
@@ -40,7 +57,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     )
 
     # One DataSource can generate many Editions.
-    editions = relationship("Edition", backref="data_source")
+    editions = relationship("Edition", back_populates="data_source", uselist=True)
 
     # One DataSource can generate many CoverageRecords.
     coverage_records = relationship("CoverageRecord", backref="data_source")
@@ -49,9 +66,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     id_equivalencies = relationship("Equivalency", backref="data_source")
 
     # One DataSource can grant access to many LicensePools.
-    license_pools = relationship(
-        "LicensePool", backref=backref("data_source", lazy="joined")
-    )
+    license_pools = relationship("LicensePool", back_populates="data_source")
 
     # One DataSource can provide many Hyperlinks.
     links = relationship("Hyperlink", backref="data_source")

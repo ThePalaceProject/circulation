@@ -1,30 +1,37 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # PolicyException LicensePool, LicensePoolDeliveryMechanism, DeliveryMechanism,
 # RightsStatus
 import datetime
 import logging
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstraint
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
-from sqlalchemy.sql.functions import func
+
+from core.model.hybrid import hybrid_property
 
 from ..util.datetime_helpers import utc_now
 from . import Base, create, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
-from .complaint import Complaint
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
 from .hassessioncache import HasSessionCache
 from .patron import Hold, Loan, Patron
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
+    from core.model import (  # noqa: autoflake
+        Collection,
+        DataSource,
+        Identifier,
+        Resource,
+    )
+
     from ..analytics import Analytics
 
 
@@ -43,15 +50,15 @@ class LicenseStatus(PythonEnum):
 
 
 class LicenseFunctions:
-    identifier: str
-    checkout_url: str
-    status_url: str
-    status: LicenseStatus
-    expires: Optional[datetime.datetime]
-    checkouts_left: Optional[int]
-    checkouts_available: int
-    terms_concurrency: Optional[int]
-    content_types: Optional[str]
+    identifier: Column[str | None]
+    checkout_url: Column[str | None]
+    status_url: Column[str | None]
+    status: LicenseStatus | None
+    expires: Column[datetime.datetime | None]
+    checkouts_left: Column[int | None]
+    checkouts_available: Column[int | None]
+    terms_concurrency: Column[int | None]
+    content_types: Column[list[str] | None]
 
     @property
     def is_perpetual(self) -> bool:
@@ -75,7 +82,7 @@ class LicenseFunctions:
         )
 
     @property
-    def total_remaining_loans(self) -> int:
+    def total_remaining_loans(self) -> int | None:
         if self.is_inactive:
             return 0
         elif self.is_loan_limited:
@@ -84,7 +91,7 @@ class LicenseFunctions:
             return self.terms_concurrency
 
     @property
-    def currently_available_loans(self) -> int:
+    def currently_available_loans(self) -> int | None:
         if self.is_inactive:
             return 0
         else:
@@ -111,7 +118,7 @@ class License(Base, LicenseFunctions):
     identifier = Column(Unicode)
     checkout_url = Column(Unicode)
     status_url = Column(Unicode)
-    status = Column(AlchemyEnum(LicenseStatus))
+    status = Column(AlchemyEnum(LicenseStatus))  # type: ignore
 
     expires = Column(DateTime(timezone=True))
 
@@ -177,12 +184,21 @@ class LicensePool(Base):
     # Each LicensePool is associated with one DataSource and one
     # Identifier.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source = relationship(
+        "DataSource", back_populates="license_pools", lazy="joined"
+    )
+
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier = relationship(
+        "Identifier", back_populates="licensed_through", lazy="joined"
+    )
 
     # Each LicensePool belongs to one Collection.
     collection_id = Column(
         Integer, ForeignKey("collections.id"), index=True, nullable=False
     )
+
+    collection = relationship("Collection", back_populates="licensepools")
 
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
@@ -191,23 +207,22 @@ class LicensePool(Base):
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.
     licenses = relationship(
-        "License", backref="license_pool", cascade="all, delete-orphan"
+        "License", backref="license_pool", cascade="all, delete-orphan", uselist=True
     )
 
     # One LicensePool can have many Loans.
-    loans = relationship("Loan", backref="license_pool", cascade="all, delete-orphan")
+    loans = relationship(
+        "Loan", back_populates="license_pool", cascade="all, delete-orphan"
+    )
 
     # One LicensePool can have many Holds.
-    holds = relationship("Hold", backref="license_pool", cascade="all, delete-orphan")
+    holds = relationship(
+        "Hold", back_populates="license_pool", cascade="all, delete-orphan"
+    )
 
     # One LicensePool can have many CirculationEvents
     circulation_events = relationship(
         "CirculationEvent", backref="license_pool", cascade="all, delete-orphan"
-    )
-
-    # One LicensePool can be associated with many Complaints.
-    complaints = relationship(
-        "Complaint", backref="license_pool", cascade="all, delete-orphan"
     )
 
     # The date this LicensePool was first created in our db
@@ -240,7 +255,7 @@ class LicensePool(Base):
 
     # This lets us cache the work of figuring out the best open access
     # link for this LicensePool.
-    _open_access_download_url = Column(Unicode, name="open_access_download_url")
+    _open_access_download_url = Column("open_access_download_url", Unicode)
 
     # A Collection can not have more than one LicensePool for a given
     # Identifier from a given DataSource.
@@ -257,7 +272,9 @@ class LicensePool(Base):
 
     def __repr__(self):
         if self.identifier:
-            identifier = "%s/%s" % (self.identifier.type, self.identifier.identifier)
+            identifier = "{}/{}".format(
+                self.identifier.type, self.identifier.identifier
+            )
         else:
             identifier = "unknown identifier"
         return (
@@ -273,22 +290,20 @@ class LicensePool(Base):
         )
 
     @hybrid_property
-    def unlimited_access(self):
+    def unlimited_access(self) -> bool:
         """Returns a Boolean value indicating whether this LicensePool allows unlimited access.
         For example, in the case of LCP books without explicit licensing information
 
         :return: Boolean value indicating whether this LicensePool allows unlimited access
-        :rtype: bool
         """
         return self.licenses_owned == self.UNLIMITED_ACCESS
 
     @unlimited_access.setter
-    def unlimited_access(self, value):
+    def unlimited_access(self, value: bool):
         """Sets value of unlimited_access property.
         If you set it to False, license_owned and license_available will be reset to 0
 
         :param value: Boolean value indicating whether this LicensePool allows unlimited access
-        :type value: bool
         """
         if value:
             self.licenses_owned = self.UNLIMITED_ACCESS
@@ -394,39 +409,6 @@ class LicensePool(Base):
                 dm.delivery_mechanism.default_client_can_fulfill
                 for dm in self.delivery_mechanisms
             ]
-        )
-
-    @classmethod
-    def with_complaint(cls, library, resolved=False):
-        """Return query for LicensePools that have at least one Complaint."""
-        from .collection import Collection
-        from .library import Library
-
-        _db = Session.object_session(library)
-        subquery = (
-            _db.query(
-                LicensePool.id, func.count(LicensePool.id).label("complaint_count")
-            )
-            .select_from(LicensePool)
-            .join(LicensePool.collection)
-            .join(Collection.libraries)
-            .filter(Library.id == library.id)
-            .join(LicensePool.complaints)
-            .group_by(LicensePool.id)
-        )
-
-        if resolved == False:
-            subquery = subquery.filter(Complaint.resolved == None)
-        elif resolved == True:
-            subquery = subquery.filter(Complaint.resolved != None)
-
-        subquery = subquery.subquery()
-
-        return (
-            _db.query(LicensePool)
-            .join(subquery, LicensePool.id == subquery.c.id)
-            .order_by(subquery.c.complaint_count.desc())
-            .add_columns(subquery.c.complaint_count)
         )
 
     @property
@@ -648,8 +630,8 @@ class LicensePool(Base):
 
     def update_availability_from_licenses(
         self,
-        analytics: "Analytics" = None,
-        as_of: datetime.datetime = None,
+        analytics: Analytics | None = None,
+        as_of: datetime.datetime | None = None,
     ):
         """
         Update the LicensePool with new availability information, based on the
@@ -659,8 +641,16 @@ class LicensePool(Base):
         """
         _db = Session.object_session(self)
 
-        licenses_owned = sum([l.total_remaining_loans for l in self.licenses])
-        licenses_available = sum([l.currently_available_loans for l in self.licenses])
+        licenses_owned = sum(
+            l.total_remaining_loans
+            for l in self.licenses
+            if l.total_remaining_loans is not None
+        )
+        licenses_available = sum(
+            l.currently_available_loans
+            for l in self.licenses
+            if l.currently_available_loans is not None
+        )
 
         holds = self.get_active_holds()
 
@@ -753,18 +743,6 @@ class LicensePool(Base):
             if old_value == new_value:
                 continue
             changes_made = True
-
-            if old_value < new_value:
-                event_name = more_event
-            else:
-                event_name = fewer_event
-
-            if not event_name:
-                continue
-
-            self.collect_analytics_event(
-                analytics, event_name, as_of, old_value, new_value
-            )
 
         # Update the license pool with the latest information.
         any_data = False
@@ -869,11 +847,6 @@ class LicensePool(Base):
                 analytics=analytics,
                 as_of=event_date,
             )
-        if ignore or not changes_made:
-            # Even if the event was ignored or didn't actually change
-            # availability, we want to record receipt of the event
-            # in the analytics.
-            self.collect_analytics_event(analytics, event_type, event_date, 0, 0)
 
     def _calculate_change_from_one_event(self, type, delta):
         new_licenses_owned = self.licenses_owned
@@ -1255,7 +1228,7 @@ class LicensePool(Base):
             licensepools_changed = True
 
         # All LicensePools with a given Identifier must share a work.
-        existing_works = set([x.work for x in self.identifier.licensed_through])
+        existing_works = {x.work for x in self.identifier.licensed_through}
         if len(existing_works) > 1:
             logging.warning(
                 "LicensePools for %r have more than one Work between them. Removing them all and starting over.",
@@ -1349,8 +1322,7 @@ class LicensePool(Base):
         q = Identifier.resources_for_identifier_ids(
             _db, [self.identifier.id], open_access
         )
-        for resource in q:
-            yield resource
+        yield from q
 
     @property
     def open_access_download_url(self):
@@ -1474,16 +1446,20 @@ class LicensePoolDeliveryMechanism(Base):
 
     id = Column(Integer, primary_key=True)
 
-    data_source_id = Column(
+    data_source_id: Column[int] = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
 
-    identifier_id = Column(
+    identifier_id: Column[int] = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
 
     delivery_mechanism_id = Column(
         Integer, ForeignKey("deliverymechanisms.id"), index=True, nullable=False
+    )
+    delivery_mechanism = relationship(
+        "DeliveryMechanism",
+        back_populates="license_pool_delivery_mechanisms",
     )
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
@@ -1642,7 +1618,7 @@ class LicensePoolDeliveryMechanism(Base):
         )
 
     def __repr__(self):
-        return "<LicensePoolDeliveryMechanism: data_source={0}, identifier={1}, mechanism={2}>".format(
+        return "<LicensePoolDeliveryMechanism: data_source={}, identifier={}, mechanism={}>".format(
             str(self.data_source), repr(self.identifier), repr(self.delivery_mechanism)
         )
 
@@ -1738,19 +1714,17 @@ class DeliveryMechanism(Base, HasSessionCache):
     #
     # This is primarily used when deciding which books can be imported
     # from an OPDS For Distributors collection.
-    default_client_can_fulfill_lookup = set(
-        [
-            # EPUB books
-            (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
-            (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
-            # PDF books
-            (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
-            # Various audiobook formats
-            (None, FINDAWAY_DRM),
-            (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
-            (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
-        ]
-    )
+    default_client_can_fulfill_lookup = {
+        # EPUB books
+        (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
+        (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+        # PDF books
+        (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
+        # Various audiobook formats
+        (None, FINDAWAY_DRM),
+        (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+        (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
+    }
 
     # If the default client supports a given media type with no DRM,
     # we can infer that the client _also_ supports that media type via
@@ -1761,7 +1735,8 @@ class DeliveryMechanism(Base, HasSessionCache):
 
     license_pool_delivery_mechanisms = relationship(
         "LicensePoolDeliveryMechanism",
-        backref="delivery_mechanism",
+        back_populates="delivery_mechanism",
+        uselist=True,
     )
 
     __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
@@ -1772,7 +1747,7 @@ class DeliveryMechanism(Base, HasSessionCache):
             drm_scheme = "DRM-free"
         else:
             drm_scheme = self.drm_scheme
-        return "%s (%s)" % (self.content_type, drm_scheme)
+        return f"{self.content_type} ({drm_scheme})"
 
     def cache_key(self):
         return (self.content_type, self.drm_scheme)
@@ -1784,7 +1759,7 @@ class DeliveryMechanism(Base, HasSessionCache):
         else:
             fulfillable = "not fulfillable"
 
-        return "<Delivery mechanism: %s, %s)>" % (self.name, fulfillable)
+        return f"<Delivery mechanism: {self.name}, {fulfillable})>"
 
     @classmethod
     def lookup(cls, _db, content_type, drm_scheme):
@@ -1905,7 +1880,6 @@ Index(
 
 
 class RightsStatus(Base):
-
     """The terms under which a book has been made available to the general
     public.
     This will normally be 'in copyright', or 'public domain', or a

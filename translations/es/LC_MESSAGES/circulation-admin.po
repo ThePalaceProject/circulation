@@ -19,12 +19,6 @@ msgid "A valid library staff email is required."
 msgstr ""
 "Se requiere un correo electrónico válido del personal de la biblioteca"
 
-msgid "Google OAuth Error"
-msgstr "Google OAuth Error"
-
-msgid "There was an error connecting with Google OAuth"
-msgstr "Se ha producido un error al conectar con Google OAuth."
-
 msgid "Invalid CSRF token"
 msgstr "Ficha CSRF no válida"
 
@@ -45,18 +39,6 @@ msgstr "El metadatos Wrangler está buscando nuevos datos. Vuelva más tarde."
 
 msgid "Metadata could not be refreshed."
 msgstr "Los metadatos no se pueden actualizar."
-
-msgid "Unrecognized complaint."
-msgstr "Queja no reconocida."
-
-msgid "The complaint you are attempting to resolve could not be found."
-msgstr "La queja que está intentando resolver no se pudo encontrar."
-
-msgid "Complaint already resolved."
-msgstr "La queja ya está resuelta."
-
-msgid "You can't resolve a complaint that is already resolved."
-msgstr "No se puede resolver una queja que ya está resuelta."
 
 msgid "Genre not found."
 msgstr "Género no encontrado."

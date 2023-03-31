@@ -37,7 +37,7 @@ class MockFlowWithoutType(Flow):
         return {}
 
 
-class TestOPDSAuthenticationFlow(object):
+class TestOPDSAuthenticationFlow:
     def test_flow_sets_type_at_runtime(self):
         """An OPDSAuthenticationFlow object can set `type` during
         to_dict().
@@ -66,7 +66,7 @@ class TestOPDSAuthenticationFlow(object):
         pytest.raises(ValueError, flow.authentication_flow_document, "argument")
 
 
-class TestAuthenticationForOPDSDocument(object):
+class TestAuthenticationForOPDSDocument:
     def test_good_document(self):
         """Verify that to_dict() works when all the data is in place."""
         doc_obj = Doc(

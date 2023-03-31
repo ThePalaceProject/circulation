@@ -12,14 +12,14 @@ class ElementMaker(builder.ElementMaker):
     def __dict__(self):
         # Remove default_typemap from the dictionary -- it contains functions
         # that can't be pickled.
-        return dict(
-            (k, v)
+        return {
+            k: v
             for k, v in super(ElementMaker, self).__dict__
             if k != "default_typemap"
-        )
+        }
 
 
-class AtomFeed(object):
+class AtomFeed:
 
     ATOM_TYPE = "application/atom+xml"
 
@@ -59,12 +59,9 @@ class AtomFeed(object):
         "lcp": LCP_NS,
     }
 
-    default_typemap = {datetime: lambda e, v: _strftime(v)}
-    E = ElementMaker(typemap=default_typemap, nsmap=nsmap)
-    SIMPLIFIED = ElementMaker(
-        typemap=default_typemap, nsmap=nsmap, namespace=SIMPLIFIED_NS
-    )
-    SCHEMA = ElementMaker(typemap=default_typemap, nsmap=nsmap, namespace=SCHEMA_NS)
+    E = ElementMaker(nsmap=nsmap)
+    SIMPLIFIED = ElementMaker(nsmap=nsmap, namespace=SIMPLIFIED_NS)
+    SCHEMA = ElementMaker(nsmap=nsmap, namespace=SCHEMA_NS)
 
     @classmethod
     def _strftime(cls, date):
@@ -138,7 +135,7 @@ class AtomFeed(object):
 
     @classmethod
     def schema_(cls, field_name):
-        return "{%s}%s" % (cls.SCHEMA_NS, field_name)
+        return f"{{{cls.SCHEMA_NS}}}{field_name}"
 
     @classmethod
     def summary(cls, *args, **kwargs):
@@ -168,7 +165,7 @@ class AtomFeed(object):
             self.E.updated(self._strftime(utc_now())),
             self.E.link(href=url, rel="self"),
         )
-        super(AtomFeed, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def __str__(self):
         if self.feed is None:
@@ -202,10 +199,10 @@ class OPDSFeed(AtomFeed):
     DEFAULT_MAX_AGE = 60 * 10
 
     def __init__(self, title, url):
-        super(OPDSFeed, self).__init__(title, url)
+        super().__init__(title, url)
 
 
-class OPDSMessage(object):
+class OPDSMessage:
     """An indication that an <entry> could not be created for an
     identifier.
 

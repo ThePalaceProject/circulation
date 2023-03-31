@@ -7,7 +7,22 @@ import binascii
 import os
 
 
-class UnicodeAwareBase64(object):
+def wrap_func_bytes_unicode(func):
+    """
+    Wrap a function, ensuring that the first input parameter is
+    a bytes object, encoding it if necessary and that the returned
+    object is a string, decoding if necessary.
+    """
+
+    def wrapped(self, s, *args, **kwargs):
+        s = self._ensure_bytes(s)
+        value = func(s, *args, **kwargs)
+        return self._ensure_unicode(value)
+
+    return wrapped
+
+
+class UnicodeAwareBase64:
     """Simulate the interface of the base64 module, but make it look as
     though base64-encoding and -decoding works on Unicode strings.
 
@@ -33,27 +48,19 @@ class UnicodeAwareBase64(object):
             return s.decode(self.encoding)
         return s
 
-    def wrap(func):
-        def wrapped(self, s, *args, **kwargs):
-            s = self._ensure_bytes(s)
-            value = func(s, *args, **kwargs)
-            return self._ensure_unicode(value)
-
-        return wrapped
-
     # Wrap most of the base64 module API so that Unicode is handled
     # transparently.
-    b64encode = wrap(stdlib_base64.b64encode)
-    b64decode = wrap(stdlib_base64.b64decode)
-    standard_b64encode = wrap(stdlib_base64.standard_b64encode)
-    standard_b64decode = wrap(stdlib_base64.standard_b64decode)
-    urlsafe_b64encode = wrap(stdlib_base64.urlsafe_b64encode)
-    urlsafe_b64decode = wrap(stdlib_base64.urlsafe_b64decode)
+    b64encode = wrap_func_bytes_unicode(stdlib_base64.b64encode)
+    b64decode = wrap_func_bytes_unicode(stdlib_base64.b64decode)
+    standard_b64encode = wrap_func_bytes_unicode(stdlib_base64.standard_b64encode)
+    standard_b64decode = wrap_func_bytes_unicode(stdlib_base64.standard_b64decode)
+    urlsafe_b64encode = wrap_func_bytes_unicode(stdlib_base64.urlsafe_b64encode)
+    urlsafe_b64decode = wrap_func_bytes_unicode(stdlib_base64.urlsafe_b64decode)
 
     # encodestring and decodestring are deprecated in base64
     # and we should use these instead:
-    encodebytes = wrap(stdlib_base64.encodebytes)
-    decodebytes = wrap(stdlib_base64.decodebytes)
+    encodebytes = wrap_func_bytes_unicode(stdlib_base64.encodebytes)
+    decodebytes = wrap_func_bytes_unicode(stdlib_base64.decodebytes)
 
 
 # If you're okay with a Unicode strings being converted to/from UTF-8

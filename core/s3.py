@@ -1,7 +1,11 @@
 import functools
 import logging
+import random
+import string
 from contextlib import contextmanager
+from datetime import datetime
 from enum import Enum
+from typing import Any, List, Optional, Tuple
 from urllib.parse import quote, unquote_plus, urlsplit
 
 import boto3
@@ -11,7 +15,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from flask_babel import lazy_gettext as _
 
 from .mirror import MirrorUploader
-from .model import ExternalIntegration
+from .model import Collection, ExternalIntegration, Library, LicensePool, Representation
 from .model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -36,7 +40,7 @@ class MultipartS3Upload:
         )
 
     def upload_part(self, content):
-        logging.info("Uploading part %s of %s" % (self.part_number, self.filename))
+        logging.info(f"Uploading part {self.part_number} of {self.filename}")
         result = self.uploader.client.upload_part(
             Body=content,
             Bucket=self.bucket,
@@ -71,22 +75,20 @@ class MultipartS3Upload:
         )
 
 
-def _get_available_regions():
+def _get_available_regions() -> List[str]:
     """Returns a list of available S3 regions
 
     :return: List of available S3 regions
-    :rtype: List[string]
     """
     session = boto3.session.Session()
 
     return session.get_available_regions(service_name="s3")
 
 
-def _get_available_region_options():
+def _get_available_region_options() -> List[ConfigurationOption]:
     """Returns a list of available options for S3Uploader's Region configuration setting
 
     :return: List of available options for S3Uploader's Region configuration setting
-    :rtype: List[Dict]
     """
     available_regions = sorted(_get_available_regions())
     options = [ConfigurationOption(region, region) for region in available_regions]
@@ -115,6 +117,8 @@ class S3UploaderConfiguration(ConfigurationGrouping):
     BOOK_COVERS_BUCKET_KEY = "book_covers_bucket"
     OA_CONTENT_BUCKET_KEY = "open_access_content_bucket"
     PROTECTED_CONTENT_BUCKET_KEY = "protected_content_bucket"
+    ANALYTICS_BUCKET_KEY = "analytics_bucket"
+
     MARC_BUCKET_KEY = "marc_bucket"
 
     URL_TEMPLATE_KEY = "bucket_name_transform"
@@ -179,6 +183,17 @@ class S3UploaderConfiguration(ConfigurationGrouping):
         description=_(
             "Self-hosted books will be uploaded to this S3 bucket. "
             "<p>The bucket must already exist&mdash;it will not be created automatically.</p>"
+        ),
+        type=ConfigurationAttributeType.TEXT,
+        required=False,
+    )
+
+    analytics_bucket = ConfigurationMetadata(
+        key=ANALYTICS_BUCKET_KEY,
+        label=_("Analytics Bucket"),
+        description=_(
+            "Text files containing analytics data will be uploaded to this "
+            "S3 bucket. "
         ),
         type=ConfigurationAttributeType.TEXT,
         required=False,
@@ -270,20 +285,20 @@ class S3Uploader(MirrorUploader):
 
     SITEWIDE = True
 
-    def __init__(self, integration, client_class=None, host=S3_HOST):
+    def __init__(
+        self,
+        integration: ExternalIntegration,
+        client_class: Optional[Any] = None,
+        host: str = S3_HOST,
+    ) -> None:
         """Instantiate an S3Uploader from an ExternalIntegration.
 
         :param integration: An ExternalIntegration
-        :type integration: ExternalIntegration
-
         :param client_class: Mock object (or class) to use (or instantiate)
             instead of boto3.client.
-        :type client_class: Any
-
         :param host: Host used by this integration
-        :type host: string
         """
-        super(S3Uploader, self).__init__(integration, host)
+        super().__init__(integration, host)
 
         if not client_class:
             client_class = boto3.client
@@ -338,17 +353,14 @@ class S3Uploader(MirrorUploader):
         # have to keep the ExternalIntegration around.
         self.buckets = dict()
         for setting in integration.settings:
-            if setting.key.endswith("_bucket"):
+            if setting.key is not None and setting.key.endswith("_bucket"):
                 self.buckets[setting.key] = setting.value
 
-    def _generate_s3_url(self, bucket, path):
+    def _generate_s3_url(self, bucket: str, path: Any) -> str:
         """Generates an S3 URL
 
         :param bucket: Bucket name
-        :type bucket: string
-
         :return: S3 URL
-        :rtype: string
         """
         key = path
 
@@ -370,20 +382,15 @@ class S3Uploader(MirrorUploader):
 
         return url
 
-    def sign_url(self, url, expiration=None):
+    def sign_url(self, url: str, expiration: Optional[int] = None) -> str:
         """Signs a URL and make it expirable
 
         :param url: URL
-        :type url: string
-
         :param expiration: (Optional) Time in seconds for the presigned URL to remain valid.
             If it's empty, S3_PRESIGNED_URL_EXPIRATION configuration setting is used
-        :type expiration: int
-
         :return: Signed expirable link
-        :rtype: string
         """
-        if not expiration:
+        if expiration is None:
             expiration = self._s3_presigned_url_expiration
 
         bucket, key = self.split_url(url)
@@ -448,6 +455,12 @@ class S3Uploader(MirrorUploader):
         return self.url(bucket, "/")
 
     def marc_file_root(self, bucket, library):
+        url = self.url(bucket, [library.short_name])
+        if not url.endswith("/"):
+            url += "/"
+        return url
+
+    def _analytics_file_root(self, bucket, library) -> str:
         url = self.url(bucket, [library.short_name])
         if not url.endswith("/"):
             url += "/"
@@ -530,17 +543,42 @@ class S3Uploader(MirrorUploader):
         parts = [time_part, lane.display_name]
         return root + self.key_join(parts) + ".mrc"
 
-    def split_url(self, url, unquote=True):
+    def analytics_file_url(
+        self,
+        library: Library,
+        license_pool: LicensePool,
+        event_type: str,
+        end_time: datetime,
+        start_time: Optional[datetime] = None,
+    ):
+        """The path to the analytics data file for the given library, license
+        pool and date range."""
+        bucket = self.get_bucket(S3UploaderConfiguration.ANALYTICS_BUCKET_KEY)
+        root = self._analytics_file_root(bucket, library)
+        if start_time:
+            time_part = str(start_time) + "-" + str(end_time)
+        else:
+            time_part = str(end_time)
+
+        # ensure the uniqueness of file name (in case of overlapping events)
+        collection = license_pool.collection_id if license_pool else "NONE"
+        random_string = "".join(random.choices(string.ascii_lowercase, k=10))
+        file_name = "-".join([time_part, event_type, str(collection), random_string])
+        # nest file in directories that allow for easy purging by year, month or day
+        parts = [
+            str(end_time.year),
+            str(end_time.month),
+            str(end_time.day),
+            file_name + ".json",
+        ]
+        return root + self.key_join(parts)
+
+    def split_url(self, url: str, unquote: bool = True) -> Tuple[str, str]:
         """Splits the URL into the components: bucket and file path
 
         :param url: URL
-        :type url: string
-
         :param unquote: Boolean value indicating whether it's required to unquote URL elements
-        :type unquote: bool
-
         :return: Tuple (bucket, file path)
-        :rtype: Tuple[string, string]
         """
         scheme, netloc, path, query, fragment = urlsplit(url)
 
@@ -602,17 +640,17 @@ class S3Uploader(MirrorUploader):
 
         return link
 
-    def mirror_one(self, representation, mirror_to, collection=None):
+    def mirror_one(
+        self,
+        representation: Representation,
+        mirror_to: str,
+        collection: Optional[Collection] = None,
+    ) -> Any:
         """Mirror a single representation to the given URL.
 
         :param representation: Book's representation
-        :type representation: Representation
-
         :param mirror_to: Mirror URL
-        :type mirror_to: string
-
         :param collection: Collection
-        :type collection: Optional[Collection]
         """
         # Turn the original URL into an s3.amazonaws.com URL.
         media_type = representation.external_media_type
@@ -711,7 +749,7 @@ class MinIOUploader(S3Uploader):
         else:
             self.client = client_class
 
-        super(MinIOUploader, self).__init__(integration, client_class, host)
+        super().__init__(integration, client_class, host)
 
 
 # MirrorUploader.implementation will instantiate an MinIOUploader instance
@@ -754,6 +792,8 @@ class MockS3Uploader(S3Uploader):
             aws_secret_access_key=None,
         )
 
+        self.client
+
     def mirror_one(self, representation, **kwargs):
         mirror_to = kwargs["mirror_to"]
         self.uploaded.append(representation)
@@ -787,7 +827,7 @@ class MockS3Uploader(S3Uploader):
             representation.set_as_mirrored(mirror_to)
 
 
-class MockS3Client(object):
+class MockS3Client:
     """This pool lets us test the real S3Uploader class with a mocked-up
     boto3 client.
     """

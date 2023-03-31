@@ -35,6 +35,7 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
     DESCRIPTION = _(
         "Import books from a distributor that requires authentication to get the OPDS feed and download books."
     )
+    BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
 
     SETTINGS = OPDSImporter.BASE_SETTINGS + [
         {
@@ -89,7 +90,7 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
         """Wrapper around HTTP.request_with_timeout to be overridden for tests."""
         return HTTP.request_with_timeout(method, url, *args, **kwargs)
 
-    def _get_token(self, _db):
+    def _get_token(self, _db) -> Credential:
         # If this is the first time we're getting a token, we
         # need to find the authenticate url in the OPDS
         # authentication document.
@@ -141,10 +142,10 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
                 )
             self.auth_url = auth_links[0].get("href")
 
-        def refresh(credential):
+        def refresh(credential: Credential) -> None:
             headers = dict()
             auth_header = "Basic %s" % base64.b64encode(
-                "%s:%s" % (self.username, self.password)
+                f"{self.username}:{self.password}"
             )
             headers["Authorization"] = auth_header
             headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -175,7 +176,8 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
         return Credential.lookup(
             _db,
             self.data_source_name,
-            "OPDS For Distributors Bearer Token",
+            self.BEARER_TOKEN_CREDENTIAL_TYPE,
+            collection=Collection.by_id(_db, self.collection_id),
             patron=None,
             refresher_method=refresh,
         )
@@ -303,8 +305,8 @@ class OPDSForDistributorsImporter(OPDSImporter):
         not open-access, but a library that can perform this import has
         a license for the title and can distribute unlimited copies.
         """
-        pool, work = super(OPDSForDistributorsImporter, self).update_work_for_edition(
-            *args, **kwargs
+        pool, work = super().update_work_for_edition(
+            *args, is_open_access=False, **kwargs
         )
         pool.update_availability(
             new_licenses_owned=1,
@@ -339,9 +341,7 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
     PROTOCOL = OPDSForDistributorsImporter.NAME
 
     def __init__(self, _db, collection, import_class, **kwargs):
-        super(OPDSForDistributorsImportMonitor, self).__init__(
-            _db, collection, import_class, **kwargs
-        )
+        super().__init__(_db, collection, import_class, **kwargs)
 
         self.api = OPDSForDistributorsAPI(_db, collection)
 
@@ -355,7 +355,7 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
         auth_header = "Bearer %s" % token
         headers["Authorization"] = auth_header
 
-        return super(OPDSForDistributorsImportMonitor, self)._get(url, headers)
+        return super()._get(url, headers)
 
 
 class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
@@ -365,9 +365,7 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
     """
 
     def __init__(self, _db, collection, import_class, **kwargs):
-        super(OPDSForDistributorsReaperMonitor, self).__init__(
-            _db, collection, import_class, **kwargs
-        )
+        super().__init__(_db, collection, import_class, **kwargs)
         self.seen_identifiers = set()
 
     def feed_contains_new_data(self, feed):
@@ -388,7 +386,7 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
 
         :param progress: A TimestampData, ignored.
         """
-        super(OPDSForDistributorsReaperMonitor, self).run_once(progress)
+        super().run_once(progress)
 
         # self.seen_identifiers is full of URNs. We need the values
         # that go in Identifier.identifier.
@@ -420,13 +418,19 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
 
 class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
     @classmethod
-    def mock_collection(self, _db):
-        """Create a mock OPDS For Distributors collection to use in tests."""
+    def mock_collection(
+        self, _db, name="Test OPDS For Distributors Collection"
+    ) -> Collection:
+        """Create a mock OPDS For Distributors collection to use in tests.
+
+        :param _db: Database session.
+        :param name: A name for the collection.
+        """
         library = DatabaseTest.make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,
-            name="Test OPDS For Distributors Collection",
+            name=name,
             create_method_kwargs=dict(
                 external_account_id="http://opds",
             ),
@@ -442,9 +446,7 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
     def __init__(self, _db, collection, *args, **kwargs):
         self.responses = []
         self.requests = []
-        super(MockOPDSForDistributorsAPI, self).__init__(
-            _db, collection, *args, **kwargs
-        )
+        super().__init__(_db, collection, *args, **kwargs)
 
     def queue_response(self, status_code, headers={}, content=None):
         self.responses.insert(0, MockRequestsResponse(status_code, headers, content))

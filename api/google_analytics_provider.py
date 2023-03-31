@@ -11,18 +11,18 @@ from core.util.http import HTTP
 from .config import CannotLoadConfiguration
 
 
-class GoogleAnalyticsProvider(object):
+class GoogleAnalyticsProvider:
 
     NAME = _("Google Analytics")
     DESCRIPTION = _("How to Configure a Google Analytics Integration")
     INSTRUCTIONS = _(
-        "<p>In order to track usage statistics, you can configure the Circulation Manager "
+        "<p>In order to track usage statistics, you can configure the Palace Collection Manager "
         + "to connect to Google Analytics.</p>"
         + "<p>Create a <a href='https://analytics.google.com/analytics/web/provision/?authuser=0#/provision' "
         + "rel='noopener' rel='noreferer' target='_blank'>Google Analytics</a> account, "
         + "or sign into your existing one.</p>"
-        + "<p>To capture data from the Library Simplified Circulation Manager in your Google Analytics account, "
-        + "you must set up a property in Google Analytics for Library Simplified.  In your Google Analytics "
+        + "<p>To capture data from the Palace Collection Manager in your Google Analytics account, "
+        + "you must set up a property in Google Analytics for Palace Collection Manager.  In your Google Analytics "
         + "account, on the administration page for the property, go to Custom Definitions > Custom Dimensions, "
         + "and add the following dimensions, in this order: <ol>"
         + "<li>time</li>"
@@ -137,6 +137,9 @@ class GoogleAnalyticsProvider(object):
                 fields.update({"cd14": edition.medium})
         if library:
             fields.update({"cd15": library.short_name})
+
+        if license_pool and work and edition:
+            fields.update({"cd16": license_pool.collection.name})
 
         # urlencode doesn't like unicode strings so we convert them to utf8
         fields = {

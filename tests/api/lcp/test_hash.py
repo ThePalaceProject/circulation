@@ -3,7 +3,7 @@ from parameterized import parameterized
 from api.lcp.hash import HasherFactory, HashingAlgorithm
 
 
-class TestHasherFactory(object):
+class TestHasherFactory:
     @parameterized.expand(
         [
             (
@@ -33,7 +33,6 @@ class TestHasherFactory(object):
         ]
     )
     def test_create(self, _, hashing_algorithm, value, expected_value):
-        #
         hasher_factory = HasherFactory()
         hasher = hasher_factory.create(hashing_algorithm)
 

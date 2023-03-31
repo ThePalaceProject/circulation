@@ -189,6 +189,13 @@ NO_SUCH_LIST = pd(
     _("You asked for a nonexistent list."),
 )
 
+CANNOT_DELETE_SHARED_LIST = pd(
+    "http://librarysimplified.org/terms/problem/cannot-delete-shared-list",
+    409,
+    _("Cannot delete list."),
+    _("It is not possible to delete a shared list."),
+)
+
 NO_SUCH_COLLECTION = pd(
     "http://librarysimplified.org/terms/problem/unknown-collection",
     404,
@@ -355,4 +362,25 @@ SHARED_SECRET_DECRYPTION_ERROR = pd(
     status_code=502,
     title=_("Decryption error"),
     detail=_("Failed to decrypt a shared secret retrieved from another computer."),
+)
+
+DEVICE_TOKEN_NOT_FOUND = pd(
+    "http://librarysimplified.org/terms/problem/device-token-not-found",
+    status_code=404,
+    title=_("Device token not found"),
+    detail=_("Patron does not have a device registered with this token."),
+)
+
+DEVICE_TOKEN_ALREADY_EXISTS = pd(
+    "http://librarysimplified.org/terms/problem/device-token-already-exists",
+    status_code=409,
+    title=_("Device token already exists"),
+    detail=_("A device token with the same token already exists."),
+)
+
+DEVICE_TOKEN_TYPE_INVALID = pd(
+    "http://librarysimplified.org/terms/problem/device-token-type-invalid",
+    status_code=400,
+    title=_("Device token type invalid"),
+    detail=_("The token type provided is not valid."),
 )

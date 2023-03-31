@@ -1,4 +1,4 @@
-class OpenSearchDocument(object):
+class OpenSearchDocument:
     """Generates OpenSearch documents."""
 
     TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -43,4 +43,4 @@ class OpenSearchDocument(object):
     @classmethod
     def escape_entities(cls, info):
         """Escape ampersands in the given dictionary's values."""
-        return dict([(k, v.replace("&", "&amp;")) for (k, v) in info.items()])
+        return {k: v.replace("&", "&amp;") for (k, v) in info.items()}

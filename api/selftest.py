@@ -14,7 +14,6 @@ from core.util.problem_detail import ProblemDetail
 
 from .authenticator import LibraryAuthenticator
 from .circulation import CirculationAPI
-from .feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 
 
 class HasSelfTests(CoreHasSelfTests):
@@ -32,7 +31,7 @@ class HasSelfTests(CoreHasSelfTests):
             detail (optional) -- additional explanation of the error
         """
 
-        def __init__(self, message: str, *, detail: str = None):
+        def __init__(self, message: str, *, detail: Optional[str] = None):
             super().__init__(message=message)
             self.message = message
             self.detail = detail
@@ -112,7 +111,7 @@ class RunSelfTestsScript(LibraryInputScript):
     """
 
     def __init__(self, _db=None, output=sys.stdout):
-        super(RunSelfTestsScript, self).__init__(_db)
+        super().__init__(_db)
         self.out = output
 
     def do_run(self, *args, **kwargs):
@@ -120,7 +119,6 @@ class RunSelfTestsScript(LibraryInputScript):
         for library in parsed.libraries:
             api_map = CirculationAPI(self._db, library).default_api_map
             api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
-            api_map[ExternalIntegration.FEEDBOOKS] = FeedbooksImportMonitor
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
                 try:
@@ -141,7 +139,6 @@ class RunSelfTestsScript(LibraryInputScript):
         # constructors.
         extra_args = extra_args or {
             OPDSImportMonitor: [OPDSImporter],
-            FeedbooksImportMonitor: [FeedbooksOPDSImporter],
         }
         extra = extra_args.get(tester, [])
         constructor_args = [self._db, collection] + list(extra)
@@ -157,7 +154,7 @@ class RunSelfTestsScript(LibraryInputScript):
             success = "SUCCESS"
         else:
             success = "FAILURE"
-        self.out.write("  %s %s (%.1fsec)\n" % (success, result.name, result.duration))
+        self.out.write(f"  {success} {result.name} ({result.duration:.1f}sec)\n")
         if isinstance(result.result, (bytes, str)):
             self.out.write("   Result: %s\n" % result.result)
         if result.exception:
@@ -186,7 +183,7 @@ class HasCollectionSelfTests(HasSelfTests):
             else:
                 title = "[title unknown]"
             identifier = lp.identifier.identifier
-            titles.append("%s (ID: %s)" % (title, identifier))
+            titles.append(f"{title} (ID: {identifier})")
 
         if titles:
             return titles

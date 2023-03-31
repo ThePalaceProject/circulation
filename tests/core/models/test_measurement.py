@@ -1,22 +1,30 @@
+import pytest
+
 from core.model import DataSource, Measurement, get_one_or_create
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestMeasurement(DatabaseTest):
-    def setup_method(self):
-        super(TestMeasurement, self).setup_method()
-        self.SOURCE_NAME = "Test Data Source"
+class ExampleMeasurementDataFixture:
+    data_source: DataSource
+    transaction: DatabaseTransactionFixture
 
-        # Create a test DataSource
-        obj, new = get_one_or_create(
-            self._db,
+    @classmethod
+    def create(
+        cls, transaction: DatabaseTransactionFixture
+    ) -> "ExampleMeasurementDataFixture":
+        session = transaction.session
+        data = ExampleMeasurementDataFixture()
+        data.transaction = transaction
+        data.SOURCE_NAME = "Test Data Source"
+        src, new = get_one_or_create(
+            session,
             DataSource,
-            name=self.SOURCE_NAME,
+            name=data.SOURCE_NAME,
         )
-        self.source = obj
+        data.data_source = src
 
-        Measurement.PERCENTILE_SCALES[Measurement.POPULARITY][self.SOURCE_NAME] = [
+        Measurement.PERCENTILE_SCALES[Measurement.POPULARITY][data.SOURCE_NAME] = [
             1,
             1,
             1,
@@ -118,81 +126,108 @@ class TestMeasurement(DatabaseTest):
             3535,
             5805,
         ]
-        Measurement.RATING_SCALES[self.SOURCE_NAME] = [1, 10]
+        Measurement.RATING_SCALES[data.SOURCE_NAME] = [1, 10]
+        return data
 
-    def _measurement(self, quantity, value, source, weight):
-        source = source or self.source
+    def measurement(self, quantity, value, source, weight):
+        source = source or self.data_source
         return Measurement(
             data_source=source, quantity_measured=quantity, value=value, weight=weight
         )
 
-    def _popularity(self, value, source=None, weight=1):
-        return self._measurement(Measurement.POPULARITY, value, source, weight)
+    def popularity(self, value, source=None, weight=1):
+        return self.measurement(Measurement.POPULARITY, value, source, weight)
 
-    def _rating(self, value, source=None, weight=1):
-        return self._measurement(Measurement.RATING, value, source, weight)
+    def rating(self, value, source=None, weight=1):
+        return self.measurement(Measurement.RATING, value, source, weight)
 
-    def _quality(self, value, weight=1):
+    def quality(self, value, weight=1):
         # The only source we recognize for quality scores is the metadata
         # wrangler.
-        source = DataSource.lookup(self._db, DataSource.METADATA_WRANGLER)
-        return self._measurement(Measurement.QUALITY, value, source, weight)
+        source = DataSource.lookup(
+            self.transaction.session, DataSource.METADATA_WRANGLER
+        )
+        return self.measurement(Measurement.QUALITY, value, source, weight)
 
-    def test_newer_measurement_displaces_earlier_measurement(self):
-        wi = self._identifier()
-        m1 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 10)
+
+@pytest.fixture()
+def example_measurement_data_fixture(
+    db,
+) -> ExampleMeasurementDataFixture:
+    return ExampleMeasurementDataFixture.create(db)
+
+
+class TestMeasurement:
+    def test_newer_measurement_displaces_earlier_measurement(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        wi = data.transaction.identifier()
+        m1 = wi.add_measurement(data.data_source, Measurement.DOWNLOADS, 10)
         assert True == m1.is_most_recent
 
-        m2 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 11)
+        m2 = wi.add_measurement(data.data_source, Measurement.DOWNLOADS, 11)
         assert False == m1.is_most_recent
         assert True == m2.is_most_recent
 
-        m3 = wi.add_measurement(self.source, Measurement.POPULARITY, 11)
+        m3 = wi.add_measurement(data.data_source, Measurement.POPULARITY, 11)
         assert True == m2.is_most_recent
         assert True == m3.is_most_recent
 
-    def test_can_insert_measurement_after_the_fact(self):
+    def test_can_insert_measurement_after_the_fact(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
 
         old = datetime_utc(2011, 1, 1)
         new = datetime_utc(2012, 1, 1)
 
-        wi = self._identifier()
-        m1 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 10, taken_at=new)
+        wi = data.transaction.identifier()
+        m1 = wi.add_measurement(
+            data.data_source, Measurement.DOWNLOADS, 10, taken_at=new
+        )
         assert True == m1.is_most_recent
 
-        m2 = wi.add_measurement(self.source, Measurement.DOWNLOADS, 5, taken_at=old)
+        m2 = wi.add_measurement(
+            data.data_source, Measurement.DOWNLOADS, 5, taken_at=old
+        )
         assert True == m1.is_most_recent
 
-    def test_normalized_popularity(self):
+    def test_normalized_popularity(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
         # Here's a very popular book on the scale defined in
         # PERCENTILE_SCALES[POPULARITY].
-        p = self._popularity(6000)
+        p = data.popularity(6000)
         assert 1.0 == p.normalized_value
 
         # Here's a slightly less popular book.
-        p = self._popularity(5804)
+        p = data.popularity(5804)
         assert 0.99 == p.normalized_value
 
         # Here's a very unpopular book
-        p = self._popularity(1)
+        p = data.popularity(1)
         assert 0 == p.normalized_value
 
         # Here's a book in the middle.
-        p = self._popularity(59)
+        p = data.popularity(59)
         assert 0.5 == p.normalized_value
 
         # So long as the data source and the quantity measured can be
         # found in PERCENTILE_SCALES, the data can be normalized.
 
         # This book is extremely unpopular.
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        m = self._measurement(Measurement.POPULARITY, 0, overdrive, 10)
+        overdrive = DataSource.lookup(data.transaction.session, DataSource.OVERDRIVE)
+        m = data.measurement(Measurement.POPULARITY, 0, overdrive, 10)
         assert 0 == m.normalized_value
 
         # For some other data source, we don't know whether popularity=0
         # means 'very popular' or 'very unpopular'.
-        gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
-        m = self._measurement(Measurement.POPULARITY, 0, gutenberg, 10)
+        gutenberg = DataSource.lookup(data.transaction.session, DataSource.GUTENBERG)
+        m = data.measurement(Measurement.POPULARITY, 0, gutenberg, 10)
         assert None == m.normalized_value
 
         # We also don't know what it means if Overdrive were to say
@@ -200,36 +235,50 @@ class TestMeasurement(DatabaseTest):
         # what? In what time period? We would have to measure it to
         # find out -- at that point we would put the percentile list
         # in PERCENTILE_SCALES and this would start working.
-        m = self._measurement(Measurement.DOWNLOADS, 0, overdrive, 10)
+        m = data.measurement(Measurement.DOWNLOADS, 0, overdrive, 10)
         assert None == m.normalized_value
 
-    def test_normalized_rating(self):
+    def test_normalized_rating(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
         # Here's a very good book on the scale defined in
         # RATING_SCALES.
-        p = self._rating(10)
+        p = data.rating(10)
         assert 1.0 == p.normalized_value
 
         # Here's a slightly less good book.
-        p = self._rating(9)
+        p = data.rating(9)
         assert 8.0 / 9 == p.normalized_value
 
         # Here's a very bad book
-        p = self._rating(1)
+        p = data.rating(1)
         assert 0 == p.normalized_value
 
-    def test_neglected_source_cannot_be_normalized(self):
-        obj, new = get_one_or_create(self._db, DataSource, name="Neglected source")
+    def test_neglected_source_cannot_be_normalized(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        obj, new = get_one_or_create(
+            data.transaction.session, DataSource, name="Neglected source"
+        )
         neglected_source = obj
-        p = self._popularity(100, neglected_source)
+        p = data.popularity(100, neglected_source)
         assert None == p.normalized_value
 
-        r = self._rating(100, neglected_source)
+        r = data.rating(100, neglected_source)
         assert None == r.normalized_value
 
-    def test_overall_quality(self):
-        popularity = self._popularity(59)
-        rating = self._rating(4)
-        irrelevant = self._measurement("Some other quantity", 42, self.source, 1)
+    def test_overall_quality(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        popularity = data.popularity(59)
+        rating = data.rating(4)
+        irrelevant = data.measurement("Some other quantity", 42, data.data_source, 1)
         pop = popularity.normalized_value
         rat = rating.normalized_value
         assert 0.5 == pop
@@ -245,18 +294,26 @@ class TestMeasurement(DatabaseTest):
         # popularity via a percentile scale modifies the
         # normalized value -- we don't care exactly how, only that
         # it's taken into account.
-        oclc = DataSource.lookup(self._db, DataSource.OCLC)
-        popularityish = self._measurement(Measurement.HOLDINGS, 400, oclc, 10)
+        oclc = DataSource.lookup(data.transaction.session, DataSource.OCLC)
+        popularityish = data.measurement(Measurement.HOLDINGS, 400, oclc, 10)
         new_quality = Measurement.overall_quality(l + [popularityish])
         assert quality != new_quality
 
-    def test_overall_quality_based_solely_on_popularity_if_no_rating(self):
-        pop = self._popularity(59)
+    def test_overall_quality_based_solely_on_popularity_if_no_rating(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        pop = data.popularity(59)
         assert 0.5 == Measurement.overall_quality([pop])
 
-    def test_overall_quality_with_rating_and_quality_but_not_popularity(self):
-        rat = self._rating(4)
-        qual = self._quality(0.5)
+    def test_overall_quality_with_rating_and_quality_but_not_popularity(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        rat = data.rating(4)
+        qual = data.quality(0.5)
 
         # We would expect the final quality score to be 1/2 of the quality
         # score we got from the metadata wrangler, and 1/2 of the normalized
@@ -264,9 +321,13 @@ class TestMeasurement(DatabaseTest):
         expect = (rat.normalized_value / 2) + 0.25
         assert expect == Measurement.overall_quality([rat, qual], 0.5, 0.5)
 
-    def test_overall_quality_with_popularity_and_quality_but_not_rating(self):
-        pop = self._popularity(4)
-        qual = self._quality(0.5)
+    def test_overall_quality_with_popularity_and_quality_but_not_rating(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        pop = data.popularity(4)
+        qual = data.quality(0.5)
 
         # We would expect the final quality score to be 1/2 of the quality
         # score we got from the metadata wrangler, and 1/2 of the normalized
@@ -274,11 +335,15 @@ class TestMeasurement(DatabaseTest):
         expect = (pop.normalized_value / 2) + (0.5 / 2)
         assert expect == Measurement.overall_quality([pop, qual], 0.5, 0.5)
 
-    def test_overall_quality_with_popularity_quality_and_rating(self):
-        pop = self._popularity(4)
-        rat = self._rating(4)
+    def test_overall_quality_with_popularity_quality_and_rating(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        pop = data.popularity(4)
+        rat = data.rating(4)
         quality_score = 0.66
-        qual = self._quality(quality_score)
+        qual = data.quality(quality_score)
 
         # The popularity and rating are scaled appropriately and
         # added together.
@@ -289,32 +354,46 @@ class TestMeasurement(DatabaseTest):
         expect_total = expect_1 / 2 + (quality_score / 2)
         assert expect_total == Measurement.overall_quality([pop, rat, qual], 0.75, 0.25)
 
-    def test_overall_quality_takes_weights_into_account(self):
-        rating1 = self._rating(10, weight=10)
-        rating2 = self._rating(1, weight=1)
+    def test_overall_quality_takes_weights_into_account(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        rating1 = data.rating(10, weight=10)
+        rating2 = data.rating(1, weight=1)
         assert 0.91 == round(Measurement.overall_quality([rating1, rating2]), 2)
 
-    def test_overall_quality_is_zero_if_no_relevant_measurements(self):
-        irrelevant = self._measurement("Some other quantity", 42, self.source, 1)
+    def test_overall_quality_is_zero_if_no_relevant_measurements(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        irrelevant = data.measurement("Some other quantity", 42, data.data_source, 1)
         assert 0 == Measurement.overall_quality([irrelevant])
 
-    def test_calculate_quality(self):
-        w = self._work(with_open_access_download=True)
+    def test_calculate_quality(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
+
+        w = data.transaction.work(with_open_access_download=True)
 
         # This book used to be incredibly popular.
         identifier = w.presentation_edition.primary_identifier
         old_popularity = identifier.add_measurement(
-            self.source, Measurement.POPULARITY, 6000
+            data.data_source, Measurement.POPULARITY, 6000
         )
 
         # Now it's just so-so.
-        popularity = identifier.add_measurement(self.source, Measurement.POPULARITY, 59)
+        popularity = identifier.add_measurement(
+            data.data_source, Measurement.POPULARITY, 59
+        )
 
         # This measurement is irrelevant because "Test Data Source"
         # doesn't have a mapping from number of editions to a
         # percentile range.
         irrelevant = identifier.add_measurement(
-            self.source, Measurement.PUBLISHED_EDITIONS, 42
+            data.data_source, Measurement.PUBLISHED_EDITIONS, 42
         )
 
         # If we calculate the quality based solely on the primary
@@ -330,8 +409,8 @@ class TestMeasurement(DatabaseTest):
         # and it has a number of editions that was obtained from
         # OCLC Classify, which _does_ have a mapping from number
         # of editions to a percentile range.
-        wi = self._identifier()
-        oclc = DataSource.lookup(self._db, DataSource.OCLC)
+        wi = data.transaction.identifier()
+        oclc = DataSource.lookup(data.transaction.session, DataSource.OCLC)
         wi.add_measurement(oclc, Measurement.PUBLISHED_EDITIONS, 800)
 
         # Now the quality is higher--the large OCLC PUBLISHED_EDITIONS
@@ -339,10 +418,13 @@ class TestMeasurement(DatabaseTest):
         w.calculate_quality([identifier.id, wi.id])
         assert w.quality > old_quality
 
-    def test_calculate_quality_default_quality(self):
+    def test_calculate_quality_default_quality(
+        self, example_measurement_data_fixture: ExampleMeasurementDataFixture
+    ):
+        data = example_measurement_data_fixture
 
         # Here's a work with no measurements whatsoever.
-        w = self._work()
+        w = data.transaction.work()
 
         # Its quality is dependent entirely on the default value we
         # pass into calculate_quality

@@ -17,7 +17,6 @@ from core.metadata_layer import (
     SubjectData,
 )
 from core.model import (
-    CirculationEvent,
     Classification,
     Collection,
     ConfigurationSetting,
@@ -31,6 +30,7 @@ from core.model import (
     Session,
     Subject,
 )
+from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.testing import DatabaseTest
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
@@ -57,8 +57,21 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
         },
     ] + BaseCirculationAPI.SETTINGS
 
-    LIBRARY_SETTINGS = [
+    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
         {"key": ENKI_LIBRARY_ID_KEY, "label": _("Library ID"), "required": True},
+        {
+            "key": ExternalIntegration.DISPLAY_RESERVES,
+            "label": _("Show/Hide Titles with No Available Loans"),
+            "required": False,
+            "description": _(
+                "Titles with no available loans will not be displayed in the Catalog view."
+            ),
+            "type": "select",
+            "options": [
+                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
+                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
+            ],
+        },
     ]
 
     list_endpoint = "ListAPI"
@@ -120,14 +133,14 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
 
         now = utc_now()
 
-        def count_loans_and_holds():
+        def count_recent_loans_and_holds():
             """Count recent circulation events that affected loans or holds."""
             one_hour_ago = now - datetime.timedelta(hours=1)
             count = len(list(self.recent_activity(one_hour_ago, now)))
             return "%s circulation events in the last hour" % count
 
         yield self.run_test(
-            "Counting recent circulation changes.", count_loans_and_holds
+            "Counting recent circulation changes.", count_recent_loans_and_holds
         )
 
         def count_title_changes():
@@ -154,11 +167,11 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
                 % library.name
             )
 
-            def count_loans_and_holds(patron, pin):
+            def count_patron_loans_and_holds(patron, pin):
                 activity = list(self.patron_activity(patron, pin))
                 return "Total loans and holds: %s" % len(activity)
 
-            yield self.run_test(task, count_loans_and_holds, patron, pin)
+            yield self.run_test(task, count_patron_loans_and_holds, patron, pin)
 
     def request(
         self,
@@ -270,8 +283,7 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
             # the same collection.
         )
         response = self.request(url, params=args)
-        for metadata in BibliographicParser().process_all(response.content):
-            yield metadata
+        yield from BibliographicParser().process_all(response.content)
 
     def get_item(self, enki_id):
         """Retrieve bibliographic and availability information for
@@ -321,8 +333,7 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
         args["strt"] = strt
         args["qty"] = qty
         response = self.request(url, params=args)
-        for metadata in BibliographicParser().process_all(response.content):
-            yield metadata
+        yield from BibliographicParser().process_all(response.content)
 
     @classmethod
     def _epoch_to_struct(cls, epoch_string):
@@ -520,7 +531,7 @@ class MockEnkiAPI(EnkiAPI):
             _db, self.ENKI_LIBRARY_ID_KEY, library, collection.external_integration
         ).value = "c"
 
-        super(MockEnkiAPI, self).__init__(_db, collection, *args, **kwargs)
+        super().__init__(_db, collection, *args, **kwargs)
 
     def queue_response(self, status_code, headers={}, content=None):
         from core.testing import MockRequestsResponse
@@ -541,7 +552,7 @@ class MockEnkiAPI(EnkiAPI):
         )
 
 
-class BibliographicParser(object):
+class BibliographicParser:
     """Parses Enki's representation of book information into
     Metadata and CirculationData objects.
     """
@@ -723,7 +734,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
 
     def __init__(self, _db, collection, api_class=EnkiAPI, analytics=None):
         """Constructor."""
-        super(EnkiImport, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self._db = _db
         if callable(api_class):
             api = api_class(_db, collection)
@@ -846,8 +857,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             presentation-ready Work will be created for the LicensePool.
         """
         availability = bibliographic.circulation
-        edition, new_edition = bibliographic.edition(self._db)
-        now = utc_now()
+        edition, _ = bibliographic.edition(self._db)
         policy = ReplacementPolicy(
             identifiers=False,
             subjects=True,
@@ -856,12 +866,6 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
         )
         bibliographic.apply(edition, self.collection, replace=policy)
         license_pool, ignore = availability.license_pool(self._db, self.collection)
-
-        if new_edition:
-            for library in self.collection.libraries:
-                self.analytics.collect_event(
-                    library, license_pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, now
-                )
 
         return edition, license_pool
 
@@ -875,7 +879,7 @@ class EnkiCollectionReaper(IdentifierSweepMonitor):
 
     def __init__(self, _db, collection, api_class=EnkiAPI):
         self._db = _db
-        super(EnkiCollectionReaper, self).__init__(self._db, collection)
+        super().__init__(self._db, collection)
         if callable(api_class):
             api = api_class(self._db, collection)
         else:

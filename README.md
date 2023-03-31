@@ -1,10 +1,11 @@
 # Palace Manager
 
 [![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![codecov](https://codecov.io/github/thepalaceproject/circulation/branch/main/graph/badge.svg?token=T09QW6DLH6)](https://codecov.io/github/thepalaceproject/circulation)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-![Python: 3.6,3.7,3.8,3.9](https://img.shields.io/badge/Python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)
+![Python: 3.8,3.9,3.10,3.11](https://img.shields.io/badge/Python-3.8%20|%203.9%20|%203.10%20|%203.11-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL
 [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
@@ -34,6 +35,18 @@ August 2021, development will be done in the `main` branch and the `python2` bra
 absolutely necessary.
 
 ## Set Up
+
+### Docker Compose
+
+In order to help quickly set up a development environment, we include a [docker-compose.yml](./docker-compose.yml)
+file. This docker-compose file, will build the webapp and scripts containers from your local repository, and start
+those containers as well as all the necessary service containers.
+
+You can give this a try by running the following command:
+
+```shell
+docker-compose up --build
+```
 
 ### Python Set Up
 
@@ -97,7 +110,22 @@ Poetry can be installed using the command `curl -sSL https://install.python-poet
 More information about installation options can be found in the
 [poetry documentation](https://python-poetry.org/docs/master/#installation).
 
-### Elasticsearch
+### Opensearch
+
+Palace now supports Opensearch: please use it instead of Elasticsearch.  While Elasticsearch is still supported,
+it is deprecated and will be removed eventually.
+
+#### Docker
+
+We recommend that you run Opensearch with docker using the following docker commands:
+
+```sh
+docker run --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
+docker exec opensearch opensearch-plugin -s install analysis-icu
+docker restart opensearch
+```
+
+### Elasticsearch (Deprecated)
 
 #### Docker
 
@@ -153,6 +181,19 @@ To let the application know which database to use set the `SIMPLIFIED_PRODUCTION
 export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
 ```
 
+### Email sending
+
+To use the features that require sending emails, for example to reset the password for logged-out users, you will need
+to have a working SMTP server and set some environment variables:
+
+```sh
+export SIMPLIFIED_MAIL_SERVER=example.smtp.com
+export SIMPLIFIED_MAIL_PORT=465
+export SIMPLIFIED_MAIL_USERNAME=username
+export SIMPLIFIED_MAIL_PASSWORD=password
+export SIMPLIFIED_MAIL_SENDER=sender@example.com
+```
+
 ### Running the Application
 
 As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
@@ -185,10 +226,16 @@ Python 3.9.9
 
 For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
 
-Install the dependencies:
+Install the dependencies (including dev and CI):
 
 ```sh
-poetry install --no-root -E pg-binary
+poetry install
+```
+
+Install only the production dependencies:
+
+```sh
+poetry install --only main,pg
 ```
 
 Run the application with:
@@ -413,16 +460,16 @@ before pushing changes to make sure you find any failing tests before committing
 For each push to a branch, CI also creates a docker image for the code in the branch. These images can be used for
 testing the branch, or deploying hotfixes.
 
-## Testing
-
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using
-[tox](https://tox.readthedocs.io/en/latest/).
-
-To run `pytest` unit tests locally, install `tox`.
+To install the tools used by CI run:
 
 ```sh
-pip install tox
+poetry install --only ci
 ```
+
+## Testing
+
+The Github Actions CI service runs the unit tests against Python 3.8, 3.9, 3.10, and 3.11 automatically using
+[tox](https://tox.readthedocs.io/en/latest/).
 
 Tox has an environment for each python version, the module being tested, and an optional `-docker` factor that will
 automatically use docker to deploy service containers used for the tests. You can select the environment you would like
@@ -435,12 +482,12 @@ with service dependencies running in docker containers.
 
 #### Python version
 
-| Factor      | Python Version |
-| ----------- | -------------- |
-| py36        | Python 3.6     |
-| py37        | Python 3.7     |
-| py38        | Python 3.8     |
-| py39        | Python 3.9     |
+| Factor | Python Version |
+|--------|----------------|
+| py38   | Python 3.8     |
+| py39   | Python 3.9     |
+| py310  | Python 3.10    |
+| py311  | Python 3.11    |
 
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
 flag.
@@ -470,11 +517,7 @@ missing Python versions in your system for local testing.
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
 and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not
 required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run
-on the Github Actions CI server.
-
-```sh
-pip install tox-docker
-```
+on the Github Actions CI server. `tox-docker` is automatically included when installing the `ci` dependency group.
 
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
 with a particular factor you add it to the end of the environment.
@@ -513,6 +556,22 @@ Only run the `test_google_analytics_provider` tests with Python 3.8 using docker
 
 ```sh
 tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
+```
+
+### Coverage Reports
+
+Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
+When the tests are run with github actions, the coverage report is automatically uploaded to
+[codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
+
+When running locally, the results from each individual run can be collected and combined into an HTML report using
+the `report` tox environment. This can be run on its own after running the tests, or as part of the tox environment
+selection.
+
+```shell
+# Run core and api tests under Python 3.8, using docker
+# containers for dependencies, and generate code coverage report
+tox -e "py38-{core,api}-docker,report"
 ```
 
 ## Usage with Docker
@@ -595,3 +654,7 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
           renderer = HTMLRenderer()
           renderer.open_in_browser(session)
       ```
+
+### Other Environment Variables
+
+- `SIMPLIFIED_SIRSI_DYNIX_APP_ID`: The Application ID for the SirsiDynix Authentication API (optional)

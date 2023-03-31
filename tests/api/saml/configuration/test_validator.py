@@ -3,7 +3,6 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.problem_details import INCOMPLETE_CONFIGURATION
 from api.admin.validator import PatronAuthenticationValidatorFactory
-from api.app import initialize_database
 from api.saml.configuration.model import SAMLConfiguration
 from api.saml.configuration.validator import (
     SAML_INCORRECT_METADATA,
@@ -16,17 +15,10 @@ from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
 from core.util.problem_detail import ProblemDetail
-from tests.api.saml import fixtures
-from tests.api.saml.controller_test import ControllerTest
+from tests.api.saml import saml_strings
 
 
-class TestSAMLSettingsValidator(ControllerTest):
-    @classmethod
-    def setup_class(cls):
-        super(TestSAMLSettingsValidator, cls).setup_class()
-
-        initialize_database(autoinitialize=False)
-
+class TestSAMLSettingsValidator:
     @parameterized.expand(
         [
             (
@@ -40,8 +32,8 @@ class TestSAMLSettingsValidator(ControllerTest):
             ),
             (
                 "empty_sp_metadata_and_empty_idp_metadata",
-                fixtures.INCORRECT_XML,
-                fixtures.INCORRECT_XML,
+                saml_strings.INCORRECT_XML,
+                saml_strings.INCORRECT_XML,
                 None,
                 INCOMPLETE_CONFIGURATION.detailed(
                     "Required field 'Service Provider's XML Metadata' is missing"
@@ -49,8 +41,8 @@ class TestSAMLSettingsValidator(ControllerTest):
             ),
             (
                 "incorrect_sp_metadata_and_incorrect_idp_metadata",
-                fixtures.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
+                saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
+                saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
                 None,
                 SAML_INCORRECT_METADATA.detailed(
                     "Service Provider's metadata has incorrect format: "
@@ -59,8 +51,8 @@ class TestSAMLSettingsValidator(ControllerTest):
             ),
             (
                 "correct_sp_metadata_and_incorrect_idp_metadata",
-                fixtures.CORRECT_XML_WITH_ONE_SP,
-                fixtures.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
                 None,
                 SAML_INCORRECT_METADATA.detailed(
                     "Identity Provider's metadata has incorrect format: "
@@ -70,22 +62,22 @@ class TestSAMLSettingsValidator(ControllerTest):
             ),
             (
                 "correct_sp_and_idp_metadata",
-                fixtures.CORRECT_XML_WITH_ONE_SP,
-                fixtures.CORRECT_XML_WITH_IDP_1,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.CORRECT_XML_WITH_IDP_1,
                 None,
                 None,
             ),
             (
                 "correct_patron_id_regular_expression",
-                fixtures.CORRECT_XML_WITH_ONE_SP,
-                fixtures.CORRECT_XML_WITH_IDP_1,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"(?P<patron_id>.+)@university\.org",
                 None,
             ),
             (
                 "correct_patron_id_regular_expression_without_patron_id_named_group",
-                fixtures.CORRECT_XML_WITH_ONE_SP,
-                fixtures.CORRECT_XML_WITH_IDP_1,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"(?P<patron>.+)@university\.org",
                 SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION.detailed(
                     "SAML patron ID regular expression '(?P<patron>.+)@university\\.org' "
@@ -94,8 +86,8 @@ class TestSAMLSettingsValidator(ControllerTest):
             ),
             (
                 "incorrect_patron_id_regular_expression",
-                fixtures.CORRECT_XML_WITH_ONE_SP,
-                fixtures.CORRECT_XML_WITH_IDP_1,
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"[",
                 SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION.detailed(
                     "SAML patron ID regular expression '[' has an incorrect format: "
@@ -163,7 +155,7 @@ class TestSAMLSettingsValidator(ControllerTest):
             assert expected_validation_result == result
 
 
-class TestSAMLSettingsValidatorFactory(object):
+class TestSAMLSettingsValidatorFactory:
     @parameterized.expand([("validator_using_factory_method", "api.saml.provider")])
     def test_create_can_create(self, _, protocol):
         # Arrange

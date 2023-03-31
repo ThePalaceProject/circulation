@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app"
+      xmlns:dcterms="http://purl.org/dc/terms/" xmlns:opds="http://opds-spec.org/2010/catalog"
+      xmlns:opf="http://www.idpf.org/2007/opf" xmlns:drm="http://librarysimplified.org/terms/drm"
+      xmlns:schema="http://schema.org/" xmlns:simplified="http://librarysimplified.org/terms/"
+      xmlns:bibframe="http://bibframe.org/vocab/" xmlns:bib="http://bib.schema.org/"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:lcp="http://readium.org/lcp-specs/ns">
+    <id>http://localhost:6500/HAZELNUT/admin/custom_list/90?list_name=Something+Else</id>
+    <title>Something Else</title>
+    <updated>2022-04-25T19:31:37+00:00</updated>
+    <link href="http://localhost:6500/HAZELNUT/admin/custom_list/90?list_name=Something+Else" rel="self"/>
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>Chameleon</title>
+        <author>
+            <name>Richard Hains</name>
+            <link rel="contributor" type="application/atom+xml;profile=opds-catalog;kind=acquisition"
+                  title="Richard Hains"
+                  href="http://localhost:6500/HAZELNUT/works/contributor/Richard%20Hains/eng/Adult%2CAdults%2BOnly%2CAll%2BAges%2CChildren%2CYoung%2BAdult"/>
+        </author>
+        <summary type="html">Jon Phillips is head bond trader at one of Wall Street's largest investment banks and lives
+            the American dream in the heart of New York's decadent banking community. But, after years of selfishness
+            and extravagance, he plans his exit through an unprecedented and ultimately fraudulent deal in the US
+            government bond market. A high-ranking colleague, who sits on the bank's main board, has teamed up with a
+            Russian financier in order to provide Jon with one of the key elements vital to the success of his ingenious
+            scheme. The deal goes spectacularly wrong and Jon's world collapses. As the Russians desperately attempt to
+            recover their lost millions, Jon is thrown into a deadly game of cat and mouse. From the seedy nightspots of
+            downtown NYC to the plush yacht clubs of the Hamptons, pastoral aristocratic England, and Southern
+            Australia's endless beaches, past lovers, new menaces, and numerous apparently accidental deaths line his
+            trail. Jon's survival now depends on putting the past behind him and becoming a calculated predator instead
+            of the vulnerable prey.
+        </summary>
+        <simplified:pwid>160623c4-ded3-21dc-d075-a603641b4a35</simplified:pwid>
+        <link rel="http://opds-spec.org/image"
+              href="https://library.biblioboard.com/ext/api/media/9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/assets/thumbnail_full.jpg"
+              type="image/jpeg"/>
+        <link rel="http://opds-spec.org/image/thumbnail"
+              href="https://library.biblioboard.com/ext/api/media/9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/assets/thumbnail.jpg"
+              type="image/jpeg"/>
+        <category scheme="http://librarysimplified.org/terms/fiction/"
+                  term="http://librarysimplified.org/terms/fiction/Fiction" label="Fiction"/>
+        <category scheme="http://librarysimplified.org/terms/genres/Simplified/"
+                  term="http://librarysimplified.org/terms/genres/Simplified/Suspense/Thriller"
+                  label="Suspense/Thriller"/>
+        <category scheme="http://schema.org/audience" term="Adult" label="Adult"/>
+        <dcterms:language>en</dcterms:language>
+        <dcterms:publisher>Beaufort Books</dcterms:publisher>
+        <dcterms:issued>2006-01-01</dcterms:issued>
+        <link rel="issues"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/report"/>
+        <id>urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6</id>
+        <link rel="alternate"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+        <link rel="alternate"
+              href="http://localhost:6500/HAZELNUT/works/URI/WHAT"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+        <bibframe:distribution bibframe:ProviderName="BiblioBoard"/>
+        <published>2022-04-14T00:00:00Z</published>
+        <updated>2022-04-15T16:25:27+00:00</updated>
+        <link type="application/atom+xml;type=entry;profile=opds-catalog" rel="http://opds-spec.org/acquisition/borrow"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/borrow">
+            <opds:indirectAcquisition type="application/vnd.librarysimplified.bearer-token+json">
+                <opds:indirectAcquisition type="application/epub+zip"/>
+            </opds:indirectAcquisition>
+            <opds:availability status="available"/>
+            <opds:holds total="0"/>
+            <opds:copies total="1" available="1"/>
+        </link>
+        <link rel="related" type="application/atom+xml;profile=opds-catalog;kind=acquisition" title="Recommended Works"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/related_books"/>
+        <link rel="http://www.w3.org/ns/oa#annotationService"
+              type="application/ld+json; profile=&quot;http://www.w3.org/ns/anno.jsonld&quot;"
+              href="http://localhost:6500/HAZELNUT/annotations/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6"/>
+        <link rel="http://librarysimplified.org/terms/rel/analytics/open-book"
+              href="http://localhost:6500/HAZELNUT/analytics/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6/open_book"/>
+    </entry>
+    <link rel="http://opds-spec.org/auth/document" href="http://localhost:6500/HAZELNUT/authentication_document"/>
+    <link rel="search" type="application/opensearchdescription+xml" href="http://localhost:6500/HAZELNUT/search/"/>
+    <link rel="http://opds-spec.org/shelf" type="application/atom+xml;profile=opds-catalog;kind=acquisition"
+          href="http://localhost:6500/HAZELNUT/loans/"/>
+    <link rel="http://www.w3.org/ns/oa#annotationService"
+          type="application/ld+json; profile=&quot;http://www.w3.org/ns/anno.jsonld&quot;"
+          href="http://localhost:6500/HAZELNUT/annotations/"/>
+    <link rel="http://opds-spec.org/crawlable" type="application/atom+xml;profile=opds-catalog;kind=acquisition"
+          href="http://localhost:6500/HAZELNUT/lists/Something%20Else/crawlable"/>
+    <link href="mailto:someone@example.com" rel="help"/>
+</feed>

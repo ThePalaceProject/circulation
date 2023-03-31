@@ -1,5 +1,4 @@
 import pytest
-from parameterized import parameterized
 
 from core.config import CannotLoadConfiguration
 from core.mirror import MirrorUploader
@@ -11,8 +10,8 @@ from core.s3 import (
     S3Uploader,
     S3UploaderConfiguration,
 )
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class DummySuccessUploader(MirrorUploader):
@@ -69,86 +68,95 @@ class DummyFailureUploader(MirrorUploader):
         return "I always fail."
 
 
-class TestInitialization(DatabaseTest):
+class TestInitialization:
     """Test the ability to get a MirrorUploader for various aspects of site
     configuration.
     """
 
-    @property
-    def _integration(self):
+    @staticmethod
+    def _integration(data: DatabaseTransactionFixture) -> ExternalIntegration:
         """Helper method to make a storage ExternalIntegration."""
         storage_name = "some storage"
-        integration = self._external_integration("my protocol")
+        integration = data.external_integration("my protocol")
         integration.goal = ExternalIntegration.STORAGE_GOAL
         integration.name = storage_name
         return integration
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,protocol,uploader_class,settings",
         [
-            ("s3_uploader", ExternalIntegration.S3, S3Uploader),
+            ("s3_uploader", ExternalIntegration.S3, S3Uploader, None),
             (
                 "minio_uploader",
                 ExternalIntegration.MINIO,
                 MinIOUploader,
                 {MinIOUploaderConfiguration.ENDPOINT_URL: "http://localhost"},
             ),
-        ]
+        ],
     )
-    def test_mirror(self, name, protocol, uploader_class, settings=None):
+    def test_mirror(
+        self,
+        db,
+        name,
+        protocol,
+        uploader_class,
+        settings,
+    ):
         storage_name = "some storage"
         # If there's no integration with goal=STORAGE or name=storage_name,
         # MirrorUploader.mirror raises an exception.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            MirrorUploader.mirror(self._db, storage_name)
+            MirrorUploader.mirror(db.session, storage_name)
         assert "No storage integration with name 'some storage' is configured" in str(
             excinfo.value
         )
 
         # If there's only one, mirror() uses it to initialize a
         # MirrorUploader.
-        integration = self._integration
+        integration = self._integration(db)
         integration.protocol = protocol
 
         if settings:
             for key, value in settings.items():
                 integration.setting(key).value = value
 
-        uploader = MirrorUploader.mirror(self._db, integration=integration)
+        uploader = MirrorUploader.mirror(db.session, integration=integration)
 
         assert isinstance(uploader, uploader_class)
 
-    def test_integration_by_name(self):
-        integration = self._integration
+    def test_integration_by_name(self, db: DatabaseTransactionFixture):
+        integration = self._integration(db)
 
         # No name was passed so nothing is found
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            MirrorUploader.integration_by_name(self._db)
+            MirrorUploader.integration_by_name(db.session)
         assert "No storage integration with name 'None' is configured" in str(
             excinfo.value
         )
 
         # Correct name was passed
-        integration = MirrorUploader.integration_by_name(self._db, integration.name)
+        integration = MirrorUploader.integration_by_name(db.session, integration.name)
         assert isinstance(integration, ExternalIntegration)
 
-    def test_for_collection(self):
+    def test_for_collection(self, db: DatabaseTransactionFixture):
+
         # This collection has no mirror_integration, so
         # there is no MirrorUploader for it.
-        collection = self._collection()
+        collection = db.collection()
         assert None == MirrorUploader.for_collection(
             collection, ExternalIntegrationLink.COVERS
         )
 
         # This collection has a properly configured mirror_integration,
         # so it can have an MirrorUploader.
-        integration = self._external_integration(
+        integration = db.external_integration(
             ExternalIntegration.S3,
             ExternalIntegration.STORAGE_GOAL,
             username="username",
             password="password",
             settings={S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "some-covers"},
         )
-        integration_link = self._external_integration_link(
+        integration_link = db.external_integration_link(
             integration=collection._external_integration,
             other_integration=integration,
             purpose=ExternalIntegrationLink.COVERS,
@@ -159,21 +167,29 @@ class TestInitialization(DatabaseTest):
         )
         assert isinstance(uploader, MirrorUploader)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,protocol,uploader_class,settings",
         [
-            ("s3_uploader", ExternalIntegration.S3, S3Uploader),
+            ("s3_uploader", ExternalIntegration.S3, S3Uploader, None),
             (
                 "minio_uploader",
                 ExternalIntegration.MINIO,
                 MinIOUploader,
                 {MinIOUploaderConfiguration.ENDPOINT_URL: "http://localhost"},
             ),
-        ]
+        ],
     )
-    def test_constructor(self, name, protocol, uploader_class, settings=None):
+    def test_constructor(
+        self,
+        db,
+        name,
+        protocol,
+        uploader_class,
+        settings,
+    ):
         # You can't create a MirrorUploader with an integration
         # that's not designed for storage.
-        integration = self._integration
+        integration = self._integration(db)
         integration.goal = ExternalIntegration.LICENSE_GOAL
         integration.protocol = protocol
 
@@ -184,31 +200,33 @@ class TestInitialization(DatabaseTest):
             uploader_class(integration)
         assert "from an integration with goal=licenses" in str(excinfo.value)
 
-    def test_implementation_registry(self):
+    def test_implementation_registry(self, db: DatabaseTransactionFixture):
+        session = db.session
+
         # The implementation class used for a given ExternalIntegration
         # is controlled by the integration's protocol and the contents
         # of the MirrorUploader's implementation registry.
         MirrorUploader.IMPLEMENTATION_REGISTRY["my protocol"] = DummyFailureUploader
 
-        integration = self._integration
-        uploader = MirrorUploader.mirror(self._db, integration=integration)
+        integration = self._integration(db)
+        uploader = MirrorUploader.mirror(session, integration=integration)
         assert isinstance(uploader, DummyFailureUploader)
         del MirrorUploader.IMPLEMENTATION_REGISTRY["my protocol"]
 
 
-class TestMirrorUploader(DatabaseTest):
+class TestMirrorUploader:
     """Test the basic workflow of MirrorUploader."""
 
-    def test_mirror_batch(self):
-        r1, ignore = self._representation()
-        r2, ignore = self._representation()
+    def test_mirror_batch(self, db: DatabaseTransactionFixture):
+        r1, ignore = db.representation()
+        r2, ignore = db.representation()
         uploader = DummySuccessUploader()
         uploader.mirror_batch([r1, r2])
         assert r1.mirrored_at != None
         assert r2.mirrored_at != None
 
-    def test_success_and_then_failure(self):
-        r, ignore = self._representation()
+    def test_success_and_then_failure(self, db: DatabaseTransactionFixture):
+        r, ignore = db.representation()
         now = utc_now()
         DummySuccessUploader().mirror_one(r, "")
         assert r.mirrored_at > now

@@ -1,0 +1,141 @@
+{
+  "%id": "https://schemas.thepalaceproject.io/customlists-report/1.0",
+  "reports": [
+    {
+      "list-id": 99,
+      "list-name": "Time",
+      "problems": [
+        {
+          "%type": "problem-book-mismatch",
+          "expected-id": "urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93",
+          "expected-id-type": "URI",
+          "expected-title": "Crotale 1",
+          "received-id": "urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93",
+          "received-title": "Crotale 2",
+          "author": "Someone",
+          "message": "The book 'Crotale 1' (id urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93) appears to have title 'Crotale 2' (id urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93) on the importing CM"
+        },
+        {
+          "%type": "problem-book-broken-on-source",
+          "id": "urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084",
+          "id-type": "URI",
+          "title": "A Guide To Reticulating Splines",
+          "message": "The book could not be retrieved on the source CM.",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-book-missing",
+          "id": "urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084",
+          "id-type": "URI",
+          "title": "A Guide To Reticulating Splines",
+          "message": "The book 'Guide To Reticulating Splines' (id urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084) appears to be missing on the importing CM",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-book-request-failed",
+          "id": "urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084",
+          "id-type": "URI",
+          "title": "A Guide To Reticulating Splines",
+          "message": "A request for book 'A Guide To Reticulating Splines' (id urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084) failed on the target CM: 500 PRINTER ON FIRE",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-collection-missing",
+          "name": "B2",
+          "message": "The collection 'B2' appears to be missing on the importing CM"
+        },
+        {
+          "%type": "problem-collection-request-failed",
+          "name": "B2",
+          "message": "The request for collection 'B2' failed: 500 OUT OF CHEESE ERROR"
+        },
+        {
+          "%type": "problem-list-already-exists",
+          "id": 23,
+          "name": "CL0",
+          "message": "The custom list 'CL0' (id 23) already exists on the target CM."
+        },
+        {
+          "%type": "problem-list-update-failed",
+          "id": 23,
+          "name": "CL0",
+          "message": "Failed to update custom list: 500 SHIP AI HAS ENTERED RAMPANCY"
+        },
+        {
+          "%type": "problem-list-broken",
+          "id": 23,
+          "name": "CL0",
+          "message": "The list 'CL0' (id 23) broke catastrophically before we could do anything with it."
+        }
+      ]
+    },
+    {
+      "list-id": 101,
+      "list-name": "Crystal Planet",
+      "problems": [
+        {
+          "%type": "problem-book-mismatch",
+          "expected-id": "urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93",
+          "expected-id-type": "URI",
+          "expected-title": "Crotale 1",
+          "received-id": "urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93",
+          "received-title": "Crotale 2",
+          "message": "The book 'Crotale 1' (id urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93) appears to have title 'Crotale 2' (id urn:uuid:1012c97d-c342-4e79-b018-4a1076b29e93) on the importing CM",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-book-broken-on-source",
+          "id": "urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084",
+          "id-type": "URI",
+          "title": "A Guide To Reticulating Splines",
+          "message": "The book could not be retrieved on the source CM.",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-book-missing",
+          "id": "urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084",
+          "id-type": "URI",
+          "title": "A Guide To Reticulating Splines",
+          "message": "The book 'Guide To Reticulating Splines' (id urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084) appears to be missing on the importing CM",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-book-request-failed",
+          "id": "urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084",
+          "id-type": "URI",
+          "title": "A Guide To Reticulating Splines",
+          "message": "A request for book 'A Guide To Reticulating Splines' (id urn:uuid:218a80a1-7d98-48d3-9d96-277b0b8d7084) failed on the target CM: 500 PRINTER ON FIRE",
+          "author": "Someone"
+        },
+        {
+          "%type": "problem-collection-missing",
+          "name": "B2",
+          "message": "The collection 'B2' appears to be missing on the importing CM"
+        },
+        {
+          "%type": "problem-collection-request-failed",
+          "name": "B2",
+          "message": "The request for collection 'B2' failed: 500 OUT OF CHEESE ERROR"
+        },
+        {
+          "%type": "problem-list-already-exists",
+          "id": 23,
+          "name": "CL0",
+          "message": "The custom list 'CL0' (id 23) already exists on the target CM."
+        },
+        {
+          "%type": "problem-list-update-failed",
+          "id": 23,
+          "name": "CL0",
+          "message": "Failed to update custom list: 500 SHIP AI HAS ENTERED RAMPANCY"
+        },
+        {
+          "%type": "problem-list-broken",
+          "id": 23,
+          "name": "CL0",
+          "message": "The list 'CL0' (id 23) broke catastrophically before we could do anything with it."
+        }
+      ]
+    }
+  ]
+}

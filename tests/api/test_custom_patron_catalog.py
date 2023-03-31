@@ -3,20 +3,20 @@ import pytest
 from api.config import CannotLoadConfiguration
 from api.custom_patron_catalog import COPPAGate, CustomPatronCatalog, CustomRootLane
 from core.model import ConfigurationSetting
-from core.testing import DatabaseTest
 from core.util.opds_writer import OPDSFeed
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestCustomPatronCatalog(DatabaseTest):
+class TestCustomPatronCatalog:
     def test_register(self):
         c = CustomPatronCatalog
         old_registry = c.BY_PROTOCOL
         c.BY_PROTOCOL = {}
 
-        class Mock1(object):
+        class Mock1:
             PROTOCOL = "A protocol"
 
-        class Mock2(object):
+        class Mock2:
             PROTOCOL = "A protocol"
 
         c.register(Mock1)
@@ -34,13 +34,13 @@ class TestCustomPatronCatalog(DatabaseTest):
             CustomRootLane.PROTOCOL: CustomRootLane,
         } == CustomPatronCatalog.BY_PROTOCOL
 
-    def test_for_library(self):
+    def test_for_library(self, db: DatabaseTransactionFixture):
         m = CustomPatronCatalog.for_library
 
         # Set up a mock CustomPatronCatalog so we can watch it being
         # instantiated.
-        class MockCustomPatronCatalog(object):
-            PROTOCOL = self._str
+        class MockCustomPatronCatalog:
+            PROTOCOL = db.fresh_str()
 
             def __init__(self, library, integration):
                 self.instantiated_with = (library, integration)
@@ -48,27 +48,27 @@ class TestCustomPatronCatalog(DatabaseTest):
         CustomPatronCatalog.register(MockCustomPatronCatalog)
 
         # By default, a library has no CustomPatronCatalog.
-        assert None == m(self._default_library)
+        assert None == m(db.default_library())
 
         # But if a library has an ExternalIntegration that corresponds
         # to a registered CustomPatronCatalog...
-        integration = self._external_integration(
+        integration = db.external_integration(
             MockCustomPatronCatalog.PROTOCOL,
             CustomPatronCatalog.GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
 
         # A CustomPatronCatalog of the appropriate class is instantiated
         # and returned.
-        view = m(self._default_library)
+        view = m(db.default_library())
         assert isinstance(view, MockCustomPatronCatalog)
-        assert (self._default_library, integration) == view.instantiated_with
+        assert (db.default_library(), integration) == view.instantiated_with
 
-    def test__load_lane(self):
+    def test__load_lane(self, db: DatabaseTransactionFixture):
         """Test the _load_lane helper method."""
-        library1 = self._library()
-        library2 = self._library()
-        lane = self._lane(library=library1)
+        library1 = db.library()
+        library2 = db.library()
+        lane = db.lane(library=library1)
         m = CustomPatronCatalog._load_lane
 
         assert lane == m(library1, lane.id)
@@ -103,24 +103,35 @@ class TestCustomPatronCatalog(DatabaseTest):
         assert doc["links"] == links
 
 
-class TestCustomRootLane(DatabaseTest):
-    """Test a CustomPatronCatalog which modifies the 'start' URL."""
-
-    def setup_method(self):
-        super(TestCustomRootLane, self).setup_method()
+class CustomRootLaneFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
         # Configure a CustomRootLane for the default library.
-        self.integration = self._external_integration(
+        self.db = db
+        self.integration = db.external_integration(
             CustomRootLane.PROTOCOL,
             CustomPatronCatalog.GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
-        self.lane = self._lane()
+        self.lane = db.lane()
         m = ConfigurationSetting.for_library_and_externalintegration
         m(
-            self._db, CustomRootLane.LANE, self._default_library, self.integration
+            db.session, CustomRootLane.LANE, db.default_library(), self.integration
         ).value = self.lane.id
 
-    def test_annotate_authentication_document(self):
+
+@pytest.fixture(scope="function")
+def custom_root_lane_fixture(db: DatabaseTransactionFixture) -> CustomRootLaneFixture:
+    return CustomRootLaneFixture(db)
+
+
+class TestCustomRootLane:
+    """Test a CustomPatronCatalog which modifies the 'start' URL."""
+
+    def test_annotate_authentication_document(
+        self, custom_root_lane_fixture: CustomRootLaneFixture
+    ):
+        db = custom_root_lane_fixture.db
+
         class MockCustomRootLane(CustomRootLane):
             def replace_link(self, doc, rel, **kwargs):
                 self.replace_link_called_with = (doc, rel, kwargs)
@@ -135,10 +146,10 @@ class TestCustomRootLane(DatabaseTest):
                 )
                 return "new-root"
 
-        library = self._default_library
-        custom_root = MockCustomRootLane(library, self.integration)
+        library = db.default_library()
+        custom_root = MockCustomRootLane(library, custom_root_lane_fixture.integration)
 
-        doc = dict()
+        doc = dict()  # type: ignore
         new_doc = custom_root.annotate_authentication_document(
             library, doc, custom_root.url_for
         )
@@ -164,35 +175,45 @@ class TestCustomRootLane(DatabaseTest):
         ) == custom_root.replace_link_called_with
 
 
-class TestCOPPAGate(DatabaseTest):
-    def setup_method(self):
-        super(TestCOPPAGate, self).setup_method()
+class COPPAGateTestFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
         # Configure a COPPAGate for the default library.
-        self.integration = self._external_integration(
+        self.integration = db.external_integration(
             COPPAGate.PROTOCOL,
             CustomPatronCatalog.GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
-        self.lane1 = self._lane()
-        self.lane2 = self._lane()
+        self.lane1 = db.lane()
+        self.lane2 = db.lane()
         m = ConfigurationSetting.for_library_and_externalintegration
         m(
-            self._db,
+            db.session,
             COPPAGate.REQUIREMENT_MET_LANE,
-            self._default_library,
+            db.default_library(),
             self.integration,
         ).value = self.lane1.id
         m(
-            self._db,
+            db.session,
             COPPAGate.REQUIREMENT_NOT_MET_LANE,
-            self._default_library,
+            db.default_library(),
             self.integration,
         ).value = self.lane2.id
 
-    def test_annotate_authentication_document(self):
+
+@pytest.fixture(scope="function")
+def coppa_gate_test_fixture(db: DatabaseTransactionFixture) -> COPPAGateTestFixture:
+    return COPPAGateTestFixture(db)
+
+
+class TestCOPPAGate:
+    def test_annotate_authentication_document(
+        self, coppa_gate_test_fixture: COPPAGateTestFixture
+    ):
         """Test the ability of a COPPAGate to modify an Authentication
         For OPDS document.
         """
+        db = coppa_gate_test_fixture.db
 
         class MockCOPPAGate(COPPAGate):
             url_for_called_with = []
@@ -206,11 +227,11 @@ class TestCOPPAGate(DatabaseTest):
                 )
                 return view + "/" + str(lane_identifier)
 
-        library = self._default_library
-        gate = MockCOPPAGate(library, self.integration)
+        library = db.default_library()
+        gate = MockCOPPAGate(library, coppa_gate_test_fixture.integration)
 
-        doc = {}
-        library = self._default_library
+        doc = {}  # type: ignore
+        library = db.default_library()
         modified = gate.annotate_authentication_document(library, doc, gate.url_for)
 
         # url_for was called twice, to make the lane links for

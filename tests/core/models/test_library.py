@@ -1,14 +1,13 @@
-# encoding: utf-8
 import pytest
 
 from core.model.configuration import ConfigurationSetting
 from core.model.library import Library
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestLibrary(DatabaseTest):
-    def test_library_registry_short_name(self):
-        library = self._default_library
+class TestLibrary:
+    def test_library_registry_short_name(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
 
         # Short name is always uppercased.
         library.library_registry_short_name = "foo"
@@ -24,28 +23,28 @@ class TestLibrary(DatabaseTest):
         # recommended, but it's not an error.
         library.library_registry_short_name = None
 
-    def test_lookup(self):
-        library = self._default_library
+    def test_lookup(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
         name = library.short_name
         assert name == library.cache_key()
 
         # Cache is empty.
-        cache = Library._cache_from_session(self._db)
+        cache = Library._cache_from_session(db.session)
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
-        assert library == Library.lookup(self._db, name)
+        assert library == Library.lookup(db.session, name)
 
         # Cache is populated.
         assert library == cache.key[name]
 
-    def test_default(self):
+    def test_default(self, db: DatabaseTransactionFixture):
         # We start off with no libraries.
-        assert None == Library.default(self._db)
+        assert None == Library.default(db.session)
 
         # Let's make a couple libraries.
-        l1 = self._default_library
-        l2 = self._library()
+        l1 = db.default_library()
+        l2 = db.library()
 
         # None of them are the default according to the database.
         assert False == l1.is_default
@@ -53,7 +52,7 @@ class TestLibrary(DatabaseTest):
 
         # If we call Library.default, the library with the lowest database
         # ID is made the default.
-        assert l1 == Library.default(self._db)
+        assert l1 == Library.default(db.session)
         assert True == l1.is_default
         assert False == l2.is_default
 
@@ -66,7 +65,7 @@ class TestLibrary(DatabaseTest):
         # will set the one with the lowest database ID to the default.
         l1._is_default = True
         l2._is_default = True
-        assert l1 == Library.default(self._db)
+        assert l1 == Library.default(db.session)
         assert True == l1.is_default
         assert False == l2.is_default
         with pytest.raises(ValueError) as excinfo:
@@ -76,11 +75,11 @@ class TestLibrary(DatabaseTest):
             in str(excinfo.value)
         )
 
-    def test_has_root_lanes(self):
+    def test_has_root_lanes(self, db: DatabaseTransactionFixture):
         # A library has root lanes if any of its lanes are the root for any
         # patron type(s).
-        library = self._default_library
-        lane = self._lane()
+        library = db.default_library()
+        lane = db.lane()
         assert False == library.has_root_lanes
 
         # If a library goes back and forth between 'has root lanes'
@@ -92,35 +91,35 @@ class TestLibrary(DatabaseTest):
         # Library._has_default_lane_cache whenever lane configuration
         # changes.)
         lane.root_for_patron_type = ["1", "2"]
-        self._db.flush()
+        db.session.flush()
         assert True == library.has_root_lanes
 
         lane.root_for_patron_type = None
-        self._db.flush()
+        db.session.flush()
         assert False == library.has_root_lanes
 
-    def test_all_collections(self):
-        library = self._default_library
+    def test_all_collections(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
 
-        parent = self._collection()
-        self._default_collection.parent_id = parent.id
+        parent = db.collection()
+        db.default_collection().parent_id = parent.id
 
-        assert [self._default_collection] == library.collections
-        assert set([self._default_collection, parent]) == set(library.all_collections)
+        assert [db.default_collection()] == library.collections
+        assert {db.default_collection(), parent} == set(library.all_collections)
 
-    def test_estimated_holdings_by_language(self):
-        library = self._default_library
+    def test_estimated_holdings_by_language(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
 
         # Here's an open-access English book.
-        english = self._work(language="eng", with_open_access_download=True)
+        english = db.work(language="eng", with_open_access_download=True)
 
         # Here's a non-open-access Tagalog book with a delivery mechanism.
-        tagalog = self._work(language="tgl", with_license_pool=True)
+        tagalog = db.work(language="tgl", with_license_pool=True)
         [pool] = tagalog.license_pools
-        self._add_generic_delivery_mechanism(pool)
+        db.add_generic_delivery_mechanism(pool)
 
         # Here's an open-access book that improperly has no language set.
-        no_language = self._work(with_open_access_download=True)
+        no_language = db.work(with_open_access_download=True)
         no_language.presentation_edition.language = None
 
         # estimated_holdings_by_language counts the English and the
@@ -134,22 +133,23 @@ class TestLibrary(DatabaseTest):
 
         # If we remove the default collection from the default library,
         # it loses all its works.
-        self._default_library.collections = []
+        db.default_library().collections = []
         estimate = library.estimated_holdings_by_language(include_open_access=False)
         assert dict() == estimate
 
-    def test_explain(self):
+    def test_explain(self, db: DatabaseTransactionFixture):
         """Test that Library.explain gives all relevant information
         about a Library.
         """
-        library = self._default_library
+        session = db.session
+        library = db.default_library()
         library.uuid = "uuid"
         library.name = "The Library"
         library.short_name = "Short"
         library.library_registry_short_name = "SHORT"
         library.library_registry_shared_secret = "secret"
 
-        integration = self._external_integration("protocol", "goal")
+        integration = db.external_integration("protocol", "goal")
         integration.url = "http://url/"
         integration.username = "someuser"
         integration.password = "somepass"
@@ -157,12 +157,12 @@ class TestLibrary(DatabaseTest):
 
         # Different libraries specialize this integration differently.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, "library-specific", library, integration
+            session, "library-specific", library, integration
         ).value = "value for library1"
 
-        library2 = self._library()
+        library2 = db.library()
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, "library-specific", library2, integration
+            session, "library-specific", library2, integration
         ).value = "value for library2"
 
         library.integrations.append(integration)

@@ -2,7 +2,6 @@ import email
 import json
 import logging
 import os
-import sys
 import urllib.parse
 from collections import defaultdict
 from time import mktime
@@ -11,18 +10,20 @@ from wsgiref.handlers import format_date_time
 
 import flask
 import pytz
+from attr import define
 from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import eagerload
+from sqlalchemy.orm.exc import NoResultFound
 
+from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
-from core.app_server import ComplaintController, HeartbeatController
+from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
-    cdn_url_for,
     load_facets_from_request,
     load_pagination_from_request,
     url_for,
@@ -35,6 +36,7 @@ from core.external_search import (
 )
 from core.lane import (
     BaseFacets,
+    Facets,
     FeaturedFacets,
     Lane,
     Pagination,
@@ -50,7 +52,6 @@ from core.model import (
     CachedFeed,
     CirculationEvent,
     Collection,
-    Complaint,
     ConfigurationSetting,
     CustomList,
     DataSource,
@@ -68,7 +69,13 @@ from core.model import (
     Session,
     get_one,
 )
+from core.model.devicetokens import (
+    DeviceToken,
+    DuplicateDeviceTokenError,
+    InvalidTokenTypeError,
+)
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
+from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
@@ -120,20 +127,11 @@ from .shared_collection import SharedCollectionAPI
 from .testing import MockCirculationAPI, MockSharedCollectionAPI
 
 
-class CirculationManager(object):
+class CirculationManager:
     log = logging.getLogger("api.controller.CirculationManager")
 
     def __init__(self, _db, testing=False):
         self._db = _db
-
-        if not testing:
-            try:
-                self.config = Configuration.load(_db)
-            except CannotLoadConfiguration as exception:
-                self.log.exception(
-                    "Could not load configuration file: {0}".format(exception)
-                )
-                sys.exit()
 
         self.testing = testing
         self.site_configuration_last_update = (
@@ -199,7 +197,7 @@ class CirculationManager(object):
             self.load_settings()
             self.site_configuration_last_update = last_update
 
-    @log_elapsed_time(log_method=log.debug, message_prefix="load_settings")
+    @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.
@@ -239,9 +237,6 @@ class CirculationManager(object):
         new_circulation_apis = {}
         # Potentially load a CustomIndexView for each library
         new_custom_index_views = {}
-
-        # Make sure there's a site-wide public/private key pair.
-        self.sitewide_key_pair
 
         with elapsed_time_logging(
             log_method=self.log.debug,
@@ -352,41 +347,6 @@ class CirculationManager(object):
             self.external_search_initialization_exception = e
         return self._external_search
 
-    def cdn_url_for(self, view, *args, **kwargs):
-        """Generate a URL for a view that (probably) passes through a CDN.
-
-        :param view: Name of the view.
-        :param _facets: The faceting object used to generate the document that's calling
-           this method. This may change which function is actually used to generate the
-           URL; in particular, it may disable a CDN that would otherwise be used. This is
-           called _facets just in case there's ever a view that takes 'facets' as a real
-           keyword argument.
-        :param args: Positional arguments to the view function.
-        :param kwargs: Keyword arguments to the view function.
-        """
-        url_for = self._cdn_url_for
-        facets = kwargs.pop("_facets", None)
-        if facets and facets.max_cache_age is CachedFeed.IGNORE_CACHE:
-            # The faceting object in play has disabled cache
-            # checking. A CDN is also a cache, so we should disable
-            # CDN URLs in the feed to make it more likely that the
-            # client continues to see up-to-the-minute feeds as they
-            # click around.
-            url_for = self.url_for
-        return url_for(view, *args, **kwargs)
-
-    def _cdn_url_for(self, *args, **kwargs):
-        """Call the cdn_url_for function.
-
-        Defined solely to be overridden in tests.
-        """
-        return cdn_url_for(*args, **kwargs)
-
-    def url_for(self, view, *args, **kwargs):
-        """Call the url_for function, ensuring that Flask generates an absolute URL."""
-        kwargs["_external"] = True
-        return url_for(view, *args, **kwargs)
-
     def log_lanes(self, lanelist=None, level=0):
         """Output information about the lane layout."""
         lanelist = lanelist or self.top_level_lane.sublanes
@@ -429,6 +389,7 @@ class CirculationManager(object):
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
+        self.opds2_feeds = OPDS2FeedController(self)
         self.marc_records = MARCRecordController(self)
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
@@ -436,7 +397,8 @@ class CirculationManager(object):
         self.work_controller = WorkController(self)
         self.analytics_controller = AnalyticsController(self)
         self.profiles = ProfileController(self)
-        self.heartbeat = HeartbeatController()
+        self.patron_devices = DeviceTokensController(self)
+        self.version = ApplicationVersionController()
         self.odl_notification_controller = ODLNotificationController(self)
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
@@ -574,7 +536,7 @@ class CirculationManager(object):
             library_identifies_patrons=library_identifies_patrons,
             facets=facets,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     @property
@@ -607,30 +569,14 @@ class CirculationManager(object):
             # itself.
             value = json.loads(value)
             value["_debug"] = dict(
-                url=self.url_for("authentication_document", library_short_name=name),
+                url=url_for(
+                    "authentication_document", library_short_name=name, _external=True
+                ),
                 environ=str(dict(flask.request.environ)),
                 cache=str(self.authentication_for_opds_documents),
             )
             value = json.dumps(value)
         return value
-
-    @property
-    def sitewide_key_pair(self):
-        """Look up or create the sitewide public/private key pair."""
-        setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
-        return Configuration.key_pair(setting)
-
-    @property
-    def public_key_integration_document(self):
-        """Serve a document with the sitewide public key."""
-        site_id = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        ).value
-        document = dict(id=site_id)
-
-        public, private = self.sitewide_key_pair
-        document["public_key"] = dict(type="RSA", value=public)
-        return json.dumps(document)
 
 
 class CirculationManagerController(BaseCirculationManagerController):
@@ -713,7 +659,10 @@ class CirculationManagerController(BaseCirculationManagerController):
                 if_modified_since
             )
         except TypeError:
-            # Parse error.
+            # Parse error <= Python 3.9
+            return None
+        except ValueError:
+            # Parse error >= Python 3.10
             return None
         if not parsed_if_modified_since:
             return None
@@ -884,8 +833,10 @@ class IndexController(CirculationManagerController):
         library_short_name = flask.request.library.short_name
         if not self.has_root_lanes():
             return redirect(
-                self.cdn_url_for(
-                    "acquisition_groups", library_short_name=library_short_name
+                url_for(
+                    "acquisition_groups",
+                    library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
@@ -926,26 +877,20 @@ class IndexController(CirculationManagerController):
             return root_lane
         if root_lane is None:
             return redirect(
-                self.cdn_url_for(
+                url_for(
                     "acquisition_groups",
                     library_short_name=library_short_name,
+                    _external=True,
                 )
             )
 
         return redirect(
-            self.cdn_url_for(
+            url_for(
                 "acquisition_groups",
                 library_short_name=library_short_name,
                 lane_identifier=root_lane.id,
+                _external=True,
             )
-        )
-
-    def public_key_document(self):
-        """Serves a sitewide public key document"""
-        return Response(
-            self.manager.public_key_integration_document,
-            200,
-            {"Content-Type": "application/opds+json"},
         )
 
 
@@ -968,7 +913,7 @@ class OPDSFeedController(CirculationManagerController):
             patron = self.request_patron
             if patron is not None and patron.root_lane:
                 return redirect(
-                    self.cdn_url_for(
+                    url_for(
                         "acquisition_groups",
                         library_short_name=library.short_name,
                         lane_identifier=patron.root_lane.id,
@@ -1002,11 +947,11 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.cdn_url_for(
+        url = url_for(
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=library.short_name,
-            _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets)
@@ -1042,11 +987,11 @@ class OPDSFeedController(CirculationManagerController):
             return search_engine
 
         library_short_name = flask.request.library.short_name
-        url = self.cdn_url_for(
+        url = url_for(
             "feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
-            _facets=facets,
+            _external=True,
         )
 
         annotator = self.manager.annotator(lane, facets=facets)
@@ -1069,10 +1014,11 @@ class OPDSFeedController(CirculationManagerController):
             return lane
         library = flask.request.library
         library_short_name = library.short_name
-        url = self.cdn_url_for(
+        url = url_for(
             "navigation_feed",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
+            _external=True,
         )
 
         title = lane.display_name
@@ -1086,7 +1032,12 @@ class OPDSFeedController(CirculationManagerController):
         )
         annotator = self.manager.annotator(lane, facets)
         return NavigationFeed.navigation(
-            self._db, title, url, lane, annotator, facets=facets
+            _db=self._db,
+            title=title,
+            url=url,
+            worklist=lane,
+            annotator=annotator,
+            facets=facets,
         )
 
     def crawlable_library_feed(self):
@@ -1094,9 +1045,10 @@ class OPDSFeedController(CirculationManagerController):
         request library.
         """
         library = flask.request.library
-        url = self.cdn_url_for(
+        url = url_for(
             "crawlable_library_feed",
             library_short_name=library.short_name,
+            _external=True,
         )
         title = library.name
         lane = CrawlableCollectionBasedLane()
@@ -1111,8 +1063,8 @@ class OPDSFeedController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
         title = collection.name
-        url = self.cdn_url_for(
-            "crawlable_collection_feed", collection_name=collection.name
+        url = url_for(
+            "crawlable_collection_feed", collection_name=collection.name, _external=True
         )
         lane = CrawlableCollectionBasedLane()
         lane.initialize([collection])
@@ -1138,10 +1090,11 @@ class OPDSFeedController(CirculationManagerController):
             return NO_SUCH_LIST
         library_short_name = library.short_name
         title = list.name
-        url = self.cdn_url_for(
+        url = url_for(
             "crawlable_list_feed",
             list_name=list.name,
             library_short_name=library_short_name,
+            _external=True,
         )
         lane = CrawlableCustomListBasedLane()
         lane.initialize(library, list)
@@ -1238,11 +1191,12 @@ class OPDSFeedController(CirculationManagerController):
         # request arguments, and another way if there is a query
         # string.
         make_url_kwargs = dict(list(facets.items()))
-        make_url = lambda: self.url_for(
+        make_url = lambda: url_for(
             "lane_search",
             lane_identifier=lane_identifier,
             library_short_name=library_short_name,
-            **make_url_kwargs
+            _external=True,
+            **make_url_kwargs,
         )
         if not query:
             # Send the search form
@@ -1293,9 +1247,8 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        url = self.url_for(
-            controller_name,
-            library_short_name=library.short_name,
+        url = url_for(
+            controller_name, library_short_name=library.short_name, _external=True
         )
 
         facets = load_facets_from_request(
@@ -1365,6 +1318,77 @@ class OPDSFeedController(CirculationManagerController):
         )
 
 
+@define
+class FeedRequestParameters:
+    """Frequently used request parameters for feed requests"""
+
+    library: Optional[Library] = None
+    pagination: Optional[Pagination] = None
+    facets: Optional[Facets] = None
+    problem: Optional[ProblemDetail] = None
+
+
+class OPDS2FeedController(CirculationManagerController):
+    """All OPDS2 type feeds are served through this controller"""
+
+    def _parse_feed_request(self):
+        """Parse the request to get frequently used request parameters for the feeds"""
+        library = getattr(flask.request, "library", None)
+        pagination = load_pagination_from_request(SortKeyPagination)
+        if isinstance(pagination, ProblemDetail):
+            return FeedRequestParameters(problem=pagination)
+
+        try:
+            facets = load_facets_from_request()
+            if isinstance(facets, ProblemDetail):
+                return FeedRequestParameters(problem=facets)
+        except AttributeError:
+            # No facets/library present, so NoneType
+            facets = None
+
+        return FeedRequestParameters(
+            library=library, facets=facets, pagination=pagination
+        )
+
+    def publications(self):
+        """OPDS2 publications feed"""
+        params: FeedRequestParameters = self._parse_feed_request()
+        if params.problem:
+            return params.problem
+        annotator = OPDS2PublicationsAnnotator(
+            flask.request.url, params.facets, params.pagination, params.library
+        )
+        lane = self.load_lane(None)
+        feed = AcquisitonFeedOPDS2.publications(
+            self._db,
+            lane,
+            params.facets,
+            params.pagination,
+            self.search_engine,
+            annotator,
+        )
+
+        return Response(
+            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        )
+
+    def navigation(self):
+        """OPDS2 navigation links"""
+        params: FeedRequestParameters = self._parse_feed_request()
+        annotator = OPDS2NavigationsAnnotator(
+            flask.request.url,
+            params.facets,
+            params.pagination,
+            params.library,
+            title="OPDS2 Navigation",
+        )
+        feed = AcquisitonFeedOPDS2.navigation(self._db, annotator)
+
+        return Response(
+            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        )
+
+
 class MARCRecordController(CirculationManagerController):
     DOWNLOAD_TEMPLATE = """
 <html lang="en">
@@ -1420,7 +1444,7 @@ class MARCRecordController(CirculationManagerController):
                     "Full file - last updated %(update_time)s",
                     update_time=file.end_time.strftime(time_format),
                 )
-                body += '<a href="%s">%s</a>' % (
+                body += '<a href="{}">{}</a>'.format(
                     files.get("full").representation.mirror_url,
                     full_label,
                 )
@@ -1436,7 +1460,7 @@ class MARCRecordController(CirculationManagerController):
                             start_time=update.start_time.strftime(time_format),
                             end_time=update.end_time.strftime(time_format),
                         )
-                        body += '<li><a href="%s">%s</a></li>' % (
+                        body += '<li><a href="{}">{}</a></li>'.format(
                             update_url,
                             update_label,
                         )
@@ -1827,6 +1851,9 @@ class LoanController(CirculationManagerController):
                 content = etree.tostring(feed)
             status_code = 200
             headers["Content-Type"] = OPDSFeed.ACQUISITION_FEED_TYPE
+        elif fulfillment.content_link_redirect is True:
+            # The fulfillment API has asked us to not be a proxy and instead redirect the client directly
+            return redirect(fulfillment.content_link)
         else:
             content = fulfillment.content
             if fulfillment.content_link:
@@ -2173,7 +2200,7 @@ class WorkController(CirculationManagerController):
             return search_engine
 
         try:
-            lane_name = "Books Related to %s by %s" % (work.title, work.author)
+            lane_name = f"Books Related to {work.title} by {work.author}"
             lane = RelatedBooksLane(library, work, lane_name, novelist_api=novelist_api)
         except ValueError as e:
             # No related books were found.
@@ -2219,7 +2246,7 @@ class WorkController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        lane_name = "Recommendations for %s by %s" % (work.title, work.author)
+        lane_name = f"Recommendations for {work.title} by {work.author}"
         try:
             lane = RecommendationLane(
                 library=library,
@@ -2259,30 +2286,6 @@ class WorkController(CirculationManagerController):
             annotator=annotator,
             search_engine=search_engine,
         )
-
-    def report(self, identifier_type, identifier):
-        """Report a problem with a book."""
-
-        # TODO: We don't have a reliable way of knowing whether the
-        # complaing is being lodged against the work or against a
-        # specific LicensePool.
-
-        # Turn source + identifier into a set of LicensePools
-        library = flask.request.library
-        pools = self.load_licensepools(library, identifier_type, identifier)
-        if isinstance(pools, ProblemDetail):
-            # Something went wrong.
-            return pools
-
-        if flask.request.method == "GET":
-            # Return a list of valid URIs to use as the type of a problem detail
-            # document.
-            data = "\n".join(Complaint.VALID_TYPES)
-            return Response(data, 200, {"Content-Type": "text/uri-list"})
-
-        data = flask.request.data
-        controller = ComplaintController()
-        return controller.register(pools[0], data)
 
     def series(self, series_name, languages, audiences, feed_class=AcquisitionFeed):
         """Serve a feed of books in a given series."""
@@ -2348,10 +2351,62 @@ class ProfileController(CirculationManagerController):
         return make_response(*result)
 
 
+class DeviceTokensController(CirculationManagerController):
+    def get_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.args["device_token"]
+        token: DeviceToken = (
+            self._db.query(DeviceToken)
+            .filter(
+                DeviceToken.patron_id == patron.id,
+                DeviceToken.device_token == device_token,
+            )
+            .first()
+        )
+        if not token:
+            return DEVICE_TOKEN_NOT_FOUND
+        return dict(token_type=token.token_type, device_token=token.device_token), 200
+
+    def create_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.json["device_token"]
+        token_type = flask.request.json["token_type"]
+
+        try:
+            device = DeviceToken.create(self._db, token_type, device_token, patron)
+        except InvalidTokenTypeError:
+            return DEVICE_TOKEN_TYPE_INVALID
+        except DuplicateDeviceTokenError:
+            return dict(exists=True), 200
+
+        return "", 201
+
+    def delete_patron_device(self):
+        patron = flask.request.patron
+        device_token = flask.request.json["device_token"]
+        token_type = flask.request.json["token_type"]
+
+        try:
+            device: DeviceToken = (
+                self._db.query(DeviceToken)
+                .filter(
+                    DeviceToken.patron == patron,
+                    DeviceToken.device_token == device_token,
+                    DeviceToken.token_type == token_type,
+                )
+                .one()
+            )
+            self._db.delete(device)
+        except NoResultFound:
+            return DEVICE_TOKEN_NOT_FOUND
+
+        return Response("", 204)
+
+
 class URNLookupController(CoreURNLookupController):
     def __init__(self, manager):
         self.manager = manager
-        super(URNLookupController, self).__init__(manager._db)
+        super().__init__(manager._db)
 
     def work_lookup(self, route_name):
         """Build a CirculationManagerAnnotor based on the current library's
@@ -2361,7 +2416,7 @@ class URNLookupController(CoreURNLookupController):
         library = flask.request.library
         top_level_worklist = self.manager.top_level_lanes[library.id]
         annotator = CirculationManagerAnnotator(top_level_worklist)
-        return super(URNLookupController, self).work_lookup(annotator, route_name)
+        return super().work_lookup(annotator, route_name)
 
 
 class AnalyticsController(CirculationManagerController):
@@ -2423,8 +2478,10 @@ class SharedCollectionController(CirculationManagerController):
         if not collection:
             return NO_SUCH_COLLECTION
 
-        register_url = self.url_for(
-            "shared_collection_register", collection_name=collection_name
+        register_url = url_for(
+            "shared_collection_register",
+            collection_name=collection_name,
+            _external=True,
         )
         register_link = dict(href=register_url, rel="register")
         content = json.dumps(dict(links=[register_link]))
@@ -2636,12 +2693,10 @@ class SharedCollectionController(CirculationManagerController):
 
 class StaticFileController(CirculationManagerController):
     def static_file(self, directory, filename):
-        cache_timeout = ConfigurationSetting.sitewide(
+        max_age = ConfigurationSetting.sitewide(
             self._db, Configuration.STATIC_FILE_CACHE_TIME
         ).int_value
-        return flask.send_from_directory(
-            directory, filename, cache_timeout=cache_timeout
-        )
+        return flask.send_from_directory(directory, filename, max_age=max_age)
 
     def image(self, filename):
         directory = os.path.join(

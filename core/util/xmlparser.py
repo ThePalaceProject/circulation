@@ -1,13 +1,14 @@
 from io import BytesIO
+from typing import Dict
 
 from lxml import etree
 
 
-class XMLParser(object):
+class XMLParser:
 
     """Helper functions to process XML data."""
 
-    NAMESPACES = {}
+    NAMESPACES: Dict[str, str] = {}
 
     @classmethod
     def _xpath(cls, tag, expression, namespaces=None):

@@ -1,6 +1,7 @@
-import cgi
 import html
+from datetime import datetime
 from threading import Lock
+from typing import List
 
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
@@ -21,8 +22,6 @@ from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationOption,
 )
-
-cgi.escape = html.escape
 
 
 class SAMLConfigurationError(BaseError):
@@ -124,7 +123,7 @@ class SAMLConfiguration(ConfigurationGrouping):
             "</pre>"
             "The expression will extract the <b>patron_id</b> from the first SAML attribute that matches "
             "or NameID if it matches the expression."
-        ).format(the_regex_pattern=cgi.escape(r"(?P<patron_id>.+)@university\.org")),
+        ).format(the_regex_pattern=html.escape(r"(?P<patron_id>.+)@university\.org")),
         type=ConfigurationAttributeType.TEXT,
         required=False,
     )
@@ -222,7 +221,7 @@ class SAMLConfiguration(ConfigurationGrouping):
         :param metadata_parser: SAML metadata parser
         :type metadata_parser: SAMLMetadataParser
         """
-        super(SAMLConfiguration, self).__init__(configuration_storage, db)
+        super().__init__(configuration_storage, db)
 
         self._metadata_parser = metadata_parser
 
@@ -362,15 +361,36 @@ class SAMLSettings(dict):
     """
 
     _mutex = Lock()
+    _last_updated_at = datetime.now()
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance, owner) -> List[dict]:
         """Return a SETTINGS-compatible dictionary.
 
         :return: SETTINGS-compatible dictionary
-        :rtype: Dict
         """
         with self._mutex:
+            fetch = False
             if not SAMLConfiguration.federated_identity_provider_entity_ids.options:
+                fetch = True
+            else:
+                from api.app import app
+
+                incommon_fed: SAMLFederation = (
+                    app._db.query(SAMLFederation)
+                    .filter(SAMLFederation.type == incommon.FEDERATION_TYPE)
+                    .first()
+                )
+                # Has the last updated time changed since this object was created?
+                # Then refresh
+                if (
+                    incommon_fed
+                    and incommon_fed.last_updated_at
+                    and incommon_fed.last_updated_at > self.__class__._last_updated_at
+                ):
+                    self.__class__._last_updated_at = incommon_fed.last_updated_at
+                    fetch = True
+
+            if fetch is True:
                 try:
                     from api.app import app
 
@@ -428,7 +448,7 @@ class SAMLConfigurationFactory(ConfigurationFactory):
         """
         if not isinstance(parser, SAMLMetadataParser):
             raise ValueError(
-                "Argument 'parser' must be an instance of {0} class".format(
+                "Argument 'parser' must be an instance of {} class".format(
                     SAMLMetadataParser
                 )
             )
@@ -453,7 +473,7 @@ class SAMLConfigurationFactory(ConfigurationFactory):
         """
         if not issubclass(configuration_grouping_class, SAMLConfiguration):
             raise ValueError(
-                "Argument 'configuration_grouping_class' must be a subclass of {0} class".format(
+                "Argument 'configuration_grouping_class' must be a subclass of {} class".format(
                     SAMLConfiguration
                 )
             )
@@ -464,7 +484,7 @@ class SAMLConfigurationFactory(ConfigurationFactory):
             yield configuration_bucket
 
 
-class SAMLOneLoginConfiguration(object):
+class SAMLOneLoginConfiguration:
     """Converts metadata objects to the OneLogin's SAML Toolkit format"""
 
     DEBUG = "debug"
@@ -612,7 +632,7 @@ class SAMLOneLoginConfiguration(object):
         if not identity_providers:
             raise SAMLConfigurationError(
                 _(
-                    "There is no identity provider with entityID = {0}".format(
+                    "There is no identity provider with entityID = {}".format(
                         idp_entity_id
                     )
                 )
@@ -621,7 +641,7 @@ class SAMLOneLoginConfiguration(object):
         if len(identity_providers) > 1:
             raise SAMLConfigurationError(
                 _(
-                    "There are multiple identity providers with entityID = {0}".format(
+                    "There are multiple identity providers with entityID = {}".format(
                         idp_entity_id
                     )
                 )

@@ -8,21 +8,23 @@ on:
 jobs:
   sync_with_nypl:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo to sync
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: code
 
       - name: Checkout CI scripts
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: 'ThePalaceProject/ci-scripts'
           path: ci
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.8
 

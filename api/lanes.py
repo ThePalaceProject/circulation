@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import core.classifier as genres
 from core import classifier
@@ -93,13 +94,12 @@ def _lane_configuration_from_collection_sizes(estimates):
 def create_default_lanes(_db, library):
     """Reset the lanes for the given library to the default.
 
-    The database will have the following top-level lanes for
-    each large-collection:
-    'Adult Fiction', 'Adult Nonfiction', 'Young Adult Fiction',
-    'Young Adult Nonfiction', and 'Children'.
-    Each lane contains additional sublanes.
-    If an NYT integration is configured, there will also be a
-    'Best Sellers' top-level lane.
+    This method will create a set of default lanes  for the first
+    major language specified in the UI or if no language is specified
+    then the most represented language in the catalogue.  If more than
+    one major language is specified, all but the first will be ignored
+    in terms of default lane creation. In other words, don't specify
+    multiple top level languages.
 
     If there are any small- or tiny-collection languages, the database
     will also have a top-level lane called 'World Languages'. The
@@ -132,7 +132,9 @@ def create_default_lanes(_db, library):
         estimates = library.estimated_holdings_by_language()
         large, small, tiny = _lane_configuration_from_collection_sizes(estimates)
     priority = 0
-    for language in large:
+
+    if large and len(large) > 0:
+        language = large[0]
         priority = create_lanes_for_large_collection(
             _db, library, language, priority=priority
         )
@@ -589,7 +591,9 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     ya_nonfiction_priority += 1
 
     children_common_args = dict(common_args)
-    children_common_args["audiences"] = CHILDREN
+    children_common_args["target_age"] = Classifier.range_tuple(
+        0, Classifier.YOUNG_ADULT_AGE_CUTOFF - 1
+    )
 
     children, ignore = create(
         _db,
@@ -633,11 +637,11 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     children_priority += 1
     children.sublanes.append(picture_books)
 
-    easy_readers, ignore = create(
+    early_readers, ignore = create(
         _db,
         Lane,
         library=library,
-        display_name="Easy Readers",
+        display_name="Early Readers",
         target_age=(5, 8),
         genres=[],
         fiction=None,
@@ -645,7 +649,7 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
         languages=languages,
     )
     children_priority += 1
-    children.sublanes.append(easy_readers)
+    children.sublanes.append(early_readers)
 
     chapter_books, ignore = create(
         _db,
@@ -955,8 +959,8 @@ class DatabaseExclusiveWorkList(DatabaseBackedWorkList):
 class WorkBasedLane(DynamicLane):
     """A lane that shows works related to one particular Work."""
 
-    DISPLAY_NAME = None
-    ROUTE = None
+    DISPLAY_NAME: Optional[str] = None
+    ROUTE: Optional[str] = None
 
     def __init__(self, library, work, display_name=None, children=None, **kwargs):
         self.work = work
@@ -980,7 +984,7 @@ class WorkBasedLane(DynamicLane):
 
         children = children or list()
 
-        super(WorkBasedLane, self).initialize(
+        super().initialize(
             library, display_name=display_name, children=children, **kwargs
         )
 
@@ -1007,7 +1011,7 @@ class WorkBasedLane(DynamicLane):
         """Add another Worklist as a child of this one and change its
         configuration to make sure its results fit in with this lane.
         """
-        super(WorkBasedLane, self).append_child(worklist)
+        super().append_child(worklist)
         worklist.languages = self.languages
         worklist.audiences = self.audiences
 
@@ -1019,7 +1023,7 @@ class WorkBasedLane(DynamicLane):
         :param patron: A Patron
         :return: A boolean
         """
-        superclass_ok = super(WorkBasedLane, self).accessible_to(patron)
+        superclass_ok = super().accessible_to(patron)
         return superclass_ok and (
             not self.work or self.work.age_appropriate_for_patron(patron)
         )
@@ -1044,7 +1048,7 @@ class RecommendationLane(WorkBasedLane):
         :raises: CannotLoadConfiguration if `novelist_api` is not provided
         and no Novelist integration is configured for this library.
         """
-        super(RecommendationLane, self).__init__(
+        super().__init__(
             library,
             work,
             display_name=display_name,
@@ -1126,7 +1130,7 @@ class SeriesLane(DynamicLane):
     def __init__(self, library, series_name, parent=None, **kwargs):
         if not series_name:
             raise ValueError("SeriesLane can't be created without series")
-        super(SeriesLane, self).initialize(library, display_name=series_name, **kwargs)
+        super().initialize(library, display_name=series_name, **kwargs)
         self.series = series_name
         if parent:
             parent.append_child(self)
@@ -1202,7 +1206,7 @@ class ContributorLane(DynamicLane):
         self.contributor_key = (
             self.contributor.display_name or self.contributor.sort_name
         )
-        super(ContributorLane, self).initialize(
+        super().initialize(
             library,
             display_name=self.contributor_key,
             audiences=audiences,
@@ -1260,7 +1264,7 @@ class RelatedBooksLane(WorkBasedLane):
     )
 
     def __init__(self, library, work, display_name=None, novelist_api=None):
-        super(RelatedBooksLane, self).__init__(
+        super().__init__(
             library,
             work,
             display_name=display_name,
@@ -1269,7 +1273,9 @@ class RelatedBooksLane(WorkBasedLane):
         sublanes = self._get_sublanes(_db, novelist_api)
         if not sublanes:
             raise ValueError(
-                "No related books for %s by %s" % (self.work.title, self.work.author)
+                "No related books for {} by {}".format(
+                    self.work.title, self.work.author
+                )
             )
         self.children = sublanes
 
@@ -1398,12 +1404,12 @@ class CrawlableCollectionBasedLane(CrawlableLane):
             # to the libraries that might use them.
             library = None
             collections = library_or_collections
-            identifier = " / ".join(sorted([x.name for x in collections]))
+            identifier = " / ".join(sorted(x.name for x in collections))
             if len(collections) == 1:
                 self.collection_feed = True
                 self.collection_name = collections[0].name
 
-        super(CrawlableCollectionBasedLane, self).initialize(
+        super().initialize(
             library,
             "Crawlable feed: %s" % identifier,
         )
@@ -1433,7 +1439,7 @@ class CrawlableCustomListBasedLane(CrawlableLane):
 
     def initialize(self, library, customlist):
         self.customlist_name = customlist.name
-        super(CrawlableCustomListBasedLane, self).initialize(
+        super().initialize(
             library,
             "Crawlable feed: %s" % self.customlist_name,
             customlists=[customlist],
@@ -1456,7 +1462,7 @@ class KnownOverviewFacetsWorkList(WorkList):
         :param facets: A Facets object to be used when generating a grouped
            feed.
         """
-        super(KnownOverviewFacetsWorkList, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.facets = facets
 
     def overview_facets(self, _db, facets):
@@ -1479,13 +1485,13 @@ class JackpotFacets(Facets):
     @classmethod
     def default_facet(cls, config, facet_group_name):
         if facet_group_name != cls.AVAILABILITY_FACET_GROUP_NAME:
-            return super(JackpotFacets, cls).default_facet(config, facet_group_name)
+            return super().default_facet(config, facet_group_name)
         return cls.AVAILABLE_NOW
 
     @classmethod
     def available_facets(cls, config, facet_group_name):
         if facet_group_name != cls.AVAILABILITY_FACET_GROUP_NAME:
-            return super(JackpotFacets, cls).available_facets(config, facet_group_name)
+            return super().available_facets(config, facet_group_name)
 
         return [
             cls.AVAILABLE_NOW,
@@ -1518,7 +1524,7 @@ class JackpotWorkList(WorkList):
         :param library: A Library
         :param facets: A Facets object.
         """
-        super(JackpotWorkList, self).initialize(library)
+        super().initialize(library)
 
         # Initialize a list of child Worklists; one for each test that
         # a client might need to run.

@@ -10,6 +10,7 @@ from werkzeug.exceptions import HTTPException
 
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import HasSessionCache
+from core.util.cache import CachedData
 from core.util.problem_detail import ProblemDetail
 
 from .app import app, babel
@@ -34,6 +35,9 @@ def initialize_circulation_manager():
             # Make sure that any changes to the database (as might happen
             # on initial setup) are committed before continuing.
             app.manager._db.commit()
+
+            # setup the cache data object
+            CachedData.initialize(app._db)
 
 
 @babel.localeselector
@@ -302,13 +306,6 @@ def authentication_document():
     return app.manager.index_controller.authentication_document()
 
 
-@library_route("/public_key_document")
-@returns_problem_detail
-@compressible
-def public_key_document():
-    return app.manager.index_controller.public_key_document()
-
-
 @library_dir_route("/groups", defaults=dict(lane_identifier=None))
 @library_route("/groups/<lane_identifier>")
 @has_library
@@ -383,6 +380,24 @@ def crawlable_list_feed(list_name):
 @compressible
 def crawlable_collection_feed(collection_name):
     return app.manager.opds_feeds.crawlable_collection_feed(collection_name)
+
+
+@library_route("/opds2/publications")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_publications():
+    return app.manager.opds2_feeds.publications()
+
+
+@library_route("/opds2/navigation")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_navigation():
+    return app.manager.opds2_feeds.navigation()
 
 
 @app.route("/collections/<collection_name>")
@@ -479,6 +494,33 @@ def lane_search(lane_identifier):
 @returns_problem_detail
 def patron_profile():
     return app.manager.profiles.protocol()
+
+
+@library_dir_route("/patrons/me/devices", methods=["GET"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def patron_devices():
+    return app.manager.patron_devices.get_patron_device()
+
+
+@library_dir_route("/patrons/me/devices", methods=["PUT"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def put_patron_devices():
+    return app.manager.patron_devices.create_patron_device()
+
+
+@library_dir_route("/patrons/me/devices", methods=["DELETE"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def delete_patron_devices():
+    return app.manager.patron_devices.delete_patron_device()
 
 
 @library_dir_route("/loans", methods=["GET", "HEAD"])
@@ -757,10 +799,21 @@ def odl_notify(loan_id):
 
 
 # Controllers used for operations purposes
+@app.route("/version.json")
+def application_version():
+    return app.manager.version.version()
+
+
+# TODO: This route is deprecated and should be removed in a
+#       future release of the code, it has been left here for
+#       one release to ease any deployment issues.
 @app.route("/heartbeat")
-@returns_problem_detail
 def heartbeat():
-    return app.manager.heartbeat.heartbeat()
+    version_info = application_version()
+    version_info[
+        "WARNING"
+    ] = "The /heartbeat endpoint is deprecated. Please use /version.json instead."
+    return version_info
 
 
 @app.route("/healthcheck.html")

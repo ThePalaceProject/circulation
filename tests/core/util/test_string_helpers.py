@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Test the helper objects in util.string.
 
 import base64 as stdlib_base64
@@ -9,7 +8,7 @@ import pytest
 from core.util.string_helpers import UnicodeAwareBase64, base64, random_string
 
 
-class TestUnicodeAwareBase64(object):
+class TestUnicodeAwareBase64:
     def test_encoding(self):
         string = "םולש"
 
@@ -74,7 +73,7 @@ class TestUnicodeAwareBase64(object):
         assert b"4piD" == stdlib_base64.b64encode(snowman_utf8)
 
 
-class TestRandomString(object):
+class TestRandomString:
     def test_random_string(self):
         m = random_string
         assert "" == m(0)

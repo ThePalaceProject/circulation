@@ -1,16 +1,17 @@
 import json
 import logging
 import os
-import shutil
-import tempfile
 import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from typing import Optional, Union
 from unittest import mock
 
 import pytest
 from sqlalchemy.orm.session import Session
+
+from core.model.devicetokens import DeviceToken
 
 from . import external_search
 from .analytics import Analytics
@@ -33,7 +34,6 @@ from .model import (
     Base,
     Classification,
     Collection,
-    Complaint,
     Contributor,
     CoverageRecord,
     Credential,
@@ -67,6 +67,10 @@ from .model.licensing import LicenseStatus
 from .util.datetime_helpers import datetime_utc, utc_now
 
 
+def _normalize_level(level):
+    return level.lower()
+
+
 class LogCaptureHandler(logging.Handler):
     """A `logging.Handler` context manager that captures the messages
     of emitted log records in the context of the specified `logger`.
@@ -74,11 +78,7 @@ class LogCaptureHandler(logging.Handler):
 
     _level_names = logging._levelToName.values()
 
-    @staticmethod
-    def _normalize_level(level):
-        return level.lower()
-
-    LEVEL_NAMES = list(map(_normalize_level.__func__, _level_names))
+    LEVEL_NAMES = list(map(_normalize_level, _level_names))
 
     def __init__(self, logger, *args, **kwargs):
         """Constructor.
@@ -100,7 +100,7 @@ class LogCaptureHandler(logging.Handler):
         self.logger.removeHandler(self)
 
     def emit(self, record):
-        level = self._normalize_level(record.levelname)
+        level = _normalize_level(record.levelname)
         if level not in self.LEVEL_NAMES:
             message = "Unexpected log level: '%s'." % record.levelname
             raise ValueError(message)
@@ -114,7 +114,7 @@ class LogCaptureHandler(logging.Handler):
         if item in self.LEVEL_NAMES:
             return self._records[item]
         else:
-            message = "'%s' object has no attribute '%s'" % (
+            message = "'{}' object has no attribute '{}'".format(
                 self.__class__.__name__,
                 item,
             )
@@ -124,7 +124,7 @@ class LogCaptureHandler(logging.Handler):
         return self.__getitem__(item)
 
 
-class DatabaseTest(object):
+class DatabaseTest:
 
     engine = None
     connection = None
@@ -140,33 +140,12 @@ class DatabaseTest(object):
     def setup_class(cls):
         # Initialize a temporary data directory.
         cls.engine, cls.connection = cls.get_database_connection()
-        cls.old_data_dir = Configuration.data_directory
-        cls.tmp_data_dir = tempfile.mkdtemp(dir="/tmp")
-        Configuration.instance[Configuration.DATA_DIRECTORY] = cls.tmp_data_dir
-
-        # Avoid CannotLoadConfiguration errors related to CDN integrations.
-        Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
-            Configuration.INTEGRATIONS, {}
-        )
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
 
     @classmethod
     def teardown_class(cls):
         # Destroy the database connection and engine.
         cls.connection.close()
         cls.engine.dispose()
-
-        if cls.tmp_data_dir.startswith("/tmp"):
-            logging.debug("Removing temporary directory %s" % cls.tmp_data_dir)
-            shutil.rmtree(cls.tmp_data_dir)
-
-        else:
-            logging.warning(
-                "Cowardly refusing to remove 'temporary' directory %s"
-                % cls.tmp_data_dir
-            )
-
-        Configuration.instance[Configuration.DATA_DIRECTORY] = cls.old_data_dir
 
     @pytest.fixture(autouse=True)
     def search_mock(self, request):
@@ -212,14 +191,8 @@ class DatabaseTest(object):
         # Reset the Analytics singleton between tests.
         Analytics._reset_singleton_instance()
 
-        # Also roll back any record of those changes in the
-        # Configuration instance.
-        for key in [
-            Configuration.SITE_CONFIGURATION_LAST_UPDATE,
-            Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE,
-        ]:
-            if key in Configuration.instance:
-                del Configuration.instance[key]
+        Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
+        Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
 
     def time_eq(self, a, b):
         "Assert that two times are *approximately* the same -- within 2 seconds."
@@ -680,12 +653,6 @@ class DatabaseTest(object):
             editions.append(edition)
         return customlist, editions
 
-    def _complaint(self, license_pool, type, source, detail, resolved=None):
-        complaint, is_new = Complaint.register(
-            license_pool, type, source, detail, resolved
-        )
-        return complaint
-
     def _credential(
         self, data_source_name=DataSource.GUTENBERG, type=None, patron=None
     ):
@@ -921,12 +888,12 @@ class DatabaseTest(object):
             print("NO Work found")
         for wCount, work in enumerate(works):
             # pipe character at end of line helps see whitespace issues
-            print("Work[%s]=%s|" % (wCount, work))
+            print(f"Work[{wCount}]={work}|")
 
             if not work.license_pools:
                 print("    NO Work.LicensePool found")
             for lpCount, license_pool in enumerate(work.license_pools):
-                print("    Work.LicensePool[%s]=%s|" % (lpCount, license_pool))
+                print(f"    Work.LicensePool[{lpCount}]={license_pool}|")
 
             print("    Work.presentation_edition=%s|" % work.presentation_edition)
 
@@ -934,14 +901,14 @@ class DatabaseTest(object):
         if not identifiers:
             print("NO Identifier found")
         for iCount, identifier in enumerate(identifiers):
-            print("Identifier[%s]=%s|" % (iCount, identifier))
+            print(f"Identifier[{iCount}]={identifier}|")
             print("    Identifier.licensed_through=%s|" % identifier.licensed_through)
 
         print("__________________________________________________________________\n")
         if not license_pools:
             print("NO LicensePool found")
         for index, license_pool in enumerate(license_pools):
-            print("LicensePool[%s]=%s|" % (index, license_pool))
+            print(f"LicensePool[{index}]={license_pool}|")
             print("    LicensePool.work_id=%s|" % license_pool.work_id)
             print("    LicensePool.data_source_id=%s|" % license_pool.data_source_id)
             print("    LicensePool.identifier_id=%s|" % license_pool.identifier_id)
@@ -957,7 +924,7 @@ class DatabaseTest(object):
             print("NO Edition found")
         for index, edition in enumerate(editions):
             # pipe character at end of line helps see whitespace issues
-            print("Edition[%s]=%s|" % (index, edition))
+            print(f"Edition[{index}]={edition}|")
             print(
                 "    Edition.primary_identifier_id=%s|" % edition.primary_identifier_id
             )
@@ -986,7 +953,7 @@ class DatabaseTest(object):
         if not data_sources:
             print("NO DataSource found")
         for index, data_source in enumerate(data_sources):
-            print("DataSource[%s]=%s|" % (index, data_source))
+            print(f"DataSource[{index}]={data_source}|")
             print("    DataSource.id=%s|" % data_source.id)
             print("    DataSource.name=%s|" % data_source.name)
             print("    DataSource.offers_licenses=%s|" % data_source.offers_licenses)
@@ -998,7 +965,7 @@ class DatabaseTest(object):
         if not representations:
             print("NO Representation found")
         for index, representation in enumerate(representations):
-            print("Representation[%s]=%s|" % (index, representation))
+            print(f"Representation[{index}]={representation}|")
             print("    Representation.id=%s|" % representation.id)
             print("    Representation.url=%s|" % representation.url)
             print("    Representation.mirror_url=%s|" % representation.mirror_url)
@@ -1149,9 +1116,7 @@ class SearchClientForTesting(ExternalSearchIndex):
     """
 
     def setup_index(self, new_index=None):
-        return super(SearchClientForTesting, self).setup_index(
-            new_index, number_of_shards=1, number_of_replicas=0
-        )
+        return super().setup_index(new_index, number_of_shards=1, number_of_replicas=0)
 
 
 @pytest.mark.elasticsearch
@@ -1171,7 +1136,7 @@ class ExternalSearchTest(DatabaseTest):
 
     def setup_method(self):
 
-        super(ExternalSearchTest, self).setup_method()
+        super().setup_method()
 
         # Track the indexes created so they can be torn down at the
         # end of the test.
@@ -1210,7 +1175,7 @@ class ExternalSearchTest(DatabaseTest):
             for index in self.indexes:
                 self.search.indices.delete(index, ignore=[404])
             ExternalSearchIndex.reset()
-        super(ExternalSearchTest, self).teardown_method()
+        super().teardown_method()
 
     def default_work(self, *args, **kwargs):
         """Convenience method to create a work with a license pool
@@ -1229,7 +1194,7 @@ class EndToEndSearchTest(ExternalSearchTest):
     """
 
     def setup_method(self):
-        super(EndToEndSearchTest, self).setup_method()
+        super().setup_method()
 
         # Create some works.
         if not self.search:
@@ -1357,10 +1322,10 @@ class EndToEndSearchTest(ExternalSearchTest):
             assert count == len(expect)
 
 
-class MockCoverageProvider(object):
+class MockCoverageProvider:
     """Mixin class for mock CoverageProviders that defines common constants."""
 
-    SERVICE_NAME = "Generic mock CoverageProvider"
+    SERVICE_NAME: Optional[str] = "Generic mock CoverageProvider"
 
     # Whenever a CoverageRecord is created, the data_source of that
     # record will be Project Gutenberg.
@@ -1368,11 +1333,11 @@ class MockCoverageProvider(object):
 
     # For testing purposes, this CoverageProvider will try to cover
     # every identifier in the database.
-    INPUT_IDENTIFIER_TYPES = None
+    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = None
 
     # This CoverageProvider can work with any Collection that supports
     # the OPDS import protocol (e.g. DatabaseTest._default_collection).
-    PROTOCOL = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL: Optional[str] = ExternalIntegration.OPDS_IMPORT
 
 
 class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvider):
@@ -1381,7 +1346,7 @@ class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvi
     """
 
     def __init__(self, *args, **kwargs):
-        super(InstrumentedCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.attempts = []
 
     def process_item(self, item):
@@ -1395,7 +1360,7 @@ class InstrumentedWorkCoverageProvider(MockCoverageProvider, WorkCoverageProvide
     """
 
     def __init__(self, _db, *args, **kwargs):
-        super(InstrumentedWorkCoverageProvider, self).__init__(_db, *args, **kwargs)
+        super().__init__(_db, *args, **kwargs)
         self.attempts = []
 
     def process_item(self, item):
@@ -1449,7 +1414,7 @@ class NeverSuccessfulCoverageProvider(InstrumentedCoverageProvider):
     SERVICE_NAME = "Never successful"
 
     def __init__(self, *args, **kwargs):
-        super(NeverSuccessfulCoverageProvider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.transient = kwargs.get("transient") or False
 
     def process_item(self, item):
@@ -1514,7 +1479,7 @@ class TaskIgnoringCoverageProvider(InstrumentedCoverageProvider):
         return []
 
 
-class DummyCanonicalizeLookupResponse(object):
+class DummyCanonicalizeLookupResponse:
     @classmethod
     def success(cls, result):
         r = cls()
@@ -1530,7 +1495,7 @@ class DummyCanonicalizeLookupResponse(object):
         return r
 
 
-class DummyMetadataClient(object):
+class DummyMetadataClient:
     def __init__(self):
         self.lookups = {}
 
@@ -1541,7 +1506,7 @@ class DummyMetadataClient(object):
             return DummyCanonicalizeLookupResponse.failure()
 
 
-class DummyHTTPClient(object):
+class DummyHTTPClient:
     def __init__(self):
         self.responses = []
         self.requests = []
@@ -1583,7 +1548,7 @@ class DummyHTTPClient(object):
         return self.responses.pop(0)
 
 
-class MockRequestsRequest(object):
+class MockRequestsRequest:
     """A mock object that simulates an HTTP request from the
     `requests` library.
     """
@@ -1594,7 +1559,7 @@ class MockRequestsRequest(object):
         self.headers = headers or dict()
 
 
-class MockRequestsResponse(object):
+class MockRequestsResponse:
     """A mock object that simulates an HTTP response from the
     `requests` library.
     """
@@ -1645,17 +1610,15 @@ def session_fixture():
     # Drop any existing schema. It will be recreated when
     # SessionManager.initialize() runs.
     engine = SessionManager.engine()
+    # Trying to drop all tables without reflecting first causes an issue
+    # since SQLAchemy does not know the order of cascades
+    # Adding .reflect is throwing an error locally becuase tables are imported
+    # later and hence being defined twice
+    # Deleting the problematic table first fixes the issue, in this case DeviceToken
+    DeviceToken.__table__.drop(engine, checkfirst=True)
     Base.metadata.drop_all(engine)
 
     yield
 
     if "TESTING" in os.environ:
         del os.environ["TESTING"]
-
-
-def pytest_configure(config):
-    # register our custom marks with pytest
-    config.addinivalue_line(
-        "markers", "elasticsearch: mark test as requiring elasticsearch"
-    )
-    config.addinivalue_line("markers", "minio: mark test as requiring minio")

@@ -3,6 +3,7 @@ from io import BytesIO
 
 from flask_babel import lazy_gettext as _
 from pymarc import Field, Record
+from sqlalchemy.orm.session import Session
 
 from .classifier import Classifier
 from .config import CannotLoadConfiguration
@@ -16,15 +17,19 @@ from .model import (
     ExternalIntegration,
     Identifier,
     Representation,
-    Session,
     Work,
     get_one_or_create,
 )
+
+# this is necessary to ensure these implementations are registered
+from .s3 import MinIOUploader, S3Uploader  # noqa: autoflake
+
+# registered
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
 
 
-class Annotator(object):
+class Annotator:
     """The Annotator knows how to add information about a Work to
     a MARC record."""
 
@@ -450,10 +455,7 @@ class Annotator(object):
                 Field(
                     tag="520",
                     indicators=[" ", " "],
-                    subfields=[
-                        "a",
-                        stripped.encode("ascii", "ignore"),
-                    ],
+                    subfields=["a", stripped],
                 )
             )
 
@@ -508,7 +510,7 @@ class MARCExporterFacets(BaseFacets):
         filter.updated_after = self.start_time
 
 
-class MARCExporter(object):
+class MARCExporter:
     """Turn a work into a record for a MARC file."""
 
     NAME = ExternalIntegration.MARC_EXPORT
@@ -572,15 +574,15 @@ class MARCExporter(object):
         {
             "key": INCLUDE_SIMPLIFIED_GENRES,
             "label": _(
-                "Include Library Simplified genres in MARC records (650 fields)"
+                "Include Palace Collection Manager genres in MARC records (650 fields)"
             ),
             "type": "select",
             "options": [
                 {
                     "key": "false",
-                    "label": _("Do not include Library Simplified genres"),
+                    "label": _("Do not include Palace Collection Manager genres"),
                 },
-                {"key": "true", "label": _("Include Library Simplified genres")},
+                {"key": "true", "label": _("Include Palace Collection Manager genres")},
             ],
             "default": "false",
         },

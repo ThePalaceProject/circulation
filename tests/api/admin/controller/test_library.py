@@ -6,6 +6,7 @@ from io import BytesIO
 import flask
 import pytest
 from PIL import Image
+from werkzeug import Response
 from werkzeug.datastructures import MultiDict
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
@@ -14,7 +15,6 @@ from api.admin.exceptions import *
 from api.admin.geographic_validator import GeographicValidator
 from api.announcements import Announcement, Announcements
 from api.config import Configuration
-from api.testing import AnnouncementTest
 from core.facets import FacetConstants
 from core.model import (
     AdminRole,
@@ -24,11 +24,10 @@ from core.model import (
     get_one_or_create,
 )
 from core.util.problem_detail import ProblemDetail
+from tests.fixtures.announcements import AnnouncementFixture
 
-from .test_controller import SettingsControllerTest
 
-
-class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
+class TestLibrarySettings:
     @pytest.fixture()
     def logo_properties(self):
         image_data_raw = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82"
@@ -58,23 +57,25 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         form = MultiDict(list(defaults.items()))
         return form
 
-    def test_libraries_get_with_no_libraries(self):
+    def test_libraries_get_with_no_libraries(self, settings_ctrl_fixture):
         # Delete any existing library created by the controller test setup.
-        library = get_one(self._db, Library)
+        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
         if library:
-            self._db.delete(library)
+            settings_ctrl_fixture.ctrl.db.session.delete(library)
 
-        with self.app.test_request_context("/"):
-            response = self.manager.admin_library_settings_controller.process_get()
+        with settings_ctrl_fixture.ctrl.app.test_request_context("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
+            )
             assert response.get("libraries") == []
 
-    def test_libraries_get_with_geographic_info(self):
+    def test_libraries_get_with_geographic_info(self, settings_ctrl_fixture):
         # Delete any existing library created by the controller test setup.
-        library = get_one(self._db, Library)
+        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
         if library:
-            self._db.delete(library)
+            settings_ctrl_fixture.ctrl.db.session.delete(library)
 
-        test_library = self._library("Library 1", "L1")
+        test_library = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
         ConfigurationSetting.for_library(
             Configuration.LIBRARY_FOCUS_AREA, test_library
         ).value = '{"CA": ["N3L"], "US": ["11235"]}'
@@ -82,8 +83,10 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             Configuration.LIBRARY_SERVICE_AREA, test_library
         ).value = '{"CA": ["J2S"], "US": ["31415"]}'
 
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_library_settings_controller.process_get()
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
+            )
             library_settings = response.get("libraries")[0].get("settings")
             assert library_settings.get("focus_area") == {
                 "CA": [{"N3L": "Paris, Ontario"}],
@@ -94,28 +97,40 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                 "US": [{"31415": "Savannah, GA"}],
             }
 
-    def test_libraries_get_with_announcements(self):
+    def test_libraries_get_with_announcements(
+        self, settings_ctrl_fixture, announcement_fixture: AnnouncementFixture
+    ):
         # Delete any existing library created by the controller test setup.
-        library = get_one(self._db, Library)
+        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
         if library:
-            self._db.delete(library)
+            settings_ctrl_fixture.ctrl.db.session.delete(library)
 
         # Set some announcements for this library.
-        test_library = self._library("Library 1", "L1")
+        test_library = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
         ConfigurationSetting.for_library(
             Announcements.SETTING_NAME, test_library
-        ).value = json.dumps([self.active, self.expired, self.forthcoming])
+        ).value = json.dumps(
+            [
+                announcement_fixture.active,
+                announcement_fixture.expired,
+                announcement_fixture.forthcoming,
+            ]
+        )
 
         # When we request information about this library...
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_library_settings_controller.process_get()
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
+            )
             library_settings = response.get("libraries")[0].get("settings")
 
             # We find out about the library's announcements.
             announcements = library_settings.get(Announcements.SETTING_NAME)
-            assert [self.active["id"], self.expired["id"], self.forthcoming["id"]] == [
-                x.get("id") for x in json.loads(announcements)
-            ]
+            assert [
+                announcement_fixture.active["id"],
+                announcement_fixture.expired["id"],
+                announcement_fixture.forthcoming["id"],
+            ] == [x.get("id") for x in json.loads(announcements)]
 
             # The objects found in `library_settings` aren't exactly
             # the same as what is stored in the database: string dates
@@ -130,15 +145,15 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     datetime.date,
                 )
 
-    def test_libraries_get_with_multiple_libraries(self):
+    def test_libraries_get_with_multiple_libraries(self, settings_ctrl_fixture):
         # Delete any existing library created by the controller test setup.
-        library = get_one(self._db, Library)
+        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
         if library:
-            self._db.delete(library)
+            settings_ctrl_fixture.ctrl.db.session.delete(library)
 
-        l1 = self._library("Library 1", "L1")
-        l2 = self._library("Library 2", "L2")
-        l3 = self._library("Library 3", "L3")
+        l1 = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
+        l2 = settings_ctrl_fixture.ctrl.db.library("Library 2", "L2")
+        l3 = settings_ctrl_fixture.ctrl.db.library("Library 3", "L3")
         # L2 has some additional library-wide settings.
         ConfigurationSetting.for_library(Configuration.FEATURED_LANE_SIZE, l2).value = 5
         ConfigurationSetting.for_library(
@@ -155,12 +170,14 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             Configuration.LARGE_COLLECTION_LANGUAGES, l2
         ).value = json.dumps(["French"])
         # The admin only has access to L1 and L2.
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        self.admin.add_role(AdminRole.LIBRARIAN, l1)
-        self.admin.add_role(AdminRole.LIBRARY_MANAGER, l2)
+        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        settings_ctrl_fixture.admin.add_role(AdminRole.LIBRARIAN, l1)
+        settings_ctrl_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, l2)
 
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_library_settings_controller.process_get()
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
+            )
             libraries = response.get("libraries")
             assert 2 == len(libraries)
 
@@ -190,34 +207,42 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             )
             assert ["French"] == settings.get(Configuration.LARGE_COLLECTION_LANGUAGES)
 
-    def test_libraries_post_errors(self):
-        with self.request_context_with_admin("/", method="POST"):
+    def test_libraries_post_errors(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
                 ]
             )
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response == MISSING_LIBRARY_SHORT_NAME
 
-        library = self._library()
-        with self.request_context_with_admin("/", method="POST"):
+        library = settings_ctrl_fixture.ctrl.db.library()
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = self.library_form(library, {"uuid": "1234"})
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response.uri == LIBRARY_NOT_FOUND.uri
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
                     ("short_name", library.short_name),
                 ]
             )
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
-        bpl, ignore = get_one_or_create(self._db, Library, short_name="bpl")
-        with self.request_context_with_admin("/", method="POST"):
+        bpl, ignore = get_one_or_create(
+            settings_ctrl_fixture.ctrl.db.session, Library, short_name="bpl"
+        )
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("uuid", bpl.uuid),
@@ -225,10 +250,12 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     ("short_name", library.short_name),
                 ]
             )
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("uuid", library.uuid),
@@ -236,12 +263,33 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     ("short_name", library.short_name),
                 ]
             )
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
+
+        # Either patron support email or website MUST be present
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "Email or Website Library"),
+                    ("short_name", "Email or Website"),
+                    ("website", "http://example.org"),
+                    ("default_notification_email_address", "email@example.org"),
+                ]
+            )
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
+            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert (
+                "Patron support email address or Patron support web site"
+                in response.detail
+            )
 
         # Test a web primary and secondary color that doesn't contrast
         # well on white. Here primary will, secondary should not.
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = self.library_form(
                 library,
                 {
@@ -249,15 +297,17 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     Configuration.WEB_SECONDARY_COLOR: "#e0e0e0",
                 },
             )
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
             assert "contrast-ratio.com/#%23e0e0e0-on-%23ffffff" in response.detail
             assert "contrast-ratio.com/#%23e0e0e0-on-%23ffffff" in response.detail
 
         # Test a list of web header links and a list of labels that
         # aren't the same length.
-        library = self._library()
-        with self.request_context_with_admin("/", method="POST"):
+        library = settings_ctrl_fixture.ctrl.db.library()
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("uuid", library.uuid),
@@ -274,25 +324,45 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     (Configuration.WEB_HEADER_LABELS, "One"),
                 ]
             )
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
 
-    def test__data_url_for_image(self, logo_properties):
-        """"""
-        image, expected_data_url = [
+    def test__data_url_for_image(self, logo_properties, settings_ctrl_fixture):
+        image, expected_data_url = (
             logo_properties[key] for key in ("image", "data_url")
-        ]
+        )
         data_url = LibrarySettingsController._data_url_for_image(image)
         assert expected_data_url == data_url
 
-    def test_libraries_post_create(self, logo_properties):
+        # A non PNG mode should work as RGBA
+        image = logo_properties["image"].convert("CMYK")
+        assert image.mode == "CMYK"
+
+        data_url = LibrarySettingsController._data_url_for_image(image)
+        rgba_image = image.convert("RGBA")
+        bio = BytesIO()
+        rgba_image.save(bio, "PNG")
+        bio.seek(0)
+        expected_data_url = "data:image/png;base64," + base64.b64encode(
+            bio.read()
+        ).decode("utf-8")
+        assert expected_data_url == data_url
+
+    def test_libraries_post_create(
+        self,
+        logo_properties,
+        settings_ctrl_fixture,
+        announcement_fixture: AnnouncementFixture,
+    ):
         class TestFileUpload(BytesIO):
             headers = {"Content-Type": "image/png"}
 
         # Pull needed properties from logo fixture
-        image_data, expected_logo_data_url, image = [
+        image_data, expected_logo_data_url, image = (
             logo_properties[key] for key in ("raw_bytes", "data_url", "image")
-        ]
+        )
         # LibrarySettingsController scales down images that are too large,
         # so we fail here if our test fixture image is large enough to cause
         # a mismatch between the expected data URL and the one configured.
@@ -320,7 +390,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                 self.was_called = True
                 return original_announcement_validate(values)
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "The New York Public Library"),
@@ -338,7 +408,12 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     ),
                     (
                         Announcements.SETTING_NAME,
-                        json.dumps([self.active, self.forthcoming]),
+                        json.dumps(
+                            [
+                                announcement_fixture.active,
+                                announcement_fixture.forthcoming,
+                            ]
+                        ),
                     ),
                     (
                         Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
@@ -378,12 +453,14 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                 geographic=geographic_validator,
                 announcements=announcement_validator,
             )
-            response = self.manager.admin_library_settings_controller.process_post(
+            response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_post(
                 validators
             )
             assert response.status_code == 201
 
-        library = get_one(self._db, Library, short_name="nypl")
+        library = get_one(
+            settings_ctrl_fixture.ctrl.db.session, Library, short_name="nypl"
+        )
         assert library.uuid == response.get_data(as_text=True)
         assert library.name == "The New York Public Library"
         assert library.short_name == "nypl"
@@ -433,9 +510,10 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         # The validated result was written to the database, such that we can
         # parse it as a list of Announcement objects.
         announcements = Announcements.for_library(library).announcements
-        assert [self.active["id"], self.forthcoming["id"]] == [
-            x.id for x in announcements
-        ]
+        assert [
+            announcement_fixture.active["id"],
+            announcement_fixture.forthcoming["id"],
+        ] == [x.id for x in announcements]
         assert all(isinstance(x, Announcement) for x in announcements)
 
         # When the library was created, default lanes were also created
@@ -449,9 +527,11 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         assert other_languages == german.parent
         assert ["ger"] == german.languages
 
-    def test_libraries_post_edit(self):
+    def test_libraries_post_edit(self, settings_ctrl_fixture):
         # A library already exists.
-        library = self._library("New York Public Library", "nypl")
+        library = settings_ctrl_fixture.ctrl.db.library(
+            "New York Public Library", "nypl"
+        )
 
         ConfigurationSetting.for_library(
             Configuration.FEATURED_LANE_SIZE, library
@@ -470,7 +550,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             Configuration.LOGO, library
         ).value = "A tiny image"
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("uuid", library.uuid),
@@ -506,10 +586,14 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                 ]
             )
             flask.request.files = MultiDict([])
-            response = self.manager.admin_library_settings_controller.process_post()
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
             assert response.status_code == 200
 
-        library = get_one(self._db, Library, uuid=library.uuid)
+        library = get_one(
+            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library.uuid
+        )
 
         assert library.uuid == response.get_data(as_text=True)
         assert library.name == "The New York Public Library"
@@ -541,27 +625,99 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             == ConfigurationSetting.for_library(Configuration.LOGO, library).value
         )
 
-    def test_library_delete(self):
-        library = self._library()
+    def test_library_post_empty_values_edit(self, settings_ctrl_fixture):
+        library = settings_ctrl_fixture.ctrl.db.library(
+            "New York Public Library", "nypl"
+        )
+        ConfigurationSetting.for_library(
+            Configuration.LIBRARY_DESCRIPTION, library
+        ).value = "description"
 
-        with self.request_context_with_admin("/", method="DELETE"):
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("uuid", library.uuid),
+                    ("name", "The New York Public Library"),
+                    ("short_name", "nypl"),
+                    (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
+                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    (Configuration.HELP_EMAIL, "help@example.com"),
+                ]
+            )
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
+            assert response.status_code == 200
+
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            )._value
+            == ""
+        )
+        # ConfigurationSetting.value property.getter sets "" to None
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            ).value
+            == None
+        )
+
+    def test_library_post_empty_values_create(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("name", "The New York Public Library"),
+                    ("short_name", "nypl"),
+                    (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
+                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    (Configuration.HELP_EMAIL, "help@example.com"),
+                ]
+            )
+            response: Response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            )
+            assert response.status_code == 201
+            uuid = response.get_data(as_text=True)
+
+        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library, uuid=uuid)
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            )._value
+            == ""
+        )
+        # ConfigurationSetting.value property.getter sets "" to None
+        assert (
+            ConfigurationSetting.for_library(
+                Configuration.LIBRARY_DESCRIPTION, library
+            ).value
+            == None
+        )
+
+    def test_library_delete(self, settings_ctrl_fixture):
+        library = settings_ctrl_fixture.ctrl.db.library()
+
+        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_library_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_delete,
                 library.uuid,
             )
 
-            self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = self.manager.admin_library_settings_controller.process_delete(
+            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_delete(
                 library.uuid
             )
             assert response.status_code == 200
 
-        library = get_one(self._db, Library, uuid=library.uuid)
+        library = get_one(
+            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library.uuid
+        )
         assert None == library
 
-    def test_library_configuration_settings(self):
+    def test_library_configuration_settings(self, settings_ctrl_fixture):
         # Verify that library_configuration_settings validates and updates every
         # setting for a library.
         settings = [
@@ -570,7 +726,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         ]
 
         # format1 has a custom validation class; format2 does not.
-        class MockValidator(object):
+        class MockValidator:
             def format_as_string(self, value):
                 self.format_as_string_called_with = value
                 return value + ", formatted for storage"
@@ -590,8 +746,8 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
                     return INVALID_INPUT.detailed("invalid!")
 
         # Run library_configuration_settings in a situation where all validations succeed.
-        controller = MockController(self.manager)
-        library = self._default_library
+        controller = MockController(settings_ctrl_fixture.manager)
+        library = settings_ctrl_fixture.ctrl.db.default_library()
         result = controller.library_configuration_settings(
             library, validators, settings
         )
@@ -617,7 +773,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
 
         # Each (validated and formatted) value was written to the
         # database.
-        setting1, setting2 = [library.setting(x["key"]) for x in settings]
+        setting1, setting2 = (library.setting(x["key"]) for x in settings)
         assert "validated %s, formatted for storage" % setting1.key == setting1.value
         assert "validated %s" % setting2.key == setting2.value
 
@@ -627,7 +783,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         controller.succeed = False
         controller._validate_setting_calls = []
         result = controller.library_configuration_settings(
-            self._default_library, validators, settings
+            settings_ctrl_fixture.ctrl.db.default_library(), validators, settings
         )
 
         # _validate_setting was only called once.
@@ -644,11 +800,11 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         for x in settings:
             assert None == library.setting(x["key"]).value
 
-    def test__validate_setting(self):
+    def test__validate_setting(self, settings_ctrl_fixture):
         # Verify the rules for validating different kinds of settings,
         # one simulated setting at a time.
 
-        library = self._default_library
+        library = settings_ctrl_fixture.ctrl.db.default_library()
 
         class MockController(LibrarySettingsController):
 
@@ -704,7 +860,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
             )
 
         # First test some simple cases: scalar values.
-        controller = MockController(self.manager)
+        controller = MockController(settings_ctrl_fixture.manager)
         m = controller._validate_setting
 
         # The incoming request has a value for this setting.
@@ -744,7 +900,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         )
 
         # A list of geographic places
-        class MockGeographicValidator(object):
+        class MockGeographicValidator:
             value = "validated value"
 
             def validate_geographic_areas(self, value, _db):
@@ -758,7 +914,10 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         assert "validated value" == m(
             library, dict(key="geographic_setting", format="geographic"), validator
         )
-        assert (json.dumps(["geographic values"]), self._db) == validator.called_with
+        assert (
+            json.dumps(["geographic values"]),
+            settings_ctrl_fixture.ctrl.db.session,
+        ) == validator.called_with
 
         # Just to be explicit, let's also test the case where the 'response' sent from the
         # validator is a ProblemDetail.
@@ -768,7 +927,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         )
 
         # A list of announcements.
-        class MockAnnouncementValidator(object):
+        class MockAnnouncementValidator:
             value = "validated value"
 
             def validate_announcements(self, value):
@@ -782,7 +941,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
         )
         assert json.dumps(controller.announcement_list) == validator.called_with
 
-    def test__format_validated_value(self):
+    def test__format_validated_value(self, settings_ctrl_fixture):
 
         m = LibrarySettingsController._format_validated_value
 
@@ -793,7 +952,7 @@ class TestLibrarySettings(SettingsControllerTest, AnnouncementTest):
 
         # When there is a validator, its format_as_string method is
         # called, and its return value is used as the formatted value.
-        class MockValidator(object):
+        class MockValidator:
             def format_as_string(self, value):
                 self.called_with = value
                 return "formatted value"

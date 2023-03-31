@@ -12,13 +12,14 @@ from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvalua
 from core.python_expression_dsl.parser import DSLParser
 
 
-class TestSAMLSubjectFilter(object):
+class TestSAMLSubjectFilter:
     @parameterized.expand(
         [
             (
                 "fails_in_the_case_of_syntax_error",
                 'subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -36,6 +37,7 @@ class TestSAMLSubjectFilter(object):
                 "fails_in_the_case_of_unknown_attribute",
                 'subject.attribute_statement.attributes["mail"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -53,6 +55,7 @@ class TestSAMLSubjectFilter(object):
                 "fails_when_subject_is_not_used",
                 'attributes["eduPersonEntitlement"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -70,6 +73,7 @@ class TestSAMLSubjectFilter(object):
                 "can_filter_when_attribute_has_one_value",
                 '"urn:mace:nyu.edu:entl:lib:eresources" == subject.attribute_statement.attributes["eduPersonEntitlement"].values[0]',
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [
@@ -86,6 +90,7 @@ class TestSAMLSubjectFilter(object):
                 "can_filter_when_attribute_has_multiple_values",
                 '"urn:mace:nyu.edu:entl:lib:eresources" in subject.attribute_statement.attributes["eduPersonEntitlement"].values',
                 SAMLSubject(
+                    "http://idp.example.com",
                     None,
                     SAMLAttributeStatement(
                         [

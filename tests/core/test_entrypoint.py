@@ -11,10 +11,10 @@ from core.entrypoint import (
 )
 from core.external_search import Filter
 from core.model import Edition, Work
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestEntryPoint(DatabaseTest):
+class TestEntryPoint:
     def test_defaults(self):
         everything, ebooks, audiobooks = EntryPoint.ENTRY_POINTS
         assert EverythingEntryPoint == everything
@@ -32,17 +32,17 @@ class TestEntryPoint(DatabaseTest):
         for ep in (EbooksEntryPoint, AudiobooksEntryPoint):
             assert ep.URI == Edition.medium_to_additional_type[ep.INTERNAL_NAME]
 
-    def test_no_changes(self):
+    def test_no_changes(self, db: DatabaseTransactionFixture):
         # EntryPoint doesn't modify queries or search filters.
-        qu = self._db.query(Edition)
-        assert qu == EntryPoint.modify_database_query(self._db, qu)
+        qu = db.session.query(Edition)
+        assert qu == EntryPoint.modify_database_query(db.session, qu)
         args = dict(arg="value")
 
         filter = object()
         assert filter == EverythingEntryPoint.modify_search_filter(filter)
 
     def test_register(self):
-        class Mock(object):
+        class Mock:
             pass
 
         args = [Mock, "Mock!"]
@@ -71,7 +71,7 @@ class TestEntryPoint(DatabaseTest):
 
         # Can't register two different entry points with the same
         # display name.
-        class Mock2(object):
+        class Mock2:
             INTERNAL_NAME = "mock2"
 
         with pytest.raises(ValueError) as excinfo:
@@ -82,38 +82,38 @@ class TestEntryPoint(DatabaseTest):
         assert Mock not in EntryPoint.DEFAULT_ENABLED
 
 
-class TestEverythingEntryPoint(DatabaseTest):
-    def test_no_changes(self):
+class TestEverythingEntryPoint:
+    def test_no_changes(self, db: DatabaseTransactionFixture):
         # EverythingEntryPoint doesn't modify queries or searches
         # beyond the default behavior for any entry point.
         assert "All" == EverythingEntryPoint.INTERNAL_NAME
 
-        qu = self._db.query(Edition)
-        assert qu == EntryPoint.modify_database_query(self._db, qu)
+        qu = db.session.query(Edition)
+        assert qu == EntryPoint.modify_database_query(db.session, qu)
         args = dict(arg="value")
 
         filter = object()
         assert filter == EverythingEntryPoint.modify_search_filter(filter)
 
 
-class TestMediumEntryPoint(DatabaseTest):
-    def test_modify_database_query(self):
+class TestMediumEntryPoint:
+    def test_modify_database_query(self, db: DatabaseTransactionFixture):
         # Create a video, and a entry point that contains videos.
-        work = self._work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.license_pools[0].presentation_edition.medium = Edition.VIDEO_MEDIUM
 
         class Videos(MediumEntryPoint):
             INTERNAL_NAME = Edition.VIDEO_MEDIUM
 
-        qu = self._db.query(Work)
+        qu = db.session.query(Work)
 
         # The default entry points filter out the video.
         for entrypoint in EbooksEntryPoint, AudiobooksEntryPoint:
-            modified = entrypoint.modify_database_query(self._db, qu)
+            modified = entrypoint.modify_database_query(db.session, qu)
             assert [] == modified.all()
 
         # But the video entry point includes it.
-        videos = Videos.modify_database_query(self._db, qu)
+        videos = Videos.modify_database_query(db.session, qu)
         assert [work.id] == [x.id for x in videos]
 
     def test_modify_search_filter(self):
@@ -125,11 +125,11 @@ class TestMediumEntryPoint(DatabaseTest):
         assert [Mock.INTERNAL_NAME] == filter.media
 
 
-class TestLibrary(DatabaseTest):
+class TestLibrary:
     """Test a Library's interaction with EntryPoints."""
 
-    def test_enabled_entrypoints(self):
-        l = self._default_library
+    def test_enabled_entrypoints(self, db: DatabaseTransactionFixture):
+        l = db.default_library()
 
         setting = l.setting(EntryPoint.ENABLED_SETTING)
 

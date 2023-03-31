@@ -1,7 +1,7 @@
-# encoding: utf-8
 # Library
 import logging
 from collections import Counter
+from typing import TYPE_CHECKING, List
 
 from expiringdict import ExpiringDict
 from sqlalchemy import (
@@ -13,19 +13,34 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
+
+from core.model.hybrid import hybrid_property
 
 from ..config import Configuration
 from ..entrypoint import EntryPoint
 from ..facets import FacetConstants
 from . import Base, get_one
+from .customlist import customlist_sharedlibrary
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePool
 from .work import Work
+
+if TYPE_CHECKING:
+    from core.model import (  # noqa: autoflake
+        AdminRole,
+        CachedFeed,
+        CachedMARCFile,
+        CirculationEvent,
+        Collection,
+        ConfigurationSetting,
+        CustomList,
+        ExternalIntegration,
+        Patron,
+    )
 
 
 class Library(Base, HasSessionCache):
@@ -54,13 +69,13 @@ class Library(Base, HasSessionCache):
     # One, and only one, library may be the default. The default
     # library is the one chosen when an incoming request does not
     # designate a library.
-    _is_default = Column(Boolean, index=True, default=False, name="is_default")
+    _is_default = Column("is_default", Boolean, index=True, default=False)
 
     # The name of this library to use when signing short client tokens
     # for consumption by the library registry. e.g. "NYNYPL" for NYPL.
     # This name must be unique across the library registry.
     _library_registry_short_name = Column(
-        Unicode, unique=True, name="library_registry_short_name"
+        "library_registry_short_name", Unicode, unique=True
     )
 
     # The shared secret to use when signing short client tokens for
@@ -68,11 +83,13 @@ class Library(Base, HasSessionCache):
     library_registry_shared_secret = Column(Unicode, unique=True)
 
     # A library may have many Patrons.
-    patrons = relationship("Patron", backref="library", cascade="all, delete-orphan")
+    patrons = relationship(
+        "Patron", back_populates="library", cascade="all, delete-orphan"
+    )
 
     # An Library may have many admin roles.
     adminroles = relationship(
-        "AdminRole", backref="library", cascade="all, delete-orphan"
+        "AdminRole", back_populates="library", cascade="all, delete-orphan"
     )
 
     # A Library may have many CachedFeeds.
@@ -91,16 +108,23 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CustomLists.
     custom_lists = relationship(
+        "CustomList", backref="library", lazy="joined", uselist=True
+    )
+
+    # Lists shared with this library
+    # shared_custom_lists: "CustomList"
+    shared_custom_lists = relationship(
         "CustomList",
-        backref="library",
-        lazy="joined",
+        secondary=lambda: customlist_sharedlibrary,
+        back_populates="shared_locally_with_libraries",
+        uselist=True,
     )
 
     # A Library may have many ExternalIntegrations.
     integrations = relationship(
         "ExternalIntegration",
         secondary=lambda: externalintegrations_libraries,
-        backref="libraries",
+        back_populates="libraries",
     )
 
     # Any additional configuration information is stored as
@@ -121,6 +145,9 @@ class Library(Base, HasSessionCache):
     # used for Library.has_root_lane.  This is invalidated whenever
     # Lane configuration changes, and it will also expire on its own.
     _has_root_lane_cache = ExpiringDict(max_len=1000, max_age_seconds=3600)
+
+    # Typing specific
+    collections: List["Collection"]
 
     def __repr__(self):
         return (
@@ -214,8 +241,7 @@ class Library(Base, HasSessionCache):
     def all_collections(self):
         for collection in self.collections:
             yield collection
-            for parent in collection.parents:
-                yield parent
+            yield from collection.parents
 
     # Some specific per-library configuration settings.
 
@@ -431,7 +457,7 @@ class Library(Base, HasSessionCache):
             lines.append("-----------------------")
         for setting in settings:
             if (include_secrets or not setting.is_secret) and setting.value is not None:
-                lines.append("%s='%s'" % (setting.key, setting.value))
+                lines.append(f"{setting.key}='{setting.value}'")
 
         integrations = list(self.integrations)
         if integrations:
@@ -463,7 +489,7 @@ class Library(Base, HasSessionCache):
                 library._is_default = False
 
 
-externalintegrations_libraries = Table(
+externalintegrations_libraries: Table = Table(
     "externalintegrations_libraries",
     Base.metadata,
     Column(

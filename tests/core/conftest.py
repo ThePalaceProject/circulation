@@ -1,3 +1,14 @@
-# Pull in the session_fixture defined in core/testing.py
-# which does the database setup and initialization
-pytest_plugins = ["core.testing"]
+pytest_plugins = [
+    "tests.fixtures.api_config",
+    "tests.fixtures.csv_files",
+    "tests.fixtures.database",
+    "tests.fixtures.marc_files",
+    "tests.fixtures.opds2_files",
+    "tests.fixtures.opds_files",
+    "tests.fixtures.overdrive",
+    "tests.fixtures.s3",
+    "tests.fixtures.sample_covers",
+    "tests.fixtures.search",
+    "tests.fixtures.time",
+    "tests.fixtures.tls_server",
+]

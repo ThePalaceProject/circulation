@@ -1,9 +1,12 @@
-class OPDSAuthenticationFlow(object):
+from typing import Optional
+
+
+class OPDSAuthenticationFlow:
     """An object that can be represented as an Authentication Flow
     in an Authentication For OPDS document.
     """
 
-    FLOW_TYPE = None
+    FLOW_TYPE: Optional[str] = None
 
     def authentication_flow_document(self, _db):
         """Convert this object into a dictionary that can be used in the
@@ -23,7 +26,7 @@ class OPDSAuthenticationFlow(object):
         raise NotImplementedError()
 
 
-class AuthenticationForOPDSDocument(object):
+class AuthenticationForOPDSDocument:
     """A data structure that can become an Authentication For OPDS
     document.
     """

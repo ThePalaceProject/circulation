@@ -9,7 +9,7 @@ from core.python_expression_dsl.evaluator import (
 from core.python_expression_dsl.parser import DSLParseError, DSLParser
 
 
-class Subject(object):
+class Subject:
     """Dummy object designed for testing DSLEvaluator."""
 
     def __init__(self, attributes):
@@ -41,7 +41,7 @@ class Subject(object):
         return self._attributes[index]
 
 
-class TestDSLEvaluator(object):
+class TestDSLEvaluator:
     @parameterized.expand(
         [
             ("incorrect_expression", "?", None, None, None, DSLParseError),
@@ -82,8 +82,8 @@ class TestDSLEvaluator(object):
             ("multiplication_with_two_operands", "9 * 3", 9 * 3),
             ("division_with_two_operands", "9 / 3", 9 / 3),
             ("division_with_two_operands_and_remainder", "9 / 4", 9.0 / 4.0),
-            ("exponentiation_with_two_operands", "9 ** 3", 9 ** 3),
-            ("exponentiation_with_three_operands", "2 ** 3 ** 3", 2 ** 3 ** 3),
+            ("exponentiation_with_two_operands", "9 ** 3", 9**3),
+            ("exponentiation_with_three_operands", "2 ** 3 ** 3", 2**3**3),
             (
                 "associative_law_for_addition",
                 "(a + b) + c == a + (b + c)",

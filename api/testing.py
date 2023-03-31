@@ -103,17 +103,17 @@ class MonitorTest(DatabaseTest):
         return self.monitor.timestamp().to_data()
 
 
-class AnnouncementTest(object):
+class AnnouncementTest:
     """A test that needs to create announcements."""
 
     # Create raw data to be used in tests.
     format = "%Y-%m-%d"
-    today = datetime.date.today()
-    yesterday = (today - datetime.timedelta(days=1)).strftime(format)
-    tomorrow = (today + datetime.timedelta(days=1)).strftime(format)
-    a_week_ago = (today - datetime.timedelta(days=7)).strftime(format)
-    in_a_week = (today + datetime.timedelta(days=7)).strftime(format)
-    today = today.strftime(format)
+    today_date = datetime.date.today()
+    yesterday = (today_date - datetime.timedelta(days=1)).strftime(format)
+    tomorrow = (today_date + datetime.timedelta(days=1)).strftime(format)
+    a_week_ago = (today_date - datetime.timedelta(days=7)).strftime(format)
+    in_a_week = (today_date + datetime.timedelta(days=7)).strftime(format)
+    today = today_date.strftime(format)
 
     # This announcement is active.
     active = dict(
@@ -208,7 +208,7 @@ class MockRemoteAPI(BaseCirculationAPI):
 
 class MockCirculationAPI(CirculationAPI):
     def __init__(self, *args, **kwargs):
-        super(MockCirculationAPI, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.responses = defaultdict(list)
         self.remote_loans = []
         self.remote_holds = []
@@ -267,7 +267,7 @@ class MockCirculationAPI(CirculationAPI):
 
 class MockSharedCollectionAPI(SharedCollectionAPI):
     def __init__(self, *args, **kwargs):
-        super(MockSharedCollectionAPI, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.responses = defaultdict(list)
 
     def _queue(self, k, v):

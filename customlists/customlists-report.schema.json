@@ -1,0 +1,381 @@
+{
+  "$id": "https://schemas.thepalaceproject.io/customlists-report/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+
+    "document": {
+      "$comment": "The top-level container of reports.",
+      "type": "object",
+      "properties": {
+        "%id": {
+          "type": "string",
+          "const": "https://schemas.thepalaceproject.io/customlists-report/1.0"
+        },
+        "reports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/report"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%id",
+        "reports"
+      ]
+    },
+
+    "report": {
+      "$comment": "The reports for a given list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "report"
+        },
+        "list-id": {
+          "type": "number",
+          "$comment": "The list ID."
+        },
+        "list-name": {
+          "type": "string",
+          "$comment": "The list name."
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "$ref": "#/$defs/problem-book-broken-on-source" },
+              { "$ref": "#/$defs/problem-book-mismatch" },
+              { "$ref": "#/$defs/problem-book-missing" },
+              { "$ref": "#/$defs/problem-book-request-failed" },
+              { "$ref": "#/$defs/problem-list-already-exists" },
+              { "$ref": "#/$defs/problem-list-broken" },
+              { "$ref": "#/$defs/problem-list-update-failed" },
+              { "$ref": "#/$defs/problem-collection-missing" },
+              { "$ref": "#/$defs/problem-collection-request-failed" }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "list-id",
+        "list-name",
+        "problems"
+      ]
+    },
+
+    "problem-book-mismatch": {
+      "$comment": "A mismatched book on a target CM",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-book-mismatch"
+        },
+        "expected-id": {
+          "$comment": "The expected book identifier",
+          "type": "string"
+        },
+        "expected-id-type": {
+          "$comment": "The expected book identifier type",
+          "type": "string"
+        },
+        "expected-title": {
+          "$comment": "The expected book title",
+          "type": "string"
+        },
+        "received-id": {
+          "$comment": "The received book identifier",
+          "type": "string"
+        },
+        "received-title": {
+          "$comment": "The received book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "expected-id",
+        "expected-id-type",
+        "expected-title",
+        "received-id",
+        "received-title",
+        "message",
+        "author"
+      ]
+    },
+
+    "problem-book-missing": {
+      "$comment": "A missing book",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-book-missing"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+          "type": "string"
+        },
+        "id-type": {
+          "$comment": "The primary identifier type",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "id-type",
+        "title",
+        "message",
+        "author"
+      ]
+    },
+
+    "problem-book-broken-on-source": {
+      "$comment": "A book that was broken on the source CM",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-book-broken-on-source"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+          "type": "string"
+        },
+        "id-type": {
+          "$comment": "The primary identifier type",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "id-type",
+        "title",
+        "message",
+        "author"
+      ]
+    },
+
+    "problem-book-request-failed": {
+      "$comment": "A book request failed on the target CM",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-book-request-failed"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the book (typically an ISBN or similar)",
+          "type": "string"
+        },
+        "id-type": {
+          "$comment": "The primary identifier type",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "id-type",
+        "title",
+        "message",
+        "author"
+      ]
+    },
+
+    "problem-list-already-exists": {
+      "$comment": "A list already exists with the given ID and name",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-list-already-exists"
+        },
+        "id": {
+          "$comment": "The list ID",
+          "type": "number"
+        },
+        "name": {
+          "$comment": "The list name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-list-broken": {
+      "$comment": "A list was broken before we even tried to do anything with it.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-list-broken"
+        },
+        "id": {
+          "$comment": "The list ID",
+          "type": "number"
+        },
+        "name": {
+          "$comment": "The list name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-list-update-failed": {
+      "$comment": "A request to update a list on the server failed.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-list-update-failed"
+        },
+        "id": {
+          "$comment": "The list ID",
+          "type": "number"
+        },
+        "name": {
+          "$comment": "The list name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-collection-missing": {
+      "$comment": "A list had a collection that does not exist on the target CM",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-collection-missing"
+        },
+        "name": {
+          "$comment": "The collection name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "name",
+        "message"
+      ]
+    },
+
+    "problem-collection-request-failed": {
+      "$comment": "A request for a collection failed.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problem-collection-request-failed"
+        },
+        "name": {
+          "$comment": "The collection name",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "name",
+        "message"
+      ]
+    }
+  },
+
+  "$ref": "#/$defs/document"
+}

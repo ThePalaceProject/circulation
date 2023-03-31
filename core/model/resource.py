@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Resource, ResourceTransformation, Hyperlink, Representation
 
 
@@ -11,6 +10,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
+from typing import TYPE_CHECKING, Any, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -31,7 +31,6 @@ from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
-from ..config import Configuration
 from ..util.datetime_helpers import utc_now
 from ..util.http import HTTP
 from . import Base, get_one, get_one_or_create
@@ -43,6 +42,9 @@ from .constants import (
 )
 from .edition import Edition
 from .licensing import LicensePool, LicensePoolDeliveryMechanism
+
+if TYPE_CHECKING:
+    from core.model import CachedMARCFile, Work  # noqa: autoflake
 
 
 class Resource(Base):
@@ -69,7 +71,7 @@ class Resource(Base):
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
     cover_editions = relationship(
-        "Edition", backref="cover", foreign_keys=[Edition.cover_id]
+        "Edition", backref="cover", foreign_keys=[Edition.cover_id]  # type: ignore
     )
 
     # Many Works may use this resource (as opposed to other resources
@@ -85,7 +87,7 @@ class Resource(Base):
     licensepooldeliverymechanisms = relationship(
         "LicensePoolDeliveryMechanism",
         backref="resource",
-        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
+        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],  # type: ignore
     )
 
     links = relationship("Hyperlink", backref="resource")
@@ -406,6 +408,7 @@ class Hyperlink(Base, LinkRelations):
     resource_id = Column(
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
+    resource: Resource
 
     @classmethod
     def unmirrored(cls, collection):
@@ -998,8 +1001,7 @@ class Representation(Base, MediaTypes):
     def normalize_content_path(cls, content_path, base=None):
         if not content_path:
             return None
-        base = base or Configuration.data_directory()
-        if content_path.startswith(base):
+        if base and content_path.startswith(base):
             content_path = content_path[len(base) :]
             if content_path.startswith("/"):
                 content_path = content_path[1:]
@@ -1051,7 +1053,7 @@ class Representation(Base, MediaTypes):
         return json.dumps(dict(d))
 
     @classmethod
-    def simple_http_get(cls, url, headers, **kwargs):
+    def simple_http_get(cls, url, headers, **kwargs) -> Tuple[int, Any, Any]:
         """The most simple HTTP-based GET."""
         if not "allow_redirects" in kwargs:
             kwargs["allow_redirects"] = True
@@ -1188,9 +1190,7 @@ class Representation(Base, MediaTypes):
     @property
     def local_path(self):
         """Return the full local path to the representation on disk."""
-        if not self.local_content_path:
-            return None
-        return os.path.join(Configuration.data_directory(), self.local_content_path)
+        return self.local_content_path
 
     @property
     def clean_media_type(self):
@@ -1423,13 +1423,13 @@ class Representation(Base, MediaTypes):
 
         try:
             image.thumbnail(*args)
-        except IOError as e:
+        except OSError as e:
             # I'm not sure why, but sometimes just trying
             # it again works.
             original_exception = traceback.format_exc()
             try:
                 image.thumbnail(*args)
-            except IOError as e:
+            except OSError as e:
                 self.scale_exception = original_exception
                 self.scaled_at = None
                 return self, False

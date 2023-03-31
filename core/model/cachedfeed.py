@@ -1,4 +1,3 @@
-# encoding: utf-8
 # CachedFeed, WillNotGenerateExpensiveFeed
 
 import datetime
@@ -369,7 +368,7 @@ class CachedFeed(Base):
             length = len(self.content)
         else:
             length = "No content"
-        return "<CachedFeed #%s %s %s %s %s %s %s >" % (
+        return "<CachedFeed #{} {} {} {} {} {} {} >".format(
             self.id,
             self.lane_id,
             self.type,

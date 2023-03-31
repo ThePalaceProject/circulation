@@ -11,37 +11,22 @@ HOME=/var/www/circulation
 
 # These scripts update internal caches.
 #
-*/5 * * * * root core/bin/run cache_opds_blocks >> /var/log/cron.log 2>&1
-*/6 * * * * root core/bin/run search_index_refresh >> /var/log/cron.log 2>&1
+*/30 * * * * root core/bin/run cache_opds_blocks >> /var/log/cron.log 2>&1
+*/30 * * * * root core/bin/run -d 15 search_index_refresh >> /var/log/cron.log 2>&1
 10 0 * * * root core/bin/run search_index_clear >> /var/log/cron.log 2>&1
 0 0 * * * root core/bin/run update_custom_list_size >> /var/log/cron.log 2>&1
-0 10 * * * root core/bin/run update_lane_size >> /var/log/cron.log 2>&1
+0 2 * * * root core/bin/run update_lane_size >> /var/log/cron.log 2>&1
+*/30 * * * * root core/bin/run -d 5 equivalent_identifiers_refresh >> /var/log/cron.log 2>&1
 
 # These scripts improve the bibliographic information associated with
 # the collections.
 #
 30 3 * * * root core/bin/run update_nyt_best_seller_lists >> /var/log/cron.log 2>&1
 
-# Add newly discovered identifiers to our Metadata Wrangler collection.
-*/10 * * * * root core/bin/run -d 9 metadata_wrangler_collection_registrar >> /var/log/cron.log 2>&1
-
-# Remove newly removed identifiers from our Metadata Wrangler collection
-22 * * * * root core/bin/run -d 50 metadata_wrangler_collection_reaper >> /var/log/cron.log 2>&1
-
-# Check whether the Metadata Wrangler has ascertained any new
-# information about books in our collection.
-59 * * * * root core/bin/run -d 50 metadata_wrangler_collection_updates >> /var/log/cron.log 2>&1
-
-# If the Metadata Wrangler needs content such as book covers or distributor
-# information that only we can provide, send it over.
-30 21 * * * root core/bin/run -d 60 metadata_upload_coverage >> /var/log/cron.log 2>&1
-0 3 * * 3 root core/bin/run -d 60 metadata_wrangler_auxiliary_metadata >> /var/log/cron.log 2>&1
-
 # If any works are missing presentation editions, add them.
 0 */3 * * * root core/bin/run work_presentation_editions >> /var/log/cron.log 2>&1
 
-# If any works are missing up-to-date classifications, classify them.
-# This also incorporates new data from the metadata wrangler.
+# If any works are missing up-to-date classifications, classify them
 0 */3 * * * root core/bin/run work_classification >> /var/log/cron.log 2>&1
 
 # If any works are classified under unprocessed subjects, reclassify
@@ -100,9 +85,6 @@ HOME=/var/www/circulation
 #
 30 5 * * * root core/bin/run opds2_import_monitor >> /var/log/cron.log 2>&1
 
-# OPDS import from Feedbooks
-1 2 * * 0 root core/bin/run feedbooks_import_monitor >> /var/log/cron.log 2>&1
-
 # OPDS 1.x + ODL
 #
 15 * * * * root core/bin/run odl_import_monitor >> /var/log/cron.log 2>&1
@@ -117,10 +99,10 @@ HOME=/var/www/circulation
 #
 */15 * * * * root core/bin/run odilo_monitor_recent >> /var/log/cron.log 2>&1
 
-# ProQuest
-#
-0 7 * * 2,5 root core/bin/run proquest_import_monitor --process-removals >> /var/log/cron.log 2>&1
-
 # SAML
 #
 0 5 * * * root core/bin/run saml_monitor >> /var/log/cron.log 2>&1
+
+# Auto update lists
+# Every hour between 7AM - 1AM
+5 0,1,7-23 * * * root core/bin/run custom_list_update_new_entries >> /var/log/cron.log 2>&1

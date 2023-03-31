@@ -1,9 +1,9 @@
-# encoding: utf-8
 # Contributor, Contribution
 
 
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSON
@@ -14,6 +14,9 @@ from sqlalchemy.orm.session import Session
 
 from ..util.personal_names import display_name_to_sort_name
 from . import Base, flush, get_one_or_create
+
+if TYPE_CHECKING:
+    from core.model import Edition  # noqa: autoflake
 
 
 class Contributor(Base):
@@ -50,7 +53,7 @@ class Contributor(Base):
 
     extra = Column(MutableDict.as_mutable(JSON), default={})
 
-    contributions = relationship("Contribution", backref="contributor")
+    contributions = relationship("Contribution", backref="contributor", uselist=True)
 
     # Types of roles
     AUTHOR_ROLE = "Author"
@@ -87,7 +90,7 @@ class Contributor(Base):
     COPYRIGHT_HOLDER_ROLE = "Copyright holder"
     TRANSCRIBER_ROLE = "Transcriber"
     DESIGNER_ROLE = "Designer"
-    AUTHOR_ROLES = set([PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE])
+    AUTHOR_ROLES = {PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE}
 
     # Map our recognized roles to MARC relators.
     # https://www.loc.gov/marc/relators/relaterm.html
@@ -285,7 +288,7 @@ class Contributor(Base):
         self._sort_name = new_sort_name
 
     # tell SQLAlchemy to use the sort_name setter for ort_name, not _sort_name, after all.
-    sort_name = synonym("_sort_name", descriptor=sort_name)
+    sort_name = synonym("_sort_name", descriptor=sort_name)  # type: ignore
 
     def merge_into(self, destination):
         """Two Contributor records should be the same.
@@ -362,7 +365,7 @@ class Contributor(Base):
 
     # Regular expressions used by default_names().
     PARENTHETICAL = re.compile(r"\([^)]*\)")
-    ALPHABETIC = re.compile("[a-zA-z]")
+    ALPHABETIC = re.compile("[a-zA-Z]")
     NUMBERS = re.compile("[0-9]")
 
     DATE_RES = [
@@ -471,9 +474,14 @@ class Contribution(Base):
 
     __tablename__ = "contributions"
     id = Column(Integer, primary_key=True)
+
+    edition = relationship("Edition", back_populates="contributions")
     edition_id = Column(Integer, ForeignKey("editions.id"), index=True, nullable=False)
+
     contributor_id = Column(
         Integer, ForeignKey("contributors.id"), index=True, nullable=False
     )
+    contributor: Contributor  # for typing
+
     role = Column(Unicode, index=True, nullable=False)
     __table_args__ = (UniqueConstraint("edition_id", "contributor_id", "role"),)

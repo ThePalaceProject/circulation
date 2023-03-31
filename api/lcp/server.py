@@ -9,6 +9,7 @@ from requests.auth import HTTPBasicAuth
 from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptorResultJSONEncoder
 from api.lcp.hash import HashingAlgorithm
+from core.lcp.credential import LCPHashedPassphrase, LCPUnhashedPassphrase
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -118,7 +119,7 @@ class LCPServerConfiguration(ConfigurationGrouping):
     )
 
 
-class LCPServer(object):
+class LCPServer:
     """Wrapper around LCP License Server's API"""
 
     def __init__(
@@ -185,10 +186,10 @@ class LCPServer(object):
         :rtype: Dict
         """
         hasher = self._get_hasher(configuration)
-        hashed_passphrase = hasher.hash(
+        unhashed_passphrase: LCPUnhashedPassphrase = (
             self._credential_factory.get_patron_passphrase(db, patron)
         )
-
+        hashed_passphrase: LCPHashedPassphrase = unhashed_passphrase.hash(hasher)
         self._credential_factory.set_hashed_passphrase(db, patron, hashed_passphrase)
 
         partial_license = {
@@ -196,7 +197,7 @@ class LCPServer(object):
             "encryption": {
                 "user_key": {
                     "text_hint": configuration.passphrase_hint,
-                    "hex_value": hashed_passphrase,
+                    "hex_value": hashed_passphrase.hashed,
                 }
             },
         }
@@ -298,7 +299,7 @@ class LCPServer(object):
                 protected_content_length=encrypted_content.protected_content_length,
                 protected_content_sha256=encrypted_content.protected_content_sha256,
             )
-            path = "/contents/{0}".format(encrypted_content.content_id)
+            path = f"/contents/{encrypted_content.content_id}"
 
             self._send_request(
                 configuration, "put", path, payload, LCPEncryptorResultJSONEncoder
@@ -334,7 +335,7 @@ class LCPServer(object):
             partial_license_payload = self._create_partial_license(
                 db, configuration, patron, license_start, license_end
             )
-            path = "contents/{0}/license".format(content_id)
+            path = f"contents/{content_id}/license"
             response = self._send_request(
                 configuration, "post", path, partial_license_payload
             )
@@ -362,7 +363,7 @@ class LCPServer(object):
             partial_license_payload = self._create_partial_license(
                 db, configuration, patron
             )
-            path = "licenses/{0}".format(license_id)
+            path = f"licenses/{license_id}"
 
             response = self._send_request(
                 configuration, "post", path, partial_license_payload

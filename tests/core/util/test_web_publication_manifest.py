@@ -2,7 +2,7 @@ from core.testing import DatabaseTest
 from core.util.web_publication_manifest import AudiobookManifest, JSONable, Manifest
 
 
-class TestJSONable(object):
+class TestJSONable:
     class Mock(JSONable):
         @property
         def as_dict(self):
@@ -19,7 +19,7 @@ class TestJSONable(object):
         assert [dict(value=1), dict(value=1)] == m([mock, mock])
 
 
-class TestManifest(object):
+class TestManifest:
     def test_defaults(self):
         assert "http://schema.org/Book" == Manifest.DEFAULT_TYPE
         assert "http://readium.org/webpub/default.jsonld" == Manifest.DEFAULT_CONTEXT
@@ -124,7 +124,7 @@ class TestUpdateBibliographicMetadata(DatabaseTest):
         assert [] == manifest.links
 
 
-class TestAudiobookManifest(object):
+class TestAudiobookManifest:
     def test_defaults(self):
         assert "http://bib.schema.org/Audiobook" == AudiobookManifest.DEFAULT_TYPE
         assert (

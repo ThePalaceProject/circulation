@@ -1,7 +1,7 @@
 import json
 
 import flask
-from flask import Response
+from flask import Response, url_for
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
@@ -23,7 +23,7 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
     """
 
     def __init__(self, manager):
-        super(DiscoveryServiceLibraryRegistrationsController, self).__init__(manager)
+        super().__init__(manager)
         self.goal = ExternalIntegration.DISCOVERY_GOAL
 
     def process_discovery_service_library_registrations(
@@ -129,9 +129,7 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
             return library
 
         registration = registration_class(registry, library)
-        registered = registration.push(
-            stage, self.url_for, do_get=do_get, do_post=do_post
-        )
+        registered = registration.push(stage, url_for, do_get=do_get, do_post=do_post)
         if isinstance(registered, ProblemDetail):
             return registered
 

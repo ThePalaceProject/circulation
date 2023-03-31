@@ -6,19 +6,21 @@ configured, not that the code is correct.
 """
 
 import datetime
+from typing import Optional
 
+from core.model import ExternalIntegration
 from core.selftest import HasSelfTests, SelfTestResult
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestSelfTestResult(DatabaseTest):
+class TestSelfTestResult:
 
     now = utc_now()
     future = now + datetime.timedelta(seconds=5)
 
-    def test_success_representation(self):
+    def test_success_representation(self, db: DatabaseTransactionFixture):
         """Show the string and dictionary representations of a successful
         test result.
         """
@@ -34,8 +36,8 @@ class TestSelfTestResult(DatabaseTest):
         )
 
         # A SelfTestResult may have an associated Collection.
-        self._default_collection.name = "CollectionA"
-        result.collection = self._default_collection
+        db.default_collection().name = "CollectionA"
+        result.collection = db.default_collection()
         assert (
             "<SelfTestResult: name='success1' collection='CollectionA' duration=5.00sec success=True result='The result'>"
             == repr(result)
@@ -88,13 +90,15 @@ class TestSelfTestResult(DatabaseTest):
         assert "debug info" == d["exception"]["debug_message"]
 
 
-class TestHasSelfTests(DatabaseTest):
-    def test_run_self_tests(self):
+class TestHasSelfTests:
+    def test_run_self_tests(self, db: DatabaseTransactionFixture):
         """See what might happen when run_self_tests tries to instantiate an
         object and run its self-tests.
         """
 
         class Tester(HasSelfTests):
+            integration: Optional[ExternalIntegration]
+
             def __init__(self, extra_arg=None):
                 """This constructor works."""
                 self.invoked_with = extra_arg
@@ -122,7 +126,7 @@ class TestHasSelfTests(DatabaseTest):
         mock_db = object()
 
         # This integration will be used to store the test results.
-        integration = self._external_integration(self._str)
+        integration = db.external_integration(db.fresh_str())
         Tester.integration = integration
 
         # By default, the default constructor is instantiated and its
