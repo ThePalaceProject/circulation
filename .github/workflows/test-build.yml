@@ -1,6 +1,10 @@
 name: Test & Build
 on: [push, pull_request]
 
+concurrency:
+  group: test-build-${{ github.ref_name }}-${{ github.event_name }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
