@@ -202,7 +202,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.use_ssl = integration.setting(self.USE_SSL).json_value
         self.ssl_cert = integration.setting(self.SSL_CERTIFICATE).value
         self.ssl_key = integration.setting(self.SSL_KEY).value
-        self.ssl_verification = integration.setting(self.SSL_VERIFICATION).json_value
+        self.ssl_verification = integration.setting(self.SSL_VERIFICATION).bool_value
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
 
