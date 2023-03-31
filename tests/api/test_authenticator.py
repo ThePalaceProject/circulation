@@ -579,9 +579,6 @@ class TestAuthenticator:
             def create_bearer_token(self, *args, **kwargs):
                 return "bearer token for %s" % self.name
 
-            def oauth_provider_lookup(self, *args, **kwargs):
-                return "oauth provider for %s" % self.name
-
             def decode_bearer_token(self, *args, **kwargs):
                 return "decoded bearer token for %s" % self.name
 
@@ -602,7 +599,6 @@ class TestAuthenticator:
             assert LIBRARY_NOT_FOUND == auth.create_authentication_headers()  # type: ignore
             assert LIBRARY_NOT_FOUND == auth.get_credential_from_header({})  # type: ignore
             assert LIBRARY_NOT_FOUND == auth.create_bearer_token()  # type: ignore
-            assert LIBRARY_NOT_FOUND == auth.oauth_provider_lookup()  # type: ignore
 
         # The other libraries are in the authenticator.
         with app.test_request_context("/"):
@@ -619,7 +615,6 @@ class TestAuthenticator:
             )
             assert "credential for l1" == auth.get_credential_from_header({})
             assert "bearer token for l1" == auth.create_bearer_token()
-            assert "oauth provider for l1" == auth.oauth_provider_lookup()
             assert "decoded bearer token for l1" == auth.decode_bearer_token()
 
         with app.test_request_context("/"):
@@ -636,7 +631,6 @@ class TestAuthenticator:
             )
             assert "credential for l2" == auth.get_credential_from_header({})
             assert "bearer token for l2" == auth.create_bearer_token()
-            assert "oauth provider for l2" == auth.oauth_provider_lookup()
             assert "decoded bearer token for l2" == auth.decode_bearer_token()
 
 
@@ -657,7 +651,6 @@ class TestLibraryAuthenticator:
 
         assert auth.basic_auth_provider != None
         assert isinstance(auth.basic_auth_provider, MilleniumPatronAPI)
-        assert {} == auth.oauth_providers_by_name
 
     def test_with_custom_patron_catalog(
         self, authenticator_fixture: AuthenticatorFixture
@@ -726,7 +719,6 @@ class TestLibraryAuthenticator:
 
         # The LibraryAuthenticator exists but has no AuthenticationProviders.
         assert None == auth.basic_auth_provider
-        assert {} == auth.oauth_providers_by_name
 
         # Both integrations have left their trace in
         # initialization_exceptions.
@@ -843,10 +835,6 @@ class TestLibraryAuthenticator:
         assert True == authenticator.supports_patron_authentication
         authenticator.basic_auth_provider = None
 
-        # So will adding an OAuth provider.
-        authenticator.oauth_providers_by_name[object()] = object()
-        assert True == authenticator.supports_patron_authentication
-
     def test_identifies_individuals(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
         # This LibraryAuthenticator does not authenticate patrons at
@@ -892,7 +880,6 @@ class TestLibraryAuthenticator:
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
-            bearer_token_signing_secret="foo",
         )
         integration = db.external_integration(db.fresh_str())
         basic1 = MockBasicAuthenticationProvider(db.default_library(), integration)
@@ -961,7 +948,6 @@ class TestLibraryAuthenticator:
             _db=db.session,
             library=db.default_library(),
             basic_auth_provider=basic,
-            bearer_token_signing_secret="secret",
         )
         credential = dict(password="foo")
         assert "foo" == authenticator.get_credential_from_header(credential)
@@ -971,7 +957,6 @@ class TestLibraryAuthenticator:
             _db=db.session,
             library=db.default_library(),
             basic_auth_provider=None,
-            bearer_token_signing_secret="secret",
         )
         assert None == authenticator.get_credential_from_header(credential)
 
@@ -997,7 +982,6 @@ class TestLibraryAuthenticator:
             _db=db.session,
             library=library,
             basic_auth_provider=basic,
-            bearer_token_signing_secret="secret",
         )
 
         class MockAuthenticationDocumentAnnotator:
@@ -1129,8 +1113,7 @@ class TestLibraryAuthenticator:
             # The main thing we need to test is that the
             # authentication sub-documents are assembled properly and
             # placed in the right position.
-            flows = doc["authentication"]
-            oauth_doc, basic_doc = sorted(flows, key=lambda x: x["type"])
+            [basic_doc] = doc["authentication"]
 
             expect_basic = basic.authentication_flow_document(db.session)
             assert expect_basic == basic_doc
@@ -1306,7 +1289,6 @@ class TestLibraryAuthenticator:
             authenticator = LibraryAuthenticator(
                 _db=db.session,
                 library=library,
-                bearer_token_signing_secret="secret",
             )
             headers = authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
