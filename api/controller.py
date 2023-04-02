@@ -92,11 +92,7 @@ from .adobe_vendor_id import (
     DeviceManagementProtocolController,
 )
 from .annotations import AnnotationParser, AnnotationWriter
-from .authenticator import (
-    Authenticator,
-    CirculationPatronProfileStorage,
-    OAuthController,
-)
+from .authenticator import Authenticator, CirculationPatronProfileStorage
 from .base_controller import BaseCirculationManagerController
 from .circulation import CirculationAPI
 from .circulation_exceptions import *
@@ -418,7 +414,6 @@ class CirculationManager:
         This method will be called fresh every time the site
         configuration changes.
         """
-        self.oauth_controller = OAuthController(self.auth)
         self.saml_controller = SAMLController(self, self.auth)
 
     @log_elapsed_time(log_method=log.debug, message_prefix="setup_adobe_vendor_id")

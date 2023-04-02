@@ -518,32 +518,6 @@ class TestAdobeDeviceManagement:
         fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestOAuthController:
-    # TODO: We might be able to do a better job of checking that
-    # flask.request.args are propagated through, instead of checking
-    # an empty dict.
-    CONTROLLER_NAME = "oauth_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, route_test: RouteTestFixture) -> RouteTestFixture:
-        route_test.set_controller_name(self.CONTROLLER_NAME)
-        return route_test
-
-    def test_oauth_authenticate(self, fixture: RouteTestFixture):
-        url = "/oauth_authenticate"
-        _db = fixture.manager._db
-        fixture.assert_request_calls(
-            url, fixture.controller.oauth_authentication_redirect, {}, _db
-        )
-
-    def test_oauth_callback(self, fixture: RouteTestFixture):
-        url = "/oauth_callback"
-        _db = fixture.manager._db
-        fixture.assert_request_calls(
-            url, fixture.controller.oauth_authentication_callback, _db, {}
-        )
-
-
 class TestODLNotificationController:
     CONTROLLER_NAME = "odl_notification_controller"
 

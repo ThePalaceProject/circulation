@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 from api.adobe_vendor_id import AuthdataUtility, DeviceManagementProtocolController
-from api.authenticator import LibraryAuthenticator, OAuthController
+from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
@@ -121,9 +121,6 @@ class TestCirculationManager:
 
         # The ExternalSearch object has been reset.
         assert isinstance(manager.external_search, MockExternalSearchIndex)
-
-        # The OAuth controller has been recreated.
-        assert isinstance(manager.oauth_controller, OAuthController)
 
         # So has the controller for the Device Management Protocol.
         assert isinstance(
