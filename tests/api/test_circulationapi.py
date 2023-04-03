@@ -1657,25 +1657,6 @@ class TestBaseCirculationAPI:
         api = BaseCirculationAPI(db.session, db.default_library())
         authenticator = LibraryAuthenticator(_db=db.session, library=library)
 
-        # This OAuth authentication provider doesn't implement
-        # remote_patron_lookup (it raises NotImplementedError),
-        # so it's no help.
-        class MockOAuth:
-            NAME = "mock oauth"
-
-            def remote_patron_lookup(self, patron):
-                self.called_with = patron
-                raise NotImplementedError()
-
-        mock_oauth = MockOAuth()
-        authenticator.register_oauth_provider(mock_oauth)
-        assert None == api.patron_email_address(
-            patron, library_authenticator=authenticator
-        )
-        # But we can verify that remote_patron_lookup was in fact
-        # called.
-        assert patron == mock_oauth.called_with
-
         # This basic authentication provider _does_ implement
         # remote_patron_lookup, but doesn't provide the crucial
         # information, so still no help.

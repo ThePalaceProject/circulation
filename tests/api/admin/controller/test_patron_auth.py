@@ -7,7 +7,6 @@ from werkzeug.datastructures import MultiDict
 from api.admin.controller.patron_auth_services import PatronAuthServicesController
 from api.admin.exceptions import *
 from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
-from api.clever import CleverAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
 from api.problem_details import *
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
@@ -31,7 +30,7 @@ class TestPatronAuth:
             )
             assert response.get("patron_auth_services") == []
             protocols = response.get("protocols")
-            assert 8 == len(protocols)
+            assert 7 == len(protocols)
             assert SimpleAuthenticationProvider.__module__ == protocols[0].get("name")
             assert "settings" in protocols[0]
             assert "library_settings" in protocols[0]
@@ -218,35 +217,6 @@ class TestPatronAuth:
             )
             assert "^(u)" == library.get(
                 AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
-            )
-
-    def test_patron_auth_services_get_with_clever_auth_service(
-        self, settings_ctrl_fixture
-    ):
-        auth_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=CleverAuthenticationAPI.__module__,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-        auth_service.username = "user"
-        auth_service.password = "pass"
-        auth_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
-
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
-            )
-            [service] = response.get("patron_auth_services")
-
-            assert auth_service.id == service.get("id")
-            assert CleverAuthenticationAPI.__module__ == service.get("protocol")
-            assert "user" == service.get("settings").get(ExternalIntegration.USERNAME)
-            assert "pass" == service.get("settings").get(ExternalIntegration.PASSWORD)
-            [library] = service.get("libraries")
-            assert (
-                settings_ctrl_fixture.ctrl.db.default_library().short_name
-                == library.get("short_name")
             )
 
     def test_patron_auth_services_get_with_saml_auth_service(
