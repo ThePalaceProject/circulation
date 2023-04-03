@@ -49,12 +49,13 @@ from core.model import (
     create,
 )
 from core.model.constants import LinkRelations
+from core.model.status import ExternalIntegrationError
 from core.opds import OPDSFeed
 from core.testing import MockRequestsResponse
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
-from core.util.http import IntegrationException
+from core.util.http import IntegrationException, RequestTimedOut
 
 from ..fixtures.api_controller import ControllerFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -959,6 +960,35 @@ class TestLibraryAuthenticator:
             basic_auth_provider=None,
         )
         assert None == authenticator.get_credential_from_header(credential)
+
+    def test_authenticated_patron_error(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        """On error the authenticated patron method must return a problem detail
+        and add an ExternalIntegrationError record to the db
+        """
+        db = authenticator_fixture.db
+        basic = authenticator_fixture.mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
+        )
+        ext_query = db.session.query(ExternalIntegrationError).filter(
+            ExternalIntegrationError.external_integration_id
+            == basic.external_integration_id
+        )
+        with patch.object(basic, "authenticated_patron") as patched:
+            patched.side_effect = RequestTimedOut("http://basic", "Request Timed Out")
+            response = authenticator.authenticated_patron(
+                db.session, {"username": "XXXX", "password": "XXXX"}
+            )
+            assert response == REMOTE_INTEGRATION_FAILED
+            assert ext_query.count() == 1
+            assert (
+                ext_query.first().error
+                == "Timeout accessing http://basic: Request Timed Out"
+            )
 
     def test_create_authentication_document(
         self, authenticator_fixture: AuthenticatorFixture

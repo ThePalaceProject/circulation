@@ -18,6 +18,7 @@ from werkzeug.datastructures import Headers
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
+from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from api.saml.configuration.model import SAMLSettings
@@ -30,10 +31,12 @@ from core.model import (
     Patron,
     PatronProfileStorage,
     Session,
+    create,
     get_one,
     get_one_or_create,
 )
 from core.model.hybrid import hybrid_property
+from core.model.status import ExternalIntegrationError
 from core.opds import OPDSFeed
 from core.selftest import HasSelfTests
 from core.user_profile import ProfileController
@@ -42,7 +45,7 @@ from core.util.authentication_for_opds import (
     OPDSAuthenticationFlow,
 )
 from core.util.datetime_helpers import utc_now
-from core.util.http import RemoteIntegrationException
+from core.util.http import RemoteIntegrationException, RequestTimedOut
 from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.problem_detail import ProblemDetail
 
@@ -676,6 +679,8 @@ class LibraryAuthenticator:
         self.bearer_token_signing_secret = bearer_token_signing_secret
         self.initialization_exceptions = dict()
 
+        self.log = logging.getLogger("Authenticator")
+
         # Make sure there's a public/private key pair for this
         # library. This makes it possible to register the library with
         # discovery services. Store the public key here for
@@ -815,6 +820,8 @@ class LibraryAuthenticator:
             credentials do not authenticate any particular patron. A
             ProblemDetail if an error occurs.
         """
+        provider = None
+        provider_token = None
         if (
             self.basic_auth_provider
             and isinstance(header, dict)
@@ -822,7 +829,8 @@ class LibraryAuthenticator:
         ):
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
-            return self.basic_auth_provider.authenticated_patron(_db, header)
+            provider = self.basic_auth_provider
+            provider_token = header
         elif (
             self.saml_providers_by_name
             and isinstance(header, (bytes, str))
@@ -843,13 +851,33 @@ class LibraryAuthenticator:
                 # a registered SAMLAuthenticationProvider.
                 return provider
 
-            # Ask the SAMLAuthenticationProvider to turn its token
-            # into a Patron.
-            return provider.authenticated_patron(_db, provider_token)
+        if provider and provider_token:
+            # Turn the token/header into a patron
+            try:
+                return provider.authenticated_patron(_db, provider_token)
+            except (RequestTimedOut, RemoteIntegrationException) as ex:
+                name = provider.external_integration(_db).name
+                self.log.error(f"Authentication Provider Error ({name}): {ex}")
+                self._record_provider_error(_db, provider, ex)
+                return REMOTE_INTEGRATION_FAILED
+            except PatronAuthorizationFailedException:
+                return INVALID_CREDENTIALS
 
         # We were unable to determine what was going on with the
         # Authenticate header.
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
+
+    def _record_provider_error(
+        self, _db, provider: "AuthenticationProvider", error: Exception
+    ) -> ExternalIntegrationError:
+        record, _ = create(
+            _db,
+            ExternalIntegrationError,
+            external_integration_id=provider.external_integration_id,
+            time=utc_now(),
+            error=str(error),
+        )
+        return record
 
     def get_credential_from_header(self, header):
         """Extract a password credential from a WWW-Authenticate header

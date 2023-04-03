@@ -555,4 +555,5 @@ from .patron import (
     PatronProfileStorage,
 )
 from .resource import Hyperlink, Representation, Resource, ResourceTransformation
+from .status import ExternalIntegrationError, ExternalIntegrationStatus
 from .work import Work, WorkGenre
