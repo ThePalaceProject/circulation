@@ -27,6 +27,7 @@ from core.model import (
     CirculationEvent,
     ConfigurationSetting,
     ExternalIntegration,
+    ExternalIntegrationError,
     Library,
     Patron,
     PatronProfileStorage,
@@ -36,7 +37,6 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.hybrid import hybrid_property
-from core.model.status import ExternalIntegrationError
 from core.opds import OPDSFeed
 from core.selftest import HasSelfTests
 from core.user_profile import ProfileController

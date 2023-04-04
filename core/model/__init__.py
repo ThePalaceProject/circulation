@@ -523,6 +523,7 @@ from .collection import (
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,
+    ExternalIntegrationError,
     ExternalIntegrationLink,
 )
 from .contributor import Contribution, Contributor
@@ -555,5 +556,4 @@ from .patron import (
     PatronProfileStorage,
 )
 from .resource import Hyperlink, Representation, Resource, ResourceTransformation
-from .status import ExternalIntegrationError, ExternalIntegrationStatus
 from .work import Work, WorkGenre
