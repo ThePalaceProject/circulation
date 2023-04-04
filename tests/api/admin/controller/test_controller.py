@@ -30,7 +30,7 @@ from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
 from api.authenticator import PatronData
 from api.config import Configuration
 from core.classifier import genres
-from core.lane import Lane
+from core.lane import Lane, Pagination
 from core.model import (
     Admin,
     AdminRole,
@@ -1558,6 +1558,44 @@ class TestCustomListsController:
 
             assert work1.presentation_edition.author == entry1.get("author")
             assert work2.presentation_edition.author == entry2.get("author")
+
+    def test_custom_list_get_with_pagination(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ):
+        data_source = DataSource.lookup(
+            admin_librarian_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
+        )
+        list, ignore = create(
+            admin_librarian_fixture.ctrl.db.session,
+            CustomList,
+            name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            library=admin_librarian_fixture.ctrl.db.default_library(),
+            data_source=data_source,
+        )
+
+        pagination_size = Pagination.DEFAULT_SIZE
+
+        for i in range(pagination_size + 1):
+            work = admin_librarian_fixture.ctrl.db.work(with_license_pool=True)
+            list.add_entry(work)
+
+        with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
+                list.id
+            )
+            feed = feedparser.parse(response.get_data())
+
+            assert list.name == feed.feed.title
+
+            [next_custom_list_link] = [
+                x["href"] for x in feed.feed["links"] if x["rel"] == "next"
+            ]
+
+            # We remove the list_name argument of the url so we can add the after keyword and build the pagination link
+            custom_list_url = feed.feed.id.rsplit("?", maxsplit=1)[0]
+            next_page_url = f"{custom_list_url}?after={pagination_size}"
+
+            assert next_custom_list_link == next_page_url
 
     def test_custom_list_get_errors(
         self, admin_librarian_fixture: AdminLibrarianFixture

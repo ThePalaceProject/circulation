@@ -1216,11 +1216,12 @@ class CustomListsController(AdminCirculationManagerController):
         self, library: Library, list: CustomList
     ) -> Callable[[int], str]:
         def url_fn(after):
-            return self.url_for(
+            return url_for(
                 "custom_list_get",
                 after=after,
                 library_short_name=library.short_name,
                 list_id=list.id,
+                _external=True,
             )
 
         return url_fn
