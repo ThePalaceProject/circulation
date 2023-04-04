@@ -2192,6 +2192,9 @@ class WorkController(CirculationManagerController):
 
         library = flask.request.library
         work = self.load_work(library, identifier_type, identifier)
+        if work is None:
+            return NOT_FOUND_ON_REMOTE
+
         if isinstance(work, ProblemDetail):
             return work
 
