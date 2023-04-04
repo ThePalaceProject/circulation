@@ -1,6 +1,7 @@
 import importlib
 import json
 import logging
+import random
 import re
 import sys
 from abc import ABC, ABCMeta
@@ -854,7 +855,10 @@ class LibraryAuthenticator:
         if provider and provider_token:
             # Turn the token/header into a patron
             try:
-                return provider.authenticated_patron(_db, provider_token)
+                if self._is_provider_available(_db, provider):
+                    return provider.authenticated_patron(_db, provider_token)
+                else:
+                    return REMOTE_INTEGRATION_FAILED
             except (RequestTimedOut, RemoteIntegrationException) as ex:
                 name = provider.external_integration(_db).name
                 self.log.error(f"Authentication Provider Error ({name}): {ex}")
@@ -878,6 +882,13 @@ class LibraryAuthenticator:
             error=str(error),
         )
         return record
+
+    def _is_provider_available(self, _db, provider):
+        if provider.external_integration(_db).status != ExternalIntegration.STATUS.RED:
+            return True
+        # Provider status is RED, should we still try a request?
+        # Let's sample 1 in 10 requests to keep the errors up to date
+        return random.random() >= 0.9
 
     def get_credential_from_header(self, header):
         """Extract a password credential from a WWW-Authenticate header

@@ -43,13 +43,13 @@ from core.model import (
     CirculationEvent,
     ConfigurationSetting,
     ExternalIntegration,
+    ExternalIntegrationError,
     Library,
     Patron,
     Session,
     create,
 )
 from core.model.constants import LinkRelations
-from core.model.status import ExternalIntegrationError
 from core.opds import OPDSFeed
 from core.testing import MockRequestsResponse
 from core.user_profile import ProfileController
@@ -96,7 +96,7 @@ class MockBasicAuthenticationProvider(
         patron=None,
         patrondata=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(library, integration, analytics, *args, **kwargs)
         self.patron = patron
@@ -128,7 +128,7 @@ class MockBasic(BasicAuthenticationProvider):
         patrondata=None,
         remote_patron_lookup_patrondata=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(library, integration, analytics)
         self.patrondata = patrondata
@@ -989,6 +989,34 @@ class TestLibraryAuthenticator:
                 ext_query.first().error
                 == "Timeout accessing http://basic: Request Timed Out"
             )
+
+    def test_authenticated_patron_red(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        db = authenticator_fixture.db
+        basic = authenticator_fixture.mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
+        )
+
+        basic.external_integration(db.session).status = ExternalIntegration.STATUS.RED
+        with patch("api.authenticator.random.random") as rand:
+            # Always fail if RED
+            rand.return_value = 0
+            basic.authenticated_patron = MagicMock()
+            assert REMOTE_INTEGRATION_FAILED == authenticator.authenticated_patron(
+                db.session, {"username": "X", "password": "X"}
+            )
+            assert basic.authenticated_patron.call_count == 0
+
+            # Always retry if RED
+            rand.return_value = 1
+            authenticator.authenticated_patron(
+                db.session, {"username": "X", "password": "X"}
+            )
+            assert basic.authenticated_patron.call_count == 1
 
     def test_create_authentication_document(
         self, authenticator_fixture: AuthenticatorFixture
