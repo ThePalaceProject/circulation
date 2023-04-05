@@ -9,6 +9,7 @@ from typing import List, Optional, Tuple
 from flask import url_for
 
 from api.lanes import DynamicLane
+from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.entrypoint import EverythingEntryPoint
@@ -1722,7 +1723,17 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             )
 
         _db = Session.object_session(item)
-        work = license_pool.work or license_pool.presentation_edition.work
+
+        # Sometimes the pool or work may be None
+        # In those cases we have to protect against the exceptions
+        try:
+            work = license_pool.work or license_pool.presentation_edition.work
+        except AttributeError:
+            return NOT_FOUND_ON_REMOTE
+
+        if not work:
+            return NOT_FOUND_ON_REMOTE
+
         active_loans_by_work = {}
         active_holds_by_work = {}
         active_fulfillments_by_work = {}
