@@ -1843,6 +1843,10 @@ class LoanController(CirculationManagerController):
             feed = LibraryLoanAndHoldAnnotator.single_item_feed(
                 self.circulation, loan, fulfillment=fulfillment
             )
+            if isinstance(feed, ProblemDetail):
+                # This should typically never happen, since we've gone through the entire fulfill workflow
+                # But for the sake of return-type completeness we are adding this here
+                return feed
             if isinstance(feed, Response):
                 return feed
             if isinstance(feed, OPDSFeed):

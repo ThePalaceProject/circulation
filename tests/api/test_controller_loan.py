@@ -2,7 +2,7 @@ import datetime
 import urllib.parse
 from decimal import Decimal
 from typing import Optional
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import feedparser
 import pytest
@@ -871,6 +871,33 @@ class TestLoanController:
 
             assert "here's your book" == response.get_data(as_text=True)
             assert [] == loan_fixture.db.session.query(Loan).all()
+
+    def test_fulfill_without_single_item_feed(self, loan_fixture: LoanFixture):
+        """A streaming fulfillment fails due to the feed method failing"""
+        controller = loan_fixture.manager.loans
+        with loan_fixture.request_context_with_library(
+            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        ):
+            circulation = controller.circulation
+            authenticated = controller.authenticated_patron_from_request()
+            loan_fixture.pool.loan_to(authenticated)
+            with patch(
+                "api.controller.LibraryLoanAndHoldAnnotator.single_item_feed"
+            ) as feed, patch.object(circulation, "fulfill") as fulfill:
+                # Complex setup
+                # The fulfillmentInfo should not be have response type
+                fulfill.return_value.as_response = None
+                # The single_item_feed must return this error
+                feed.return_value = NOT_FOUND_ON_REMOTE
+                # The content type needs to be streaming
+                loan_fixture.mech1.delivery_mechanism.content_type = (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+                )
+
+                response = controller.fulfill(
+                    loan_fixture.pool.id, loan_fixture.mech1.delivery_mechanism.id
+                )
+                assert response == NOT_FOUND_ON_REMOTE
 
     def test_no_drm_fulfill(self, loan_fixture: LoanFixture):
         """In case a work does not have DRM for it's fulfillment.
