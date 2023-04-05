@@ -149,7 +149,7 @@ class TestSIPClient:
         # Call connect() and make sure timeout is set properly.
         try:
             sip.connect()
-            assert 12 == sip.connection.timeout
+            assert 3 == sip.connection.timeout
         finally:
             # Un-mock the socket.socket function
             socket.socket = old_socket
