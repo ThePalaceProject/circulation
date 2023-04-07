@@ -10,7 +10,6 @@ from werkzeug.exceptions import MethodNotAllowed
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
-from api.admin.dashboard_stats import generate_statistics
 from api.admin.problem_details import *
 from api.controller import CirculationManager, CirculationManagerController
 from tests.fixtures.api_controller import ControllerFixture
@@ -472,12 +471,6 @@ class TestAdminDashboard:
         url = "/admin/circulation_events"
         fixture.assert_authenticated_request_calls(
             url, fixture.controller.circulation_events
-        )
-
-    def test_stats(self, fixture: AdminRouteFixture):
-        url = "/admin/stats"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.stats, stats_function=generate_statistics
         )
 
 
