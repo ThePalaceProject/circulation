@@ -767,19 +767,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry
     ):
-        # Add a link for reporting problems.
-        feed.add_link_to_entry(
-            entry,
-            rel="issues",
-            href=self.url_for(
-                "report",
-                identifier_type=identifier.type,
-                identifier=identifier.identifier,
-                library_short_name=self.library.short_name,
-                _external=True,
-            ),
-        )
-
         super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )

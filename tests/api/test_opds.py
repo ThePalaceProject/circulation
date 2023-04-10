@@ -869,7 +869,7 @@ class TestLibraryAnnotator:
         with_auth, no_auth = linksets
 
         # Some links are present no matter what.
-        for expect in ["alternate", "issues", "related"]:
+        for expect in ["alternate", "related"]:
             assert expect in with_auth
             assert expect in no_auth
 
@@ -908,7 +908,6 @@ class TestLibraryAnnotator:
         # These links are still present.
         for expect in [
             "alternate",
-            "issues",
             "related",
             "http://www.w3.org/ns/oa#annotationservice",
         ]:
@@ -1044,15 +1043,6 @@ class TestLibraryAnnotator:
                 uri_partials = [uri_partials]
             for part in uri_partials:
                 assert part in link.href
-
-    def test_work_entry_includes_problem_reporting_link(
-        self, annotator_fixture: LibraryAnnotatorFixture
-    ):
-        work = annotator_fixture.db.work(with_open_access_download=True)
-        feed = self.get_parsed_feed(annotator_fixture, [work])
-        [entry] = feed.entries
-        expected_rel_and_partial = {"issues": "/report"}
-        self.assert_link_on_entry(entry, partials_by_rel=expected_rel_and_partial)
 
     def test_work_entry_includes_open_access_or_borrow_link(
         self, annotator_fixture: LibraryAnnotatorFixture
