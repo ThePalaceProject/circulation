@@ -25,6 +25,8 @@ from .constants import (
     MediaTypes,
 )
 
+CIRCULATION_ADVISORY_LOCK_ID = "1000000001"
+
 
 def flush(db):
     """Flush the database connection unless it's known to already be flushing."""
@@ -288,6 +290,10 @@ def dump_query(query):
 DEBUG = False
 
 
+def acquire_advisory_lock(connection, lock_id):
+    connection.execute(f"SELECT pg_advisory_lock({lock_id});")
+
+
 class SessionManager:
 
     # A function that calculates recursively equivalent identifiers
@@ -336,7 +342,7 @@ class SessionManager:
         engine = cls.engine(url)
         with engine.connect() as connection:
             tx = connection.begin()
-            connection.execute("LOCK TABLE pg_proc IN ACCESS EXCLUSIVE MODE;")
+            acquire_advisory_lock(connection, CIRCULATION_ADVISORY_LOCK_ID)
 
             if initialize_schema:
                 cls.initialize_schema(connection)
