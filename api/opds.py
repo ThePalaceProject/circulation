@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import copy
 import logging
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import List, Optional, Tuple
+from typing import Any
 
 from flask import url_for
 
@@ -34,18 +36,20 @@ from core.model import (
 from core.model.formats import FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
+from core.util.flask_util import OPDSEntryResponse
 from core.util.opds_writer import OPDSFeed
+from core.util.problem_detail import ProblemDetail
 
 from .adobe_vendor_id import AuthdataUtility
 from .annotations import AnnotationWriter
-from .circulation import BaseCirculationAPI
+from .circulation import BaseCirculationAPI, FulfillmentInfo
 from .config import CannotLoadConfiguration, Configuration
 from .novelist import NoveListAPI
 
 
 class CirculationManagerAnnotator(Annotator):
 
-    hidden_content_types: List[str]
+    hidden_content_types: list[str]
 
     def __init__(
         self,
@@ -179,7 +183,7 @@ class CirculationManagerAnnotator(Annotator):
     @staticmethod
     def _prioritized_formats_for_pool(
         licensepool: LicensePool,
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         collection: Collection = licensepool.collection
         external: ExternalIntegration = collection.external_integration
 
@@ -193,14 +197,14 @@ class CirculationManagerAnnotator(Annotator):
                 FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
             )
         )
-        prioritized_drm_schemes: List[str] = drm_setting.json_value or []
+        prioritized_drm_schemes: list[str] = drm_setting.json_value or []
 
         content_setting: ConfigurationSetting = (
             ConfigurationSetting.for_externalintegration(
                 FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
             )
         )
-        prioritized_content_types: List[str] = content_setting.json_value or []
+        prioritized_content_types: list[str] = content_setting.json_value or []
 
         return prioritized_drm_schemes, prioritized_content_types
 
@@ -226,8 +230,8 @@ class CirculationManagerAnnotator(Annotator):
         return _prioritize
 
     def visible_delivery_mechanisms(
-        self, licensepool: Optional[LicensePool]
-    ) -> List[LicensePoolDeliveryMechanism]:
+        self, licensepool: LicensePool | None
+    ) -> list[LicensePoolDeliveryMechanism]:
         if not licensepool:
             return []
 
@@ -1685,13 +1689,13 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
     @classmethod
     def single_item_feed(
         cls,
-        circulation,
-        item,
-        fulfillment=None,
+        circulation: Any,
+        item: LicensePool | Loan,
+        fulfillment: FulfillmentInfo | None = None,
         test_mode=False,
         feed_class=AcquisitionFeed,
         **response_kwargs,
-    ):
+    ) -> OPDSEntryResponse | ProblemDetail:
         """Construct a response containing a single OPDS entry representing an active loan
         or hold.
 
@@ -1704,7 +1708,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         :param response_kwargs: Extra keyword arguments to be passed into the OPDSEntryResponse
             constructor.
 
-        :return: An OPDSEntryResponse
+        :return: An OPDSEntryResponse or ProblemDetail
         """
         if not item:
             raise ValueError("Argument 'item' must be non-empty")
@@ -1722,8 +1726,6 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
                 )
             )
 
-        _db = Session.object_session(item)
-
         # Sometimes the pool or work may be None
         # In those cases we have to protect against the exceptions
         try:
@@ -1734,8 +1736,9 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         if not work:
             return NOT_FOUND_ON_REMOTE
 
-        active_loans_by_work = {}
-        active_holds_by_work = {}
+        _db = Session.object_session(item)
+        active_loans_by_work: Any = {}
+        active_holds_by_work: Any = {}
         active_fulfillments_by_work = {}
         item_dictionary = None
 
