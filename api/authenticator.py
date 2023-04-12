@@ -885,9 +885,7 @@ class LibraryAuthenticator:
         return record
 
     def _is_provider_available(self, _db, provider: AuthenticationProvider) -> bool:
-        return (
-            provider.external_integration(_db).status != ExternalIntegration.STATUS.RED
-        )
+        return provider.external_integration(_db).status != ExternalIntegration.RED
 
     def get_credential_from_header(self, header):
         """Extract a password credential from a WWW-Authenticate header

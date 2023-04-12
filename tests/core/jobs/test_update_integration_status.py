@@ -48,7 +48,7 @@ class TestUpdateIntegrationStatus:
     ):
         assert (
             integration_status_fixture.patron_integration.status
-            == ExternalIntegration.STATUS.GREEN
+            == ExternalIntegration.GREEN
         )
         integration_status_fixture.record_enough_errors(
             integration_status_fixture.patron_integration
@@ -56,7 +56,7 @@ class TestUpdateIntegrationStatus:
         integration_status_fixture.script.do_run()
         assert (
             integration_status_fixture.patron_integration.status
-            == ExternalIntegration.STATUS.RED
+            == ExternalIntegration.RED
         )
 
     def test_non_patron_errors(
@@ -65,7 +65,7 @@ class TestUpdateIntegrationStatus:
         # Non patron auth goals should not be affected by the job
         assert (
             integration_status_fixture.not_patron_integration.status
-            == ExternalIntegration.STATUS.GREEN
+            == ExternalIntegration.GREEN
         )
         integration_status_fixture.record_enough_errors(
             integration_status_fixture.not_patron_integration
@@ -73,7 +73,7 @@ class TestUpdateIntegrationStatus:
         integration_status_fixture.script.do_run()
         assert (
             integration_status_fixture.not_patron_integration.status
-            == ExternalIntegration.STATUS.GREEN
+            == ExternalIntegration.GREEN
         )
 
     def test_red_to_green(
@@ -86,15 +86,13 @@ class TestUpdateIntegrationStatus:
         integration_status_fixture.script.do_run()
         assert (
             integration_status_fixture.patron_integration.status
-            == ExternalIntegration.STATUS.GREEN
+            == ExternalIntegration.GREEN
         )
 
         # This should flip back to green
-        integration_status_fixture.patron_integration.status = (
-            ExternalIntegration.STATUS.RED
-        )
+        integration_status_fixture.patron_integration.status = ExternalIntegration.RED
         integration_status_fixture.script.do_run()
         assert (
             integration_status_fixture.patron_integration.status
-            == ExternalIntegration.STATUS.GREEN
+            == ExternalIntegration.GREEN
         )

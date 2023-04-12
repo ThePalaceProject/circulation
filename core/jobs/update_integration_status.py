@@ -52,11 +52,11 @@ class UpdateIntegrationStatusScript(Script):
             self._db.query(ExternalIntegration)
             .filter(
                 ExternalIntegration.id.notin_(should_block_ids),
-                ExternalIntegration.status == ExternalIntegration.STATUS.RED,
+                ExternalIntegration.status == ExternalIntegration.RED,
             )
             .update(
                 {
-                    ExternalIntegration.status: ExternalIntegration.STATUS.GREEN,
+                    ExternalIntegration.status: ExternalIntegration.GREEN,
                     ExternalIntegration.last_status_update: now,
                 },
                 synchronize_session=False,
@@ -72,5 +72,5 @@ class UpdateIntegrationStatusScript(Script):
         )
         for integration in integrations:
             self.log.info(f"Setting integration status: '{integration.name}' = RED")
-            integration.status = ExternalIntegration.STATUS.RED
+            integration.status = ExternalIntegration.RED
             integration.last_status_update = now

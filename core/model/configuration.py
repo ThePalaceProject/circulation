@@ -10,7 +10,9 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
 
 from flask_babel import lazy_gettext as _
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Unicode
+from sqlalchemy import Column, DateTime
+from sqlalchemy import Enum as saEnum
+from sqlalchemy import ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
@@ -145,9 +147,10 @@ class ExternalIntegration(Base):
     to a third-party API.
     """
 
-    class STATUS:
-        RED = 0
-        GREEN = 1
+    GREEN = "green"
+    RED = "red"
+
+    STATUS = saEnum(GREEN, RED, name="external_integration_status")
 
     # Possible goals of ExternalIntegrations.
     #
@@ -315,7 +318,7 @@ class ExternalIntegration(Base):
     # used to identify ExternalIntegrations from command-line scripts.
     name = Column(Unicode, nullable=True, unique=True)
 
-    status = Column(Integer, server_default=str(STATUS.GREEN))
+    status = Column(STATUS, server_default=str(GREEN))
     last_status_update = Column(DateTime, nullable=True)
 
     # Any additional configuration information goes into

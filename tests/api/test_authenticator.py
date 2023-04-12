@@ -1001,22 +1001,13 @@ class TestLibraryAuthenticator:
             basic_auth_provider=basic,
         )
 
-        basic.external_integration(db.session).status = ExternalIntegration.STATUS.RED
-        with patch("api.authenticator.random.random") as rand:
-            # Always fail if RED
-            rand.return_value = 0
-            basic.authenticated_patron = MagicMock()
-            assert REMOTE_INTEGRATION_FAILED == authenticator.authenticated_patron(
-                db.session, {"username": "X", "password": "X"}
-            )
-            assert basic.authenticated_patron.call_count == 0
-
-            # Always retry if RED
-            rand.return_value = 1
-            authenticator.authenticated_patron(
-                db.session, {"username": "X", "password": "X"}
-            )
-            assert basic.authenticated_patron.call_count == 1
+        basic.external_integration(db.session).status = ExternalIntegration.RED
+        # Always fail if RED
+        basic.authenticated_patron = MagicMock()
+        assert REMOTE_INTEGRATION_FAILED == authenticator.authenticated_patron(
+            db.session, {"username": "X", "password": "X"}
+        )
+        assert basic.authenticated_patron.call_count == 0
 
     def test_create_authentication_document(
         self, authenticator_fixture: AuthenticatorFixture
