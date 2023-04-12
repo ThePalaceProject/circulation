@@ -1726,11 +1726,17 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
                 )
             )
 
+        log = logging.getLogger(cls.__name__)
+
         # Sometimes the pool or work may be None
         # In those cases we have to protect against the exceptions
         try:
             work = license_pool.work or license_pool.presentation_edition.work
-        except AttributeError:
+        except AttributeError as ex:
+            log.error(f"Error retrieving a Work Object {ex}")
+            log.error(
+                f"Error Data: {license_pool} | {license_pool and license_pool.presentation_edition}"
+            )
             return NOT_FOUND_ON_REMOTE
 
         if not work:
