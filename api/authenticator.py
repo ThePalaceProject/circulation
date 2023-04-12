@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 import importlib
 import json
 import logging
-import random
 import re
 import sys
 from abc import ABC, ABCMeta
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Iterable
 
 import flask
 import jwt
@@ -535,10 +536,10 @@ class Authenticator:
     log = logging.getLogger("api.authenticator.Authenticator")
 
     def __init__(
-        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics] = None
+        self, _db, libraries: Iterable[Library], analytics: Analytics | None = None
     ):
         # Create authenticators
-        self.library_authenticators: Dict[str, LibraryAuthenticator] = {}
+        self.library_authenticators: dict[str, LibraryAuthenticator] = {}
         self.populate_authenticators(_db, libraries, analytics)
 
     @property
@@ -547,7 +548,7 @@ class Authenticator:
 
     @log_elapsed_time(log_method=log.debug, message_prefix="populate_authenticators")
     def populate_authenticators(
-        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics]
+        self, _db, libraries: Iterable[Library], analytics: Analytics | None
     ):
         for library in libraries:
             self.library_authenticators[
@@ -872,7 +873,7 @@ class LibraryAuthenticator:
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
     def _record_provider_error(
-        self, _db, provider: "AuthenticationProvider", error: Exception
+        self, _db, provider: AuthenticationProvider, error: Exception
     ) -> ExternalIntegrationError:
         record, _ = create(
             _db,
@@ -883,12 +884,10 @@ class LibraryAuthenticator:
         )
         return record
 
-    def _is_provider_available(self, _db, provider):
-        if provider.external_integration(_db).status != ExternalIntegration.STATUS.RED:
-            return True
-        # Provider status is RED, should we still try a request?
-        # Let's sample 1 in 10 requests to keep the errors up to date
-        return random.random() >= 0.9
+    def _is_provider_available(self, _db, provider: AuthenticationProvider) -> bool:
+        return (
+            provider.external_integration(_db).status != ExternalIntegration.STATUS.RED
+        )
 
     def get_credential_from_header(self, header):
         """Extract a password credential from a WWW-Authenticate header
@@ -1244,7 +1243,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # Each subclass MUST define a value for FLOW_TYPE. This is used in the
     # Authentication for OPDS document to distinguish between
     # different types of authentication.
-    FLOW_TYPE: Optional[str] = None
+    FLOW_TYPE: str | None = None
 
     # If an AuthenticationProvider authenticates patrons without identifying
     # then as specific individuals (the way a geographic gate does),
@@ -1256,7 +1255,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # AuthenticationProviders. Image files MUST be stored in the
     # `resources/images` directory - the value here should be the
     # file name.
-    LOGIN_BUTTON_IMAGE: Optional[str] = None
+    LOGIN_BUTTON_IMAGE: str | None = None
 
     # Each authentication mechanism may have a list of SETTINGS that
     # must be configured for that mechanism, and may have a list of
@@ -1267,7 +1266,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # For example: { "key": "username", "label": _("Client ID") }.
     # A setting is optional by default, but may have "required" set to True.
 
-    SETTINGS: List[dict] = []
+    SETTINGS: list[dict] = []
 
     # Each library and authentication mechanism may have an ILS-assigned
     # branch or institution ID used in the SIP2 AO field.
@@ -1637,7 +1636,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
 
     def remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
+    ) -> ProblemDetail | PatronData | Patron | None:
         """Ask the remote for detailed information about a patron's account.
 
         This may be called in the course of authenticating a patron,
@@ -1717,7 +1716,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
     # passwords.
     alphanumerics_plus = "^[A-Za-z0-9@.-]+$"
     DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = alphanumerics_plus
-    DEFAULT_PASSWORD_REGULAR_EXPRESSION: Optional[str] = None
+    DEFAULT_PASSWORD_REGULAR_EXPRESSION: str | None = None
 
     # Configuration settings that are common to all Basic Auth-type
     # authentication techniques.
@@ -1960,7 +1959,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
     def _remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
+    ) -> ProblemDetail | PatronData | Patron | None:
         if not patron_or_patrondata:
             return None
         if isinstance(patron_or_patrondata, PatronData) or isinstance(
@@ -1975,7 +1974,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
     def remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
+    ) -> ProblemDetail | PatronData | Patron | None:
         """Ask the remote for information about this patron, and then make sure
         the patron belongs to the library associated with this BasicAuthenticationProvider."""
 
@@ -2399,4 +2398,4 @@ class BaseSAMLAuthenticationProvider(
 
     SETTINGS = SAMLSettings()  # type: ignore
 
-    LIBRARY_SETTINGS: List[Dict[str, Any]] = []
+    LIBRARY_SETTINGS: list[dict[str, Any]] = []
