@@ -3,7 +3,7 @@ import json
 import re
 from collections import defaultdict
 from typing import Any, Dict, List
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock, create_autospec
 
 import dateutil
 import feedparser
@@ -23,6 +23,7 @@ from api.opds import (
     SharedCollectionAnnotator,
     SharedCollectionLoanAndHoldAnnotator,
 )
+from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.analytics import Analytics
 from core.classifier import Classifier, Fantasy, Urban_Fantasy
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
@@ -42,9 +43,11 @@ from core.model import (
     Representation,
     RightsStatus,
     Work,
+    get_one,
 )
 from core.model.formats import FormatPriorities
 from core.model.licensing import LicensePool
+from core.model.patron import Loan
 from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
 from core.opds_import import OPDSXMLParser
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -2200,6 +2203,35 @@ class TestLibraryLoanAndHoldAnnotator:
         assert {work: hold} == annotator.active_holds_by_work
         assert {} == annotator.active_loans_by_work
         assert {} == annotator.active_fulfillments_by_work
+
+    def test_single_item_feed_without_work(self, db: DatabaseTransactionFixture):
+        """If a licensepool has no work or edition the single_item_feed mustn't raise an exception"""
+        mock = MagicMock()
+        # A loan without a pool
+        loan = Loan(patron=db.patron())
+        assert (
+            LibraryLoanAndHoldAnnotator.single_item_feed(mock, loan)
+            == NOT_FOUND_ON_REMOTE
+        )
+
+        work = db.work(with_license_pool=True)
+        pool: LicensePool = get_one(db.session, LicensePool, work_id=work.id)
+        # Pool with no work, and the presentation edition has no work either
+        pool.work_id = None
+        work.presentation_edition_id = None
+        db.session.commit()
+        assert (
+            LibraryLoanAndHoldAnnotator.single_item_feed(mock, pool)
+            == NOT_FOUND_ON_REMOTE
+        )
+
+        # pool with no work and no presentation edition
+        pool.presentation_edition_id = None
+        db.session.commit()
+        assert (
+            LibraryLoanAndHoldAnnotator.single_item_feed(mock, pool)
+            == NOT_FOUND_ON_REMOTE
+        )
 
 
 class SharedCollectionAnnotatorFixture:
