@@ -35,6 +35,7 @@ from typing import Callable, Optional
 
 import certifi
 
+from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.sip.dialect import GenericILS
 from core.util.datetime_helpers import utc_now
 
@@ -353,7 +354,9 @@ class SIPClient(Constants):
                 self.location_code,
             )
             if response["login_ok"] != "1":
-                raise OSError("Error logging in: %r" % response)
+                raise PatronAuthorizationFailedException(
+                    "Error logging in: %r" % response
+                )
             return response
 
     def patron_information(self, *args, **kwargs):

@@ -43,6 +43,7 @@ from core.model import (
     CirculationEvent,
     ConfigurationSetting,
     ExternalIntegration,
+    ExternalIntegrationError,
     Library,
     Patron,
     Session,
@@ -54,7 +55,7 @@ from core.testing import MockRequestsResponse
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
-from core.util.http import IntegrationException
+from core.util.http import IntegrationException, RequestTimedOut
 
 from ..fixtures.api_controller import ControllerFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -95,7 +96,7 @@ class MockBasicAuthenticationProvider(
         patron=None,
         patrondata=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(library, integration, analytics, *args, **kwargs)
         self.patron = patron
@@ -127,7 +128,7 @@ class MockBasic(BasicAuthenticationProvider):
         patrondata=None,
         remote_patron_lookup_patrondata=None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(library, integration, analytics)
         self.patrondata = patrondata
@@ -959,6 +960,54 @@ class TestLibraryAuthenticator:
             basic_auth_provider=None,
         )
         assert None == authenticator.get_credential_from_header(credential)
+
+    def test_authenticated_patron_error(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        """On error the authenticated patron method must return a problem detail
+        and add an ExternalIntegrationError record to the db
+        """
+        db = authenticator_fixture.db
+        basic = authenticator_fixture.mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
+        )
+        ext_query = db.session.query(ExternalIntegrationError).filter(
+            ExternalIntegrationError.external_integration_id
+            == basic.external_integration_id
+        )
+        with patch.object(basic, "authenticated_patron") as patched:
+            patched.side_effect = RequestTimedOut("http://basic", "Request Timed Out")
+            response = authenticator.authenticated_patron(
+                db.session, {"username": "XXXX", "password": "XXXX"}
+            )
+            assert response == REMOTE_INTEGRATION_FAILED
+            assert ext_query.count() == 1
+            assert (
+                ext_query.first().error
+                == "Timeout accessing http://basic: Request Timed Out"
+            )
+
+    def test_authenticated_patron_red(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        db = authenticator_fixture.db
+        basic = authenticator_fixture.mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
+        )
+
+        basic.external_integration(db.session).status = ExternalIntegration.RED
+        # Always fail if RED
+        basic.authenticated_patron = MagicMock()
+        assert REMOTE_INTEGRATION_FAILED == authenticator.authenticated_patron(
+            db.session, {"username": "X", "password": "X"}
+        )
+        assert basic.authenticated_patron.call_count == 0
 
     def test_create_authentication_document(
         self, authenticator_fixture: AuthenticatorFixture

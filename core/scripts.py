@@ -75,7 +75,7 @@ from .util.worker_pools import DatabasePool
 
 class Script:
     @property
-    def _db(self):
+    def _db(self) -> Session:
         if not hasattr(self, "_session"):
             self._session = production_session()
         return self._session
