@@ -3,7 +3,6 @@ import copy
 import json
 import logging
 import os
-import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from typing import (
@@ -25,8 +24,8 @@ from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
-from werkzeug.urls import url_fix, url_parse, url_quote, url_quote_plus, url_unparse
+from sqlalchemy.sql.expression import desc, nullslast
+from werkzeug.urls import BaseURL, url_parse, url_quote_plus
 from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
@@ -50,7 +49,7 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import CannotCreateLocalPatron, LibraryAuthenticator, PatronData
 from api.axis import Axis360API
 from api.bibliotheca import BibliothecaAPI
-from api.config import CannotLoadConfiguration, Configuration
+from api.config import Configuration
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
@@ -75,12 +74,9 @@ from core.model import (
     CustomList,
     DataSource,
     ExternalIntegration,
-    Hold,
     Identifier,
     Library,
     LicensePool,
-    Loan,
-    Patron,
     Timestamp,
     Work,
     create,
@@ -98,7 +94,7 @@ from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
 from core.util.flask_util import OPDSFeedResponse
-from core.util.languages import LanguageCodes, LanguageNames
+from core.util.languages import LanguageCodes
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -235,6 +231,39 @@ def setup_admin_controllers(manager):
     manager.admin_announcement_service = AnnouncementSettings(manager)
 
     manager.admin_search_controller = AdminSearchController(manager)
+
+
+class SanitizedRedirections:
+    """Functions to sanitize redirects."""
+
+    @staticmethod
+    def _check_redirect(target: str) -> Tuple[bool, str]:
+        """Check that a redirect is allowed.
+        Because the URL redirect is assumed to be untrusted user input,
+        we extract the URL path and forbid redirecting to external
+        hosts.
+        """
+        redirect_url: BaseURL = url_parse(target)
+
+        # If the redirect isn't asking for a particular host, then it's safe.
+        if redirect_url.netloc in (None, ""):
+            return True, ""
+
+        # Otherwise, if the redirect is asking for a different host, it's unsafe.
+        if redirect_url.netloc != flask.request.host:
+            logging.warning(f"Redirecting to {redirect_url.netloc} is not permitted")
+            return False, _("Redirecting to an external domain is not allowed.")
+
+        return True, ""
+
+    @staticmethod
+    def redirect(target: str) -> Response:
+        """Check that a redirect is allowed before performing it."""
+        ok, message = SanitizedRedirections._check_redirect(target)
+        if ok:
+            return redirect(target, Response=Response)
+        else:
+            return Response(message, 400)
 
 
 class AdminController:
@@ -601,7 +630,7 @@ class SignInController(AdminController):
             headers["Content-Type"] = "text/html"
             return Response(html, 200, headers)
         elif admin:
-            return redirect(flask.request.args.get("redirect"), Response=Response)
+            return SanitizedRedirections.redirect(flask.request.args.get("redirect"))
 
     def password_sign_in(self):
         if not self.admin_auth_providers:
@@ -616,7 +645,7 @@ class SignInController(AdminController):
             return self.error_response(INVALID_ADMIN_CREDENTIALS)
 
         admin = self.authenticated_admin(admin_details)
-        return redirect(redirect_url, Response=Response)
+        return SanitizedRedirections.redirect(redirect_url)
 
     def change_password(self):
         admin = flask.request.admin
@@ -635,7 +664,7 @@ class SignInController(AdminController):
             redirect=url_for("admin_view", _external=True),
             _external=True,
         )
-        return redirect(redirect_url)
+        return SanitizedRedirections.redirect(redirect_url)
 
     def error_response(self, problem_detail):
         """Returns a problem detail as an HTML response"""
