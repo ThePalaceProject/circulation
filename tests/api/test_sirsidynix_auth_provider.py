@@ -1,5 +1,6 @@
 import os
 from copy import deepcopy
+from typing import Any, Dict, List, Tuple
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -12,7 +13,7 @@ from api.sirsidynix_authentication_provider import (
     SirsiDynixHorizonAuthenticationProvider,
     SirsiDynixPatronData,
 )
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.testing import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -26,7 +27,6 @@ class SirsiDynixAuthenticatorFixture:
                 ExternalIntegration.URL: "http://example.org/sirsi",
                 SirsiDynixHorizonAuthenticationProvider.Keys.CLIENT_ID: "clientid",
                 SirsiDynixHorizonAuthenticationProvider.Keys.LIBRARY_ID: "libraryid",
-                SirsiDynixHorizonAuthenticationProvider.Keys.LIBRARY_PREFIX: "test",
             },
         )
 
@@ -55,7 +55,6 @@ class TestSirsiDynixAuthenticationProvider:
         assert sirsi_fixture.api.sirsi_client_id == "clientid"
         assert sirsi_fixture.api.sirsi_app_id == "UNITTEST"
         assert sirsi_fixture.api.sirsi_library_id == "libraryid"
-        assert sirsi_fixture.api.sirsi_library_prefix == "test"
 
     def test_api_patron_login(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         response_dict = {"sessionToken": "xxxx", "patronKey": "test"}
@@ -119,8 +118,8 @@ class TestSirsiDynixAuthenticationProvider:
                 }
             }
         }
-        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
-        sirsi_fixture.api.api_patron_status_info = MagicMock(
+        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=ok_patron_resp)  # type: ignore[method-assign]
+        sirsi_fixture.api.api_patron_status_info = MagicMock(  # type: ignore[method-assign]
             return_value=patron_status_resp
         )
         patrondata = sirsi_fixture.api.remote_patron_lookup(
@@ -129,9 +128,11 @@ class TestSirsiDynixAuthenticationProvider:
 
         assert sirsi_fixture.api.api_read_patron_data.call_count == 1
         assert sirsi_fixture.api.api_patron_status_info.call_count == 1
+        assert isinstance(patrondata, PatronData)
         assert patrondata.personal_name == "Test User"
         assert patrondata.fines == 50.00
         assert patrondata.block_reason == PatronData.NO_VALUE
+        assert patrondata.library_identifier == "testtype"
 
         # Test the defensive code
         # Test no session token
@@ -148,7 +149,7 @@ class TestSirsiDynixAuthenticationProvider:
 
         # Test bad patron read data
         bad_patron_resp = {"bad": "yes"}
-        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=bad_patron_resp)
+        sirsi_fixture.api.api_read_patron_data = MagicMock(return_value=bad_patron_resp)  # type: ignore[method-assign]
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -157,38 +158,29 @@ class TestSirsiDynixAuthenticationProvider:
         not_approved_patron_resp = {
             "fields": {"approved": False, "patronType": {"key": "testtype"}}
         }
-        sirsi_fixture.api.api_read_patron_data = MagicMock(
+        sirsi_fixture.api.api_read_patron_data = MagicMock(  # type: ignore[method-assign]
             return_value=not_approved_patron_resp
         )
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
+        assert isinstance(patrondata, PatronData)
         assert patrondata.block_reason == SirsiBlockReasons.NOT_APPROVED
-
-        # Test bad patronType prefix
-        bad_prefix_patron_resp = {
-            "fields": {"approved": True, "patronType": {"key": "nottesttype"}}
-        }
-        sirsi_fixture.api.api_read_patron_data = MagicMock(
-            return_value=bad_prefix_patron_resp
-        )
-        patrondata = sirsi_fixture.api.remote_patron_lookup(
-            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
-        )
-        assert patrondata == PATRON_OF_ANOTHER_LIBRARY
 
         # Test blocked patron types
         bad_prefix_patron_resp = {
             "fields": {"approved": True, "patronType": {"key": "testblocked"}}
         }
         sirsi_fixture.api.sirsi_disallowed_suffixes = ["blocked"]
-        sirsi_fixture.api.api_read_patron_data = MagicMock(
+        sirsi_fixture.api.api_read_patron_data = MagicMock(  # type: ignore[method-assign]
             return_value=bad_prefix_patron_resp
         )
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
+        assert isinstance(patrondata, PatronData)
         assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
+        assert patrondata.library_identifier == "testblocked"
 
         # Test bad patron status info
         sirsi_fixture.api.api_read_patron_data.return_value = ok_patron_resp
@@ -202,6 +194,62 @@ class TestSirsiDynixAuthenticationProvider:
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix
         with pytest.raises(ValueError):
             sirsi_fixture.api._request("GET", "/leadingslash")
+
+    @pytest.mark.parametrize(
+        "restriction_type, restriction, expected",
+        [
+            (
+                SirsiDynixHorizonAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
+                "",
+                True,
+            ),
+            (
+                SirsiDynixHorizonAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                "test",
+                True,
+            ),
+            (
+                SirsiDynixHorizonAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                "abc",
+                PATRON_OF_ANOTHER_LIBRARY,
+            ),
+        ],
+    )
+    def test_full_auth_request(
+        self,
+        db: DatabaseTransactionFixture,
+        sirsi_fixture: SirsiDynixAuthenticatorFixture,
+        restriction_type,
+        restriction,
+        expected,
+    ):
+        sirsi_fixture.api.remote_authenticate = MagicMock(  # type: ignore[method-assign]
+            return_value=SirsiDynixPatronData(
+                permanent_id="xxxx", session_token="xxx", complete=False
+            )
+        )
+        sirsi_fixture.api.remote_patron_lookup = MagicMock(  # type: ignore[method-assign]
+            return_value=PatronData(
+                permanent_id="xxxx",
+                personal_name="Test User",
+                fines=50.00,
+                library_identifier="testtype",
+            )
+        )
+        sirsi_fixture.api.library_identifier_field = "patronType"
+        sirsi_fixture.api.library_identifier_restriction_type = restriction_type
+        sirsi_fixture.api.library_identifier_restriction = restriction
+        patron = sirsi_fixture.api.authenticated_patron(
+            db.session, {"username": "testuser", "password": "testpass"}
+        )
+        sirsi_fixture.api.remote_authenticate.assert_called_with("testuser", "testpass")
+        sirsi_fixture.api.remote_patron_lookup.assert_called()
+        if expected is True:
+            assert isinstance(patron, Patron)
+            assert patron.fines == 50.00
+            assert patron.block_reason is None
+        else:
+            assert patron == expected
 
     def test_blocked_patron_status_info(
         self, sirsi_fixture: SirsiDynixAuthenticatorFixture
@@ -235,7 +283,7 @@ class TestSirsiDynixAuthenticationProvider:
             "amountOwed": {"currencyCode": "USD", "amount": "0.00"},
         }
 
-        statuses = [
+        statuses: List[Tuple[Dict[str, bool], Any]] = [
             ({"hasMaxDaysWithFines": True}, PatronData.EXCESSIVE_FINES),
             ({"hasMaxFines": True}, PatronData.EXCESSIVE_FINES),
             ({"hasMaxLostItem": True}, PatronData.TOO_MANY_LOST),
@@ -257,16 +305,17 @@ class TestSirsiDynixAuthenticationProvider:
             info_copy = deepcopy(patron_info)
             info_copy.update(status)
 
-            sirsi_fixture.api.api_read_patron_data = MagicMock(
+            sirsi_fixture.api.api_read_patron_data = MagicMock(  # type: ignore[method-assign]
                 return_value=ok_patron_resp
             )
-            sirsi_fixture.api.api_patron_status_info = MagicMock(
+            sirsi_fixture.api.api_patron_status_info = MagicMock(  # type: ignore[method-assign]
                 return_value={"fields": info_copy}
             )
 
             data = sirsi_fixture.api.remote_patron_lookup(
                 SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
             )
+            assert isinstance(data, SirsiDynixPatronData)
             assert data.block_reason == reason
 
     def test_api_methods(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):

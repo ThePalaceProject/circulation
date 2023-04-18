@@ -8,7 +8,6 @@ from urllib.parse import urljoin
 from sqlalchemy.orm import object_session
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
-from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from core.config import Configuration
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
     from requests import Response
 
     from core.model.patron import Patron
-    from core.util.problem_detail import ProblemDetail
 
 
 class SirsiBlockReasons:
@@ -48,7 +46,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
         CLIENT_ID = "CLIENT_ID"
         LIBRARY_ID = "LIBRARY_ID"
-        LIBRARY_PREFIX = "LIBRARY_PREFIX"
         LIBRARY_DISALLOWED_SUFFIXES = "LIBRARY_DISALLOWED_SUFFIXES"
 
     SETTINGS = [
@@ -64,18 +61,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "description": _("The client ID that should be used to identify this CM."),
             "required": True,
         },
-        {
-            "key": BasicAuthenticationProvider.TEST_IDENTIFIER,
-            "label": _("Test Identifier"),
-            "description": BasicAuthenticationProvider.TEST_IDENTIFIER_DESCRIPTION_FOR_OPTIONAL_PASSWORD,
-            "required": True,
-        },
-        {
-            "key": BasicAuthenticationProvider.TEST_PASSWORD,
-            "label": _("Test Password"),
-            "description": BasicAuthenticationProvider.TEST_PASSWORD_DESCRIPTION_OPTIONAL,
-        },
-    ]
+    ] + BasicAuthenticationProvider.SETTINGS
 
     LIBRARY_SETTINGS = [
         {
@@ -83,15 +69,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             "label": _("Library ID"),
             "description": _(
                 "This is used to identify a unique library on the API. This must match what the API expects."
-            ),
-            "required": True,
-        },
-        {
-            "key": Keys.LIBRARY_PREFIX,
-            "label": _("Library Prefix"),
-            "description": _(
-                "This is used to match a member of the Library to their member branch location."
-                " Should be a prefix letter, eg. 'p' or 'co' etc..."
             ),
             "required": True,
         },
@@ -106,7 +83,18 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             ),
             "required": False,
         },
-    ]
+    ] + BasicAuthenticationProvider.LIBRARY_SETTINGS
+
+    for setting in LIBRARY_SETTINGS:
+        if setting["key"] == BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD:
+            setting["options"] = [
+                {
+                    "key": BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
+                    "label": _("Barcode"),
+                },
+                {"key": "patronType", "label": _("patronType")},
+            ]
+            setting["default"] = "patronType"
 
     def __init__(self, library, integration: ExternalIntegration, analytics=None):
         super().__init__(library, integration, analytics)
@@ -132,11 +120,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
                 _db, self.Keys.LIBRARY_ID, library, integration
             ).value
         )
-        self.sirsi_library_prefix = (
-            ConfigurationSetting.for_library_and_externalintegration(
-                _db, self.Keys.LIBRARY_PREFIX, library, integration
-            ).value
-        )
 
     def remote_authenticate(
         self, username: str | None, password: str | None
@@ -159,8 +142,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
     def remote_patron_lookup(
         self, patron_or_patrondata: Patron | PatronData
-    ) -> None | SirsiDynixPatronData | ProblemDetail:
-        """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
+    ) -> None | SirsiDynixPatronData:
+        """Do a remote patron lookup, this method can only look up a patron with a patrondata object
         with a session_token already setup within it.
         This method also checks all the reasons that a patron may be blocked for.
         """
@@ -179,32 +162,24 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         if not data or "fields" not in data:
             return None
 
+        patrondata.complete = True
         fields: dict = data["fields"]
         patrondata.personal_name = fields.get("displayName")
         patron_type: str = fields["patronType"].get("key", "")
-
-        patrondata.external_type = patron_type
+        patrondata.library_identifier = patron_type
 
         # Basic block reasons
-
-        # Does the patron type start with the library prefix
-        # This ensures the patron is a member of the library
-        # they are interacting with
-        if not patron_type.startswith(self.sirsi_library_prefix):
-            # We respond with a problem detail, stopping the upstream authentication immediately
-            return PATRON_OF_ANOTHER_LIBRARY
 
         if not fields.get("approved", False):
             patrondata.block_reason = SirsiBlockReasons.NOT_APPROVED
             return patrondata
 
-        # Remove the library prefix from the patron type
-        # we are left with the patron "suffix"
-        # This suffix can be part of the blocked patron types list
-        patron_suffix = patron_type[len(self.sirsi_library_prefix) :]
-        if patron_suffix in self.sirsi_disallowed_suffixes:
-            patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
-            return patrondata
+        # If the patron type ends with a disallowed suffix the
+        # patron will be authenticated but marked as blocked.
+        for suffix in self.sirsi_disallowed_suffixes:
+            if patron_type.endswith(suffix):
+                patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
+                return patrondata
 
         # Get patron "fines" information
         status = self.api_patron_status_info(
@@ -238,7 +213,6 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         # If previously, the patron was blocked this should unset the value in the DB
         if patrondata.block_reason is None:
             patrondata.block_reason = PatronData.NO_VALUE
-        patrondata.complete = True
         return patrondata
 
     ###
