@@ -8,11 +8,9 @@ from collections import defaultdict
 from typing import Any, Dict, Optional, Union
 
 from attr import define
-from elasticsearch import Elasticsearch
-from elasticsearch.exceptions import ElasticsearchException, RequestError
-from elasticsearch.helpers import bulk as elasticsearch_bulk
-from elasticsearch_dsl import SF, MultiSearch, Search
-from elasticsearch_dsl.query import (
+from flask_babel import lazy_gettext as _
+from opensearch_dsl import SF, MultiSearch, Search
+from opensearch_dsl.query import (
     Bool,
     DisMax,
     Exists,
@@ -24,9 +22,11 @@ from elasticsearch_dsl.query import (
     MultiMatch,
     Nested,
 )
-from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import Range, Regexp, Term, Terms
-from flask_babel import lazy_gettext as _
+from opensearch_dsl.query import Query as BaseQuery
+from opensearch_dsl.query import Range, Regexp, Term, Terms
+from opensearchpy import OpenSearch
+from opensearchpy.exceptions import OpenSearchException, RequestError
+from opensearchpy.helpers import bulk as opensearch__bulk
 from spellchecker import SpellChecker
 
 from core.util import Values
@@ -274,7 +274,7 @@ class ExternalSearchIndex(HasSelfTests):
                     works_index,
                     url,
                 )
-                ExternalSearchIndex.__client = Elasticsearch(
+                ExternalSearchIndex.__client = OpenSearch(
                     url, use_ssl=use_ssl, timeout=20, maxsize=25
                 )
 
@@ -294,7 +294,7 @@ class ExternalSearchIndex(HasSelfTests):
                 # This is almost certainly a problem with our code,
                 # not a communications error.
                 raise
-            except ElasticsearchException as e:
+            except OpenSearchException as e:
                 raise CannotLoadConfiguration(
                     "Exception communicating with Search server: %s" % repr(e)
                 )
@@ -302,7 +302,7 @@ class ExternalSearchIndex(HasSelfTests):
         self.search = Search(using=self.__client, index=self.works_alias)
 
         def bulk(docs, **kwargs):
-            return elasticsearch_bulk(self.__client, docs, **kwargs)
+            return opensearch__bulk(self.__client, docs, **kwargs)
 
         self.bulk = bulk
 

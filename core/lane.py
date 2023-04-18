@@ -5,8 +5,8 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import quote_plus
 
-import elasticsearch
 from flask_babel import lazy_gettext as _
+from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import (
     Boolean,
     Column,
@@ -1953,7 +1953,7 @@ class WorkList:
         filter = self.filter(_db, facets)
         try:
             hits = search_client.query_works(query, filter, pagination, debug)
-        except elasticsearch.exceptions.ElasticsearchException as e:
+        except OpenSearchException as e:
             logging.error(
                 "Problem communicating with ElasticSearch. Returning empty list of search results.",
                 exc_info=e,
