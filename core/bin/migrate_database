@@ -3,6 +3,11 @@
 
 import startup  # noqa: autoflake
 
+from core.config import Configuration
+from core.model import SessionManager
 from core.scripts import AlembicMigrateVersion
 
-AlembicMigrateVersion().run()
+session = SessionManager.session(
+    Configuration.database_url(), initialize_data=False, initialize_schema=False
+)
+AlembicMigrateVersion(_db=session).run()
