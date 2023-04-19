@@ -818,7 +818,7 @@ class ConfigurationSetting(Base, HasSessionCache):
     MEANS_YES = {"true", "t", "yes", "y"}
 
     @property
-    def bool_value(self):
+    def bool_value(self) -> bool | None:
         """Turn the value into a boolean if possible.
         :return: A boolean, or None if there is no value.
         """
@@ -829,7 +829,7 @@ class ConfigurationSetting(Base, HasSessionCache):
         return None
 
     @property
-    def int_value(self):
+    def int_value(self) -> int | None:
         """Turn the value into an int if possible.
         :return: An integer, or None if there is no value.
         :raise ValueError: If the value cannot be converted to an int.
@@ -839,7 +839,7 @@ class ConfigurationSetting(Base, HasSessionCache):
         return None
 
     @property
-    def float_value(self):
+    def float_value(self) -> float | None:
         """Turn the value into an float if possible.
         :return: A float, or None if there is no value.
         :raise ValueError: If the value cannot be converted to a float.
