@@ -41,8 +41,8 @@ def downgrade() -> None:
     op.drop_column("externalintegrations", "last_status_update")
     op.drop_column("externalintegrations", "status")
 
-    # At this point in time for the code this enum was generated
-    # sqla automatically adds it to the DB bt we must manually
+    # At this point in time for the code this enum was generated.
+    # Sqla automatically adds it to the DB but we must manually
     # remove it in case of a downgrade
     status_enum.drop(op.get_bind())
     # ### end Alembic commands ###
