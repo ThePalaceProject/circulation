@@ -22,8 +22,9 @@ from flask import Request, Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
+from sqlalchemy.sql import and_, func
 from sqlalchemy.sql.expression import desc, nullslast
 from werkzeug.urls import BaseURL, url_parse, url_quote_plus
 from werkzeug.wrappers import Response as werkzeug_response
@@ -495,7 +496,8 @@ class ViewController(AdminController):
 
 class TimestampsController(AdminCirculationManagerController):
     """Returns a dict: each key is a type of service (script, monitor, or coverage provider);
-    each value is a nested dict in which timestamps are organized by service name and then by collection ID."""
+    each value is a nested dict in which timestamps are organized by service name and then by collection ID.
+    """
 
     def diagnostics(self):
         self.require_system_admin()
@@ -532,7 +534,8 @@ class TimestampsController(AdminCirculationManagerController):
 
     def _sort_by_collection(self, timestamps):
         """Takes a list of timestamps; turns it into a dict in which each key is a
-        collection ID and each value is a list of the timestamps associated with that collection."""
+        collection ID and each value is a list of the timestamps associated with that collection.
+        """
 
         result = {}
         for timestamp in timestamps:
@@ -1630,7 +1633,6 @@ class LanesController(AdminCirculationManagerController):
 
 
 class DashboardController(AdminCirculationManagerController):
-
     Statistics = TypeVar("Statistics", bound=Dict[str, Any])
 
     def stats(
@@ -1721,7 +1723,6 @@ class DashboardController(AdminCirculationManagerController):
 
 
 class SettingsController(AdminCirculationManagerController):
-
     METADATA_SERVICE_URI_TYPE = "application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
@@ -1764,7 +1765,6 @@ class SettingsController(AdminCirculationManagerController):
         # If no storage integration was selected, then delete the existing
         # external integration link.
         if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
-
             current_integration_link = get_one(
                 self._db,
                 ExternalIntegrationLink,
@@ -2461,6 +2461,11 @@ class AdminSearchController(AdminController):
     # 1 hour in-memory cache
     @memoize(ttls=3600)
     def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
+        licenses_filter = or_(
+            LicensePool.open_access == True,
+            LicensePool.self_hosted == True,
+            LicensePool.licenses_owned != 0,
+        )
 
         # Reusable queries
         classification_query = (
@@ -2469,13 +2474,13 @@ class AdminSearchController(AdminController):
             .join(
                 LicensePool, LicensePool.identifier_id == Classification.identifier_id
             )
-            .filter(LicensePool.collection_id.in_(collection_ids))
+            .filter(LicensePool.collection_id.in_(collection_ids), licenses_filter)
         )
 
         editions_query = (
             self._db.query(LicensePool)
             .join(LicensePool.presentation_edition)
-            .filter(LicensePool.collection_id.in_(collection_ids))
+            .filter(LicensePool.collection_id.in_(collection_ids), licenses_filter)
         )
 
         # Concrete values

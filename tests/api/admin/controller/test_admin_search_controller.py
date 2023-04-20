@@ -10,8 +10,9 @@ class AdminSearchFixture:
     def __init__(self, admin_ctrl_fixture: AdminControllerFixture):
         self.admin_ctrl_fixture = admin_ctrl_fixture
         self.manager = admin_ctrl_fixture.manager
+        self.db = self.admin_ctrl_fixture.ctrl.db
 
-        db = self.admin_ctrl_fixture.ctrl.db
+        db = self.db
 
         # Setup works with subjects, languages, audiences etc...
         gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
@@ -101,3 +102,53 @@ class TestAdminSearchController:
         assert response["languages"] == {"English": 2, "Spanish": 1, "Mandingo": 10}
         assert response["publishers"] == {"Publisher 1": 3, "Publisher 10": 10}
         assert response["distributors"] == {"Gutenberg": 13}
+
+    def test_no_license_counts(self, admin_search_fixture: AdminSearchFixture):
+        # Remove the cache
+        admin_search_fixture.manager.admin_search_controller.__class__._search_field_values_cached.ttls = (
+            0
+        )
+
+        w = (
+            admin_search_fixture.db.session.query(Work)
+            .filter(Work.presentation_edition.has(title="work3"))
+            .first()
+        )
+        pool = w.active_license_pool()
+
+        # A pool without licenses should not attribute to the count
+        pool.licenses_owned = 0
+        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
+            "/",
+            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
+        ):
+            response = (
+                admin_search_fixture.manager.admin_search_controller.search_field_values()
+            )
+            assert "Horror" not in response["genres"]
+            assert "Spanish" not in response["languages"]
+
+        # An open access license should get counted even without owned licenses
+        pool.open_access = True
+        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
+            "/",
+            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
+        ):
+            response = (
+                admin_search_fixture.manager.admin_search_controller.search_field_values()
+            )
+            assert "Horror" in response["genres"]
+            assert "Spanish" in response["languages"]
+
+        # Same goes for self hosted titles
+        pool.open_access = False
+        pool.self_hosted = True
+        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
+            "/",
+            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
+        ):
+            response = (
+                admin_search_fixture.manager.admin_search_controller.search_field_values()
+            )
+            assert "Horror" in response["genres"]
+            assert "Spanish" in response["languages"]
