@@ -24,7 +24,7 @@ from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import and_, func
+from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import desc, nullslast
 from werkzeug.urls import BaseURL, url_parse, url_quote_plus
 from werkzeug.wrappers import Response as werkzeug_response
