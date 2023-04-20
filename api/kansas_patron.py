@@ -1,9 +1,10 @@
 import logging
+from typing import Optional, Union
 
 from flask_babel import lazy_gettext as _
 from lxml import etree
 
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.util.http import HTTP
 
 from .authenticator import BasicAuthenticationProvider, PatronData
@@ -44,7 +45,9 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         # Create XML doc for request
         authorization_request = self.create_authorize_request(username, password)
         # Post request to the server
@@ -54,7 +57,7 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             response.content
         )
         if not authorized:
-            return False
+            return None
         # Kansas auth gives very little data about the patron. Only name and a library identifier.
         return PatronData(
             permanent_id=username,
@@ -63,6 +66,15 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             library_identifier=library_identifier,
             complete=True,
         )
+
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Union[PatronData, Patron]
+    ) -> Optional[PatronData]:
+        # Kansas auth gives very little data about the patron. So this function is just a passthrough.
+        if isinstance(patron_or_patrondata, PatronData):
+            return patron_or_patrondata
+
+        return None
 
     # End implementation of BasicAuthenticationProvider abstract methods.
 

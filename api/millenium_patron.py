@@ -1,6 +1,6 @@
 import datetime
 import re
-from typing import Optional
+from typing import Optional, Union
 from urllib import parse
 
 import dateutil
@@ -8,7 +8,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from money import Money
 
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
@@ -247,19 +247,24 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     def _request(self, path):
         """Make an HTTP request and parse the response."""
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         """Does the Millenium Patron API approve of these credentials?
 
         :return: False if the credentials are invalid. If they are
             valid, a PatronData that serves only to indicate which
             authorization identifier the patron prefers.
         """
+        if not username:
+            return None
+
         if not self.collects_password:
             # We don't even look at the password. If the patron exists, they
             # are authenticated.
-            patrondata = self._remote_patron_lookup(username)
+            patrondata = self.remote_patron_lookup(username)
             if not patrondata:
-                return False
+                return None
             return patrondata
 
         if self.auth_mode == self.PIN_AUTHENTICATION_MODE:
@@ -277,13 +282,13 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             data = dict(self._extract_text_nodes(response.content))
             if data.get("RETCOD") == "0":
                 return PatronData(authorization_identifier=username, complete=False)
-            return False
+            return None
         elif self.auth_mode == self.FAMILY_NAME_AUTHENTICATION_MODE:
             # Patrons are authenticated by their family name.
-            patrondata = self._remote_patron_lookup(username)
+            patrondata = self.remote_patron_lookup(username)
             if not patrondata:
                 # The patron doesn't even exist.
-                return False
+                return None
 
             # The patron exists; but do the last names match?
             if self.family_name_match(patrondata.personal_name, password):
@@ -291,7 +296,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 # to update their account without making a separate
                 # call to /dump.
                 return patrondata
-        return False
+        return None
 
     @classmethod
     def family_name_match(self, actual_name, supposed_family_name):
@@ -307,10 +312,14 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             return True
         return False
 
-    def _remote_patron_lookup(self, patron_or_patrondata_or_identifier):
+    def remote_patron_lookup(
+        self, patron_or_patrondata_or_identifier: Union[PatronData, Patron, str]
+    ) -> Optional[PatronData]:
         if isinstance(patron_or_patrondata_or_identifier, str):
             identifier = patron_or_patrondata_or_identifier
         else:
+            if not patron_or_patrondata_or_identifier.authorization_identifier:
+                return None
             identifier = patron_or_patrondata_or_identifier.authorization_identifier
         """Look up patron information for the given identifier."""
         path = "%(barcode)s/dump" % dict(barcode=identifier)

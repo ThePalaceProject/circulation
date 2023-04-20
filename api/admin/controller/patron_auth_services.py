@@ -7,7 +7,7 @@ from flask_babel import lazy_gettext as _
 from api.admin.controller import SettingsController
 from api.admin.problem_details import *
 from api.admin.validator import PatronAuthenticationValidatorFactory
-from api.authenticator import AuthenticationProvider
+from api.authenticator import BasicAuthenticationProvider
 from api.firstbook2 import FirstBookAuthenticationAPI
 from api.kansas_patron import KansasAuthenticationAPI
 from api.millenium_patron import MilleniumPatronAPI
@@ -179,21 +179,6 @@ class PatronAuthServicesController(SettingsController):
                         )
                     )
 
-    def check_external_type(self, library, auth_service):
-        """Check that the library's external type regular expression is valid, if it was set."""
-
-        value = ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
-            AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            library,
-            auth_service,
-        ).value
-        if value:
-            try:
-                re.compile(value)
-            except Exception as e:
-                return INVALID_EXTERNAL_TYPE_REGULAR_EXPRESSION
-
     def check_identifier_restriction(self, library, auth_service):
         """Check whether the library's identifier restriction regular expression is set and
         is supposed to be a regular expression; if so, check that it's valid."""
@@ -201,7 +186,7 @@ class PatronAuthServicesController(SettingsController):
         identifier_restriction_type = (
             ConfigurationSetting.for_library_and_externalintegration(
                 self._db,
-                AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
                 library,
                 auth_service,
             ).value
@@ -209,7 +194,7 @@ class PatronAuthServicesController(SettingsController):
         identifier_restriction = (
             ConfigurationSetting.for_library_and_externalintegration(
                 self._db,
-                AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION,
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION,
                 library,
                 auth_service,
             ).value
@@ -217,7 +202,7 @@ class PatronAuthServicesController(SettingsController):
         if (
             identifier_restriction
             and identifier_restriction_type
-            == AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
+            == BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
         ):
             try:
                 re.compile(identifier_restriction)
@@ -229,11 +214,9 @@ class PatronAuthServicesController(SettingsController):
         to configure this patron auth service."""
 
         for library in auth_service.libraries:
-            error = (
-                self.check_library_integrations(library)
-                or self.check_external_type(library, auth_service)
-                or self.check_identifier_restriction(library, auth_service)
-            )
+            error = self.check_library_integrations(
+                library
+            ) or self.check_identifier_restriction(library, auth_service)
             if error:
                 return error
 

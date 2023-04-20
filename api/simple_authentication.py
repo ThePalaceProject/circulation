@@ -1,6 +1,9 @@
+from typing import Optional, Union
+
 from flask_babel import lazy_gettext as _
 
-from core.model import Patron
+from core.analytics import Analytics
+from core.model import ExternalIntegration, Library, Patron
 
 from .authenticator import BasicAuthenticationProvider, PatronData
 from .config import CannotLoadConfiguration
@@ -62,7 +65,12 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
         },
     ]
 
-    def __init__(self, library, integration, analytics=None):
+    def __init__(
+        self,
+        library: Library,
+        integration: ExternalIntegration,
+        analytics: Optional[Analytics] = None,
+    ):
         super().__init__(library, integration, analytics)
 
         self.test_password = integration.setting(self.TEST_PASSWORD).value
@@ -82,8 +90,10 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
             integration.setting(self.TEST_NEIGHBORHOOD).value or None
         )
 
-    def remote_authenticate(self, username, password):
-        "Fake 'remote' authentication."
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
+        """Fake 'remote' authentication."""
         if not username or (self.collects_password and not password):
             return None
 
@@ -93,8 +103,9 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
         return self.generate_patrondata(username, self.test_neighborhood)
 
     @classmethod
-    def generate_patrondata(cls, authorization_identifier, neighborhood=None):
-
+    def generate_patrondata(
+        cls, authorization_identifier: str, neighborhood: Optional[str] = None
+    ) -> PatronData:
         if authorization_identifier.endswith("_username"):
             username = authorization_identifier
             identifier = authorization_identifier[:-9]
@@ -115,10 +126,7 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
         )
         return patrondata
 
-    # End implementation of BasicAuthenticationProvider abstract
-    # methods.
-
-    def valid_patron(self, username, password):
+    def valid_patron(self, username: str, password: Optional[str]) -> bool:
         """Is this patron associated with the given password in
         the given dictionary?
         """
@@ -128,16 +136,19 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
             password_match = password in (None, "")
         return password_match and username in self.test_identifiers
 
-    def _remote_patron_lookup(self, patron_or_patrondata):
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Union[Patron, PatronData]
+    ) -> Optional[PatronData]:
         if not patron_or_patrondata:
             return None
         if (
-            isinstance(patron_or_patrondata, PatronData)
-            or isinstance(patron_or_patrondata, Patron)
-        ) and patron_or_patrondata.authorization_identifier in self.test_identifiers:
-            return self.generate_patrondata(
-                patron_or_patrondata.authorization_identifier
-            )
+            not patron_or_patrondata.authorization_identifier
+            or patron_or_patrondata.authorization_identifier
+            not in self.test_identifiers
+        ):
+            return None
+
+        return self.generate_patrondata(patron_or_patrondata.authorization_identifier)
 
 
 AuthenticationProvider = SimpleAuthenticationProvider

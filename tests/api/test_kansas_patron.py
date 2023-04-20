@@ -3,6 +3,7 @@ from typing import List
 import pytest
 from lxml import etree
 
+from api.authenticator import PatronData
 from api.kansas_patron import KansasAuthenticationAPI
 from core.model import ExternalIntegration
 
@@ -86,7 +87,7 @@ class TestKansasPatronAPI:
         authorized, patron_name, library_identifier = api.parse_authorize_response(
             response
         )
-        assert authorized == True
+        assert authorized is True
         assert patron_name == "Montgomery Burns"
         assert library_identifier == "-2"
 
@@ -94,7 +95,7 @@ class TestKansasPatronAPI:
         authorized, patron_name, library_identifier = api.parse_authorize_response(
             response
         )
-        assert authorized == False
+        assert authorized is False
         assert patron_name == "Jay Gee"
         assert library_identifier == "12"
 
@@ -102,7 +103,7 @@ class TestKansasPatronAPI:
         authorized, patron_name, library_identifier = api.parse_authorize_response(
             response
         )
-        assert authorized == False
+        assert authorized is False
         assert patron_name == "Simpson"
         assert library_identifier == "test"
 
@@ -110,22 +111,23 @@ class TestKansasPatronAPI:
         authorized, patron_name, library_identifier = api.parse_authorize_response(
             response
         )
-        assert authorized == True
+        assert authorized is True
         assert patron_name == "Gee"
-        assert library_identifier == None
+        assert library_identifier is None
 
         response = api.sample_data("authorization_response_empty_tag.xml")
         authorized, patron_name, library_identifier = api.parse_authorize_response(
             response
         )
-        assert authorized == False
-        assert patron_name == None
+        assert authorized is False
+        assert patron_name is None
         assert library_identifier == "0"
 
     def test_remote_authenticate(self, kansas_patron_fixture: KansasPatronFixture):
         api = kansas_patron_fixture.api
         api.enqueue("authorization_response_good.xml")
         patrondata = api.remote_authenticate("1234", "4321")
+        assert isinstance(patrondata, PatronData)
         assert patrondata.authorization_identifier == "1234"
         assert patrondata.permanent_id == "1234"
         assert patrondata.library_identifier == "-2"
@@ -133,14 +135,15 @@ class TestKansasPatronAPI:
 
         api.enqueue("authorization_response_bad.xml")
         patrondata = api.remote_authenticate("1234", "4321")
-        assert patrondata == False
+        assert patrondata is None
 
         api.enqueue("authorization_response_no_status.xml")
         patrondata = api.remote_authenticate("1234", "4321")
-        assert patrondata == False
+        assert patrondata is None
 
         api.enqueue("authorization_response_no_id.xml")
         patrondata = api.remote_authenticate("1234", "4321")
+        assert isinstance(patrondata, PatronData)
         assert patrondata.authorization_identifier == "1234"
         assert patrondata.permanent_id == "1234"
         assert patrondata.library_identifier == None
@@ -148,8 +151,23 @@ class TestKansasPatronAPI:
 
         api.enqueue("authorization_response_empty_tag.xml")
         patrondata = api.remote_authenticate("1234", "4321")
-        assert patrondata == False
+        assert patrondata is None
 
         api.enqueue("authorization_response_malformed.xml")
         patrondata = api.remote_authenticate("1234", "4321")
-        assert patrondata == False
+        assert patrondata is None
+
+    def test_remote_patron_lookup(self, kansas_patron_fixture: KansasPatronFixture):
+        # Remote patron lookup is not supported. It always returns
+        # the same PatronData object passed into it.
+        input_patrondata = PatronData()
+        output_patrondata = kansas_patron_fixture.api.remote_patron_lookup(
+            input_patrondata
+        )
+        assert input_patrondata == output_patrondata
+
+        # if anything else is passed in, it returns None
+        output_patrondata = kansas_patron_fixture.api.remote_patron_lookup(
+            kansas_patron_fixture.db.patron()
+        )
+        assert output_patrondata is None
