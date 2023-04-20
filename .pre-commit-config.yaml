@@ -22,6 +22,7 @@ repos:
       - id: pyupgrade
         args:
           - --py38-plus
+          - --keep-runtime-typing
 
   - repo: https://github.com/myint/autoflake
     rev: v2.0.0
