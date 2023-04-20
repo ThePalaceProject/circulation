@@ -1955,7 +1955,7 @@ class WorkList:
             hits = search_client.query_works(query, filter, pagination, debug)
         except OpenSearchException as e:
             logging.error(
-                "Problem communicating with ElasticSearch. Returning empty list of search results.",
+                "Problem communicating with OpenSearch. Returning empty list of search results.",
                 exc_info=e,
             )
         if hits:

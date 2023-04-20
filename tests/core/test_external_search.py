@@ -158,7 +158,6 @@ class TestExternalSearch:
         # The alias hasn't been passed over to the new index.
         alias = "test_index-" + external_search_fixture.search.CURRENT_ALIAS_SUFFIX
         assert alias == external_search_fixture.search.works_alias
-        print(current_index, alias)
         assert True == external_search_fixture.search.indices.exists_alias(
             alias, index=current_index
         )

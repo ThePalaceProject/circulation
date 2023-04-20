@@ -26,7 +26,7 @@ from opensearch_dsl.query import Query as BaseQuery
 from opensearch_dsl.query import Range, Regexp, Term, Terms
 from opensearchpy import OpenSearch
 from opensearchpy.exceptions import OpenSearchException, RequestError
-from opensearchpy.helpers import bulk as opensearch__bulk
+from opensearchpy.helpers import bulk as opensearch_bulk
 from spellchecker import SpellChecker
 
 from core.util import Values
@@ -302,7 +302,7 @@ class ExternalSearchIndex(HasSelfTests):
         self.search = Search(using=self.__client, index=self.works_alias)
 
         def bulk(docs, **kwargs):
-            return opensearch__bulk(self.__client, docs, **kwargs)
+            return opensearch_bulk(self.__client, docs, **kwargs)
 
         self.bulk = bulk
 
@@ -992,7 +992,7 @@ class Mapping(MappingDocument):
 
 
 class CurrentMapping(Mapping):
-    """The first mapping to support only Opensearch 6.
+    """The first mapping to support only Opensearch 1.x.
 
     The body of this mapping looks for bibliographic information in
     the core document, primarily used for matching search
@@ -1268,7 +1268,7 @@ return champion;
 
 class SearchBase:
     """A superclass containing helper methods for creating and modifying
-    Opensearch-dsl Query-type objects.
+    opensearch-dsl Query-type objects.
     """
 
     @classmethod
@@ -1310,7 +1310,7 @@ class SearchBase:
         :param subdocument: The name of the subdocument to query
         against, e.g. "contributors".
 
-        :param query: An Opensearch-dsl Query object (not the Query
+        :param query: An opensearch-dsl Query object (not the Query
         objects defined by this class).
         """
         return Nested(path=subdocument, query=query)
@@ -1504,7 +1504,7 @@ class Query(SearchBase):
         self.use_query_parser = use_query_parser
 
         # Pre-calculate some values that will be checked frequently
-        # when generating the Opensearch-dsl query.
+        # when generating the opensearch-dsl query.
 
         # Check if the string contains English stopwords.
         if query_string:
@@ -1547,16 +1547,16 @@ class Query(SearchBase):
             self.fuzzy_coefficient = 0
 
     def build(self, opensearch, pagination=None):
-        """Make an Opensearch-DSL Search object out of this query.
+        """Make an opensearch-dsl Search object out of this query.
 
-        :param opensearch: An Opensearch-DSL Search object. This
+        :param opensearch: An opensearch-dsl Search object. This
             object is ready to run a search against an Opensearch server,
             but it doesn't represent any particular Opensearch query.
 
         :param pagination: A Pagination object indicating a slice of
             results to pull from the search index.
 
-        :return: An Opensearch-DSL Search object that's prepared
+        :return: An opensearch-dsl Search object that's prepared
             to run this specific query.
         """
         query = self.elasticsearch_query
@@ -1581,7 +1581,7 @@ class Query(SearchBase):
         if query_filter:
             query = Bool(must=query, filter=query_filter)
 
-        # We now have an Opensearch-DSL Query object (which isn't
+        # We now have an opensearch-dsl Query object (which isn't
         # tied to a specific server). Turn it into a Search object
         # (which is).
         search = opensearch.query(query)
@@ -1627,7 +1627,7 @@ class Query(SearchBase):
 
     @property
     def elasticsearch_query(self):
-        """Build an Opensearch-DSL Query object for this query string."""
+        """Build an opensearch-dsl Query object for this query string."""
 
         # The query will most likely be a dis_max query, which tests a
         # number of hypotheses about what the query string might
@@ -1829,7 +1829,7 @@ class Query(SearchBase):
         :param query_string: The query string that might be the name
             of an author.
 
-        :yield: A sequence of Opensearch-DSL query objects to be
+        :yield: A sequence of opensearch-dsl query objects to be
             considered as hypotheses.
         """
 
@@ -1875,7 +1875,7 @@ class Query(SearchBase):
         in practice this dramatically slows down searches without
         greatly improving results.
 
-        :param base_query: An Opensearch-DSL query object to use
+        :param base_query: An opensearch-dsl query object to use
            when adding restrictions.
         :param base_score: The relative score of the base query. The resulting
            hypotheses will be weighted based on this score.
@@ -1987,7 +1987,7 @@ class Query(SearchBase):
         :param hypotheses: A list of active hypotheses, to be
         appended to if necessary.
 
-        :param query: An Opensearch-DSL Query object (or list of
+        :param query: An opensearch-dsl Query object (or list of
         Query objects) to be used as the basis for this hypothesis. If
         there's nothing here, no new hypothesis will be generated.
 
@@ -2309,7 +2309,7 @@ class QueryParser:
         """Parse the query string and create a list of clauses
         that will boost certain types of books.
 
-        Use .query to get an Opensearch-DSL Query object.
+        Use .query to get an opensearch-dsl Query object.
 
         :param query_class: Pass in a mock of Query here during testing
         to generate 'query' objects that are easier for you to test.
@@ -3453,10 +3453,10 @@ class SortKeyPagination(Pagination):
 
 class WorkSearchResult:
     """Wraps a Work object to give extra information obtained from
-    ElasticSearch.
+    Opensearch.
 
     This object acts just like a Work (though isinstance(x, Work) will
-    fail), with one exception: you can access the raw ElasticSearch Hit
+    fail), with one exception: you can access the raw Opensearch Hit
     result as ._hit.
 
     This is useful when a Work needs to be 'tagged' with information
