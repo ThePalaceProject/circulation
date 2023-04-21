@@ -1769,7 +1769,16 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
     def remote_patron_lookup(
         self, patron_or_patrondata: PatronData | Patron
     ) -> PatronData | ProblemDetail | None:
-        """Ask the remote for detailed information about this patron"""
+        """Ask the remote for detailed information about this patron
+
+        For some authentication providers, this is not necessary. If that is the case,
+        this method can just be implemented as `return patron_or_patrondata`.
+
+        If the patron is not found, or an error occurs communicating with the remote,
+        return None or a ProblemDetail.
+
+        Otherwise, return a PatronData object with the complete property set to True.
+        """
         ...
 
     @abstractmethod
@@ -1778,9 +1787,10 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
     ) -> PatronData | ProblemDetail | None:
         """Does the source of truth approve of these credentials?
 
-        If the credentials are valid, return a PatronData object. The PatronData object has a `complete` field. This
-        field on the returned PatronData object will be used to determine if we need to call `remote_patron_lookup`
-        later to get the complete information about the patron.
+        If the credentials are valid, return a PatronData object. The PatronData object
+        has a `complete` field. This field on the returned PatronData object will be used
+        to determine if we need to call `remote_patron_lookup` later to get the complete
+        information about the patron.
 
         If the credentials are invalid, return None.
 
