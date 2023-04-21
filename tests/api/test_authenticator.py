@@ -1563,11 +1563,12 @@ class TestAuthenticationProvider:
         assert username == patron.username
 
     @pytest.mark.parametrize(
-        "auth_return, enforce_return, lookup_return, calls_auth, calls_enforce, calls_lookup, expected",
+        "auth_return,enforce_return,lookup_return,"
+        "calls_auth,calls_enforce,calls_lookup,create_patron,expected",
         [
             # If we don't get a Patrondata from remote_authenticate, we don't call remote_patron_lookup
             # or enforce_library_identifier_restriction
-            (None, None, None, 1, 0, 0, None),
+            (None, None, None, 1, 0, 0, False, None),
             # If we get a complete patrondata from remote_authenticate, we don't call remote_patron_lookup
             (
                 PatronData(
@@ -1580,6 +1581,7 @@ class TestAuthenticationProvider:
                 1,
                 1,
                 0,
+                False,
                 True,
             ),
             # If we get an incomplete patrondata from remote_authenticate, but get a complete patrondata
@@ -1593,6 +1595,7 @@ class TestAuthenticationProvider:
                 1,
                 1,
                 0,
+                False,
                 True,
             ),
             # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
@@ -1604,6 +1607,7 @@ class TestAuthenticationProvider:
                 1,
                 1,
                 0,
+                False,
                 PATRON_OF_ANOTHER_LIBRARY,
             ),
             # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
@@ -1617,7 +1621,50 @@ class TestAuthenticationProvider:
                 1,
                 1,
                 1,
+                False,
                 True,
+            ),
+            # If the patron already exists and we have a complete patrondata we don't
+            # call remote_patron_lookup.
+            (
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                None,
+                1,
+                1,
+                0,
+                True,
+                True,
+            ),
+            # If the patron already exists but we have an incomplete patrondata, we call
+            # remote_patron_lookup, and update the patron record.
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                1,
+                1,
+                1,
+                True,
+                True,
+            ),
+            # If the patron already exists and we have an incomplete patrondata, but
+            # remote_patron_lookup returns None, we don't get a patron record.
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(authorization_identifier="a", complete=False),
+                None,
+                1,
+                1,
+                1,
+                True,
+                None,
             ),
         ],
     )
@@ -1630,6 +1677,7 @@ class TestAuthenticationProvider:
         calls_auth,
         calls_enforce,
         calls_lookup,
+        create_patron,
         expected,
     ):
         # The call to remote_patron_lookup is potentially expensive, so we want to avoid calling it
@@ -1642,6 +1690,10 @@ class TestAuthenticationProvider:
             return_value=enforce_return
         )
         provider.remote_patron_lookup = MagicMock(return_value=lookup_return)
+
+        # Create a patron before doing auth if requested
+        if create_patron:
+            db.patron(external_identifier="a")
 
         patron = provider.authenticated_patron(db.session, self.credentials)
         assert provider.remote_patron_lookup.call_count == calls_lookup
