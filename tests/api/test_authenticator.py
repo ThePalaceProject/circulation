@@ -1789,87 +1789,136 @@ class TestAuthenticationProvider:
             is False
         )
 
+    @pytest.mark.parametrize(
+        "restriction_type, restriction, identifier, expected",
+        [
+            # Test regex
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                re.compile("23[46]5"),
+                "23456",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                re.compile("23[46]5"),
+                "2365",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                re.compile("23[46]5"),
+                "2375",
+                False,
+            ),
+            # Test prefix
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                "2345",
+                "23456",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                "2345",
+                "123456",
+                False,
+            ),
+            # Test string
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                "2345",
+                "2345",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                "2345",
+                "12345",
+                False,
+            ),
+        ],
+    )
     def test_enforce_library_identifier_restriction(
-        self, authenticator_fixture: AuthenticatorFixture
+        self,
+        authenticator_fixture: AuthenticatorFixture,
+        restriction_type,
+        restriction,
+        identifier,
+        expected,
     ):
         """Test the enforce_library_identifier_restriction method."""
         provider = authenticator_fixture.mock_basic()
-        m = provider.enforce_library_identifier_restriction
-        patrondata = PatronData()
+        provider.library_identifier_restriction_type = restriction_type
+        provider.library_identifier_restriction = restriction
 
-        # Test no restriction
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
-        )
-        provider.library_identifier_restriction = "2345"
+        # Test match applied to barcode
         provider.library_identifier_field = (
             MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
         )
-        assert patrondata == m("12365", patrondata)
+        patrondata = PatronData(authorization_identifier=identifier)
+        if expected:
+            assert (
+                provider.enforce_library_identifier_restriction(patrondata)
+                == patrondata
+            )
+        else:
+            assert provider.enforce_library_identifier_restriction(patrondata) is None
 
-        # Test regex against barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
-        )
-        provider.library_identifier_restriction = re.compile("23[46]5")
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert patrondata == m("23456", patrondata)
-        assert patrondata == m("2365", patrondata)
-        assert m("2375", provider.patrondata) is None
+        # Test match applied to library_identifier field on complete patrondata
+        provider.library_identifier_field = "other"
+        patrondata = PatronData(library_identifier=identifier)
+        if expected:
+            assert (
+                provider.enforce_library_identifier_restriction(patrondata)
+                == patrondata
+            )
+        else:
+            assert provider.enforce_library_identifier_restriction(patrondata) is None
 
-        # Test prefix against barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX
+        # Test match applied to library_identifier field on incomplete patrondata
+        provider.library_identifier_field = "other"
+        local_patrondata = PatronData(complete=False, authorization_identifier="123")
+        remote_patrondata = PatronData(
+            library_identifier=identifier, authorization_identifier="123"
         )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert patrondata == m("23456", patrondata)
-        assert m("123456", patrondata) is None
+        provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)
+        if expected:
+            assert (
+                provider.enforce_library_identifier_restriction(local_patrondata)
+                == remote_patrondata
+            )
+        else:
+            assert (
+                provider.enforce_library_identifier_restriction(local_patrondata)
+                is None
+            )
+        provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
-        # Test string against barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
-        )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert m("123456", patrondata) is None
-        assert patrondata == m("2345", patrondata)
-
-        # Test match applied to field on patrondata not barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
-        )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = "agent"
-        patrondata.library_identifier = "2345"
-        assert patrondata == m("123456", patrondata)
-        patrondata.library_identifier = "12345"
-        assert m("2345", patrondata) is None
-
-        # Calls out to remote if the patrondata is not complete
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
-        )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = "agent"
-        patrondata.library_identifier = "2345"
-        patrondata.complete = False
-        provider.remote_patron_lookup = MagicMock(return_value=patrondata)
-        assert patrondata == m("123456", patrondata)
-        provider.remote_patron_lookup.assert_called_once_with(patrondata)
-
-        # Test match field is blank
+    def test_enforce_library_identifier_restriction_library_identifier_field_none(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        # Test library_identifier_field field is blank, we just return the patrondata passed in
+        provider = authenticator_fixture.mock_basic()
         provider.library_identifier_restriction_type = (
             MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
         )
         provider.library_identifier_field = None
-        assert patrondata == m("123456", patrondata)
+        patrondata = PatronData(authorization_identifier="12345")
+        assert patrondata == provider.enforce_library_identifier_restriction(patrondata)
+
+    def test_enforce_library_identifier_restriction_none(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        """Test the enforce_library_identifier_restriction method."""
+        provider = authenticator_fixture.mock_basic()
+        provider.library_identifier_restriction_type = (
+            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
+        )
+        provider.library_identifier_restriction = "2345"
+
+        patrondata = PatronData(authorization_identifier="12345")
+        assert provider.enforce_library_identifier_restriction(patrondata) == patrondata
 
     def test_patron_identifier_restriction(
         self, authenticator_fixture: AuthenticatorFixture

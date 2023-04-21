@@ -1893,7 +1893,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             return patrondata
 
         # Check that the patron belongs to this library.
-        patrondata = self.enforce_library_identifier_restriction(username, patrondata)
+        patrondata = self.enforce_library_identifier_restriction(patrondata)
         if patrondata is None:
             return PATRON_OF_ANOTHER_LIBRARY
 
@@ -2172,8 +2172,26 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
 
         return False
 
+    def get_library_identifier_field_data(
+        self, patrondata: PatronData
+    ) -> tuple[PatronData, str | None]:
+        if (
+            self.library_identifier_field.lower()
+            == self.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
+        ):
+            return patrondata, patrondata.authorization_identifier
+
+        if not patrondata.complete:
+            remote_patrondata = self.remote_patron_lookup(patrondata)
+            if not isinstance(remote_patrondata, PatronData):
+                # Unable to lookup, just return the original patrondata.
+                return patrondata, None
+            patrondata = remote_patrondata
+
+        return patrondata, patrondata.library_identifier
+
     def enforce_library_identifier_restriction(
-        self, identifier: str | None, patrondata: PatronData
+        self, patrondata: PatronData
     ) -> PatronData | None:
         """Does the given patron match the configured library identifier restriction?"""
         if (
@@ -2188,22 +2206,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             # Restriction field is blank, so everything matches.
             return patrondata
 
-        if (
-            self.library_identifier_field.lower()
-            == self.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        ):
-            field = identifier
-        else:
-            if not patrondata.complete:
-                # Get full patron information
-                remote_patron_data = self.remote_patron_lookup(patrondata)
-                if remote_patron_data is None or isinstance(
-                    remote_patron_data, ProblemDetail
-                ):
-                    return None
-                patrondata = remote_patron_data
-            field = patrondata.library_identifier
-
+        patrondata, field = self.get_library_identifier_field_data(patrondata)
         if self._restriction_matches(
             field,
             self.library_identifier_restriction,
