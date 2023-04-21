@@ -31,10 +31,6 @@ class Configuration(CoreConfiguration):
     # documents are cached.
     AUTHENTICATION_DOCUMENT_CACHE_TIME = "authentication_document_cache_time"
 
-    # The name of a setting that turns UWSGI debugging information on
-    # or off.
-    WSGI_DEBUG_KEY = "wsgi_debug"
-
     # A custom link to a Terms of Service document to be understood by
     # users of the administrative interface.
     #
