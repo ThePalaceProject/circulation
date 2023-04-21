@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -23,11 +22,7 @@ from .coverage import (
     IdentifierCoverageProvider,
     WorkCoverageProvider,
 )
-from .external_search import (
-    ExternalSearchIndex,
-    MockExternalSearchIndex,
-    SearchIndexCoverageProvider,
-)
+from .external_search import ExternalSearchIndex, MockExternalSearchIndex
 from .lane import Lane
 from .log import LogConfiguration
 from .model import (
@@ -1186,140 +1181,6 @@ class ExternalSearchTest(DatabaseTest):
         )
         work.set_presentation_ready()
         return work
-
-
-class EndToEndSearchTest(ExternalSearchTest):
-    """Subclasses of this class set up real works in a real
-    search index and run searches against it.
-    """
-
-    def setup_method(self):
-        super().setup_method()
-
-        # Create some works.
-        if not self.search:
-            # No search index is configured -- nothing to do.
-            return
-
-        self.populate_works()
-
-        # Add all the works created in the setup to the search index.
-        SearchIndexCoverageProvider(
-            self._db, search_index_client=self.search
-        ).run_once_and_update_timestamp()
-
-        # Sleep to give the index time to catch up.
-        time.sleep(2)
-
-    def populate_works(self):
-        raise NotImplementedError()
-
-    def _assert_works(self, description, expect, actual, should_be_ordered=True):
-        "Verify that two lists of works are the same."
-
-        # Get the titles of the works that were actually returned, to
-        # make comparisons easier.
-        actual_ids = []
-        actual_titles = []
-        for work in actual:
-            actual_titles.append(work.title)
-            actual_ids.append(work.id)
-
-        expect_ids = []
-        expect_titles = []
-        for work in expect:
-            expect_titles.append(work.title)
-            expect_ids.append(work.id)
-
-        # We compare IDs rather than objects because the Works may
-        # actually be WorkSearchResults.
-        expect_compare = expect_ids
-        actual_compare = actual_ids
-        if not should_be_ordered:
-            expect_compare = set(expect_compare)
-            actual_compare = set(actual_compare)
-
-        assert (
-            expect_compare == actual_compare
-        ), "%r did not find %d works\n (%s/%s).\nInstead found %d\n (%s/%s)" % (
-            description,
-            len(expect),
-            ", ".join(map(str, expect_ids)),
-            ", ".join(expect_titles),
-            len(actual),
-            ", ".join(map(str, actual_ids)),
-            ", ".join(actual_titles),
-        )
-
-    def _expect_results(
-        self, expect, query_string=None, filter=None, pagination=None, **kwargs
-    ):
-        """Helper function to call query_works() and verify that it
-        returns certain work IDs.
-
-        :param ordered: If this is True (the default), then the
-        assertion will only succeed if the search results come in in
-        the exact order specified in `works`. If this is False, then
-        those exact results must come up, but their order is not
-        what's being tested.
-        """
-        if isinstance(expect, Work):
-            expect = [expect]
-        should_be_ordered = kwargs.pop("ordered", True)
-        hits = self.search.query_works(
-            query_string, filter, pagination, debug=True, **kwargs
-        )
-
-        query_args = (query_string, filter, pagination)
-        self._compare_hits(expect, hits, query_args, should_be_ordered, **kwargs)
-
-    def _expect_results_multi(self, expect, queries, **kwargs):
-        """Helper function to call query_works_multi() and verify that it
-        returns certain work IDs.
-
-        :param expect: A list of lists of Works that you expect
-            to get back from each query in `queries`.
-        :param queries: A list of (query string, Filter, Pagination)
-            3-tuples.
-        :param ordered: If this is True (the default), then the
-           assertion will only succeed if the search results come in
-           in the exact order specified in `works`. If this is False,
-           then those exact results must come up, but their order is
-           not what's being tested.
-        """
-        should_be_ordered = kwargs.pop("ordered", True)
-        resultset = list(self.search.query_works_multi(queries, debug=True, **kwargs))
-        for i, expect_one_query in enumerate(expect):
-            hits = resultset[i]
-            query_args = queries[i]
-            self._compare_hits(
-                expect_one_query, hits, query_args, should_be_ordered, **kwargs
-            )
-
-    def _compare_hits(self, expect, hits, query_args, should_be_ordered=True, **kwargs):
-        query_string, filter, pagination = query_args
-        results = [x.work_id for x in hits]
-        actual = self._db.query(Work).filter(Work.id.in_(results)).all()
-        if should_be_ordered:
-            # Put the Work objects in the same order as the IDs returned
-            # in `results`.
-            works_by_id = dict()
-            for w in actual:
-                works_by_id[w.id] = w
-            actual = [
-                works_by_id[result] for result in results if result in works_by_id
-            ]
-
-        query_args = (query_string, filter, pagination)
-        self._assert_works(query_args, expect, actual, should_be_ordered)
-
-        if query_string is None and pagination is None and not kwargs:
-            # Only a filter was provided -- this means if we pass the
-            # filter into count_works() we'll get all the results we
-            # got from query_works(). Take the opportunity to verify
-            # that count_works() gives the right answer.
-            count = self.search.count_works(filter)
-            assert count == len(expect)
 
 
 class MockCoverageProvider:

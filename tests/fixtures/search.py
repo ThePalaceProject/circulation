@@ -19,18 +19,15 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class ExternalSearchFixture:
     """
-    These tests require elasticsearch to be running locally. If it's not, or there's
+    These tests require opensearch to be running locally. If it's not, or there's
     an error creating the index, the tests will pass without doing anything.
 
-    Tests for elasticsearch are useful for ensuring that we haven't accidentally broken
+    Tests for opensearch are useful for ensuring that we haven't accidentally broken
     a type of search by changing analyzers or queries, but search needs to be tested manually
     to ensure that it works well overall, with a realistic index.
     """
 
     SEARCH_TEST_URLS = {
-        ExternalSearchIndex.SEARCH_VERSION_ES6_8: os.environ.get(
-            "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
-        ),
         ExternalSearchIndex.SEARCH_VERSION_OS1_X: os.environ.get(
             "SIMPLIFIED_TEST_OPENSEARCH", "http://localhost:9200"
         ),
@@ -67,7 +64,7 @@ class ExternalSearchFixture:
         except Exception as e:
             fixture.search = None
             logging.error(
-                "Unable to set up elasticsearch index, search tests will be skipped.",
+                "Unable to set up opensearch index, search tests will be skipped.",
                 exc_info=e,
             )
         return fixture
@@ -106,7 +103,6 @@ class ExternalSearchFixture:
 @pytest.fixture(
     scope="function",
     params=[
-        ExternalSearchIndex.SEARCH_VERSION_ES6_8,
         ExternalSearchIndex.SEARCH_VERSION_OS1_X,
     ],
 )
@@ -271,7 +267,6 @@ class EndToEndSearchFixture:
 @pytest.fixture(
     scope="function",
     params=[
-        ExternalSearchIndex.SEARCH_VERSION_ES6_8,
         ExternalSearchIndex.SEARCH_VERSION_OS1_X,
     ],
 )

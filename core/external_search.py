@@ -93,11 +93,9 @@ class ExternalSearchIndex(HasSelfTests):
     DEFAULT_TEST_SEARCH_TERM = "test"
 
     SEARCH_VERSION = "search_version"
-    SEARCH_VERSION_ES6_8 = "Elasticsearch 6.8"
     SEARCH_VERSION_OS1_X = "Opensearch 1.x"
-    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_ES6_8
+    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_OS1_X
 
-    work_document_type: Optional[str] = None
     __client = None
 
     CURRENT_ALIAS_SUFFIX = "current"
@@ -135,7 +133,6 @@ class ExternalSearchIndex(HasSelfTests):
             "required": True,
             "type": "select",
             "options": [
-                {"key": SEARCH_VERSION_ES6_8, "label": SEARCH_VERSION_ES6_8},
                 {"key": SEARCH_VERSION_OS1_X, "label": SEARCH_VERSION_OS1_X},
             ],
         },
@@ -227,7 +224,7 @@ class ExternalSearchIndex(HasSelfTests):
         if not integration:
             raise CannotLoadConfiguration("No search integration configured.")
 
-        valid_versions = [self.SEARCH_VERSION_OS1_X, self.SEARCH_VERSION_ES6_8]
+        valid_versions = [self.SEARCH_VERSION_OS1_X]
         if version and version not in valid_versions:
             raise ValueError(
                 f"{version} is not a valid search version, must be one of {valid_versions}"
@@ -238,9 +235,6 @@ class ExternalSearchIndex(HasSelfTests):
             self.version = integration.setting(self.SEARCH_VERSION).value_or_default(
                 self.DEFAULT_SEARCH_VERSION
             )
-
-        if self.version == self.SEARCH_VERSION_ES6_8:
-            self.work_document_type = "work-type"
 
         self.mapping = mapping or CurrentMapping(self)
 
@@ -334,8 +328,6 @@ class ExternalSearchIndex(HasSelfTests):
 
         def _properties(mapping: Dict) -> Dict:
             """We may or may not have doc types depending on the versioning"""
-            if self.work_document_type:
-                mapping = mapping[self.work_document_type]
             return mapping["properties"]
 
         current_mapping: Dict = _properties(
@@ -352,7 +344,6 @@ class ExternalSearchIndex(HasSelfTests):
             self.indices.put_mapping(
                 dict(properties=puts),
                 index=self.works_index,
-                doc_type=self.work_document_type,
             )
             self.log.info(f"Updated {self.works_index} mapping with {puts}")
         return puts
@@ -649,8 +640,6 @@ class ExternalSearchIndex(HasSelfTests):
         docs = Work.to_search_documents(needs_add)
 
         for doc in docs:
-            if self.work_document_type:
-                doc["_type"] = self.work_document_type
             doc["_index"] = self.works_index
         time2 = time.time()
 
@@ -729,7 +718,7 @@ class ExternalSearchIndex(HasSelfTests):
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
         args = dict(index=self.works_index, id=work.id)
-        args["doc_type"] = self.work_document_type or "_doc"
+        args["doc_type"] = "_doc"
 
         if self.exists(**args):
             self.delete(**args)
@@ -815,7 +804,6 @@ class MappingDocument:
 
     def __init__(self, service: ExternalSearchIndex):
         self.service = service
-        self.has_document_types = self.service.work_document_type is not None
         self.properties: Dict[str, Any] = {}
         self.subdocuments: Dict[str, Any] = {}
 
@@ -986,8 +974,6 @@ class Mapping(MappingDocument):
             properties[name] = dict(type="nested", properties=subdocument.properties)
 
         mappings = dict(properties=properties)
-        if self.has_document_types:
-            mappings = {self.service.work_document_type: mappings}
         return dict(settings=settings, mappings=mappings)
 
 
@@ -1559,7 +1545,7 @@ class Query(SearchBase):
         :return: An opensearch-dsl Search object that's prepared
             to run this specific query.
         """
-        query = self.elasticsearch_query
+        query = self.search_query
         nested_filters = defaultdict(list)
 
         # Convert the resulting Filter into two objects -- one
@@ -1626,7 +1612,7 @@ class Query(SearchBase):
         return search
 
     @property
-    def elasticsearch_query(self):
+    def search_query(self):
         """Build an opensearch-dsl Query object for this query string."""
 
         # The query will most likely be a dis_max query, which tests a
@@ -2151,7 +2137,7 @@ class JSONQuery(Query):
         self.filter = filter
 
     @property
-    def elasticsearch_query(self):
+    def search_query(self):
         query = None
         if "query" not in self.query:
             raise QueryParseException("'query' key must be present as the root")
@@ -2384,14 +2370,14 @@ class QueryParser:
         # we have lots of different ways of checking a regular query --
         # different hypotheses, fuzzy matches, etc. So the simplest thing
         # to do is to create a Query object for the smaller search query
-        # and see what its .elasticsearch_query is.
+        # and see what its .search_query is.
         if (
             self.final_query_string
             and self.final_query_string != self.original_query_string
         ):
             recursive = self.query_class(
                 self.final_query_string, use_query_parser=False
-            ).elasticsearch_query
+            ).search_query
             self.match_queries.append(recursive)
 
     def add_match_term_filter(self, query, field, query_string, matched_portion):
@@ -3473,10 +3459,7 @@ class WorkSearchResult:
 
 
 class MockExternalSearchIndex(ExternalSearchIndex):
-
-    work_document_type = None
-
-    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_ES6_8):
+    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_OS1_X):
         self.url = url
         self.docs = {}
         self.works_index = "works"
@@ -3486,15 +3469,9 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
         self.version = version
-        if version == ExternalSearchIndex.SEARCH_VERSION_ES6_8:
-            self.work_document_type = "work-type"
 
     def _key(self, index, id):
-        return (
-            (index, id)
-            if not self.work_document_type
-            else (index, self.work_document_type, id)
-        )
+        return (index, id)
 
     def index(self, index, id, body):
         self.docs[self._key(index, id)] = body
