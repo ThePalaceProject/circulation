@@ -103,7 +103,7 @@ class TestAdminSearchController:
         assert response["publishers"] == {"Publisher 1": 3, "Publisher 10": 10}
         assert response["distributors"] == {"Gutenberg": 13}
 
-    def test_no_license_counts(self, admin_search_fixture: AdminSearchFixture):
+    def test_different_license_types(self, admin_search_fixture: AdminSearchFixture):
         # Remove the cache
         admin_search_fixture.manager.admin_search_controller.__class__._search_field_values_cached.ttls = (
             0
