@@ -1564,11 +1564,11 @@ class TestAuthenticationProvider:
 
     @pytest.mark.parametrize(
         "auth_return,enforce_return,lookup_return,"
-        "calls_auth,calls_enforce,calls_lookup,create_patron,expected",
+        "calls_lookup,create_patron,expected",
         [
             # If we don't get a Patrondata from remote_authenticate, we don't call remote_patron_lookup
             # or enforce_library_identifier_restriction
-            (None, None, None, 1, 0, 0, False, None),
+            (None, None, None, 0, False, None),
             # If we get a complete patrondata from remote_authenticate, we don't call remote_patron_lookup
             (
                 PatronData(
@@ -1578,8 +1578,6 @@ class TestAuthenticationProvider:
                     authorization_identifier="a", external_type="xyz", complete=True
                 ),
                 None,
-                1,
-                1,
                 0,
                 False,
                 True,
@@ -1592,8 +1590,6 @@ class TestAuthenticationProvider:
                     authorization_identifier="a", external_type="xyz", complete=True
                 ),
                 None,
-                1,
-                1,
                 0,
                 False,
                 True,
@@ -1604,8 +1600,6 @@ class TestAuthenticationProvider:
                 PatronData(authorization_identifier="a", complete=False),
                 None,
                 None,
-                1,
-                1,
                 0,
                 False,
                 PATRON_OF_ANOTHER_LIBRARY,
@@ -1618,8 +1612,6 @@ class TestAuthenticationProvider:
                 PatronData(
                     authorization_identifier="a", external_type="xyz", complete=True
                 ),
-                1,
-                1,
                 1,
                 False,
                 True,
@@ -1634,8 +1626,6 @@ class TestAuthenticationProvider:
                     authorization_identifier="a", external_type="xyz", complete=True
                 ),
                 None,
-                1,
-                1,
                 0,
                 True,
                 True,
@@ -1649,8 +1639,6 @@ class TestAuthenticationProvider:
                     authorization_identifier="a", external_type="xyz", complete=True
                 ),
                 1,
-                1,
-                1,
                 True,
                 True,
             ),
@@ -1660,8 +1648,6 @@ class TestAuthenticationProvider:
                 PatronData(authorization_identifier="a", complete=False),
                 PatronData(authorization_identifier="a", complete=False),
                 None,
-                1,
-                1,
                 1,
                 True,
                 None,
@@ -1674,8 +1660,6 @@ class TestAuthenticationProvider:
         auth_return,
         enforce_return,
         lookup_return,
-        calls_auth,
-        calls_enforce,
         calls_lookup,
         create_patron,
         expected,
@@ -1691,16 +1675,24 @@ class TestAuthenticationProvider:
         )
         provider.remote_patron_lookup = MagicMock(return_value=lookup_return)
 
-        # Create a patron before doing auth if requested
-        if create_patron:
-            db.patron(external_identifier="a")
+        username = "a"
+        password = "b"
+        credentials = {"username": username, "password": password}
 
-        patron = provider.authenticated_patron(db.session, self.credentials)
+        # Create a patron before doing auth and make sure we can find it
+        if create_patron:
+            db_patron = db.patron()
+            db_patron.authorization_identifier = username
+
+        patron = provider.authenticated_patron(db.session, credentials)
+        provider.remote_authenticate.assert_called_once_with(username, password)
+        if auth_return is not None:
+            provider.enforce_library_identifier_restriction.assert_called_once_with(
+                auth_return
+            )
+        else:
+            provider.enforce_library_identifier_restriction.assert_not_called()
         assert provider.remote_patron_lookup.call_count == calls_lookup
-        assert (
-            provider.enforce_library_identifier_restriction.call_count == calls_enforce
-        )
-        assert provider.remote_authenticate.call_count == calls_auth
         if expected is True:
             # Make sure we get a Patron object back and that the patrondata has been
             # properly applied to it
