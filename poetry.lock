@@ -990,14 +990,14 @@ Six = "*"
 
 [[package]]
 name = "flask-pydantic-spec"
-version = "0.4.3"
+version = "0.4.4"
 description = "generate OpenAPI document and validate request & response with Python annotations."
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "flask_pydantic_spec-0.4.3-py3-none-any.whl", hash = "sha256:837c7f01ff6b0c045784c7f8e81089e16da4a84cfe5b0f39364e33eeae9853e9"},
-    {file = "flask_pydantic_spec-0.4.3.tar.gz", hash = "sha256:a7af33d5c812aa4900bede3ff3cb4687ff007636b09af0936e78258aca3974be"},
+    {file = "flask_pydantic_spec-0.4.4-py3-none-any.whl", hash = "sha256:8315a2a3706970132baefe15356125c83ccba41e52f1357fa076f061cef66c8b"},
+    {file = "flask_pydantic_spec-0.4.4.tar.gz", hash = "sha256:c631ef76d76bd973ed5398862dc1cf1069c638eb98783138673778a3e8db29f6"},
 ]
 
 [package.dependencies]
