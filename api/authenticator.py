@@ -13,7 +13,6 @@ import jwt
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from money import Money
-from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.sql.expression import or_
 from werkzeug.datastructures import Headers
@@ -1917,7 +1916,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             #
             # Just make sure our local data is up-to-date with
             # whatever we just got from remote.
-            self.apply_patrondata(patrondata, patron)
+            patrondata.apply(patron)
             return patron
 
         # At this point there are two possibilities:
@@ -1966,15 +1965,8 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         # but we needed to do a separate validation step. Either way,
         # we now need to update the Patron record with the account
         # information we just got from the source of truth.
-        self.apply_patrondata(patrondata, patron)
-        return patron
-
-    def apply_patrondata(self, patrondata: PatronData, patron: Patron) -> None:
-        """Apply a PatronData object to the given patron and make sure
-        any fields that need to be updated as a result of new data
-        are updated.
-        """
         patrondata.apply(patron)
+        return patron
 
     def get_credential_from_header(self, header: dict[str, str] | str) -> str | None:
         """Extract a password credential from a WWW-Authenticate header
@@ -2269,7 +2261,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             remote_patron_info = self.remote_patron_lookup(patron)
 
         if isinstance(remote_patron_info, PatronData):
-            self.apply_patrondata(remote_patron_info, patron)
+            remote_patron_info.apply(patron)
 
         return patron
 
