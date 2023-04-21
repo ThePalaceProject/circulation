@@ -4,7 +4,6 @@ from typing import Callable, Optional
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
-from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 
 from core.mock_analytics_provider import MockAnalyticsProvider
@@ -1470,7 +1469,10 @@ class TestLicensePoolDeliveryMechanism:
         mech1.compatible_with(mech2)
         assert (mech2.delivery_mechanism, True) == Mock.called_with
 
-    @parameterized.expand([("ascii_sy", "a", "a", "a"), ("", "ą", "ą", "ą")])
+    @pytest.mark.parametrize(
+        "_, data_source, identifier, delivery_mechanism",
+        [("ascii_sy", "a", "a", "a"), ("", "ą", "ą", "ą")],
+    )
     def test_repr(self, _, data_source, identifier, delivery_mechanism):
         """Test that LicensePoolDeliveryMechanism.__repr__ correctly works for both ASCII and non-ASCII symbols.
 

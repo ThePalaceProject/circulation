@@ -21,7 +21,6 @@ from opensearch_dsl.query import (
 from opensearch_dsl.query import Query as opensearch_dsl_query
 from opensearch_dsl.query import Range, Term, Terms
 from opensearchpy.exceptions import OpenSearchException
-from parameterized import parameterized
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier
@@ -5224,26 +5223,28 @@ class TestJSONQuery:
             }
         }
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "key, value, op",
         [
             ("target_age", 18, "lte"),
             ("target_age", 18, "lt"),
             ("target_age", 18, "gt"),
             ("target_age", 18, "gte"),
-        ]
+        ],
     )
     def test_elasticsearch_query_range(self, key, value, op):
         q = self._leaf(key, value, op)
         q = self._jq(q)
         assert q.elasticsearch_query.to_dict() == {"range": {f"{key}": {op: value}}}
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "key, value, is_keyword",
         [
             ("contributors.display_name", "name", True),
             ("contributors.lc", "name", False),
             ("genres.name", "name", False),
             ("licensepools.medium", "Book", False),
-        ]
+        ],
     )
     def test_elasticsearch_query_nested(self, key, value, is_keyword):
         q = self._jq(self._leaf(key, value))
@@ -5256,7 +5257,8 @@ class TestJSONQuery:
             }
         }
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "query, error_match",
         [
             (dict(key="author", op="eg", value="name"), "Unrecognized operator: eg"),
             (dict(key="arthur", op="eq", value="name"), "Unrecognized key: arthur"),
@@ -5265,7 +5267,7 @@ class TestJSONQuery:
                 "Could not make sense of the query",
             ),
             ({"and": [], "or": []}, "A conjuction cannot have multiple parts"),
-        ]
+        ],
     )
     def test_errors(self, query, error_match):
         q = self._jq(query)
@@ -5358,12 +5360,13 @@ class TestJSONQuery:
             exc.value
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "key, value, is_text",
         [
             ("title", "value", True),
             ("licensepools.open_access", True, False),
             ("published", "1990-01-01", False),
-        ]
+        ],
     )
     def test_type_queries(self, key, value, is_text):
         """Bool and long types are term queries, whereas text is a match query"""

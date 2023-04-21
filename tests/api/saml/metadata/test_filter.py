@@ -1,5 +1,4 @@
 import pytest
-from parameterized import parameterized
 
 from api.saml.metadata.filter import SAMLSubjectFilter, SAMLSubjectFilterError
 from api.saml.metadata.model import (
@@ -13,7 +12,8 @@ from core.python_expression_dsl.parser import DSLParser
 
 
 class TestSAMLSubjectFilter:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,expression,subject,expected_result,expected_exception",
         [
             (
                 "fails_in_the_case_of_syntax_error",
@@ -85,6 +85,7 @@ class TestSAMLSubjectFilter:
                     ),
                 ),
                 True,
+                None,
             ),
             (
                 "can_filter_when_attribute_has_multiple_values",
@@ -105,12 +106,11 @@ class TestSAMLSubjectFilter:
                     ),
                 ),
                 True,
+                None,
             ),
-        ]
+        ],
     )
-    def test_execute(
-        self, _, expression, subject, expected_result, expected_exception=None
-    ):
+    def test_execute(self, _, expression, subject, expected_result, expected_exception):
         # Arrange
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
@@ -127,7 +127,8 @@ class TestSAMLSubjectFilter:
             # Assert
             assert expected_result == result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,expression,expected_exception",
         [
             (
                 "fails_in_the_case_of_syntax_error",
@@ -154,7 +155,7 @@ class TestSAMLSubjectFilter:
                 '"urn:mace:nyu.edu:entl:lib:eresources" in subject.attribute_statement.attributes["eduPersonEntitlement"].values',
                 None,
             ),
-        ]
+        ],
     )
     def test_validate(self, _, expression, expected_exception):
         # Arrange

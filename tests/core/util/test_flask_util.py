@@ -4,10 +4,10 @@ import datetime
 import time
 from wsgiref.handlers import format_date_time
 
+import pytest
 from flask import Response as FlaskResponse
 from flask_pydantic_spec.flask_backend import Context
 from flask_pydantic_spec.utils import parse_multi_dict
-from parameterized import parameterized
 
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import (
@@ -158,7 +158,8 @@ class TestOPDSEntryResponse:
 
 
 class TestMethods:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "value, result",
         [
             ("true", True),
             ("True", True),
@@ -169,7 +170,7 @@ class TestMethods:
             ("0", False),
             ("t", False),
             (None, False),
-        ]
+        ],
     )
     def test_boolean_value(self, value, result):
         assert boolean_value(value) == result

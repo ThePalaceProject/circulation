@@ -4,7 +4,6 @@ from unittest.mock import PropertyMock, create_autospec
 import feedparser
 import pytest
 from lxml import etree
-from parameterized import parameterized
 
 from core.model import PresentationCalculationPolicy
 from core.model.constants import MediaTypes
@@ -712,7 +711,8 @@ class TestIdentifier:
         expected = thumbnail.resource.representation.mirrored_at
         assert AtomFeed._strftime(even_later) == entry.updated
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, identifier_type, identifier, title",
         [
             ("ascii_type_ascii_identifier_no_title", "a", "a", None),
             ("ascii_type_non_ascii_identifier_no_title", "a", "ą", None),
@@ -726,7 +726,7 @@ class TestIdentifier:
             ("ascii_type_non_ascii_identifier_non_ascii_title", "a", "ą", "ą"),
             ("non_ascii_type_ascii_identifier_non_ascii_title", "ą", "a", "ą"),
             ("non_ascii_type_non_ascii_identifier_non_ascii_title", "ą", "ą", "ą"),
-        ]
+        ],
     )
     def test_repr(self, _, identifier_type, identifier, title):
         """Test that Identifier.__repr__ correctly works with both ASCII and non-ASCII symbols.
@@ -830,7 +830,8 @@ class TestRecursiveEquivalencyCache:
 
 
 class TestProQuestIdentifierParser:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, identifier_string, expected_result",
         [
             (
                 "incorrect_identifier",
@@ -842,7 +843,7 @@ class TestProQuestIdentifierParser:
                 "urn:proquest.com/document-id/12345",
                 (Identifier.PROQUEST_ID, "12345"),
             ),
-        ]
+        ],
     )
     def test_parse(self, _, identifier_string, expected_result):
         parser = ProQuestIdentifierParser()

@@ -5,7 +5,6 @@ import onelogin
 import pytest
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from parameterized import parameterized
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -31,11 +30,12 @@ from tests.api.saml import saml_strings
 
 
 class TestSAMLMetadataParser:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,incorrect_xml",
         [
             ("incorrect_xml_str_type", saml_strings.INCORRECT_XML),
             ("incorrect_xml_bytes_type", saml_strings.INCORRECT_XML.encode()),
-        ]
+        ],
     )
     def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(
         self, _, incorrect_xml: Union[str, bytes]
@@ -47,7 +47,8 @@ class TestSAMLMetadataParser:
         with pytest.raises(SAMLMetadataParsingError):
             metadata_parser.parse(incorrect_xml)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,incorrect_xml_with_one_idp_metadata_without_sso_service",
         [
             (
                 "incorrect_xml_with_one_idp_metadata_without_sso_service_str_type",
@@ -57,7 +58,7 @@ class TestSAMLMetadataParser:
                 "incorrect_xml_with_one_idp_metadata_without_sso_service_bytes_type",
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_raises_exception_when_idp_metadata_does_not_contain_sso_service(
         self,
@@ -73,7 +74,8 @@ class TestSAMLMetadataParser:
                 incorrect_xml_with_one_idp_metadata_without_sso_service
             )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding",
         [
             (
                 "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_str_type",
@@ -83,7 +85,7 @@ class TestSAMLMetadataParser:
                 "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_bytes_type",
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_raises_exception_when_idp_metadata_contains_sso_service_with_wrong_binding(
         self,
@@ -101,7 +103,8 @@ class TestSAMLMetadataParser:
                 incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding
             )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,correct_xml_with_one_idp_metadata_without_display_names",
         [
             (
                 "correct_xml_with_one_idp_metadata_without_display_names_str_type",
@@ -111,7 +114,7 @@ class TestSAMLMetadataParser:
                 "correct_xml_with_one_idp_metadata_without_display_names_bytes_type",
                 saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_does_not_raise_exception_when_xml_metadata_does_not_have_display_names(
         self,
@@ -155,14 +158,15 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,correct_xml_with_idp_1",
         [
             ("correct_xml_with_idp_1_str_type", saml_strings.CORRECT_XML_WITH_IDP_1),
             (
                 "correct_xml_with_idp_1_bytes_type",
                 saml_strings.CORRECT_XML_WITH_IDP_1.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_correctly_parses_one_idp_metadata(
         self, _, correct_xml_with_idp_1: Union[str, bytes]
@@ -258,14 +262,15 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,correct_xml_with_idp_1",
         [
             ("correct_xml_with_idp_1_str_type", saml_strings.CORRECT_XML_WITH_IDP_1),
             (
                 "correct_xml_with_idp_1_bytes_type",
                 saml_strings.CORRECT_XML_WITH_IDP_1.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_correctly_parses_idp_metadata_without_name_id_format(
         self, _, correct_xml_with_idp_1: Union[str, bytes]
@@ -361,7 +366,8 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,correct_xml_with_one_idp_metadata_with_one_certificate",
         [
             (
                 "correct_xml_with_one_idp_metadata_with_one_certificate_str_type",
@@ -371,7 +377,7 @@ class TestSAMLMetadataParser:
                 "correct_xml_with_one_idp_metadata_with_one_certificate_bytes_type",
                 saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_correctly_parses_idp_metadata_with_one_certificate(
         self,
@@ -471,7 +477,8 @@ class TestSAMLMetadataParser:
             == parsing_result.provider
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,correct_xml_with_multiple_idps",
         [
             (
                 "correct_xml_with_multiple_idps_str_type",
@@ -481,7 +488,7 @@ class TestSAMLMetadataParser:
                 "correct_xml_with_multiple_idps_bytes_type",
                 saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_correctly_parses_metadata_with_multiple_descriptors(
         self, _, correct_xml_with_multiple_idps: Union[str, bytes]
@@ -620,7 +627,8 @@ class TestSAMLMetadataParser:
             == parsing_results[1].provider
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, incorrect_xml_with_one_sp_metadata_without_acs_service",
         [
             (
                 "incorrect_xml_with_one_sp_metadata_without_acs_service_str_type",
@@ -630,7 +638,7 @@ class TestSAMLMetadataParser:
                 "incorrect_xml_with_one_sp_metadata_without_acs_service_bytes_type",
                 saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_raises_exception_when_sp_metadata_does_not_contain_acs_service(
         self,
@@ -646,14 +654,15 @@ class TestSAMLMetadataParser:
                 incorrect_xml_with_one_sp_metadata_without_acs_service
             )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, correct_xml_with_one_sp",
         [
             ("correct_xml_with_one_sp_str_type", saml_strings.CORRECT_XML_WITH_ONE_SP),
             (
                 "correct_xml_with_one_sp_bytes_type",
                 saml_strings.CORRECT_XML_WITH_ONE_SP.encode(),
             ),
-        ]
+        ],
     )
     def test_parse_correctly_parses_one_sp_metadata(
         self, _, correct_xml_with_one_sp: Union[str, bytes]
@@ -746,7 +755,8 @@ class TestSAMLMetadataParser:
 
 
 class TestSAMLSubjectParser:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,idp,name_id_format,name_id_nq,name_id_spnq,name_id,attributes,expected_result",
         [
             (
                 "name_id_and_attributes",
@@ -882,7 +892,7 @@ class TestSAMLSubjectParser:
                     ),
                 ),
             ),
-        ]
+        ],
     )
     def test_parse(
         self,
