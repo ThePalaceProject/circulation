@@ -6,7 +6,7 @@ from typing import List
 from unittest.mock import MagicMock, call
 
 import pytest
-from elasticsearch.exceptions import ElasticsearchException
+from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
 from core.classifier import Classifier
@@ -2468,7 +2468,7 @@ class TestWorkList:
         # there are no results.
         class RaisesException:
             def query_works(self, *args, **kwargs):
-                raise ElasticsearchException("oh no")
+                raise OpenSearchException("oh no")
 
         assert [] == wl.search(db.session, query, RaisesException())
 
