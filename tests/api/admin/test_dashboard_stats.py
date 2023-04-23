@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from api.admin.dashboard_stats import generate_statistics
+from api.admin.model.dashboard_statistics import InventoryStatistics, PatronStatistics
 from core.model import Admin, AdminRole, DataSource, create
 from core.util.datetime_helpers import utc_now
 
@@ -40,21 +41,32 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
     admin = session.admin
     db = session.db
 
+    # A `zeroed` PatronStatistics object is the same as one whose
+    # properties are individually specified as zero.
+    no_patrons = PatronStatistics.zeroed()
+    assert (
+        PatronStatistics(
+            total=0, with_active_loan=0, with_active_loan_or_hold=0, loans=0, holds=0
+        )
+        == no_patrons
+    )
+
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
     default_library = db.library("Default Library", "default")
 
     # At first, there are no patrons in the database.
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        patron_data = data.get("patrons")
-        assert 0 == patron_data.get("total")
-        assert 0 == patron_data.get("with_active_loans")
-        assert 0 == patron_data.get("with_active_loans_or_holds")
-        assert 0 == patron_data.get("loans")
-        assert 0 == patron_data.get("holds")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_patron_stats = library_stats.patron_statistics
+    summary_patron_stats = response.patron_summary
+    for patron_data in [library_patron_stats, summary_patron_stats]:
+        assert no_patrons == patron_data
+        assert 0 == patron_data.total
+        assert 0 == patron_data.with_active_loan
+        assert 0 == patron_data.with_active_loan_or_hold
+        assert 0 == patron_data.loans
+        assert 0 == patron_data.holds
 
     edition, pool = db.edition(with_license_pool=True, with_open_access_download=False)
     edition2, open_access_pool = db.edition(with_open_access_download=True)
@@ -73,15 +85,15 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
     open_access_pool.loan_to(patron3)
 
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        patron_data = data.get("patrons")
-        assert 3 == patron_data.get("total")
-        assert 1 == patron_data.get("with_active_loans")
-        assert 2 == patron_data.get("with_active_loans_or_holds")
-        assert 1 == patron_data.get("loans")
-        assert 1 == patron_data.get("holds")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_patron_stats = library_stats.patron_statistics
+    summary_patron_stats = response.patron_summary
+    for patron_data in [library_patron_stats, summary_patron_stats]:
+        assert 3 == patron_data.total
+        assert 1 == patron_data.with_active_loan
+        assert 2 == patron_data.with_active_loan_or_hold
+        assert 1 == patron_data.loans
+        assert 1 == patron_data.holds
 
     # These patrons are in a different library..
     l2 = db.library()
@@ -92,18 +104,19 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
     pool.on_hold_to(patron5)
 
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    assert 3 == library_data.get("patrons").get("total")
-    assert 1 == library_data.get("patrons").get("with_active_loans")
-    assert 2 == library_data.get("patrons").get("with_active_loans_or_holds")
-    assert 1 == library_data.get("patrons").get("loans")
-    assert 1 == library_data.get("patrons").get("holds")
-    assert 5 == total_data.get("patrons").get("total")
-    assert 2 == total_data.get("patrons").get("with_active_loans")
-    assert 4 == total_data.get("patrons").get("with_active_loans_or_holds")
-    assert 2 == total_data.get("patrons").get("loans")
-    assert 2 == total_data.get("patrons").get("holds")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_patron_stats = library_stats.patron_statistics
+    summary_patron_stats = response.patron_summary
+    assert 3 == library_patron_stats.total
+    assert 1 == library_patron_stats.with_active_loan
+    assert 2 == library_patron_stats.with_active_loan_or_hold
+    assert 1 == library_patron_stats.loans
+    assert 1 == library_patron_stats.holds
+    assert 5 == summary_patron_stats.total
+    assert 2 == summary_patron_stats.with_active_loan
+    assert 4 == summary_patron_stats.with_active_loan_or_hold
+    assert 2 == summary_patron_stats.loans
+    assert 2 == summary_patron_stats.holds
 
     # If the admin only has access to some libraries, only those will be counted
     # in the total stats.
@@ -111,18 +124,19 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
     admin.add_role(AdminRole.LIBRARIAN, default_library)
 
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    assert 3 == library_data.get("patrons").get("total")
-    assert 1 == library_data.get("patrons").get("with_active_loans")
-    assert 2 == library_data.get("patrons").get("with_active_loans_or_holds")
-    assert 1 == library_data.get("patrons").get("loans")
-    assert 1 == library_data.get("patrons").get("holds")
-    assert 3 == total_data.get("patrons").get("total")
-    assert 1 == total_data.get("patrons").get("with_active_loans")
-    assert 2 == total_data.get("patrons").get("with_active_loans_or_holds")
-    assert 1 == total_data.get("patrons").get("loans")
-    assert 1 == total_data.get("patrons").get("holds")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_patron_stats = library_stats.patron_statistics
+    summary_patron_stats = response.patron_summary
+    assert 3 == library_patron_stats.total
+    assert 1 == library_patron_stats.with_active_loan
+    assert 2 == library_patron_stats.with_active_loan_or_hold
+    assert 1 == library_patron_stats.loans
+    assert 1 == library_patron_stats.holds
+    assert 3 == summary_patron_stats.total
+    assert 1 == summary_patron_stats.with_active_loan
+    assert 2 == summary_patron_stats.with_active_loan_or_hold
+    assert 1 == summary_patron_stats.loans
+    assert 1 == summary_patron_stats.holds
 
 
 def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture):
@@ -136,13 +150,19 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
 
     # At first, there are no titles in the database.
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        inventory_data = data.get("inventory")
-        assert 0 == inventory_data.get("titles")
-        assert 0 == inventory_data.get("licenses")
-        assert 0 == inventory_data.get("available_licenses")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_inventory = library_stats.inventory_summary
+    summary_inventory = response.inventory_summary
+    for inventory_data in [library_inventory, summary_inventory]:
+        assert 0 == inventory_data.titles
+        assert 0 == inventory_data.available_titles
+        assert 0 == inventory_data.self_hosted_titles
+        assert 0 == inventory_data.open_access_titles
+        assert 0 == inventory_data.licensed_titles
+        assert 0 == inventory_data.unlimited_license_titles
+        assert 0 == inventory_data.metered_license_titles
+        assert 0 == inventory_data.metered_licenses_owned
+        assert 0 == inventory_data.metered_licenses_available
 
     # This edition has no licenses owned and isn't counted in the inventory.
     edition1, pool1 = db.edition(
@@ -167,13 +187,19 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     pool3.licenses_available = 4
 
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        inventory_data = data.get("inventory")
-        assert 2 == inventory_data.get("titles")
-        assert 15 == inventory_data.get("licenses")
-        assert 4 == inventory_data.get("available_licenses")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_inventory = library_stats.inventory_summary
+    summary_inventory = response.inventory_summary
+    for inventory_data in [library_inventory, summary_inventory]:
+        assert 2 == inventory_data.titles
+        assert 1 == inventory_data.available_titles
+        assert 0 == inventory_data.self_hosted_titles
+        assert 0 == inventory_data.open_access_titles
+        assert 2 == inventory_data.licensed_titles
+        assert 0 == inventory_data.unlimited_license_titles
+        assert 2 == inventory_data.metered_license_titles
+        assert 15 == inventory_data.metered_licenses_owned
+        assert 4 == inventory_data.metered_licenses_available
 
     # This edition is in a different collection.
     c2 = db.collection()
@@ -184,14 +210,28 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     pool4.licenses_available = 2
 
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    assert 2 == library_data.get("inventory").get("titles")
-    assert 15 == library_data.get("inventory").get("licenses")
-    assert 4 == library_data.get("inventory").get("available_licenses")
-    assert 3 == total_data.get("inventory").get("titles")
-    assert 17 == total_data.get("inventory").get("licenses")
-    assert 6 == total_data.get("inventory").get("available_licenses")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_inventory = library_stats.inventory_summary
+    summary_inventory = response.inventory_summary
+    assert 2 == library_inventory.titles
+    assert 1 == library_inventory.available_titles
+    assert 0 == library_inventory.self_hosted_titles
+    assert 0 == library_inventory.open_access_titles
+    assert 2 == library_inventory.licensed_titles
+    assert 0 == library_inventory.unlimited_license_titles
+    assert 2 == library_inventory.metered_license_titles
+    assert 15 == library_inventory.metered_licenses_owned
+    assert 4 == library_inventory.metered_licenses_available
+
+    assert 3 == summary_inventory.titles
+    assert 2 == summary_inventory.available_titles
+    assert 0 == summary_inventory.self_hosted_titles
+    assert 0 == summary_inventory.open_access_titles
+    assert 3 == summary_inventory.licensed_titles
+    assert 0 == summary_inventory.unlimited_license_titles
+    assert 3 == summary_inventory.metered_license_titles
+    assert 17 == summary_inventory.metered_licenses_owned
+    assert 6 == summary_inventory.metered_licenses_available
 
     admin.remove_role(AdminRole.SYSTEM_ADMIN)
     admin.add_role(AdminRole.LIBRARIAN, default_library)
@@ -199,13 +239,19 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     # The admin can no longer see the other collection, so it's not
     # counted in the totals.
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        inventory_data = data.get("inventory")
-        assert 2 == inventory_data.get("titles")
-        assert 15 == inventory_data.get("licenses")
-        assert 4 == inventory_data.get("available_licenses")
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_inventory = library_stats.inventory_summary
+    summary_inventory = response.inventory_summary
+    for inventory_data in [library_inventory, summary_inventory]:
+        assert 2 == inventory_data.titles
+        assert 1 == inventory_data.available_titles
+        assert 0 == inventory_data.self_hosted_titles
+        assert 0 == inventory_data.open_access_titles
+        assert 2 == inventory_data.licensed_titles
+        assert 0 == inventory_data.unlimited_license_titles
+        assert 2 == inventory_data.titles
+        assert 15 == inventory_data.metered_licenses_owned
+        assert 4 == inventory_data.metered_licenses_available
 
 
 def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixture):
@@ -213,129 +259,208 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     admin = session.admin
     db = session.db
 
+    # A `zeroed` InventoryStatistics object is the same as one whose
+    # properties are individually specified as zero.
+    empty_inventory = InventoryStatistics.zeroed()
+    assert empty_inventory == InventoryStatistics(
+        titles=0,
+        available_titles=0,
+        self_hosted_titles=0,
+        open_access_titles=0,
+        licensed_titles=0,
+        unlimited_license_titles=0,
+        metered_license_titles=0,
+        metered_licenses_owned=0,
+        metered_licenses_available=0,
+    )
+    # We can update individual properties on the object while copying.
+    new_metered_inventory = empty_inventory.copy(
+        update={
+            "titles": 2,
+            "available_titles": 2,
+            "licensed_titles": 2,
+            "metered_license_titles": 2,
+            "metered_licenses_owned": 4,
+            "metered_licenses_available": 4,
+        }
+    )
+    assert new_metered_inventory == InventoryStatistics(
+        titles=2,
+        available_titles=2,
+        self_hosted_titles=0,
+        open_access_titles=0,
+        licensed_titles=2,
+        unlimited_license_titles=0,
+        metered_license_titles=2,
+        metered_licenses_owned=4,
+        metered_licenses_available=4,
+    )
+
     admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+    # Initially, there is no inventory.
+    response = session.get_statistics()
+    assert response.inventory_summary == empty_inventory
 
     default_library = db.library("Default Library", "default")
     default_collection = db.collection(name="Default Collection")
     default_collection.libraries += [default_library]
-    edition0, _ = db.edition(
+
+    # default collection adds an OA title.
+    _, _ = db.edition(
         with_open_access_download=True,
         data_source_name=DataSource.GUTENBERG,
         collection=default_collection,
     )
 
-    # At first, there is 1 open access title in the database,
+    # Now there is 1 open access title in the database,
     # created in CirculationControllerTest.setup.
+    expected_library_inventory = empty_inventory.copy(
+        update={
+            "titles": 1,
+            "available_titles": 1,
+            "open_access_titles": 1,
+        }
+    )
+    expected_summary_inventory = expected_library_inventory.copy()
+
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        collections_data = data.get("collections")
-        assert 1 == len(collections_data)
-        assert 0 == collections_data.get(default_collection.name).get("licensed_titles")
-        assert 1 == collections_data.get(default_collection.name).get(
-            "open_access_titles"
-        )
-        assert 0 == collections_data.get(default_collection.name).get("licenses")
-        assert 0 == collections_data.get(default_collection.name).get(
-            "available_licenses"
-        )
+    assert (
+        expected_library_inventory
+        == response.libraries_by_key.get(default_library.short_name).inventory_summary
+    )
+    assert expected_summary_inventory == response.inventory_summary
 
     c2 = db.collection()
     c3 = db.collection()
     c3.libraries += [default_library]
 
-    edition1, pool1 = db.edition(
+    # c2 adds a 5/10 metered license title.
+    _, pool = db.edition(
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.OVERDRIVE,
         collection=c2,
     )
-    pool1.open_access = False
-    pool1.licenses_owned = 10
-    pool1.licenses_available = 5
+    pool.open_access = False
+    pool.licenses_owned = 10
+    pool.licenses_available = 5
 
-    edition2, pool2 = db.edition(
+    # c3 does not add a title, since no licenses owned.
+    _, pool = db.edition(
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.OVERDRIVE,
         collection=c3,
     )
-    pool2.open_access = False
-    pool2.licenses_owned = 0
-    pool2.licenses_available = 0
+    pool.open_access = False
+    pool.licenses_owned = 0
+    pool.licenses_available = 0
 
-    edition3, pool3 = db.edition(
+    # default collection adds a 0/3 metered license title.
+    _, pool = db.edition(
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.BIBLIOTHECA,
         collection=default_collection,
     )
-    pool3.open_access = False
-    pool3.licenses_owned = 3
-    pool3.licenses_available = 0
+    pool.open_access = False
+    pool.licenses_owned = 3
+    pool.licenses_available = 0
 
-    edition4, pool4 = db.edition(
+    # c2 adds a 5/5 metered license title.
+    _, pool = db.edition(
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.AXIS_360,
         collection=c2,
     )
-    pool4.open_access = False
-    pool4.licenses_owned = 5
-    pool4.licenses_available = 5
+    pool.open_access = False
+    pool.licenses_owned = 5
+    pool.licenses_available = 5
+
+    added_library_inventory = empty_inventory.copy(
+        update={
+            "titles": 1,
+            "available_titles": 0,
+            "licensed_titles": 1,
+            "metered_license_titles": 1,
+            "metered_licenses_owned": 3,
+            "metered_licenses_available": 0,
+        }
+    )
+    added_summary_inventory = empty_inventory.copy(
+        update={
+            "titles": 3,
+            "available_titles": 2,
+            "licensed_titles": 3,
+            "metered_license_titles": 3,
+            "metered_licenses_owned": 18,
+            "metered_licenses_available": 10,
+        }
+    )
+    expected_library_inventory += added_library_inventory
+    expected_summary_inventory += added_summary_inventory
 
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    library_collections_data = library_data.get("collections")
-    total_collections_data = total_data.get("collections")
-    assert 2 == len(library_collections_data)
-    assert 3 == len(total_collections_data)
-    for data in [library_collections_data, total_collections_data]:
-        assert 1 == data.get(default_collection.name).get("licensed_titles")
-        assert 1 == data.get(default_collection.name).get("open_access_titles")
-        assert 3 == data.get(default_collection.name).get("licenses")
-        assert 0 == data.get(default_collection.name).get("available_licenses")
+    library_stats_data = response.libraries_by_key.get(default_library.short_name)
+    all_collections_by_id = {c.id: c for c in response.collections}
+    library_collections_by_id = {
+        id_: all_collections_by_id[id_] for id_ in library_stats_data.collection_ids
+    }
+    assert expected_library_inventory == library_stats_data.inventory_summary
+    assert expected_summary_inventory == response.inventory_summary
+    assert 2 == len(library_stats_data.collection_ids)
+    assert 3 == len(response.collections)
 
-        assert 0 == data.get(c3.name).get("licensed_titles")
-        assert 0 == data.get(c3.name).get("open_access_titles")
-        assert 0 == data.get(c3.name).get("licenses")
-        assert 0 == data.get(c3.name).get("available_licenses")
+    for collections in [library_collections_by_id, all_collections_by_id]:
+        default_inventory = collections[default_collection.id].inventory
+        c3_inventory = collections[c3.id].inventory
+        assert 1 == default_inventory.licensed_titles
+        assert 1 == default_inventory.open_access_titles
+        assert 3 == default_inventory.metered_licenses_owned
+        assert 0 == default_inventory.metered_licenses_available
 
-    assert None == library_collections_data.get(c2.name)
-    c2_data = total_collections_data.get(c2.name)
-    assert 2 == c2_data.get("licensed_titles")
-    assert 0 == c2_data.get("open_access_titles")
-    assert 15 == c2_data.get("licenses")
-    assert 10 == c2_data.get("available_licenses")
+        assert 0 == c3_inventory.licensed_titles
+        assert 0 == c3_inventory.open_access_titles
+        assert 0 == c3_inventory.metered_licenses_owned
+        assert 0 == c3_inventory.metered_licenses_available
+
+    # assert None == library_collections_data.get(c2.name)
+    # c2_data = total_collections_data.get(c2.name)
+    assert library_collections_by_id.get(c2.id) is None
+    c2_inventory = all_collections_by_id[c2.id].inventory
+    assert 2 == c2_inventory.licensed_titles
+    assert 0 == c2_inventory.open_access_titles
+    assert 15 == c2_inventory.metered_licenses_owned
+    assert 10 == c2_inventory.metered_licenses_available
 
     admin.remove_role(AdminRole.SYSTEM_ADMIN)
     admin.add_role(AdminRole.LIBRARY_MANAGER, default_library)
 
-    # c2 is no longer included in the totals since the admin's library does
-    # not use it.
+    # c2 is no longer included in the totals since the admin user's
+    # library is not associated with it.
     response = session.get_statistics()
-    library_data = response.get(default_library.short_name)
-    total_data = response.get("total")
-    for data in [library_data, total_data]:
-        collections_data = data.get("collections")
-        assert 2 == len(collections_data)
-        assert collections_data.get(c2.name) is None
+    library_stats_data = response.libraries_by_key.get(default_library.short_name)
+    all_collections_by_id = {c.id: c for c in response.collections}
+    library_collections_by_id = {
+        id: all_collections_by_id[id] for id in library_stats_data.collection_ids
+    }
+    for collections in [library_collections_by_id, all_collections_by_id]:
+        assert 2 == len(collections)
+        assert collections.get(c2.id) is None
 
-        assert 1 == collections_data.get(default_collection.name).get("licensed_titles")
-        assert 1 == collections_data.get(default_collection.name).get(
-            "open_access_titles"
-        )
-        assert 3 == collections_data.get(default_collection.name).get("licenses")
-        assert 0 == collections_data.get(default_collection.name).get(
-            "available_licenses"
-        )
+        default_inventory = collections[default_collection.id].inventory
+        assert 1 == default_inventory.licensed_titles
+        assert 1 == default_inventory.open_access_titles
+        assert 3 == default_inventory.metered_licenses_owned
+        assert 0 == default_inventory.metered_licenses_available
 
-        assert 0 == collections_data.get(c3.name).get("licensed_titles")
-        assert 0 == collections_data.get(c3.name).get("open_access_titles")
-        assert 0 == collections_data.get(c3.name).get("licenses")
-        assert 0 == collections_data.get(c3.name).get("available_licenses")
+        c3_inventory = collections[c3.id].inventory
+        assert 0 == c3_inventory.licensed_titles
+        assert 0 == c3_inventory.open_access_titles
+        assert 0 == c3_inventory.metered_licenses_owned
+        assert 0 == c3_inventory.metered_licenses_available
 
 
 def test_stats_parent_collection_permissions(
@@ -355,9 +480,9 @@ def test_stats_parent_collection_permissions(
     admin.add_role(AdminRole.LIBRARIAN, library)
 
     response = session.get_statistics()
-    stats = response["total"]["collections"]
+    collection_ids = [c.id for c in response.collections]
 
     # Child is in stats, but parent is not
     # No exceptions were thrown
-    assert child.name in stats
-    assert parent.name not in stats
+    assert child.id in collection_ids
+    assert parent.name not in collection_ids

@@ -9,6 +9,7 @@ from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.dashboard_stats import generate_statistics
+from api.admin.model.dashboard_statistics import StatisticsResponse
 from api.app import api_spec, app
 from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
@@ -342,12 +343,14 @@ def circulation_events():
 
 
 @app.route("/admin/stats")
+@api_spec.validate(resp=SpecResponse(HTTP_200=StatisticsResponse), tags=["admin.stats"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
 def stats():
-    return app.manager.admin_dashboard_controller.stats(
-        stats_function=generate_statistics
+    statistics_response: StatisticsResponse = (
+        app.manager.admin_dashboard_controller.stats(stats_function=generate_statistics)
     )
+    return statistics_response.api_dict()
 
 
 @app.route("/admin/libraries", methods=["GET", "POST"])
