@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import email
 import json
 import logging
@@ -5,7 +7,7 @@ import os
 import urllib.parse
 from collections import defaultdict
 from time import mktime
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any
 from wsgiref.handlers import format_date_time
 
 import flask
@@ -92,11 +94,7 @@ from .adobe_vendor_id import (
     DeviceManagementProtocolController,
 )
 from .annotations import AnnotationParser, AnnotationWriter
-from .authenticator import (
-    Authenticator,
-    CirculationPatronProfileStorage,
-    OAuthController,
-)
+from .authenticator import Authenticator, CirculationPatronProfileStorage
 from .base_controller import BaseCirculationManagerController
 from .circulation import CirculationAPI
 from .circulation_exceptions import *
@@ -129,6 +127,9 @@ from .opds import (
 from .problem_details import *
 from .shared_collection import SharedCollectionAPI
 from .testing import MockCirculationAPI, MockSharedCollectionAPI
+
+if TYPE_CHECKING:
+    from werkzeug import Response as wkResponse
 
 
 class CirculationManager:
@@ -316,8 +317,8 @@ class CirculationManager:
         )
 
     def _dev_mgmt_from_libraries(
-        self, libraries: List[Library]
-    ) -> Optional[DeviceManagementProtocolController]:
+        self, libraries: list[Library]
+    ) -> DeviceManagementProtocolController | None:
         """Return a DeviceManagementProtocolController in any library uses Adobe Vendor IDs."""
 
         for library in libraries:
@@ -418,7 +419,6 @@ class CirculationManager:
         This method will be called fresh every time the site
         configuration changes.
         """
-        self.oauth_controller = OAuthController(self.auth)
         self.saml_controller = SAMLController(self, self.auth)
 
     @log_elapsed_time(log_method=log.debug, message_prefix="setup_adobe_vendor_id")
@@ -1327,10 +1327,10 @@ class OPDSFeedController(CirculationManagerController):
 class FeedRequestParameters:
     """Frequently used request parameters for feed requests"""
 
-    library: Optional[Library] = None
-    pagination: Optional[Pagination] = None
-    facets: Optional[Facets] = None
-    problem: Optional[ProblemDetail] = None
+    library: Library | None = None
+    pagination: Pagination | None = None
+    facets: Facets | None = None
+    problem: ProblemDetail | None = None
 
 
 class OPDS2FeedController(CirculationManagerController):
@@ -1706,7 +1706,13 @@ class LoanController(CirculationManagerController):
             return problem_doc
         return best, mechanism
 
-    def fulfill(self, license_pool_id, mechanism_id=None, part=None, do_get=None):
+    def fulfill(
+        self,
+        license_pool_id: int,
+        mechanism_id: int | None = None,
+        part: str | None = None,
+        do_get: Any | None = None,
+    ) -> wkResponse | ProblemDetail:
         """Fulfill a book that has already been checked out,
         or which can be fulfilled with no active loan.
 
@@ -1742,7 +1748,7 @@ class LoanController(CirculationManagerController):
             # There's still a chance this request can succeed, but if not,
             # we'll be sending out authentication_response.
             patron = None
-        library = flask.request.library
+        library = flask.request.library  # type: ignore
         header = self.authorization_header()
         credential = self.manager.auth.get_credential_from_header(header)
 
@@ -1848,9 +1854,13 @@ class LoanController(CirculationManagerController):
             feed = LibraryLoanAndHoldAnnotator.single_item_feed(
                 self.circulation, loan, fulfillment=fulfillment
             )
+            if isinstance(feed, ProblemDetail):
+                # This should typically never happen, since we've gone through the entire fulfill workflow
+                # But for the sake of return-type completeness we are adding this here
+                return feed
             if isinstance(feed, Response):
                 return feed
-            if isinstance(feed, OPDSFeed):
+            if isinstance(feed, OPDSFeed):  # type: ignore
                 content = str(feed)
             else:
                 content = etree.tostring(feed)
@@ -2197,6 +2207,9 @@ class WorkController(CirculationManagerController):
 
         library = flask.request.library
         work = self.load_work(library, identifier_type, identifier)
+        if work is None:
+            return NOT_FOUND_ON_REMOTE
+
         if isinstance(work, ProblemDetail):
             return work
 

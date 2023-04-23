@@ -3,7 +3,6 @@ import copy
 import json
 import logging
 import os
-import sys
 import urllib.parse
 from datetime import date, datetime, timedelta
 from typing import (
@@ -23,10 +22,11 @@ from flask import Request, Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import and_, desc, distinct, join, nullslast, select
-from werkzeug.urls import url_fix, url_parse, url_quote, url_quote_plus, url_unparse
+from sqlalchemy.sql.expression import desc, nullslast
+from werkzeug.urls import BaseURL, url_parse, url_quote_plus
 from werkzeug.wrappers import Response as werkzeug_response
 
 from api.admin.config import Configuration as AdminClientConfig
@@ -51,7 +51,7 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import CannotCreateLocalPatron, LibraryAuthenticator, PatronData
 from api.axis import Axis360API
 from api.bibliotheca import BibliothecaAPI
-from api.config import CannotLoadConfiguration, Configuration
+from api.config import Configuration
 from api.controller import CirculationManagerController
 from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
@@ -76,12 +76,9 @@ from core.model import (
     CustomList,
     DataSource,
     ExternalIntegration,
-    Hold,
     Identifier,
     Library,
     LicensePool,
-    Loan,
-    Patron,
     Timestamp,
     Work,
     create,
@@ -99,7 +96,7 @@ from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
 from core.util.flask_util import OPDSFeedResponse
-from core.util.languages import LanguageCodes, LanguageNames
+from core.util.languages import LanguageCodes
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -236,6 +233,39 @@ def setup_admin_controllers(manager):
     manager.admin_announcement_service = AnnouncementSettings(manager)
 
     manager.admin_search_controller = AdminSearchController(manager)
+
+
+class SanitizedRedirections:
+    """Functions to sanitize redirects."""
+
+    @staticmethod
+    def _check_redirect(target: str) -> Tuple[bool, str]:
+        """Check that a redirect is allowed.
+        Because the URL redirect is assumed to be untrusted user input,
+        we extract the URL path and forbid redirecting to external
+        hosts.
+        """
+        redirect_url: BaseURL = url_parse(target)
+
+        # If the redirect isn't asking for a particular host, then it's safe.
+        if redirect_url.netloc in (None, ""):
+            return True, ""
+
+        # Otherwise, if the redirect is asking for a different host, it's unsafe.
+        if redirect_url.netloc != flask.request.host:
+            logging.warning(f"Redirecting to {redirect_url.netloc} is not permitted")
+            return False, _("Redirecting to an external domain is not allowed.")
+
+        return True, ""
+
+    @staticmethod
+    def redirect(target: str) -> Response:
+        """Check that a redirect is allowed before performing it."""
+        ok, message = SanitizedRedirections._check_redirect(target)
+        if ok:
+            return redirect(target, Response=Response)
+        else:
+            return Response(message, 400)
 
 
 class AdminController:
@@ -467,7 +497,8 @@ class ViewController(AdminController):
 
 class TimestampsController(AdminCirculationManagerController):
     """Returns a dict: each key is a type of service (script, monitor, or coverage provider);
-    each value is a nested dict in which timestamps are organized by service name and then by collection ID."""
+    each value is a nested dict in which timestamps are organized by service name and then by collection ID.
+    """
 
     def diagnostics(self):
         self.require_system_admin()
@@ -504,7 +535,8 @@ class TimestampsController(AdminCirculationManagerController):
 
     def _sort_by_collection(self, timestamps):
         """Takes a list of timestamps; turns it into a dict in which each key is a
-        collection ID and each value is a list of the timestamps associated with that collection."""
+        collection ID and each value is a list of the timestamps associated with that collection.
+        """
 
         result = {}
         for timestamp in timestamps:
@@ -602,7 +634,7 @@ class SignInController(AdminController):
             headers["Content-Type"] = "text/html"
             return Response(html, 200, headers)
         elif admin:
-            return redirect(flask.request.args.get("redirect"), Response=Response)
+            return SanitizedRedirections.redirect(flask.request.args.get("redirect"))
 
     def password_sign_in(self):
         if not self.admin_auth_providers:
@@ -617,7 +649,7 @@ class SignInController(AdminController):
             return self.error_response(INVALID_ADMIN_CREDENTIALS)
 
         admin = self.authenticated_admin(admin_details)
-        return redirect(redirect_url, Response=Response)
+        return SanitizedRedirections.redirect(redirect_url)
 
     def change_password(self):
         admin = flask.request.admin
@@ -636,7 +668,7 @@ class SignInController(AdminController):
             redirect=url_for("admin_view", _external=True),
             _external=True,
         )
-        return redirect(redirect_url)
+        return SanitizedRedirections.redirect(redirect_url)
 
     def error_response(self, problem_detail):
         """Returns a problem detail as an HTML response"""
@@ -1217,11 +1249,12 @@ class CustomListsController(AdminCirculationManagerController):
         self, library: Library, list: CustomList
     ) -> Callable[[int], str]:
         def url_fn(after):
-            return self.url_for(
+            return url_for(
                 "custom_list_get",
                 after=after,
                 library_short_name=library.short_name,
                 list_id=list.id,
+                _external=True,
             )
 
         return url_fn
@@ -1689,7 +1722,6 @@ class DashboardController(AdminCirculationManagerController):
 
 
 class SettingsController(AdminCirculationManagerController):
-
     METADATA_SERVICE_URI_TYPE = "application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
@@ -1732,7 +1764,6 @@ class SettingsController(AdminCirculationManagerController):
         # If no storage integration was selected, then delete the existing
         # external integration link.
         if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
-
             current_integration_link = get_one(
                 self._db,
                 ExternalIntegrationLink,
@@ -2429,6 +2460,11 @@ class AdminSearchController(AdminController):
     # 1 hour in-memory cache
     @memoize(ttls=3600)
     def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
+        licenses_filter = or_(
+            LicensePool.open_access == True,
+            LicensePool.self_hosted == True,
+            LicensePool.licenses_owned != 0,
+        )
 
         # Reusable queries
         classification_query = (
@@ -2437,13 +2473,13 @@ class AdminSearchController(AdminController):
             .join(
                 LicensePool, LicensePool.identifier_id == Classification.identifier_id
             )
-            .filter(LicensePool.collection_id.in_(collection_ids))
+            .filter(LicensePool.collection_id.in_(collection_ids), licenses_filter)
         )
 
         editions_query = (
             self._db.query(LicensePool)
             .join(LicensePool.presentation_edition)
-            .filter(LicensePool.collection_id.in_(collection_ids))
+            .filter(LicensePool.collection_id.in_(collection_ids), licenses_filter)
         )
 
         # Concrete values

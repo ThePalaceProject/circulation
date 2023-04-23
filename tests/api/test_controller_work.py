@@ -19,7 +19,7 @@ from api.lanes import (
 )
 from api.novelist import MockNoveListAPI
 from api.opds import LibraryAnnotator
-from api.problem_details import NO_SUCH_LANE
+from api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import SortKeyPagination, mock_search_index
@@ -33,8 +33,10 @@ from core.model import (
     LicensePool,
     MediaTypes,
     Resource,
+    get_one,
     tuple_to_numericrange,
 )
+from core.model.work import Work
 from core.opds import AcquisitionFeed
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
@@ -824,6 +826,23 @@ class TestWorkController:
 
         # That's it!
         assert {} == kwargs
+
+    def test_related_no_works(self, work_fixture: WorkFixture):
+        """Test when an identifier's pool does not have a work attached to it"""
+        db = work_fixture.db
+
+        # Create a work and remove it from the licensepool
+        work: Work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+        pool = get_one(db.session, LicensePool, work_id=work.id)
+        pool.work_id = None
+        db.session.commit()
+
+        with work_fixture.request_context_with_library("/"):
+            result = work_fixture.manager.work_controller.related(
+                identifier.type, identifier.identifier
+            )
+        assert result == NOT_FOUND_ON_REMOTE
 
     def test_series(self, work_fixture: WorkFixture):
         # Test the ability of the series() method to generate an OPDS

@@ -6,10 +6,9 @@ from datetime import datetime
 from typing import Callable, Collection, List
 
 import pytest
-from elasticsearch.exceptions import ElasticsearchException
-from elasticsearch_dsl import Q
-from elasticsearch_dsl.function import RandomScore, ScriptScore
-from elasticsearch_dsl.query import (
+from opensearch_dsl import Q
+from opensearch_dsl.function import RandomScore, ScriptScore
+from opensearch_dsl.query import (
     Bool,
     DisMax,
     Match,
@@ -19,8 +18,9 @@ from elasticsearch_dsl.query import (
     MultiMatch,
     Nested,
 )
-from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
-from elasticsearch_dsl.query import Range, Term, Terms
+from opensearch_dsl.query import Query as opensearch_dsl_query
+from opensearch_dsl.query import Range, Term, Terms
+from opensearchpy.exceptions import OpenSearchException
 from parameterized import parameterized
 from psycopg2.extras import NumericRange
 
@@ -120,7 +120,7 @@ class TestExternalSearch:
         # happens if there's a problem communicating with that server.
         class Mock(ExternalSearchIndex):
             def set_works_index_and_alias(self, _db):
-                raise ElasticsearchException("very bad")
+                raise OpenSearchException("very bad")
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             Mock(session)
@@ -159,10 +159,10 @@ class TestExternalSearch:
         alias = "test_index-" + external_search_fixture.search.CURRENT_ALIAS_SUFFIX
         assert alias == external_search_fixture.search.works_alias
         assert True == external_search_fixture.search.indices.exists_alias(
-            current_index, alias
+            alias, index=current_index
         )
         assert False == external_search_fixture.search.indices.exists_alias(
-            "the_other_index", alias
+            alias, index="the_other_index"
         )
 
     def test_set_works_index_and_alias(
@@ -202,7 +202,7 @@ class TestExternalSearch:
         # The alias is also created from the configuration.
         alias = "test_index-" + search.CURRENT_ALIAS_SUFFIX
         assert alias == search.works_alias
-        assert True == search.indices.exists_alias(index_name, alias)
+        assert True == search.indices.exists_alias(alias, index_name)
 
         # If the -current alias is already set on a different index, it
         # won't be reassigned. Instead, search will occur against the
@@ -4592,7 +4592,7 @@ class TestFilter:
         if filters is None:
             # There are no active filters.
             filters = []
-        if isinstance(filters, elasticsearch_dsl_query):
+        if isinstance(filters, opensearch_dsl_query):
             # An initial filter was passed in. Convert it to a list.
             filters = [filters]
         filters.append(new_filter)

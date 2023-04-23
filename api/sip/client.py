@@ -35,6 +35,7 @@ from typing import Callable, Optional
 
 import certifi
 
+from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.sip.dialect import GenericILS
 from core.util.datetime_helpers import utc_now
 
@@ -222,6 +223,8 @@ class SIPClient(Constants):
 
     # Maximum retries of a SIP message before failing.
     MAXIMUM_RETRIES = 5
+    # Timeout in seconds
+    TIMEOUT = 3
 
     # These are the subfield names associated with the 'patron status'
     # field as specified in the SIP2 spec.
@@ -351,7 +354,9 @@ class SIPClient(Constants):
                 self.location_code,
             )
             if response["login_ok"] != "1":
-                raise OSError("Error logging in: %r" % response)
+                raise PatronAuthorizationFailedException(
+                    "Error logging in: %r" % response
+                )
             return response
 
     def patron_information(self, *args, **kwargs):
@@ -386,7 +391,7 @@ class SIPClient(Constants):
             else:
                 self.connection = self.make_insecure_connection()
 
-            self.connection.settimeout(12)
+            self.connection.settimeout(self.TIMEOUT)
             self.connection.connect((self.target_server, self.target_port))
         except OSError as message:
             raise OSError(

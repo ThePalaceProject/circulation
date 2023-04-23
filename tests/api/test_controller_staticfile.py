@@ -44,7 +44,7 @@ class TestStaticFileController:
     ):
         files = resources_files_fixture
 
-        filename = "CleverLoginButton280.png"
+        filename = "FirstBookLoginButton280.png"
         expected_content = files.sample_data(filename)
 
         with circulation_fixture.app.test_request_context("/"):

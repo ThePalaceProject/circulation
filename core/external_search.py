@@ -8,11 +8,9 @@ from collections import defaultdict
 from typing import Any, Dict, Optional, Union
 
 from attr import define
-from elasticsearch import Elasticsearch
-from elasticsearch.exceptions import ElasticsearchException, RequestError
-from elasticsearch.helpers import bulk as elasticsearch_bulk
-from elasticsearch_dsl import SF, MultiSearch, Search
-from elasticsearch_dsl.query import (
+from flask_babel import lazy_gettext as _
+from opensearch_dsl import SF, MultiSearch, Search
+from opensearch_dsl.query import (
     Bool,
     DisMax,
     Exists,
@@ -24,9 +22,11 @@ from elasticsearch_dsl.query import (
     MultiMatch,
     Nested,
 )
-from elasticsearch_dsl.query import Query as BaseQuery
-from elasticsearch_dsl.query import Range, Regexp, Term, Terms
-from flask_babel import lazy_gettext as _
+from opensearch_dsl.query import Query as BaseQuery
+from opensearch_dsl.query import Range, Regexp, Term, Terms
+from opensearchpy import OpenSearch
+from opensearchpy.exceptions import OpenSearchException, RequestError
+from opensearchpy.helpers import bulk as opensearch_bulk
 from spellchecker import SpellChecker
 
 from core.util import Values
@@ -154,7 +154,7 @@ class ExternalSearchIndex(HasSelfTests):
 
     @classmethod
     def search_integration(cls, _db) -> ExternalIntegration:
-        """Look up the ExternalIntegration for ElasticSearch."""
+        """Look up the ExternalIntegration for Opensearch."""
         return ExternalIntegration.lookup(
             _db, ExternalIntegration.ELASTICSEARCH, goal=ExternalIntegration.SEARCH_GOAL
         )
@@ -210,7 +210,7 @@ class ExternalSearchIndex(HasSelfTests):
         """Constructor
 
         :param in_testing: Set this to true if you don't want an
-        Elasticsearch client to be created, e.g. because you're
+        Opensearch client to be created, e.g. because you're
         running a unit test of the constructor.
 
 
@@ -274,7 +274,7 @@ class ExternalSearchIndex(HasSelfTests):
                     works_index,
                     url,
                 )
-                ExternalSearchIndex.__client = Elasticsearch(
+                ExternalSearchIndex.__client = OpenSearch(
                     url, use_ssl=use_ssl, timeout=20, maxsize=25
                 )
 
@@ -294,7 +294,7 @@ class ExternalSearchIndex(HasSelfTests):
                 # This is almost certainly a problem with our code,
                 # not a communications error.
                 raise
-            except ElasticsearchException as e:
+            except OpenSearchException as e:
                 raise CannotLoadConfiguration(
                     "Exception communicating with Search server: %s" % repr(e)
                 )
@@ -302,7 +302,7 @@ class ExternalSearchIndex(HasSelfTests):
         self.search = Search(using=self.__client, index=self.works_alias)
 
         def bulk(docs, **kwargs):
-            return elasticsearch_bulk(self.__client, docs, **kwargs)
+            return opensearch_bulk(self.__client, docs, **kwargs)
 
         self.bulk = bulk
 
@@ -373,7 +373,7 @@ class ExternalSearchIndex(HasSelfTests):
             self.works_alias = self.__client.works_alias = name
 
         if alias_is_set:
-            # The alias exists on the Elasticsearch server, so it must
+            # The alias exists on the Opensearch server, so it must
             # point _somewhere.
             exists_on_works_index = self.indices.exists_alias(
                 index=self.works_index, name=alias_name
@@ -534,12 +534,12 @@ class ExternalSearchIndex(HasSelfTests):
             of the search results.
         :param debug: If this is True, debugging information will
             be gathered and logged. The search query will ask
-            ElasticSearch for all available fields, not just the
+            Opensearch for all available fields, not just the
             fields known to be used by the feed generation code.  This
             all comes at a slight performance cost.
         :return: A list of Hit objects containing information about
             the search results. This will include the values of any
-            script fields calculated by ElasticSearch during the
+            script fields calculated by Opensearch during the
             search process.
         """
         if isinstance(filter, Filter) and filter.match_nothing is True:
@@ -557,7 +557,7 @@ class ExternalSearchIndex(HasSelfTests):
         as a big list.
 
         :param queries: A list of (query string, Filter, Pagination) 3-tuples,
-            each representing an Elasticsearch query to be run.
+            each representing an Opensearch query to be run.
 
         :yield: A sequence of lists, one per item in `queries`,
             each containing the search results from that
@@ -592,7 +592,7 @@ class ExternalSearchIndex(HasSelfTests):
             multi = multi.add(search)
 
         a = time.time()
-        # NOTE: This is the code that actually executes the ElasticSearch
+        # NOTE: This is the code that actually executes the OpenSearch
         # request.
         resultset = [x for x in multi.execute()]
 
@@ -615,7 +615,7 @@ class ExternalSearchIndex(HasSelfTests):
             # Tell the Pagination object about the page that was just
             # 'loaded' so that Pagination.next_page will work.
             #
-            # The pagination itself happened inside the Elasticsearch
+            # The pagination itself happened inside the Opensearch
             # server when the query ran.
             pagination.page_loaded(results)
             yield results
@@ -664,7 +664,7 @@ class ExternalSearchIndex(HasSelfTests):
         # giving up on the batch.
         if len(errors) == len(docs):
             if retry_on_batch_failure:
-                self.log.info("Elasticsearch bulk update timed out, trying again.")
+                self.log.info("Opensearch bulk update timed out, trying again.")
                 return self.bulk_update(needs_add, retry_on_batch_failure=False)
             else:
                 docs = []
@@ -809,7 +809,7 @@ class ExternalSearchIndex(HasSelfTests):
 
 class MappingDocument:
     """This class knows a lot about how the 'properties' section of an
-    Elasticsearch mapping document (or one of its subdocuments) is
+    Opensearch mapping document (or one of its subdocuments) is
     created.
     """
 
@@ -844,7 +844,7 @@ class MappingDocument:
             hook_method(description)
         # TODO: Cross-check the description for correctness. Do the
         # things it mention actually exist? Better to fail now with a
-        # useful error than to fail when talking to Elasticsearch.
+        # useful error than to fail when talking to Opensearch.
         self.properties[name] = description
 
     def add_properties(self, properties_by_type):
@@ -870,7 +870,7 @@ class MappingDocument:
         """Hook method to handle the custom 'basic_text'
         property type.
 
-        This type does not exist in Elasticsearch. It's our name for a
+        This type does not exist in Opensearch. It's our name for a
         text field that is indexed three times: once using our default
         English analyzer ("title"), once using an analyzer with
         minimal stemming ("title.minimal") for close matches, and once
@@ -891,7 +891,7 @@ class MappingDocument:
         """Hook method to handle the custom 'filterable_text'
         property type.
 
-        This type does not exist in Elasticsearch. It's our name for a
+        This type does not exist in Opensearch. It's our name for a
         text field that can be used in both queries and filters.
 
         This field is indexed _four_ times -- the three ways a normal
@@ -933,10 +933,10 @@ class Mapping(MappingDocument):
     @classmethod
     def script_name(cls, base_name):
         """Scope a script name with "simplified" (to avoid confusion with
-        other applications on the Elasticsearch server), and the
+        other applications on the Opensearch server), and the
         version number (to avoid confusion with other versions *of
         this application*, which may implement the same script
-        differently, on this Elasticsearch server).
+        differently, on this Opensearch server).
         """
         return f"simplified.{base_name}.{cls.version_name()}"
 
@@ -992,7 +992,7 @@ class Mapping(MappingDocument):
 
 
 class CurrentMapping(Mapping):
-    """The first mapping to support only Elasticsearch 6.
+    """The first mapping to support only Opensearch 1.x.
 
     The body of this mapping looks for bibliographic information in
     the core document, primarily used for matching search
@@ -1062,7 +1062,7 @@ class CurrentMapping(Mapping):
 
         # We use three analyzers:
         #
-        # 1. An analyzer based on Elasticsearch's default English
+        # 1. An analyzer based on Opensearch's default English
         #    analyzer, with a normal stemmer -- used as the default
         #    view of a text field such as 'description'.
         #
@@ -1078,7 +1078,7 @@ class CurrentMapping(Mapping):
         # The analyzers are identical except for the end of the filter
         # chain.
         #
-        # All three analyzers are based on Elasticsearch's default English
+        # All three analyzers are based on Opensearch's default English
         # analyzer, defined here:
         # https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-lang-analyzer.html#english-analyzer
 
@@ -1109,7 +1109,7 @@ class CurrentMapping(Mapping):
         #    -- it's more flexible).
 
         # Here's the common analyzer configuration. The comment NEW
-        # means this is something we added on top of Elasticsearch's
+        # means this is something we added on top of Opensearch's
         # default configuration for the English analyzer.
         common_text_analyzer = dict(
             type="custom",
@@ -1121,7 +1121,7 @@ class CurrentMapping(Mapping):
             "asciifolding",  # NEW
         ]
 
-        # The default_text_analyzer uses Elasticsearch's standard
+        # The default_text_analyzer uses Opensearch's standard
         # English stemmer and removes stopwords.
         self.analyzers["en_default_text_analyzer"] = dict(common_text_analyzer)
         self.analyzers["en_default_text_analyzer"]["filter"] = common_filter + [
@@ -1268,7 +1268,7 @@ return champion;
 
 class SearchBase:
     """A superclass containing helper methods for creating and modifying
-    Elasticsearch-dsl Query-type objects.
+    opensearch-dsl Query-type objects.
     """
 
     @classmethod
@@ -1310,7 +1310,7 @@ class SearchBase:
         :param subdocument: The name of the subdocument to query
         against, e.g. "contributors".
 
-        :param query: An elasticsearch-dsl Query object (not the Query
+        :param query: An opensearch-dsl Query object (not the Query
         objects defined by this class).
         """
         return Nested(path=subdocument, query=query)
@@ -1347,7 +1347,7 @@ class SearchBase:
 
     @classmethod
     def make_target_age_query(cls, target_age, boost=1.1):
-        """Create an Elasticsearch query object for a boolean query that
+        """Create an Opensearch query object for a boolean query that
         matches works whose target ages overlap (partially or
         entirely) the given age range.
 
@@ -1375,7 +1375,7 @@ class SearchBase:
 
     @classmethod
     def _combine_hypotheses(self, hypotheses):
-        """Build an Elasticsearch Query object that tests a number
+        """Build an Opensearch Query object that tests a number
         of hypotheses at once.
 
         :return: A DisMax query if there are hypotheses to be tested;
@@ -1504,7 +1504,7 @@ class Query(SearchBase):
         self.use_query_parser = use_query_parser
 
         # Pre-calculate some values that will be checked frequently
-        # when generating the Elasticsearch-dsl query.
+        # when generating the opensearch-dsl query.
 
         # Check if the string contains English stopwords.
         if query_string:
@@ -1546,17 +1546,17 @@ class Query(SearchBase):
             # run the 'fuzzy' hypotheses at all.
             self.fuzzy_coefficient = 0
 
-    def build(self, elasticsearch, pagination=None):
-        """Make an Elasticsearch-DSL Search object out of this query.
+    def build(self, opensearch, pagination=None):
+        """Make an opensearch-dsl Search object out of this query.
 
-        :param elasticsearch: An Elasticsearch-DSL Search object. This
-            object is ready to run a search against an Elasticsearch server,
-            but it doesn't represent any particular Elasticsearch query.
+        :param opensearch: An opensearch-dsl Search object. This
+            object is ready to run a search against an Opensearch server,
+            but it doesn't represent any particular Opensearch query.
 
         :param pagination: A Pagination object indicating a slice of
             results to pull from the search index.
 
-        :return: An Elasticsearch-DSL Search object that's prepared
+        :return: An opensearch-dsl Search object that's prepared
             to run this specific query.
         """
         query = self.elasticsearch_query
@@ -1581,10 +1581,10 @@ class Query(SearchBase):
         if query_filter:
             query = Bool(must=query, filter=query_filter)
 
-        # We now have an Elasticsearch-DSL Query object (which isn't
+        # We now have an opensearch-dsl Query object (which isn't
         # tied to a specific server). Turn it into a Search object
         # (which is).
-        search = elasticsearch.query(query)
+        search = opensearch.query(query)
 
         # Now update the 'nested filters' dictionary with the
         # universal nested filters -- no suppressed license pools,
@@ -1627,7 +1627,7 @@ class Query(SearchBase):
 
     @property
     def elasticsearch_query(self):
-        """Build an Elasticsearch-DSL Query object for this query string."""
+        """Build an opensearch-dsl Query object for this query string."""
 
         # The query will most likely be a dis_max query, which tests a
         # number of hypotheses about what the query string might
@@ -1829,18 +1829,18 @@ class Query(SearchBase):
         :param query_string: The query string that might be the name
             of an author.
 
-        :yield: A sequence of Elasticsearch-DSL query objects to be
+        :yield: A sequence of opensearch-dsl query objects to be
             considered as hypotheses.
         """
 
-        # Ask Elasticsearch to match what was typed against
+        # Ask Opensearch to match what was typed against
         # contributors.display_name.
         yield from self._author_field_must_match("display_name", self.query_string)
 
         # Although almost nobody types a sort name into a search box,
         # they may copy-and-paste one. Furthermore, we may only know
         # some contributors by their sort name.  Try to convert what
-        # was typed into a sort name, and ask Elasticsearch to match
+        # was typed into a sort name, and ask Opensearch to match
         # that against contributors.sort_name.
         sort_name = display_name_to_sort_name(self.query_string)
         if sort_name:
@@ -1875,7 +1875,7 @@ class Query(SearchBase):
         in practice this dramatically slows down searches without
         greatly improving results.
 
-        :param base_query: An Elasticsearch-DSL query object to use
+        :param base_query: An opensearch-dsl query object to use
            when adding restrictions.
         :param base_score: The relative score of the base query. The resulting
            hypotheses will be weighted based on this score.
@@ -1968,7 +1968,7 @@ class Query(SearchBase):
         # proportional to the length of the query.
         #
         # max_expansions limits the number of possible alternates
-        # Elasticsearch will consider for any given word.
+        # Opensearch will consider for any given word.
         kwargs.update(fuzziness="AUTO", max_expansions=2)
         yield Match(**{field_name: kwargs}), self.fuzzy_coefficient * 0.50
 
@@ -1987,7 +1987,7 @@ class Query(SearchBase):
         :param hypotheses: A list of active hypotheses, to be
         appended to if necessary.
 
-        :param query: An Elasticsearch-DSL Query object (or list of
+        :param query: An opensearch-dsl Query object (or list of
         Query objects) to be used as the basis for this hypothesis. If
         there's nothing here, no new hypothesis will be generated.
 
@@ -2309,7 +2309,7 @@ class QueryParser:
         """Parse the query string and create a list of clauses
         that will boost certain types of books.
 
-        Use .query to get an Elasticsearch-DSL Query object.
+        Use .query to get an opensearch-dsl Query object.
 
         :param query_class: Pass in a mock of Query here during testing
         to generate 'query' objects that are easier for you to test.
@@ -2760,7 +2760,7 @@ class Filter(SearchBase):
         return with_all_ages
 
     def build(self, _chain_filters=None):
-        """Convert this object to an Elasticsearch Filter object.
+        """Convert this object to an Opensearch Filter object.
 
         :return: A 2-tuple (filter, nested_filters). Filters on fields
            within nested documents (such as
@@ -2980,7 +2980,7 @@ class Filter(SearchBase):
 
     @property
     def sort_order(self):
-        """Create a description, for use in an Elasticsearch document,
+        """Create a description, for use in an Opensearch document,
         explaining how search results should be ordered.
 
         :return: A list of dictionaries, each dictionary mapping a
@@ -3014,7 +3014,7 @@ class Filter(SearchBase):
 
     @property
     def asc(self):
-        "Convert order_ascending to Elasticsearch-speak."
+        "Convert order_ascending to Opensearch-speak."
         if self.order_ascending is False:
             return "desc"
         else:
@@ -3325,7 +3325,7 @@ class Filter(SearchBase):
 
 
 class SortKeyPagination(Pagination):
-    """An Elasticsearch-specific implementation of Pagination that
+    """An Opensearch-specific implementation of Pagination that
     paginates search results by tracking where in a sorted list the
     previous page left off, rather than using a numeric index into the
     list.
@@ -3396,7 +3396,7 @@ class SortKeyPagination(Pagination):
         """Modify the given Search object so that it starts
         picking up items immediately after the previous page.
 
-        :param search: An elasticsearch-dsl Search object.
+        :param search: An opensearch-dsl Search object.
         """
         if self.last_item_on_previous_page:
             search = search.update_from_dict(
@@ -3438,7 +3438,7 @@ class SortKeyPagination(Pagination):
         SortKeyPagination object capable of generating the subsequent
         page.
 
-        :param page: A list of elasticsearch-dsl Hit objects.
+        :param page: A list of opensearch-dsl Hit objects.
         """
         super().page_loaded(page)
         if page:
@@ -3453,14 +3453,14 @@ class SortKeyPagination(Pagination):
 
 class WorkSearchResult:
     """Wraps a Work object to give extra information obtained from
-    ElasticSearch.
+    Opensearch.
 
     This object acts just like a Work (though isinstance(x, Work) will
-    fail), with one exception: you can access the raw ElasticSearch Hit
+    fail), with one exception: you can access the raw Opensearch Hit
     result as ._hit.
 
     This is useful when a Work needs to be 'tagged' with information
-    obtained through Elasticsearch, such as its 'last modified' date
+    obtained through Opensearch, such as its 'last modified' date
     the context of a specific lane.
     """
 
@@ -3572,7 +3572,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
 
 
 class MockMeta(dict):
-    """Mock the .meta object associated with an Elasticsearch search
+    """Mock the .meta object associated with an Opensearch search
     result.  This is necessary to get SortKeyPagination to work with
     MockExternalSearchIndex.
     """

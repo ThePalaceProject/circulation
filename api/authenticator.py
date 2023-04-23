@@ -1,18 +1,16 @@
-import datetime
+from __future__ import annotations
+
 import importlib
 import json
 import logging
 import re
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from abc import ABC, ABCMeta
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Iterable
 
 import flask
 import jwt
-from flask import redirect, url_for
+from flask import url_for
 from flask_babel import lazy_gettext as _
 from money import Money
 from sqlalchemy.orm.exc import NoResultFound
@@ -22,6 +20,7 @@ from werkzeug.datastructures import Headers
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
+from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from api.saml.configuration.model import SAMLSettings
@@ -29,13 +28,13 @@ from core.analytics import Analytics
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
-    Credential,
-    DataSource,
     ExternalIntegration,
+    ExternalIntegrationError,
     Library,
     Patron,
     PatronProfileStorage,
     Session,
+    create,
     get_one,
     get_one_or_create,
 )
@@ -48,10 +47,9 @@ from core.util.authentication_for_opds import (
     OPDSAuthenticationFlow,
 )
 from core.util.datetime_helpers import utc_now
-from core.util.http import RemoteIntegrationException
+from core.util.http import RemoteIntegrationException, RequestTimedOut
 from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.problem_detail import ProblemDetail
-from core.util.problem_detail import json as pd_json
 
 from .config import CannotLoadConfiguration, Configuration, IntegrationException
 from .problem_details import *
@@ -538,10 +536,10 @@ class Authenticator:
     log = logging.getLogger("api.authenticator.Authenticator")
 
     def __init__(
-        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics] = None
+        self, _db, libraries: Iterable[Library], analytics: Analytics | None = None
     ):
         # Create authenticators
-        self.library_authenticators: Dict[str, LibraryAuthenticator] = {}
+        self.library_authenticators: dict[str, LibraryAuthenticator] = {}
         self.populate_authenticators(_db, libraries, analytics)
 
     @property
@@ -550,7 +548,7 @@ class Authenticator:
 
     @log_elapsed_time(log_method=log.debug, message_prefix="populate_authenticators")
     def populate_authenticators(
-        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics]
+        self, _db, libraries: Iterable[Library], analytics: Analytics | None
     ):
         for library in libraries:
             self.library_authenticators[
@@ -579,11 +577,6 @@ class Authenticator:
 
     def create_bearer_token(self, *args, **kwargs):
         return self.invoke_authenticator_method("create_bearer_token", *args, **kwargs)
-
-    def oauth_provider_lookup(self, *args, **kwargs):
-        return self.invoke_authenticator_method(
-            "oauth_provider_lookup", *args, **kwargs
-        )
 
     def saml_provider_lookup(self, *args, **kwargs):
         return self.invoke_authenticator_method("saml_provider_lookup", *args, **kwargs)
@@ -636,10 +629,7 @@ class LibraryAuthenticator:
                 )
                 authenticator.initialization_exceptions[integration.id] = e
 
-        if (
-            authenticator.oauth_providers_by_name
-            or authenticator.saml_providers_by_name
-        ):
+        if authenticator.saml_providers_by_name:
             # NOTE: this will immediately commit the database session,
             # which may not be what you want during a test. To avoid
             # this, you can create the bearer token signing secret as
@@ -657,7 +647,6 @@ class LibraryAuthenticator:
         _db,
         library,
         basic_auth_provider=None,
-        oauth_providers=None,
         saml_providers=None,
         bearer_token_signing_secret=None,
         authentication_document_annotator=None,
@@ -672,9 +661,6 @@ class LibraryAuthenticator:
 
         :param basic_auth_provider: The AuthenticatonProvider that handles
         HTTP Basic Auth requests.
-
-        :param oauth_providers: A list of AuthenticationProviders that handle
-        OAuth requests.
 
         :param saml_providers: A list of AuthenticationProviders that handle
         SAML requests.
@@ -691,20 +677,17 @@ class LibraryAuthenticator:
         self.authentication_document_annotator = authentication_document_annotator
 
         self.basic_auth_provider = basic_auth_provider
-        self.oauth_providers_by_name = dict()
         self.saml_providers_by_name = dict()
         self.bearer_token_signing_secret = bearer_token_signing_secret
         self.initialization_exceptions = dict()
+
+        self.log = logging.getLogger("Authenticator")
 
         # Make sure there's a public/private key pair for this
         # library. This makes it possible to register the library with
         # discovery services. Store the public key here for
         # convenience; leave the private key in the database.
         self.public_key, ignore = self.key_pair
-
-        if oauth_providers:
-            for provider in oauth_providers:
-                self.oauth_providers_by_name[provider.NAME] = provider
 
         if saml_providers:
             for provider in saml_providers:
@@ -715,11 +698,7 @@ class LibraryAuthenticator:
     @property
     def supports_patron_authentication(self):
         """Does this library have any way of authenticating patrons at all?"""
-        if (
-            self.basic_auth_provider
-            or self.oauth_providers_by_name
-            or self.saml_providers_by_name
-        ):
+        if self.basic_auth_provider or self.saml_providers_by_name:
             return True
         return False
 
@@ -745,16 +724,9 @@ class LibraryAuthenticator:
         return Library.by_id(self._db, self.library_id)
 
     def assert_ready_for_token_signing(self):
-        """If this LibraryAuthenticator has OAuth providers, ensure that it
+        """If this LibraryAuthenticator has SAML providers, ensure that it
         also has a secret it can use to sign bearer tokens.
         """
-        if self.oauth_providers_by_name and not self.bearer_token_signing_secret:
-            raise CannotLoadConfiguration(
-                _(
-                    "OAuth providers are configured, but secret for signing bearer tokens is not."
-                )
-            )
-
         if self.saml_providers_by_name and not self.bearer_token_signing_secret:
             raise CannotLoadConfiguration(
                 _(
@@ -810,8 +782,6 @@ class LibraryAuthenticator:
             self.register_basic_auth_provider(provider)
             # TODO: Run a self-test, or at least check that we have
             # the ability to run one.
-        elif issubclass(provider_class, OAuthAuthenticationProvider):
-            self.register_oauth_provider(provider)
         elif issubclass(provider_class, BaseSAMLAuthenticationProvider):
             self.register_saml_provider(provider)
         else:
@@ -824,14 +794,6 @@ class LibraryAuthenticator:
         if self.basic_auth_provider != None and self.basic_auth_provider != provider:
             raise CannotLoadConfiguration("Two basic auth providers configured")
         self.basic_auth_provider = provider
-
-    def register_oauth_provider(self, provider):
-        already_registered = self.oauth_providers_by_name.get(provider.NAME)
-        if already_registered and already_registered != provider:
-            raise CannotLoadConfiguration(
-                'Two different OAuth providers claim the name "%s"' % (provider.NAME)
-            )
-        self.oauth_providers_by_name[provider.NAME] = provider
 
     def register_saml_provider(self, provider):
         already_registered = self.saml_providers_by_name.get(provider.NAME)
@@ -846,7 +808,6 @@ class LibraryAuthenticator:
         """An iterator over all registered AuthenticationProviders."""
         if self.basic_auth_provider:
             yield self.basic_auth_provider
-        yield from list(self.oauth_providers_by_name.values())
         yield from list(self.saml_providers_by_name.values())
 
     def authenticated_patron(self, _db, header):
@@ -861,6 +822,8 @@ class LibraryAuthenticator:
             credentials do not authenticate any particular patron. A
             ProblemDetail if an error occurs.
         """
+        provider = None
+        provider_token = None
         if (
             self.basic_auth_provider
             and isinstance(header, dict)
@@ -868,30 +831,8 @@ class LibraryAuthenticator:
         ):
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
-            return self.basic_auth_provider.authenticated_patron(_db, header)
-        elif (
-            self.oauth_providers_by_name
-            and isinstance(header, (bytes, str))
-            and "bearer" in header.lower()
-        ):
-
-            # The patron wants to use an
-            # OAuthAuthenticationProvider. Figure out which one.
-            try:
-                provider_name, provider_token = self.decode_bearer_token_from_header(
-                    header
-                )
-            except jwt.exceptions.InvalidTokenError as e:
-                return INVALID_OAUTH_BEARER_TOKEN
-            provider = self.oauth_provider_lookup(provider_name)
-            if isinstance(provider, ProblemDetail):
-                # There was a problem turning the provider name into
-                # a registered OAuthAuthenticationProvider.
-                return provider
-
-            # Ask the OAuthAuthenticationProvider to turn its token
-            # into a Patron.
-            return provider.authenticated_patron(_db, provider_token)
+            provider = self.basic_auth_provider
+            provider_token = header
         elif (
             self.saml_providers_by_name
             and isinstance(header, (bytes, str))
@@ -912,13 +853,39 @@ class LibraryAuthenticator:
                 # a registered SAMLAuthenticationProvider.
                 return provider
 
-            # Ask the SAMLAuthenticationProvider to turn its token
-            # into a Patron.
-            return provider.authenticated_patron(_db, provider_token)
+        if provider and provider_token:
+            # Turn the token/header into a patron
+            try:
+                if self._is_provider_available(_db, provider):
+                    return provider.authenticated_patron(_db, provider_token)
+                else:
+                    return REMOTE_INTEGRATION_FAILED
+            except (RequestTimedOut, RemoteIntegrationException) as ex:
+                name = provider.external_integration(_db).name
+                self.log.error(f"Authentication Provider Error ({name}): {ex}")
+                self._record_provider_error(_db, provider, ex)
+                return REMOTE_INTEGRATION_FAILED
+            except PatronAuthorizationFailedException:
+                return INVALID_CREDENTIALS
 
         # We were unable to determine what was going on with the
         # Authenticate header.
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
+
+    def _record_provider_error(
+        self, _db, provider: AuthenticationProvider, error: Exception
+    ) -> ExternalIntegrationError:
+        record, _ = create(
+            _db,
+            ExternalIntegrationError,
+            external_integration_id=provider.external_integration_id,
+            time=utc_now(),
+            error=str(error),
+        )
+        return record
+
+    def _is_provider_available(self, _db, provider: AuthenticationProvider) -> bool:
+        return provider.external_integration(_db).status != ExternalIntegration.RED
 
     def get_credential_from_header(self, header):
         """Extract a password credential from a WWW-Authenticate header
@@ -937,26 +904,6 @@ class LibraryAuthenticator:
                 break
 
         return credential
-
-    def oauth_provider_lookup(self, provider_name):
-        """Look up the OAuthAuthenticationProvider with the given name. If that
-        doesn't work, return an appropriate ProblemDetail.
-        """
-        if not self.oauth_providers_by_name:
-            # We don't support OAuth at all.
-            return UNKNOWN_OAUTH_PROVIDER.detailed(
-                _("No OAuth providers are configured.")
-            )
-
-        if not provider_name or not provider_name in self.oauth_providers_by_name:
-            # The patron neglected to specify a provider, or specified
-            # one we don't support.
-            possibilities = ", ".join(list(self.oauth_providers_by_name.keys()))
-            return UNKNOWN_OAUTH_PROVIDER.detailed(
-                UNKNOWN_OAUTH_PROVIDER.detail
-                + _(" The known providers are: %s") % possibilities
-            )
-        return self.oauth_providers_by_name[provider_name]
 
     def saml_provider_lookup(self, provider_name):
         """Look up the SAMLAuthenticationProvider with the given name. If that
@@ -1294,7 +1241,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # Each subclass MUST define a value for FLOW_TYPE. This is used in the
     # Authentication for OPDS document to distinguish between
     # different types of authentication.
-    FLOW_TYPE: Optional[str] = None
+    FLOW_TYPE: str | None = None
 
     # If an AuthenticationProvider authenticates patrons without identifying
     # then as specific individuals (the way a geographic gate does),
@@ -1306,7 +1253,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # AuthenticationProviders. Image files MUST be stored in the
     # `resources/images` directory - the value here should be the
     # file name.
-    LOGIN_BUTTON_IMAGE: Optional[str] = None
+    LOGIN_BUTTON_IMAGE: str | None = None
 
     # Each authentication mechanism may have a list of SETTINGS that
     # must be configured for that mechanism, and may have a list of
@@ -1317,7 +1264,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # For example: { "key": "username", "label": _("Client ID") }.
     # A setting is optional by default, but may have "required" set to True.
 
-    SETTINGS: List[dict] = []
+    SETTINGS: list[dict] = []
 
     # Each library and authentication mechanism may have an ILS-assigned
     # branch or institution ID used in the SIP2 AO field.
@@ -1687,7 +1634,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
 
     def remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
+    ) -> ProblemDetail | PatronData | Patron | None:
         """Ask the remote for detailed information about a patron's account.
 
         This may be called in the course of authenticating a patron,
@@ -1767,7 +1714,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
     # passwords.
     alphanumerics_plus = "^[A-Za-z0-9@.-]+$"
     DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = alphanumerics_plus
-    DEFAULT_PASSWORD_REGULAR_EXPRESSION: Optional[str] = None
+    DEFAULT_PASSWORD_REGULAR_EXPRESSION: str | None = None
 
     # Configuration settings that are common to all Basic Auth-type
     # authentication techniques.
@@ -2010,7 +1957,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
     def _remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
+    ) -> ProblemDetail | PatronData | Patron | None:
         if not patron_or_patrondata:
             return None
         if isinstance(patron_or_patrondata, PatronData) or isinstance(
@@ -2025,7 +1972,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
     def remote_patron_lookup(
         self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
+    ) -> ProblemDetail | PatronData | Patron | None:
         """Ask the remote for information about this patron, and then make sure
         the patron belongs to the library associated with this BasicAuthenticationProvider."""
 
@@ -2432,386 +2379,6 @@ class BearerTokenSigner:
         return ConfigurationSetting.sitewide_secret(db, cls.BEARER_TOKEN_SIGNING_SECRET)
 
 
-class OAuthAuthenticationProvider(AuthenticationProvider, BearerTokenSigner):
-
-    # NOTE: Each subclass must define URI as per
-    # AuthenticationProvider superclass. This is the URI used to
-    # identify this particular authentication provider.
-    #
-    # Each subclass MAY define a value for FLOW_TYPE. This is the URI
-    # used to identify the authentication mechanism in Authentication
-    # For OPDS documents. The default is used to indicate the Library
-    # Simplified variant of OAuth.
-    #
-    # Each subclass MUST define an attribute called
-    # NAME, which is the name used to configure that
-    # subclass in the configuration file. Failure to define this
-    # attribute will result in an error in the constructor.
-    #
-    # Each subclass MUST define an attribute called TOKEN_TYPE, which
-    # is the name used in the database to distinguish this provider's
-    # tokens from other provider's tokens.
-    #
-    # Each subclass MUST define an attribute called
-    # TOKEN_DATA_SOURCE_NAME, which is the name of the DataSource
-    # under which bearer tokens for patrons will be registered.
-
-    # Finally, each subclass MUST define an attribute called
-    # EXTERNAL_AUTHENTICATE_URL. When the patron hits the
-    # oauth_authentication_redirect controller, they will be
-    # redirected to this URL on the OAuth provider's site.
-    #
-    # This URL template MUST contain Python variable interpolations
-    # for 'client_id', 'oauth_callback_url', 'state'. This way the
-    # OAuth provider knows which client is asking to authenticate a
-    # user, and it knows to send the client back to our
-    # oauth_authentication_callback controller. Finally, the
-    # oauth_callback controller can maintain any state from the
-    # initial request to oauth_authentication_redirect.
-    #
-    # As an example, here's the EXTERNAL_AUTHENTICATE_URL for the
-    # Clever OAuth provider:
-    #
-    # EXTERNAL_AUTHENTICATE_URL = "https://clever.com/oauth/authorize?response_type=code&client_id=%(client_id)s&redirect_uri=%(oauth_callback_url)s&state=%(state)s"
-
-    FLOW_TYPE = "http://librarysimplified.org/authtype/OAuth-with-intermediary"
-
-    # After verifying the patron's OAuth credentials, we send them a
-    # token. This configuration setting controls how long they can use
-    # that token before we check their OAuth credentials again.
-    OAUTH_TOKEN_EXPIRATION_DAYS = "token_expiration_days"
-
-    # This is the default value for that configuration setting.
-    DEFAULT_TOKEN_EXPIRATION_DAYS = 42
-
-    SETTINGS = [
-        {
-            "key": OAUTH_TOKEN_EXPIRATION_DAYS,
-            "type": "number",
-            "label": _("Days until OAuth token expires"),
-        },
-    ] + AuthenticationProvider.SETTINGS
-
-    def __init__(self, library, integration, analytics=None):
-        """Initialize this OAuthAuthenticationProvider.
-
-        :param library: Patrons authenticated through this provider
-            are associated with this Library. Don't store this object!
-            It's associated with a scoped database session. Just pull
-            normal Python objects out of it.
-        :param externalintegration: The ExternalIntegration that
-            configures this AuthenticationProvider. Don't store this
-            object! It's associated with a scoped database session. Just
-            pull normal Python objects out of it.
-        :param client_id: An ID given to us by the OAuth provider, used
-            to distinguish between us and its other clients.
-        :param client_secret: A secret key given to us by the OAuth
-            provider, used to validate that we are who we say we are.
-        :param token_expiration_days: This many days may elapse before
-            we ask the patron to go through the OAuth validation
-            process again.
-        """
-        super().__init__(library, integration, analytics)
-        self.client_id = integration.username
-        self.client_secret = integration.password
-        self.token_expiration_days = (
-            integration.setting(self.OAUTH_TOKEN_EXPIRATION_DAYS).int_value
-            or self.DEFAULT_TOKEN_EXPIRATION_DAYS
-        )
-
-    def authenticated_patron(self, _db, token):
-        """Go from an OAuth provider token to an authenticated Patron.
-
-        :param token: The provider token extracted from the Authorization
-            header. This is _not_ the bearer token found in
-            the Authorization header; it's the provider-specific token
-            embedded in that token.
-
-        :return: A Patron, if one can be authenticated. None, if the
-            credentials do not authenticate any particular patron. A
-            ProblemDetail if an error occurs.
-        """
-        data_source, ignore = self.token_data_source(_db)
-        credential = Credential.lookup_by_token(
-            _db, data_source, self.TOKEN_TYPE, token
-        )
-        if credential:
-            return credential.patron
-
-        # This token wasn't in our database, or was expired. The
-        # patron will have to log in through the OAuth provider again
-        # to get a new token.
-        return None
-
-    def create_token(self, _db, patron, token):
-        """Create a Credential object that ties the given patron to the
-        given provider token.
-        """
-        data_source, ignore = self.token_data_source(_db)
-        duration = datetime.timedelta(days=self.token_expiration_days)
-        return Credential.temporary_token_create(
-            _db, data_source, self.TOKEN_TYPE, patron, duration, token
-        )
-
-    def external_authenticate_url(self, state, _db):
-        """Generate the URL provided by the OAuth provider which will present
-        the patron with a login form.
-
-        :param state: A state variable to be propagated through to the OAuth
-            callback.
-        """
-        template = self.EXTERNAL_AUTHENTICATE_URL
-        arguments = self.external_authenticate_url_parameters(state, _db)
-        return template % arguments
-
-    def external_authenticate_url_parameters(self, state, _db):
-        """Arguments used to fill in the template EXTERNAL_AUTHENTICATE_URL."""
-        library_short_name = self.library(_db).short_name
-        return dict(
-            client_id=self.client_id,
-            state=state,
-            # When the patron finishes logging in to the OAuth provider,
-            # we want them to send the patron to this URL.
-            oauth_callback_url=OAuthController.oauth_authentication_callback_url(
-                library_short_name
-            ),
-        )
-
-    def oauth_callback(self, _db, code):
-        """Verify the incoming parameters with the OAuth provider. Exchange
-        the authorization code for an access token. Create or look up
-        appropriate database records.
-
-        :param code: The authorization code generated by the
-            authorization server, as per section 4.1.2 of RFC 6749. This
-            method will exchange the authorization code for an access token.
-
-        :return: A ProblemDetail if there's a problem. Otherwise, a
-            3-tuple (Credential, Patron, PatronData). The Credential
-            contains the access token provided by the OAuth provider. The
-            Patron object represents the authenticated Patron, and the
-            PatronData object includes information about the patron
-            obtained from the OAuth provider which cannot be stored in the
-            circulation manager's database, but which should be passed on
-            to the client.
-
-        """
-        # Ask the OAuth provider to verify the code that was passed
-        # in.  This will give us an access token we can use to look up
-        # detailed patron information.
-        token = self.remote_exchange_code_for_access_token(_db, code)
-        if isinstance(token, ProblemDetail):
-            return token
-
-        # Now that we have a bearer token, use it to look up patron
-        # information.
-        patrondata = self.remote_patron_lookup(token)
-        if isinstance(patrondata, ProblemDetail):
-            return patrondata
-
-        for identifier in patrondata.authorization_identifiers:
-            result = self.enforce_library_identifier_restriction(identifier, patrondata)
-            if result:
-                patrondata = result
-                break
-        else:
-            # None of the patron's authorization identifiers match.
-            # This patron was able to validate with the OAuth provider,
-            # but they are not a patron of _this_ library.
-            return PATRON_OF_ANOTHER_LIBRARY
-
-        # Convert the PatronData into a Patron object.
-        patron, is_new = patrondata.get_or_create_patron(
-            _db, self.library_id, analytics=self.analytics
-        )
-
-        # Create a credential for the Patron.
-        credential, is_new = self.create_token(_db, patron, token)
-        return credential, patron, patrondata
-
-    def remote_exchange_authorization_code_for_access_token(self, _db, code):
-        """Ask the OAuth provider to convert a code (passed in to the OAuth
-        callback) into a bearer token.
-
-        We can use the bearer token to act on behalf of a specific
-        patron. It also gives us confidence that the patron
-        authenticated correctly with the OAuth provider.
-
-        :return: A ProblemDetail if there's a problem; otherwise, the
-            bearer token.
-        """
-        raise NotImplementedError()
-
-    def remote_patron_lookup(self, access_token):
-        """Use a bearer token to look up as much information as possible about
-        a patron.
-
-        :return: A ProblemDetail if there's a problem. Otherwise, a PatronData.
-        """
-        raise NotImplementedError()
-
-    def _internal_authenticate_url(self, _db):
-        """A patron who wants to log in should hit this URL on the circulation
-        manager. They'll be redirected to the OAuth provider, which will
-        take care of it.
-        """
-        library = self.library(_db)
-
-        return url_for(
-            "oauth_authenticate",
-            _external=True,
-            provider=self.NAME,
-            library_short_name=library.short_name,
-        )
-
-    def _authentication_flow_document(self, _db):
-        """Create a Authentication Flow object for use in an Authentication for
-        OPDS document.
-
-        Example:
-        {
-            "type": "http://librarysimplified.org/authtype/OAuth-with-intermediary"
-            "description": "My OAuth Provider",
-            "links": [
-              { "rel" : "authenticate"
-                "href": "https://circulation.library.org/oauth_authenticate?provider=MyOAuth" }
-            ]
-        }
-        """
-        flow_doc = dict(
-            description=self.NAME,
-            links=[dict(rel="authenticate", href=self._internal_authenticate_url(_db))],
-        )
-        if self.LOGIN_BUTTON_IMAGE:
-            # TODO: I'm not sure if logo is appropriate for this, since it's a button
-            # with the logo on it rather than a plain logo. Perhaps we should use plain
-            # logos instead.
-            flow_doc["links"] += [
-                dict(
-                    rel="logo",
-                    href=url_for(
-                        "static_image", filename=self.LOGIN_BUTTON_IMAGE, _external=True
-                    ),
-                )
-            ]
-        return flow_doc
-
-    def token_data_source(self, _db):
-        return get_one_or_create(_db, DataSource, name=self.TOKEN_DATA_SOURCE_NAME)
-
-
-class OAuthController:
-
-    """A controller for handling requests that are part of the OAuth
-    credential dance.
-    """
-
-    def __init__(self, authenticator):
-        self.authenticator = authenticator
-
-    @classmethod
-    def oauth_authentication_callback_url(cls, library_short_name):
-        """The URL to the oauth_authentication_callback controller.
-
-        This is its own method because sometimes an
-        OAuthAuthenticationProvider needs to send it to the OAuth
-        provider to demonstrate that it knows which URL a patron was
-        redirected to.
-        """
-        return url_for(
-            "oauth_callback", library_short_name=library_short_name, _external=True
-        )
-
-    def oauth_authentication_redirect(self, params, _db):
-        """Redirect an unauthenticated patron to the authentication URL of the
-        appropriate OAuth provider.
-
-        Over on that other site, the patron will authenticate and be
-        redirected back to the circulation manager, ending up in
-        oauth_authentication_callback.
-        """
-        redirect_uri = params.get("redirect_uri", "")
-        provider_name = params.get("provider")
-        provider = self.authenticator.oauth_provider_lookup(provider_name)
-        if isinstance(provider, ProblemDetail):
-            return self._redirect_with_error(redirect_uri, provider)
-        state = dict(provider=provider.NAME, redirect_uri=redirect_uri)
-        state = json.dumps(state)
-        state = urllib.parse.quote(state)
-        return redirect(provider.external_authenticate_url(state, _db))
-
-    def oauth_authentication_callback(self, _db, params):
-        """Create a Patron object and a bearer token for a patron who has just
-        authenticated with one of our OAuth providers.
-
-        :return: A redirect to the `redirect_uri` kept in
-            `params['state']`, with the bearer token encoded into the
-            fragment identifier as `access_token` and useful information
-            about the patron encoded into the fragment identifier as
-            `patron_info`. For example, if params is
-
-            dict(state="http://oauthprovider.org/success")
-
-        Then the redirect URI might be:
-
-            http://oauthprovider.org/success#access_token=1234&patron_info=%7B%22name%22%3A+%22Mary+Shell%22%7D
-
-        It's the client's responsibility to extract the access_token,
-        start using it as a bearer token, and make sense of the
-        patron_info.
-        """
-        code = params.get("code")
-        state = params.get("state")
-        if not code or not state:
-            return INVALID_OAUTH_CALLBACK_PARAMETERS
-
-        state = json.loads(urllib.parse.unquote(state))
-        client_redirect_uri = state.get("redirect_uri") or ""
-        provider_name = state.get("provider")
-        provider = self.authenticator.oauth_provider_lookup(provider_name)
-        if isinstance(provider, ProblemDetail):
-            return self._redirect_with_error(client_redirect_uri, provider)
-
-        # Send the incoming parameters to the OAuth provider and get
-        # back a provider token (a Credential object), the
-        # authenticated patron (a Patron object), and a PatronData
-        # including any personal information obtained from the OAuth
-        # provider (such as patron name) which we can't store in the
-        # database.
-        response = provider.oauth_callback(_db, code)
-        if isinstance(response, ProblemDetail):
-            # Most likely the OAuth provider didn't like the credentials
-            # we sent.
-            return self._redirect_with_error(client_redirect_uri, response)
-        provider_token, patron, patrondata = response
-
-        # Turn the provider token into a bearer token we can give to
-        # the patron.
-        simplified_token = self.authenticator.create_bearer_token(
-            provider.NAME, provider_token.credential
-        )
-
-        patron_info = json.dumps(patrondata.to_response_parameters)
-        params = dict(access_token=simplified_token, patron_info=patron_info)
-        return redirect(client_redirect_uri + "#" + urllib.parse.urlencode(params))
-
-    def _redirect_with_error(self, redirect_uri, pd):
-        """Redirect the patron to the given URL, with the given ProblemDetail
-        encoded into the fragment identifier.
-        """
-        return redirect(self._error_uri(redirect_uri, pd))
-
-    def _error_uri(self, redirect_uri, pd):
-        """Encode the given ProblemDetail into the fragment identifier
-        of the given URI.
-        """
-        problem_detail_json = pd_json(
-            pd.uri, pd.status_code, pd.title, pd.detail, pd.instance, pd.debug_message
-        )
-        params = dict(error=problem_detail_json)
-        return redirect_uri + "#" + urllib.parse.urlencode(params)
-
-
 class BaseSAMLAuthenticationProvider(
     AuthenticationProvider, BearerTokenSigner, metaclass=ABCMeta
 ):
@@ -2829,4 +2396,4 @@ class BaseSAMLAuthenticationProvider(
 
     SETTINGS = SAMLSettings()  # type: ignore
 
-    LIBRARY_SETTINGS: List[Dict[str, Any]] = []
+    LIBRARY_SETTINGS: list[dict[str, Any]] = []

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
+from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.sip.client import MockSIPClient, SIPClient
 from api.sip.dialect import AutoGraphicsVerso, GenericILS
 from tests.fixtures.tls_server import TLSServerFixture
@@ -149,7 +150,7 @@ class TestSIPClient:
         # Call connect() and make sure timeout is set properly.
         try:
             sip.connect()
-            assert 12 == sip.connection.timeout
+            assert 3 == sip.connection.timeout
         finally:
             # Un-mock the socket.socket function
             socket.socket = old_socket
@@ -423,7 +424,7 @@ class TestLogin:
     def test_login_failure(self):
         sip = MockSIPClient(login_user_id="user_id", login_password="password")
         sip.queue_response("940")
-        pytest.raises(IOError, sip.login)
+        pytest.raises(PatronAuthorizationFailedException, sip.login)
 
     def test_login_happens_when_user_id_and_password_specified(self):
         sip = MockSIPClient(login_user_id="user_id", login_password="password")
