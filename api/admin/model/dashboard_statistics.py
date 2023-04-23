@@ -1,4 +1,6 @@
-from typing import Dict, List, Type, TypeVar
+from __future__ import annotations
+
+from typing import List, TypeVar
 
 from pydantic import BaseModel, Extra, Field, NonNegativeInt
 
@@ -30,14 +32,14 @@ class StatisticsBaseModel(CustomBaseModel):
     def __getitem__(self, item):
         return getattr(self, item)
 
-    def __add__(self: "S", other: "S") -> "S":
+    def __add__(self: S, other: S) -> S:
         """Sum each property and return new instance."""
         return self.__class__(
             **{field: self[field] + other[field] for field in self.__fields__.keys()}
         )
 
     @classmethod
-    def zeroed(cls: Type["S"]) -> "S":
+    def zeroed(cls: type[S]) -> S:
         """An instance of this class with all values set to zero."""
         return cls(**{field: 0 for field in cls.__fields__.keys()})
 
@@ -138,6 +140,6 @@ class StatisticsResponse(CustomBaseModel):
     )
 
     @property
-    def libraries_by_key(self) -> Dict[str, LibraryStatistics]:
+    def libraries_by_key(self) -> dict[str, LibraryStatistics]:
         """Dictionary of library statistics keyed by their `key` value.2"""
         return {lib.key: lib for lib in self.libraries}
