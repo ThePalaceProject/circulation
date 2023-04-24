@@ -47,10 +47,7 @@ class TestCirculationManager:
 
         # The authentication document cache has a default value for
         # max_age.
-        assert 0 == manager.authentication_for_opds_documents.max_age
-
-        # WSGI debug is off by default.
-        assert False == manager.wsgi_debug
+        assert 3600 == manager.authentication_for_opds_documents.max_age
 
         # Now let's create a brand new library, never before seen.
         library = circulation_fixture.db.library()
@@ -91,10 +88,6 @@ class TestCirculationManager:
             circulation_fixture.db.session,
             Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME,
         ).value = "60"
-
-        ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.WSGI_DEBUG_KEY
-        ).value = "true"
 
         # Then reload the CirculationManager...
         circulation_fixture.manager.load_settings()
@@ -137,9 +130,6 @@ class TestCirculationManager:
         # The authentication document cache has been rebuilt with a
         # new max_age.
         assert 60 == manager.authentication_for_opds_documents.max_age
-
-        # The WSGI debug setting has been changed.
-        assert True == manager.wsgi_debug
 
         # Controllers that don't depend on site configuration
         # have not been reloaded.

@@ -304,16 +304,10 @@ class CirculationManager:
         authentication_document_cache_time = int(
             ConfigurationSetting.sitewide(
                 self._db, Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME
-            ).value_or_default(0)
+            ).value_or_default(3600)
         )
         self.authentication_for_opds_documents = ExpiringDict(
             max_len=1000, max_age_seconds=authentication_document_cache_time
-        )
-        self.wsgi_debug = (
-            ConfigurationSetting.sitewide(
-                self._db, Configuration.WSGI_DEBUG_KEY
-            ).bool_value
-            or False
         )
 
     def _dev_mgmt_from_libraries(
@@ -567,20 +561,6 @@ class CirculationManager:
             # time.
             value = self.auth.create_authentication_document()
             self.authentication_for_opds_documents[name] = value
-
-        if self.wsgi_debug and "debug" in flask.request.args:
-            # Annotate with debugging information about the WSGI
-            # environment and the authentication document cache
-            # itself.
-            value = json.loads(value)
-            value["_debug"] = dict(
-                url=url_for(
-                    "authentication_document", library_short_name=name, _external=True
-                ),
-                environ=str(dict(flask.request.environ)),
-                cache=str(self.authentication_for_opds_documents),
-            )
-            value = json.dumps(value)
         return value
 
 
