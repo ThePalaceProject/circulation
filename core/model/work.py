@@ -1436,7 +1436,7 @@ class Work(Base):
 
     # This can be used in func.to_char to convert a SQL datetime into a string
     # that Opensearch can parse as a date.
-    ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
+    OPENSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
     def to_search_documents(

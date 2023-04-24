@@ -144,9 +144,9 @@ class DatabaseTest:
 
     @pytest.fixture(autouse=True)
     def search_mock(self, request):
-        # Only setup the elasticsearch mock if the elasticsearch mark isn't set
-        elasticsearch_mark = request.node.get_closest_marker("elasticsearch")
-        if elasticsearch_mark is not None:
+        # Only setup the opensearch mock if the opensearch mark isn't set
+        opensearch_mark = request.node.get_closest_marker("opensearch")
+        if opensearch_mark is not None:
             self.search_mock = None
         else:
             self.search_mock = mock.patch(
@@ -1114,13 +1114,13 @@ class SearchClientForTesting(ExternalSearchIndex):
         return super().setup_index(new_index, number_of_shards=1, number_of_replicas=0)
 
 
-@pytest.mark.elasticsearch
+@pytest.mark.opensearch
 class ExternalSearchTest(DatabaseTest):
     """
-    These tests require elasticsearch to be running locally. If it's not, or there's
+    These tests require opensearch to be running locally. If it's not, or there's
     an error creating the index, the tests will pass without doing anything.
 
-    Tests for elasticsearch are useful for ensuring that we haven't accidentally broken
+    Tests for opensearch are useful for ensuring that we haven't accidentally broken
     a type of search by changing analyzers or queries, but search needs to be tested manually
     to ensure that it works well overall, with a realistic index.
     """

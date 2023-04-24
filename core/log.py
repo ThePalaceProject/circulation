@@ -397,7 +397,7 @@ class LogConfiguration:
         # log level, which is probably higher than the normal log level.
         for logger in (
             "sqlalchemy.engine",
-            "elasticsearch",
+            "opensearch",
             "requests.packages.urllib3.connectionpool",
             "botocore",
         ):

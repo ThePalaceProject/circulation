@@ -291,11 +291,11 @@ def external_search_patch_fixture(request) -> Iterable[ExternalSearchPatchFixtur
     """Ask for the external search class to be patched with a mock."""
     fixture = ExternalSearchPatchFixture()
 
-    # Only setup the elasticsearch mock if the elasticsearch mark isn't set
-    elasticsearch_mark = request.node.get_closest_marker("elasticsearch")
-    if elasticsearch_mark is not None:
+    # Only setup the opensearch mock if the opensearch mark isn't set
+    opensearch_mark = request.node.get_closest_marker("opensearch")
+    if opensearch_mark is not None:
         raise RuntimeError(
-            "This fixture should not be combined with @pytest.mark.elasticsearch"
+            "This fixture should not be combined with @pytest.mark.opensearch"
         )
 
     fixture.search_mock = mock.patch(
