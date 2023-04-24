@@ -967,7 +967,7 @@ class TestConfigurationOption:
 
 class TestConfigurationGrouping:
     @pytest.mark.parametrize(
-        "_, setting_name, expected_value",
+        "_,setting_name,expected_value",
         [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")],
     )
     def test_getters(self, _, setting_name, expected_value):
@@ -985,7 +985,7 @@ class TestConfigurationGrouping:
         configuration_storage.load.assert_called_once_with(db, setting_name)
 
     @pytest.mark.parametrize(
-        "_, setting_name, db_value, expected_value",
+        "_,setting_name,db_value,expected_value",
         [
             (
                 "default_menu_value",
@@ -1051,7 +1051,7 @@ class TestConfigurationGrouping:
         assert SETTING5_DEFAULT == setting5_value
 
     @pytest.mark.parametrize(
-        "_, setting_name, expected_value",
+        "_,setting_name,expected_value",
         [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")],
     )
     def test_setters(self, _, setting_name, expected_value):

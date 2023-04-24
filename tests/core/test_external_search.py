@@ -5224,7 +5224,7 @@ class TestJSONQuery:
         }
 
     @pytest.mark.parametrize(
-        "key, value, op",
+        "key,value,op",
         [
             ("target_age", 18, "lte"),
             ("target_age", 18, "lt"),
@@ -5238,7 +5238,7 @@ class TestJSONQuery:
         assert q.elasticsearch_query.to_dict() == {"range": {f"{key}": {op: value}}}
 
     @pytest.mark.parametrize(
-        "key, value, is_keyword",
+        "key,value,is_keyword",
         [
             ("contributors.display_name", "name", True),
             ("contributors.lc", "name", False),
@@ -5258,7 +5258,7 @@ class TestJSONQuery:
         }
 
     @pytest.mark.parametrize(
-        "query, error_match",
+        "query,error_match",
         [
             (dict(key="author", op="eg", value="name"), "Unrecognized operator: eg"),
             (dict(key="arthur", op="eq", value="name"), "Unrecognized key: arthur"),
@@ -5361,7 +5361,7 @@ class TestJSONQuery:
         )
 
     @pytest.mark.parametrize(
-        "key, value, is_text",
+        "key,value,is_text",
         [
             ("title", "value", True),
             ("licensepools.open_access", True, False),

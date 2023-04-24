@@ -712,7 +712,7 @@ class TestIdentifier:
         assert AtomFeed._strftime(even_later) == entry.updated
 
     @pytest.mark.parametrize(
-        "_, identifier_type, identifier, title",
+        "_,identifier_type,identifier,title",
         [
             ("ascii_type_ascii_identifier_no_title", "a", "a", None),
             ("ascii_type_non_ascii_identifier_no_title", "a", "ą", None),
@@ -831,7 +831,7 @@ class TestRecursiveEquivalencyCache:
 
 class TestProQuestIdentifierParser:
     @pytest.mark.parametrize(
-        "_, identifier_string, expected_result",
+        "_,identifier_string,expected_result",
         [
             (
                 "incorrect_identifier",

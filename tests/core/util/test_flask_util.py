@@ -159,7 +159,7 @@ class TestOPDSEntryResponse:
 
 class TestMethods:
     @pytest.mark.parametrize(
-        "value, result",
+        "value,result",
         [
             ("true", True),
             ("True", True),

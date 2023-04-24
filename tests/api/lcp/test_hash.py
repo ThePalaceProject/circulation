@@ -5,7 +5,7 @@ from api.lcp.hash import HasherFactory, HashingAlgorithm
 
 class TestHasherFactory:
     @pytest.mark.parametrize(
-        "_, hashing_algorithm, value, expected_value",
+        "_,hashing_algorithm,value,expected_value",
         [
             (
                 "sha256",

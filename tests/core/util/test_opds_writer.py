@@ -62,7 +62,7 @@ class TestAtomFeed:
         assert tag.endswith('opf:role="ctb"/>')
 
     @pytest.mark.parametrize(
-        "_, obj, formatted",
+        "_,obj,formatted",
         [
             ("date", datetime.date(2020, 1, 2), "2020-01-02T00:00:00Z"),
             ("naive", datetime.datetime(2020, 1, 2, 3, 4, 5), "2020-01-02T03:04:05Z"),

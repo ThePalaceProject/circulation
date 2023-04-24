@@ -5,7 +5,7 @@ from core.python_expression_dsl.parser import DSLParseError, DSLParser
 
 class TestDSLParser:
     @pytest.mark.parametrize(
-        "_, expression, expected_error_message",
+        "_,expression,expected_error_message",
         [
             ("incorrect_expression", "?", "Unexpected symbol '?' at position 0"),
             ("incorrect_expression_2", "(+", "Unexpected symbol '+' at position 1"),

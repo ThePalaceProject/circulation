@@ -14,7 +14,7 @@ from core.util.datetime_helpers import (
 
 class TestDatetimeUTC:
     @pytest.mark.parametrize(
-        "time, formatted, isoformat",
+        "time,formatted,isoformat",
         [
             ([2021, 1, 1], "2021-01-01T00:00:00", "2021-01-01T00:00:00+00:00"),
             ([1955, 11, 5, 12], "1955-11-05T12:00:00", "1955-11-05T12:00:00+00:00"),
@@ -114,7 +114,7 @@ class TestToUTC:
         assert d1_utc == to_utc(d1_eastern)
 
     @pytest.mark.parametrize(
-        "expect, date_string, format",
+        "expect,date_string,format",
         [
             ([2021, 1, 1], "2021-01-01", "%Y-%m-%d"),
             ([1955, 11, 5, 12], "1955-11-05T12:00:00", "%Y-%m-%dT%H:%M:%S"),

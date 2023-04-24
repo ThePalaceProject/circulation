@@ -18,7 +18,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 
 class TestSAMLFederatedMetadataExpirationValidator:
     @pytest.mark.parametrize(
-        "_, current_time, metadata, expected_exception",
+        "_,current_time,metadata,expected_exception",
         [
             (
                 "incorrect_xml_str_type",

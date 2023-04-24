@@ -628,7 +628,7 @@ class TestSAMLMetadataParser:
         )
 
     @pytest.mark.parametrize(
-        "_, incorrect_xml_with_one_sp_metadata_without_acs_service",
+        "_,incorrect_xml_with_one_sp_metadata_without_acs_service",
         [
             (
                 "incorrect_xml_with_one_sp_metadata_without_acs_service_str_type",
@@ -655,7 +655,7 @@ class TestSAMLMetadataParser:
             )
 
     @pytest.mark.parametrize(
-        "_, correct_xml_with_one_sp",
+        "_,correct_xml_with_one_sp",
         [
             ("correct_xml_with_one_sp_str_type", saml_strings.CORRECT_XML_WITH_ONE_SP),
             (

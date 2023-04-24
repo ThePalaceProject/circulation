@@ -1470,7 +1470,7 @@ class TestLicensePoolDeliveryMechanism:
         assert (mech2.delivery_mechanism, True) == Mock.called_with
 
     @pytest.mark.parametrize(
-        "_, data_source, identifier, delivery_mechanism",
+        "_,data_source,identifier,delivery_mechanism",
         [("ascii_sy", "a", "a", "a"), ("", "ą", "ą", "ą")],
     )
     def test_repr(self, _, data_source, identifier, delivery_mechanism):

@@ -42,7 +42,7 @@ class Subject:
 
 class TestDSLEvaluator:
     @pytest.mark.parametrize(
-        "_, expression, expected_result, context, safe_classes, expected_exception",
+        "_,expression,expected_result,context,safe_classes,expected_exception",
         [
             ("incorrect_expression", "?", None, None, None, DSLParseError),
             ("numeric_literal", "9", 9, None, None, None),

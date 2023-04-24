@@ -315,7 +315,7 @@ class TestValidator:
 
 class PatronAuthenticationValidatorFactoryTest:
     @pytest.mark.parametrize(
-        "name, protocol",
+        "name,protocol",
         [
             ("validator_using_class_name", "tests.admin.fixtures.dummy_validator"),
             (

@@ -1139,7 +1139,7 @@ class TestContributorData:
 
 class TestLinkData:
     @pytest.mark.parametrize(
-        "name, rel, expected_mirror_type",
+        "name,rel,expected_mirror_type",
         [
             ("image", Hyperlink.IMAGE, ExternalIntegrationLink.COVERS),
             ("thumbnail", Hyperlink.THUMBNAIL_IMAGE, ExternalIntegrationLink.COVERS),
