@@ -259,7 +259,7 @@ class ExternalIntegration(Base):
     LCP = "LCP"
 
     # Integrations with SEARCH_GOAL
-    ELASTICSEARCH = "Elasticsearch"
+    OPENSEARCH = "Opensearch"
 
     # Integrations with DRM_GOAL
     ADOBE_VENDOR_ID = "Adobe Vendor ID"

@@ -49,7 +49,7 @@ class ExternalSearchFixture:
         fixture.version = testing_version
 
         fixture.integration = db.external_integration(
-            ExternalIntegration.ELASTICSEARCH,
+            ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
             url=fixture.url,
             settings={

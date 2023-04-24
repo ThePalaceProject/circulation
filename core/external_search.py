@@ -79,7 +79,7 @@ def mock_search_index(mock=None):
 
 class ExternalSearchIndex(HasSelfTests):
 
-    NAME = ExternalIntegration.ELASTICSEARCH
+    NAME = ExternalIntegration.OPENSEARCH
 
     # A test may temporarily set this to a mock of this class.
     # While that's true, load() will return the mock instead of
@@ -153,7 +153,7 @@ class ExternalSearchIndex(HasSelfTests):
     def search_integration(cls, _db) -> ExternalIntegration:
         """Look up the ExternalIntegration for Opensearch."""
         return ExternalIntegration.lookup(
-            _db, ExternalIntegration.ELASTICSEARCH, goal=ExternalIntegration.SEARCH_GOAL
+            _db, ExternalIntegration.OPENSEARCH, goal=ExternalIntegration.SEARCH_GOAL
         )
 
     @classmethod

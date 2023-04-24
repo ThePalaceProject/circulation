@@ -15,9 +15,7 @@ class TestSearchServices:
             )
             assert response.get("search_services") == []
             protocols = response.get("protocols")
-            assert ExternalIntegration.ELASTICSEARCH in [
-                p.get("name") for p in protocols
-            ]
+            assert ExternalIntegration.OPENSEARCH in [p.get("name") for p in protocols]
             assert "settings" in protocols[0]
 
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
@@ -31,7 +29,7 @@ class TestSearchServices:
         search_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         search_service.url = "search url"
@@ -89,7 +87,7 @@ class TestSearchServices:
         service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
 
@@ -97,7 +95,7 @@ class TestSearchServices:
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                 ]
             )
             response = controller.process_services()
@@ -116,7 +114,7 @@ class TestSearchServices:
             flask.request.form = MultiDict(
                 [
                     ("name", service.name),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                 ]
             )
             response = controller.process_services()
@@ -125,7 +123,7 @@ class TestSearchServices:
         service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
 
@@ -134,7 +132,7 @@ class TestSearchServices:
                 [
                     ("name", "Name"),
                     ("id", service.id),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                 ]
             )
             response = controller.process_services()
@@ -144,7 +142,7 @@ class TestSearchServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                     (ExternalIntegration.URL, "search url"),
                     (ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "works-index-prefix"),
                 ]
@@ -156,7 +154,7 @@ class TestSearchServices:
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                     (ExternalIntegration.URL, "http://search_url"),
                     (ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "works-index-prefix"),
                     (ExternalSearchIndex.TEST_SEARCH_TERM_KEY, "sample-search-term"),
@@ -173,7 +171,7 @@ class TestSearchServices:
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         assert service.id == int(response.response[0])
-        assert ExternalIntegration.ELASTICSEARCH == service.protocol
+        assert ExternalIntegration.OPENSEARCH == service.protocol
         assert "http://search_url" == service.url
         assert (
             "works-index-prefix"
@@ -188,7 +186,7 @@ class TestSearchServices:
         search_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         search_service.url = "search url"
@@ -204,7 +202,7 @@ class TestSearchServices:
                 [
                     ("name", "Name"),
                     ("id", search_service.id),
-                    ("protocol", ExternalIntegration.ELASTICSEARCH),
+                    ("protocol", ExternalIntegration.OPENSEARCH),
                     (ExternalIntegration.URL, "http://new_search_url"),
                     (
                         ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY,
@@ -222,7 +220,7 @@ class TestSearchServices:
             assert response.status_code == 200
 
         assert search_service.id == int(response.response[0])
-        assert ExternalIntegration.ELASTICSEARCH == search_service.protocol
+        assert ExternalIntegration.OPENSEARCH == search_service.protocol
         assert "http://new_search_url" == search_service.url
         assert (
             "new-works-index-prefix"
@@ -237,7 +235,7 @@ class TestSearchServices:
         search_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         search_service.url = "search url"
