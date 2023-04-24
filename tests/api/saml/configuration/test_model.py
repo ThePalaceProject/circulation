@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, PropertyMock, call, create_autospec
 
 import pytest
 import sqlalchemy
-from parameterized import parameterized
 
 from api.app import initialize_database
 from api.authenticator import BaseSAMLAuthenticationProvider
@@ -469,7 +468,8 @@ class TestSAMLOneLoginConfiguration:
         assert result == expected_result
         configuration.get_identity_providers.assert_called_once_with(db)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,service_provider,expected_result",
         [
             (
                 "service_provider_without_certificates",
@@ -511,7 +511,7 @@ class TestSAMLOneLoginConfiguration:
                     },
                 },
             ),
-        ]
+        ],
     )
     def test_get_service_provider_settings_returns_correct_result(
         self, _, service_provider, expected_result

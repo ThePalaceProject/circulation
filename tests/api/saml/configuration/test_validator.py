@@ -1,4 +1,4 @@
-from parameterized import parameterized
+import pytest
 from werkzeug.datastructures import MultiDict
 
 from api.admin.problem_details import INCOMPLETE_CONFIGURATION
@@ -19,7 +19,8 @@ from tests.api.saml import saml_strings
 
 
 class TestSAMLSettingsValidator:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,sp_xml_metadata,idp_xml_metadata,patron_id_regular_expression,expected_validation_result",
         [
             (
                 "missing_sp_metadata_and_missing_idp_metadata",
@@ -94,7 +95,7 @@ class TestSAMLSettingsValidator:
                     "unterminated character set at position 0"
                 ),
             ),
-        ]
+        ],
     )
     def test_validate(
         self,
@@ -156,7 +157,9 @@ class TestSAMLSettingsValidator:
 
 
 class TestSAMLSettingsValidatorFactory:
-    @parameterized.expand([("validator_using_factory_method", "api.saml.provider")])
+    @pytest.mark.parametrize(
+        "_,protocol", [("validator_using_factory_method", "api.saml.provider")]
+    )
     def test_create_can_create(self, _, protocol):
         # Arrange
         factory = PatronAuthenticationValidatorFactory()

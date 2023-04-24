@@ -1886,21 +1886,6 @@ rfc3987 = ">=1.3.8,<2.0.0"
 uritemplate = ">=3.0.1,<5.0.0"
 
 [[package]]
-name = "parameterized"
-version = "0.9.0"
-description = "Parameterized testing with any Python test framework"
-category = "dev"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "parameterized-0.9.0-py2.py3-none-any.whl", hash = "sha256:4e0758e3d41bea3bbd05ec14fc2c24736723f243b28d702081aef438c9372b1b"},
-    {file = "parameterized-0.9.0.tar.gz", hash = "sha256:7fc905272cefa4f364c1a3429cbbe9c0f98b793988efb5bf90aac80f08db09b1"},
-]
-
-[package.extras]
-dev = ["jinja2"]
-
-[[package]]
 name = "pathlib-mate"
 version = "1.0.3"
 description = "An extended and more powerful pathlib."
@@ -3792,4 +3777,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "6c352ef306b6a38a983a19a48fde7ca6ab5738ec1d52a65e8a603c893a19c4fa"
+content-hash = "de6a161794ee3eed7169504644f211351bae888b4fe44517633663a7d79c4504"
