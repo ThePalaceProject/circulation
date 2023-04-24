@@ -1125,8 +1125,8 @@ class ExternalSearchTest(DatabaseTest):
     to ensure that it works well overall, with a realistic index.
     """
 
-    SIMPLIFIED_TEST_ELASTICSEARCH = os.environ.get(
-        "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
+    SIMPLIFIED_TEST_OPENSEARCH = os.environ.get(
+        "SIMPLIFIED_TEST_OPENSEARCH", "http://localhost:9200"
     )
 
     def setup_method(self):
@@ -1140,7 +1140,7 @@ class ExternalSearchTest(DatabaseTest):
         self.integration = self._external_integration(
             ExternalIntegration.ELASTICSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
-            url=self.SIMPLIFIED_TEST_ELASTICSEARCH,
+            url=self.SIMPLIFIED_TEST_OPENSEARCH,
             settings={
                 ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
                 ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
@@ -1152,7 +1152,7 @@ class ExternalSearchTest(DatabaseTest):
         except Exception as e:
             self.search = None
             logging.error(
-                "Unable to set up elasticsearch index, search tests will be skipped.",
+                "Unable to set up opensearch index, search tests will be skipped.",
                 exc_info=e,
             )
 

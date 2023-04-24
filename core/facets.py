@@ -112,7 +112,7 @@ class FacetConstants:
         COLLECTION_FACET_GROUP_NAME: COLLECTION_FULL,
     }
 
-    SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME = {
+    SORT_ORDER_TO_OPENSEARCH_FIELD_NAME = {
         ORDER_TITLE: "sort_title",
         ORDER_AUTHOR: "sort_author",
         ORDER_LAST_UPDATE: "last_update_time",

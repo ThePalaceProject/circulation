@@ -4215,8 +4215,8 @@ class TestFilter:
         assert "I don't know how to sort by subdocument.field" in str(excinfo.value)
 
         # It's possible to sort by every field in
-        # Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME.
-        used_orders = Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME
+        # Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME.
+        used_orders = Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME
         added_to_collection = used_orders[Facets.ORDER_ADDED_TO_COLLECTION]
         series_position = used_orders[Facets.ORDER_SERIES_POSITION]
         last_update = used_orders[Facets.ORDER_LAST_UPDATE]

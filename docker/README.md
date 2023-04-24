@@ -23,12 +23,12 @@ $ docker run --name webapp -d \
     ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
-If the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container
+If the database and OpenSearch(OS) are running in containers, use the --link option to let the webapp docker container
 to access them as bellow:
 
 ```sh
 docker run \
---link pg --link es \
+--link pg --link os \
 --name circ \
 -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
 -d -p 6500:80 \
@@ -89,7 +89,7 @@ Environment variables can be set with the `-e VARIABLE_KEY='variable_value'` opt
 - `auto` : Either initializes or migrates the database, depending on if it is new or not. This is the default value.
 - `ignore` : Does nothing.
 - `init` : Initializes the app against a brand new database. If you are running a circulation manager for the first
-time ever, use this value to set up an Elasticsearch alias and account for the database schema for future
+time ever, use this value to set up an Opensearch alias and account for the database schema for future
 migrations.
 - `migrate` : Migrates an existing database against a new release. Use this value when switching from one stable
 version to another.
