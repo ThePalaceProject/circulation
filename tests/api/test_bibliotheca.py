@@ -22,7 +22,6 @@ from api.bibliotheca import (
     ErrorParser,
     EventParser,
     ItemListParser,
-    MockBibliothecaAPI,
     PatronCirculationParser,
 )
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
@@ -65,6 +64,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
 from core.util.problem_detail import ProblemDetail
 from core.util.web_publication_manifest import AudiobookManifest
+from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time

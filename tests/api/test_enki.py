@@ -6,13 +6,7 @@ import pytest
 from api.authenticator import BasicAuthenticationProvider
 from api.circulation import FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import *
-from api.enki import (
-    BibliographicParser,
-    EnkiAPI,
-    EnkiCollectionReaper,
-    EnkiImport,
-    MockEnkiAPI,
-)
+from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
 from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
     ConfigurationSetting,
@@ -31,6 +25,7 @@ from core.model import (
 from core.testing import MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import RemoteIntegrationException, RequestTimedOut
+from tests.api.mockapi.enki import MockEnkiAPI
 from tests.fixtures.api_enki_files import EnkiFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

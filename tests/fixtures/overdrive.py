@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from core.model import Collection
-from core.overdrive import MockOverdriveCoreAPI
+from tests.api.mockapi.overdrive import MockOverdriveCoreAPI
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

@@ -6,7 +6,6 @@ from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
 from api.circulation_exceptions import *
 from api.odilo import (
-    MockOdiloAPI,
     OdiloAPI,
     OdiloBibliographicCoverageProvider,
     OdiloCirculationMonitor,
@@ -27,6 +26,7 @@ from core.model import (
 from core.testing import MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
+from tests.api.mockapi.odilo import MockOdiloAPI
 
 from ..fixtures.api_odilo_files import OdiloFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

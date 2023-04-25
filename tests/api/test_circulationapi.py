@@ -8,7 +8,6 @@ import pytest
 from flask import Flask
 
 from api.authenticator import LibraryAuthenticator, PatronData
-from api.bibliotheca import MockBibliothecaAPI
 from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
@@ -38,6 +37,7 @@ from core.model import (
     RightsStatus,
 )
 from core.util.datetime_helpers import utc_now
+from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 
 from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

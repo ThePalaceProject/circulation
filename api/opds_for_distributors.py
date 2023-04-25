@@ -17,11 +17,9 @@ from core.model import (
     RightsStatus,
     Session,
     get_one,
-    get_one_or_create,
 )
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
-from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
@@ -414,49 +412,3 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
         self._db.commit()
         achievements = "License pools removed: %d." % pools_reaped
         return TimestampData(achievements=achievements)
-
-
-class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
-    @classmethod
-    def mock_collection(
-        self, _db, name="Test OPDS For Distributors Collection"
-    ) -> Collection:
-        """Create a mock OPDS For Distributors collection to use in tests.
-
-        :param _db: Database session.
-        :param name: A name for the collection.
-        """
-        library = DatabaseTest.make_default_library(_db)
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(
-                external_account_id="http://opds",
-            ),
-        )
-        integration = collection.create_external_integration(
-            protocol=OPDSForDistributorsAPI.NAME
-        )
-        integration.username = "a"
-        integration.password = "b"
-        library.collections.append(collection)
-        return collection
-
-    def __init__(self, _db, collection, *args, **kwargs):
-        self.responses = []
-        self.requests = []
-        super().__init__(_db, collection, *args, **kwargs)
-
-    def queue_response(self, status_code, headers={}, content=None):
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _request_with_timeout(self, method, url, *args, **kwargs):
-        self.requests.append([method, url, args, kwargs])
-        response = self.responses.pop()
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
