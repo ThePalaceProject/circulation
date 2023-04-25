@@ -29,7 +29,7 @@ class TestSearchServiceSelfTests:
         search_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         # Make sure that HasSelfTest.prior_test_results() was called and that
@@ -61,7 +61,7 @@ class TestSearchServiceSelfTests:
         search_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         m = (

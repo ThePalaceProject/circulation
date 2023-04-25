@@ -104,18 +104,18 @@ class TestExternalSearch:
     # TODO: would be good to check the put_script calls, but the
     # current constructor makes put_script difficult to mock.
 
-    def test_elasticsearch_error_in_constructor_becomes_cannotloadconfiguration(
+    def test_opensearch_error_in_constructor_becomes_cannotloadconfiguration(
         self, external_search_fixture: ExternalSearchFixture
     ):
         session = external_search_fixture.db.session
 
-        """If we're unable to establish a connection to the Elasticsearch
+        """If we're unable to establish a connection to the Opensearch
         server, CannotLoadConfiguration (which the circulation manager can
-        understand) is raised instead of an Elasticsearch-specific exception.
+        understand) is raised instead of an Opensearch-specific exception.
         """
 
         # Unlike other tests in this module, this one runs even if no
-        # ElasticSearch server is running, since it's testing what
+        # OpenSearch server is running, since it's testing what
         # happens if there's a problem communicating with that server.
         class Mock(ExternalSearchIndex):
             def set_works_index_and_alias(self, _db):
@@ -405,17 +405,13 @@ class TestExternalSearch:
 
         new_mapping = search.indices.get_mapping(search.works_index)
         new_mapping = new_mapping[search.works_index]["mappings"]
-        assert "new_long_property" in (
-            new_mapping["properties"]
-            if not search.work_document_type
-            else new_mapping[search.work_document_type]["properties"]
-        )
+        assert "new_long_property" in new_mapping["properties"]
 
 
 class TestCurrentMapping:
     def test_character_filters(self):
         # Verify the functionality of the regular expressions we tell
-        # Elasticsearch to use when normalizing fields that will be used
+        # Opensearch to use when normalizing fields that will be used
         # for searching.
         filters = []
         for filter_name in CurrentMapping.AUTHOR_CHAR_FILTER_NAMES:
@@ -710,7 +706,7 @@ class TestExternalSearchWithWorks:
         # An end-to-end test of the search functionality.
         #
         # Works created during setup are added to a real search index.
-        # We then run actual Elasticsearch queries against the
+        # We then run actual Opensearch queries against the
         # search index and verify that the work IDs returned
         # are the ones we expect.
 
@@ -2169,7 +2165,7 @@ class TestFeaturedFacets:
         fixture.populate_search_index()
 
         # Verify that FeaturedFacets sets appropriate scoring functions
-        # for ElasticSearch queries.
+        # for OpenSearch queries.
         f = FeaturedFacets(minimum_featured_quality=0.55, random_seed=42)
         filter = Filter()
         f.modify_search_filter(filter)
@@ -2295,7 +2291,7 @@ class TestFeaturedFacets:
         # is availability.
         all_featured_facets = FeaturedFacets(0, random_seed=Filter.DETERMINISTIC)
         # We don't know exactly what order the books will be in,
-        # because even without the random element Elasticsearch is
+        # because even without the random element Opensearch is
         # slightly nondeterministic, but we do expect that all of the
         # available books will show up before all of the unavailable
         # books.
@@ -2391,7 +2387,7 @@ class TestSearchBase:
         assert Nested(path="contributors", query=subdocument_query) == nested
 
     def test__match_term(self):
-        # _match_term creates a Match Elasticsearch object which does a
+        # _match_term creates a Match Opensearch object which does a
         # match against a specific field.
         m = SearchBase._match_term
         qu = m("author", "flannery o'connor")
@@ -2406,7 +2402,7 @@ class TestSearchBase:
 
     def test__match_range(self):
         # Test the _match_range helper method.
-        # This is used to create an Elasticsearch query term
+        # This is used to create an Opensearch query term
         # that only matches if a value is in a given range.
 
         # This only matches if field.name has a value >= 5.
@@ -2484,11 +2480,11 @@ class TestQuery:
     def test_build(self, db: DatabaseTransactionFixture):
         # Verify that the build() method combines the 'query' part of
         # a Query and the 'filter' part to create a single
-        # Elasticsearch Search object, complete with (if necessary)
+        # Opensearch Search object, complete with (if necessary)
         # subqueries, sort ordering, and script fields.
 
         class MockSearch:
-            """A mock of the Elasticsearch-DSL `Search` object.
+            """A mock of the Opensearch-DSL `Search` object.
 
             Calls to Search methods tend to create a new Search object
             based on the old one. This mock simulates that behavior.
@@ -2522,8 +2518,8 @@ class TestQuery:
                 )
 
             def query(self, query):
-                """Simulate the creation of an Elasticsearch-DSL `Search`
-                object from an Elasticsearch-DSL `Query` object.
+                """Simulate the creation of an Opensearch-DSL `Search`
+                object from an Opensearch-DSL `Query` object.
 
                 :return: A New MockSearch object.
                 """
@@ -2553,9 +2549,9 @@ class TestQuery:
 
         class MockQuery(Query):
             # A Mock of the Query object from external_search
-            # (not the one from Elasticsearch-DSL).
+            # (not the one from Opensearch-DSL).
             @property
-            def elasticsearch_query(self):
+            def search_query(self):
                 return Q("simple_query_string", query=self.query_string)
 
         class MockPagination:
@@ -2640,9 +2636,9 @@ class TestQuery:
             == universal_nested
         )
 
-        # The result of Query.elasticsearch_query is used as the basis
+        # The result of Query.search_query is used as the basis
         # for the Search object.
-        assert Bool(must=qu.elasticsearch_query) == built._query
+        assert Bool(must=qu.search_query) == built._query
 
         # Now test some cases where the query has a filter.
 
@@ -2661,7 +2657,7 @@ class TestQuery:
         underlying_query = built._query
 
         # The query we passed in is used as the 'must' part of the
-        assert underlying_query.must == [qu.elasticsearch_query]
+        assert underlying_query.must == [qu.search_query]
         main_filter, nested_filters = filter.build()
 
         # The filter we passed in was combined with the universal
@@ -2810,7 +2806,7 @@ class TestQuery:
         assert script_fields == built._script_fields
 
         # If the Filter specifies a sort order, Filter.sort_order is
-        # used to convert it to appropriate Elasticsearch syntax, and
+        # used to convert it to appropriate Opensearch syntax, and
         # the MockSearch object is modified appropriately.
         built = from_facets(
             None, None, order=Facets.ORDER_AUTHOR, order_ascending=False
@@ -2844,8 +2840,8 @@ class TestQuery:
         assert MatchNone() == main
         assert {} == nested
 
-    def test_elasticsearch_query(self):
-        # The elasticsearch_query property calls a number of other methods
+    def test_search_query(self):
+        # The search_query property calls a number of other methods
         # to generate hypotheses, then creates a dis_max query
         # to find the most likely hypothesis for any given book.
 
@@ -2905,13 +2901,13 @@ class TestQuery:
         # Before we get started, try an easy case. If there is no query
         # string we get a match_all query that returns everything.
         query = Mock(None)
-        result = query.elasticsearch_query
+        result = query.search_query
         assert dict(match_all=dict()) == result.to_dict()
 
         # Now try a real query string.
         q = "query string"
         query = Mock(q)
-        result = query.elasticsearch_query
+        result = query.search_query
 
         # The final result is the result of calling _combine_hypotheses
         # on a number of hypotheses. Our mock class just returns
@@ -3325,7 +3321,7 @@ class TestQueryParser:
                 )
 
             @property
-            def elasticsearch_query(self):
+            def search_query(self):
                 # Mock the creation of an extremely complicated DisMax
                 # query -- we just want to verify that such a query
                 # was created.
@@ -3352,7 +3348,7 @@ class TestQueryParser:
 
         # parser.match_queries contains the result of putting the rest
         # of the query string into a Query object (or, here, our
-        # MockQuery) and looking at its .elasticsearch_query. In a
+        # MockQuery) and looking at its .search_query. In a
         # real scenario, this will result in a huge DisMax query
         # that tries to consider all the things someone might be
         # searching for, _in addition to_ applying a filter.
@@ -3372,7 +3368,7 @@ class TestQueryParser:
             assert filters == parser.filters
 
             if remainder:
-                queries.append(MockQuery(remainder).elasticsearch_query)
+                queries.append(MockQuery(remainder).search_query)
             assert queries == parser.match_queries
 
         # Here's the same test from before, using the new
@@ -3442,7 +3438,7 @@ class TestQueryParser:
         [nonfiction] = query.filters
         [asteroids] = query.match_queries
 
-        # It creates real Elasticsearch-DSL query objects.
+        # It creates real Opensearch-DSL query objects.
 
         # The filter is a very simple Term query.
         assert Term(fiction="nonfiction") == nonfiction
@@ -3451,7 +3447,7 @@ class TestQueryParser:
         # I won't test the whole thing, but it's what you would get if
         # you just tried a search for "asteroids".
         assert isinstance(asteroids, DisMax)
-        assert asteroids == Query("asteroids").elasticsearch_query
+        assert asteroids == Query("asteroids").search_query
 
     def test_add_match_term_filter(self):
         # TODO: this method could use a standalone test, but it's
@@ -3923,7 +3919,7 @@ class TestFilter:
             filter_fixture.transaction.session,
         )
 
-        # Test the ability to turn a Filter into an ElasticSearch
+        # Test the ability to turn a Filter into an OpenSearch
         # filter object.
 
         # build() takes the information in the Filter object, scrubs
@@ -4085,7 +4081,7 @@ class TestFilter:
         assert {} == nested
 
         # Every other restriction imposed on the Filter object becomes an
-        # Elasticsearch filter object in this list.
+        # Opensearch filter object in this list.
         (medium, language, fiction, audience, target_age, updated_after) = built
 
         # Test them one at a time.
@@ -4218,8 +4214,8 @@ class TestFilter:
         assert "I don't know how to sort by subdocument.field" in str(excinfo.value)
 
         # It's possible to sort by every field in
-        # Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME.
-        used_orders = Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME
+        # Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME.
+        used_orders = Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME
         added_to_collection = used_orders[Facets.ORDER_ADDED_TO_COLLECTION]
         series_position = used_orders[Facets.ORDER_SERIES_POSITION]
         last_update = used_orders[Facets.ORDER_LAST_UPDATE]
@@ -4297,7 +4293,7 @@ class TestFilter:
         first_field = validate_sort_order(f, last_update)
 
         # Here, the ordering is done by a script that runs on the
-        # ElasticSearch server.
+        # OpenSearch server.
         sort = first_field.pop("_script")
         assert {} == first_field
 
@@ -4492,7 +4488,7 @@ class TestFilter:
 
     def test__scrub(self):
         # Test the _scrub helper method, which transforms incoming strings
-        # to the type of strings Elasticsearch uses.
+        # to the type of strings Opensearch uses.
         m = Filter._scrub
         assert None == m(None)
         assert "foo" == m("foo")
@@ -4534,7 +4530,7 @@ class TestFilter:
 
     def test__chain_filters(self):
         # Test the _chain_filters method, which combines
-        # two Elasticsearch filter objects.
+        # two Opensearch filter objects.
         f1 = Q("term", key="value")
         f2 = Q("term", key2="value2")
 
@@ -4583,7 +4579,7 @@ class TestFilter:
 
     def _mock_chain(self, filters, new_filter):
         """A mock of _chain_filters so we don't have to check
-        test results against super-complicated Elasticsearch
+        test results against super-complicated Opensearch
         filter objects.
 
         Instead, we'll get a list of smaller filter objects.
@@ -4599,7 +4595,7 @@ class TestFilter:
 
 
 class TestSortKeyPagination:
-    """Test the Elasticsearch-implementation of Pagination that does
+    """Test the Opensearch-implementation of Pagination that does
     pagination by tracking the last item on the previous page,
     rather than by tracking the number of items seen so far.
     """
@@ -4731,14 +4727,14 @@ class TestSortKeyPagination:
         search.getitem_called_with = "not called"
 
         # With .last_item_on_previous_page set, modify_search_query()
-        # calls update_from_dict() on our mock ElasticSearch `Search`
+        # calls update_from_dict() on our mock OpenSearch `Search`
         # object, passing in the last item on the previous page.
 
         # The return value of modify_search_query() becomes the active
         # Search object.
         assert "modified search object" == pagination.modify_search_query(search)
 
-        # Now we can see that the Elasticsearch object was modified to
+        # Now we can see that the Opensearch object was modified to
         # use the 'search_after' feature.
         assert dict(search_after=last_item) == search.update_from_dict_called_with
 
@@ -4751,7 +4747,7 @@ class TestSortKeyPagination:
         # results is loaded.
         this_page = SortKeyPagination()
 
-        # Mock an Elasticsearch 'hit' object -- we'll be accessing
+        # Mock an Opensearch 'hit' object -- we'll be accessing
         # hit.meta.sort.
         class MockMeta:
             def __init__(self, sort_key):
@@ -4921,7 +4917,7 @@ class TestSearchErrors:
 
 class TestWorkSearchResult:
     # Test the WorkSearchResult class, which wraps together a data
-    # model Work and an ElasticSearch Hit into something that looks
+    # model Work and an OpenSearch Hit into something that looks
     # like a Work.
 
     def test_constructor(self, db: DatabaseTransactionFixture):
@@ -4932,7 +4928,7 @@ class TestWorkSearchResult:
         # The original Work object is available as ._work
         assert work == result._work
 
-        # The Elasticsearch Hit object is available as ._hit
+        # The Opensearch Hit object is available as ._hit
         assert hit == result._hit
 
         # Any other attributes are delegated to the Work.
@@ -5096,16 +5092,16 @@ class TestJSONQuery:
 
     match_args = JSONQuery.MATCH_ARGS
 
-    def test_elasticsearch_query(self, external_search_fixture: ExternalSearchFixture):
+    def test_search_query(self, external_search_fixture: ExternalSearchFixture):
         q = {"key": "medium", "value": "Book"}
         q = self._jq(q)
-        q.elasticsearch_query.to_dict() == {
+        q.search_query.to_dict() == {
             "match": {"medium.keyword": {"query": "Book", **self.match_args}}
         }
 
         q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
         q = self._jq(q)
-        q.elasticsearch_query.to_dict() == {
+        q.search_query.to_dict() == {
             "bool": {
                 "should": [
                     {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
@@ -5120,7 +5116,7 @@ class TestJSONQuery:
 
         q = {"and": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
         q = self._jq(q)
-        q.elasticsearch_query.to_dict() == {
+        q.search_query.to_dict() == {
             "bool": {
                 "must": [
                     {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
@@ -5140,7 +5136,7 @@ class TestJSONQuery:
             ]
         }
         q = self._jq(q)
-        q.elasticsearch_query.to_dict() == {
+        q.search_query.to_dict() == {
             "bool": {
                 "must": [
                     {
@@ -5172,7 +5168,7 @@ class TestJSONQuery:
 
         q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio", "neq")]}
         q = self._jq(q)
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "bool": {
                 "should": [
                     {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
@@ -5201,7 +5197,7 @@ class TestJSONQuery:
             ]
         }
         q = self._jq(q)
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
                     {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
@@ -5232,10 +5228,10 @@ class TestJSONQuery:
             ("target_age", 18, "gte"),
         ],
     )
-    def test_elasticsearch_query_range(self, key, value, op):
+    def test_search_query_range(self, key, value, op):
         q = self._leaf(key, value, op)
         q = self._jq(q)
-        assert q.elasticsearch_query.to_dict() == {"range": {f"{key}": {op: value}}}
+        assert q.search_query.to_dict() == {"range": {f"{key}": {op: value}}}
 
     @pytest.mark.parametrize(
         "key,value,is_keyword",
@@ -5246,11 +5242,11 @@ class TestJSONQuery:
             ("licensepools.medium", "Book", False),
         ],
     )
-    def test_elasticsearch_query_nested(self, key, value, is_keyword):
+    def test_search_query_nested(self, key, value, is_keyword):
         q = self._jq(self._leaf(key, value))
         term = key if not is_keyword else f"{key}.keyword"
         root = key.split(".")[0]
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "nested": {
                 "path": root,
                 "query": {"match": {term: {"query": value, **self.match_args}}},
@@ -5273,11 +5269,11 @@ class TestJSONQuery:
         q = self._jq(query)
 
         with pytest.raises(QueryParseException, match=error_match):
-            q.elasticsearch_query  # fetch the property
+            q.search_query  # fetch the property
 
     def test_regex_query(self):
         q = self._jq(self._leaf("title", "book", op="regex"))
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "regexp": {
                 "title.keyword": {
                     "flags": "ALL",
@@ -5288,13 +5284,13 @@ class TestJSONQuery:
 
     def test_field_transforms(self):
         q = self._jq(self._leaf("classification", "cls"))
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "match": {
                 "classifications.term.keyword": {"query": "cls", **self.match_args}
             }
         }
         q = self._jq(self._leaf("open_access", True))
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "nested": {
                 "path": "licensepools",
                 "query": {"term": {"licensepools.open_access": True}},
@@ -5311,7 +5307,7 @@ class TestJSONQuery:
             .first()
         )
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "nested": {
                 "path": "licensepools",
                 "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
@@ -5320,7 +5316,7 @@ class TestJSONQuery:
 
         # Test case-insensitivity for data sources
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG.upper()))
-        assert q.elasticsearch_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "nested": {
                 "path": "licensepools",
                 "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
@@ -5329,33 +5325,31 @@ class TestJSONQuery:
 
         dt = datetime(1990, 1, 1)
         q = self._jq(self._leaf("published", "1990-01-01"))
-        assert q.elasticsearch_query.to_dict() == {
-            "term": {"published": dt.timestamp()}
-        }
+        assert q.search_query.to_dict() == {"term": {"published": dt.timestamp()}}
 
         with pytest.raises(QueryParseException) as exc:
             q = self._jq(self._leaf("published", "1990-01-x1"))
-            q.elasticsearch_query
+            q.search_query
             assert (
                 "Could not parse 'published' value '1990-01-x1'. Only use 'YYYY-MM-DD'"
             )
 
         # Test language code transformations
         q = self._jq(self._leaf("language", "EngliSH"))
-        assert q.elasticsearch_query.to_dict() == {"term": {"language": "eng"}}
+        assert q.search_query.to_dict() == {"term": {"language": "eng"}}
 
         # Nothing found, stay the same
         q = self._jq(self._leaf("language", "NoLanguage"))
-        assert q.elasticsearch_query.to_dict() == {"term": {"language": "NoLanguage"}}
+        assert q.search_query.to_dict() == {"term": {"language": "NoLanguage"}}
 
         # Already a language code
         q = self._jq(self._leaf("language", "eng"))
-        assert q.elasticsearch_query.to_dict() == {"term": {"language": "eng"}}
+        assert q.search_query.to_dict() == {"term": {"language": "eng"}}
 
     def test_operator_restrictions(self):
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
         with pytest.raises(QueryParseException) as exc:
-            q.elasticsearch_query
+            q.search_query
         assert "Operator 'gt' is not allowed for 'data_source'. Only use ['eq']" == str(
             exc.value
         )
@@ -5371,7 +5365,7 @@ class TestJSONQuery:
     def test_type_queries(self, key, value, is_text):
         """Bool and long types are term queries, whereas text is a match query"""
         q = self._jq(self._leaf(key, value))
-        q.elasticsearch_query.to_dict().keys() == ["match" if is_text else "term"]
+        q.search_query.to_dict().keys() == ["match" if is_text else "term"]
 
 
 class TestExternalSearchJSONQueryData:

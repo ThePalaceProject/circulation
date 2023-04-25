@@ -661,8 +661,8 @@ class Facets(FacetsWithEntryPoint):
         """Modify the given external_search.Filter object
         so that it reflects the settings of this Facets object.
 
-        This is the Elasticsearch equivalent of apply(). However, the
-        Elasticsearch implementation of (e.g.) the meaning of the
+        This is the Opensearch equivalent of apply(). However, the
+        Opensearch implementation of (e.g.) the meaning of the
         different availabilty statuses is kept in Filter.build().
         """
         super().modify_search_filter(filter)
@@ -676,7 +676,7 @@ class Facets(FacetsWithEntryPoint):
         # No order and relevance order both signify the default and,
         # thus, either should leave `filter.order` unset.
         if self.order and self.order != self.ORDER_BY_RELEVANCE:
-            order = self.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME.get(self.order)
+            order = self.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME.get(self.order)
             if order:
                 filter.order = order
                 filter.order_ascending = self.order_ascending
@@ -765,7 +765,7 @@ class DefaultSortOrderFacets(Facets):
 class DatabaseBackedFacets(Facets):
     """A generic faceting object designed for managing queries against the
     database. (Other faceting objects are designed for managing
-    Elasticsearch searches.)
+    Opensearch searches.)
     """
 
     # Of the sort orders in Facets, these are the only available ones
@@ -1848,7 +1848,7 @@ class WorkList:
         containing a single list of search results.
 
         :param _db: A database connection
-        :param hits: A list of Hit objects from ElasticSearch.
+        :param hits: A list of Hit objects from Opensearch.
         :return: A list of Work or (if the search results include
             script fields), WorkSearchResult objects.
         """
@@ -2117,7 +2117,7 @@ class WorkList:
         # Ask the search engine for works from every lane we're given.
 
         # NOTE: At the moment, every WorkList in the system can be
-        # generated using an Elasticsearch query. That is, there are
+        # generated using an Opensearch query. That is, there are
         # no subclasses of the DatabaseExclusiveWorkList class defined
         # in circulation/api/lanes.py. If that ever changes, we'll
         # need to change this code.

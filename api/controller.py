@@ -1147,7 +1147,7 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(lane, ProblemDetail):
             return lane
 
-        # Althoug the search query goes against Elasticsearch, we must
+        # Although the search query goes against Opensearch, we must
         # use normal pagination because the results are sorted by
         # match quality, not bibliographic information.
         pagination = load_pagination_from_request(

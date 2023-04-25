@@ -112,8 +112,8 @@ More information about installation options can be found in the
 
 ### Opensearch
 
-Palace now supports Opensearch: please use it instead of Elasticsearch.  While Elasticsearch is still supported,
-it is deprecated and will be removed eventually.
+Palace now supports Opensearch: please use it instead of Elasticsearch.
+Elasticsearch is no longer supported.
 
 #### Docker
 
@@ -124,28 +124,6 @@ docker run --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node
 docker exec opensearch opensearch-plugin -s install analysis-icu
 docker restart opensearch
 ```
-
-### Elasticsearch (Deprecated)
-
-#### Docker
-
-The easiest way to setup a local elasticsearch environment is to use docker.
-
-```sh
-docker run -d --name es -e discovery.type=single-node -p 9200:9200 elasticsearch:6.8.6
-docker exec es elasticsearch-plugin -s install analysis-icu
-docker restart es
-```
-
-#### Local
-
-1. Download it [here](https://www.elastic.co/downloads/past-releases/elasticsearch-6-8-6).
-2. `cd` into the `elasticsearch-[version number]` directory.
-3. Run `$ elasticsearch-plugin install analysis-icu`
-4. Run `$ ./bin/elasticsearch`.
-5. You may be prompted to download [Java SE](https://www.oracle.com/java/technologies/javase-downloads.html). If so, go
-   ahead and do so.
-6. Check `http://localhost:9200` to make sure the Elasticsearch server is running.
 
 ### Database
 
@@ -323,10 +301,10 @@ service has been configured.
 
 #### Configuring Search
 
-Navigate to `System Configuration → Search` and add a new Elasticsearch configuration. The required URL is
-the URL of the [Elasticsearch instance configured earlier](#elasticsearch):
+Navigate to `System Configuration → Search` and add a new search configuration. The required URL is
+the URL of the [Opensearch instance configured earlier](#opensearch):
 
-![Elasticsearch](.github/readme/search.png)
+![Opensearch](.github/readme/search.png)
 
 #### Generating Search Indices
 
@@ -534,14 +512,14 @@ If you already have elastic search or postgres running locally, you can run them
 following environment variables:
 
 - `SIMPLIFIED_TEST_DATABASE`
-- `SIMPLIFIED_TEST_ELASTICSEARCH`
+- `SIMPLIFIED_TEST_OPENSEARCH`
 
 Make sure the ports and usernames are updated to reflect the local configuration.
 
 ```sh
 # Set environment variables
 export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:9005/simplified_circulation_test"
-export SIMPLIFIED_TEST_ELASTICSEARCH="http://localhost:9200"
+export SIMPLIFIED_TEST_OPENSEARCH="http://localhost:9200"
 
 # Run tox
 tox -e "py38-{api,core}"

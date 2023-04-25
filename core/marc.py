@@ -503,9 +503,7 @@ class MARCExporterFacets(BaseFacets):
         self.start_time = start_time
 
     def modify_search_filter(self, filter):
-        filter.order = self.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME[
-            self.ORDER_LAST_UPDATE
-        ]
+        filter.order = self.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME[self.ORDER_LAST_UPDATE]
         filter.order_ascending = True
         filter.updated_after = self.start_time
 
@@ -711,7 +709,7 @@ class MARCExporter:
         :param start_time: Only include records that were created or modified after this time.
         :param force_refresh: Create new records even when cached records are available.
         :param mirror: Optional mirror to use instead of loading one from configuration.
-        :param query_batch_size: Number of works to retrieve with a single Elasticsearch query.
+        :param query_batch_size: Number of works to retrieve with a single Opensearch query.
         :param upload_batch_size: Number of records to mirror at a time. This is different
           from query_batch_size because S3 enforces a minimum size of 5MB for all parts
           of a multipart upload except the last, but 5MB of records would be too many

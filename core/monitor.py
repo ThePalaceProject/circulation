@@ -934,7 +934,7 @@ class WorkReaper(ReaperMonitor):
         )
 
     def delete(self, work):
-        """Delete work from elasticsearch and database."""
+        """Delete work from opensearch and database."""
         work.delete(self.search_index_client)
 
 

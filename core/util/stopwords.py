@@ -3,7 +3,7 @@
 # English:
 # https://snowballstem.org/algorithms/english/stop.txt
 # (BSD licensed)
-# This is the set of English stopwords used by the Elasticsearch analyzer.
+# This is the set of English stopwords used by the Opensearch analyzer.
 ENGLISH_STOPWORDS = {
     "i",
     "me",

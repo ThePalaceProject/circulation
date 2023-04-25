@@ -19,18 +19,15 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class ExternalSearchFixture:
     """
-    These tests require elasticsearch to be running locally. If it's not, or there's
+    These tests require opensearch to be running locally. If it's not, or there's
     an error creating the index, the tests will pass without doing anything.
 
-    Tests for elasticsearch are useful for ensuring that we haven't accidentally broken
+    Tests for opensearch are useful for ensuring that we haven't accidentally broken
     a type of search by changing analyzers or queries, but search needs to be tested manually
     to ensure that it works well overall, with a realistic index.
     """
 
     SEARCH_TEST_URLS = {
-        ExternalSearchIndex.SEARCH_VERSION_ES6_8: os.environ.get(
-            "SIMPLIFIED_TEST_ELASTICSEARCH", "http://localhost:9200"
-        ),
         ExternalSearchIndex.SEARCH_VERSION_OS1_X: os.environ.get(
             "SIMPLIFIED_TEST_OPENSEARCH", "http://localhost:9200"
         ),
@@ -52,7 +49,7 @@ class ExternalSearchFixture:
         fixture.version = testing_version
 
         fixture.integration = db.external_integration(
-            ExternalIntegration.ELASTICSEARCH,
+            ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
             url=fixture.url,
             settings={
@@ -67,7 +64,7 @@ class ExternalSearchFixture:
         except Exception as e:
             fixture.search = None
             logging.error(
-                "Unable to set up elasticsearch index, search tests will be skipped.",
+                "Unable to set up opensearch index, search tests will be skipped.",
                 exc_info=e,
             )
         return fixture
@@ -106,7 +103,6 @@ class ExternalSearchFixture:
 @pytest.fixture(
     scope="function",
     params=[
-        ExternalSearchIndex.SEARCH_VERSION_ES6_8,
         ExternalSearchIndex.SEARCH_VERSION_OS1_X,
     ],
 )
@@ -271,7 +267,6 @@ class EndToEndSearchFixture:
 @pytest.fixture(
     scope="function",
     params=[
-        ExternalSearchIndex.SEARCH_VERSION_ES6_8,
         ExternalSearchIndex.SEARCH_VERSION_OS1_X,
     ],
 )
@@ -296,11 +291,11 @@ def external_search_patch_fixture(request) -> Iterable[ExternalSearchPatchFixtur
     """Ask for the external search class to be patched with a mock."""
     fixture = ExternalSearchPatchFixture()
 
-    # Only setup the elasticsearch mock if the elasticsearch mark isn't set
-    elasticsearch_mark = request.node.get_closest_marker("elasticsearch")
-    if elasticsearch_mark is not None:
+    # Only setup the opensearch mock if the opensearch mark isn't set
+    opensearch_mark = request.node.get_closest_marker("opensearch")
+    if opensearch_mark is not None:
         raise RuntimeError(
-            "This fixture should not be combined with @pytest.mark.elasticsearch"
+            "This fixture should not be combined with @pytest.mark.opensearch"
         )
 
     fixture.search_mock = mock.patch(
