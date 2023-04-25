@@ -1,8 +1,8 @@
 from api.enki import EnkiAPI
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting
-from core.testing import DatabaseTest
 from core.util.http import HTTP
+from tests.fixtures.db import DatabaseTest
 
 
 class MockEnkiAPI(EnkiAPI):

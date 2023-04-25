@@ -9,7 +9,6 @@ import pytest
 from money import Money
 
 from core.model import Edition, Identifier
-from core.testing import DatabaseTest
 from core.util import (
     Bigrams,
     MetadataSimilarity,
@@ -20,6 +19,7 @@ from core.util import (
     slugify,
 )
 from core.util.median import median
+from tests.fixtures.db import DatabaseTest
 
 
 class DummyAuthor:

@@ -5,8 +5,9 @@ from core.model import get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.overdrive import OverdriveConfiguration, OverdriveCoreAPI
-from core.testing import DatabaseTest, MockRequestsResponse
+from core.testing import MockRequestsResponse
 from core.util.http import HTTP
+from tests.fixtures.db import DatabaseTest
 
 
 class MockOverdriveCoreAPI(OverdriveCoreAPI):

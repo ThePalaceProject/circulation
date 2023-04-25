@@ -26,9 +26,9 @@ from core.model.licensing import (
     RightsStatus,
 )
 from core.model.resource import Hyperlink, Representation
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.db import DatabaseTest
 
 
 class TestDeliveryMechanismFixture:

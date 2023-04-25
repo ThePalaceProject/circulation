@@ -1,5 +1,5 @@
-from core.testing import DatabaseTest
 from core.util.web_publication_manifest import AudiobookManifest, JSONable, Manifest
+from tests.fixtures.db import DatabaseTest
 
 
 class TestJSONable:

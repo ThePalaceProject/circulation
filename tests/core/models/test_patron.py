@@ -10,9 +10,9 @@ from core.model.datasource import DataSource
 from core.model.library import Library
 from core.model.licensing import PolicyException
 from core.model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.db import DatabaseTest
 
 
 class TestAnnotation:

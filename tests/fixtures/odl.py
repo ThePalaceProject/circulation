@@ -20,11 +20,12 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.configuration import ExternalIntegration
-from core.testing import DatabaseTest, MockRequestsResponse
+from core.testing import MockRequestsResponse
 from core.util.http import HTTP
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.db import DatabaseTest
 from tests.fixtures.files import APIFilesFixture
 
 
