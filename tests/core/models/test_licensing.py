@@ -28,7 +28,6 @@ from core.model.licensing import (
 from core.model.resource import Hyperlink, Representation
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.db import DatabaseTest
 
 
 class TestDeliveryMechanismFixture:
@@ -266,16 +265,16 @@ class TestRightsStatus:
         pytest.raises(IntegrityError, db.session.commit)
 
 
-class TestLicense(DatabaseTest):
-    def setup_method(self):
-        super().setup_method()
-        self.pool = self._licensepool(None)
+class TestLicenseFixture:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        self.db = db
+        self.pool = db.licensepool(None)
 
         now = utc_now()
         next_year = now + datetime.timedelta(days=365)
         yesterday = now - datetime.timedelta(days=1)
 
-        self.perpetual = self._license(
+        self.perpetual = db.license(
             self.pool,
             expires=None,
             checkouts_left=None,
@@ -283,7 +282,7 @@ class TestLicense(DatabaseTest):
             terms_concurrency=2,
         )
 
-        self.time_limited = self._license(
+        self.time_limited = db.license(
             self.pool,
             expires=next_year,
             checkouts_left=None,
@@ -291,7 +290,7 @@ class TestLicense(DatabaseTest):
             terms_concurrency=1,
         )
 
-        self.loan_limited = self._license(
+        self.loan_limited = db.license(
             self.pool,
             expires=None,
             checkouts_left=4,
@@ -299,7 +298,7 @@ class TestLicense(DatabaseTest):
             terms_concurrency=3,
         )
 
-        self.time_and_loan_limited = self._license(
+        self.time_and_loan_limited = db.license(
             self.pool,
             expires=next_year + datetime.timedelta(days=1),
             checkouts_left=52,
@@ -307,18 +306,18 @@ class TestLicense(DatabaseTest):
             terms_concurrency=1,
         )
 
-        self.expired_time_limited = self._license(
+        self.expired_time_limited = db.license(
             self.pool,
             expires=yesterday,
             checkouts_left=None,
             checkouts_available=1,
         )
 
-        self.expired_loan_limited = self._license(
+        self.expired_loan_limited = db.license(
             self.pool, expires=None, checkouts_left=0, checkouts_available=1
         )
 
-        self.unavailable = self._license(
+        self.unavailable = db.license(
             self.pool,
             expires=None,
             checkouts_left=None,
@@ -326,11 +325,18 @@ class TestLicense(DatabaseTest):
             status=LicenseStatus.unavailable,
         )
 
-    def test_loan_to(self):
+
+@pytest.fixture(scope="function")
+def licenses(db: DatabaseTransactionFixture) -> TestLicenseFixture:
+    return TestLicenseFixture(db)
+
+
+class TestLicense:
+    def test_loan_to(self, licenses: TestLicenseFixture):
         # Verify that loaning a license also loans its pool.
-        pool = self.pool
-        license = self.perpetual
-        patron = self._patron()
+        pool = licenses.pool
+        license = licenses.perpetual
+        patron = licenses.db.patron()
         patron.last_loan_activity_sync = utc_now()
         loan, is_new = license.loan_to(patron)
         assert license == loan.license
@@ -373,8 +379,9 @@ class TestLicense(DatabaseTest):
         is_inactive,
         total_remaining_loans,
         currently_available_loans,
+        licenses: TestLicenseFixture,
     ):
-        license = getattr(self, license_type)
+        license = getattr(licenses, license_type)
         assert is_perpetual == license.is_perpetual
         assert is_time_limited == license.is_time_limited
         assert is_loan_limited == license.is_loan_limited
@@ -394,8 +401,10 @@ class TestLicense(DatabaseTest):
             ("unavailable", None, 20),
         ],
     )
-    def test_license_checkout(self, license_type, left, available):
-        license = getattr(self, license_type)
+    def test_license_checkout(
+        self, license_type, left, available, licenses: TestLicenseFixture
+    ):
+        license = getattr(licenses, license_type)
         license.checkout()
         assert left == license.checkouts_left
         assert available == license.checkouts_available
@@ -450,55 +459,57 @@ class TestLicense(DatabaseTest):
             ),
         ],
     )
-    def test_license_checkin(self, license_params, left, available):
-        l = self._license(self.pool, **license_params)
+    def test_license_checkin(
+        self, license_params, left, available, licenses: TestLicenseFixture
+    ):
+        l = licenses.db.license(licenses.pool, **license_params)
         l.checkin()
         assert left == l.checkouts_left
         assert available == l.checkouts_available
 
-    def test_best_available_license(self):
+    def test_best_available_license(self, licenses: TestLicenseFixture):
         next_week = utc_now() + datetime.timedelta(days=7)
-        time_limited_2 = self._license(
-            self.pool,
+        time_limited_2 = licenses.db.license(
+            licenses.pool,
             expires=next_week,
             checkouts_left=None,
             checkouts_available=1,
         )
-        loan_limited_2 = self._license(
-            self.pool, expires=None, checkouts_left=2, checkouts_available=1
+        loan_limited_2 = licenses.db.license(
+            licenses.pool, expires=None, checkouts_left=2, checkouts_available=1
         )
 
         # First, we use the time-limited license that's expiring first.
-        assert time_limited_2 == self.pool.best_available_license()
-        time_limited_2.loan_to(self._patron())
+        assert time_limited_2 == licenses.pool.best_available_license()
+        time_limited_2.loan_to(licenses.db.patron())
 
         # When that's not available, we use the next time-limited license.
-        assert self.time_limited == self.pool.best_available_license()
-        self.time_limited.loan_to(self._patron())
+        assert licenses.time_limited == licenses.pool.best_available_license()
+        licenses.time_limited.loan_to(licenses.db.patron())
 
         # The time-and-loan-limited license also counts as time-limited for this.
-        assert self.time_and_loan_limited == self.pool.best_available_license()
-        self.time_and_loan_limited.loan_to(self._patron())
+        assert licenses.time_and_loan_limited == licenses.pool.best_available_license()
+        licenses.time_and_loan_limited.loan_to(licenses.db.patron())
 
         # Next is the perpetual license.
-        assert self.perpetual == self.pool.best_available_license()
-        self.perpetual.loan_to(self._patron())
+        assert licenses.perpetual == licenses.pool.best_available_license()
+        licenses.perpetual.loan_to(licenses.db.patron())
 
         # Then the loan-limited license with the most remaining checkouts.
-        assert self.loan_limited == self.pool.best_available_license()
-        self.loan_limited.loan_to(self._patron())
+        assert licenses.loan_limited == licenses.pool.best_available_license()
+        licenses.loan_limited.loan_to(licenses.db.patron())
 
         # That license allows 2 concurrent checkouts, so it's still the
         # best license until it's checked out again.
-        assert self.loan_limited == self.pool.best_available_license()
-        self.loan_limited.loan_to(self._patron())
+        assert licenses.loan_limited == licenses.pool.best_available_license()
+        licenses.loan_limited.loan_to(licenses.db.patron())
 
         # There's one more loan-limited license.
-        assert loan_limited_2 == self.pool.best_available_license()
-        loan_limited_2.loan_to(self._patron())
+        assert loan_limited_2 == licenses.pool.best_available_license()
+        loan_limited_2.loan_to(licenses.db.patron())
 
         # Now all licenses are either loaned out or expired.
-        assert None == self.pool.best_available_license()
+        assert None == licenses.pool.best_available_license()
 
 
 class TestLicensePool:
