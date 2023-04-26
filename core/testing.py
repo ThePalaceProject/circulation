@@ -199,19 +199,6 @@ class NeverSuccessfulBibliographicCoverageProvider(
         return self.failure(identifier, "Bitter failure", transient=True)
 
 
-class BrokenCoverageProvider(InstrumentedCoverageProvider):
-    SERVICE_NAME = "Broken"
-
-    def process_item(self, item):
-        raise Exception("I'm too broken to even return a CoverageFailure.")
-
-
-class BrokenBibliographicCoverageProvider(
-    BrokenCoverageProvider, BibliographicCoverageProvider
-):
-    SERVICE_NAME = "Broken (bibliographic)"
-
-
 class TransientFailureCoverageProvider(InstrumentedCoverageProvider):
     SERVICE_NAME = "Never successful (transient)"
 
@@ -235,33 +222,6 @@ class TaskIgnoringCoverageProvider(InstrumentedCoverageProvider):
 
     def process_batch(self, batch):
         return []
-
-
-class DummyCanonicalizeLookupResponse:
-    @classmethod
-    def success(cls, result):
-        r = cls()
-        r.status_code = 200
-        r.headers = {"Content-Type": "text/plain"}
-        r.content = result
-        return r
-
-    @classmethod
-    def failure(cls):
-        r = cls()
-        r.status_code = 404
-        return r
-
-
-class DummyMetadataClient:
-    def __init__(self):
-        self.lookups = {}
-
-    def canonicalize_author_name(self, primary_identifier, display_author):
-        if display_author in self.lookups:
-            return DummyCanonicalizeLookupResponse.success(self.lookups[display_author])
-        else:
-            return DummyCanonicalizeLookupResponse.failure()
 
 
 class DummyHTTPClient:
