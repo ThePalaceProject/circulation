@@ -33,9 +33,9 @@ class SirsiBlockReasons:
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
     """SirsiDynix Authentication API implementation.
 
-    Currently is only used to authenticate patrons, there is no CRUD implemented for patron profiles.
-    It is recommended (but not mandatory) to have the environment variable `SIRSI_DYNIX_APP_ID` set, so that the API requests
-    have an identifiying App ID attached to them, which is the recommended approach as per the SirsiDynix docs.
+    Currently, is only used to authenticate patrons, there is no CRUD implemented for patron profiles.
+    It is recommended (but not mandatory) to have the environment variable `SIRSI_DYNIX_APP_ID` set, so that the API
+    requests have an identifying App ID attached to them, which is the recommended approach as per the SirsiDynix docs.
     """
 
     NAME = "SirsiDynix Horizon Authentication"
@@ -138,11 +138,16 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             ).value
         )
 
-    def remote_authenticate(self, username: str, password: str) -> PatronData | bool:
+    def remote_authenticate(
+        self, username: str | None, password: str | None
+    ) -> PatronData | None:
         """Authenticate this user with the remote server."""
+        if username is None or password is None:
+            return None
+
         data = self.api_patron_login(username, password)
         if not data:
-            return False
+            return None
 
         return SirsiDynixPatronData(
             username=username,
@@ -152,8 +157,8 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             complete=False,
         )
 
-    def _remote_patron_lookup(
-        self, patron_or_patrondata: Patron | SirsiDynixPatronData
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Patron | PatronData
     ) -> None | SirsiDynixPatronData | ProblemDetail:
         """Do a remote patron lookup, this method can only lookup a patron with a patrondata object
         with a session_token already setup within it.

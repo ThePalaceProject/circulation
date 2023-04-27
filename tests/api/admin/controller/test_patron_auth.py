@@ -6,20 +6,13 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.controller.patron_auth_services import PatronAuthServicesController
 from api.admin.exceptions import *
-from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
+from api.authenticator import BasicAuthenticationProvider
 from api.millenium_patron import MilleniumPatronAPI
 from api.problem_details import *
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    ExternalIntegration,
-    Library,
-    create,
-    get_one,
-)
+from core.model import AdminRole, ExternalIntegration, Library, create, get_one
 
 
 class TestPatronAuth:
@@ -87,16 +80,7 @@ class TestPatronAuth:
                 settings_ctrl_fixture.ctrl.db.default_library().short_name
                 == library.get("short_name")
             )
-            assert None == library.get(
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
-            )
 
-        ConfigurationSetting.for_library_and_externalintegration(
-            settings_ctrl_fixture.ctrl.db.session,
-            AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            settings_ctrl_fixture.ctrl.db.default_library(),
-            auth_service,
-        ).value = "^(u)"
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
                 settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
@@ -107,9 +91,6 @@ class TestPatronAuth:
             assert (
                 settings_ctrl_fixture.ctrl.db.default_library().short_name
                 == library.get("short_name")
-            )
-            assert "^(u)" == library.get(
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
             )
 
     def test_patron_auth_services_get_with_millenium_auth_service(
@@ -130,12 +111,6 @@ class TestPatronAuth:
             BasicAuthenticationProvider.PASSWORD_REGULAR_EXPRESSION
         ).value = "p*"
         auth_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
-        ConfigurationSetting.for_library_and_externalintegration(
-            settings_ctrl_fixture.ctrl.db.session,
-            AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            settings_ctrl_fixture.ctrl.db.default_library(),
-            auth_service,
-        ).value = "^(u)"
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
@@ -162,9 +137,6 @@ class TestPatronAuth:
                 settings_ctrl_fixture.ctrl.db.default_library().short_name
                 == library.get("short_name")
             )
-            assert "^(u)" == library.get(
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
-            )
 
     def test_patron_auth_services_get_with_sip2_auth_service(
         self, settings_ctrl_fixture
@@ -183,12 +155,6 @@ class TestPatronAuth:
         auth_service.setting(SIP2AuthenticationProvider.FIELD_SEPARATOR).value = ","
 
         auth_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
-        ConfigurationSetting.for_library_and_externalintegration(
-            settings_ctrl_fixture.ctrl.db.session,
-            AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            settings_ctrl_fixture.ctrl.db.default_library(),
-            auth_service,
-        ).value = "^(u)"
 
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
@@ -214,9 +180,6 @@ class TestPatronAuth:
             assert (
                 settings_ctrl_fixture.ctrl.db.default_library().short_name
                 == library.get("short_name")
-            )
-            assert "^(u)" == library.get(
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION
             )
 
     def test_patron_auth_services_get_with_saml_auth_service(
@@ -397,8 +360,8 @@ class TestPatronAuth:
                             [
                                 {
                                     "short_name": library.short_name,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
                                 }
                             ]
                         ),
@@ -412,30 +375,6 @@ class TestPatronAuth:
             assert response.uri == MULTIPLE_BASIC_AUTH_SERVICES.uri
 
         settings_ctrl_fixture.ctrl.db.session.delete(auth_service)
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
-                [
-                    ("protocol", SimpleAuthenticationProvider.__module__),
-                    (
-                        "libraries",
-                        json.dumps(
-                            [
-                                {
-                                    "short_name": library.short_name,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
-                                    AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION: "(invalid re",
-                                }
-                            ]
-                        ),
-                    ),
-                ]
-                + common_args
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
-            )
-            assert response == INVALID_EXTERNAL_TYPE_REGULAR_EXPRESSION
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
@@ -447,9 +386,9 @@ class TestPatronAuth:
                             [
                                 {
                                     "short_name": library.short_name,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION: "(invalid re",
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION: "(invalid re",
                                 }
                             ]
                         ),
@@ -509,10 +448,9 @@ class TestPatronAuth:
                             [
                                 {
                                     "short_name": library.short_name,
-                                    AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION: "^(.)",
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION: "^1234",
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION: "^1234",
                                 }
                             ]
                         ),
@@ -541,15 +479,6 @@ class TestPatronAuth:
             == auth_service.setting(BasicAuthenticationProvider.TEST_PASSWORD).value
         )
         assert [library] == auth_service.libraries
-        assert (
-            "^(.)"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-                library,
-                auth_service,
-            ).value
-        )
         common_args: list = self._common_basic_auth_arguments()
 
         # test empty (BARCODE_FORMAT_NONE) values
@@ -655,9 +584,8 @@ class TestPatronAuth:
                             [
                                 {
                                     "short_name": l2.short_name,
-                                    AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION: "^(.)",
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
-                                    AuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
+                                    BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD: BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
                                 }
                             ]
                         ),
@@ -682,15 +610,6 @@ class TestPatronAuth:
             == auth_service.setting(BasicAuthenticationProvider.TEST_PASSWORD).value
         )
         assert [l2] == auth_service.libraries
-        assert (
-            "^(.)"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                AuthenticationProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-                l2,
-                auth_service,
-            ).value
-        )
 
     def test_patron_auth_service_delete(self, settings_ctrl_fixture):
         l1, ignore = create(

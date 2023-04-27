@@ -18,7 +18,6 @@ from money import Money
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
 from api.authenticator import (
-    AuthenticationProvider,
     Authenticator,
     BasicAuthenticationProvider,
     CirculationPatronProfileStorage,
@@ -62,28 +61,7 @@ from ..fixtures.database import DatabaseTransactionFixture
 from ..fixtures.vendor_id import VendorIDFixture
 
 
-class BasicConcreteAuthenticationProvider(BasicAuthenticationProvider):
-    def __init__(self, library, integration, analytics=None):
-        super().__init__(library, integration, analytics)
-
-
-class MockAuthenticationProvider:
-    """An AuthenticationProvider that always authenticates requests for
-    the given Patron and always returns the given PatronData when
-    asked to look up data.
-    """
-
-    def __init__(self, patron=None, patrondata=None):
-        self.patron = patron
-        self.patrondata = patrondata
-
-    def authenticate(self, _db, header):
-        return self.patron
-
-
-class MockBasicAuthenticationProvider(
-    BasicAuthenticationProvider, MockAuthenticationProvider
-):
+class MockBasicAuthenticationProvider(BasicAuthenticationProvider):
     """A mock basic authentication provider for use in testing the overall
     authentication process.
     """
@@ -95,10 +73,8 @@ class MockBasicAuthenticationProvider(
         analytics=None,
         patron=None,
         patrondata=None,
-        *args,
-        **kwargs,
     ):
-        super().__init__(library, integration, analytics, *args, **kwargs)
+        super().__init__(library, integration, analytics)
         self.patron = patron
         self.patrondata = patrondata
 
@@ -496,7 +472,7 @@ class MockAuthenticator(Authenticator):
 
     def __init__(self, current_library, authenticators, analytics=None):
         _db = Session.object_session(current_library)
-        super().__init__(_db, analytics)
+        super().__init__(_db, [current_library], analytics)
         self.current_library_name = current_library.short_name
         self.library_authenticators = authenticators
 
@@ -1462,16 +1438,6 @@ class TestAuthenticationProvider:
             == provider.external_integration(db.session)
         )
 
-    def test_private_remote_patron_lookup(
-        self, authenticator_fixture: AuthenticatorFixture
-    ):
-        provider = authenticator_fixture.mock_basic(patrondata=None)
-
-        # Passing a type other than Patron or PatronData to _remote_patron_lookup
-        # will raise a ValueError.
-        with pytest.raises(ValueError):
-            provider._remote_patron_lookup(MagicMock())
-
     def test_authenticated_patron_passes_on_none(
         self, authenticator_fixture: AuthenticatorFixture
     ):
@@ -1566,7 +1532,7 @@ class TestAuthenticationProvider:
         # patron has borrowing privileges.
         last_sync = patron.last_external_sync
         assert False == PatronUtility.needs_external_sync(patron)
-        patron = provider.authenticated_patron(db.session, dict(username=username))
+        patron = provider.authenticated_patron(db.session, self.credentials)
         assert last_sync == patron.last_external_sync
         assert barcode == patron.authorization_identifier
         assert username == patron.username
@@ -1586,7 +1552,7 @@ class TestAuthenticationProvider:
         )
         provider.patrondata = incomplete_data
         patron = provider.authenticated_patron(
-            db.session, dict(username="someotheridentifier")
+            db.session, dict(username="someotheridentifier", password="")
         )
         assert patron.last_external_sync > last_sync
 
@@ -1607,23 +1573,19 @@ class TestAuthenticationProvider:
         provider = authenticator_fixture.mock_basic(
             remote_patron_lookup_patrondata=patrondata
         )
-        provider.external_type_regular_expression = re.compile("^(.)")
         provider.update_patron_metadata(patron)
 
         # The patron's username has been changed.
         assert "user" == patron.username
 
         # last_external_sync has been updated.
-        assert patron.last_external_sync != None
-
-        # external_type was updated based on the regular expression
-        assert "2" == patron.external_type
+        assert patron.last_external_sync is not None
 
         # .neighborhood was not stored in .cached_neighborhood.  In
         # this case, it must be cheap to get .neighborhood every time,
         # and it's better not to store information we can get cheaply.
         assert "Little Homeworld" == patron.neighborhood
-        assert None == patron.cached_neighborhood
+        assert patron.cached_neighborhood is None
 
     def test_update_patron_metadata_noop_if_no_remote_metadata(
         self, authenticator_fixture: AuthenticatorFixture
@@ -1637,246 +1599,326 @@ class TestAuthenticationProvider:
         # patron.last_external_sync didn't change.
         assert None == patron.last_external_sync
 
-    def test_remote_patron_lookup(self, authenticator_fixture: AuthenticatorFixture):
-        """The default implementation of remote_patron_lookup returns whatever was passed in."""
-        db = authenticator_fixture.db
-        provider = BasicConcreteAuthenticationProvider(
-            db.default_library(), db.external_integration(db.fresh_str())
-        )
-        assert None == provider.remote_patron_lookup(None)
-        patron = db.patron()
-        assert patron == provider.remote_patron_lookup(patron)
-        patrondata = PatronData()
-        assert patrondata == provider.remote_patron_lookup(patrondata)
-
-    def test_update_patron_external_type(
+    def test_update_patron_metadata_returns_none_different_library(
         self, authenticator_fixture: AuthenticatorFixture
     ):
         db = authenticator_fixture.db
         patron = db.patron()
-        patron.authorization_identifier = "A123"
-        patron.external_type = "old value"
-        library = patron.library
-        integration = db.external_integration(db.fresh_str())
+        library1 = patron.library
+        library2 = db.library()
+        provider = MockBasic(library2, authenticator_fixture.mock_basic_integration)
+        patron_metadata = provider.update_patron_metadata(patron)
 
-        class MockProvider(AuthenticationProvider):
-            NAME = "Just a mock"
-
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MockProvider.EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            library,
-            integration,
-        )
-        setting.value = None
-
-        # If there is no EXTERNAL_TYPE_REGULAR_EXPRESSION, calling
-        # update_patron_external_type does nothing.
-        MockProvider(library, integration).update_patron_external_type(patron)
-        assert "old value" == patron.external_type
-
-        setting.value = "([A-Z])"
-        MockProvider(library, integration).update_patron_external_type(patron)
-        assert "A" == patron.external_type
-
-        setting.value = "([0-9]$)"
-        MockProvider(library, integration).update_patron_external_type(patron)
-        assert "3" == patron.external_type
-
-        # These regexp has no groups, so it has no power to change
-        # external_type.
-        setting.value = "A"
-        MockProvider(library, integration).update_patron_external_type(patron)
-        assert "3" == patron.external_type
-
-        # This regexp is invalid, so it isn't used.
-        setting.value = "(not a valid regexp"
-        provider = MockProvider(library, integration)
-        assert None == provider.external_type_regular_expression
+        assert library1 != library2
+        assert patron_metadata is None
 
     def test_restriction_matches(self):
         """Test the behavior of the library identifier restriction algorithm."""
-        m = AuthenticationProvider._restriction_matches
+        m = BasicAuthenticationProvider._restriction_matches
 
         # If restriction is none, we always return True.
-        assert True == m(
-            "123",
-            None,
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+        assert (
+            m(
+                "123",
+                None,
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+            )
+            is True
         )
-        assert True == m(
-            "123",
-            None,
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+        assert (
+            m(
+                "123",
+                None,
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+            )
+            is True
         )
-        assert True == m(
-            "123",
-            None,
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+        assert (
+            m(
+                "123",
+                None,
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+            )
+            is True
         )
-        assert True == m(
-            "123", None, AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST
+        assert (
+            m(
+                "123",
+                None,
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+            )
+            is True
         )
 
         # If field is None we always return False.
-        assert False == m(
-            None,
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+        assert (
+            m(
+                None,
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+            )
+            is False
         )
-        assert False == m(
-            None,
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+        assert (
+            m(
+                None,
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+            )
+            is False
         )
-        assert False == m(
-            None,
-            re.compile(".*"),
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+        assert (
+            m(
+                None,
+                re.compile(".*"),
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+            )
+            is False
         )
-        assert False == m(
-            None,
-            ["1", "2"],
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+        assert (
+            m(
+                None,
+                ["1", "2"],
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+            )
+            is False
         )
 
         # Test prefix
-        assert True == m(
-            "12345a",
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+        assert (
+            m(
+                "12345a",
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+            )
+            is True
         )
-        assert False == m(
-            "a1234",
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+        assert (
+            m(
+                "a1234",
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+            )
+            is False
         )
 
         # Test string
-        assert False == m(
-            "12345a",
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+        assert (
+            m(
+                "12345a",
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+            )
+            is False
         )
-        assert False == m(
-            "a1234",
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+        assert (
+            m(
+                "a1234",
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+            )
+            is False
         )
-        assert True == m(
-            "1234",
-            "1234",
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+        assert (
+            m(
+                "1234",
+                "1234",
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+            )
+            is True
         )
 
         # Test list
-        assert True == m(
-            "1234",
-            ["1234", "4321"],
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+        assert (
+            True
+            == m(
+                "1234",
+                ["1234", "4321"],
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+            )
+            is True
         )
-        assert True == m(
-            "4321",
-            ["1234", "4321"],
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+        assert (
+            m(
+                "4321",
+                ["1234", "4321"],
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+            )
+            is True
         )
-        assert False == m(
-            "12345",
-            ["1234", "4321"],
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+        assert (
+            m(
+                "12345",
+                ["1234", "4321"],
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+            )
+            is False
         )
-        assert False == m(
-            "54321",
-            ["1234", "4321"],
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+        assert (
+            m(
+                "54321",
+                ["1234", "4321"],
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+            )
+            is False
         )
 
         # Test Regex
-        assert True == m(
-            "123",
-            re.compile("^(12|34)"),
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+        assert (
+            m(
+                "123",
+                re.compile("^(12|34)"),
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+            )
+            is True
         )
-        assert True == m(
-            "345",
-            re.compile("^(12|34)"),
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+        assert (
+            m(
+                "345",
+                re.compile("^(12|34)"),
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+            )
+            is True
         )
-        assert False == m(
-            "abc",
-            re.compile("^bc"),
-            AuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+        assert (
+            m(
+                "abc",
+                re.compile("^bc"),
+                BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+            )
+            is False
         )
 
+    @pytest.mark.parametrize(
+        "restriction_type, restriction, identifier, expected",
+        [
+            # Test regex
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                re.compile("23[46]5"),
+                "23456",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                re.compile("23[46]5"),
+                "2365",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                re.compile("23[46]5"),
+                "2375",
+                False,
+            ),
+            # Test prefix
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                "2345",
+                "23456",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                "2345",
+                "123456",
+                False,
+            ),
+            # Test string
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                "2345",
+                "2345",
+                True,
+            ),
+            (
+                MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                "2345",
+                "12345",
+                False,
+            ),
+        ],
+    )
     def test_enforce_library_identifier_restriction(
+        self,
+        authenticator_fixture: AuthenticatorFixture,
+        restriction_type,
+        restriction,
+        identifier,
+        expected,
+    ):
+        """Test the enforce_library_identifier_restriction method."""
+        provider = authenticator_fixture.mock_basic()
+        provider.library_identifier_restriction_type = restriction_type
+        provider.library_identifier_restriction = restriction
+
+        # Test match applied to barcode
+        provider.library_identifier_field = (
+            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
+        )
+        patrondata = PatronData(authorization_identifier=identifier)
+        if expected:
+            assert (
+                provider.enforce_library_identifier_restriction(patrondata)
+                == patrondata
+            )
+        else:
+            assert provider.enforce_library_identifier_restriction(patrondata) is None
+
+        # Test match applied to library_identifier field on complete patrondata
+        provider.library_identifier_field = "other"
+        patrondata = PatronData(library_identifier=identifier)
+        if expected:
+            assert (
+                provider.enforce_library_identifier_restriction(patrondata)
+                == patrondata
+            )
+        else:
+            assert provider.enforce_library_identifier_restriction(patrondata) is None
+
+        # Test match applied to library_identifier field on incomplete patrondata
+        provider.library_identifier_field = "other"
+        local_patrondata = PatronData(complete=False, authorization_identifier="123")
+        remote_patrondata = PatronData(
+            library_identifier=identifier, authorization_identifier="123"
+        )
+        provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)
+        if expected:
+            assert (
+                provider.enforce_library_identifier_restriction(local_patrondata)
+                == remote_patrondata
+            )
+        else:
+            assert (
+                provider.enforce_library_identifier_restriction(local_patrondata)
+                is None
+            )
+        provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
+
+    def test_enforce_library_identifier_restriction_library_identifier_field_none(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        # Test library_identifier_field field is blank, we just return the patrondata passed in
+        provider = authenticator_fixture.mock_basic()
+        provider.library_identifier_restriction_type = (
+            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
+        )
+        provider.library_identifier_field = None
+        patrondata = PatronData(authorization_identifier="12345")
+        assert patrondata == provider.enforce_library_identifier_restriction(patrondata)
+
+    def test_enforce_library_identifier_restriction_none(
         self, authenticator_fixture: AuthenticatorFixture
     ):
         """Test the enforce_library_identifier_restriction method."""
-        db = authenticator_fixture.db
         provider = authenticator_fixture.mock_basic()
-        m = provider.enforce_library_identifier_restriction
-        patron = db.patron()
-        patrondata = PatronData()
-
-        # Test with patron rather than patrondata as argument
-        assert patron == m(object(), patron)
-        patron.library_id = -1
-        assert False == m(object(), patron)
-
-        # Test no restriction
         provider.library_identifier_restriction_type = (
             MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
         )
         provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert patrondata == m("12365", patrondata)
 
-        # Test regex against barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
-        )
-        provider.library_identifier_restriction = re.compile("23[46]5")
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert patrondata == m("23456", patrondata)
-        assert patrondata == m("2365", patrondata)
-        assert False == m("2375", provider.patrondata)
-
-        # Test prefix against barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX
-        )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert patrondata == m("23456", patrondata)
-        assert False == m("123456", patrondata)
-
-        # Test string against barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
-        )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        )
-        assert False == m("123456", patrondata)
-        assert patrondata == m("2345", patrondata)
-
-        # Test match applied to field on patrondata not barcode
-        provider.library_identifier_restriction_type = (
-            MockBasic.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
-        )
-        provider.library_identifier_restriction = "2345"
-        provider.library_identifier_field = "agent"
-        patrondata.library_identifier = "2345"
-        assert patrondata == m("123456", patrondata)
-        patrondata.library_identifier = "12345"
-        assert False == m("2345", patrondata)
+        patrondata = PatronData(authorization_identifier="12345")
+        assert provider.enforce_library_identifier_restriction(patrondata) == patrondata
 
     def test_patron_identifier_restriction(
         self, authenticator_fixture: AuthenticatorFixture
@@ -1885,72 +1927,80 @@ class TestAuthenticationProvider:
         library = db.default_library()
         integration = db.external_integration(db.fresh_str())
 
-        class MockProvider(AuthenticationProvider):
-            NAME = "Just a mock"
-
         string_setting = ConfigurationSetting.for_library_and_externalintegration(
             db.session,
-            MockProvider.LIBRARY_IDENTIFIER_RESTRICTION,
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION,
             library,
             integration,
         )
 
         type_setting = ConfigurationSetting.for_library_and_externalintegration(
             db.session,
-            MockProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
             library,
             integration,
         )
 
         # If the type is regex its converted into a regular expression.
-        type_setting.value = MockProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
+        type_setting.value = (
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
+        )
         string_setting.value = "^abcd"
-        provider = MockProvider(library, integration)
+        provider = MockBasicAuthenticationProvider(library, integration)
         assert "^abcd" == provider.library_identifier_restriction.pattern
 
         # If its type is list, make sure its converted into a list
-        type_setting.value = MockProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST
+        type_setting.value = (
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST
+        )
         string_setting.value = "a,b,c"
-        provider = MockProvider(library, integration)
+        provider = MockBasicAuthenticationProvider(library, integration)
         assert ["a", "b", "c"] == provider.library_identifier_restriction
 
         # If its type is prefix make sure its a string
-        type_setting.value = MockProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX
+        type_setting.value = (
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX
+        )
         string_setting.value = "abc"
-        provider = MockProvider(library, integration)
+        provider = MockBasicAuthenticationProvider(library, integration)
         assert "abc" == provider.library_identifier_restriction
 
         # If its type is string make sure its a string
-        type_setting.value = MockProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
+        type_setting.value = (
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING
+        )
         string_setting.value = "abc"
-        provider = MockProvider(library, integration)
+        provider = MockBasicAuthenticationProvider(library, integration)
         assert "abc" == provider.library_identifier_restriction
 
         # If its type is none make sure its actually None
-        type_setting.value = MockProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
+        type_setting.value = (
+            MockBasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
+        )
         string_setting.value = "abc"
-        provider = MockProvider(library, integration)
-        assert None == provider.library_identifier_restriction
+        provider = MockBasicAuthenticationProvider(library, integration)
+        assert provider.library_identifier_restriction is None
 
 
 class TestBasicAuthenticationProvider:
     def test_constructor(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
-        b = BasicAuthenticationProvider
-
-        class ConfigAuthenticationProvider(BasicAuthenticationProvider):
-            NAME = "Config loading test"
-
         integration = db.external_integration(
             db.fresh_str(), goal=ExternalIntegration.PATRON_AUTH_GOAL
         )
         db.default_library().integrations.append(integration)
-        integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = "idre"
-        integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = "pwre"
-        integration.setting(b.TEST_IDENTIFIER).value = "username"
-        integration.setting(b.TEST_PASSWORD).value = "pw"
+        integration.setting(
+            MockBasicAuthenticationProvider.IDENTIFIER_REGULAR_EXPRESSION
+        ).value = "idre"
+        integration.setting(
+            MockBasicAuthenticationProvider.PASSWORD_REGULAR_EXPRESSION
+        ).value = "pwre"
+        integration.setting(
+            MockBasicAuthenticationProvider.TEST_IDENTIFIER
+        ).value = "username"
+        integration.setting(MockBasicAuthenticationProvider.TEST_PASSWORD).value = "pw"
 
-        provider = ConfigAuthenticationProvider(db.default_library(), integration)
+        provider = MockBasicAuthenticationProvider(db.default_library(), integration)
         assert "idre" == provider.identifier_re.pattern
         assert "pwre" == provider.password_re.pattern
         assert "username" == provider.test_username
@@ -1961,9 +2011,11 @@ class TestBasicAuthenticationProvider:
             db.fresh_str(), goal=ExternalIntegration.PATRON_AUTH_GOAL
         )
 
-        provider = ConfigAuthenticationProvider(db.default_library(), integration)
+        provider = MockBasicAuthenticationProvider(db.default_library(), integration)
         assert (
-            re.compile(b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION)
+            re.compile(
+                MockBasicAuthenticationProvider.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION
+            )
             == provider.identifier_re
         )
         assert None == provider.password_re
@@ -1983,7 +2035,7 @@ class TestBasicAuthenticationProvider:
 
         # You don't have to have a testing patron.
         integration = db.external_integration(db.fresh_str())
-        no_testing_patron = BasicConcreteAuthenticationProvider(
+        no_testing_patron = MockBasicAuthenticationProvider(
             db.default_library(), integration
         )
         assert (None, None) == no_testing_patron.testing_patron(db.session)
@@ -2074,9 +2126,9 @@ class TestBasicAuthenticationProvider:
         assert value == present_patron.testing_patron_or_bust(db.session)
 
     def test__run_self_tests(self, authenticator_fixture: AuthenticatorFixture):
-        _db = object()
+        _db = MagicMock()
 
-        class CantAuthenticateTestPatron(BasicAuthenticationProvider):
+        class CantAuthenticateTestPatron(MockBasicAuthenticationProvider):
             def __init__(self):
                 pass
 
@@ -2089,13 +2141,13 @@ class TestBasicAuthenticationProvider:
         provider = CantAuthenticateTestPatron()
         [result] = list(provider._run_self_tests(_db))
         assert _db == provider.called_with
-        assert False == result.success
+        assert result.success is False
         assert "Nope" == result.exception.args[0]
 
         # If we can authenticate a test patron, the patron and their
         # password are passed into the next test.
 
-        class Mock(BasicAuthenticationProvider):
+        class Mock(MockBasicAuthenticationProvider):
             def __init__(self, patron, password):
                 self.patron = patron
                 self.password = password
@@ -2110,7 +2162,7 @@ class TestBasicAuthenticationProvider:
                 return "some metadata"
 
         provider = Mock("patron", "password")
-        [get_patron, update_metadata] = provider._run_self_tests(object())
+        [get_patron, update_metadata] = provider._run_self_tests(_db)
         assert "Authenticating test patron" == get_patron.name
         assert True == get_patron.success
         assert (provider.patron, provider.password) == get_patron.result
@@ -2124,7 +2176,7 @@ class TestBasicAuthenticationProvider:
         ConfigurationSetting objects.
         """
         db = authenticator_fixture.db
-        b = BasicConcreteAuthenticationProvider
+        b = MockBasicAuthenticationProvider
         integration = db.external_integration(db.fresh_str())
         integration.setting(b.IDENTIFIER_KEYBOARD).value = b.EMAIL_ADDRESS_KEYBOARD
         integration.setting(b.PASSWORD_KEYBOARD).value = b.NUMBER_PAD
@@ -2142,27 +2194,27 @@ class TestBasicAuthenticationProvider:
 
     def test_server_side_validation(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
-        b = BasicConcreteAuthenticationProvider
+        b = MockBasicAuthenticationProvider
         integration = db.external_integration(db.fresh_str())
         integration.setting(b.IDENTIFIER_REGULAR_EXPRESSION).value = "foo"
         integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = "bar"
 
         provider = b(db.default_library(), integration)
 
-        assert True == provider.server_side_validation("food", "barbecue")
-        assert False == provider.server_side_validation("food", "arbecue")
-        assert False == provider.server_side_validation("ood", "barbecue")
-        assert False == provider.server_side_validation(None, None)
+        assert provider.server_side_validation("food", "barbecue") is True
+        assert provider.server_side_validation("food", "arbecue") is False
+        assert provider.server_side_validation("ood", "barbecue") is False
+        assert provider.server_side_validation(None, None) is False
 
         # If this authenticator does not look at provided passwords,
         # then the only values that will pass validation are null
         # and the empty string.
         provider.password_keyboard = provider.NULL_KEYBOARD
-        assert False == provider.server_side_validation("food", "barbecue")
-        assert False == provider.server_side_validation("food", "is good")
-        assert False == provider.server_side_validation("food", " ")
-        assert True == provider.server_side_validation("food", None)
-        assert True == provider.server_side_validation("food", "")
+        assert provider.server_side_validation("food", "barbecue") is False
+        assert provider.server_side_validation("food", "is good") is False
+        assert provider.server_side_validation("food", " ") is False
+        assert provider.server_side_validation("food", None) is True
+        assert provider.server_side_validation("food", "") is True
         provider.password_keyboard = provider.DEFAULT_KEYBOARD
 
         # It's okay not to provide anything for server side validation.
@@ -2171,25 +2223,19 @@ class TestBasicAuthenticationProvider:
         integration.setting(b.PASSWORD_REGULAR_EXPRESSION).value = None
         provider = b(db.default_library(), integration)
         assert b.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION == provider.identifier_re.pattern
-        assert None == provider.password_re
-        assert True == provider.server_side_validation("food", "barbecue")
-        assert True == provider.server_side_validation("a", None)
-        assert False == provider.server_side_validation("!@#$", None)
+        assert provider.password_re is None
+        assert provider.server_side_validation("food", "barbecue") is True
+        assert provider.server_side_validation("a", "abc") is True
+        assert provider.server_side_validation("!@#$", "def") is False
 
         # Test maximum length of identifier and password.
         integration.setting(b.IDENTIFIER_MAXIMUM_LENGTH).value = "5"
         integration.setting(b.PASSWORD_MAXIMUM_LENGTH).value = "10"
         provider = b(db.default_library(), integration)
 
-        assert True == provider.server_side_validation("a", "1234")
-        assert False == provider.server_side_validation("a", "123456789012345")
-        assert False == provider.server_side_validation("abcdefghijklmnop", "1234")
-
-        # You can disable the password check altogether by setting maximum
-        # length to zero.
-        integration.setting(b.PASSWORD_MAXIMUM_LENGTH).value = "0"
-        provider = b(db.default_library(), integration)
-        assert True == provider.server_side_validation("a", None)
+        assert provider.server_side_validation("a", "1234") is True
+        assert provider.server_side_validation("a", "123456789012345") is False
+        assert provider.server_side_validation("abcdefghijklmnop", "1234") is False
 
     def test_local_patron_lookup(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
@@ -2296,36 +2342,6 @@ class TestBasicAuthenticationProvider:
                 == logo_link["href"]
             )
 
-    def test_remote_patron_lookup(self, authenticator_fixture: AuthenticatorFixture):
-        # remote_patron_lookup does the lookup by calling _remote_patron_lookup,
-        # then calls enforce_library_identifier_restriction to make sure that the patron
-        # is associated with the correct library
-        db = authenticator_fixture.db
-
-        class Mock(BasicAuthenticationProvider):
-            def _remote_patron_lookup(self, patron_or_patrondata):
-                self._remote_patron_lookup_called_with = patron_or_patrondata
-                return patron_or_patrondata
-
-            def enforce_library_identifier_restriction(self, identifier, patrondata):
-                self.enforce_library_identifier_restriction_called_with = (
-                    identifier,
-                    patrondata,
-                )
-                return "Result"
-
-        integration = db.external_integration(
-            db.fresh_str(), ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        provider = Mock(db.default_library(), integration)
-        patron = db.patron()
-        assert "Result" == provider.remote_patron_lookup(patron)
-        assert provider._remote_patron_lookup_called_with == patron
-        assert provider.enforce_library_identifier_restriction_called_with == (
-            patron.authorization_identifier,
-            patron,
-        )
-
     def test_scrub_credential(self, authenticator_fixture: AuthenticatorFixture):
         # Verify that the scrub_credential helper method strips extra whitespace
         # and nothing else.
@@ -2334,9 +2350,7 @@ class TestBasicAuthenticationProvider:
         integration = db.external_integration(
             db.fresh_str(), ExternalIntegration.PATRON_AUTH_GOAL
         )
-        provider = BasicConcreteAuthenticationProvider(
-            db.default_library(), integration
-        )
+        provider = MockBasicAuthenticationProvider(db.default_library(), integration)
         m = provider.scrub_credential
 
         assert None == provider.scrub_credential(None)
@@ -2347,7 +2361,6 @@ class TestBasicAuthenticationProvider:
         assert "user" == provider.scrub_credential(" user")
         assert "user" == provider.scrub_credential(" user ")
         assert "user" == provider.scrub_credential("    \ruser\t     ")
-        assert b"user" == provider.scrub_credential(b" user ")
 
 
 class TestBasicAuthenticationProviderAuthenticate:
@@ -2583,7 +2596,6 @@ class TestBasicAuthenticationProviderAuthenticate:
         )
 
         provider = authenticator_fixture.mock_basic(patrondata=patrondata)
-        provider.external_type_regular_expression = re.compile("^(.)")
         patron2 = provider.authenticate(db.session, self.credentials)
 
         # We were able to match our local patron to the patron held by the
@@ -2594,7 +2606,6 @@ class TestBasicAuthenticationProviderAuthenticate:
         # new identifiers.
         assert new_identifier == patron.authorization_identifier
         assert new_username == patron.username
-        assert patron.authorization_identifier[0] == patron.external_type
 
     def test_authentication_updates_outdated_patron_on_username_match(
         self, authenticator_fixture: AuthenticatorFixture
@@ -2724,7 +2735,7 @@ class TestSirsiDynixAuthenticationProvider:
             assert response == response_dict
 
             mock_request.return_value = MockRequestsResponse(401, content=response_dict)
-            assert sirsi_fixture.api.api_patron_login("username", "pwd") == False
+            assert sirsi_fixture.api.api_patron_login("username", "pwd") is False
 
     def test_remote_authenticate(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         with patch(
@@ -2740,7 +2751,16 @@ class TestSirsiDynixAuthenticationProvider:
             assert response.permanent_id == "test"
 
             mock_request.return_value = MockRequestsResponse(401, content=response_dict)
-            assert sirsi_fixture.api.remote_authenticate("username", "pwd") == False
+            assert sirsi_fixture.api.remote_authenticate("username", "pwd") is None
+
+    def test_remote_authenticate_username_password_none(
+        self, sirsi_fixture: SirsiDynixAuthenticatorFixture
+    ):
+        response = sirsi_fixture.api.remote_authenticate(None, "pwd")
+        assert response is None
+
+        response = sirsi_fixture.api.remote_authenticate("username", None)
+        assert response is None
 
     def test_remote_patron_lookup(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Test the happy path, patron OK, some fines
@@ -2836,7 +2856,7 @@ class TestSirsiDynixAuthenticationProvider:
         patrondata = sirsi_fixture.api.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
-        assert patrondata == None
+        assert patrondata is None
 
     def test__request(self, sirsi_fixture: SirsiDynixAuthenticatorFixture):
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix

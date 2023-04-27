@@ -21,9 +21,9 @@ class TestSimpleAuth:
         integration.setting(p.TEST_PASSWORD).value = "pass"
         provider = p(db.default_library(), integration)
 
-        assert None == provider.remote_authenticate("user", "wrongpass")
-        assert None == provider.remote_authenticate("user", None)
-        assert None == provider.remote_authenticate(None, "pass")
+        assert provider.remote_authenticate("user", "wrongpass") is None
+        assert provider.remote_authenticate("user", None) is None
+        assert provider.remote_authenticate(None, "pass") is None
         user = provider.remote_authenticate("barcode", "pass")
         assert isinstance(user, PatronData)
         assert "barcode" == user.authorization_identifier
@@ -37,6 +37,7 @@ class TestSimpleAuth:
 
         # User can also authenticate by their 'username'
         user2 = provider.remote_authenticate("barcode_username", "pass")
+        assert isinstance(user2, PatronData)
         assert "barcode" == user2.authorization_identifier
         assert "neighborhood" == user2.neighborhood
 
@@ -56,10 +57,11 @@ class TestSimpleAuth:
         assert isinstance(user, PatronData)
 
         user2 = provider.remote_authenticate("barcode", "")
+        assert isinstance(user2, PatronData)
         assert user2.authorization_identifier == user.authorization_identifier
 
         # If you provide any password, you're out.
-        assert None == provider.remote_authenticate("barcode", "pass")
+        assert provider.remote_authenticate("barcode", "pass") is None
 
     def test_additional_identifiers(self, db: DatabaseTransactionFixture):
         p = SimpleAuthenticationProvider
@@ -76,8 +78,8 @@ class TestSimpleAuth:
         )
         provider = p(db.default_library(), integration)
 
-        assert None == provider.remote_authenticate("a", None)
-        assert None == provider.remote_authenticate(None, "pass")
+        assert provider.remote_authenticate("a", None) is None
+        assert provider.remote_authenticate(None, "pass") is None
 
         user = provider.remote_authenticate("a", "pass")
         assert isinstance(user, PatronData)
@@ -86,20 +88,23 @@ class TestSimpleAuth:
         assert "a_username" == user.username
 
         user2 = provider.remote_authenticate("b", "pass")
-        assert isinstance(user, PatronData)
+        assert isinstance(user2, PatronData)
         assert "b" == user2.authorization_identifier
         assert "b_id" == user2.permanent_id
         assert "b_username" == user2.username
 
         # Users can also authenticate by their 'username'
         user3 = provider.remote_authenticate("a_username", "pass")
+        assert isinstance(user3, PatronData)
         assert "a" == user3.authorization_identifier
 
         user4 = provider.remote_authenticate("b_username", "pass")
+        assert isinstance(user4, PatronData)
         assert "b" == user4.authorization_identifier
 
         # The main user can still authenticate too.
         user5 = provider.remote_authenticate("barcode", "pass")
+        assert isinstance(user5, PatronData)
         assert "barcode" == user5.authorization_identifier
 
     def test_generate_patrondata(self, db: DatabaseTransactionFixture):
@@ -125,7 +130,7 @@ class TestSimpleAuth:
         result = m("1234", "Echo Park")
         assert result.neighborhood == "Echo Park"
 
-    def test__remote_patron_lookup(self, db: DatabaseTransactionFixture):
+    def test_remote_patron_lookup(self, db: DatabaseTransactionFixture):
         p = SimpleAuthenticationProvider
         integration = db.external_integration(db.fresh_str())
         integration.setting(p.TEST_IDENTIFIER).value = "barcode"
@@ -137,17 +142,19 @@ class TestSimpleAuth:
         patron.authorization_identifier = "barcode"
 
         # Returns None if nothing is passed in
-        assert provider._remote_patron_lookup(None) == None
+        assert provider.remote_patron_lookup(None) is None  # type: ignore[arg-type]
 
         # Returns a patron if a patron is passed in and something is found
-        result = provider._remote_patron_lookup(patron)
+        result = provider.remote_patron_lookup(patron)
+        assert isinstance(result, PatronData)
         assert result.permanent_id == "barcode_id"
 
         # Returns None if no patron is found
         patron.authorization_identifier = "wrong barcode"
-        result = provider._remote_patron_lookup(patron)
-        assert result == None
+        result = provider.remote_patron_lookup(patron)
+        assert result is None
 
         # Returns a patron if a PatronData object is passed in and something is found
-        result = provider._remote_patron_lookup(patron_data)
+        result = provider.remote_patron_lookup(patron_data)
+        assert isinstance(result, PatronData)
         assert result.permanent_id == "barcode_id"
