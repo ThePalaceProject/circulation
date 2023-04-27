@@ -22,10 +22,10 @@ from core.model import (
     Subject,
     Work,
 )
-from core.testing import MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.api.mockapi.enki import MockEnkiAPI
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.api_enki_files import EnkiFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

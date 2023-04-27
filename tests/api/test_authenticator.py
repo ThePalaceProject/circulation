@@ -50,11 +50,11 @@ from core.model import (
 )
 from core.model.constants import LinkRelations
 from core.opds import OPDSFeed
-from core.testing import MockRequestsResponse
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException, RequestTimedOut
+from tests.core.mock import MockRequestsResponse
 
 from ..fixtures.api_controller import ControllerFixture
 from ..fixtures.database import DatabaseTransactionFixture

@@ -1,8 +1,8 @@
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from core.model import get_one_or_create
 from core.model.collection import Collection
-from core.testing import MockRequestsResponse
 from core.util.http import HTTP
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.db import DatabaseTest
 
 

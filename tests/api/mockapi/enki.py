@@ -28,7 +28,7 @@ class MockEnkiAPI(EnkiAPI):
         super().__init__(_db, collection, *args, **kwargs)
 
     def queue_response(self, status_code, headers={}, content=None):
-        from core.testing import MockRequestsResponse
+        from tests.core.mock import MockRequestsResponse
 
         self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
 

@@ -5,7 +5,6 @@ import pytest
 import requests
 
 from core.problem_details import INVALID_INPUT
-from core.testing import MockRequestsResponse
 from core.util.http import (
     HTTP,
     INTEGRATION_ERROR,
@@ -15,6 +14,7 @@ from core.util.http import (
     RequestTimedOut,
 )
 from core.util.problem_detail import ProblemDetail
+from tests.core.mock import MockRequestsResponse
 
 
 class TestHTTP:

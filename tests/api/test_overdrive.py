@@ -38,9 +38,9 @@ from core.model import (
     RightsStatus,
 )
 from core.overdrive import OverdriveConfiguration
-from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.api.mockapi.overdrive import MockOverdriveAPI
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 
 from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

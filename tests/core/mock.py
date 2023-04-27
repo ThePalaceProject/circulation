@@ -2,14 +2,14 @@ import json
 import logging
 from typing import Optional, Union
 
-from .coverage import (
+from core.coverage import (
     BibliographicCoverageProvider,
     CollectionCoverageProvider,
     IdentifierCoverageProvider,
     WorkCoverageProvider,
 )
-from .external_search import ExternalSearchIndex
-from .model import DataSource, ExternalIntegration
+from core.external_search import ExternalSearchIndex
+from core.model import DataSource, ExternalIntegration
 
 
 def _normalize_level(level):

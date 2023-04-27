@@ -23,10 +23,10 @@ from core.model import (
     Identifier,
     Representation,
 )
-from core.testing import MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
 from tests.api.mockapi.odilo import MockOdiloAPI
+from tests.core.mock import MockRequestsResponse
 
 from ..fixtures.api_odilo_files import OdiloFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

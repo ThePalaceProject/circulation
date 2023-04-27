@@ -45,12 +45,12 @@ from core.model import (
     get_one_or_create,
 )
 from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
-from core.testing import DummyHTTPClient
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
+from tests.core.mock import DummyHTTPClient
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

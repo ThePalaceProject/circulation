@@ -26,8 +26,8 @@ from core.model import (
 from core.model.configuration import ExternalIntegrationLink
 from core.model.licensing import LicenseStatus
 from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient
 from core.util.datetime_helpers import utc_now
+from tests.core.mock import DummyHTTPClient
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

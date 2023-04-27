@@ -15,11 +15,11 @@ from api.registration.registry import (
     RemoteRegistry,
 )
 from core.model import ConfigurationSetting, ExternalIntegration
-from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail
 from tests.api.mockapi.circulation import MockCirculationManager
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
