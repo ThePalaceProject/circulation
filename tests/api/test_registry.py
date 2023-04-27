@@ -19,6 +19,7 @@ from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail
+from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -136,6 +137,7 @@ class TestRemoteRegistry:
 
     def test_fetch_catalog(self, remote_registry_fixture: RemoteRegistryFixture):
         db = remote_registry_fixture.db
+
         # Test our ability to retrieve essential information from a
         # remote registry's root catalog.
         class Mock(RemoteRegistry):
@@ -866,7 +868,8 @@ class TestLibraryRegistrationScript:
             "--stage=testing",
             "--registry-url=http://registry/",
         ]
-        app = script.do_run(cmd_args=cmd_args, in_unit_test=True)
+        manager = MockCirculationManager(db.session)
+        script.do_run(cmd_args=cmd_args, manager=manager)
 
         # One library was processed.
         (registration, stage, url_for) = script.processed.pop()
@@ -884,7 +887,7 @@ class TestLibraryRegistrationScript:
 
         # Now run the script again without specifying a particular
         # library or the --stage argument.
-        app = script.do_run(cmd_args=[], in_unit_test=True)
+        script.do_run(cmd_args=[], manager=manager)
 
         # Every library was processed.
         assert {library, library2} == {x[0].library for x in script.processed}

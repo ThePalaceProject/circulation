@@ -183,9 +183,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         )
         return parser
 
-    def __init__(
-        self, _db=None, cmd_args=None, testing=False, manager=None, *args, **kwargs
-    ):
+    def __init__(self, _db=None, cmd_args=None, manager=None, *args, **kwargs):
         """Constructor.
         :param _db: A database connection.
         :param cmd_args: A mock set of command-line arguments, to use instead
@@ -203,7 +201,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
         if not manager:
-            manager = CirculationManager(self._db, testing=testing)
+            manager = CirculationManager(self._db)
         from api.app import app
 
         app.manager = manager

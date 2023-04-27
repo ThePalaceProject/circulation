@@ -2,7 +2,9 @@ import logging
 from collections import defaultdict
 
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
+from api.controller import CirculationManager
 from api.shared_collection import SharedCollectionAPI
+from core.external_search import MockExternalSearchIndex
 from core.model import DataSource, Hold, Loan
 
 
@@ -191,3 +193,16 @@ class MockSharedCollectionAPI(SharedCollectionAPI):
 
     def revoke_hold(self, collection, client, hold):
         return self._return_or_raise("revoke-hold")
+
+
+class MockCirculationManager(CirculationManager):
+    def setup_search(self):
+        """Set up a search client."""
+        return MockExternalSearchIndex()
+
+    def setup_circulation(self, library, analytics):
+        """Set up the Circulation object."""
+        return MockCirculationAPI(self._db, library, analytics)
+
+    def setup_shared_collection(self):
+        return MockSharedCollectionAPI(self._db)
