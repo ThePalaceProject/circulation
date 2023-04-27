@@ -2,7 +2,7 @@ from api.enki import EnkiAPI
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting
 from core.util.http import HTTP
-from tests.fixtures.db import DatabaseTest
+from tests.fixtures.db import make_default_library
 
 
 class MockEnkiAPI(EnkiAPI):
@@ -10,7 +10,7 @@ class MockEnkiAPI(EnkiAPI):
         self.responses = []
         self.requests = []
 
-        library = DatabaseTest.make_default_library(_db)
+        library = make_default_library(_db)
         if not collection:
             collection, ignore = Collection.by_name_and_protocol(
                 _db, name="Test Enki Collection", protocol=EnkiAPI.ENKI

@@ -16,7 +16,6 @@ from core.model import (
     create,
 )
 from core.s3 import S3Uploader, S3UploaderConfiguration
-from tests.fixtures.db import DatabaseTest
 
 
 class TestS3AnalyticsProvider(DatabaseTest):

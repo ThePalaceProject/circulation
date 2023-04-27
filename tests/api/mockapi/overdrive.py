@@ -7,7 +7,7 @@ from core.model.configuration import ExternalIntegration
 from core.overdrive import OverdriveConfiguration, OverdriveCoreAPI
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.db import DatabaseTest
+from tests.fixtures.db import make_default_library
 
 
 class MockOverdriveCoreAPI(OverdriveCoreAPI):
@@ -25,7 +25,7 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
     ):
         """Create a mock Overdrive collection for use in tests."""
         if library is None:
-            library = DatabaseTest.make_default_library(_db)
+            library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,

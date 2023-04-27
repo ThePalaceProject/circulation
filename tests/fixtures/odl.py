@@ -25,7 +25,7 @@ from tests.core.mock import MockRequestsResponse
 from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.db import DatabaseTest
+from tests.fixtures.db import make_default_library
 from tests.fixtures.files import APIFilesFixture
 
 
@@ -75,7 +75,7 @@ class ODLTestFixture:
         self.patched = patched
 
     def library(self):
-        return DatabaseTest.make_default_library(self.db.session)
+        return make_default_library(self.db.session)
 
     def collection(self, library):
         """Create a mock ODL collection to use in tests."""

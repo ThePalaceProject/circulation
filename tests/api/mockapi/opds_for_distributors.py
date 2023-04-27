@@ -3,7 +3,7 @@ from core.model import get_one_or_create
 from core.model.collection import Collection
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.db import DatabaseTest
+from tests.fixtures.db import make_default_library
 
 
 class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
@@ -16,7 +16,7 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
         :param _db: Database session.
         :param name: A name for the collection.
         """
-        library = DatabaseTest.make_default_library(_db)
+        library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,
