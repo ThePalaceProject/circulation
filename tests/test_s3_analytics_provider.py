@@ -18,7 +18,7 @@ from core.model import (
 from core.s3 import S3Uploader, S3UploaderConfiguration
 
 
-class TestS3AnalyticsProvider(DatabaseTest):
+class TestS3AnalyticsProvider:
     @staticmethod
     def timestamp_to_string(timestamp):
         """Return a string representation of a datetime object.
