@@ -1,15 +1,15 @@
-"""Update Sirsi auth config
+"""update sirsi auth config
 
-Revision ID: 457622962381
-Revises: dac99ae0c6fd
-Create Date: 2023-04-21 15:07:28.197192+00:00
+Revision ID: 5dcbc92c20b2
+Revises: 3ee5b99f2ae7
+Create Date: 2023-04-27 22:53:36.584426+00:00
 
 """
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "457622962381"
-down_revision = "dac99ae0c6fd"
+revision = "5dcbc92c20b2"
+down_revision = "3ee5b99f2ae7"
 branch_labels = None
 depends_on = None
 
