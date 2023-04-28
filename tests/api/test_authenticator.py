@@ -1562,6 +1562,145 @@ class TestAuthenticationProvider:
         assert barcode == patron.authorization_identifier
         assert username == patron.username
 
+    @pytest.mark.parametrize(
+        "auth_return,enforce_return,lookup_return,"
+        "calls_lookup,create_patron,expected",
+        [
+            # If we don't get a Patrondata from remote_authenticate, we don't call remote_patron_lookup
+            # or enforce_library_identifier_restriction
+            (None, None, None, 0, False, None),
+            # If we get a complete patrondata from remote_authenticate, we don't call remote_patron_lookup
+            (
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                None,
+                0,
+                False,
+                True,
+            ),
+            # If we get an incomplete patrondata from remote_authenticate, but get a complete patrondata
+            # from enforce_library_identifier_restriction, we don't call remote_patron_lookup
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                None,
+                0,
+                False,
+                True,
+            ),
+            # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
+            # returns None, we don't call remote_patron_lookup and get a ProblemDetail
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                None,
+                None,
+                0,
+                False,
+                PATRON_OF_ANOTHER_LIBRARY,
+            ),
+            # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
+            # returns an incomplete patrondata, we call remote_patron_lookup
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                1,
+                False,
+                True,
+            ),
+            # If the patron already exists and we have a complete patrondata we don't
+            # call remote_patron_lookup.
+            (
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                None,
+                0,
+                True,
+                True,
+            ),
+            # If the patron already exists but we have an incomplete patrondata, we call
+            # remote_patron_lookup, and update the patron record.
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(
+                    authorization_identifier="a", external_type="xyz", complete=True
+                ),
+                1,
+                True,
+                True,
+            ),
+            # If the patron already exists and we have an incomplete patrondata, but
+            # remote_patron_lookup returns None, we don't get a patron record.
+            (
+                PatronData(authorization_identifier="a", complete=False),
+                PatronData(authorization_identifier="a", complete=False),
+                None,
+                1,
+                True,
+                None,
+            ),
+        ],
+    )
+    def test_authenticated_patron_only_calls_remote_patron_lookup_once(
+        self,
+        authenticator_fixture: AuthenticatorFixture,
+        auth_return,
+        enforce_return,
+        lookup_return,
+        calls_lookup,
+        create_patron,
+        expected,
+    ):
+        # The call to remote_patron_lookup is potentially expensive, so we want to avoid calling it
+        # more than once. This test makes sure that if we have a complete patrondata from remote_authenticate,
+        # or from enforce_library_identifier_restriction, we don't call remote_patron_lookup.
+        db = authenticator_fixture.db
+        provider = authenticator_fixture.mock_basic()
+        provider.remote_authenticate = MagicMock(return_value=auth_return)
+        provider.enforce_library_identifier_restriction = MagicMock(
+            return_value=enforce_return
+        )
+        provider.remote_patron_lookup = MagicMock(return_value=lookup_return)
+
+        username = "a"
+        password = "b"
+        credentials = {"username": username, "password": password}
+
+        # Create a patron before doing auth and make sure we can find it
+        if create_patron:
+            db_patron = db.patron()
+            db_patron.authorization_identifier = username
+
+        patron = provider.authenticated_patron(db.session, credentials)
+        provider.remote_authenticate.assert_called_once_with(username, password)
+        if auth_return is not None:
+            provider.enforce_library_identifier_restriction.assert_called_once_with(
+                auth_return
+            )
+        else:
+            provider.enforce_library_identifier_restriction.assert_not_called()
+        assert provider.remote_patron_lookup.call_count == calls_lookup
+        if expected is True:
+            # Make sure we get a Patron object back and that the patrondata has been
+            # properly applied to it
+            assert isinstance(patron, Patron)
+            assert patron.external_type == "xyz"
+        else:
+            assert patron is expected
+
     def test_update_patron_metadata(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
         patron = db.patron()
@@ -2527,14 +2666,14 @@ class TestBasicAuthenticationProviderAuthenticate:
         authentication provider. But we handle it.
         """
         db = authenticator_fixture.db
-        patrondata = PatronData(permanent_id=db.fresh_str())
+        patrondata = PatronData(permanent_id=db.fresh_str(), complete=False)
         provider = authenticator_fixture.mock_basic(patrondata=patrondata)
 
         # When we call remote_authenticate(), we get patrondata, but
         # there is no corresponding local patron, so we call
         # remote_patron_lookup() for details, and we get nothing.  At
         # this point we give up -- there is no authenticated patron.
-        assert None == provider.authenticate(db.session, self.credentials)
+        assert provider.authenticate(db.session, self.credentials) is None
 
     def test_authentication_creates_missing_patron(
         self, authenticator_fixture: AuthenticatorFixture
