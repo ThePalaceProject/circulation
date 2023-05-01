@@ -1592,7 +1592,10 @@ class TestAuthenticationProvider:
         provider.patrondata = incomplete_data
         patron = provider.authenticated_patron(
             db.session,
-            Authorization(auth_type="basic", data=dict(username="someotheridentifier", password="")),
+            Authorization(
+                auth_type="basic",
+                data=dict(username="someotheridentifier", password=""),
+            ),
         )
         assert patron.last_external_sync > last_sync
 
