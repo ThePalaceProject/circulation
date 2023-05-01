@@ -820,10 +820,7 @@ class LibraryAuthenticator:
     def authenticated_patron(self, _db, auth: Authorization):
         """Go from an Authorization header value to a Patron object.
 
-        :param header: If Basic Auth is in use, this is a dictionary
-            with 'user' and 'password' components, derived from the HTTP
-            header `Authorization`. Otherwise, this is the literal value
-            of the `Authorization` HTTP header.
+        :param auth: A flask.Authorization object
 
         :return: A Patron, if one can be authenticated. None, if the
             credentials do not authenticate any particular patron. A
