@@ -5,6 +5,7 @@ from typing import Any, List
 from urllib import parse
 
 import pytest
+from werkzeug.datastructures import Authorization
 
 from api.authenticator import PatronData
 from api.config import CannotLoadConfiguration
@@ -357,7 +358,10 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         p2 = millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice", password="pin")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="alice", password="pin")
+            ),
         )
         assert p2 == p
         assert "SECOND-barcode" == p.authorization_identifier
@@ -368,7 +372,10 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="FIRST-barcode", password="pin")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="FIRST-barcode", password="pin")
+            ),
         )
         assert "FIRST-barcode" == p.authorization_identifier
 
@@ -377,7 +384,9 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session,
-            dict(username="SECOND-barcode", password="pin"),
+            Authorization(
+                auth_type="basic", data=dict(username="SECOND-barcode", password="pin")
+            ),
         )
         assert "SECOND-barcode" == p.authorization_identifier
 
@@ -386,7 +395,10 @@ class TestMilleniumPatronAPI:
         p.authorization_identifier = "abcd"
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice", password="pin")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="alice", password="pin")
+            ),
         )
         assert "abcd" == p.authorization_identifier
         assert "alice" == p.username
@@ -400,7 +412,10 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="FIRST-barcode", password="pin")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="FIRST-barcode", password="pin")
+            ),
         )
         assert "FIRST-barcode" == p.authorization_identifier
 
@@ -411,7 +426,9 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session,
-            dict(username="SECOND-barcode", password="pin"),
+            Authorization(
+                auth_type="basic", data=dict(username="SECOND-barcode", password="pin")
+            ),
         )
         assert "SECOND-barcode" == p.authorization_identifier
 
@@ -421,7 +438,10 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice", password="pin")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="alice", password="pin")
+            ),
         )
         assert "FIRST-barcode" == p.authorization_identifier
 
@@ -439,7 +459,10 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="FIRST-barcode", password="pin")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="FIRST-barcode", password="pin")
+            ),
         )
         assert "SECOND-barcode" == p.authorization_identifier
 
@@ -453,7 +476,10 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.success.html")
         alice = millenium_fixture.api.authenticate(
-            millenium_fixture.db.session, dict(username="alice", password="4444")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="alice", password="4444")
+            ),
         )
         assert isinstance(alice, Patron)
         assert "44444444444447" == alice.authorization_identifier
@@ -471,7 +497,9 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         alice = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session,
-            dict(username="44444444444447", password="4444"),
+            Authorization(
+                auth_type="basic", data=dict(username="44444444444447", password="4444")
+            ),
         )
         assert isinstance(alice, Patron)
         assert "44444444444447" == alice.authorization_identifier
@@ -480,7 +508,10 @@ class TestMilleniumPatronAPI:
         # Authenticate with username again
         millenium_fixture.api.enqueue("pintest.good.html")
         alice = millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice", password="4444")
+            millenium_fixture.db.session,
+            Authorization(
+                auth_type="basic", data=dict(username="alice", password="4444")
+            ),
         )
         assert isinstance(alice, Patron)
         assert "44444444444447" == alice.authorization_identifier
@@ -507,7 +538,9 @@ class TestMilleniumPatronAPI:
         # and updates last_external_sync if the last sync was twelve
         # hours ago.
         millenium_fixture.api.enqueue("pintest.good.html")
-        auth = dict(username="44444444444447", password="4444")
+        auth = Authorization(
+            auth_type="basic", data=dict(username="44444444444447", password="4444")
+        )
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
@@ -542,7 +575,9 @@ class TestMilleniumPatronAPI:
         p.authorization_identifier = "44444444444447"
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.invalid_expiration.html")
-        auth = dict(username="44444444444447", password="4444")
+        auth = Authorization(
+            auth_type="basic", data=dict(username="44444444444447", password="4444")
+        )
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
@@ -556,7 +591,9 @@ class TestMilleniumPatronAPI:
         p.authorization_identifier = "44444444444447"
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.invalid_fines.html")
-        auth = dict(username="44444444444447", password="4444")
+        auth = Authorization(
+            auth_type="basic", data=dict(username="44444444444447", password="4444")
+        )
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )

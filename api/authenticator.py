@@ -575,8 +575,8 @@ class Authenticator:
     def create_authentication_headers(self):
         return self.invoke_authenticator_method("create_authentication_headers")
 
-    def get_credential_from_header(self, header):
-        return self.invoke_authenticator_method("get_credential_from_header", header)
+    def get_credential_from_header(self, auth):
+        return self.invoke_authenticator_method("get_credential_from_header", auth)
 
     def create_bearer_token(self, *args, **kwargs):
         return self.invoke_authenticator_method("create_bearer_token", *args, **kwargs)
@@ -881,7 +881,7 @@ class LibraryAuthenticator:
     def _is_provider_available(self, _db, provider: AuthenticationProvider) -> bool:
         return provider.external_integration(_db).status != ExternalIntegration.RED
 
-    def get_credential_from_header(self, header):
+    def get_credential_from_header(self, auth: Authorization):
         """Extract a password credential from a WWW-Authenticate header
         (or equivalent).
 
@@ -893,7 +893,7 @@ class LibraryAuthenticator:
         """
         credential = None
         for provider in self.providers:
-            credential = provider.get_credential_from_header(header)
+            credential = provider.get_credential_from_header(auth)
             if credential is not None:
                 break
 
@@ -1297,7 +1297,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, HasSelfTests, ABC):
 
     @abstractmethod
     def authenticated_patron(
-        self, _db: Session, header: dict[str, str] | str
+        self, _db: Session, header: Authorization
     ) -> Patron | ProblemDetail | None:
         """Go from a WWW-Authenticate header (or equivalent) to a Patron object.
 
@@ -1310,9 +1310,8 @@ class AuthenticationProvider(OPDSAuthenticationFlow, HasSelfTests, ABC):
         ...
 
     @abstractmethod
-    def get_credential_from_header(self, header: dict[str, str] | str) -> str | None:
-        """Extract a password credential from a WWW-Authenticate header
-        (or equivalent).
+    def get_credential_from_header(self, auth: Authorization) -> str | None:
+        """Extract a password credential from a werkzeug.Authorization object
 
         This is used to pass on a patron's credential to a content provider,
         such as Overdrive, which performs independent validation of
@@ -1791,7 +1790,10 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         """
         if self.test_username is None:
             return self.test_username, self.test_password
-        header = dict(username=self.test_username, password=self.test_password)
+        header = Authorization(
+            auth_type="basic",
+            data=dict(username=self.test_username, password=self.test_password),
+        )
         return self.authenticated_patron(_db, header), self.test_password
 
     def testing_patron_or_bust(self, _db: Session) -> tuple[Patron, str]:
@@ -1934,6 +1936,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         """
         if auth and auth.type.lower() == "basic":
             return auth.get("password", None)
+        return None
 
     def server_side_validation(
         self, username: str | None, password: str | None
