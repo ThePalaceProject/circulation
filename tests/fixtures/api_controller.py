@@ -9,6 +9,7 @@ from typing import Any, Callable
 import flask
 import pytest
 from flask import Flask
+from werkzeug.datastructures import Authorization
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.app import app
@@ -68,7 +69,10 @@ class ControllerFixture:
     # SimpleAuthenticationProvider set up in ControllerTest.setup().
     valid_auth = "Basic " + base64.b64encode("unittestuser:unittestpassword")
     invalid_auth = "Basic " + base64.b64encode("user1:password2")
-    valid_credentials = dict(username="unittestuser", password="unittestpassword")
+    valid_credentials = Authorization(
+        auth_type="basic",
+        data=dict(username="unittestuser", password="unittestpassword"),
+    )
 
     def __init__(
         self,

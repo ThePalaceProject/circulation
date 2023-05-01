@@ -15,7 +15,7 @@ from flask_babel import lazy_gettext as _
 from money import Money
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.sql.expression import or_
-from werkzeug.datastructures import Headers
+from werkzeug.datastructures import Authorization, Headers
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
@@ -817,7 +817,7 @@ class LibraryAuthenticator:
             yield self.basic_auth_provider
         yield from list(self.saml_providers_by_name.values())
 
-    def authenticated_patron(self, _db, header):
+    def authenticated_patron(self, _db, auth: Authorization):
         """Go from an Authorization header value to a Patron object.
 
         :param header: If Basic Auth is in use, this is a dictionary
@@ -831,27 +831,17 @@ class LibraryAuthenticator:
         """
         provider = None
         provider_token = None
-        if (
-            self.basic_auth_provider
-            and isinstance(header, dict)
-            and "username" in header
-        ):
+        if self.basic_auth_provider and auth.type.lower() == "basic":
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
             provider = self.basic_auth_provider
-            provider_token = header
-        elif (
-            self.saml_providers_by_name
-            and isinstance(header, (bytes, str))
-            and "bearer" in header.lower()
-        ):
+            provider_token = auth.parameters
+        elif self.saml_providers_by_name and auth.type.lower() == "bearer":
 
             # The patron wants to use an
             # SAMLAuthenticationProvider. Figure out which one.
             try:
-                provider_name, provider_token = self.decode_bearer_token_from_header(
-                    header
-                )
+                provider_name, provider_token = self.decode_bearer_token(auth.token)
             except jwt.exceptions.InvalidTokenError as e:
                 return INVALID_SAML_BEARER_TOKEN
             provider = self.saml_provider_lookup(provider_name)
@@ -952,13 +942,6 @@ class LibraryAuthenticator:
             iss=provider_name,
         )
         return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
-
-    def decode_bearer_token_from_header(self, header):
-        """Extract auth provider name and access token from an Authenticate
-        header value.
-        """
-        simplified_token = header.split(" ")[1]
-        return self.decode_bearer_token(simplified_token)
 
     def decode_bearer_token(self, token):
         """Extract auth provider name and access token from JSON web token."""
@@ -1872,7 +1855,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         return value.strip()
 
     def authenticate(
-        self, _db: Session, credentials: dict[str, str]
+        self, _db: Session, credentials: Authorization
     ) -> Patron | ProblemDetail | None:
         """Turn a set of credentials into a Patron object.
 
@@ -1942,7 +1925,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         )
         return patron
 
-    def get_credential_from_header(self, header: dict[str, str] | str) -> str | None:
+    def get_credential_from_header(self, auth: Authorization) -> str | None:
         """Extract a password credential from a WWW-Authenticate header
         (or equivalent).
 
@@ -1952,9 +1935,8 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
 
         :param header: A dictionary with keys `username` and `password`.
         """
-        if not isinstance(header, dict):
-            return None
-        return header.get("password", None)
+        if auth and auth.type.lower() == "basic":
+            return auth.get("password", None)
 
     def server_side_validation(
         self, username: str | None, password: str | None
@@ -2191,9 +2173,9 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             return None
 
     def authenticated_patron(
-        self, _db: Session, header: dict[str, str] | str
+        self, _db: Session, authorization: Authorization
     ) -> Patron | ProblemDetail | None:
-        """Go from a WWW-Authenticate header (or equivalent) to a Patron object.
+        """Go from a werkzeug.Authorization object to a Patron object.
 
         If the Patron needs to have their metadata updated, it happens
         transparently at this point.
@@ -2201,14 +2183,11 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         :return: A Patron if one can be authenticated; a ProblemDetail
             if an error occurs; None if the credentials are missing or wrong.
         """
-        if not isinstance(header, dict):
-            return None
-
         with elapsed_time_logging(
             log_method=self.logger().info,
             message_prefix="authenticated_patron - authenticate",
         ):
-            patron = self.authenticate(_db, header)
+            patron = self.authenticate(_db, authorization)
 
         if not isinstance(patron, Patron):
             return patron
