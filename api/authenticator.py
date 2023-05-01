@@ -832,13 +832,13 @@ class LibraryAuthenticator:
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
             provider = self.basic_auth_provider
-            provider_token = auth.parameters
+            provider_token = auth.parameters  # type: ignore[attr-defined]
         elif self.saml_providers_by_name and auth.type.lower() == "bearer":
 
             # The patron wants to use an
             # SAMLAuthenticationProvider. Figure out which one.
             try:
-                provider_name, provider_token = self.decode_bearer_token(auth.token)
+                provider_name, provider_token = self.decode_bearer_token(auth.token)  # type: ignore[attr-defined]
             except jwt.exceptions.InvalidTokenError as e:
                 return INVALID_SAML_BEARER_TOKEN
             provider = self.saml_provider_lookup(provider_name)
