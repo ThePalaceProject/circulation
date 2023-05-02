@@ -14,8 +14,8 @@ from core.model import (
     Library,
     create,
 )
-from core.testing import DummyHTTPClient
 from core.util.http import HTTP
+from tests.core.mock import DummyHTTPClient
 
 
 class TestLibraryRegistration:

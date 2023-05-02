@@ -53,9 +53,9 @@ from core.model import (
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.problem_details import INVALID_INPUT
-from core.testing import LogCaptureHandler
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
+from tests.core.mock import LogCaptureHandler
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 

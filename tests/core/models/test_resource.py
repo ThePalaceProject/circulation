@@ -8,7 +8,7 @@ from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import RightsStatus
 from core.model.resource import Hyperlink, Representation, Resource
-from core.testing import DummyHTTPClient, MockRequestsResponse
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     TemporaryDirectoryConfigurationFixture,

@@ -31,11 +31,7 @@ from core.app_server import (
     url_for,
 )
 from core.entrypoint import EverythingEntryPoint
-from core.external_search import (
-    ExternalSearchIndex,
-    MockExternalSearchIndex,
-    SortKeyPagination,
-)
+from core.external_search import ExternalSearchIndex, SortKeyPagination
 from core.lane import (
     BaseFacets,
     Facets,
@@ -126,7 +122,6 @@ from .opds import (
 )
 from .problem_details import *
 from .shared_collection import SharedCollectionAPI
-from .testing import MockCirculationAPI, MockSharedCollectionAPI
 
 if TYPE_CHECKING:
     from werkzeug import Response as wkResponse
@@ -135,10 +130,8 @@ if TYPE_CHECKING:
 class CirculationManager:
     log = logging.getLogger("api.controller.CirculationManager")
 
-    def __init__(self, _db, testing=False):
+    def __init__(self, _db):
         self._db = _db
-
-        self.testing = testing
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
@@ -356,29 +349,18 @@ class CirculationManager:
 
     def setup_search(self):
         """Set up a search client."""
-        if self.testing:
-            return MockExternalSearchIndex()
-        else:
-            search = ExternalSearchIndex(self._db)
-            if not search:
-                self.log.warn("No external search server configured.")
-                return None
-            return search
+        search = ExternalSearchIndex(self._db)
+        if not search:
+            self.log.warn("No external search server configured.")
+            return None
+        return search
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
-        if self.testing:
-            cls = MockCirculationAPI
-        else:
-            cls = CirculationAPI
-        return cls(self._db, library, analytics)
+        return CirculationAPI(self._db, library, analytics)
 
     def setup_shared_collection(self):
-        if self.testing:
-            cls = MockSharedCollectionAPI
-        else:
-            cls = SharedCollectionAPI
-        return cls(self._db)
+        return SharedCollectionAPI(self._db)
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.

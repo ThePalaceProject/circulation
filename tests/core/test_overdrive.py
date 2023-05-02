@@ -19,7 +19,6 @@ from core.model import (
     Subject,
 )
 from core.overdrive import (
-    MockOverdriveCoreAPI,
     OverdriveAdvantageAccount,
     OverdriveBibliographicCoverageProvider,
     OverdriveConfiguration,
@@ -27,9 +26,10 @@ from core.overdrive import (
     OverdriveRepresentationExtractor,
 )
 from core.scripts import RunCollectionCoverageProviderScript
-from core.testing import MockRequestsResponse
 from core.util.http import BadResponseException
 from core.util.string_helpers import base64
+from tests.api.mockapi.overdrive import MockOverdriveCoreAPI
+from tests.core.mock import MockRequestsResponse
 from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 from tests.fixtures.overdrive import OverdriveFixture, OverdriveWithAPIFixture
 

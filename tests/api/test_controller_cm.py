@@ -165,7 +165,7 @@ class TestCirculationManager:
             def setup_search(self):
                 raise Exception("doomed!")
 
-        circulation = BadSearch(circulation_fixture.db.session, testing=True)
+        circulation = BadSearch(circulation_fixture.db.session)
 
         # We didn't get a search object.
         assert None == circulation.external_search

@@ -16,10 +16,29 @@ from core.model import (
     create,
 )
 from core.s3 import S3Uploader, S3UploaderConfiguration
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestS3AnalyticsProvider(DatabaseTest):
+class S3AnalyticsFixture:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        self.db = db
+        self._analytics_integration, _ = create(
+            db.session,
+            ExternalIntegration,
+            goal=ExternalIntegration.ANALYTICS_GOAL,
+            protocol=S3AnalyticsProvider.__module__,
+        )
+        self._analytics_provider = S3AnalyticsProvider(
+            self._analytics_integration, db.default_library()
+        )
+
+
+@pytest.fixture(scope="function")
+def s3_analytics_fixture(db: DatabaseTransactionFixture):
+    return S3AnalyticsFixture(db)
+
+
+class TestS3AnalyticsProvider:
     @staticmethod
     def timestamp_to_string(timestamp):
         """Return a string representation of a datetime object.
@@ -30,55 +49,48 @@ class TestS3AnalyticsProvider(DatabaseTest):
         :return: String representation of the timestamp
         :rtype: str
         """
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")
+        return str(timestamp)
 
-    def setup_method(self):
-        super().setup_method()
-
-        self._analytics_integration, _ = create(
-            self._db,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=S3AnalyticsProvider.__module__,
-        )
-        self._analytics_provider = S3AnalyticsProvider(
-            self._analytics_integration, self._default_library
-        )
-
-    def test_exception_is_raised_when_there_is_no_external_integration_link(self):
+    def test_exception_is_raised_when_there_is_no_external_integration_link(
+        self, s3_analytics_fixture: S3AnalyticsFixture
+    ):
         # Act, Assert
         with pytest.raises(CannotLoadConfiguration):
-            self._analytics_provider.collect_event(
-                self._default_library,
+            s3_analytics_fixture._analytics_provider.collect_event(
+                s3_analytics_fixture.db.default_library(),
                 None,
                 CirculationEvent.NEW_PATRON,
                 datetime.datetime.utcnow(),
             )
 
-    def test_exception_is_raised_when_there_is_no_storage_integration(self):
+    def test_exception_is_raised_when_there_is_no_storage_integration(
+        self, s3_analytics_fixture: S3AnalyticsFixture
+    ):
         # Arrange
         # Create an external integration link but don't create a storage integration
         create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegrationLink,
-            external_integration_id=self._analytics_integration.id,
+            external_integration_id=s3_analytics_fixture._analytics_integration.id,
             purpose=ExternalIntegrationLink.ANALYTICS,
         )
 
         # Act, Assert
         with pytest.raises(CannotLoadConfiguration):
-            self._analytics_provider.collect_event(
-                self._default_library,
+            s3_analytics_fixture._analytics_provider.collect_event(
+                s3_analytics_fixture.db.default_library(),
                 None,
                 CirculationEvent.NEW_PATRON,
                 datetime.datetime.utcnow(),
             )
 
-    def test_exception_is_raised_when_there_is_no_analytics_bucket(self):
+    def test_exception_is_raised_when_there_is_no_analytics_bucket(
+        self, s3_analytics_fixture: S3AnalyticsFixture
+    ):
         # Arrange
         # Create a storage service
         storage_integration, _ = create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.STORAGE_GOAL,
             protocol=ExternalIntegration.S3,
@@ -86,39 +98,41 @@ class TestS3AnalyticsProvider(DatabaseTest):
 
         # Create an external integration link to the storage service
         create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegrationLink,
-            external_integration_id=self._analytics_integration.id,
+            external_integration_id=s3_analytics_fixture._analytics_integration.id,
             other_integration_id=storage_integration.id,
             purpose=ExternalIntegrationLink.ANALYTICS,
         )
 
         # Act, Assert
         with pytest.raises(CannotLoadConfiguration):
-            self._analytics_provider.collect_event(
-                self._default_library,
+            s3_analytics_fixture._analytics_provider.collect_event(
+                s3_analytics_fixture.db.default_library(),
                 None,
                 CirculationEvent.NEW_PATRON,
                 datetime.datetime.utcnow(),
             )
 
     def test_analytics_data_without_associated_license_pool_is_correctly_stored_in_s3(
-        self,
+        self, s3_analytics_fixture: S3AnalyticsFixture
     ):
         # Arrange
         # Create an S3 Analytics integration
         analytics_integration, _ = create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=S3AnalyticsProvider.__module__,
         )
         # Create an S3 Analytics provider
-        provider = S3AnalyticsProvider(analytics_integration, self._default_library)
+        provider = S3AnalyticsProvider(
+            analytics_integration, s3_analytics_fixture.db.default_library()
+        )
 
         # Create an S3 storage service
         storage_integration, _ = create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.STORAGE_GOAL,
             protocol=ExternalIntegration.S3,
@@ -130,7 +144,7 @@ class TestS3AnalyticsProvider(DatabaseTest):
 
         # Create a link to the S3 storage service
         create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegrationLink,
             external_integration_id=analytics_integration.id,
             other_integration_id=storage_integration.id,
@@ -140,7 +154,7 @@ class TestS3AnalyticsProvider(DatabaseTest):
         # Set up a mock instead of real S3Uploader class acting as the S3 storage service
         s3_uploader = create_autospec(spec=S3Uploader)
 
-        with patch("MirrorUploader.implementation") as mock_implementation:
+        with patch("core.mirror.MirrorUploader.implementation") as mock_implementation:
             mock_implementation.return_value = s3_uploader
             # Set up event's metadata
             event_time = datetime.datetime.utcnow()
@@ -148,16 +162,18 @@ class TestS3AnalyticsProvider(DatabaseTest):
             event_type = CirculationEvent.NEW_PATRON
 
             # Act
-            provider.collect_event(self._default_library, None, event_type, event_time)
+            provider.collect_event(
+                s3_analytics_fixture.db.default_library(), None, event_type, event_time
+            )
 
             # Assert
             s3_uploader.analytics_file_url.assert_called_once_with(
-                self._default_library, None, event_type, event_time
+                s3_analytics_fixture.db.default_library(), None, event_type, event_time
             )
             s3_uploader.mirror_one.assert_called_once()
             representation, _ = s3_uploader.mirror_one.call_args[0]
 
-            assert MediaTypes.JSON_MEDIA_TYPE == representation.media_type
+            assert MediaTypes.APPLICATION_JSON_MEDIA_TYPE == representation.media_type
 
             content = representation.content
             event = json.loads(content)
@@ -165,25 +181,27 @@ class TestS3AnalyticsProvider(DatabaseTest):
             assert event_type == event["type"]
             assert event_time_formatted == event["start"]
             assert event_time_formatted == event["end"]
-            assert self._default_library.id == event["library_id"]
+            assert s3_analytics_fixture.db.default_library().id == event["library_id"]
 
     def test_analytics_data_with_associated_license_pool_is_correctly_stored_in_s3(
-        self,
+        self, s3_analytics_fixture: S3AnalyticsFixture
     ):
         # Arrange
         # Create an S3 Analytics integration
         analytics_integration, _ = create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=S3AnalyticsProvider.__module__,
         )
         # Create an S3 Analytics provider
-        provider = S3AnalyticsProvider(analytics_integration, self._default_library)
+        provider = S3AnalyticsProvider(
+            analytics_integration, s3_analytics_fixture.db.default_library()
+        )
 
         # Create an S3 storage service
         storage_integration, _ = create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.STORAGE_GOAL,
             protocol=ExternalIntegration.S3,
@@ -195,7 +213,7 @@ class TestS3AnalyticsProvider(DatabaseTest):
 
         # Create a link to the S3 storage service
         create(
-            self._db,
+            s3_analytics_fixture.db.session,
             ExternalIntegrationLink,
             external_integration_id=analytics_integration.id,
             other_integration_id=storage_integration.id,
@@ -204,10 +222,10 @@ class TestS3AnalyticsProvider(DatabaseTest):
 
         # Set up a mock instead of real S3Uploader class acting as the S3 storage service
         s3_uploader = create_autospec(spec=S3Uploader)
-        with patch("MirrorUploader.implementation") as mock_implementation:
+        with patch("core.mirror.MirrorUploader.implementation") as mock_implementation:
             mock_implementation.return_value = s3_uploader
             # Create a test book
-            work = self._work(
+            work = s3_analytics_fixture.db.work(
                 data_source_name=DataSource.GUTENBERG,
                 title="Test Book",
                 authors=("Test Author 1", "Test Author 2"),
@@ -226,17 +244,23 @@ class TestS3AnalyticsProvider(DatabaseTest):
 
             # Act
             provider.collect_event(
-                self._default_library, license_pool, event_type, event_time
+                s3_analytics_fixture.db.default_library(),
+                license_pool,
+                event_type,
+                event_time,
             )
 
             # Assert
             s3_uploader.analytics_file_url.assert_called_once_with(
-                self._default_library, license_pool, event_type, event_time
+                s3_analytics_fixture.db.default_library(),
+                license_pool,
+                event_type,
+                event_time,
             )
             s3_uploader.mirror_one.assert_called_once()
             representation, _ = s3_uploader.mirror_one.call_args[0]
 
-            assert MediaTypes.JSON_MEDIA_TYPE == representation.media_type
+            assert MediaTypes.APPLICATION_JSON_MEDIA_TYPE == representation.media_type
 
             content = representation.content
             event = json.loads(content)
@@ -248,7 +272,7 @@ class TestS3AnalyticsProvider(DatabaseTest):
             assert event_type == event["type"]
             assert event_time_formatted == event["start"]
             assert event_time_formatted == event["end"]
-            assert self._default_library.id == event["library_id"]
+            assert s3_analytics_fixture.db.default_library().id == event["library_id"]
             assert license_pool.id == event["license_pool_id"]
             assert edition.publisher == event["publisher"]
             assert edition.imprint == event["imprint"]

@@ -8,7 +8,6 @@ import pytest
 from flask import Flask
 
 from api.authenticator import LibraryAuthenticator, PatronData
-from api.bibliotheca import MockBibliothecaAPI
 from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
@@ -20,7 +19,6 @@ from api.circulation import (
     LoanInfo,
 )
 from api.circulation_exceptions import *
-from api.testing import MockCirculationAPI
 from core.config import CannotLoadConfiguration
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
@@ -38,6 +36,8 @@ from core.model import (
     RightsStatus,
 )
 from core.util.datetime_helpers import utc_now
+from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
+from tests.api.mockapi.circulation import MockCirculationAPI
 
 from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

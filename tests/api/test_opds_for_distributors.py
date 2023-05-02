@@ -8,7 +8,6 @@ import pytest
 import core.opds_import
 from api.circulation_exceptions import *
 from api.opds_for_distributors import (
-    MockOPDSForDistributorsAPI,
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
     OPDSForDistributorsReaperMonitor,
@@ -29,6 +28,7 @@ from core.model import (
 )
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
+from tests.api.mockapi.opds_for_distributors import MockOPDSForDistributorsAPI
 from tests.fixtures.api_opds_dist_files import OPDSForDistributorsFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 

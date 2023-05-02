@@ -49,11 +49,11 @@ from core.opds_import import (
     OPDSXMLParser,
 )
 from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
-from core.testing import DummyHTTPClient
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
 from core.util.http import BadResponseException
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from tests.core.mock import DummyHTTPClient
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds_files import OPDSFilesFixture
 from tests.fixtures.sample_covers import SampleCoversFixture

@@ -10,7 +10,6 @@ from core.model.datasource import DataSource
 from core.model.library import Library
 from core.model.licensing import PolicyException
 from core.model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -808,7 +807,7 @@ def example_patron_profile_fixture(
     return ExamplePatronProfileStorageFixture.create(db)
 
 
-class TestPatronProfileStorage(DatabaseTest):
+class TestPatronProfileStorage:
     def test_writable_setting_names(
         self, example_patron_profile_fixture: ExamplePatronProfileStorageFixture
     ):

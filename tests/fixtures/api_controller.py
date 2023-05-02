@@ -30,6 +30,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.util.string_helpers import base64
+from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 
@@ -150,7 +151,7 @@ class ControllerFixture:
         self.default_patron = self.default_patrons[self.library]
 
         self.authdata = AuthdataUtility.from_config(self.library)
-        self.manager = CirculationManager(session, testing=True)
+        self.manager = MockCirculationManager(session)
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.

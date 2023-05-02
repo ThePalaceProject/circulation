@@ -13,7 +13,7 @@ from core.external_search import (
     SearchIndexCoverageProvider,
 )
 from core.model import ExternalIntegration, Work
-from core.testing import SearchClientForTesting
+from tests.core.mock import SearchClientForTesting
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

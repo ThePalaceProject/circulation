@@ -37,8 +37,8 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient, LogCaptureHandler
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from tests.core.mock import DummyHTTPClient, LogCaptureHandler
 from tests.fixtures.csv_files import CSVFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.marc_files import MARCFilesFixture
