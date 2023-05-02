@@ -880,6 +880,7 @@ class OPDS2Importer(
             error_message,
             data_source=self.data_source,
             transient=transient,
+            collection=self.collection,
         )
         failures[identifier.identifier].append(failure)
 

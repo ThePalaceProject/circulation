@@ -12,6 +12,7 @@ from core.model.coverage import (
     WorkCoverageRecord,
 )
 from core.model.datasource import DataSource
+from core.model.edition import Edition
 from core.model.identifier import Equivalency, Identifier
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -431,6 +432,30 @@ class TestCoverageRecord:
         assert source == new_record.data_source
         assert operation == new_record.operation
         assert "Oh no" == new_record.exception
+
+    def test_assert_coverage_operation(self, db: DatabaseTransactionFixture):
+        """Ensure all the methods that should raise errors, do raise the errors"""
+        edition: Edition = db.edition()
+        with pytest.raises(ValueError):
+            CoverageRecord.add_for(
+                edition,
+                edition.data_source,
+                CoverageRecord.IMPORT_OPERATION,
+            )
+
+        with pytest.raises(ValueError):
+            CoverageRecord.lookup(
+                edition,
+                edition.data_source,
+                CoverageRecord.IMPORT_OPERATION,
+            )
+
+        with pytest.raises(ValueError):
+            CoverageRecord.bulk_add(
+                [edition.primary_identifier],
+                edition.data_source,
+                CoverageRecord.IMPORT_OPERATION,
+            )
 
 
 class TestWorkCoverageRecord:

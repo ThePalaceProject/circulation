@@ -517,6 +517,7 @@ class OPDSImporter:
                     traceback.format_exc(),
                     data_source=data_source,
                     transient=False,
+                    collection=self.collection,
                 )
                 failures[key] = failure
                 # clean up any edition might have created
@@ -539,6 +540,7 @@ class OPDSImporter:
                     traceback.format_exc(),
                     data_source=data_source,
                     transient=False,
+                    collection=self.collection,
                 )
                 failures[key] = failure
 
@@ -839,6 +841,7 @@ class OPDSImporter:
             # This really is a failure. Associate the internal
             # identifier with the CoverageFailure object.
             failure.obj = internal_identifier
+            failure.collection = self.collection
         return internal_identifier, failure
 
     @classmethod
@@ -893,6 +896,8 @@ class OPDSImporter:
             identifier, detail, failure = self.data_detail_for_feedparser_entry(
                 entry=entry, data_source=data_source
             )
+            if failure:
+                failure.collection = self.collection
 
             if identifier:
                 if failure:
@@ -1779,6 +1784,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
             identifier,
             self.importer.data_source,
             operation=CoverageRecord.IMPORT_OPERATION,
+            collection=self.collection,
         )
 
         if not record:
@@ -1882,6 +1888,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
                 self.importer.data_source,
                 CoverageRecord.IMPORT_OPERATION,
                 status=CoverageRecord.SUCCESS,
+                collection=self.collection,
             )
 
         # Create CoverageRecords for the failures.
