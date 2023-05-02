@@ -14,7 +14,7 @@ from api.sirsidynix_authentication_provider import (
     SirsiDynixPatronData,
 )
 from core.model import ExternalIntegration, Patron
-from core.testing import MockRequestsResponse
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
