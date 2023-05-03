@@ -288,7 +288,9 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             return patrondata
 
         if self.auth_mode == self.PIN_AUTHENTICATION_MODE:
-            return self._remote_authenticate_pintest(password, username)
+            return self._remote_authenticate_pintest(
+                username=username, password=password
+            )
         elif self.auth_mode == self.FAMILY_NAME_AUTHENTICATION_MODE:
             # Patrons are authenticated by their family name.
             patrondata = self.remote_patron_lookup(username)
@@ -304,7 +306,9 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 return patrondata
         return None
 
-    def _remote_authenticate_pintest(self, password, username):
+    def _remote_authenticate_pintest(
+        self, username: str, password: Optional[str]
+    ) -> Optional[PatronData]:
         # Patrons are authenticated with a secret PIN.
         #
         # The PIN is URL-encoded. The username is not: as far as
@@ -333,7 +337,8 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
 
         if result.get("RETCOD") == "0":
             return PatronData(authorization_identifier=username, complete=False)
-        return False
+
+        return None
 
     @classmethod
     def family_name_match(self, actual_name, supposed_family_name):
