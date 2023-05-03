@@ -279,6 +279,9 @@ class ExternalIntegration(Base):
     # The token auth for an opds/opds2 feed
     TOKEN_AUTH = "token_auth_endpoint"
 
+    # The JWE Patron Auth protocol
+    PATRON_AUTH_JWE = "patron_auth_jwe"
+
     __tablename__ = "externalintegrations"
     id = Column(Integer, primary_key=True)
 

@@ -523,6 +523,14 @@ def delete_patron_devices():
     return app.manager.patron_devices.delete_patron_device()
 
 
+@library_dir_route("/patrons/me/token", methods=["GET"])
+@has_library
+@requires_auth
+@returns_problem_detail
+def patron_auth_token():
+    return app.manager.patron_auth_token.get_token()
+
+
 @library_dir_route("/loans", methods=["GET", "HEAD"])
 @has_library
 @allows_patron_web

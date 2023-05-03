@@ -81,7 +81,7 @@ from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP, RemoteIntegrationException
 from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.opds_writer import OPDSFeed
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 from core.util.string_helpers import base64
 
 from .adobe_vendor_id import (
@@ -90,7 +90,11 @@ from .adobe_vendor_id import (
     DeviceManagementProtocolController,
 )
 from .annotations import AnnotationParser, AnnotationWriter
-from .authenticator import Authenticator, CirculationPatronProfileStorage
+from .authenticator import (
+    Authenticator,
+    CirculationPatronProfileStorage,
+    PatronJWEAccessTokenProvider,
+)
 from .base_controller import BaseCirculationManagerController
 from .circulation import CirculationAPI
 from .circulation_exceptions import *
@@ -252,7 +256,6 @@ class CirculationManager:
 
         worklist = kwargs.get("worklist")
         if worklist is not None:
-
             # Try to get the index controller. If it's not initialized
             # for any reason, don't run this check -- we have bigger
             # problems.
@@ -485,6 +488,7 @@ class CirculationManager:
         self.odl_notification_controller = ODLNotificationController(self)
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
+        self.patron_auth_token = PatronAuthTokenController(self)
 
         from api.lcp.controller import LCPController
 
@@ -2785,3 +2789,19 @@ class StaticFileController(CirculationManagerController):
             os.path.abspath(os.path.dirname(__file__)), "..", "resources", "images"
         )
         return self.static_file(directory, filename)
+
+
+class PatronAuthTokenController(CirculationManagerController):
+    def get_token(self):
+        """Create a Patron Auth access token for an authenticated patron"""
+        patron = flask.request.patron
+        try:
+            token = PatronJWEAccessTokenProvider.generate_token(
+                self._db, patron, flask.request.authorization["password"]
+            )
+        except ProblemError as ex:
+            logging.getLogger(self.__class__.__name__).error(
+                f"Could not generate Patron Auth Access Token: {ex}"
+            )
+            return ex.problem_detail
+        return dict(access_token=token)

@@ -3,13 +3,38 @@ from __future__ import annotations
 import json
 import logging
 import sys
+<<<<<<< HEAD
 from abc import ABC
 from typing import Dict, Iterable, List, Literal, Optional, Tuple, Type
+=======
+import time
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Pattern,
+    Tuple,
+    Type,
+)
+from datetime import timedelta
+>>>>>>> c0cad57cc (JWE access token implementation)
 
 import flask
 import jwt
 from flask import url_for
 from flask_babel import lazy_gettext as _
+<<<<<<< HEAD
+=======
+from jwcrypto import jwe, jwk
+from money import Money
+from pydantic import PositiveInt, validator
+>>>>>>> c0cad57cc (JWE access token implementation)
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization, Headers
 
@@ -29,6 +54,7 @@ from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.http import RemoteIntegrationException
 from core.util.log import elapsed_time_logging
 from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.string_helpers import random_string
 
 from .authentication.base import AuthenticationProvider
 from .authentication.basic import BasicAuthenticationProvider
@@ -837,3 +863,122 @@ class BaseSAMLAuthenticationProvider(AuthenticationProvider, BearerTokenSigner, 
     @property
     def flow_type(self) -> str:
         return "http://librarysimplified.org/authtype/SAML-2.0"
+
+class PatronAccessTokenProvider:
+    """Provides access tokens for patron auth"""
+
+    @classmethod
+    def generate_token(cls, patron: Patron, password) -> str:
+        raise NotImplementedError()
+
+    @classmethod
+    def decode_token(cls, token) -> dict:
+        raise NotImplementedError()
+
+
+class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
+    """Provide JWE based access tokens for patron auth"""
+
+    PATRON_AUTH_JWE_KEY = "PATRON_AUTH_JWE_KEY"
+    PATRON_AUTH_CURRENT_JWE_KEY_ID = "PATRON_AUTH_CURRENT_JWE_KEY_ID"
+
+    @classmethod
+    def generate_key(cls) -> jwk.JWK:
+        kid = random_string(16)
+        return jwk.JWK.generate(kty="oct", size=256, kid=kid)
+
+    @classmethod
+    def get_integration(cls, _db) -> ExternalIntegration:
+        integration, _ = get_one_or_create(
+            _db,
+            ExternalIntegration,
+            protocol=ExternalIntegration.PATRON_AUTH_JWE,
+            goal=ExternalIntegration.PATRON_AUTH_GOAL,
+        )
+        return integration
+
+    @classmethod
+    def rotate_key(cls, _db) -> jwk.JWK:
+        """Rotate the current JWK key in the DB"""
+        key = cls.generate_key()
+        integration = cls.get_integration(_db)
+
+        kid_setting = integration.setting(cls.PATRON_AUTH_CURRENT_JWE_KEY_ID)
+        kid_setting.value = key.key_id
+
+        kvalue_setting = integration.setting(cls.PATRON_AUTH_JWE_KEY)
+        kvalue_setting.value = key.export()
+        return key
+
+    @classmethod
+    def get_current_key(cls, _db, kid=None) -> jwk.JWK:
+        """Get the current JWK key for the CM
+        :param kid: (Optional) If present, compare this value to the currently active kid,
+                    raise a ValueError if found to be different
+        """
+        integration = cls.get_integration(_db)
+
+        if kid is not None:
+            kid_setting = integration.setting(cls.PATRON_AUTH_CURRENT_JWE_KEY_ID)
+            if kid_setting.value != kid:
+                raise ValueError(
+                    "Current KID has changed, the key has probably been rotated"
+                )
+
+        kvalue_setting = integration.setting(cls.PATRON_AUTH_JWE_KEY)
+        # First time run, we don't have a value yet
+        if kvalue_setting.value_or_default(None) is None:
+            cls.rotate_key(_db)
+        return jwk.JWK.from_json(kvalue_setting.value)
+
+    @classmethod
+    def generate_token(cls, _db, patron: Patron, password: str) -> str:
+
+        # Only basic type authentication requires an access token
+        if not patron.patrondata:
+            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE)
+
+        key = cls.get_current_key(_db)
+        payload = dict(id=patron.id, pwd=password, typ="patron")
+
+        # special sirsidynix type patrondata
+        if patron.patrondata and hasattr(patron.patrondata, "session_token"):
+            payload["session_token"] = patron.patrondata.session_token
+            payload["typ"] = "sirsi"
+
+        token = jwe.JWE(
+            jwe.json_encode(payload),
+            dict(
+                alg="dir",
+                kid=key.key_id,
+                typ="JWE",
+                enc="A128CBC-HS256",
+                exp=(utc_now() + timedelta(hours=1)).timestamp(),
+            ),
+            recipient=key,
+        )
+        return token.serialize(compact=True)
+
+    @classmethod
+    def decode_token(cls, _db, token) -> dict:
+        try:
+            jwe_token = jwe.JWE.from_jose_token(token)
+        except jwe.InvalidJWEData as ex:
+            logging.getLogger(cls.__name__).error(
+                f"Invalid JWE data was encountered: {ex}"
+            )
+            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_INVALID)
+
+        # Check expiry
+        exp = jwe.json_decode(jwe_token.objects["protected"])["exp"]
+        if time.time() > exp:
+            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_EXPIRED)
+
+        try:
+            key = cls.get_current_key(_db, jwe_token.jose_header.get("kid"))
+        except ValueError:
+            # The kid was incorrect, the key has probably rotated
+            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_EXPIRED)
+
+        jwe_token.decrypt(key)
+        return jwe.json_decode(jwe_token.payload)

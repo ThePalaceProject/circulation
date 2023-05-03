@@ -191,6 +191,9 @@ class Patron(Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.neighborhood: Optional[str] = None
+        # We will keep the patrondata within the Patron object
+        # primarily so that the JWE access tokens can be generated
+        self.patrondata = None
 
     def __repr__(self):
         def date(d):
