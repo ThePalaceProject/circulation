@@ -317,7 +317,11 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             data = f"number={username}&pin={quoted_password}"
             path = "pintest"
             url = self.root + path
-            response = self.request_post(url, data=data)
+            response = self.request_post(
+                url,
+                data=data,
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
             result = dict(self._extract_text_nodes(response.content))
         else:
             path = "%(barcode)s/%(pin)s/pintest" % dict(

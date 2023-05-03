@@ -366,7 +366,6 @@ class TestMilleniumPatronAPI:
         """If the username is none, we get none as a return value."""
         assert millenium_fixture.api.remote_authenticate(None, "pin") is None
 
-
     def test_authentication_updates_patron_authorization_identifier(
         self, millenium_fixture: MilleniumPatronFixture
     ):
