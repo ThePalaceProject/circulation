@@ -880,7 +880,6 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
     """Provide JWE based access tokens for patron auth"""
 
     PATRON_AUTH_JWE_KEY = "PATRON_AUTH_JWE_KEY"
-    PATRON_AUTH_CURRENT_JWE_KEY_ID = "PATRON_AUTH_CURRENT_JWE_KEY_ID"
 
     @classmethod
     def generate_key(cls) -> jwk.JWK:
@@ -903,9 +902,6 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         key = cls.generate_key()
         integration = cls.get_integration(_db)
 
-        kid_setting = integration.setting(cls.PATRON_AUTH_CURRENT_JWE_KEY_ID)
-        kid_setting.value = key.key_id
-
         kvalue_setting = integration.setting(cls.PATRON_AUTH_JWE_KEY)
         kvalue_setting.value = key.export()
         return key
@@ -918,22 +914,21 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         """
         integration = cls.get_integration(_db)
 
-        if kid is not None:
-            kid_setting = integration.setting(cls.PATRON_AUTH_CURRENT_JWE_KEY_ID)
-            if kid_setting.value != kid:
-                raise ValueError(
-                    "Current KID has changed, the key has probably been rotated"
-                )
-
         kvalue_setting = integration.setting(cls.PATRON_AUTH_JWE_KEY)
         # First time run, we don't have a value yet
         if kvalue_setting.value_or_default(None) is None:
             cls.rotate_key(_db)
+
+        key = jwk.JWK.from_json(kvalue_setting.value)
+        if kid is not None and kid != key.key_id:
+            raise ValueError(
+                "Current KID has changed, the key has probably been rotated"
+            )
+
         return jwk.JWK.from_json(kvalue_setting.value)
 
     @classmethod
     def generate_token(cls, _db, patron: Patron, password: str) -> str:
-
         # Only basic type authentication requires an access token
         if not patron.patrondata:
             raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE)

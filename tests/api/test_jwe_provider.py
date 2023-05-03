@@ -85,12 +85,6 @@ class TestJWEProvider:
         key = PatronJWEAccessTokenProvider.rotate_key(db.session)
         integration = PatronJWEAccessTokenProvider.get_integration(db.session)
         assert (
-            integration.setting(
-                PatronJWEAccessTokenProvider.PATRON_AUTH_CURRENT_JWE_KEY_ID
-            ).value
-            == key.key_id
-        )
-        assert (
             integration.setting(PatronJWEAccessTokenProvider.PATRON_AUTH_JWE_KEY).value
             == key.export()
         )
@@ -98,12 +92,6 @@ class TestJWEProvider:
         key2 = PatronJWEAccessTokenProvider.rotate_key(db.session)
         assert key2.key_id != key.key_id
         assert key2.thumbprint() != key.thumbprint()
-        assert (
-            integration.setting(
-                PatronJWEAccessTokenProvider.PATRON_AUTH_CURRENT_JWE_KEY_ID
-            ).value
-            == key2.key_id
-        )
         assert (
             integration.setting(PatronJWEAccessTokenProvider.PATRON_AUTH_JWE_KEY).value
             == key2.export()
