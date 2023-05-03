@@ -172,10 +172,9 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             "key": USE_POST_FOR_REQUESTS,
             "label": _("Use POST for requests"),
             "description": _(
-                "Whether to use POST HTTP requests instead of GET. The Millenium Patron API has a design flaw in that "
-                "passwords appear in URLs made with GET requests. LYRASIS implementations of the API allow for using "
-                "HTTP POST so that passwords are no longer visible in URLs. If you are talking a LYRASIS implementation "
-                "such as VLC, you should enable this setting."
+                "Whether to use POST (instead of GET) HTTP requests. If this is a Virtual Library Card integration, "
+                "using POST will improve the security of this integration and is the recommended setting. Otherwise, "
+                "do not use POST, as it is NOT compatible with other Millenium integrations."
             ),
             "required": False,
             "default": False,
