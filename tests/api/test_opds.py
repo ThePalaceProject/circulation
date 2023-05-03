@@ -283,7 +283,7 @@ class TestCirculationManagerAnnotator:
         # Otherwise it's too slow to bother.
         class MockHit:
             def __init__(self, last_update):
-                # Store the time the way we get it from ElasticSearch --
+                # Store the time the way we get it from Opensearch --
                 # as a single-element list containing seconds since epoch.
                 self.last_update = [
                     (last_update - datetime_utc(1970, 1, 1)).total_seconds()
@@ -294,7 +294,7 @@ class TestCirculationManagerAnnotator:
         entry = entry_for(result)
         assert "2018-02-05" in entry.get("updated")
 
-        # Any 'update time' provided by ElasticSearch is used even if
+        # Any 'update time' provided by Opensearch is used even if
         # it's clearly earlier than Work.last_update_time.
         hit = MockHit(datetime_utc(2017, 1, 1))
         result._hit = hit

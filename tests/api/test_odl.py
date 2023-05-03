@@ -26,7 +26,6 @@ from api.circulation_exceptions import (
     NotOnHold,
 )
 from api.odl import (
-    MockSharedODLAPI,
     ODLAPIConfiguration,
     ODLHoldReaper,
     ODLImporter,
@@ -52,6 +51,7 @@ from core.util import datetime_helpers
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException, RemoteIntegrationException
 from core.util.string_helpers import base64
+from tests.api.mockapi.odl import MockSharedODLAPI
 from tests.fixtures.api_odl_files import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import APIFilesFixture

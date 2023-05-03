@@ -26,7 +26,6 @@ from api.axis import (
     HoldReleaseResponseParser,
     HoldResponseParser,
     JSONResponseParser,
-    MockAxis360API,
 )
 from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
@@ -62,6 +61,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail
+from tests.api.mockapi.axis import MockAxis360API
 
 from ..fixtures.api_axis_files import AxisFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

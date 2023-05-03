@@ -92,12 +92,12 @@ from core.scripts import (
     WorkClassificationScript,
     WorkProcessingScript,
 )
-from core.testing import (
+from core.util.datetime_helpers import datetime_utc, utc_now
+from core.util.worker_pools import DatabasePool
+from tests.core.mock import (
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
-from core.util.worker_pools import DatabasePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 

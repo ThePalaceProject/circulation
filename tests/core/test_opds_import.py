@@ -49,11 +49,11 @@ from core.opds_import import (
     OPDSXMLParser,
 )
 from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
-from core.testing import DummyHTTPClient
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
 from core.util.http import BadResponseException
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from tests.core.mock import DummyHTTPClient
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds_files import OPDSFilesFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
@@ -365,7 +365,6 @@ class TestOPDSImporter:
         assert m(book_links) == "Book"
 
     def test_extract_link_rights_uri(self):
-
         # Most of the time, a link's rights URI is inherited from the entry.
         entry_rights = RightsStatus.PUBLIC_DOMAIN_USA
 
@@ -1912,7 +1911,6 @@ class TestCombine:
         assert "new value" == c(a_is_old, a_is_new)["a"]
 
     def test_combine_present_value_not_replaced_with_none(self):
-
         """When combining a dictionary where a key is set to None
         with a dictionary where that key is present, the value
         is left alone.
@@ -2524,12 +2522,18 @@ class TestOPDSImportMonitor:
         # If there are CoverageRecords that record work are after the updated
         # dates, there's nothing new.
         record, ignore = CoverageRecord.add_for(
-            editions[0], data_source, CoverageRecord.IMPORT_OPERATION
+            editions[0],
+            data_source,
+            CoverageRecord.IMPORT_OPERATION,
+            collection=transaction.default_collection(),
         )
         record.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
 
         record2, ignore = CoverageRecord.add_for(
-            editions[1], data_source, CoverageRecord.IMPORT_OPERATION
+            editions[1],
+            data_source,
+            CoverageRecord.IMPORT_OPERATION,
+            collection=transaction.default_collection(),
         )
         record2.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
 
@@ -2598,7 +2602,10 @@ class TestOPDSImportMonitor:
 
         for edition in editions:
             record, ignore = CoverageRecord.add_for(
-                edition, data_source, CoverageRecord.IMPORT_OPERATION
+                edition,
+                data_source,
+                CoverageRecord.IMPORT_OPERATION,
+                collection=transaction.default_collection(),
             )
             record.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
 
@@ -2667,6 +2674,7 @@ class TestOPDSImportMonitor:
             editions[0].primary_identifier,
             data_source,
             operation=CoverageRecord.IMPORT_OPERATION,
+            collection=transaction.default_collection(),
         )
         assert CoverageRecord.SUCCESS == record.status
         assert None == record.exception
@@ -2699,7 +2707,10 @@ class TestOPDSImportMonitor:
             session, "urn:librarysimplified.org/terms/id/Gutenberg%20ID/10441"
         )
         failure = CoverageRecord.lookup(
-            identifier, data_source, operation=CoverageRecord.IMPORT_OPERATION
+            identifier,
+            data_source,
+            operation=CoverageRecord.IMPORT_OPERATION,
+            collection=transaction.default_collection(),
         )
         assert "Utter failure!" in failure.exception
 

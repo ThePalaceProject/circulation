@@ -149,7 +149,7 @@ class TestIndexController:
             doc = json.loads(data)
             assert library_name == doc["title"]
 
-        # Currently, the authentication document cache is disabled by default.
+        # Verify that the authentication document cache is working.
         circulation_fixture.manager.authentication_for_opds_documents[
             library_name
         ] = "Cached value"
@@ -159,47 +159,14 @@ class TestIndexController:
             response = (
                 circulation_fixture.manager.index_controller.authentication_document()
             )
-            assert "Cached value" != response.get_data(as_text=True)
+            assert response.get_data(as_text=True) == "Cached value"
 
-        # Enable the A4OPDS document cache and verify that it's working.
-        circulation_fixture.manager.authentication_for_opds_documents.max_age = 3600
-        cached_value = json.dumps(dict(key="Cached document"))
-        circulation_fixture.manager.authentication_for_opds_documents[
-            library_name
-        ] = cached_value
-        with circulation_fixture.request_context_with_library(
-            "/?debug", headers=dict(Authorization=circulation_fixture.invalid_auth)
-        ):
-            response = (
-                circulation_fixture.manager.index_controller.authentication_document()
-            )
-            assert cached_value == response.get_data(as_text=True)
-
-            # Note that WSGI debugging data was not provided, even
-            # though we requested it, since WSGI debugging is
-            # disabled.
-            assert "_debug" not in response.get_data(as_text=True)
-
-        # When WSGI debugging is enabled and requested, an
-        # authentication document includes some extra information in a
-        # special '_debug' section.
-        circulation_fixture.manager.wsgi_debug = True
-        with circulation_fixture.request_context_with_library(
-            "/?debug", headers=dict(Authorization=circulation_fixture.invalid_auth)
-        ):
-            response = (
-                circulation_fixture.manager.index_controller.authentication_document()
-            )
-            doc = json.loads(response.data)
-            assert doc["key"] == "Cached document"
-            debug = doc["_debug"]
-            assert all(x in debug for x in ("url", "cache", "environ"))
-
-        # WSGI debugging is not provided unless requested.
+        # Verify what happens when the cache is disabled.
+        circulation_fixture.manager.authentication_for_opds_documents.max_age = 0
         with circulation_fixture.request_context_with_library(
             "/", headers=dict(Authorization=circulation_fixture.invalid_auth)
         ):
             response = (
                 circulation_fixture.manager.index_controller.authentication_document()
             )
-            assert "_debug" not in response.get_data(as_text=True)
+            assert response.get_data(as_text=True) != "Cached value"

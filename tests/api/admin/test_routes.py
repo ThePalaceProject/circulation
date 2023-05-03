@@ -10,9 +10,9 @@ from werkzeug.exceptions import MethodNotAllowed
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
-from api.admin.dashboard_stats import generate_statistics
 from api.admin.problem_details import *
-from api.controller import CirculationManager, CirculationManagerController
+from api.controller import CirculationManagerController
+from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
 from tests.fixtures.vendor_id import VendorIDFixture
@@ -61,7 +61,6 @@ class MockAdminController(MockController):
 
 
 class AdminRouteFixture:
-
     # The first time __init__() is called, it will instantiate a real
     # CirculationManager object and store it in REAL_CIRCULATION_MANAGER.
     # We only do this once because it takes about a second to instantiate
@@ -87,7 +86,7 @@ class AdminRouteFixture:
             # controller.
             vendor_id.initialize_adobe(library, [library])
             vendor_id.adobe_vendor_id.password = vendor_id.TEST_NODE_VALUE
-            circ_manager = CirculationManager(self.db.session, testing=True)
+            circ_manager = MockCirculationManager(self.db.session)
             manager = AdminController(circ_manager)
             setup_admin_controllers(circ_manager)
             self.REAL_CIRCULATION_MANAGER = circ_manager
@@ -268,7 +267,6 @@ def admin_route_fixture(
 
 
 class TestAdminSignIn:
-
     CONTROLLER_NAME = "admin_sign_in_controller"
 
     @pytest.fixture(scope="function")
@@ -312,7 +310,6 @@ class TestAdminSignIn:
 
 
 class TestAdminWork:
-
     CONTROLLER_NAME = "admin_work_controller"
 
     @pytest.fixture(scope="function")
@@ -436,7 +433,6 @@ class TestAdminWork:
 
 
 class TestAdminFeed:
-
     CONTROLLER_NAME = "admin_feed_controller"
 
     @pytest.fixture(scope="function")
@@ -454,7 +450,6 @@ class TestAdminFeed:
 
 
 class TestAdminDashboard:
-
     CONTROLLER_NAME = "admin_dashboard_controller"
 
     @pytest.fixture(scope="function")
@@ -474,15 +469,8 @@ class TestAdminDashboard:
             url, fixture.controller.circulation_events
         )
 
-    def test_stats(self, fixture: AdminRouteFixture):
-        url = "/admin/stats"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.stats, stats_function=generate_statistics
-        )
-
 
 class TestAdminLibrarySettings:
-
     CONTROLLER_NAME = "admin_library_settings_controller"
 
     @pytest.fixture(scope="function")
@@ -509,7 +497,6 @@ class TestAdminLibrarySettings:
 
 
 class TestAdminCollectionSettings:
-
     CONTROLLER_NAME = "admin_collection_settings_controller"
 
     @pytest.fixture(scope="function")
@@ -536,7 +523,6 @@ class TestAdminCollectionSettings:
 
 
 class TestAdminCollectionSelfTests:
-
     CONTROLLER_NAME = "admin_collection_self_tests_controller"
 
     @pytest.fixture(scope="function")
@@ -552,7 +538,6 @@ class TestAdminCollectionSelfTests:
 
 
 class TestAdminCollectionLibraryRegistrations:
-
     CONTROLLER_NAME = "admin_collection_library_registrations_controller"
 
     @pytest.fixture(scope="function")
@@ -569,7 +554,6 @@ class TestAdminCollectionLibraryRegistrations:
 
 
 class TestAdminIndividualAdminSettings:
-
     CONTROLLER_NAME = "admin_individual_admin_settings_controller"
 
     @pytest.fixture(scope="function")
@@ -593,7 +577,6 @@ class TestAdminIndividualAdminSettings:
 
 
 class TestAdminPatronAuthServices:
-
     CONTROLLER_NAME = "admin_patron_auth_services_controller"
 
     @pytest.fixture(scope="function")
@@ -617,7 +600,6 @@ class TestAdminPatronAuthServices:
 
 
 class TestAdminPatronAuthServicesSelfTests:
-
     CONTROLLER_NAME = "admin_patron_auth_service_self_tests_controller"
 
     @pytest.fixture(scope="function")
@@ -636,7 +618,6 @@ class TestAdminPatronAuthServicesSelfTests:
 
 
 class TestAdminPatron:
-
     CONTROLLER_NAME = "admin_patron_controller"
 
     @pytest.fixture(scope="function")
@@ -660,7 +641,6 @@ class TestAdminPatron:
 
 
 class TestAdminMetadataServices:
-
     CONTROLLER_NAME = "admin_metadata_services_controller"
 
     @pytest.fixture(scope="function")
@@ -684,7 +664,6 @@ class TestAdminMetadataServices:
 
 
 class TestAdminAnalyticsServices:
-
     CONTROLLER_NAME = "admin_analytics_services_controller"
 
     @pytest.fixture(scope="function")
@@ -708,7 +687,6 @@ class TestAdminAnalyticsServices:
 
 
 class TestAdminSearchServices:
-
     CONTROLLER_NAME = "admin_search_services_controller"
 
     @pytest.fixture(scope="function")
@@ -732,7 +710,6 @@ class TestAdminSearchServices:
 
 
 class TestAdminSearchServicesSelfTests:
-
     CONTROLLER_NAME = "admin_search_service_self_tests_controller"
 
     @pytest.fixture(scope="function")
@@ -749,7 +726,6 @@ class TestAdminSearchServicesSelfTests:
 
 
 class TestAdminStorageServices:
-
     CONTROLLER_NAME = "admin_storage_services_controller"
 
     @pytest.fixture(scope="function")
@@ -773,7 +749,6 @@ class TestAdminStorageServices:
 
 
 class TestAdminCatalogServices:
-
     CONTROLLER_NAME = "admin_catalog_services_controller"
 
     @pytest.fixture(scope="function")
@@ -797,7 +772,6 @@ class TestAdminCatalogServices:
 
 
 class TestAdminDiscoveryServices:
-
     CONTROLLER_NAME = "admin_discovery_services_controller"
 
     @pytest.fixture(scope="function")
@@ -821,7 +795,6 @@ class TestAdminDiscoveryServices:
 
 
 class TestAdminSitewideServices:
-
     CONTROLLER_NAME = "admin_sitewide_configuration_settings_controller"
 
     @pytest.fixture(scope="function")
@@ -845,7 +818,6 @@ class TestAdminSitewideServices:
 
 
 class TestAdminLoggingServices:
-
     CONTROLLER_NAME = "admin_logging_services_controller"
 
     @pytest.fixture(scope="function")
@@ -869,7 +841,6 @@ class TestAdminLoggingServices:
 
 
 class TestAdminDiscoveryServiceLibraryRegistrations:
-
     CONTROLLER_NAME = "admin_discovery_service_library_registrations_controller"
 
     @pytest.fixture(scope="function")
@@ -888,7 +859,6 @@ class TestAdminDiscoveryServiceLibraryRegistrations:
 
 
 class TestAdminCustomListsServices:
-
     CONTROLLER_NAME = "admin_custom_lists_controller"
 
     @pytest.fixture(scope="function")
@@ -910,7 +880,6 @@ class TestAdminCustomListsServices:
 
 
 class TestAdminLanes:
-
     CONTROLLER_NAME = "admin_lanes_controller"
 
     @pytest.fixture(scope="function")
@@ -960,7 +929,6 @@ class TestAdminLanes:
 
 
 class TestTimestamps:
-
     CONTROLLER_NAME = "timestamps_controller"
 
     @pytest.fixture(scope="function")
@@ -974,7 +942,6 @@ class TestTimestamps:
 
 
 class TestAdminView:
-
     CONTROLLER_NAME = "admin_view_controller"
 
     @pytest.fixture(scope="function")
@@ -1004,7 +971,6 @@ class TestAdminView:
 
 
 class TestAdminStatic:
-
     CONTROLLER_NAME = "static_files"
 
     @pytest.fixture(scope="function")

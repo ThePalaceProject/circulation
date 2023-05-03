@@ -6,7 +6,7 @@ from typing import List
 from unittest.mock import MagicMock, call
 
 import pytest
-from elasticsearch.exceptions import ElasticsearchException
+from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
 from core.classifier import Classifier
@@ -53,9 +53,9 @@ from core.model import (
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.problem_details import INVALID_INPUT
-from core.testing import LogCaptureHandler
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
+from tests.core.mock import LogCaptureHandler
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
 
@@ -795,8 +795,8 @@ class TestFacets:
         assert "some collection" == filter.subcollection
 
         # The sort order constant is converted to the name of an
-        # Elasticsearch field.
-        expect = Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME[
+        # Opensearch field.
+        expect = Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME[
             Facets.ORDER_ADDED_TO_COLLECTION
         ]
         assert expect == filter.order
@@ -1528,7 +1528,7 @@ class TestSearchFacets:
         assert None == filter.languages
 
     def test_modify_search_filter_accepts_relevance_order(self):
-        # By default, ElasticSearch orders by relevance, so if order
+        # By default, Opensearch orders by relevance, so if order
         # is specified as "relevance", filter should not have an
         # `order` property.
         with LogCaptureHandler(logging.root) as logs:
@@ -2464,11 +2464,11 @@ class TestWorkList:
 
         assert [] == wl.search(db.session, query, NoResults())
 
-        # If there's an ElasticSearch exception during the query,
+        # If there's an Opensearch exception during the query,
         # there are no results.
         class RaisesException:
             def query_works(self, *args, **kwargs):
-                raise ElasticsearchException("oh no")
+                raise OpenSearchException("oh no")
 
         assert [] == wl.search(db.session, query, RaisesException())
 
@@ -4058,7 +4058,7 @@ class TestWorkListGroupsEndToEndData:
 
 class TestWorkListGroupsEndToEnd:
     # A comprehensive end-to-end test of WorkList.groups()
-    # using a real Elasticsearch index.
+    # using a real Opensearch index.
     #
     # Helper methods are tested in a different class, TestWorkListGroups
 
@@ -4167,7 +4167,7 @@ class TestWorkListGroupsEndToEnd:
         discredited_nonfiction.inherit_parent_restrictions = False
 
         # Since we have a bunch of lanes and works, plus an
-        # Elasticsearch index, let's take this opportunity to verify that
+        # Opensearch index, let's take this opportunity to verify that
         # WorkList.works and DatabaseBackedWorkList.works_from_database
         # give the same results.
         facets = DatabaseBackedFacets(
@@ -4254,7 +4254,7 @@ class TestWorkListGroupsEndToEnd:
                 # lane. It also contains a title that was previously
                 # featured earlier. The search index knows about a
                 # title (lq_litfix) that was not previously featured,
-                # but we didn't see it because the Elasticsearch query
+                # but we didn't see it because the Opensearch query
                 # didn't happen to fetch it.
                 #
                 # Each lane gets a separate query, and there were too
@@ -4553,7 +4553,7 @@ class TestWorkListGroups:
                 return one_lane_worth * len(resultsets)
 
         class MockSearchEngine:
-            """Mock a multi-query call to an Elasticsearch server."""
+            """Mock a multi-query call to an Opensearch server."""
 
             def __init__(self):
                 self.called_with = None

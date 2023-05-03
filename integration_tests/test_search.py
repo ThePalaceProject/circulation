@@ -40,7 +40,7 @@ from core.util.personal_names import (
 # A problem from the unit tests that we couldn't turn into a
 # real integration test.
 #
-# # In Elasticsearch 6, the exact author match that doesn't
+# # In Opensearch 1.x, the exact author match that doesn't
 # # mention 'biography' is boosted above a book that
 # # mentions all three words in its title.
 # order = [
@@ -831,7 +831,7 @@ class TestUnownedTitle(SearchTest):
     def test_nonexistent_title_tower(self):
         # NOTE: there is no book with this title.  The most likely
         # scenario is that the user meant "The Dark Tower." The only
-        # way to get this to work in Elasticsearch might be to
+        # way to get this to work in Opensearch might be to
         # institute a big synonym filter.
         self.search("The night tower", FirstMatch(title="The Dark Tower"))
 
@@ -1546,7 +1546,7 @@ class TestMJRose(VariantSearchTest):
     @known_to_fail
     def test_with_no_periods_or_spaces(self):
         # The author name is indexed as "m j", and without a space
-        # between the "m" and the "j" Elasticsearch won't match the
+        # between the "m" and the "j" Opensearch won't match the
         # tokens.
         self.search("mj rose")
 

@@ -18,7 +18,7 @@ from core.model import (
     create,
     get_one,
 )
-from core.testing import MockRequestsResponse
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

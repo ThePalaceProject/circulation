@@ -9,7 +9,6 @@ import pytest
 from money import Money
 
 from core.model import Edition, Identifier
-from core.testing import DatabaseTest
 from core.util import (
     Bigrams,
     MetadataSimilarity,
@@ -20,6 +19,7 @@ from core.util import (
     slugify,
 )
 from core.util.median import median
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class DummyAuthor:
@@ -378,21 +378,21 @@ class TestMedian:
         assert 290 == median(test_set)
 
 
-class TestFastQueryCount(DatabaseTest):
-    def test_no_distinct(self):
-        identifier = self._identifier()
-        qu = self._db.query(Identifier)
+class TestFastQueryCount:
+    def test_no_distinct(self, db: DatabaseTransactionFixture):
+        identifier = db.identifier()
+        qu = db.session.query(Identifier)
         assert 1 == fast_query_count(qu)
 
-    def test_distinct(self):
-        e1 = self._edition(title="The title", authors="Author 1")
-        e2 = self._edition(title="The title", authors="Author 1")
-        e3 = self._edition(title="The title", authors="Author 2")
-        e4 = self._edition(title="Another title", authors="Author 1")
+    def test_distinct(self, db: DatabaseTransactionFixture):
+        e1 = db.edition(title="The title", authors="Author 1")
+        e2 = db.edition(title="The title", authors="Author 1")
+        e3 = db.edition(title="The title", authors="Author 2")
+        e4 = db.edition(title="Another title", authors="Author 1")
 
         # Without the distinct clause, a query against Edition will
         # return four editions.
-        qu = self._db.query(Edition)
+        qu = db.session.query(Edition)
         assert qu.count() == fast_query_count(qu)
 
         # If made distinct on Edition.author, the query will return only
@@ -405,11 +405,11 @@ class TestFastQueryCount(DatabaseTest):
         qu3 = qu.distinct(Edition.title, Edition.author)
         assert qu3.count() == fast_query_count(qu3)
 
-    def test_limit(self):
+    def test_limit(self, db: DatabaseTransactionFixture):
         for x in range(4):
-            self._identifier()
+            db.identifier()
 
-        qu = self._db.query(Identifier)
+        qu = db.session.query(Identifier)
         assert qu.count() == fast_query_count(qu)
 
         qu2 = qu.limit(2)

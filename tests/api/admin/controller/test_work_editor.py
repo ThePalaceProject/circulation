@@ -36,11 +36,11 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.testing import (
+from core.util.datetime_helpers import datetime_utc
+from tests.core.mock import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc
 from tests.core.util.test_flask_util import add_request_context
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture

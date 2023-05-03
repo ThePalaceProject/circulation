@@ -1,4 +1,4 @@
-from parameterized import parameterized
+import pytest
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -42,11 +42,15 @@ class TestAttributeStatement:
 
 
 class TestSAMLSubjectPatronIDExtractor:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,subject,expected_patron_id,use_name_id,patron_id_attributes,patron_id_regular_expression",
         [
             (
                 "subject_without_patron_id",
                 SAMLSubject("http://idp.example.com", None, None),
+                None,
+                True,
+                None,
                 None,
             ),
             (
@@ -71,6 +75,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     ),
                 ),
                 "3",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_eduPersonUniqueId_attribute",
@@ -90,6 +97,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     ),
                 ),
                 "2",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_uid_attribute",
@@ -101,6 +111,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     ),
                 ),
                 "2",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_name_id",
@@ -117,6 +130,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     ),
                 ),
                 "1",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_switched_off_use_of_name_id",
@@ -134,6 +150,8 @@ class TestSAMLSubjectPatronIDExtractor:
                 ),
                 None,
                 False,
+                None,
+                None,
             ),
             (
                 "patron_id_attributes_matching_attributes_in_subject",
@@ -159,6 +177,7 @@ class TestSAMLSubjectPatronIDExtractor:
                 "4",
                 False,
                 [SAMLAttributeType.uid.name],
+                None,
             ),
             (
                 "patron_id_attributes_matching_second_saml_attribute",
@@ -187,6 +206,7 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.eduPersonTargetedID.name,
                     SAMLAttributeType.uid.name,
                 ],
+                None,
             ),
             (
                 "patron_id_attributes_not_matching_attributes_in_subject",
@@ -212,6 +232,7 @@ class TestSAMLSubjectPatronIDExtractor:
                 None,
                 False,
                 [SAMLAttributeType.givenName.name],
+                None,
             ),
             (
                 "patron_id_attributes_not_matching_attributes_in_subject_and_using_name_id_instead",
@@ -237,6 +258,7 @@ class TestSAMLSubjectPatronIDExtractor:
                 "1",
                 True,
                 [SAMLAttributeType.givenName.name],
+                None,
             ),
             (
                 "patron_id_regular_expression_matching_saml_subject",
@@ -386,16 +408,16 @@ class TestSAMLSubjectPatronIDExtractor:
                 ],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
             ),
-        ]
+        ],
     )
     def test(
         self,
         _,
         subject,
         expected_patron_id,
-        use_name_id=True,
-        patron_id_attributes=None,
-        patron_id_regular_expression=None,
+        use_name_id,
+        patron_id_attributes,
+        patron_id_regular_expression,
     ):
         """Make sure that SAMLSubjectUIDExtractor correctly extracts a unique patron ID from the SAML subject.
 

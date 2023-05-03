@@ -44,7 +44,8 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.testing import (
+from core.util.datetime_helpers import datetime_utc, utc_now
+from tests.core.mock import (
     AlwaysSuccessfulBibliographicCoverageProvider,
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulCoverageProvider,
@@ -57,7 +58,6 @@ from core.testing import (
     TransientFailureCoverageProvider,
     TransientFailureWorkCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

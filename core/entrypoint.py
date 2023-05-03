@@ -76,7 +76,7 @@ class EntryPoint:
 
     @classmethod
     def modify_search_filter(cls, filter):
-        """If necessary, modify an ElasticSearch Filter object so that it
+        """If necessary, modify an OpenSearch Filter object so that it
         restricts results to items shown through this entry point.
 
         The default behavior is not to change the Filter object at all.

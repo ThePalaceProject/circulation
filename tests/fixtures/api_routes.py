@@ -6,7 +6,8 @@ import pytest
 from werkzeug.exceptions import MethodNotAllowed
 
 from api import routes
-from api.controller import CirculationManager, CirculationManagerController
+from api.controller import CirculationManagerController
+from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 
@@ -108,7 +109,6 @@ class MockController(MockControllerMethod):
 
 
 class RouteTestFixture:
-
     # The first time __init__() is called, it will instantiate a real
     # CirculationManager object and store it in REAL_CIRCULATION_MANAGER.
     # We only do this once because it takes about a second to instantiate
@@ -135,7 +135,7 @@ class RouteTestFixture:
             # controller.
             vendor_id.initialize_adobe(library, [library])
             vendor_id.adobe_vendor_id.password = vendor_id.TEST_NODE_VALUE
-            manager = CirculationManager(self.db.session, testing=True)
+            manager = MockCirculationManager(self.db.session)
             RouteTestFixture.REAL_CIRCULATION_MANAGER = manager
 
         app = MockApp()

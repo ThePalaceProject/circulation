@@ -150,28 +150,6 @@ class SimplifiedOPDSLookup:
         return self._get(url)
 
 
-class MockSimplifiedOPDSLookup(SimplifiedOPDSLookup):
-    def __init__(self, *args, **kwargs):
-        self.requests = []
-        self.responses = []
-        super().__init__(*args, **kwargs)
-
-    def queue_response(self, status_code, headers={}, content=None):
-        from .testing import MockRequestsResponse
-
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _get(self, url, *args, **kwargs):
-        self.requests.append((url, args, kwargs))
-        response = self.responses.pop()
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
-
-
 class OPDSXMLParser(XMLParser):
     NAMESPACES = {
         "simplified": "http://librarysimplified.org/terms/",
@@ -539,6 +517,7 @@ class OPDSImporter:
                     traceback.format_exc(),
                     data_source=data_source,
                     transient=False,
+                    collection=self.collection,
                 )
                 failures[key] = failure
                 # clean up any edition might have created
@@ -561,6 +540,7 @@ class OPDSImporter:
                     traceback.format_exc(),
                     data_source=data_source,
                     transient=False,
+                    collection=self.collection,
                 )
                 failures[key] = failure
 
@@ -861,6 +841,7 @@ class OPDSImporter:
             # This really is a failure. Associate the internal
             # identifier with the CoverageFailure object.
             failure.obj = internal_identifier
+            failure.collection = self.collection
         return internal_identifier, failure
 
     @classmethod
@@ -915,6 +896,8 @@ class OPDSImporter:
             identifier, detail, failure = self.data_detail_for_feedparser_entry(
                 entry=entry, data_source=data_source
             )
+            if failure:
+                failure.collection = self.collection
 
             if identifier:
                 if failure:
@@ -1801,6 +1784,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
             identifier,
             self.importer.data_source,
             operation=CoverageRecord.IMPORT_OPERATION,
+            collection=self.collection,
         )
 
         if not record:
@@ -1904,6 +1888,7 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
                 self.importer.data_source,
                 CoverageRecord.IMPORT_OPERATION,
                 status=CoverageRecord.SUCCESS,
+                collection=self.collection,
             )
 
         # Create CoverageRecords for the failures.

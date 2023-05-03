@@ -1435,8 +1435,8 @@ class Work(Base):
             self.secondary_appeal = self.NO_APPEAL
 
     # This can be used in func.to_char to convert a SQL datetime into a string
-    # that Elasticsearch can parse as a date.
-    ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
+    # that Opensearch can parse as a date.
+    OPENSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
     def to_search_documents(
@@ -1868,7 +1868,7 @@ class Work(Base):
 
         def explicit_bool(label, t):
             # Ensure we always generate True/False instead of
-            # True/None. Elasticsearch can't filter on null values.
+            # True/None. Opensearch can't filter on null values.
             return case([(t, True)], else_=False).label(label)
 
         licensepools = (

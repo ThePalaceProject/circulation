@@ -259,11 +259,11 @@ class CirculationManagerAnnotator(Annotator):
         entry,
         updated=None,
     ):
-        # If ElasticSearch included a more accurate last_update_time,
+        # If OpenSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
         updated = work.last_update_time
         if isinstance(work, WorkSearchResult):
-            # Elasticsearch puts this field in a list, but we've set it up
+            # Opensearch puts this field in a list, but we've set it up
             # so there will be at most one value.
             last_updates = getattr(work._hit, "last_update", [])
             if last_updates:

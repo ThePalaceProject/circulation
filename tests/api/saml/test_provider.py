@@ -806,3 +806,12 @@ class TestSAMLWebSSOAuthenticationProvider:
             assert expected_patron_data.permanent_id == patron.external_identifier
             assert expected_patron_data == patron_data
             assert expected_expiration_time == credential.expires
+
+    def test_get_credential_from_header(self, saml_provider_fixture):
+        # This provider doesn't support getting the credential from the header.
+        # so this method should always return None.
+        provider = SAMLWebSSOAuthenticationProvider(
+            saml_provider_fixture.controller_fixture.db.default_library(),
+            saml_provider_fixture.integration,
+        )
+        assert provider.get_credential_from_header({}) is None

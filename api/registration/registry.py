@@ -565,7 +565,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         )
         return parser
 
-    def do_run(self, cmd_args=None, in_unit_test=False):
+    def do_run(self, cmd_args=None, manager=None):
         parser = self.arg_parser(self._db)
         parsed = self.parse_command_line(self._db, cmd_args)
 
@@ -578,7 +578,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         # Set up an application context so we have access to url_for.
         from api.app import app
 
-        app.manager = CirculationManager(self._db, testing=in_unit_test)
+        app.manager = manager or CirculationManager(self._db)
         base_url = ConfigurationSetting.sitewide(
             self._db, Configuration.BASE_URL_KEY
         ).value

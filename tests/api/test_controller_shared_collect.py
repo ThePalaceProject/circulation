@@ -47,10 +47,10 @@ from core.model import (
     create,
 )
 from core.problem_details import INTEGRATION_ERROR
-from core.testing import MockRequestsResponse
 from core.util.datetime_helpers import utc_now
 from core.util.http import RemoteIntegrationException
 from core.util.string_helpers import base64
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture

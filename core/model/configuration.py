@@ -176,7 +176,7 @@ class ExternalIntegration(Base):
     STORAGE_GOAL = MirrorUploader.STORAGE_GOAL
 
     # These integrations are associated with external services such as
-    # Elasticsearch that provide indexed search.
+    # Opensearch that provide indexed search.
     SEARCH_GOAL = "search"
 
     # These integrations are associated with external services such as
@@ -259,7 +259,7 @@ class ExternalIntegration(Base):
     LCP = "LCP"
 
     # Integrations with SEARCH_GOAL
-    ELASTICSEARCH = "Elasticsearch"
+    OPENSEARCH = "Opensearch"
 
     # Integrations with DRM_GOAL
     ADOBE_VENDOR_ID = "Adobe Vendor ID"
