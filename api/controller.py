@@ -20,6 +20,7 @@ from lxml import etree
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
+from api.model.patron_auth import PatronAuthAccessToken
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
@@ -2804,4 +2805,4 @@ class PatronAuthTokenController(CirculationManagerController):
                 f"Could not generate Patron Auth Access Token: {ex}"
             )
             return ex.problem_detail
-        return dict(access_token=token)
+        return PatronAuthAccessToken(access_token=token).api_dict()
