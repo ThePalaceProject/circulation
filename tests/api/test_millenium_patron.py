@@ -348,7 +348,10 @@ class TestMilleniumPatronAPI:
         patrondata = millenium_fixture.api.remote_authenticate(barcode, pin)
         # The return value includes everything we know about the
         # authenticated patron, which isn't much.
-        assert "barcode1234567!" == patrondata.authorization_identifier
+        assert patrondata is not None
+        auth_id = patrondata.authorization_identifier
+        assert auth_id is not None
+        assert "barcode1234567!" == auth_id
 
         # The PIN went out URL-encoded. The barcode did not.
         # XXX: Do we actually want URL encoding? Does this make sense if the pin is
