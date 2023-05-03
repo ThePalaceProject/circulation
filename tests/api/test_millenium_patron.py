@@ -359,7 +359,8 @@ class TestMilleniumPatronAPI:
         [args, kwargs] = millenium_fixture.api.requests_made.pop()
         [url] = args
         assert kwargs == {
-            "data": "number=barcode1234567!&pin=%21correct%20pin%3C%3E%40%2F"
+            "data": "number=barcode1234567!&pin=%21correct%20pin%3C%3E%40%2F",
+            "headers": {"content-type": "application/x-www-form-urlencoded"},
         }
         assert url == "http://url/pintest"
 
