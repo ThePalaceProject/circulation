@@ -221,9 +221,7 @@ redmail = "^0.6.0"
 requests = "^2.29"
 SQLAlchemy = "~1.3.19"
 textblob = "0.17.1"
-# We import typing extensions, to be able to use ParamSpec and Self
-# in our type annotations.
-# - ParamSpec is included in Python 3.10
+# We import typing_extensions, so we can use Self in our type annotations.
 # - Self is included in Python 3.11
 # Once we upgrade to Python 3.11, we can remove this dependency.
 typing_extensions = {version = "^4.5.0", python = "<3.11"}
