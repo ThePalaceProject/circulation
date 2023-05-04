@@ -429,6 +429,7 @@ class LibraryAuthenticator:
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:
         """An iterator over all registered AuthenticationProviders."""
+        yield self.access_token_authentication_provider
         if self.basic_auth_provider:
             yield self.basic_auth_provider
         yield from self.saml_providers_by_name.values()

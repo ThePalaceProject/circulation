@@ -922,6 +922,22 @@ class TestLibraryAuthenticator:
             assert response == "foo"
             assert saml.authenticated_patron.call_count == 1
 
+    def test_authenticated_patron_bearer_access_token(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        db = authenticator_fixture.db
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+        )
+        patron = db.patron()
+        patron.patrondata = PatronData()
+        token = AccessTokenProvider.generate_token(db.session, patron, "pass")
+        auth = Authorization(auth_type="bearer", token=token)
+
+        auth_patron = authenticator.authenticated_patron(db.session, auth)
+        assert auth_patron.id == patron.id
+
     def test_authenticated_patron_unsupported_mechanism(
         self, db: DatabaseTransactionFixture
     ):

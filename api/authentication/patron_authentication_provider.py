@@ -14,6 +14,7 @@ from core.util.problem_detail import ProblemDetail
 class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
     def __init__(self, _db: Session):
         self._db = _db
+        self.external_integration_id = AccessTokenProvider.get_integration(_db).id
 
     def authenticated_patron(
         self, _db: Session, token: str
@@ -38,9 +39,10 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
                 session_token=data.get("session_token")
             )
 
-        print("GOT PATRON FROM AT", patron)
-
         return patron
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:
-        return ""
+        if auth.type.lower() == "bearer" and AccessTokenProvider.is_access_token(
+            auth.token
+        ):
+            return AccessTokenProvider.decode_token(self._db, auth.token).get("pwd")
