@@ -19,6 +19,7 @@ from .util.profilers import (
 )
 
 app = PalaceFlask(__name__)
+app._db = None  # type: ignore [assignment]
 app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
     Configuration.localization_languages()[0]
 ]
