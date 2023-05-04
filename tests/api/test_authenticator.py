@@ -1458,9 +1458,7 @@ class TestLibraryAuthenticator:
 
 class TestAuthenticationProvider:
 
-    credentials = Authorization(
-        auth_type="basic", data=dict(username="user", password="")
-    )
+    credentials = dict(username="user", password="")
 
     def test_external_integration(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
@@ -1585,10 +1583,7 @@ class TestAuthenticationProvider:
         provider.patrondata = incomplete_data
         patron = provider.authenticated_patron(
             db.session,
-            Authorization(
-                auth_type="basic",
-                data=dict(username="someotheridentifier", password=""),
-            ),
+            dict(username="someotheridentifier", password=""),
         )
         assert patron.last_external_sync > last_sync
 
@@ -2549,9 +2544,7 @@ class TestBasicAuthenticationProviderAuthenticate:
 
     # A dummy set of credentials, for use when the exact details of
     # the credentials passed in are not important.
-    credentials = Authorization(
-        auth_type="basic", data=dict(username="user", password="pass")
-    )
+    credentials = dict(username="user", password="pass")
 
     def test_success(self, authenticator_fixture: AuthenticatorFixture):
         db = authenticator_fixture.db
@@ -2565,9 +2558,7 @@ class TestBasicAuthenticationProviderAuthenticate:
 
         # BasicAuthenticationProvider scrubs leading and trailing spaces from
         # the credentials.
-        credentials_with_spaces = Authorization(
-            auth_type="basic", data=dict(username="  user ", password=" pass \t ")
-        )
+        credentials_with_spaces = dict(username="  user ", password=" pass \t ")
         for creds in (self.credentials, credentials_with_spaces):
             assert patron == provider.authenticate(db.session, self.credentials)
 
@@ -2702,10 +2693,7 @@ class TestBasicAuthenticationProviderAuthenticate:
 
         # This succeeds because we pass the regex test.
         assert patron == provider.authenticate(
-            db.session,
-            Authorization(
-                auth_type="basic", data=dict(username="food", password="barbecue")
-            ),
+            db.session, dict(username="food", password="barbecue")
         )
 
     def test_authentication_succeeds_but_patronlookup_fails(

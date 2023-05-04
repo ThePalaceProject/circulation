@@ -1790,10 +1790,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         """
         if self.test_username is None:
             return self.test_username, self.test_password
-        header = Authorization(
-            auth_type="basic",
-            data=dict(username=self.test_username, password=self.test_password),
-        )
+        header = dict(username=self.test_username, password=self.test_password)
         return self.authenticated_patron(_db, header), self.test_password
 
     def testing_patron_or_bust(self, _db: Session) -> tuple[Patron, str]:
@@ -2184,7 +2181,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             if an error occurs; None if the credentials are missing or wrong.
         """
         if type(authorization) != dict:
-            return None
+            return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
         with elapsed_time_logging(
             log_method=self.logger().info,
