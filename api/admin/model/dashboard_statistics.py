@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import List, TypeVar
+import sys
+from typing import List
 
 from pydantic import BaseModel, Extra, Field, NonNegativeInt
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
 def _snake_to_camel_case(name: str) -> str:
@@ -32,19 +38,16 @@ class StatisticsBaseModel(CustomBaseModel):
     def __getitem__(self, item):
         return getattr(self, item)
 
-    def __add__(self: S, other: S) -> S:
+    def __add__(self, other: Self) -> Self:
         """Sum each property and return new instance."""
         return self.__class__(
             **{field: self[field] + other[field] for field in self.__fields__.keys()}
         )
 
     @classmethod
-    def zeroed(cls: type[S]) -> S:
+    def zeroed(cls) -> Self:
         """An instance of this class with all values set to zero."""
         return cls(**{field: 0 for field in cls.__fields__.keys()})
-
-
-S = TypeVar("S", bound=StatisticsBaseModel)
 
 
 class PatronStatistics(StatisticsBaseModel):
