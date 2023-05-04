@@ -1297,7 +1297,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, HasSelfTests, ABC):
 
     @abstractmethod
     def authenticated_patron(
-        self, _db: Session, header: Authorization
+        self, _db: Session, header: dict | str
     ) -> Patron | ProblemDetail | None:
         """Go from a WWW-Authenticate header (or equivalent) to a Patron object.
 
@@ -1854,7 +1854,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         return value.strip()
 
     def authenticate(
-        self, _db: Session, credentials: Authorization
+        self, _db: Session, credentials: dict
     ) -> Patron | ProblemDetail | None:
         """Turn a set of credentials into a Patron object.
 
@@ -2173,7 +2173,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
             return None
 
     def authenticated_patron(
-        self, _db: Session, authorization: Authorization
+        self, _db: Session, authorization: dict | str
     ) -> Patron | ProblemDetail | None:
         """Go from a werkzeug.Authorization object to a Patron object.
 
@@ -2183,6 +2183,9 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         :return: A Patron if one can be authenticated; a ProblemDetail
             if an error occurs; None if the credentials are missing or wrong.
         """
+        if type(authorization) != dict:
+            return None
+
         with elapsed_time_logging(
             log_method=self.logger().info,
             message_prefix="authenticated_patron - authenticate",
