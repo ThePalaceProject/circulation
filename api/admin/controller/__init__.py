@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import desc, nullslast
 from werkzeug.urls import BaseURL, url_parse, url_quote_plus
-from werkzeug.wrappers import Response as werkzeug_response
+from werkzeug.wrappers import Response as WerkzeugResponse
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.exceptions import *
@@ -259,7 +259,7 @@ class SanitizedRedirections:
         return True, ""
 
     @staticmethod
-    def redirect(target: str) -> Response:
+    def redirect(target: str) -> WerkzeugResponse:
         """Check that a redirect is allowed before performing it."""
         ok, message = SanitizedRedirections._check_redirect(target)
         if ok:
@@ -690,7 +690,7 @@ class ResetPasswordController(AdminController):
         )
     )
 
-    def forgot_password(self) -> Union[ProblemDetail, werkzeug_response]:
+    def forgot_password(self) -> Union[ProblemDetail, WerkzeugResponse]:
         """Shows forgot password page or starts off forgot password workflow"""
 
         if not self.admin_auth_providers:
@@ -760,7 +760,7 @@ class ResetPasswordController(AdminController):
 
         return reset_password_url
 
-    def reset_password(self, reset_password_token: str) -> Optional[werkzeug_response]:
+    def reset_password(self, reset_password_token: str) -> Optional[WerkzeugResponse]:
         """Shows reset password page or process the reset password request"""
         auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
         if not auth:

@@ -375,7 +375,7 @@ class SAMLSettings(dict):
             else:
                 from api.app import app
 
-                incommon_fed: SAMLFederation = (
+                incommon_fed = (
                     app._db.query(SAMLFederation)
                     .filter(SAMLFederation.type == incommon.FEDERATION_TYPE)
                     .first()
