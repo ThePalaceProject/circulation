@@ -8,7 +8,6 @@ from jwcrypto import jwe, jwk
 from api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
-    PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE,
 )
 from core.model import get_one_or_create
 from core.model.configuration import ExternalIntegration
@@ -91,17 +90,8 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
 
     @classmethod
     def generate_token(cls, _db, patron: Patron, password: str) -> str:
-        # Only basic type authentication requires an access token
-        if not patron.patrondata:
-            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE)
-
         key = cls.get_current_key(_db)
         payload = dict(id=patron.id, pwd=password, typ="patron")
-
-        # special sirsidynix type patrondata
-        if patron.patrondata and hasattr(patron.patrondata, "session_token"):
-            payload["session_token"] = patron.patrondata.session_token
-            payload["typ"] = "sirsi"
 
         token = jwe.JWE(
             jwe.json_encode(payload),

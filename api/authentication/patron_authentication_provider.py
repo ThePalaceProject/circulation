@@ -6,12 +6,13 @@ from werkzeug.datastructures import Authorization
 from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import AuthenticationProvider
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
-from api.sirsidynix_authentication_provider import SirsiDynixPatronData
 from core.model import Patron, Session, get_one
 from core.util.problem_detail import ProblemDetail
 
 
 class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
+    FLOW_TYPE = "http://librarysimplified.org/authtype/bearer"
+
     def __init__(self, _db: Session):
         self._db = _db
         self.external_integration_id = AccessTokenProvider.get_integration(_db).id
@@ -22,8 +23,8 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
         data = AccessTokenProvider.decode_token(_db, token)
         try:
             patron_id = data["id"]
-            patron_type = data["typ"]
-            password = data["pwd"]
+            # Ensure the password exists
+            data["pwd"]
         except KeyError:
             return PATRON_AUTH_ACCESS_TOKEN_INVALID
 
@@ -31,18 +32,18 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
         if patron is None:
             return None
 
-        patron.plaintext_password = password
-
-        # Only a sirsi type patron has additional data
-        if patron_type == "sirsi":
-            patron.patrondata = SirsiDynixPatronData(
-                session_token=data.get("session_token")
-            )
-
         return patron
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:
-        if auth.type.lower() == "bearer" and AccessTokenProvider.is_access_token(
-            auth.token
+        if (
+            auth
+            and auth.type.lower() == "bearer"
+            and AccessTokenProvider.is_access_token(auth.token)
         ):
             return AccessTokenProvider.decode_token(self._db, auth.token).get("pwd")
+
+    def _authentication_flow_document(self, _db):
+        return None
+
+    def remote_patron_lookup(self, _db):
+        raise NotImplementedError()

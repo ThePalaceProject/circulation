@@ -657,7 +657,9 @@ class TestLibraryAuthenticator:
         authenticator = LibraryAuthenticator.from_config(
             db.session, db.default_library()
         )
-        assert [] == list(authenticator.providers)
+
+        # The access token provider exists
+        assert len(list(authenticator.providers)) == 1
 
     def test_configuration_exception_during_from_config_stored(
         self,
@@ -931,7 +933,6 @@ class TestLibraryAuthenticator:
             library=db.default_library(),
         )
         patron = db.patron()
-        patron.patrondata = PatronData()
         token = AccessTokenProvider.generate_token(db.session, patron, "pass")
         auth = Authorization(auth_type="bearer", token=token)
 
@@ -972,6 +973,11 @@ class TestLibraryAuthenticator:
             basic_auth_provider=None,
         )
         assert authenticator.get_credential_from_header(credential) is None
+
+        patron = db.patron()
+        token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
+        credential = Authorization(auth_type="bearer", token=token)
+        assert authenticator.get_credential_from_header(credential) == "passworx"
 
     def test_create_authentication_document(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture

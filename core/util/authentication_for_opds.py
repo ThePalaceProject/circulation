@@ -86,7 +86,9 @@ class AuthenticationForOPDSDocument:
         document: Dict[str, Any] = dict(id=self.id, title=self.title)
         flow_documents = document.setdefault("authentication", [])
         for flow in self.authentication_flows:
-            flow_documents.append(flow.authentication_flow_document(_db))
+            doc = flow.authentication_flow_document(_db)
+            if doc is not None:
+                flow_documents.append(flow.authentication_flow_document(_db))
         if self.links:
             doc_links = document.setdefault("links", [])
             for link in self.links:
