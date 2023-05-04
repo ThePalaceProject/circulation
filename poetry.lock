@@ -3301,18 +3301,6 @@ files = [
 ]
 
 [[package]]
-name = "types-mock"
-version = "5.0.0.6"
-description = "Typing stubs for mock"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "types-mock-5.0.0.6.tar.gz", hash = "sha256:3abdee238948c6678ef5b4fd740bd41d30289a2fe4d91aac4ae9f6869e6c9333"},
-    {file = "types_mock-5.0.0.6-py3-none-any.whl", hash = "sha256:6946f4b2240160a1740db7d6c8e8736705acd133afd98555897db0116d41a6fc"},
-]
-
-[[package]]
 name = "types-pillow"
 version = "9.5.0.2"
 description = "Typing stubs for Pillow"
@@ -3686,4 +3674,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "9c314f59ac0ee388bcd31d8aab191e667bb1ad8d92d6cb60ff97d7195c51dcbf"
+content-hash = "af08310b56c7d3fe14d224b4ec8020ebbefa2c8e5dd90b78d71664f6aef8b30b"
