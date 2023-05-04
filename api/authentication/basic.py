@@ -400,7 +400,10 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         if self.test_username is None:
             return self.test_username, self.test_password
         test_password = self.test_password or ""
-        header = dict(username=self.test_username, password=test_password)
+        header = Authorization(
+            auth_type="basic",
+            data=dict(username=self.test_username, password=self.test_password),
+        )
         return self.authenticated_patron(_db, header), test_password
 
     def testing_patron_or_bust(self, _db: Session) -> tuple[Patron, str | None]:

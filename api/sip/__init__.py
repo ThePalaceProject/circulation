@@ -190,7 +190,6 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
 
 
 class SIP2AuthenticationProvider(BasicAuthenticationProvider):
-
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
     # Map the reasons why SIP2 might report a patron is blocked to the
@@ -370,7 +369,6 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                 )
 
     def info_to_patrondata(self, info, validate_password=True) -> Optional[PatronData]:
-
         """Convert the SIP-specific dictionary obtained from
         SIPClient.patron_information() to an abstract,
         authenticator-independent PatronData object.

@@ -1,4 +1,4 @@
-from api.authenticator import PatronJWEAccessTokenProvider
+from api.authentication.access_token import PatronJWEAccessTokenProvider
 from core.jobs.rotate_jwe_key import RotateJWEKeyScript
 from tests.fixtures.database import DatabaseTransactionFixture
 

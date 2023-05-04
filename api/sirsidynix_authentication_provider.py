@@ -25,6 +25,7 @@ from core.util.http import HTTP
 if TYPE_CHECKING:
     from requests import Response
 
+    from core.analytics import Analytics
     from core.model.patron import Patron
 
 

@@ -194,6 +194,9 @@ class Patron(Base):
         # We will keep the patrondata within the Patron object
         # primarily so that the JWE access tokens can be generated
         self.patrondata = None
+        # We will use the patron object to maintain the credentials in-memory as well
+        # if provided by the authentication mechanism
+        self.plaintext_password = None
 
     def __repr__(self):
         def date(d):

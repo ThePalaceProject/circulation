@@ -14,9 +14,9 @@ from .datetime_helpers import utc_now
 from .opds_writer import OPDSFeed
 
 if sys.version_info >= (3, 11):
-    from typing import Self
+    pass
 else:
-    from typing_extensions import Self
+    pass
 
 
 def problem_raw(type, status, title, detail=None, instance=None, headers={}):

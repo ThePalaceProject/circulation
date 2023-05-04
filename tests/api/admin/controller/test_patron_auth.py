@@ -17,6 +17,7 @@ from api.authentication.basic import (
     LibraryIdentifierRestriction,
 )
 from api.millenium_patron import AuthenticationMode, MilleniumPatronAPI
+from api.problem_details import *
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider

@@ -1,13 +1,15 @@
 import base64
 import json
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 import pytest
 from dateutil import tz
 from freezegun import freeze_time
 from jwcrypto import jwk
 
-from api.authenticator import PatronData, PatronJWEAccessTokenProvider
+from api.authentication.access_token import PatronJWEAccessTokenProvider
+from api.authentication.base import PatronData
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
 from api.sirsidynix_authentication_provider import SirsiDynixPatronData
 from core.util.datetime_helpers import utc_now
@@ -96,3 +98,27 @@ class TestJWEProvider:
             integration.setting(PatronJWEAccessTokenProvider.PATRON_AUTH_JWE_KEY).value
             == key2.export()
         )
+
+    def test_is_access_token(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+        patron.patrondata = PatronData()
+
+        # Happy path
+        token = PatronJWEAccessTokenProvider.generate_token(
+            db.session, patron, "password"
+        )
+        assert PatronJWEAccessTokenProvider.is_access_token(token) == True
+
+        with patch.object(PatronJWEAccessTokenProvider, "_decode") as decode:
+            # An incorrect type
+            decode.return_value = MagicMock(
+                objects=dict(protected=json.dumps(dict(typ="NotJWE")))
+            )
+            assert PatronJWEAccessTokenProvider.is_access_token(token) == False
+
+            # Something failed during the decode
+            decode.return_value = None
+            assert PatronJWEAccessTokenProvider.is_access_token(token) == False
+
+        # The token is not the right format
+        assert PatronJWEAccessTokenProvider.is_access_token("not-a-token") == False

@@ -20,6 +20,7 @@ from lxml import etree
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
+from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
@@ -91,11 +92,7 @@ from .adobe_vendor_id import (
     DeviceManagementProtocolController,
 )
 from .annotations import AnnotationParser, AnnotationWriter
-from .authenticator import (
-    Authenticator,
-    CirculationPatronProfileStorage,
-    PatronJWEAccessTokenProvider,
-)
+from .authenticator import Authenticator, CirculationPatronProfileStorage
 from .base_controller import BaseCirculationManagerController
 from .circulation import CirculationAPI
 from .circulation_exceptions import *
@@ -2797,7 +2794,7 @@ class PatronAuthTokenController(CirculationManagerController):
         """Create a Patron Auth access token for an authenticated patron"""
         patron = flask.request.patron
         try:
-            token = PatronJWEAccessTokenProvider.generate_token(
+            token = AccessTokenProvider.generate_token(
                 self._db, patron, flask.request.authorization["password"]
             )
         except ProblemError as ex:
