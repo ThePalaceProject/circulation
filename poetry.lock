@@ -3289,30 +3289,6 @@ files = [
 Flask = ">=2.0.0"
 
 [[package]]
-name = "types-freezegun"
-version = "1.1.10"
-description = "Typing stubs for freezegun"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "types-freezegun-1.1.10.tar.gz", hash = "sha256:cb3a2d2eee950eacbaac0673ab50499823365ceb8c655babb1544a41446409ec"},
-    {file = "types_freezegun-1.1.10-py3-none-any.whl", hash = "sha256:fadebe72213e0674036153366205038e1f95c8ca96deb4ef9b71ddc15413543e"},
-]
-
-[[package]]
-name = "types-itsdangerous"
-version = "1.1.6"
-description = "Typing stubs for itsdangerous"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "types-itsdangerous-1.1.6.tar.gz", hash = "sha256:21c6966c10e353a5d35d36c82aaa2c5598d3bc32ddc8e0591276da5ad2e3c638"},
-    {file = "types_itsdangerous-1.1.6-py3-none-any.whl", hash = "sha256:aef2535c2fa0527dcce244ece0792b20ec02ee46533800735275f82a45a0244d"},
-]
-
-[[package]]
 name = "types-jsonschema"
 version = "4.17.0.7"
 description = "Typing stubs for jsonschema"
@@ -3710,4 +3686,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "d740428b49a9c733a85fae29cecc11c750f015abfc73f3a31fb0ff44ee717e71"
+content-hash = "9c314f59ac0ee388bcd31d8aab191e667bb1ad8d92d6cb60ff97d7195c51dcbf"
