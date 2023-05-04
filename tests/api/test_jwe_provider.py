@@ -26,8 +26,8 @@ class TestJWEProvider:
             token = PatronJWEAccessTokenProvider.generate_token(
                 db.session, patron, "password"
             )
-        header, _, _ = token.partition(".")
-        header = json.loads(base64.b64decode(header + "==="))
+        _header, _, _ = token.partition(".")
+        header = json.loads(base64.b64decode(_header + "==="))
         assert datetime.fromtimestamp(header["exp"], tz=tz.tzutc()) == t + timedelta(
             hours=1
         )

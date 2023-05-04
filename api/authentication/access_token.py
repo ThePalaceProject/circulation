@@ -21,15 +21,15 @@ class PatronAccessTokenProvider:
     """Provides access tokens for patron auth"""
 
     @classmethod
-    def generate_token(cls, _db, patron: Patron, password) -> str:
+    def generate_token(cls, _db, patron: Patron, password: str) -> str:
         raise NotImplementedError()
 
     @classmethod
-    def decode_token(cls, _db, token) -> dict:
+    def decode_token(cls, _db, token: str) -> dict:
         raise NotImplementedError()
 
     @classmethod
-    def is_access_token(cls, token) -> bool:
+    def is_access_token(cls, token: str) -> bool:
         raise NotImplementedError()
 
     @classmethod
@@ -44,6 +44,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
 
     @classmethod
     def generate_key(cls) -> jwk.JWK:
+        """Generate a new key compatible with the token encyption type"""
         kid = random_string(16)
         return jwk.JWK.generate(kty="oct", size=256, kid=kid)
 
@@ -90,6 +91,11 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
 
     @classmethod
     def generate_token(cls, _db, patron: Patron, password: str) -> str:
+        """Generate a JWE token for a patron
+        :param patron: Generate a token for this patron
+        :param password: Encrypt this password within the token
+        :return: A compacted JWE token
+        """
         key = cls.get_current_key(_db)
         payload = dict(id=patron.id, pwd=password, typ="patron")
 
@@ -107,7 +113,11 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return token.serialize(compact=True)
 
     @classmethod
-    def decode_token(cls, _db, token) -> dict:
+    def decode_token(cls, _db, token: str) -> dict:
+        """Decode the given token
+        :param token: A serialized JWE token
+        :return: The decrypted data dictionary from the token
+        """
         jwe_token = cls._decode(token)
 
         # Check expiry
@@ -125,7 +135,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return jwe.json_decode(jwe_token.payload)
 
     @classmethod
-    def _decode(cls, token):
+    def _decode(cls, token: str) -> jwe.JWE:
         """Decode a JWE token without decryption"""
         try:
             jwe_token = jwe.JWE.from_jose_token(token)

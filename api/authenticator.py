@@ -460,7 +460,7 @@ class LibraryAuthenticator:
 
             if AccessTokenProvider.is_access_token(auth.token):
                 provider = self.access_token_authentication_provider
-                provider_token = auth.token
+                provider_token = auth.token  # type: ignore[attr-defined]
             elif self.saml_providers_by_name:
                 # The patron wants to use an
                 # SAMLAuthenticationProvider. Figure out which one.
