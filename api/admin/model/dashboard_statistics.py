@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Extra, Field, NonNegativeInt
 
@@ -25,7 +25,9 @@ class CustomBaseModel(BaseModel):
         allow_population_by_field_name = True
         extra = Extra.forbid
 
-    def api_dict(self, *args, by_alias=True, **kwargs):
+    def api_dict(
+        self, *args: Any, by_alias: bool = True, **kwargs: Any
+    ) -> Dict[str, Any]:
         """Return the instance in a form suitable for a web response.
 
         By default, the properties use their lower camel case aliases,
@@ -35,7 +37,7 @@ class CustomBaseModel(BaseModel):
 
 
 class StatisticsBaseModel(CustomBaseModel):
-    def __getitem__(self, item):
+    def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
 
     def __add__(self, other: Self) -> Self:

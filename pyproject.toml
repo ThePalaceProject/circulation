@@ -106,13 +106,46 @@ exclude = [
     'tests/core/test_scripts\.py',
 ]
 files = ["."]
-plugins = ["sqlmypy"]
+plugins = ["pydantic.mypy", "sqlmypy"]
 warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
+# This override is the equivalent of running mypy with the --strict flag.
+# This is a work in progress, but we should try to get as many of our files
+# into the module list here as possible.
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+module = [
+    "api.admin.model.dashboard_statistics",
+    "core.model.hassessioncache",
+]
+no_implicit_reexport = true
+strict_concatenate = true
+strict_equality = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# This override silences errors for modules in our own codebase that we import
+# from other covered modules. Ideally we will be able to remove this override
+# eventually, once we have type hints for all of our own code.
+follow_imports = "silent"
+module = [
+    "core.classifier.*",
+    "core.model.listeners",
+]
+
+[[tool.mypy.overrides]]
+# This override silences errors for modules we import that don't currently
+# have type hints, or type stubs that cover them. We should go through this
+# list periodically and remove modules that have since added type hints.
 ignore_missing_imports = true
 module = [
     "aws_xray_sdk.ext.*",
@@ -152,18 +185,6 @@ module = [
     "watchtower",
     "wcag_contrast_ratio",
     "webpub_manifest_parser.*",
-]
-
-[[tool.mypy.overrides]]
-follow_imports = "skip"
-module = [
-    "core.classifier.*",
-]
-
-[[tool.mypy.overrides]]
-follow_imports = "silent"
-module = [
-    "core.model.listeners",
 ]
 
 [tool.poetry]

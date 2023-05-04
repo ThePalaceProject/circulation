@@ -20,7 +20,12 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from .. import classifier
-from ..classifier import COMICS_AND_GRAPHIC_NOVELS, Classifier, Erotica, GenreData
+from ..classifier import (  # type: ignore[attr-defined]
+    COMICS_AND_GRAPHIC_NOVELS,
+    Classifier,
+    Erotica,
+    GenreData,
+)
 from . import (
     Base,
     get_one,
