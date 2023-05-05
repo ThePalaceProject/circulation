@@ -364,21 +364,21 @@ DEVICE_TOKEN_TYPE_INVALID = pd(
 
 PATRON_AUTH_ACCESS_TOKEN_EXPIRED = pd(
     "http://librarysimplified.org/terms/problem/patron-auth-access-token-expired",
-    status_code=403,
+    status_code=401,
     title=_("Access token expired"),
     detail=_("The patron authentication access token has expired."),
 )
 
 PATRON_AUTH_ACCESS_TOKEN_INVALID = pd(
     "http://librarysimplified.org/terms/problem/patron-auth-access-token-invalid",
-    status_code=403,
+    status_code=401,
     title=_("Access token invalid"),
     detail=_("The patron authentication access token is invalid."),
 )
 
 PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE = pd(
     "http://librarysimplified.org/terms/problem/patron-auth-access-not-possible",
-    status_code=403,
+    status_code=400,
     title=_("Access token not possible"),
     detail=_(
         "The patron authentication access token is not possible for this type of authentication."

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Generator
+
+from flask import url_for
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -7,16 +10,19 @@ from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import AuthenticationProvider
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
 from core.model import Patron, Session, get_one
-from core.util.problem_detail import ProblemDetail
+from core.selftest import SelfTestResult
+from core.util.problem_detail import ProblemDetail, ProblemError
+
+if TYPE_CHECKING:
+    from core.model import Library
 
 
 class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
     """Patron Authentication based on a CM generated Access Token"""
 
-    FLOW_TYPE = "http://librarysimplified.org/authtype/bearer"
-
-    def __init__(self, _db: Session):
+    def __init__(self, _db: Session, library: Library):
         self._db = _db
+        self.library_id = library.id
         self.external_integration_id = AccessTokenProvider.get_integration(_db).id
 
     def authenticated_patron(
@@ -27,7 +33,17 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
         if type(token) is not str:
             return None
 
-        data = AccessTokenProvider.decode_token(_db, token)
+        try:
+            data = AccessTokenProvider.decode_token(_db, token)
+        except ProblemError as ex:
+            data = ex.problem_detail
+
+        if type(data) == ProblemDetail:
+            return data
+
+        # This exists because of mypy
+        assert type(data) is dict
+
         try:
             patron_id = data["id"]
             # Ensure the password exists
@@ -46,16 +62,61 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
         if (
             auth
             and auth.type.lower() == "bearer"
-            and AccessTokenProvider.is_access_token(auth.token)  # type: ignore[attr-defined]
+            and auth.token
+            and AccessTokenProvider.is_access_token(auth.token)
         ):
-            return AccessTokenProvider.decode_token(self._db, auth.token).get("pwd")  # type: ignore[attr-defined]
+            token = AccessTokenProvider.decode_token(self._db, auth.token)
+            if type(token) == dict:
+                return token.get("pwd")
 
         return None
 
     def _authentication_flow_document(self, _db):
         """This auth type should not have an entry in the authentication document"""
-        return None
+        token_url = url_for(
+            "patron_auth_token",
+            library_short_name=self.library(_db).short_name,
+            _external=True,
+        )
+        inputs = {"login": {"keyboard": "default"}, "password": {"keyboard": "default"}}
+        links = [
+            {
+                "rel": "authenticate",
+                "href": token_url,
+            }
+        ]
+        labels = {
+            "login": "Barcode",
+            "password": "Pin",
+        }
+
+        return dict(
+            description=self.description(),
+            type=self.flow_type,
+            inputs=inputs,
+            links=links,
+            labels=labels,
+        )
 
     def remote_patron_lookup(self, _db):
         """There is no remote lookup"""
+        raise NotImplementedError()
+
+    @property
+    def flow_type(self) -> str:
+        return "http://librarysimplified.org/authtype/basic-token"
+
+    @classmethod
+    def description(cls) -> str:
+        return "Library Barcode + Token"
+
+    @classmethod
+    def identifies_individuals(cls):
+        return True
+
+    @classmethod
+    def label(cls) -> str:
+        return "Library Barcode + Token"
+
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         raise NotImplementedError()

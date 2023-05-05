@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import time
 from datetime import timedelta
@@ -13,7 +15,7 @@ from core.model import get_one_or_create
 from core.model.configuration import ExternalIntegration
 from core.model.patron import Patron
 from core.util.datetime_helpers import utc_now
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemError
 from core.util.string_helpers import random_string
 
 
@@ -21,15 +23,17 @@ class PatronAccessTokenProvider:
     """Provides access tokens for patron auth"""
 
     @classmethod
-    def generate_token(cls, _db, patron: Patron, password: str) -> str:
+    def generate_token(
+        cls, _db, patron: Patron, password: str, expires_in: int = 3600
+    ) -> str:
         raise NotImplementedError()
 
     @classmethod
-    def decode_token(cls, _db, token: str) -> dict:
+    def decode_token(cls, _db, token: str) -> dict | ProblemDetail:
         raise NotImplementedError()
 
     @classmethod
-    def is_access_token(cls, token: str) -> bool:
+    def is_access_token(cls, token: str | None) -> bool:
         raise NotImplementedError()
 
     @classmethod
@@ -90,10 +94,13 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return jwk.JWK.from_json(kvalue_setting.value)
 
     @classmethod
-    def generate_token(cls, _db, patron: Patron, password: str) -> str:
+    def generate_token(
+        cls, _db, patron: Patron, password: str, expires_in: int = 3600
+    ) -> str:
         """Generate a JWE token for a patron
         :param patron: Generate a token for this patron
         :param password: Encrypt this password within the token
+        :param expires_in: Seconds after which this token will expire
         :return: A compacted JWE token
         """
         key = cls.get_current_key(_db)
@@ -106,14 +113,14 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
                 kid=key.key_id,
                 typ="JWE",
                 enc="A128CBC-HS256",
-                exp=(utc_now() + timedelta(hours=1)).timestamp(),
+                exp=(utc_now() + timedelta(seconds=expires_in)).timestamp(),
             ),
             recipient=key,
         )
         return token.serialize(compact=True)
 
     @classmethod
-    def decode_token(cls, _db, token: str) -> dict:
+    def decode_token(cls, _db, token: str) -> dict | ProblemDetail:
         """Decode the given token
         :param token: A serialized JWE token
         :return: The decrypted data dictionary from the token
@@ -123,15 +130,19 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         # Check expiry
         exp = jwe.json_decode(jwe_token.objects["protected"])["exp"]
         if time.time() > exp:
-            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_EXPIRED)
+            return PATRON_AUTH_ACCESS_TOKEN_EXPIRED
 
         try:
             key = cls.get_current_key(_db, jwe_token.jose_header.get("kid"))
         except ValueError:
             # The kid was incorrect, the key has probably rotated
-            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_EXPIRED)
+            return PATRON_AUTH_ACCESS_TOKEN_EXPIRED
 
-        jwe_token.decrypt(key)
+        try:
+            jwe_token.decrypt(key)
+        except jwe.InvalidJWEData:
+            return PATRON_AUTH_ACCESS_TOKEN_INVALID
+
         return jwe.json_decode(jwe_token.payload)
 
     @classmethod
@@ -147,10 +158,10 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return jwe_token
 
     @classmethod
-    def is_access_token(cls, token: str) -> bool:
+    def is_access_token(cls, token: str | None) -> bool:
         """Test if the given token is a valid JWE token"""
         try:
-            jwe_token = cls._decode(token)
+            jwe_token = cls._decode(token) if token else None
         except Exception:
             return False
 

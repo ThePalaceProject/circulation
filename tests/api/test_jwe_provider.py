@@ -9,6 +9,7 @@ from freezegun import freeze_time
 from jwcrypto import jwk
 
 from api.authentication.access_token import PatronJWEAccessTokenProvider
+from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_EXPIRED
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -59,6 +60,25 @@ class TestJWEProvider:
         assert decoded["id"] == patron.id
         assert decoded["pwd"] == "password"
         assert decoded["typ"] == "patron"
+
+    def test_decode_token_errors(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+
+        with patch.object(PatronJWEAccessTokenProvider, "get_current_key") as mock_key:
+            mock_key.return_value = jwk.JWK.generate(
+                kty="oct", size=256, kid="some-kid"
+            )
+            token = PatronJWEAccessTokenProvider.generate_token(
+                db.session, patron, "password", expires_in=1000
+            )
+        decoded = PatronJWEAccessTokenProvider.decode_token(db.session, token)
+        assert decoded == PATRON_AUTH_ACCESS_TOKEN_EXPIRED
+
+        token = PatronJWEAccessTokenProvider.generate_token(
+            db.session, patron, "password", expires_in=-1
+        )
+        decoded = PatronJWEAccessTokenProvider.decode_token(db.session, token)
+        assert decoded == PATRON_AUTH_ACCESS_TOKEN_EXPIRED
 
     def test_rotate_key(self, db: DatabaseTransactionFixture):
         key = PatronJWEAccessTokenProvider.rotate_key(db.session)

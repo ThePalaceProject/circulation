@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Assign subjects to genres."""
+"""Rotate the JWE Auth key in the database"""
 import os
 import sys
 

@@ -1,6 +1,5 @@
 """Utilities for Flask applications."""
 import datetime
-import sys
 import time
 from typing import Any, Dict
 from wsgiref.handlers import format_date_time
@@ -12,11 +11,6 @@ from pydantic import BaseModel, Extra
 from . import problem_detail
 from .datetime_helpers import utc_now
 from .opds_writer import OPDSFeed
-
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
 
 
 def problem_raw(type, status, title, detail=None, instance=None, headers={}):

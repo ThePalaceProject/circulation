@@ -31,6 +31,7 @@ from api.authentication.basic import (
     Keyboards,
     LibraryIdentifierRestriction,
 )
+from api.authentication.access_token import AccessTokenProvider
 from api.authenticator import (
     Authenticator,
     BaseSAMLAuthenticationProvider,
@@ -925,9 +926,8 @@ class TestLibraryAuthenticator:
             assert saml.authenticated_patron.call_count == 1
 
     def test_authenticated_patron_bearer_access_token(
-        self, authenticator_fixture: AuthenticatorFixture
+        self, db: DatabaseTransactionFixture
     ):
-        db = authenticator_fixture.db
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
@@ -937,6 +937,7 @@ class TestLibraryAuthenticator:
         auth = Authorization(auth_type="bearer", token=token)
 
         auth_patron = authenticator.authenticated_patron(db.session, auth)
+        assert type(auth_patron) == Patron
         assert auth_patron.id == patron.id
 
     def test_authenticated_patron_unsupported_mechanism(
@@ -1129,7 +1130,7 @@ class TestLibraryAuthenticator:
             # The main thing we need to test is that the
             # authentication sub-documents are assembled properly and
             # placed in the right position.
-            [basic_doc] = doc["authentication"]
+            [token_doc, basic_doc] = doc["authentication"]
 
             expect_basic = basic.authentication_flow_document(db.session)
             assert expect_basic == basic_doc

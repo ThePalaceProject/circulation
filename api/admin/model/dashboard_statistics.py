@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import sys
 from typing import Any, List
 
 from pydantic import Field, NonNegativeInt
 
 from core.util.flask_util import CustomBaseModel
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
 class StatisticsBaseModel(CustomBaseModel):

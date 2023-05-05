@@ -2793,13 +2793,23 @@ class PatronAuthTokenController(CirculationManagerController):
     def get_token(self):
         """Create a Patron Auth access token for an authenticated patron"""
         patron = flask.request.patron
+        auth = flask.request.authorization
+
+        if not patron or auth.type.lower() != "basic":
+            return PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
+
         try:
             token = AccessTokenProvider.generate_token(
-                self._db, patron, flask.request.authorization["password"]
+                self._db,
+                patron,
+                auth["password"],
+                expires_in=0,
             )
         except ProblemError as ex:
             logging.getLogger(self.__class__.__name__).error(
                 f"Could not generate Patron Auth Access Token: {ex}"
             )
             return ex.problem_detail
-        return PatronAuthAccessToken(access_token=token).api_dict()
+        return PatronAuthAccessToken(
+            access_token=token, expires_in=3600, token_type="Bearer"
+        ).api_dict()

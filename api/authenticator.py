@@ -273,7 +273,7 @@ class LibraryAuthenticator:
         ] = {}
 
         self.access_token_authentication_provider = (
-            PatronAccessTokenAuthenticationProvider(_db)
+            PatronAccessTokenAuthenticationProvider(_db, library)
         )
 
         self.log = logging.getLogger("Authenticator")
@@ -429,9 +429,9 @@ class LibraryAuthenticator:
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:
         """An iterator over all registered AuthenticationProviders."""
+        yield self.access_token_authentication_provider
         if self.basic_auth_provider:
             yield self.basic_auth_provider
-        yield self.access_token_authentication_provider
         yield from self.saml_providers_by_name.values()
 
     def authenticated_patron(
@@ -460,7 +460,7 @@ class LibraryAuthenticator:
 
             if AccessTokenProvider.is_access_token(auth.token):
                 provider = self.access_token_authentication_provider
-                provider_token = auth.token  # type: ignore[attr-defined]
+                provider_token = auth.token
             elif self.saml_providers_by_name:
                 # The patron wants to use an
                 # SAMLAuthenticationProvider. Figure out which one.
@@ -468,11 +468,12 @@ class LibraryAuthenticator:
                     provider_name, provider_token = self.decode_bearer_token(auth.token)
                 except jwt.exceptions.InvalidTokenError as e:
                     return INVALID_SAML_BEARER_TOKEN
-                provider = self.saml_provider_lookup(provider_name)
-                if isinstance(provider, ProblemDetail):
+                saml_provider = self.saml_provider_lookup(provider_name)
+                if isinstance(saml_provider, ProblemDetail):
                     # There was a problem turning the provider name into
                     # a registered SAMLAuthenticationProvider.
-                    return provider
+                    return saml_provider
+                provider = saml_provider
 
         if provider and provider_token:
             # Turn the token/header into a patron
