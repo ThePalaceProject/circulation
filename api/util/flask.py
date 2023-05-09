@@ -1,7 +1,7 @@
-from typing import Any
-
 from flask import Flask
 from sqlalchemy.orm import Session
+
+from api.controller import CirculationManager
 
 
 class PalaceFlask(Flask):
@@ -43,4 +43,4 @@ class PalaceFlask(Flask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._db: Session
-        self.manager: Any
+        self.manager: CirculationManager
