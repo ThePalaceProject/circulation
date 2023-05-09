@@ -543,6 +543,7 @@ class TestMilleniumPatronAPI:
         # hours ago.
         millenium_fixture.api.enqueue("pintest.good.html")
         auth = dict(username="44444444444447", password="4444")
+
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
@@ -578,6 +579,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.invalid_expiration.html")
         auth = dict(username="44444444444447", password="4444")
+
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
@@ -592,6 +594,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.invalid_fines.html")
         auth = dict(username="44444444444447", password="4444")
+
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )

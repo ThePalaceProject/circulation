@@ -13,6 +13,7 @@ import pytest
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from money import Money
+from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
@@ -881,7 +882,8 @@ class TestLibraryAuthenticator:
             _db=db.session, library=db.default_library(), basic_auth_provider=basic
         )
         assert patron == authenticator.authenticated_patron(
-            db.session, dict(username="foo", password="bar")
+            db.session,
+            Authorization(auth_type="basic", data=dict(username="foo", password="bar")),
         )
 
         # Neighborhood information is being temporarily stored in the
@@ -891,8 +893,37 @@ class TestLibraryAuthenticator:
         assert "Achewood" == patron.neighborhood
 
         # OAuth doesn't work.
-        problem = authenticator.authenticated_patron(db.session, "Bearer abcd")
+        problem = authenticator.authenticated_patron(
+            db.session, Authorization(auth_type="bearer", token="abcd")
+        )
         assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem  # type: ignore
+
+    def test_authenticated_patron_bearer(
+        self, authenticator_fixture: AuthenticatorFixture
+    ):
+        db = authenticator_fixture.db
+        integration = db.external_integration(db.fresh_str())
+        bearer = MagicMock(NAME="name")
+        bearer.external_integration.return_value = integration
+
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            saml_providers=[bearer],
+            bearer_token_signing_secret="xx",
+        )
+
+        # Mock the sign verification
+        with patch.object(authenticator, "decode_bearer_token") as decode:
+            decode.return_value = ("name", "decoded-token")
+            response = authenticator.authenticated_patron(
+                db.session, Authorization(auth_type="Bearer", token="some-bearer-token")
+            )
+            # The token was decoded
+            assert decode.call_count == 1
+            decode.assert_called_with("some-bearer-token")
+            # The right saml provider was used
+            assert response == bearer.authenticated_patron.return_value
 
     def test_authenticated_patron_unsupported_mechanism(
         self, authenticator_fixture: AuthenticatorFixture
@@ -902,7 +933,9 @@ class TestLibraryAuthenticator:
             _db=db.session,
             library=db.default_library(),
         )
-        problem = authenticator.authenticated_patron(db.session, object())
+        problem = authenticator.authenticated_patron(
+            db.session, Authorization(auth_type="advanced")
+        )
         assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem  # type: ignore
 
     def test_get_credential_from_header(
@@ -919,7 +952,7 @@ class TestLibraryAuthenticator:
             library=db.default_library(),
             basic_auth_provider=basic,
         )
-        credential = dict(password="foo")
+        credential = Authorization(auth_type="basic", data=dict(password="foo"))
         assert "foo" == authenticator.get_credential_from_header(credential)
 
         # We can't pull the password out if no basic auth provider
@@ -950,7 +983,10 @@ class TestLibraryAuthenticator:
         with patch.object(basic, "authenticated_patron") as patched:
             patched.side_effect = RequestTimedOut("http://basic", "Request Timed Out")
             response = authenticator.authenticated_patron(
-                db.session, {"username": "XXXX", "password": "XXXX"}
+                db.session,
+                Authorization(
+                    auth_type="basic", data={"username": "XXXX", "password": "XXXX"}
+                ),
             )
             assert response == REMOTE_INTEGRATION_FAILED
             assert ext_query.count() == 1
@@ -974,7 +1010,8 @@ class TestLibraryAuthenticator:
         # Always fail if RED
         basic.authenticated_patron = MagicMock()
         assert REMOTE_INTEGRATION_FAILED == authenticator.authenticated_patron(
-            db.session, {"username": "X", "password": "X"}
+            db.session,
+            Authorization(auth_type="basic", data={"username": "X", "password": "X"}),
         )
         assert basic.authenticated_patron.call_count == 0
 
@@ -1545,7 +1582,8 @@ class TestAuthenticationProvider:
         )
         provider.patrondata = incomplete_data
         patron = provider.authenticated_patron(
-            db.session, dict(username="someotheridentifier", password="")
+            db.session,
+            dict(username="someotheridentifier", password=""),
         )
         assert patron.last_external_sync > last_sync
 
@@ -2424,9 +2462,15 @@ class TestBasicAuthenticationProvider:
         self, authenticator_fixture: AuthenticatorFixture
     ):
         provider = authenticator_fixture.mock_basic()
-        assert None == provider.get_credential_from_header("Bearer [some token]")
-        assert None == provider.get_credential_from_header(dict())
-        assert "foo" == provider.get_credential_from_header(dict(password="foo"))
+        assert None == provider.get_credential_from_header(
+            Authorization(auth_type="bearer", token="Some Token")
+        )
+        assert None == provider.get_credential_from_header(
+            Authorization(auth_type="basic")
+        )
+        assert "foo" == provider.get_credential_from_header(
+            Authorization(auth_type="basic", data=dict(password="foo"))
+        )
 
     def test_authentication_flow_document(
         self, authenticator_fixture: AuthenticatorFixture

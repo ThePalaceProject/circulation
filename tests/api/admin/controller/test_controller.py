@@ -92,9 +92,9 @@ class TestViewController:
             assert 302 == response.status_code
             location = response.headers.get("Location")
             assert "sign_in" in location
-            assert "admin%2Fweb" in location
-            assert "collection%2Fa%252F(b)" in location
-            assert "book%2Fc%252F(d)" in location
+            assert "admin/web" in location
+            assert "collection/a%252F(b)" in location
+            assert "book/c%252F(d)" in location
 
     def test_redirect_to_library(self, admin_ctrl_fixture: AdminControllerFixture):
         # If the admin doesn't have access to any libraries, they get a message

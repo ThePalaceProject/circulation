@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytz
 from sqlalchemy import (
@@ -51,6 +52,11 @@ from .edition import Edition
 from .identifier import Identifier, RecursiveEquivalencyCache
 from .measurement import Measurement
 
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
+
 # Import related models when doing type checking
 if TYPE_CHECKING:
     from core.model import (  # noqa: autoflake
@@ -78,9 +84,6 @@ class WorkGenre(Base):
 
     def __repr__(self):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
-
-
-WorkTypevar = TypeVar("WorkTypevar", bound="Work")
 
 
 class Work(Base):
@@ -1439,9 +1442,7 @@ class Work(Base):
     OPENSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents(
-        cls: type[WorkTypevar], works: list[WorkTypevar]
-    ) -> list[dict]:
+    def to_search_documents(cls, works: list[Self]) -> list[dict]:
         """In app to search documents needed to ease off the burden
         of complex queries from the DB cluster
         No recursive identifier policy is taken here as using the
@@ -1563,7 +1564,7 @@ class Work(Base):
             )
 
             try:
-                search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+                search_doc = cls.search_doc_as_dict(cast(Self, item))
                 results.append(search_doc)
             except:
                 logging.exception(f"Could not create search document for {item}")
@@ -1571,7 +1572,7 @@ class Work(Base):
         return results
 
     @classmethod
-    def search_doc_as_dict(cls: type[WorkTypevar], doc: WorkTypevar):
+    def search_doc_as_dict(cls, doc: Self):
         columns = {
             "work": [
                 "fiction",

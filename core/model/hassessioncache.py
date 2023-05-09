@@ -2,10 +2,11 @@ from __future__ import annotations
 
 # HasSessionCache
 import logging
+import sys
 from abc import abstractmethod
 from collections import namedtuple
 from types import SimpleNamespace
-from typing import Callable, Hashable, TypeVar
+from typing import Callable, Hashable
 
 from sqlalchemy import Column
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,7 +14,10 @@ from sqlalchemy.orm import Session
 
 from . import get_one
 
-T = TypeVar("T", bound="HasSessionCache")
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
 class HasSessionCache:
@@ -37,15 +41,15 @@ class HasSessionCache:
         ...
 
     @classmethod
-    def log(cls):
+    def log(cls) -> logging.Logger:
         return logging.getLogger(cls.__class__.__name__)
 
     @classmethod
     def cache_warm(
-        cls: type[T],
+        cls,
         db: Session,
-        get_objects: Callable[[], list[T]] | None = None,
-    ):
+        get_objects: Callable[[], list[Self]] | None = None,
+    ) -> None:
         """
         Populate the cache with the contents of `get_objects`. Useful to populate
         the cache in advance with items we know we will use.
@@ -59,7 +63,7 @@ class HasSessionCache:
             cls._cache_insert(obj, cache)
 
     @classmethod
-    def _cache_insert(cls: type[T], obj: T, cache: CacheTuple):
+    def _cache_insert(cls, obj: Self, cache: CacheTuple) -> None:
         """Cache an object for later retrieval."""
         key = obj.cache_key()
         id = obj.id
@@ -67,7 +71,7 @@ class HasSessionCache:
         cache.key[key] = obj
 
     @classmethod
-    def _cache_remove(cls: type[T], obj: T, cache: CacheTuple):
+    def _cache_remove(cls, obj: Self, cache: CacheTuple) -> None:
         """Remove an object from the cache"""
         try:
             key = obj.cache_key()
@@ -84,13 +88,13 @@ class HasSessionCache:
 
     @classmethod
     def _cache_lookup(
-        cls: type[T],
+        cls,
         db: Session,
         cache: CacheTuple,
         cache_name: str,
         cache_key: Hashable,
-        cache_miss_hook: Callable,
-    ) -> tuple[T | None, bool]:
+        cache_miss_hook: Callable[[], tuple[Self | None, bool]],
+    ) -> tuple[Self | None, bool]:
         """Helper method used by both by_id and by_cache_key.
 
         Looks up `cache_key` in the `cache_name` property of `cache`, returning
@@ -122,7 +126,7 @@ class HasSessionCache:
             return obj, new
 
     @classmethod
-    def _cache_from_session(cls, _db: Session):
+    def _cache_from_session(cls, _db: Session) -> CacheTuple:
         """Get cache from database session."""
 
         # https://docs.sqlalchemy.org/en/14/orm/session_api.html#sqlalchemy.orm.Session.info
@@ -133,14 +137,14 @@ class HasSessionCache:
             cache[cls.__name__] = cls.CacheTuple(
                 {}, {}, SimpleNamespace(hits=0, misses=0)
             )
-        return cache[cls.__name__]
+        return cache[cls.__name__]  # type: ignore[no-any-return]
 
     @classmethod
-    def by_id(cls: type[T], db: Session, id: int) -> T | None:
+    def by_id(cls, db: Session, id: int) -> Self | None:
         """Look up an item by its unique database ID."""
         cache = cls._cache_from_session(db)
 
-        def lookup_hook():
+        def lookup_hook():  # type: ignore[no-untyped-def]
             return get_one(db, cls, id=id), False
 
         obj, _ = cls._cache_lookup(db, cache, "id", id, lookup_hook)
@@ -148,8 +152,11 @@ class HasSessionCache:
 
     @classmethod
     def by_cache_key(
-        cls: type[T], db: Session, cache_key: Hashable, cache_miss_hook: Callable
-    ) -> tuple[T | None, bool]:
+        cls,
+        db: Session,
+        cache_key: Hashable,
+        cache_miss_hook: Callable[[], tuple[Self | None, bool]],
+    ) -> tuple[Self | None, bool]:
         """Look up an item by its cache key."""
         cache = cls._cache_from_session(db)
         return cls._cache_lookup(db, cache, "key", cache_key, cache_miss_hook)

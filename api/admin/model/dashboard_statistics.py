@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import List, TypeVar
+import sys
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Extra, Field, NonNegativeInt
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
 def _snake_to_camel_case(name: str) -> str:
@@ -19,7 +25,9 @@ class CustomBaseModel(BaseModel):
         allow_population_by_field_name = True
         extra = Extra.forbid
 
-    def api_dict(self, *args, by_alias=True, **kwargs):
+    def api_dict(
+        self, *args: Any, by_alias: bool = True, **kwargs: Any
+    ) -> Dict[str, Any]:
         """Return the instance in a form suitable for a web response.
 
         By default, the properties use their lower camel case aliases,
@@ -29,22 +37,19 @@ class CustomBaseModel(BaseModel):
 
 
 class StatisticsBaseModel(CustomBaseModel):
-    def __getitem__(self, item):
+    def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
 
-    def __add__(self: S, other: S) -> S:
+    def __add__(self, other: Self) -> Self:
         """Sum each property and return new instance."""
         return self.__class__(
             **{field: self[field] + other[field] for field in self.__fields__.keys()}
         )
 
     @classmethod
-    def zeroed(cls: type[S]) -> S:
+    def zeroed(cls) -> Self:
         """An instance of this class with all values set to zero."""
         return cls(**{field: 0 for field in cls.__fields__.keys()})
-
-
-S = TypeVar("S", bound=StatisticsBaseModel)
 
 
 class PatronStatistics(StatisticsBaseModel):
