@@ -84,7 +84,6 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 
-from .admin.controller.analytics_services import AnalyticsServicesController
 from .adobe_vendor_id import (
     AdobeVendorIDController,
     AuthdataUtility,
