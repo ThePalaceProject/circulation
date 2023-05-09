@@ -3,7 +3,7 @@
 # Local environment variables are not passed into cron, so variables set at
 # runtime need to be stored.
 
-set -ex
+set -e
 
 SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 
