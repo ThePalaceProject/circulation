@@ -2,6 +2,7 @@ import logging
 import os
 import urllib.parse
 
+import flask_babel
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
 
@@ -46,7 +47,7 @@ PalaceCProfileProfiler.configure(app)
 PalaceXrayProfiler.configure(app)
 
 
-def initialize_application() -> Flask:
+def initialize_application() -> PalaceFlask:
     with app.app_context(), flask_babel.force_locale("en"):
         initialize_database()
         initialize_circulation_manager()
