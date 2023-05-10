@@ -58,7 +58,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     VERIFY_CERTIFICATE = "verify_certificate"
 
     # Whether to use POST for remote requests. This is not supported by "standard"
-    # Millenium Patron API implementations; it is a LYRASIS extension to avoid having
+    # Millenium Patron API implementations; it is a Palace Project extension to avoid having
     # passwords appear in URLs.
     USE_POST_FOR_REQUESTS = "use_post_requests"
 
