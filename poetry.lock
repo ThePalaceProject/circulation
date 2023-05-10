@@ -2381,14 +2381,14 @@ requests = ["requests"]
 
 [[package]]
 name = "pymarc"
-version = "4.2.2"
+version = "5.0.0"
 description = "Read, write and modify MARC bibliographic data"
 category = "main"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 files = [
-    {file = "pymarc-4.2.2-py3-none-any.whl", hash = "sha256:569ba7f74d3fbbbee2158a3e8d9fdbd59466a1a8fb096bf60c26c8f986183a83"},
-    {file = "pymarc-4.2.2.tar.gz", hash = "sha256:a4a8a952e38f0e4714c58354b510abf09cbf3a45b0b991765bef0ce3f30b01dd"},
+    {file = "pymarc-5.0.0-py3-none-any.whl", hash = "sha256:3d8612dc64d56db91240e063b22ea0998f42227e22c5703c16c34bbdf4ad20f7"},
+    {file = "pymarc-5.0.0.tar.gz", hash = "sha256:e11ad0dff6f749ce9dfc98ea540321aa5fb9ee04aff2e9597a0ba0283e5265eb"},
 ]
 
 [[package]]
@@ -3674,4 +3674,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "af08310b56c7d3fe14d224b4ec8020ebbefa2c8e5dd90b78d71664f6aef8b30b"
+content-hash = "a0ab0e2a64769582ab0d75418e1dcd871ac5e945df17a52c5929bb94631fffbc"
