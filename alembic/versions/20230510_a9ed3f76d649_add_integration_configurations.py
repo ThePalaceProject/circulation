@@ -7,7 +7,7 @@ Create Date: 2023-05-10 19:50:47.458800+00:00
 """
 import json
 from collections import defaultdict
-from typing import Dict, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -43,8 +43,9 @@ def _validate_and_load_settings(
     for key, setting in settings_dict.items():
         if key in aliases:
             key = aliases[key]
-        config_item: ConfigurationFormItem = getattr(
-            settings_class.ConfigurationForm, key, None
+        config_item = cast(
+            Optional[ConfigurationFormItem],
+            getattr(settings_class.ConfigurationForm, key, None),
         )
         if config_item is None:
             continue
@@ -66,9 +67,9 @@ def upgrade() -> None:
         sa.Column("protocol", sa.Unicode(), nullable=False),
         sa.Column("goal", sa.Enum("PATRON_AUTH_GOAL", name="goals"), nullable=False),
         sa.Column("name", sa.Unicode(), nullable=False),
-        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),  # type: ignore[call-arg]
         sa.Column(
-            "self_test_results", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+            "self_test_results", postgresql.JSONB(astext_type=sa.Text()), nullable=False  # type: ignore[call-arg]
         ),
         sa.Column("status", sa.Enum("RED", "GREEN", name="status"), nullable=False),
         sa.Column("last_status_update", sa.DateTime(), nullable=True),
@@ -99,7 +100,7 @@ def upgrade() -> None:
         "integration_library_configurations",
         sa.Column("parent_id", sa.Integer(), nullable=False),
         sa.Column("library_id", sa.Integer(), nullable=False),
-        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),  # type: ignore[call-arg]
         sa.ForeignKeyConstraint(["library_id"], ["libraries.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["parent_id"], ["integration_configurations.id"], ondelete="CASCADE"
@@ -122,7 +123,7 @@ def upgrade() -> None:
             (integration.id,),
         )
         settings_dict = {}
-        library_settings = defaultdict(dict)
+        library_settings: Dict[str, Dict[str, Any]] = defaultdict(dict)
         self_test_results = json_serializer({})
         for setting in settings:
             if not setting.value:
