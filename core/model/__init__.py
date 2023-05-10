@@ -342,7 +342,8 @@ class SessionManager:
         engine = cls.engine(url)
         with engine.connect() as connection:
             tx = connection.begin()
-            acquire_advisory_lock(connection, CIRCULATION_ADVISORY_LOCK_ID)
+            if initialize_schema or initialize_data:
+                acquire_advisory_lock(connection, CIRCULATION_ADVISORY_LOCK_ID)
 
             if initialize_schema:
                 cls.initialize_schema(connection)
