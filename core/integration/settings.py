@@ -3,13 +3,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 from pydantic import BaseModel, Extra, ValidationError, root_validator
 from pydantic.fields import ModelField
 from sqlalchemy.orm import Session
-from typing_extensions import Self
-from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
@@ -234,24 +232,3 @@ class BaseSettings(BaseModel):
                         f"'{item_label}' validation error: {error['msg']}."
                     )
                 )
-
-    @classmethod
-    def from_form_data(cls, form_data: ImmutableMultiDict[str, str]) -> Self:
-        """Load this class from form data"""
-        data = {}
-        for field in cls.__fields__.values():
-            if field.name not in form_data:
-                cls.logger().warning(f"Missing field {field.name} in form data")
-                continue
-
-            value: List[str] | Optional[str]
-            if (
-                getattr(cls.ConfigurationForm, field.name).type
-                == ConfigurationFormItemType.LIST
-            ):
-                value = form_data.getlist(field.name)
-                value = [v for v in value if v != ""]
-            else:
-                value = form_data.get(field.name)
-            data[field.name] = value
-        return cls(**data)
