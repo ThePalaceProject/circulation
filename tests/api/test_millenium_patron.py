@@ -42,6 +42,12 @@ class MockAPI(MilleniumPatronAPI):
         self.queue = self.queue[1:]
         return MockResponse(response)
 
+    def request_post(self, *args, **kwargs) -> MockResponse:
+        self.requests_made.append((args, kwargs))
+        response = self.queue[0]
+        self.queue = self.queue[1:]
+        return MockResponse(response)
+
     def sample_data(self, filename) -> bytes:
         return self.files.sample_data(filename)
 
@@ -328,6 +334,35 @@ class TestMilleniumPatronAPI:
         # In particular, verify that the slash character in the PIN was encoded;
         # by default, parse.quote leaves it alone.
         assert "%2F" in url
+
+    def test_remote_authenticate_correct_pin_POST(
+        self, millenium_fixture: MilleniumPatronFixture
+    ):
+        """Test that a POST request is made if we ask for it. There's no need to repeat the entirety
+        of the tests for GET, as the code takes the same path for everything other than the initial
+        request."""
+        millenium_fixture.api.use_post = True
+        millenium_fixture.api.enqueue("pintest.good.html")
+        barcode = "barcode1234567!"
+        pin = "!correct pin<>@/"
+        patrondata = millenium_fixture.api.remote_authenticate(barcode, pin)
+        # The return value includes everything we know about the
+        # authenticated patron, which isn't much.
+        assert patrondata is not None
+        auth_id = patrondata.authorization_identifier
+        assert auth_id is not None
+        assert "barcode1234567!" == auth_id
+
+        # The PIN went out URL-encoded. The barcode did not.
+        # XXX: Do we actually want URL encoding? Does this make sense if the pin is
+        #      now inside the body of a POST?
+        [args, kwargs] = millenium_fixture.api.requests_made.pop()
+        [url] = args
+        assert kwargs == {
+            "data": "number=barcode1234567!&pin=%21correct%20pin%3C%3E%40%2F",
+            "headers": {"content-type": "application/x-www-form-urlencoded"},
+        }
+        assert url == "http://url/pintest"
 
     def test_remote_authenticate_username_none(
         self, millenium_fixture: MilleniumPatronFixture
