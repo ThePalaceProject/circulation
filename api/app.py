@@ -13,9 +13,9 @@ from core.model import ConfigurationSetting, SessionManager
 from core.util import LanguageCodes
 from core.util.cache import CachedData
 
-from .util.flask import PalaceFlask
 from .admin.controller import setup_admin_controllers
 from .controller import CirculationManager
+from .util.flask import PalaceFlask
 from .util.profilers import (
     PalaceCProfileProfiler,
     PalacePyInstrumentProfiler,
