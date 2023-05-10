@@ -8,7 +8,6 @@ from typing import Any, Callable
 
 import flask
 import pytest
-from flask import Flask
 from werkzeug.datastructures import Authorization
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -17,6 +16,7 @@ from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
 from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider
+from api.util.flask import PalaceFlask
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
 from core.lane import Lane
 from core.model import (
@@ -52,7 +52,7 @@ class ControllerFixtureSetupOverrides:
 class ControllerFixture:
     """A test that requires a functional app server."""
 
-    app: Flask
+    app: PalaceFlask
     authdata: AuthdataUtility
     collection: Collection
     collections: list[Collection]

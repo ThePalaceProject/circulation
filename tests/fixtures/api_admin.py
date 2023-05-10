@@ -30,7 +30,7 @@ class AdminControllerFixture:
             controller_fixture.db.session, Configuration.SECRET_KEY
         ).value = "a secret"
 
-        setup_admin(controller_fixture.db.session)  # type: ignore
+        setup_admin(controller_fixture.db.session)
         setup_admin_controllers(controller_fixture.manager)
         self.admin, ignore = create(
             controller_fixture.db.session,

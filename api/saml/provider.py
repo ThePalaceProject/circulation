@@ -1,9 +1,10 @@
 import logging
-from typing import Dict, Optional, Union
+from typing import Optional
 
 from contextlib2 import contextmanager
 from flask import url_for
 from flask_babel import lazy_gettext as _
+from werkzeug.datastructures import Authorization
 
 from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
 from api.problem_details import *
@@ -87,9 +88,7 @@ class SAMLWebSSOAuthenticationProvider(
                 configuration.patron_id_regular_expression
             )
 
-    def get_credential_from_header(
-        self, header: Union[Dict[str, str], str]
-    ) -> Optional[str]:
+    def get_credential_from_header(self, auth: Authorization) -> Optional[str]:
         # We cannot extract the credential from the header, so we just return None
         return None
 

@@ -112,9 +112,9 @@ class IndividualAdminSettingsController(SettingsController):
             self.check_permissions(admin, settingUp=True)
 
             # Update the roles, if requested.
-            roles = flask.request.form.get("roles")
-            if roles:
-                roles = json.loads(roles)
+            roles_json = flask.request.form.get("roles")
+            if roles_json:
+                roles = json.loads(roles_json)
             else:
                 roles = []
 
@@ -145,9 +145,9 @@ class IndividualAdminSettingsController(SettingsController):
             self.check_permissions(admin, settingUp=False)
 
             # Update the roles, if requested.
-            roles = flask.request.form.get("roles")
-            if roles:
-                roles = json.loads(roles)
+            roles_json = flask.request.form.get("roles")
+            if roles_json:
+                roles = json.loads(roles_json)
             else:
                 roles = []
 
@@ -177,9 +177,9 @@ class IndividualAdminSettingsController(SettingsController):
                     return self.unacceptable_password()
 
             # Update the roles, if requested.
-            roles = flask.request.form.get("roles")
-            if roles:
-                roles = json.loads(roles)
+            roles_json = flask.request.form.get("roles")
+            if roles_json:
+                roles = json.loads(roles_json)
             else:
                 roles = []
 

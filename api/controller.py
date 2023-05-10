@@ -126,9 +126,111 @@ from .shared_collection import SharedCollectionAPI
 if TYPE_CHECKING:
     from werkzeug import Response as wkResponse
 
+    from api.admin.controller.announcement_service import AnnouncementSettings
+    from api.admin.controller.catalog_services import CatalogServicesController
+    from api.admin.controller.collection_library_registrations import (
+        CollectionLibraryRegistrationsController,
+    )
+    from api.admin.controller.collection_self_tests import CollectionSelfTestsController
+    from api.admin.controller.collection_settings import CollectionSettingsController
+    from api.admin.controller.individual_admin_settings import (
+        IndividualAdminSettingsController,
+    )
+    from api.admin.controller.library_settings import LibrarySettingsController
+    from api.admin.controller.metadata_service_self_tests import (
+        MetadataServiceSelfTestsController,
+    )
+    from api.admin.controller.metadata_services import MetadataServicesController
+    from api.admin.controller.patron_auth_service_self_tests import (
+        PatronAuthServiceSelfTestsController,
+    )
+    from api.admin.controller.patron_auth_services import PatronAuthServicesController
+    from api.admin.controller.search_service_self_tests import (
+        SearchServiceSelfTestsController,
+    )
+    from api.admin.controller.sitewide_services import (
+        LoggingServicesController,
+        SearchServicesController,
+        SitewideServicesController,
+    )
+    from api.admin.controller.sitewide_settings import (
+        SitewideConfigurationSettingsController,
+    )
+    from api.admin.controller.storage_services import StorageServicesController
+
+    from .admin.controller import (
+        AdminSearchController,
+        CustomListsController,
+        DashboardController,
+        FeedController,
+        LanesController,
+        PatronController,
+        ResetPasswordController,
+        SettingsController,
+        SignInController,
+        TimestampsController,
+    )
+    from .admin.controller.analytics_services import AnalyticsServicesController
+    from .admin.controller.discovery_service_library_registrations import (
+        DiscoveryServiceLibraryRegistrationsController,
+    )
+    from .admin.controller.discovery_services import DiscoveryServicesController
+    from .admin.controller.self_tests import SelfTestsController
+
 
 class CirculationManager:
     log = logging.getLogger("api.controller.CirculationManager")
+
+    # API Controllers
+    index_controller: IndexController
+    opds_feeds: OPDSFeedController
+    opds2_feeds: OPDS2FeedController
+    marc_records: MARCRecordController
+    loans: LoanController
+    annotations: AnnotationController
+    urn_lookup: URNLookupController
+    work_controller: WorkController
+    analytics_controller: AnalyticsController
+    profiles: ProfileController
+    patron_devices: DeviceTokensController
+    version: ApplicationVersionController
+    odl_notification_controller: ODLNotificationController
+    shared_collection_controller: SharedCollectionController
+    static_files: StaticFileController
+
+    # Admin controllers
+    admin_sign_in_controller: SignInController
+    admin_reset_password_controller: ResetPasswordController
+    timestamps_controller: TimestampsController
+    admin_work_controller: WorkController
+    admin_feed_controller: FeedController
+    admin_custom_lists_controller: CustomListsController
+    admin_lanes_controller: LanesController
+    admin_dashboard_controller: DashboardController
+    admin_settings_controller: SettingsController
+    admin_patron_controller: PatronController
+    admin_self_tests_controller: SelfTestsController
+    admin_discovery_services_controller: DiscoveryServicesController
+    admin_discovery_service_library_registrations_controller: DiscoveryServiceLibraryRegistrationsController
+    admin_analytics_services_controller: AnalyticsServicesController
+    admin_metadata_services_controller: MetadataServicesController
+    admin_metadata_service_self_tests_controller: MetadataServiceSelfTestsController
+    admin_patron_auth_services_controller: PatronAuthServicesController
+    admin_patron_auth_service_self_tests_controller: PatronAuthServiceSelfTestsController
+    admin_collection_settings_controller: CollectionSettingsController
+    admin_collection_self_tests_controller: CollectionSelfTestsController
+    admin_collection_library_registrations_controller: CollectionLibraryRegistrationsController
+    admin_sitewide_configuration_settings_controller: SitewideConfigurationSettingsController
+    admin_library_settings_controller: LibrarySettingsController
+    admin_individual_admin_settings_controller: IndividualAdminSettingsController
+    admin_sitewide_services_controller: SitewideServicesController
+    admin_logging_services_controller: LoggingServicesController
+    admin_search_service_self_tests_controller: SearchServiceSelfTestsController
+    admin_search_services_controller: SearchServicesController
+    admin_storage_services_controller: StorageServicesController
+    admin_catalog_services_controller: CatalogServicesController
+    admin_announcement_service: AnnouncementSettings
+    admin_search_controller: AdminSearchController
 
     def __init__(self, _db):
         self._db = _db
