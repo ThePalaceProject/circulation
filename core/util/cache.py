@@ -50,7 +50,7 @@ def memoize(ttls: int = 3600) -> Callable[[Callable[P, T]], Callable[P, T]]:
             cached = cache.get(signature)
 
             # Has the cache expired?
-            if cached and time.time() - cached["last_updated"] < ttls:
+            if cached and time.time() - cached["last_updated"] < inner.ttls:  # type: ignore[attr-defined]
                 response = cast(T, cached["response"])
             else:
                 response = func(*args, **kwargs)
@@ -59,6 +59,7 @@ def memoize(ttls: int = 3600) -> Callable[[Callable[P, T]], Callable[P, T]]:
             return response
 
         # The ttl is configurable from anywhere through the decorated function
+        inner.ttls = ttls  # type: ignore[attr-defined]
         return inner
 
     return outer
