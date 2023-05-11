@@ -1,12 +1,27 @@
+from __future__ import annotations
+
+import sys
 import time
 from functools import wraps
 from threading import Lock
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+
+from sqlalchemy.orm import Session
 
 from ..model.datasource import DataSource
 
+# TODO: Remove this when we drop support for Python 3.9
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+else:
+    from typing_extensions import ParamSpec
 
-def _signature(func: Callable, *args, **kwargs) -> str:
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def _signature(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> str:
     """Create a hashable function signature
     by stringifying and joining all arguments"""
     strargs = ";".join([str(a) for a in args])
@@ -14,8 +29,8 @@ def _signature(func: Callable, *args, **kwargs) -> str:
     return str(func) + "::" + strargs + "::" + strkwargs
 
 
-def memoize(ttls: int = 3600):
-    """An in-memory cache based off the funcion and arguments
+def memoize(ttls: int = 3600) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    """An in-memory cache based off the function and arguments
     Usage:
     @memoize(ttls=<seconds>)
     def func(...):
@@ -28,15 +43,15 @@ def memoize(ttls: int = 3600):
     """
     cache: Dict[str, Any] = {}
 
-    def outer(func):
+    def outer(func: Callable[P, T]) -> Callable[P, T]:
         @wraps(func)
-        def inner(*args, **kwargs):
+        def inner(*args: P.args, **kwargs: P.kwargs) -> T:
             signature = _signature(func, *args, **kwargs)
             cached = cache.get(signature)
 
             # Has the cache expired?
-            if cached and time.time() - cached["last_updated"] < inner.ttls:
-                response = cached["response"]
+            if cached and time.time() - cached["last_updated"] < inner.ttls:  # type: ignore[attr-defined]
+                response = cast(T, cached["response"])
             else:
                 response = func(*args, **kwargs)
                 cache[signature] = dict(last_updated=time.time(), response=response)
@@ -44,7 +59,7 @@ def memoize(ttls: int = 3600):
             return response
 
         # The ttl is configurable from anywhere through the decorated function
-        inner.ttls = ttls
+        inner.ttls = ttls  # type: ignore[attr-defined]
         return inner
 
     return outer
@@ -58,10 +73,10 @@ class CachedData:
     Always expunge objects before returning the data, to avoid stale/cross-thread session usage"""
 
     # Instance of itself
-    cache: Any = None
+    cache: Optional[CachedData] = None
 
     @classmethod
-    def initialize(cls, _db) -> "CachedData":
+    def initialize(cls, _db: Session) -> CachedData:
         """Initialize the cache data instance or update the _db instance for the global cache instance
         Use this method liberally in the vicinity of the usage of the cache functions so the _db instance
         is constantly being updated
@@ -75,7 +90,7 @@ class CachedData:
 
         return cls.cache
 
-    def __init__(self, _db) -> None:
+    def __init__(self, _db: Session) -> None:
         self._db = _db
         self.lock = Lock()
 
