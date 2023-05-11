@@ -730,6 +730,9 @@ class SIPClient(Constants):
         """
         data = data.decode(self.encoding)
 
+        # We save the original data that is parsed so we can log it if there would be some errors.
+        original_data = data
+
         parsed = {}
         data = self.consume_status_code(data, str(expect_status_code), parsed)
 
@@ -798,7 +801,7 @@ class SIPClient(Constants):
         # If a named field is required and never showed up, sound the alarm.
         for field in required_fields_not_seen:
             self.log.error(
-                "Expected required field %s but did not find it.", field.sip_code
+                f"Expected required field {field.sip_code} but did not find it. Response data:{original_data}. SIP2 server:{self.target_server}"
             )
         return parsed
 
