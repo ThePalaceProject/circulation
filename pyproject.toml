@@ -125,6 +125,7 @@ disallow_untyped_defs = true
 module = [
     "api.admin.model.dashboard_statistics",
     "core.model.hassessioncache",
+    "core.util.cache",
 ]
 no_implicit_reexport = true
 strict_concatenate = true

@@ -2090,9 +2090,9 @@ class JSONQuery(Query):
         @staticmethod
         def data_source(value: str) -> int:
             """Transform a datasource name into a datasource id"""
-            sources = CachedData.cache.data_sources()
+            sources = CachedData.cache.data_sources()  # type: ignore[union-attr]
             for source in sources:
-                if source.name.lower() == value.lower():
+                if source.name.lower() == value.lower():  # type: ignore[union-attr]
                     return source.id
 
             # No such value was found, so return a non-id
