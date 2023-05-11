@@ -9,7 +9,7 @@ from api.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
 )
-from core.integration.exceptions import ProblemDetailException
+from core.util.problem_detail import ProblemError
 from tests.api.saml import saml_strings
 
 
@@ -112,7 +112,7 @@ class TestSAMLSettingsValidator:
             ] = patron_id_regular_expression
 
         if expected_validation_result is not None:
-            with pytest.raises(ProblemDetailException) as exception:
+            with pytest.raises(ProblemError) as exception:
                 SAMLWebSSOAuthenticationSettings(**submitted_settings)
 
             assert (

@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from api.admin.problem_details import *
 from api.authenticator import AuthenticationProvider
 from api.integration.registry.patron_auth import patron_auth_registry
-from core.integration.exceptions import ProblemDetailException
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model import get_one, json_serializer
@@ -17,7 +16,7 @@ from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class PatronAuthServiceSelfTestsController:
@@ -39,7 +38,7 @@ class PatronAuthServiceSelfTestsController:
                 return self.self_tests_process_get(identifier)
             else:
                 return self.self_tests_process_post(identifier)
-        except ProblemDetailException as e:
+        except ProblemError as e:
             return e.problem_detail
 
     def self_tests_process_get(self, identifier: int) -> Response:
@@ -87,7 +86,7 @@ class PatronAuthServiceSelfTestsController:
         self, integration: IntegrationConfiguration
     ) -> Type[AuthenticationProvider]:
         if integration.protocol not in self.registry:
-            raise ProblemDetailException(problem_detail=UNKNOWN_PROTOCOL)
+            raise ProblemError(problem_detail=UNKNOWN_PROTOCOL)
         return self.registry[integration.protocol]
 
     def look_up_by_id(self, identifier: int) -> IntegrationConfiguration:
@@ -98,7 +97,7 @@ class PatronAuthServiceSelfTestsController:
             goal=Goals.PATRON_AUTH_GOAL,
         )
         if not service:
-            raise (ProblemDetailException(problem_detail=MISSING_SERVICE))
+            raise (ProblemError(problem_detail=MISSING_SERVICE))
         return service
 
     @staticmethod
@@ -117,7 +116,7 @@ class PatronAuthServiceSelfTestsController:
         # we can't run self tests.
         library_configuration = self.get_library_configuration(integration)
         if library_configuration is None:
-            raise ProblemDetailException(
+            raise ProblemError(
                 problem_detail=FAILED_TO_RUN_SELF_TESTS.detailed(
                     f"Failed to run self tests for {integration.name}, because it is not associated with any libraries."
                 )
@@ -126,7 +125,7 @@ class PatronAuthServiceSelfTestsController:
         if not isinstance(integration.settings, dict) or not isinstance(
             library_configuration.settings, dict
         ):
-            raise ProblemDetailException(
+            raise ProblemError(
                 problem_detail=FAILED_TO_RUN_SELF_TESTS.detailed(
                     f"Failed to run self tests for {integration.name}, because its settings are not valid."
                 )

@@ -30,11 +30,11 @@ from api.saml.metadata.model import (
 )
 from api.saml.metadata.parser import SAMLMetadataParser, SAMLMetadataParsingError
 from core.exceptions import BaseError
-from core.integration.exceptions import SettingsValidationError
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
+    SettingsValidationError,
 )
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser

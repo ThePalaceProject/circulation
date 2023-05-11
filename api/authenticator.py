@@ -37,13 +37,13 @@ from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from core.analytics import Analytics
 from core.integration.base import HasLibraryIntegrationConfiguration
-from core.integration.exceptions import ProblemDetailException, SettingsValidationError
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
+    SettingsValidationError,
 )
 from core.model import (
     CirculationEvent,
@@ -70,7 +70,7 @@ from core.util.authentication_for_opds import (
 from core.util.datetime_helpers import utc_now
 from core.util.http import RemoteIntegrationException
 from core.util.log import elapsed_time_logging
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 from .admin.problem_details import (
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
@@ -833,7 +833,7 @@ class LibraryAuthenticator:
                 library_settings,
                 analytics,
             )
-        except (RemoteIntegrationException, ProblemDetailException):
+        except (RemoteIntegrationException, ProblemError):
             raise CannotLoadConfiguration(
                 f"Could not instantiate {impl_cls.__name__} authentication provider for "
                 f"library {self.library_short_name}."

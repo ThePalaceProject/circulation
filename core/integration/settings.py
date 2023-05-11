@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Tuple
 
-from pydantic import BaseModel, Extra, ValidationError, root_validator
+from pydantic import (
+    BaseModel,
+    Extra,
+    PydanticValueError,
+    ValidationError,
+    root_validator,
+)
 from pydantic.fields import ModelField
 from sqlalchemy.orm import Session
 
@@ -13,7 +19,7 @@ from api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
 )
-from core.integration.exceptions import ProblemDetailException
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class ConfigurationFormItemType(Enum):
@@ -195,7 +201,7 @@ class BaseSettings(BaseModel):
 
     def __init__(self, **data: Any):
         """
-        Override the init method to return our custom ProblemDetailException
+        Override the init method to return our custom ProblemError
 
         This is needed to allow us to include custom ProblemDetail objects
         with information about how to return the error to the front-end in
@@ -214,21 +220,36 @@ class BaseSettings(BaseModel):
             ):
                 # We have a ProblemDetail, so we return that instead of a
                 # generic validation error.
-                raise ProblemDetailException(
-                    problem_detail=error["ctx"]["problem_detail"]
-                )
+                raise ProblemError(problem_detail=error["ctx"]["problem_detail"])
             elif (
                 error["type"] == "value_error.missing"
                 or error["type"] == "type_error.none.not_allowed"
             ):
-                raise ProblemDetailException(
+                raise ProblemError(
                     problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                         f"Required field '{item_label}' is missing."
                     )
                 )
             else:
-                raise ProblemDetailException(
+                raise ProblemError(
                     problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
                         f"'{item_label}' validation error: {error['msg']}."
                     )
                 )
+
+
+class SettingsValidationError(PydanticValueError):
+    """
+    Raised in a custom pydantic validator when there is a problem
+    with the configuration settings. A ProblemDetail should
+    be passed to the exception constructor.
+
+    for example:
+    raise SettingsValidationError(problem_detail=INVALID_CONFIGURATION_OPTION)
+    """
+
+    code = "problem_detail"
+    msg_template = "{problem_detail.detail}"
+
+    def __init__(self, problem_detail: ProblemDetail, **kwargs: Any):
+        super().__init__(problem_detail=problem_detail, **kwargs)

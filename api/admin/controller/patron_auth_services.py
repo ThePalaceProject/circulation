@@ -13,7 +13,6 @@ from api.admin.problem_details import *
 from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
 from api.controller import CirculationManager
 from api.integration.registry.patron_auth import patron_auth_registry
-from core.integration.exceptions import ProblemDetailException
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings
@@ -29,7 +28,7 @@ from core.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from core.util.cache import memoize
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class PatronAuthServicesController(AdminCirculationManagerController):
@@ -135,13 +134,13 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             goal=Goals.PATRON_AUTH_GOAL,
         )
         if auth_service is None:
-            raise ProblemDetailException(MISSING_SERVICE)
+            raise ProblemError(MISSING_SERVICE)
         if auth_service.protocol != protocol:
-            raise ProblemDetailException(CANNOT_CHANGE_PROTOCOL)
+            raise ProblemError(CANNOT_CHANGE_PROTOCOL)
         if name is not None and auth_service.name != name:
             service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
             if service_with_name is not None:
-                raise ProblemDetailException(INTEGRATION_NAME_ALREADY_IN_USE)
+                raise ProblemError(INTEGRATION_NAME_ALREADY_IN_USE)
             auth_service.name = name
 
         return auth_service
@@ -150,7 +149,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
         # Create a new service
         service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
         if service_with_name is not None:
-            raise ProblemDetailException(INTEGRATION_NAME_ALREADY_IN_USE)
+            raise ProblemError(INTEGRATION_NAME_ALREADY_IN_USE)
 
         auth_service, _ = create(
             self._db,
@@ -169,7 +168,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
     def get_library(self, short_name: str) -> Library:
         library: Optional[Library] = get_one(self._db, Library, short_name=short_name)
         if library is None:
-            raise ProblemDetailException(
+            raise ProblemError(
                 NO_SUCH_LIBRARY.detailed(
                     f"You attempted to add the integration to {short_name}, but it does not exist.",
                 )
@@ -241,13 +240,13 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             libraries_data = form_data.get("libraries", None, str)
 
             if protocol is None and id is None:
-                raise ProblemDetailException(NO_PROTOCOL_FOR_NEW_SERVICE)
+                raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
 
             if protocol is None or protocol not in self.registry:
                 self.log.warning(
                     f"Unknown patron authentication service protocol: {protocol}"
                 )
-                raise ProblemDetailException(UNKNOWN_PROTOCOL)
+                raise ProblemError(UNKNOWN_PROTOCOL)
 
             if id is not None:
                 # Find an existing service to edit
@@ -256,7 +255,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             else:
                 # Create a new service
                 if name is None:
-                    raise ProblemDetailException(MISSING_PATRON_AUTH_NAME)
+                    raise ProblemError(MISSING_PATRON_AUTH_NAME)
                 auth_service = self.create_new_service(name, protocol)
                 response_code = 201
 
@@ -275,7 +274,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
 
-        except ProblemDetailException as e:
+        except ProblemError as e:
             self._db.rollback()
             return e.problem_detail
 
@@ -294,7 +293,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             .count()
         )
         if basic_auth_integrations > 1:
-            raise ProblemDetailException(
+            raise ProblemError(
                 MULTIPLE_BASIC_AUTH_SERVICES.detailed(
                     "You tried to add a patron authentication service that uses basic auth "
                     f"to {library.short_name}, but it already has one."
