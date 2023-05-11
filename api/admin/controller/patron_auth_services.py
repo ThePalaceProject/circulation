@@ -44,7 +44,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
         self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
         self._apis = None
 
-    @memoize(ttls=1800)  # type: ignore[misc]
+    @memoize(ttls=1800)
     def _cached_protocols(self) -> Dict[str, Dict[str, Any]]:
         """Cached result for integration implementations"""
         protocols = {}
@@ -63,7 +63,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
     @property
     def protocols(self) -> Dict[str, Dict[str, Any]]:
         """Use a property for implementations to allow expiring cached results"""
-        return self._cached_protocols()  # type: ignore[no-any-return]
+        return self._cached_protocols()
 
     @property
     def basic_auth_protocols(self) -> Set[str]:
