@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 import sqlalchemy
 from flask_babel import lazy_gettext as _
-from parameterized import parameterized
 from sqlalchemy.exc import IntegrityError
 
 from core.config import CannotLoadConfiguration, Configuration
@@ -967,8 +966,9 @@ class TestConfigurationOption:
 
 
 class TestConfigurationGrouping:
-    @parameterized.expand(
-        [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
+    @pytest.mark.parametrize(
+        "_,setting_name,expected_value",
+        [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")],
     )
     def test_getters(self, _, setting_name, expected_value):
         # Arrange
@@ -984,7 +984,8 @@ class TestConfigurationGrouping:
         assert setting_value == expected_value
         configuration_storage.load.assert_called_once_with(db, setting_name)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,setting_name,db_value,expected_value",
         [
             (
                 "default_menu_value",
@@ -1018,7 +1019,7 @@ class TestConfigurationGrouping:
                 json.dumps(["value1", "value2"]),
                 ["value1", "value2"],
             ),
-        ]
+        ],
     )
     def test_menu_and_list_getters(self, _, setting_name, db_value, expected_value):
         # Arrange
@@ -1049,8 +1050,9 @@ class TestConfigurationGrouping:
         assert SETTING1_DEFAULT == setting1_value
         assert SETTING5_DEFAULT == setting5_value
 
-    @parameterized.expand(
-        [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")]
+    @pytest.mark.parametrize(
+        "_,setting_name,expected_value",
+        [("setting1", "setting1", 12345), ("setting2", "setting2", "12345")],
     )
     def test_setters(self, _, setting_name, expected_value):
         # Arrange

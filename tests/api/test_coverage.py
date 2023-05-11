@@ -3,10 +3,11 @@ import pytest
 from api.coverage import MockOPDSImportCoverageProvider, OPDSImportCoverageProvider
 from core.coverage import CoverageFailure
 from core.model import Collection, DataSource, LicensePool
-from core.opds_import import MockSimplifiedOPDSLookup, OPDSImporter
-from core.testing import MockRequestsResponse
+from core.opds_import import OPDSImporter
 from core.util.http import BadResponseException
 from core.util.opds_writer import OPDSFeed
+from tests.api.mockapi.opds import MockSimplifiedOPDSLookup
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

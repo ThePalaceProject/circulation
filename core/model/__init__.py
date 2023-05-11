@@ -523,6 +523,7 @@ from .collection import (
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,
+    ExternalIntegrationError,
     ExternalIntegrationLink,
 )
 from .contributor import Contribution, Contributor

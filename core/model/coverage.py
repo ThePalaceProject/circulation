@@ -376,6 +376,13 @@ class CoverageRecord(Base, BaseCoverageRecord):
         )
 
     @classmethod
+    def assert_coverage_operation(cls, operation, collection):
+        if operation == CoverageRecord.IMPORT_OPERATION and not collection:
+            raise ValueError(
+                "An 'import' type coverage must be associated with a collection"
+            )
+
+    @classmethod
     def lookup(
         cls, edition_or_identifier, data_source, operation=None, collection=None
     ):
@@ -383,13 +390,17 @@ class CoverageRecord(Base, BaseCoverageRecord):
         from .edition import Edition
         from .identifier import Identifier
 
+        cls.assert_coverage_operation(operation, collection)
+
         _db = Session.object_session(edition_or_identifier)
         if isinstance(edition_or_identifier, Identifier):
             identifier = edition_or_identifier
         elif isinstance(edition_or_identifier, Edition):
             identifier = edition_or_identifier.primary_identifier
         else:
-            raise ValueError("Cannot look up a coverage record for %r." % edition)
+            raise ValueError(
+                "Cannot look up a coverage record for %r." % edition_or_identifier
+            )
 
         if isinstance(data_source, (bytes, str)):
             data_source = DataSource.lookup(_db, data_source)
@@ -406,7 +417,7 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     @classmethod
     def add_for(
-        self,
+        cls,
         edition,
         data_source,
         operation=None,
@@ -416,6 +427,8 @@ class CoverageRecord(Base, BaseCoverageRecord):
     ):
         from .edition import Edition
         from .identifier import Identifier
+
+        cls.assert_coverage_operation(operation, collection)
 
         _db = Session.object_session(edition)
         if isinstance(edition, Identifier):
@@ -458,6 +471,8 @@ class CoverageRecord(Base, BaseCoverageRecord):
         if not identifiers:
             # Nothing to do.
             return
+
+        cls.assert_coverage_operation(operation, collection)
 
         _db = Session.object_session(identifiers[0])
         timestamp = timestamp or utc_now()

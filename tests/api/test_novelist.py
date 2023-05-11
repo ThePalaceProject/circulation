@@ -7,8 +7,8 @@ from api.config import CannotLoadConfiguration
 from api.novelist import MockNoveListAPI, NoveListAPI
 from core.metadata_layer import Metadata
 from core.model import DataSource, ExternalIntegration, Identifier
-from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.util.http import HTTP
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 
 from ..fixtures.api_novelist_files import NoveListFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

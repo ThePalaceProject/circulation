@@ -1,12 +1,13 @@
 import logging
 import time
 import urllib.parse
+from typing import Optional, Union
 
 import jwt
 import requests
 from flask_babel import lazy_gettext as _
 
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 
 from .authenticator import BasicAuthenticationProvider, PatronData
 from .circulation_exceptions import RemoteInitiatedServerError
@@ -64,8 +65,13 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         # All FirstBook credentials are in upper-case.
+        if username is None or username == "":
+            return None
+
         username = username.upper()
 
         # If they fail a PIN test, there is no authenticated patron.
@@ -79,6 +85,14 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
             permanent_id=username,
             authorization_identifier=username,
         )
+
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Union[PatronData, Patron]
+    ) -> Optional[PatronData]:
+        if isinstance(patron_or_patrondata, PatronData):
+            return patron_or_patrondata
+
+        return None
 
     # End implementation of BasicAuthenticationProvider abstract methods.
 

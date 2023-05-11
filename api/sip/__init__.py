@@ -3,11 +3,12 @@ from datetime import datetime
 from typing import Optional, Union
 
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
 
 from api.authenticator import BasicAuthenticationProvider, PatronData
 from api.sip.client import SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
-from core.model import ExternalIntegration, Patron
+from core.model import ConfigurationSetting, ExternalIntegration, Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
 
@@ -29,6 +30,11 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
     SSL_VERIFICATION = "ssl_verification"
     ILS = "ils"
     PATRON_STATUS_BLOCK = "patron status block"
+
+    # Configuration settings that are specific to a library.
+    # Each library and authentication mechanism may have an ILS-assigned
+    # branch or institution ID used in the SIP2 AO field.
+    INSTITUTION_ID = "institution_id"
 
     SETTINGS = [
         {"key": ExternalIntegration.URL, "label": _("Server"), "required": True},
@@ -134,6 +140,16 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         },
     ] + BasicAuthenticationProvider.SETTINGS
 
+    LIBRARY_SETTINGS = [
+        {
+            "key": INSTITUTION_ID,
+            "label": _("Institution ID"),
+            "description": _(
+                "A specific identifier for the library or branch, if used in patron authentication"
+            ),
+        }
+    ] + BasicAuthenticationProvider.LIBRARY_SETTINGS
+
     # Map the reasons why SIP2 might report a patron is blocked to the
     # protocol-independent block reason used by PatronData.
     SPECIFIC_BLOCK_REASONS = {
@@ -206,6 +222,14 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
         self.client = client
 
+        db = Session.object_session(library)
+        self.institution_id = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                db, self.INSTITUTION_ID, library, integration
+            ).value
+            or ""
+        )
+
         # Check if patrons should be blocked based on SIP status
         # If nothing is specified, the default is True (block patrons!)
         _block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
@@ -260,13 +284,17 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
-    def _remote_patron_lookup(self, patron_or_patrondata) -> Optional[PatronData]:
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Union[PatronData, Patron]
+    ) -> Optional[PatronData]:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
         return self.info_to_patrondata(info, False)
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         """Authenticate a patron with the SIP2 server.
 
         :param username: The patron's username/barcode/card

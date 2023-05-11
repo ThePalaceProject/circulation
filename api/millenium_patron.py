@@ -1,6 +1,6 @@
 import datetime
 import re
-from typing import Optional
+from typing import Optional, Union
 from urllib import parse
 
 import dateutil
@@ -8,7 +8,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from money import Money
 
-from core.model import ExternalIntegration
+from core.model import ExternalIntegration, Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
@@ -56,6 +56,11 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     # A configuration value for whether or not to validate the SSL certificate
     # of the Millenium Patron API server.
     VERIFY_CERTIFICATE = "verify_certificate"
+
+    # Whether to use POST for remote requests. This is not supported by "standard"
+    # Millenium Patron API implementations; it is a Palace Project extension to avoid having
+    # passwords appear in URLs.
+    USE_POST_FOR_REQUESTS = "use_post_requests"
 
     # The field to use when validating a patron's credential.
     AUTHENTICATION_MODE = "auth_mode"
@@ -163,6 +168,17 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             "required": True,
             "default": BARCODE_FIELD,
         },
+        {
+            "key": USE_POST_FOR_REQUESTS,
+            "label": _("Use POST for requests"),
+            "description": _(
+                "Whether to use POST (instead of GET) HTTP requests. If this is a Virtual Library Card integration, "
+                "using POST will improve the security of this integration and is the recommended setting. Otherwise, "
+                "do not use POST, as it is NOT compatible with other Millenium integrations."
+            ),
+            "required": False,
+            "default": False,
+        },
     ] + BasicAuthenticationProvider.SETTINGS
 
     # Replace library settings to allow text in identifier field.
@@ -241,49 +257,46 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             or MilleniumPatronAPI.BARCODE_FIELD
         )
 
+        self.use_post: bool = (
+            integration.setting(self.USE_POST_FOR_REQUESTS).bool_value or False
+        )
+
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
 
     def _request(self, path):
         """Make an HTTP request and parse the response."""
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         """Does the Millenium Patron API approve of these credentials?
 
         :return: False if the credentials are invalid. If they are
             valid, a PatronData that serves only to indicate which
             authorization identifier the patron prefers.
         """
+        if not username:
+            return None
+
         if not self.collects_password:
             # We don't even look at the password. If the patron exists, they
             # are authenticated.
-            patrondata = self._remote_patron_lookup(username)
+            patrondata = self.remote_patron_lookup(username)
             if not patrondata:
-                return False
+                return None
             return patrondata
 
         if self.auth_mode == self.PIN_AUTHENTICATION_MODE:
-            # Patrons are authenticated with a secret PIN.
-            #
-            # The PIN is URL-encoded. The username is not: as far as
-            # we can tell Millenium Patron doesn't even try to decode
-            # it.
-            quoted_password = parse.quote(password, safe="") if password else password
-            path = "%(barcode)s/%(pin)s/pintest" % dict(
-                barcode=username, pin=quoted_password
+            return self._remote_authenticate_pintest(
+                username=username, password=password
             )
-            url = self.root + path
-            response = self.request(url)
-            data = dict(self._extract_text_nodes(response.content))
-            if data.get("RETCOD") == "0":
-                return PatronData(authorization_identifier=username, complete=False)
-            return False
         elif self.auth_mode == self.FAMILY_NAME_AUTHENTICATION_MODE:
             # Patrons are authenticated by their family name.
-            patrondata = self._remote_patron_lookup(username)
+            patrondata = self.remote_patron_lookup(username)
             if not patrondata:
                 # The patron doesn't even exist.
-                return False
+                return None
 
             # The patron exists; but do the last names match?
             if self.family_name_match(patrondata.personal_name, password):
@@ -291,7 +304,41 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 # to update their account without making a separate
                 # call to /dump.
                 return patrondata
-        return False
+        return None
+
+    def _remote_authenticate_pintest(
+        self, username: str, password: Optional[str]
+    ) -> Optional[PatronData]:
+        # Patrons are authenticated with a secret PIN.
+        #
+        # The PIN is URL-encoded. The username is not: as far as
+        # we can tell Millenium Patron doesn't even try to decode
+        # it.
+        quoted_password = parse.quote(password, safe="") if password else password
+
+        result: dict = {}
+        if self.use_post:
+            data = f"number={username}&pin={quoted_password}"
+            path = "pintest"
+            url = self.root + path
+            response = self.request_post(
+                url,
+                data=data,
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
+            result = dict(self._extract_text_nodes(response.content))
+        else:
+            path = "%(barcode)s/%(pin)s/pintest" % dict(
+                barcode=username, pin=quoted_password
+            )
+            url = self.root + path
+            response = self.request(url)
+            result = dict(self._extract_text_nodes(response.content))
+
+        if result.get("RETCOD") == "0":
+            return PatronData(authorization_identifier=username, complete=False)
+
+        return None
 
     @classmethod
     def family_name_match(self, actual_name, supposed_family_name):
@@ -307,10 +354,14 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             return True
         return False
 
-    def _remote_patron_lookup(self, patron_or_patrondata_or_identifier):
+    def remote_patron_lookup(
+        self, patron_or_patrondata_or_identifier: Union[PatronData, Patron, str]
+    ) -> Optional[PatronData]:
         if isinstance(patron_or_patrondata_or_identifier, str):
             identifier = patron_or_patrondata_or_identifier
         else:
+            if not patron_or_patrondata_or_identifier.authorization_identifier:
+                return None
             identifier = patron_or_patrondata_or_identifier.authorization_identifier
         """Look up patron information for the given identifier."""
         path = "%(barcode)s/dump" % dict(barcode=identifier)
@@ -327,6 +378,13 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         """
         self._update_request_kwargs(kwargs)
         return HTTP.request_with_timeout("GET", url, *args, **kwargs)
+
+    def request_post(self, url, *args, **kwargs):
+        """Actually make an HTTP request. This method exists only so the mock
+        can override it.
+        """
+        self._update_request_kwargs(kwargs)
+        return HTTP.request_with_timeout("POST", url, *args, **kwargs)
 
     def _update_request_kwargs(self, kwargs):
         """Modify the kwargs to HTTP.request_with_timeout to reflect the API

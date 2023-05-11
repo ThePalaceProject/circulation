@@ -106,3 +106,7 @@ HOME=/var/www/circulation
 # Auto update lists
 # Every hour between 7AM - 1AM
 5 0,1,7-23 * * * root core/bin/run custom_list_update_new_entries >> /var/log/cron.log 2>&1
+
+# Update the status of the different Authentication Providers
+#
+*/5 * * * * root core/bin/run update_integration_statuses >> /var/log/cron.log 2>&1

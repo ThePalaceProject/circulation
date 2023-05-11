@@ -60,6 +60,7 @@ from scripts import (
     LocalAnalyticsExportScript,
     NovelistSnapshotScript,
 )
+from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
 from tests.fixtures.search import ExternalSearchFixture
@@ -174,7 +175,9 @@ class TestCacheRepresentationPerLane:
         assert True == script.should_process_lane(parent)
         assert False == script.should_process_lane(child)
 
-        script = CacheRepresentationPerLane(db.session, ["--min-depth=1"], testing=True)
+        script = CacheRepresentationPerLane(
+            db.session, ["--min-depth=1"], manager=MockCirculationManager(db.session)
+        )
         assert 1 == script.min_depth
         assert False == script.should_process_lane(parent)
         assert True == script.should_process_lane(child)

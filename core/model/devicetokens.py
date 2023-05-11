@@ -1,4 +1,5 @@
-from typing import Type, TypeVar, Union
+import sys
+from typing import Union
 
 from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
@@ -8,13 +9,15 @@ from core.model.patron import Patron
 
 from . import Base
 
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
+
 
 class DeviceTokenTypes:
     FCM_ANDROID = "FCMAndroid"
     FCM_IOS = "FCMiOS"
-
-
-T = TypeVar("T", bound="DeviceToken")
 
 
 class DeviceToken(Base):
@@ -49,12 +52,12 @@ class DeviceToken(Base):
 
     @classmethod
     def create(
-        cls: Type[T],
+        cls,
         db,
         token_type: str,
         device_token: str,
         patron: Union[Patron, int],
-    ) -> T:
+    ) -> Self:
         """Create a DeviceToken while ensuring sql issues are managed.
         Raises InvalidTokenTypeError, DuplicateDeviceTokenError"""
 

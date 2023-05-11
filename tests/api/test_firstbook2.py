@@ -3,6 +3,7 @@ import os
 import jwt
 import pytest
 
+from api.authenticator import PatronData
 from api.circulation_exceptions import RemoteInitiatedServerError
 from api.firstbook2 import FirstBookAuthenticationAPI, MockFirstBookAuthenticationAPI
 from core.model import ExternalIntegration
@@ -80,14 +81,20 @@ class TestFirstBook:
 
     def test_remote_authenticate(self, firstbook_fixture2: FirstBookFixture2):
         patrondata = firstbook_fixture2.api.remote_authenticate("abcd", "1234")
+        assert isinstance(patrondata, PatronData)
         assert "ABCD" == patrondata.permanent_id
         assert "ABCD" == patrondata.authorization_identifier
         assert None == patrondata.username
 
         patrondata = firstbook_fixture2.api.remote_authenticate("ABCD", "1234")
+        assert isinstance(patrondata, PatronData)
         assert "ABCD" == patrondata.permanent_id
         assert "ABCD" == patrondata.authorization_identifier
         assert None == patrondata.username
+
+        # When username is none, the patrondata object should be None
+        patrondata = firstbook_fixture2.api.remote_authenticate(None, "1234")
+        assert patrondata is None
 
     def test_broken_service_remote_pin_test(
         self, firstbook_fixture2: FirstBookFixture2
@@ -136,3 +143,18 @@ class TestFirstBook:
         # If the secrets don't match, decoding won't work.
         firstbook_fixture2.api.secret = "bad secret"
         pytest.raises(jwt.DecodeError, firstbook_fixture2.api._decode, token)
+
+    def test_remote_patron_lookup(self, firstbook_fixture2: FirstBookFixture2):
+        # Remote patron lookup is not supported. It always returns
+        # the same PatronData object passed into it.
+        input_patrondata = PatronData()
+        output_patrondata = firstbook_fixture2.api.remote_patron_lookup(
+            input_patrondata
+        )
+        assert input_patrondata == output_patrondata
+
+        # if anything else is passed in, it returns None
+        output_patrondata = firstbook_fixture2.api.remote_patron_lookup(
+            firstbook_fixture2.db.patron()
+        )
+        assert output_patrondata is None

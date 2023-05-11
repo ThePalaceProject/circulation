@@ -94,17 +94,18 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.sierra_valid_login)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "foo@example.com" == patrondata.email_address
         assert "LE CARRÉ, JOHN" == patrondata.personal_name
         assert 0 == patrondata.fines
-        assert None == patrondata.authorization_expires
-        assert None == patrondata.external_type
+        assert patrondata.authorization_expires is None
+        assert patrondata.external_type is None
         assert PatronData.NO_VALUE == patrondata.block_reason
 
         client.queue_response(self.sierra_invalid_login)
         client.queue_response(self.end_session_response)
-        assert None == auth.remote_authenticate("user", "pass")
+        assert auth.remote_authenticate("user", "pass") is None
 
         # Since Sierra provides both the patron's fine amount and the
         # maximum allowable amount, we can determine just by looking
@@ -113,12 +114,14 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.sierra_excessive_fines)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert PatronData.EXCESSIVE_FINES == patrondata.block_reason
 
         # A patron with an expired card.
         client.queue_response(self.evergreen_expired_card)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         # SIP extension field XI becomes sipserver_internal_id which
         # becomes PatronData.permanent_id.
@@ -132,6 +135,7 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_excessive_fines)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "863718" == patrondata.permanent_id
         assert "Booth Excessive Fines Test" == patrondata.personal_name
@@ -153,17 +157,20 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_hold_privileges_denied)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert PatronData.NO_VALUE == patrondata.block_reason
 
         client.queue_response(self.evergreen_card_reported_lost)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert PatronData.CARD_REPORTED_LOST == patrondata.block_reason
 
         # Some examples taken from a Polaris instance.
         client.queue_response(self.polaris_valid_pin)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert "25891000331441" == patrondata.authorization_identifier
         assert "foo@bar.com" == patrondata.email_address
         assert 9.25 == patrondata.fines
@@ -173,16 +180,18 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.polaris_wrong_pin)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
-        assert None == patrondata
+        assert patrondata is None
 
         client.queue_response(self.polaris_expired_card)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert datetime(2016, 10, 25, 23, 59, 59) == patrondata.authorization_expires
 
         client.queue_response(self.polaris_excess_fines)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         assert 11.50 == patrondata.fines
 
         # Two cases where the patron's authorization identifier was
@@ -191,14 +200,14 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.polaris_no_such_patron)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
-        assert None == patrondata
+        assert patrondata is None
 
         # And once on an ILS that leaves valid_patron_password blank
         # when that happens.
         client.queue_response(self.tlc_no_such_patron)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", "pass")
-        assert None == patrondata
+        assert patrondata is None
 
     def test_remote_authenticate_no_password(self, db: DatabaseTransactionFixture):
 
@@ -211,6 +220,7 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_active_user)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user", None)
+        assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "863715" == patrondata.permanent_id
         assert "Booth Active Test" == patrondata.personal_name
@@ -222,6 +232,7 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_active_user)
         client.queue_response(self.end_session_response)
         patrondata = auth.remote_authenticate("user2", "some password")
+        assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         request = client.requests[-1]
         assert b"user2" in request
@@ -247,12 +258,13 @@ class TestSIP2AuthenticationProvider:
         # We're able to parse the message from the server and parse
         # out patron data, including the É character, with the proper
         # encoding.
+        assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "foo@example.com" == patrondata.email_address
         assert "LE CARRÉ, JOHN" == patrondata.personal_name
         assert 0 == patrondata.fines
-        assert None == patrondata.authorization_expires
-        assert None == patrondata.external_type
+        assert patrondata.authorization_expires is None
+        assert patrondata.external_type is None
         assert PatronData.NO_VALUE == patrondata.block_reason
 
     def test_ioerror_during_connect_becomes_remoteintegrationexception(
@@ -328,16 +340,16 @@ class TestSIP2AuthenticationProvider:
         auth = SIP2AuthenticationProvider(
             db.default_library(), integration, client=client
         )
-        patron_data = auth._remote_patron_lookup(patron)
+        patron_data = auth.remote_patron_lookup(patron)
         assert patron_data is not None
-        assert patron_data.__class__ == PatronData
+        assert isinstance(patron_data, PatronData)
         assert "25891000331441" == patron_data.authorization_identifier
         assert "foo@bar.com" == patron_data.email_address
         assert 9.25 == patron_data.fines
         assert "Falk, Jen" == patron_data.personal_name
         assert datetime(2018, 6, 9, 23, 59, 59) == patron_data.authorization_expires
         assert client.patron_information == "1234"
-        assert client.password == None
+        assert client.password is None
 
     def test_info_to_patrondata_validate_password(self, db: DatabaseTransactionFixture):
         integration = db.external_integration(db.fresh_str())

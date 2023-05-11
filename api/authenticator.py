@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import importlib
 import json
 import logging
 import re
 import sys
-from abc import ABC, ABCMeta
-from typing import Any, Dict, Iterable, List, Optional, Union
+from abc import ABC, abstractmethod
+from typing import Any, Generator, Iterable
 
 import flask
 import jwt
@@ -13,41 +15,44 @@ from flask_babel import lazy_gettext as _
 from money import Money
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.sql.expression import or_
-from werkzeug.datastructures import Headers
+from werkzeug.datastructures import Authorization, Headers
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
+from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
-from api.saml.configuration.model import SAMLSettings
 from core.analytics import Analytics
 from core.model import (
     CirculationEvent,
     ConfigurationSetting,
     ExternalIntegration,
+    ExternalIntegrationError,
     Library,
     Patron,
     PatronProfileStorage,
     Session,
+    create,
     get_one,
     get_one_or_create,
 )
 from core.model.hybrid import hybrid_property
 from core.opds import OPDSFeed
-from core.selftest import HasSelfTests
+from core.selftest import HasSelfTests, SelfTestResult
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import (
     AuthenticationForOPDSDocument,
     OPDSAuthenticationFlow,
 )
 from core.util.datetime_helpers import utc_now
-from core.util.http import RemoteIntegrationException
-from core.util.log import elapsed_time_logging, log_elapsed_time
+from core.util.http import RemoteIntegrationException, RequestTimedOut
+from core.util.log import elapsed_time_logging
 from core.util.problem_detail import ProblemDetail
 
 from .config import CannotLoadConfiguration, Configuration, IntegrationException
 from .problem_details import *
+from .saml.configuration.model import SAMLSettings
 from .util.patron import PatronUtility
 
 
@@ -266,7 +271,7 @@ class PatronData:
             value = value.amount
         self._fines = value
 
-    def apply(self, patron):
+    def apply(self, patron: Patron):
         """Take the portion of this data that can be stored in the database
         and write it to the given Patron record.
         """
@@ -528,27 +533,30 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
 class Authenticator:
     """Route requests to the appropriate LibraryAuthenticator."""
 
-    log = logging.getLogger("api.authenticator.Authenticator")
-
     def __init__(
-        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics] = None
+        self, _db, libraries: Iterable[Library], analytics: Analytics | None = None
     ):
         # Create authenticators
-        self.library_authenticators: Dict[str, LibraryAuthenticator] = {}
+        self.log = logging.getLogger(
+            f"{self.__class__.__module__}.{self.__class__.__name__}"
+        )
+        self.library_authenticators: dict[str, LibraryAuthenticator] = {}
         self.populate_authenticators(_db, libraries, analytics)
 
     @property
     def current_library_short_name(self):
         return flask.request.library.short_name
 
-    @log_elapsed_time(log_method=log.debug, message_prefix="populate_authenticators")
     def populate_authenticators(
-        self, _db, libraries: Iterable[Library], analytics: Optional[Analytics]
+        self, _db, libraries: Iterable[Library], analytics: Analytics | None
     ):
-        for library in libraries:
-            self.library_authenticators[
-                library.short_name
-            ] = LibraryAuthenticator.from_config(_db, library, analytics)
+        with elapsed_time_logging(
+            log_method=self.log.debug, message_prefix="populate_authenticators"
+        ):
+            for library in libraries:
+                self.library_authenticators[
+                    library.short_name
+                ] = LibraryAuthenticator.from_config(_db, library, analytics)
 
     def invoke_authenticator_method(self, method_name, *args, **kwargs):
         short_name = self.current_library_short_name
@@ -567,8 +575,8 @@ class Authenticator:
     def create_authentication_headers(self):
         return self.invoke_authenticator_method("create_authentication_headers")
 
-    def get_credential_from_header(self, header):
-        return self.invoke_authenticator_method("get_credential_from_header", header)
+    def get_credential_from_header(self, auth):
+        return self.invoke_authenticator_method("get_credential_from_header", auth)
 
     def create_bearer_token(self, *args, **kwargs):
         return self.invoke_authenticator_method("create_bearer_token", *args, **kwargs)
@@ -676,6 +684,8 @@ class LibraryAuthenticator:
         self.bearer_token_signing_secret = bearer_token_signing_secret
         self.initialization_exceptions = dict()
 
+        self.log = logging.getLogger("Authenticator")
+
         # Make sure there's a public/private key pair for this
         # library. This makes it possible to register the library with
         # discovery services. Store the public key here for
@@ -727,7 +737,11 @@ class LibraryAuthenticator:
                 )
             )
 
-    def register_provider(self, integration, analytics=None):
+    def register_provider(
+        self,
+        integration: ExternalIntegration,
+        analytics: Analytics | None = None,
+    ):
         """Turn an ExternalIntegration object into an AuthenticationProvider
         object, and register it.
 
@@ -743,8 +757,7 @@ class LibraryAuthenticator:
         library = self.library
         if library not in integration.libraries:
             raise CannotLoadConfiguration(
-                "Was asked to register an integration with library %s, which doesn't use it."
-                % library.name
+                f"Was asked to register an integration with library {library.name}, which doesn't use it."
             )
 
         module_name = integration.protocol
@@ -760,17 +773,15 @@ class LibraryAuthenticator:
         provider_class = getattr(provider_module, "AuthenticationProvider", None)
         if not provider_class:
             raise CannotLoadConfiguration(
-                "Loaded module %s but could not find a class called AuthenticationProvider inside."
-                % module_name
+                f"Loaded module {module_name} but could not find a class called AuthenticationProvider inside."
             )
         try:
             provider = provider_class(self.library, integration, analytics)
         except RemoteIntegrationException as e:
             raise CannotLoadConfiguration(
-                "Could not instantiate %s authentication provider for library %s, possibly due to a network connection problem."
-                % (provider_class, self.library.short_name)
+                f"Could not instantiate {provider_class} authentication provider for library "
+                f"{self.library.short_name}, possibly due to a network connection problem."
             )
-            return
         if issubclass(provider_class, BasicAuthenticationProvider):
             self.register_basic_auth_provider(provider)
             # TODO: Run a self-test, or at least check that we have
@@ -779,12 +790,15 @@ class LibraryAuthenticator:
             self.register_saml_provider(provider)
         else:
             raise CannotLoadConfiguration(
-                "Authentication provider %s is neither a BasicAuthenticationProvider nor an OAuthAuthenticationProvider. I can create it, but not sure where to put it."
-                % provider_class
+                f"Authentication provider {provider_class} is neither a BasicAuthenticationProvider nor a "
+                "BaseSAMLAuthenticationProvider. I can create it, but not sure where to put it."
             )
 
     def register_basic_auth_provider(self, provider):
-        if self.basic_auth_provider != None and self.basic_auth_provider != provider:
+        if (
+            self.basic_auth_provider is not None
+            and self.basic_auth_provider != provider
+        ):
             raise CannotLoadConfiguration("Two basic auth providers configured")
         self.basic_auth_provider = provider
 
@@ -797,44 +811,34 @@ class LibraryAuthenticator:
         self.saml_providers_by_name[provider.NAME] = provider
 
     @property
-    def providers(self):
+    def providers(self) -> Iterable[AuthenticationProvider]:
         """An iterator over all registered AuthenticationProviders."""
         if self.basic_auth_provider:
             yield self.basic_auth_provider
         yield from list(self.saml_providers_by_name.values())
 
-    def authenticated_patron(self, _db, header):
+    def authenticated_patron(self, _db, auth: Authorization):
         """Go from an Authorization header value to a Patron object.
 
-        :param header: If Basic Auth is in use, this is a dictionary
-            with 'user' and 'password' components, derived from the HTTP
-            header `Authorization`. Otherwise, this is the literal value
-            of the `Authorization` HTTP header.
+        :param auth: A werkzeug.Authorization object
 
         :return: A Patron, if one can be authenticated. None, if the
             credentials do not authenticate any particular patron. A
             ProblemDetail if an error occurs.
         """
-        if (
-            self.basic_auth_provider
-            and isinstance(header, dict)
-            and "username" in header
-        ):
+        provider = None
+        provider_token = None
+        if self.basic_auth_provider and auth.type.lower() == "basic":
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
-            return self.basic_auth_provider.authenticated_patron(_db, header)
-        elif (
-            self.saml_providers_by_name
-            and isinstance(header, (bytes, str))
-            and "bearer" in header.lower()
-        ):
+            provider = self.basic_auth_provider
+            provider_token = auth.parameters
+        elif self.saml_providers_by_name and auth.type.lower() == "bearer":
 
             # The patron wants to use an
             # SAMLAuthenticationProvider. Figure out which one.
             try:
-                provider_name, provider_token = self.decode_bearer_token_from_header(
-                    header
-                )
+                provider_name, provider_token = self.decode_bearer_token(auth.token)
             except jwt.exceptions.InvalidTokenError as e:
                 return INVALID_SAML_BEARER_TOKEN
             provider = self.saml_provider_lookup(provider_name)
@@ -843,15 +847,41 @@ class LibraryAuthenticator:
                 # a registered SAMLAuthenticationProvider.
                 return provider
 
-            # Ask the SAMLAuthenticationProvider to turn its token
-            # into a Patron.
-            return provider.authenticated_patron(_db, provider_token)
+        if provider and provider_token:
+            # Turn the token/header into a patron
+            try:
+                if self._is_provider_available(_db, provider):
+                    return provider.authenticated_patron(_db, provider_token)
+                else:
+                    return REMOTE_INTEGRATION_FAILED
+            except (RequestTimedOut, RemoteIntegrationException) as ex:
+                name = provider.external_integration(_db).name
+                self.log.error(f"Authentication Provider Error ({name}): {ex}")
+                self._record_provider_error(_db, provider, ex)
+                return REMOTE_INTEGRATION_FAILED
+            except PatronAuthorizationFailedException:
+                return INVALID_CREDENTIALS
 
         # We were unable to determine what was going on with the
         # Authenticate header.
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
-    def get_credential_from_header(self, header):
+    def _record_provider_error(
+        self, _db, provider: AuthenticationProvider, error: Exception
+    ) -> ExternalIntegrationError:
+        record, _ = create(
+            _db,
+            ExternalIntegrationError,
+            external_integration_id=provider.external_integration_id,
+            time=utc_now(),
+            error=str(error),
+        )
+        return record
+
+    def _is_provider_available(self, _db, provider: AuthenticationProvider) -> bool:
+        return provider.external_integration(_db).status != ExternalIntegration.RED
+
+    def get_credential_from_header(self, auth: Authorization):
         """Extract a password credential from a WWW-Authenticate header
         (or equivalent).
 
@@ -863,7 +893,7 @@ class LibraryAuthenticator:
         """
         credential = None
         for provider in self.providers:
-            credential = provider.get_credential_from_header(header)
+            credential = provider.get_credential_from_header(auth)
             if credential is not None:
                 break
 
@@ -909,13 +939,6 @@ class LibraryAuthenticator:
             iss=provider_name,
         )
         return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
-
-    def decode_bearer_token_from_header(self, header):
-        """Extract auth provider name and access token from an Authenticate
-        header value.
-        """
-        simplified_token = header.split(" ")[1]
-        return self.decode_bearer_token(simplified_token)
 
     def decode_bearer_token(self, token):
         """Extract auth provider name and access token from JSON web token."""
@@ -1188,7 +1211,7 @@ class LibraryAuthenticator:
         return headers
 
 
-class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
+class AuthenticationProvider(OPDSAuthenticationFlow, HasSelfTests, ABC):
     """Handle a specific patron authentication scheme."""
 
     # NOTE: Each subclass MUST define an attribute called NAME, which
@@ -1205,7 +1228,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # Each subclass MUST define a value for FLOW_TYPE. This is used in the
     # Authentication for OPDS document to distinguish between
     # different types of authentication.
-    FLOW_TYPE: Optional[str] = None
+    FLOW_TYPE: str | None = None
 
     # If an AuthenticationProvider authenticates patrons without identifying
     # then as specific individuals (the way a geographic gate does),
@@ -1217,7 +1240,7 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # AuthenticationProviders. Image files MUST be stored in the
     # `resources/images` directory - the value here should be the
     # file name.
-    LOGIN_BUTTON_IMAGE: Optional[str] = None
+    LOGIN_BUTTON_IMAGE: str | None = None
 
     # Each authentication mechanism may have a list of SETTINGS that
     # must be configured for that mechanism, and may have a list of
@@ -1228,117 +1251,15 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
     # For example: { "key": "username", "label": _("Client ID") }.
     # A setting is optional by default, but may have "required" set to True.
 
-    SETTINGS: List[dict] = []
+    SETTINGS: list[dict[str, Any]] = []
+    LIBRARY_SETTINGS: list[dict[str, Any]] = []
 
-    # Each library and authentication mechanism may have an ILS-assigned
-    # branch or institution ID used in the SIP2 AO field.
-    INSTITUTION_ID = "institution_id"
-
-    # Each library and authentication mechanism may have a regular
-    # expression for deriving a patron's external type from their
-    # authentication identifier.
-    EXTERNAL_TYPE_REGULAR_EXPRESSION = "external_type_regular_expression"
-
-    # When multiple libraries share an ILS, a person may be able to
-    # authenticate with the ILS but not be considered a patron of
-    # _this_ library. This setting contains the rule for determining
-    # whether an identifier is valid for a specific library.
-    LIBRARY_IDENTIFIER_RESTRICTION_TYPE = "library_identifier_restriction_type"
-
-    # This field lets the user choose the data source for the patron match.
-    LIBRARY_IDENTIFIER_FIELD = "library_identifier_field"
-
-    # Usually this is a string which is compared against the
-    # patron's identifiers using the comparison method chosen in
-    # LIBRARY_IDENTIFIER_RESTRICTION_TYPE.
-    LIBRARY_IDENTIFIER_RESTRICTION = "library_identifier_restriction"
-
-    # Different types of patron restrictions.
-    LIBRARY_IDENTIFIER_RESTRICTION_BARCODE = "barcode"
-    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE = "none"
-    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX = "regex"
-    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX = "prefix"
-    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING = "string"
-    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST = "list"
-
-    LIBRARY_SETTINGS = [
-        {
-            "key": EXTERNAL_TYPE_REGULAR_EXPRESSION,
-            "label": _("External Type Regular Expression"),
-            "description": _("Derive a patron's type from their identifier."),
-        },
-        {
-            "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
-            "label": _("Library Identifier Restriction Type"),
-            "type": "select",
-            "description": _(
-                "When multiple libraries share an ILS, a person may be able to "
-                + "authenticate with the ILS but not be considered a patron of "
-                + "<em>this</em> library. This setting contains the rule for determining "
-                + "whether an identifier is valid for this specific library. <p/> "
-                + "If this setting it set to 'No Restriction' then the values for "
-                + "<em>Library Identifier Field</em> and <em>Library Identifier "
-                + "Restriction</em> will not be used."
-            ),
-            "options": [
-                {
-                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
-                    "label": _("No restriction"),
-                },
-                {
-                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
-                    "label": _("Prefix Match"),
-                },
-                {
-                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
-                    "label": _("Exact Match"),
-                },
-                {
-                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
-                    "label": _("Regex Match"),
-                },
-                {
-                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
-                    "label": _("Exact Match, comma separated list"),
-                },
-            ],
-            "default": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
-        },
-        {
-            "key": LIBRARY_IDENTIFIER_FIELD,
-            "label": _("Library Identifier Field"),
-            "type": "select",
-            "options": [
-                {"key": LIBRARY_IDENTIFIER_RESTRICTION_BARCODE, "label": _("Barcode")},
-            ],
-            "description": _(
-                "This is the field on the patron record that the <em>Library Identifier Restriction "
-                + "Type</em> is applied to, different patron authentication methods provide different "
-                + "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
-                + "is set to 'No restriction'."
-            ),
-            "default": LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
-        },
-        {
-            "key": LIBRARY_IDENTIFIER_RESTRICTION,
-            "label": _("Library Identifier Restriction"),
-            "description": _(
-                "This is the restriction applied to the <em>Library Identifier Field</em> "
-                + "using the method chosen in <em>Library Identifier Restriction Type</em>. "
-                + "This value is not used if <em>Library Identifier Restriction Type</em> "
-                + "is set to 'No restriction'."
-            ),
-        },
-        {
-            "key": INSTITUTION_ID,
-            "label": _("Institution ID"),
-            "description": _(
-                "A specific identifier for the library or branch, if used in patron authentication"
-            ),
-        },
-    ]
-
-    def __init__(self, library, integration, analytics=None):
+    def __init__(
+        self,
+        library: Library,
+        integration: ExternalIntegration,
+        analytics: Analytics | None = None,
+    ):
         """Basic constructor.
 
         :param library: Patrons authenticated through this provider
@@ -1361,150 +1282,23 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
 
         self.library_id = library.id
         self.external_integration_id = integration.id
-        self.log = logging.getLogger(self.NAME)
+        self.log = self.logger()
         self.analytics = analytics
-        # If there's a regular expression that maps authorization
-        # identifier to external type, find it now.
-        _db = Session.object_session(library)
-        regexp = ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.EXTERNAL_TYPE_REGULAR_EXPRESSION, library, integration
-        ).value
-        if regexp:
-            try:
-                regexp = re.compile(regexp)
-            except Exception as e:
-                self.log.error(
-                    "Could not configure external type regular expression: %r", e
-                )
-                regexp = None
-        self.external_type_regular_expression = regexp
-
-        field = ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.LIBRARY_IDENTIFIER_FIELD, library, integration
-        ).value
-        if isinstance(field, (bytes, str)):
-            field = field.strip()
-        self.library_identifier_field = field
-
-        self.library_identifier_restriction_type = (
-            ConfigurationSetting.for_library_and_externalintegration(
-                _db, self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE, library, integration
-            ).value
-        )
-        if not self.library_identifier_restriction_type:
-            self.library_identifier_restriction_type = (
-                self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
-            )
-
-        restriction = ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.LIBRARY_IDENTIFIER_RESTRICTION, library, integration
-        ).value
-
-        if (
-            self.library_identifier_restriction_type
-            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
-        ):
-            self.library_identifier_restriction = re.compile(restriction)
-        elif (
-            self.library_identifier_restriction_type
-            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST
-        ):
-            restriction = restriction.split(",")
-            self.library_identifier_restriction = [item.strip() for item in restriction]
-        elif (
-            self.library_identifier_restriction_type
-            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
-        ):
-            self.library_identifier_restriction = None
-        else:
-            if isinstance(restriction, (bytes, str)):
-                self.library_identifier_restriction = restriction.strip()
-            else:
-                self.library_identifier_restriction = restriction
-
-        self.institution_id = (
-            ConfigurationSetting.for_library_and_externalintegration(
-                _db, self.INSTITUTION_ID, library, integration
-            ).value
-            or ""
-        )
 
     @classmethod
-    def _restriction_matches(cls, field, restriction, match_type):
-        """Does the given patron match the given library restriction restriction?"""
-        if not restriction:
-            # No restriction -- anything matches.
-            return True
-        if not field:
-            # No field -- it won't match any restriction.
-            return False
-
-        if match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX:
-            if restriction.search(field):
-                return True
-        elif match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX:
-            if field.startswith(restriction):
-                return True
-        elif match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING:
-            if field == restriction:
-                return True
-        elif match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST:
-            if field in restriction:
-                return True
-
-        return False
-
-    def enforce_library_identifier_restriction(self, identifier, patrondata):
-        """Does the given patron match the configured library identifier restriction?"""
-        if isinstance(patrondata, Patron):
-            if self.library_id == patrondata.library_id:
-                return patrondata
-            else:
-                return False
-
-        if (
-            not self.library_identifier_restriction_type
-            or self.library_identifier_restriction_type
-            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
-        ):
-            # No restriction to enforce.
-            return patrondata
-
-        if not self.library_identifier_field or not self.library_identifier_restriction:
-            # Restriction field is blank, so everything matches.
-            return patrondata
-
-        if (
-            self.library_identifier_field.lower()
-            == self.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
-        ):
-            field = identifier
-        else:
-            if not patrondata.complete:
-                # Get full patron information
-                patrondata = self.remote_patron_lookup(patrondata)
-            field = patrondata.library_identifier
-
-        if self._restriction_matches(
-            field,
-            self.library_identifier_restriction,
-            self.library_identifier_restriction_type,
-        ):
-            return patrondata
-        else:
-            return False
-
-    def library(self, _db):
-        return Library.by_id(_db, self.library_id)
-
-    def external_integration(self, _db):
-        return get_one(_db, ExternalIntegration, id=self.external_integration_id)
-
-    @classmethod
-    def _logger(cls) -> logging.Logger:
+    def logger(cls) -> logging.Logger:
         return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
-    def authenticated_patron(self, _db, header):
+    def library(self, _db: Session) -> Library | None:
+        return Library.by_id(_db, self.library_id)
+
+    def external_integration(self, _db: Session) -> ExternalIntegration:
+        return get_one(_db, ExternalIntegration, id=self.external_integration_id)
+
+    @abstractmethod
+    def authenticated_patron(
+        self, _db: Session, header: dict | str
+    ) -> Patron | ProblemDetail | None:
         """Go from a WWW-Authenticate header (or equivalent) to a Patron object.
 
         If the Patron needs to have their metadata updated, it happens
@@ -1513,80 +1307,11 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
         :return: A Patron if one can be authenticated; a ProblemDetail
             if an error occurs; None if the credentials are missing or wrong.
         """
+        ...
 
-        with elapsed_time_logging(
-            log_method=self._logger().info,
-            message_prefix="authenticated_patron - authenticate",
-        ):
-            patron = self.authenticate(_db, header)
-
-        if not isinstance(patron, Patron):
-            return patron
-        if PatronUtility.needs_external_sync(patron):
-            self.update_patron_metadata(patron)
-        if patron.cached_neighborhood and not patron.neighborhood:
-            # Patron.neighborhood (which is not a model field) was not
-            # set, probably because we avoided an expensive metadata
-            # update. But we have a cached_neighborhood (which _is_ a
-            # model field) to use in situations like this.
-            patron.neighborhood = patron.cached_neighborhood
-        return patron
-
-    def update_patron_metadata(self, patron):
-        """Refresh our local record of this patron's account information.
-
-        :param patron: A Patron object.
-        """
-
-        with elapsed_time_logging(
-            log_method=self._logger().info,
-            message_prefix=f"update_patron_metadata - remote_patron_lookup",
-        ):
-            remote_patron_info = self.remote_patron_lookup(patron)
-
-        if isinstance(remote_patron_info, PatronData):
-            self.apply_patrondata(remote_patron_info, patron)
-
-    def update_patron_external_type(self, patron):
-        """Make sure the patron's external type reflects
-        what external_type_regular_expression says.
-        """
-        if not self.external_type_regular_expression:
-            # External type is not determined by a regular expression.
-            return
-        if not patron.authorization_identifier:
-            # Patron has no authorization identifier. Leave their
-            # external_type alone.
-            return
-
-        match = self.external_type_regular_expression.search(
-            patron.authorization_identifier
-        )
-        if not match:
-            # Patron's authorization identifier doesn't match the
-            # regular expression at all. Leave their external_type
-            # alone.
-            return
-        groups = match.groups()
-        if not groups:
-            # The regular expression matched but didn't contain any groups.
-            # This is a configuration error; do nothing.
-            return
-
-        patron.external_type = groups[0]
-
-    def authenticate(self, _db, header):
-        """Authenticate a patron based on a WWW-Authenticate header
-        (or equivalent).
-
-        :return: A Patron if one can be authenticated; a ProblemDetail if an
-            error occurs; None if the credentials are missing or wrong.
-        """
-        raise NotImplementedError()
-
-    def get_credential_from_header(self, header):
-        """Extract a password credential from a WWW-Authenticate header
-        (or equivalent).
+    @abstractmethod
+    def get_credential_from_header(self, auth: Authorization) -> str | None:
+        """Extract a password credential from a werkzeug.Authorization object
 
         This is used to pass on a patron's credential to a content provider,
         such as Overdrive, which performs independent validation of
@@ -1594,50 +1319,10 @@ class AuthenticationProvider(OPDSAuthenticationFlow, ABC):
 
         :return: The patron's password, or None if not available.
         """
-        return None
-
-    def remote_patron_lookup(
-        self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
-        """Ask the remote for detailed information about a patron's account.
-
-        This may be called in the course of authenticating a patron,
-        or it may be called when the patron isn't around, for purposes
-        of learning some personal information (primarily email
-        address) that can't be stored in the database.
-
-        The default implementation assumes there is no special
-        lookup functionality, and returns exactly the information
-        present in the object that was passed in.
-
-        :param patron_or_patrondata: Either a Patron object, a PatronData
-            object, or None (if no further information could be provided).
-
-        :return: An updated PatronData object.
-
-        """
-        raise NotImplementedError()
-
-    def _authentication_flow_document(self, _db):
-        """Create a Authentication Flow object for use in an Authentication for
-        OPDS document.
-
-        :return: A dictionary suitable for inclusion as one of the
-        'authentication' list in an Authentication for OPDS document.
-
-        For example:
-
-        {
-          "authentication": [
-            { "type": "http://opds-spec.org/auth/basic",
-              "labels": {"login": "Barcode", "password": "PIN"} }
-          ]
-        }
-        """
-        raise NotImplementedError()
+        ...
 
 
-class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
+class BasicAuthenticationProvider(AuthenticationProvider, ABC):
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """
@@ -1678,7 +1363,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
     # passwords.
     alphanumerics_plus = "^[A-Za-z0-9@.-]+$"
     DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = alphanumerics_plus
-    DEFAULT_PASSWORD_REGULAR_EXPRESSION: Optional[str] = None
+    DEFAULT_PASSWORD_REGULAR_EXPRESSION: str | None = None
 
     # Configuration settings that are common to all Basic Auth-type
     # authentication techniques.
@@ -1853,12 +1538,101 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
         },
     ] + AuthenticationProvider.SETTINGS
 
-    # Used in the constructor to signify that the default argument
-    # value for the class should be used (as distinct from None, which
-    # indicates that no value should be used.)
-    class_default = object()
+    # Configuration settings that are specific to a library.
 
-    def __init__(self, library, integration, analytics=None):
+    # When multiple libraries share an ILS, a person may be able to
+    # authenticate with the ILS but not be considered a patron of
+    # _this_ library. This setting contains the rule for determining
+    # whether an identifier is valid for a specific library.
+    LIBRARY_IDENTIFIER_RESTRICTION_TYPE = "library_identifier_restriction_type"
+
+    # This field lets the user choose the data source for the patron match.
+    LIBRARY_IDENTIFIER_FIELD = "library_identifier_field"
+
+    # Usually this is a string which is compared against the
+    # patron's identifiers using the comparison method chosen in
+    # LIBRARY_IDENTIFIER_RESTRICTION_TYPE.
+    LIBRARY_IDENTIFIER_RESTRICTION = "library_identifier_restriction"
+
+    # Different types of patron restrictions.
+    LIBRARY_IDENTIFIER_RESTRICTION_BARCODE = "barcode"
+    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE = "none"
+    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX = "regex"
+    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX = "prefix"
+    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING = "string"
+    LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST = "list"
+
+    LIBRARY_SETTINGS = [
+        {
+            "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE,
+            "label": _("Library Identifier Restriction Type"),
+            "type": "select",
+            "description": _(
+                "When multiple libraries share an ILS, a person may be able to "
+                + "authenticate with the ILS but not be considered a patron of "
+                + "<em>this</em> library. This setting contains the rule for determining "
+                + "whether an identifier is valid for this specific library. <p/> "
+                + "If this setting it set to 'No Restriction' then the values for "
+                + "<em>Library Identifier Field</em> and <em>Library Identifier "
+                + "Restriction</em> will not be used."
+            ),
+            "options": [
+                {
+                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
+                    "label": _("No restriction"),
+                },
+                {
+                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX,
+                    "label": _("Prefix Match"),
+                },
+                {
+                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING,
+                    "label": _("Exact Match"),
+                },
+                {
+                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX,
+                    "label": _("Regex Match"),
+                },
+                {
+                    "key": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST,
+                    "label": _("Exact Match, comma separated list"),
+                },
+            ],
+            "default": LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE,
+        },
+        {
+            "key": LIBRARY_IDENTIFIER_FIELD,
+            "label": _("Library Identifier Field"),
+            "type": "select",
+            "options": [
+                {"key": LIBRARY_IDENTIFIER_RESTRICTION_BARCODE, "label": _("Barcode")},
+            ],
+            "description": _(
+                "This is the field on the patron record that the <em>Library Identifier Restriction "
+                + "Type</em> is applied to, different patron authentication methods provide different "
+                + "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
+                + "is set to 'No restriction'."
+            ),
+            "default": LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
+        },
+        {
+            "key": LIBRARY_IDENTIFIER_RESTRICTION,
+            "label": _("Library Identifier Restriction"),
+            "description": _(
+                "This is the restriction applied to the <em>Library Identifier Field</em> "
+                + "using the method chosen in <em>Library Identifier Restriction Type</em>. "
+                + "This value is not used if <em>Library Identifier Restriction Type</em> "
+                + "is set to 'No restriction'."
+            ),
+        },
+    ] + AuthenticationProvider.LIBRARY_SETTINGS
+
+    def __init__(
+        self,
+        library: Library,
+        integration: ExternalIntegration,
+        analytics: Analytics | None = None,
+    ):
         """Create a BasicAuthenticationProvider.
 
         :param library: Patrons authenticated through this provider
@@ -1876,18 +1650,21 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
             integration.setting(self.IDENTIFIER_REGULAR_EXPRESSION).value
             or self.DEFAULT_IDENTIFIER_REGULAR_EXPRESSION
         )
-
-        if identifier_regular_expression:
-            identifier_regular_expression = re.compile(identifier_regular_expression)
-        self.identifier_re = identifier_regular_expression
+        self.identifier_re = (
+            re.compile(identifier_regular_expression)
+            if identifier_regular_expression
+            else None
+        )
 
         password_regular_expression = (
             integration.setting(self.PASSWORD_REGULAR_EXPRESSION).value
             or self.DEFAULT_PASSWORD_REGULAR_EXPRESSION
         )
-        if password_regular_expression:
-            password_regular_expression = re.compile(password_regular_expression)
-        self.password_re = password_regular_expression
+        self.password_re = (
+            re.compile(password_regular_expression)
+            if password_regular_expression
+            else None
+        )
 
         self.test_username = integration.setting(self.TEST_IDENTIFIER).value
         self.test_password = integration.setting(self.TEST_PASSWORD).value
@@ -1919,43 +1696,94 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
             or self.DEFAULT_PASSWORD_LABEL
         )
 
-    def _remote_patron_lookup(
-        self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
-        if not patron_or_patrondata:
-            return None
-        if isinstance(patron_or_patrondata, PatronData) or isinstance(
-            patron_or_patrondata, Patron
-        ):
+        # If there's a regular expression that maps authorization
+        # identifier to external type, find it now.
+        _db = Session.object_session(library)
+        field = ConfigurationSetting.for_library_and_externalintegration(
+            _db, self.LIBRARY_IDENTIFIER_FIELD, library, integration
+        ).value
+        if field is not None:
+            field = field.strip()
+        self.library_identifier_field = field
 
-            return patron_or_patrondata
-        raise ValueError(
-            "Unexpected object %r passed into remote_patron_lookup."
-            % patron_or_patrondata
+        self.library_identifier_restriction_type = (
+            ConfigurationSetting.for_library_and_externalintegration(
+                _db, self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE, library, integration
+            ).value
         )
-
-    def remote_patron_lookup(
-        self, patron_or_patrondata
-    ) -> Union[ProblemDetail, PatronData, Patron, None]:
-        """Ask the remote for information about this patron, and then make sure
-        the patron belongs to the library associated with this BasicAuthenticationProvider."""
-
-        patron_info = self._remote_patron_lookup(patron_or_patrondata)
-        if patron_info and not isinstance(patron_info, ProblemDetail):
-            return self.enforce_library_identifier_restriction(
-                patron_info.authorization_identifier, patron_info
+        if not self.library_identifier_restriction_type:
+            self.library_identifier_restriction_type = (
+                self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
             )
+
+        restriction = ConfigurationSetting.for_library_and_externalintegration(
+            _db, self.LIBRARY_IDENTIFIER_RESTRICTION, library, integration
+        ).value
+
+        self.library_identifier_restriction: str | list[str] | re.Pattern | None
+        if (
+            self.library_identifier_restriction_type
+            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX
+        ):
+            self.library_identifier_restriction = re.compile(restriction)
+        elif (
+            self.library_identifier_restriction_type
+            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST
+        ):
+            restriction = restriction.split(",")
+            self.library_identifier_restriction = [item.strip() for item in restriction]
+        elif (
+            self.library_identifier_restriction_type
+            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
+        ):
+            self.library_identifier_restriction = None
         else:
-            return patron_info
+            if isinstance(restriction, str):
+                self.library_identifier_restriction = restriction.strip()
+            else:
+                self.library_identifier_restriction = restriction
+
+    @abstractmethod
+    def remote_patron_lookup(
+        self, patron_or_patrondata: PatronData | Patron
+    ) -> PatronData | ProblemDetail | None:
+        """Ask the remote for detailed information about this patron
+
+        For some authentication providers, this is not necessary. If that is the case,
+        this method can just be implemented as `return patron_or_patrondata`.
+
+        If the patron is not found, or an error occurs communicating with the remote,
+        return None or a ProblemDetail.
+
+        Otherwise, return a PatronData object with the complete property set to True.
+        """
+        ...
+
+    @abstractmethod
+    def remote_authenticate(
+        self, username: str | None, password: str | None
+    ) -> PatronData | ProblemDetail | None:
+        """Does the source of truth approve of these credentials?
+
+        If the credentials are valid, return a PatronData object. The PatronData object
+        has a `complete` field. This field on the returned PatronData object will be used
+        to determine if we need to call `remote_patron_lookup` later to get the complete
+        information about the patron.
+
+        If the credentials are invalid, return None.
+
+        If there is a problem communicating with the remote, return a ProblemDetail.
+        """
+        ...
 
     @property
-    def collects_password(self):
+    def collects_password(self) -> bool:
         """Does this BasicAuthenticationProvider expect a username
         and a password, or just a username?
         """
         return self.password_keyboard != self.NULL_KEYBOARD
 
-    def testing_patron(self, _db):
+    def testing_patron(self, _db: Session) -> tuple[Patron | ProblemDetail | None, str]:
         """Look up a Patron object reserved for testing purposes.
 
         :return: A 2-tuple (Patron, password)
@@ -1965,7 +1793,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
         header = dict(username=self.test_username, password=self.test_password)
         return self.authenticated_patron(_db, header), self.test_password
 
-    def testing_patron_or_bust(self, _db):
+    def testing_patron_or_bust(self, _db: Session) -> tuple[Patron, str]:
         """Look up the Patron object reserved for testing purposes.
 
         :raise:CannotLoadConfiguration: If no test patron is configured.
@@ -1981,8 +1809,8 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
         if not patron:
             message = (
-                "Remote declined to authenticate the test patron.",
-                "The patron may not exist or its password may be wrong.",
+                "Remote declined to authenticate the test patron. "
+                "The patron may not exist or its password may be wrong."
             )
         elif isinstance(patron, ProblemDetail):
             message = (
@@ -1991,14 +1819,14 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
                 )
             )
         else:
-            message = (
+            message = (  # type: ignore[unreachable]
                 "Test patron lookup returned invalid value for patron: {!r}".format(
                     patron
                 )
             )
         raise IntegrationException(message)
 
-    def _run_self_tests(self, _db):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         """Verify the credentials of the test patron for this integration,
         and update its metadata.
         """
@@ -2016,13 +1844,15 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
             "Syncing patron metadata", self.update_patron_metadata, patron
         )
 
-    def scrub_credential(self, value):
+    def scrub_credential(self, value: str | None) -> str | None:
         """Scrub an incoming value that is part of a patron's set of credentials."""
-        if not isinstance(value, (str, bytes)):
+        if not isinstance(value, str):
             return value
         return value.strip()
 
-    def authenticate(self, _db, credentials):
+    def authenticate(
+        self, _db: Session, credentials: dict
+    ) -> Patron | ProblemDetail | None:
         """Turn a set of credentials into a Patron object.
 
         :param credentials: A dictionary with keys `username` and `password`.
@@ -2032,27 +1862,18 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
         """
         username = self.scrub_credential(credentials.get("username"))
         password = self.scrub_credential(credentials.get("password"))
-        server_side_validation_result = self.server_side_validation(username, password)
-        if not server_side_validation_result:
-            # False => None
-            server_side_validation_result = None
-        if not server_side_validation_result or isinstance(
-            server_side_validation_result, ProblemDetail
-        ):
-            # The credentials are prima facie invalid and do not
-            # need to be checked with the source of truth.
-            return server_side_validation_result
+        if not self.server_side_validation(username, password):
+            return None
 
         # Check these credentials with the source of truth.
         patrondata = self.remote_authenticate(username, password)
-        if not patrondata or isinstance(patrondata, ProblemDetail):
-            # Either an error occured or the credentials did not correspond
-            # to any patron.
+        if patrondata is None or isinstance(patrondata, ProblemDetail):
+            # Either an error occurred or the credentials did not correspond to any patron.
             return patrondata
 
         # Check that the patron belongs to this library.
-        patrondata = self.enforce_library_identifier_restriction(username, patrondata)
-        if not patrondata:
+        patrondata = self.enforce_library_identifier_restriction(patrondata)
+        if patrondata is None:
             return PATRON_OF_ANOTHER_LIBRARY
 
         # At this point we know there is _some_ authenticated patron,
@@ -2063,80 +1884,44 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
         # First, try to look up the Patron object in our database.
         patron = self.local_patron_lookup(_db, username, patrondata)
-        if patron and (
-            patrondata.complete or not PatronUtility.needs_external_sync(patron)
-        ):
-            # We found them! And there is no need to do a separate
-            # lookup for purposes of external sync -- either because
-            # they don't need to be synced or because we got a
-            # complete PatronData as a side effect of the authentication
-            # check.
-            #
-            # Just make sure our local data is up to date with
-            # whatever we just got from remote.
-            self.apply_patrondata(patrondata, patron)
+        if patron:
+            # We found the patron! Now we need to make sure the patron's
+            # information in the database is up-to-date.
+            if not patrondata.complete and PatronUtility.needs_external_sync(patron):
+                # We found the patron, but we need to sync their information with the
+                # remote source of truth.  We do this by calling remote_patron_lookup.
+                patrondata = self.remote_patron_lookup(patrondata)
+                if not isinstance(patrondata, PatronData):
+                    # Something went wrong, we can't get the patron's information.
+                    # so we fail the authentication process.
+                    return patrondata
+
+            # Apply the information we have to the patron and return it.
+            patrondata.apply(patron)
             return patron
 
-        # At this point there are two possibilities:
-        #
-        # 1. We didn't find them. Now the question is: _why_ didn't
-        # the patron show up locally? Have we never seen them before
-        # or has their authorization identifier changed?
-        #
-        # 2. We found them, they need an external sync, and we found
-        # them in a way that didn't provide that information.
-        #
-        # In both cases, the next step is to look up the patron's
-        # account details remotely. In some providers this step may
-        # be a no-op. But we have to try it, because if the patron's
-        # account details are out of sync, the rest of the request (the
-        # thing they're actually trying to do) might fail.
-        patrondata = self.remote_patron_lookup(patrondata)
-        if not patrondata or isinstance(patrondata, ProblemDetail):
-            # Either there was a problem looking up the patron data, or
-            # the patron does not exist on the remote. How we passed
-            # remote validation is a mystery, but ours not to reason
-            # why. There is no authenticated patron.
-            return patrondata
+        # At this point we didn't find the patron, so we want to look up the patron
+        # with the remote, in case this allows us to find an existing patron, based
+        # on the information returned by the remote_patron_lookup.
+        if not patrondata.complete:
+            patrondata = self.remote_patron_lookup(patrondata)
+            if not isinstance(patrondata, PatronData):
+                # Something went wrong, we can't get the patron's information.
+                # so we fail the authentication process.
+                return patrondata
+            patron = self.local_patron_lookup(_db, username, patrondata)
+            if patron:
+                # We found the patron, so we apply the information we have to the patron and return it.
+                patrondata.apply(patron)
+                return patron
 
-        if isinstance(patrondata, Patron):
-            # For whatever reason, the remote lookup implementation
-            # returned a Patron object instead of a PatronData. Just
-            # use that Patron object.
-            return patrondata
-
-        # At this point we have a _complete_ PatronData object which we
-        # know represents an existing patron on the remote side. Try
-        # the local lookup again.
-        patron = self.local_patron_lookup(_db, username, patrondata)
-
-        if not patron:
-            # We have a PatronData from the ILS that does not
-            # correspond to any local Patron. Create the local Patron.
-            patron, is_new = patrondata.get_or_create_patron(
-                _db, self.library_id, analytics=self.analytics
-            )
-
-        # The lookup failed in the first place either because the
-        # Patron did not exist on the local side, or because one of
-        # the patron's identifiers changed; or, the lookup succeeded
-        # but we needed to do a separate validation step. Either way,
-        # we now need to update the Patron record with the account
-        # information we just got from the source of truth.
-        self.apply_patrondata(patrondata, patron)
+        # We didn't find the patron, so we create a new patron with the information we have.
+        patron, _ = patrondata.get_or_create_patron(
+            _db, self.library_id, analytics=self.analytics
+        )
         return patron
 
-    def apply_patrondata(self, patrondata, patron):
-        """Apply a PatronData object to the given patron and make sure
-        any fields that need to be updated as a result of new data
-        are updated.
-        """
-        patrondata.apply(patron)
-
-        if self.external_type_regular_expression:
-            self.update_patron_external_type(patron)
-
-    def get_credential_from_header(self, header):
+    def get_credential_from_header(self, auth: Authorization) -> str | None:
         """Extract a password credential from a WWW-Authenticate header
         (or equivalent).
 
@@ -2146,62 +1931,50 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
 
         :param header: A dictionary with keys `username` and `password`.
         """
-        if not isinstance(header, dict):
-            return None
-        return header.get("password", None)
+        if auth and auth.type.lower() == "basic":
+            return auth.get("password", None)
+        return None
 
-    def server_side_validation(self, username, password):
+    def server_side_validation(
+        self, username: str | None, password: str | None
+    ) -> bool:
         """Do these credentials even look right?
 
         Sometimes egregious problems can be caught without needing to
         check with the ILS.
         """
-        valid = True
-        if self.identifier_re:
-            valid = (
-                valid
-                and username is not None
-                and (self.identifier_re.match(username) is not None)
-            )
+        if username is None or username == "":
+            return False
 
+        if self.identifier_re and self.identifier_re.match(username) is None:
+            return False
+
+        if (
+            self.identifier_maximum_length
+            and len(username) > self.identifier_maximum_length
+        ):
+            return False
+
+        # The only legal password is an empty one.
         if not self.collects_password:
-            # The only legal password is an empty one.
-            valid = valid and password in (None, "")
+            if password not in (None, ""):
+                return False
         else:
-            if self.password_re:
-                valid = (
-                    valid
-                    and password is not None
-                    and (self.password_re.match(password) is not None)
-                )
-            if self.password_maximum_length:
-                valid = (
-                    valid
-                    and password
-                    and (len(password) <= self.password_maximum_length)
-                )
+            if password is None:
+                return False
+            if self.password_re and self.password_re.match(password) is None:
+                return False
+            if (
+                self.password_maximum_length
+                and len(password) > self.password_maximum_length
+            ):
+                return False
 
-        if self.identifier_maximum_length:
-            valid = valid and (len(username) <= self.identifier_maximum_length)
+        return True
 
-        return valid
-
-    def remote_authenticate(self, username, password):
-        """Does the source of truth approve of these credentials?
-
-        :return: If the credentials are valid, but nothing more is
-            known about the patron, return True.
-
-        If the credentials are valid, _and_ enough information came
-        back in the request to also create a PatronInfo object, you
-        may create that object and return it to save a
-        remote patron lookup later.
-
-        If the credentials are invalid, return False or None.
-        """
-        raise NotImplementedError()
-
-    def local_patron_lookup(self, _db, username, patrondata):
+    def local_patron_lookup(
+        self, _db: Session, username: str | None, patrondata: PatronData | None
+    ) -> Patron | None:
         """Try to find a Patron object in the local database.
 
         :param username: An HTTP Basic Auth username. May or may not
@@ -2275,10 +2048,10 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
         return patron
 
     @property
-    def authentication_header(self):
-        return 'Basic realm="%s"' % self.AUTHENTICATION_REALM
+    def authentication_header(self) -> str:
+        return f'Basic realm="{self.AUTHENTICATION_REALM}"'
 
-    def _authentication_flow_document(self, _db):
+    def _authentication_flow_document(self, _db: Session) -> dict[str, Any]:
         """Create a Authentication Flow object for use in an Authentication for
         OPDS document.
         """
@@ -2300,7 +2073,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
         localized_password_label = self.COMMON_PASSWORD_LABELS.get(
             self.password_label, self.password_label
         )
-        flow_doc = dict(
+        flow_doc: dict[str, Any] = dict(
             description=str(self.DISPLAY_NAME),
             labels=dict(
                 login=str(localized_identifier_label),
@@ -2321,6 +2094,132 @@ class BasicAuthenticationProvider(AuthenticationProvider, HasSelfTests, ABC):
                 )
             ]
         return flow_doc
+
+    @classmethod
+    def _restriction_matches(
+        cls,
+        field: str | None,
+        restriction: Any,
+        match_type: str,
+    ) -> bool:
+        """Does the given patron match the given library restriction?"""
+        if not restriction:
+            # No restriction -- anything matches.
+            return True
+        if not field:
+            # No field -- it won't match any restriction.
+            return False
+
+        if match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_REGEX:
+            if restriction.search(field):
+                return True
+        elif match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_PREFIX:
+            if field.startswith(restriction):
+                return True
+        elif match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_STRING:
+            if field == restriction:
+                return True
+        elif match_type == cls.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_LIST:
+            if field in restriction:
+                return True
+
+        return False
+
+    def get_library_identifier_field_data(
+        self, patrondata: PatronData
+    ) -> tuple[PatronData, str | None]:
+        if (
+            self.library_identifier_field.lower()
+            == self.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE
+        ):
+            return patrondata, patrondata.authorization_identifier
+
+        if not patrondata.complete:
+            remote_patrondata = self.remote_patron_lookup(patrondata)
+            if not isinstance(remote_patrondata, PatronData):
+                # Unable to lookup, just return the original patrondata.
+                return patrondata, None
+            patrondata = remote_patrondata
+
+        return patrondata, patrondata.library_identifier
+
+    def enforce_library_identifier_restriction(
+        self, patrondata: PatronData
+    ) -> PatronData | None:
+        """Does the given patron match the configured library identifier restriction?"""
+        if (
+            not self.library_identifier_restriction_type
+            or self.library_identifier_restriction_type
+            == self.LIBRARY_IDENTIFIER_RESTRICTION_TYPE_NONE
+        ):
+            # No restriction to enforce.
+            return patrondata
+
+        if not self.library_identifier_field or not self.library_identifier_restriction:
+            # Restriction field is blank, so everything matches.
+            return patrondata
+
+        patrondata, field = self.get_library_identifier_field_data(patrondata)
+        if self._restriction_matches(
+            field,
+            self.library_identifier_restriction,
+            self.library_identifier_restriction_type,
+        ):
+            return patrondata
+        else:
+            return None
+
+    def authenticated_patron(
+        self, _db: Session, authorization: dict | str
+    ) -> Patron | ProblemDetail | None:
+        """Go from a werkzeug.Authorization object to a Patron object.
+
+        If the Patron needs to have their metadata updated, it happens
+        transparently at this point.
+
+        :return: A Patron if one can be authenticated; a ProblemDetail
+            if an error occurs; None if the credentials are missing or wrong.
+        """
+        if type(authorization) != dict:
+            return UNSUPPORTED_AUTHENTICATION_MECHANISM
+
+        with elapsed_time_logging(
+            log_method=self.logger().info,
+            message_prefix="authenticated_patron - authenticate",
+        ):
+            patron = self.authenticate(_db, authorization)
+
+        if not isinstance(patron, Patron):
+            return patron
+        if PatronUtility.needs_external_sync(patron):
+            self.update_patron_metadata(patron)
+        if patron.cached_neighborhood and not patron.neighborhood:
+            # Patron.neighborhood (which is not a model field) was not
+            # set, probably because we avoided an expensive metadata
+            # update. But we have a cached_neighborhood (which _is_ a
+            # model field) to use in situations like this.
+            patron.neighborhood = patron.cached_neighborhood
+        return patron
+
+    def update_patron_metadata(self, patron: Patron) -> Patron | None:
+        """Refresh our local record of this patron's account information.
+
+        :param patron: A Patron object.
+        """
+
+        if self.library_id != patron.library_id:
+            return None
+
+        with elapsed_time_logging(
+            log_method=self.logger().info,
+            message_prefix=f"update_patron_metadata - remote_patron_lookup",
+        ):
+            remote_patron_info = self.remote_patron_lookup(patron)
+
+        if isinstance(remote_patron_info, PatronData):
+            remote_patron_info.apply(patron)
+
+        return patron
 
 
 class BearerTokenSigner:
@@ -2343,9 +2242,7 @@ class BearerTokenSigner:
         return ConfigurationSetting.sitewide_secret(db, cls.BEARER_TOKEN_SIGNING_SECRET)
 
 
-class BaseSAMLAuthenticationProvider(
-    AuthenticationProvider, BearerTokenSigner, metaclass=ABCMeta
-):
+class BaseSAMLAuthenticationProvider(AuthenticationProvider, BearerTokenSigner, ABC):
     """
     Base class for SAML authentication providers
     """
@@ -2358,6 +2255,6 @@ class BaseSAMLAuthenticationProvider(
 
     FLOW_TYPE = "http://librarysimplified.org/authtype/SAML-2.0"
 
-    SETTINGS = SAMLSettings()  # type: ignore
+    SETTINGS = SAMLSettings()  # type: ignore[assignment]
 
-    LIBRARY_SETTINGS: List[Dict[str, Any]] = []
+    LIBRARY_SETTINGS: list[dict[str, Any]] = []

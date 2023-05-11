@@ -4,6 +4,7 @@ import random
 from unittest.mock import MagicMock, patch
 
 import flask
+from werkzeug.datastructures import Authorization
 
 from api.circulation_exceptions import RemoteInitiatedServerError
 from api.config import Configuration
@@ -136,7 +137,9 @@ class TestBaseController:
 
         with circulation_fixture.request_context_with_library("/"):
             value = circulation_fixture.controller.authenticated_patron(
-                dict(username="user1", password="password2")
+                Authorization(
+                    auth_type="basic", data=dict(username="user1", password="password2")
+                )
             )
             assert value == INVALID_CREDENTIALS
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import email
 import json
 import logging
@@ -5,7 +7,7 @@ import os
 import urllib.parse
 from collections import defaultdict
 from time import mktime
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any
 from wsgiref.handlers import format_date_time
 
 import flask
@@ -29,11 +31,7 @@ from core.app_server import (
     url_for,
 )
 from core.entrypoint import EverythingEntryPoint
-from core.external_search import (
-    ExternalSearchIndex,
-    MockExternalSearchIndex,
-    SortKeyPagination,
-)
+from core.external_search import ExternalSearchIndex, SortKeyPagination
 from core.lane import (
     BaseFacets,
     Facets,
@@ -124,16 +122,118 @@ from .opds import (
 )
 from .problem_details import *
 from .shared_collection import SharedCollectionAPI
-from .testing import MockCirculationAPI, MockSharedCollectionAPI
+
+if TYPE_CHECKING:
+    from werkzeug import Response as wkResponse
+
+    from api.admin.controller.announcement_service import AnnouncementSettings
+    from api.admin.controller.catalog_services import CatalogServicesController
+    from api.admin.controller.collection_library_registrations import (
+        CollectionLibraryRegistrationsController,
+    )
+    from api.admin.controller.collection_self_tests import CollectionSelfTestsController
+    from api.admin.controller.collection_settings import CollectionSettingsController
+    from api.admin.controller.individual_admin_settings import (
+        IndividualAdminSettingsController,
+    )
+    from api.admin.controller.library_settings import LibrarySettingsController
+    from api.admin.controller.metadata_service_self_tests import (
+        MetadataServiceSelfTestsController,
+    )
+    from api.admin.controller.metadata_services import MetadataServicesController
+    from api.admin.controller.patron_auth_service_self_tests import (
+        PatronAuthServiceSelfTestsController,
+    )
+    from api.admin.controller.patron_auth_services import PatronAuthServicesController
+    from api.admin.controller.search_service_self_tests import (
+        SearchServiceSelfTestsController,
+    )
+    from api.admin.controller.sitewide_services import (
+        LoggingServicesController,
+        SearchServicesController,
+        SitewideServicesController,
+    )
+    from api.admin.controller.sitewide_settings import (
+        SitewideConfigurationSettingsController,
+    )
+    from api.admin.controller.storage_services import StorageServicesController
+
+    from .admin.controller import (
+        AdminSearchController,
+        CustomListsController,
+        DashboardController,
+        FeedController,
+        LanesController,
+        PatronController,
+        ResetPasswordController,
+        SettingsController,
+        SignInController,
+        TimestampsController,
+    )
+    from .admin.controller.analytics_services import AnalyticsServicesController
+    from .admin.controller.discovery_service_library_registrations import (
+        DiscoveryServiceLibraryRegistrationsController,
+    )
+    from .admin.controller.discovery_services import DiscoveryServicesController
+    from .admin.controller.self_tests import SelfTestsController
 
 
 class CirculationManager:
     log = logging.getLogger("api.controller.CirculationManager")
 
-    def __init__(self, _db, testing=False):
-        self._db = _db
+    # API Controllers
+    index_controller: IndexController
+    opds_feeds: OPDSFeedController
+    opds2_feeds: OPDS2FeedController
+    marc_records: MARCRecordController
+    loans: LoanController
+    annotations: AnnotationController
+    urn_lookup: URNLookupController
+    work_controller: WorkController
+    analytics_controller: AnalyticsController
+    profiles: ProfileController
+    patron_devices: DeviceTokensController
+    version: ApplicationVersionController
+    odl_notification_controller: ODLNotificationController
+    shared_collection_controller: SharedCollectionController
+    static_files: StaticFileController
 
-        self.testing = testing
+    # Admin controllers
+    admin_sign_in_controller: SignInController
+    admin_reset_password_controller: ResetPasswordController
+    timestamps_controller: TimestampsController
+    admin_work_controller: WorkController
+    admin_feed_controller: FeedController
+    admin_custom_lists_controller: CustomListsController
+    admin_lanes_controller: LanesController
+    admin_dashboard_controller: DashboardController
+    admin_settings_controller: SettingsController
+    admin_patron_controller: PatronController
+    admin_self_tests_controller: SelfTestsController
+    admin_discovery_services_controller: DiscoveryServicesController
+    admin_discovery_service_library_registrations_controller: DiscoveryServiceLibraryRegistrationsController
+    admin_analytics_services_controller: AnalyticsServicesController
+    admin_metadata_services_controller: MetadataServicesController
+    admin_metadata_service_self_tests_controller: MetadataServiceSelfTestsController
+    admin_patron_auth_services_controller: PatronAuthServicesController
+    admin_patron_auth_service_self_tests_controller: PatronAuthServiceSelfTestsController
+    admin_collection_settings_controller: CollectionSettingsController
+    admin_collection_self_tests_controller: CollectionSelfTestsController
+    admin_collection_library_registrations_controller: CollectionLibraryRegistrationsController
+    admin_sitewide_configuration_settings_controller: SitewideConfigurationSettingsController
+    admin_library_settings_controller: LibrarySettingsController
+    admin_individual_admin_settings_controller: IndividualAdminSettingsController
+    admin_sitewide_services_controller: SitewideServicesController
+    admin_logging_services_controller: LoggingServicesController
+    admin_search_service_self_tests_controller: SearchServiceSelfTestsController
+    admin_search_services_controller: SearchServicesController
+    admin_storage_services_controller: StorageServicesController
+    admin_catalog_services_controller: CatalogServicesController
+    admin_announcement_service: AnnouncementSettings
+    admin_search_controller: AdminSearchController
+
+    def __init__(self, _db):
+        self._db = _db
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
@@ -299,21 +399,15 @@ class CirculationManager:
         authentication_document_cache_time = int(
             ConfigurationSetting.sitewide(
                 self._db, Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME
-            ).value_or_default(0)
+            ).value_or_default(3600)
         )
         self.authentication_for_opds_documents = ExpiringDict(
             max_len=1000, max_age_seconds=authentication_document_cache_time
         )
-        self.wsgi_debug = (
-            ConfigurationSetting.sitewide(
-                self._db, Configuration.WSGI_DEBUG_KEY
-            ).bool_value
-            or False
-        )
 
     def _dev_mgmt_from_libraries(
-        self, libraries: List[Library]
-    ) -> Optional[DeviceManagementProtocolController]:
+        self, libraries: list[Library]
+    ) -> DeviceManagementProtocolController | None:
         """Return a DeviceManagementProtocolController in any library uses Adobe Vendor IDs."""
 
         for library in libraries:
@@ -357,29 +451,18 @@ class CirculationManager:
 
     def setup_search(self):
         """Set up a search client."""
-        if self.testing:
-            return MockExternalSearchIndex()
-        else:
-            search = ExternalSearchIndex(self._db)
-            if not search:
-                self.log.warn("No external search server configured.")
-                return None
-            return search
+        search = ExternalSearchIndex(self._db)
+        if not search:
+            self.log.warn("No external search server configured.")
+            return None
+        return search
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
-        if self.testing:
-            cls = MockCirculationAPI
-        else:
-            cls = CirculationAPI
-        return cls(self._db, library, analytics)
+        return CirculationAPI(self._db, library, analytics)
 
     def setup_shared_collection(self):
-        if self.testing:
-            cls = MockSharedCollectionAPI
-        else:
-            cls = SharedCollectionAPI
-        return cls(self._db)
+        return SharedCollectionAPI(self._db)
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.
@@ -562,20 +645,6 @@ class CirculationManager:
             # time.
             value = self.auth.create_authentication_document()
             self.authentication_for_opds_documents[name] = value
-
-        if self.wsgi_debug and "debug" in flask.request.args:
-            # Annotate with debugging information about the WSGI
-            # environment and the authentication document cache
-            # itself.
-            value = json.loads(value)
-            value["_debug"] = dict(
-                url=url_for(
-                    "authentication_document", library_short_name=name, _external=True
-                ),
-                environ=str(dict(flask.request.environ)),
-                cache=str(self.authentication_for_opds_documents),
-            )
-            value = json.dumps(value)
         return value
 
 
@@ -1162,7 +1231,7 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(lane, ProblemDetail):
             return lane
 
-        # Althoug the search query goes against Elasticsearch, we must
+        # Although the search query goes against Opensearch, we must
         # use normal pagination because the results are sorted by
         # match quality, not bibliographic information.
         pagination = load_pagination_from_request(
@@ -1322,10 +1391,10 @@ class OPDSFeedController(CirculationManagerController):
 class FeedRequestParameters:
     """Frequently used request parameters for feed requests"""
 
-    library: Optional[Library] = None
-    pagination: Optional[Pagination] = None
-    facets: Optional[Facets] = None
-    problem: Optional[ProblemDetail] = None
+    library: Library | None = None
+    pagination: Pagination | None = None
+    facets: Facets | None = None
+    problem: ProblemDetail | None = None
 
 
 class OPDS2FeedController(CirculationManagerController):
@@ -1701,7 +1770,13 @@ class LoanController(CirculationManagerController):
             return problem_doc
         return best, mechanism
 
-    def fulfill(self, license_pool_id, mechanism_id=None, part=None, do_get=None):
+    def fulfill(
+        self,
+        license_pool_id: int,
+        mechanism_id: int | None = None,
+        part: str | None = None,
+        do_get: Any | None = None,
+    ) -> wkResponse | ProblemDetail:
         """Fulfill a book that has already been checked out,
         or which can be fulfilled with no active loan.
 
@@ -1737,7 +1812,7 @@ class LoanController(CirculationManagerController):
             # There's still a chance this request can succeed, but if not,
             # we'll be sending out authentication_response.
             patron = None
-        library = flask.request.library
+        library = flask.request.library  # type: ignore
         header = self.authorization_header()
         credential = self.manager.auth.get_credential_from_header(header)
 
@@ -1843,9 +1918,13 @@ class LoanController(CirculationManagerController):
             feed = LibraryLoanAndHoldAnnotator.single_item_feed(
                 self.circulation, loan, fulfillment=fulfillment
             )
+            if isinstance(feed, ProblemDetail):
+                # This should typically never happen, since we've gone through the entire fulfill workflow
+                # But for the sake of return-type completeness we are adding this here
+                return feed
             if isinstance(feed, Response):
                 return feed
-            if isinstance(feed, OPDSFeed):
+            if isinstance(feed, OPDSFeed):  # type: ignore
                 content = str(feed)
             else:
                 content = etree.tostring(feed)
@@ -2192,6 +2271,9 @@ class WorkController(CirculationManagerController):
 
         library = flask.request.library
         work = self.load_work(library, identifier_type, identifier)
+        if work is None:
+            return NOT_FOUND_ON_REMOTE
+
         if isinstance(work, ProblemDetail):
             return work
 

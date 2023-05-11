@@ -157,7 +157,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     "links": [
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http%3A%2F%2Fidp2.hilbertteam.net%2Fidp%2Fshibboleth",
+                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp2.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME,
@@ -221,7 +221,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     "links": [
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http%3A%2F%2Fidp2.hilbertteam.net%2Fidp%2Fshibboleth",
+                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp2.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": saml_strings.IDP_1_ORGANIZATION_EN_ORGANIZATION_DISPLAY_NAME,
@@ -252,7 +252,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                     "links": [
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http%3A%2F%2Fidp1.hilbertteam.net%2Fidp%2Fshibboleth",
+                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": SAMLConfiguration.IDP_DISPLAY_NAME_DEFAULT_TEMPLATE.format(
@@ -268,7 +268,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                         },
                         {
                             "rel": "authenticate",
-                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http%3A%2F%2Fidp1.hilbertteam.net%2Fidp%2Fshibboleth",
+                            "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
                                     "value": SAMLConfiguration.IDP_DISPLAY_NAME_DEFAULT_TEMPLATE.format(
@@ -806,3 +806,12 @@ class TestSAMLWebSSOAuthenticationProvider:
             assert expected_patron_data.permanent_id == patron.external_identifier
             assert expected_patron_data == patron_data
             assert expected_expiration_time == credential.expires
+
+    def test_get_credential_from_header(self, saml_provider_fixture):
+        # This provider doesn't support getting the credential from the header.
+        # so this method should always return None.
+        provider = SAMLWebSSOAuthenticationProvider(
+            saml_provider_fixture.controller_fixture.db.default_library(),
+            saml_provider_fixture.integration,
+        )
+        assert provider.get_credential_from_header({}) is None

@@ -4,7 +4,6 @@ import logging
 from copy import deepcopy
 
 import pytest
-from parameterized import parameterized
 
 from core.analytics import Analytics
 from core.classifier import NO_NUMBER, NO_VALUE, Classifier
@@ -38,8 +37,8 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.testing import DummyHTTPClient, LogCaptureHandler
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from tests.core.mock import DummyHTTPClient, LogCaptureHandler
 from tests.fixtures.csv_files import CSVFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.marc_files import MARCFilesFixture
@@ -1139,7 +1138,8 @@ class TestContributorData:
 
 
 class TestLinkData:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,rel,expected_mirror_type",
         [
             ("image", Hyperlink.IMAGE, ExternalIntegrationLink.COVERS),
             ("thumbnail", Hyperlink.THUMBNAIL_IMAGE, ExternalIntegrationLink.COVERS),
@@ -1153,7 +1153,7 @@ class TestLinkData:
                 Hyperlink.GENERIC_OPDS_ACQUISITION,
                 ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
             ),
-        ]
+        ],
     )
     def test_mirror_type_returns_correct_mirror_type_for(
         self, name, rel, expected_mirror_type

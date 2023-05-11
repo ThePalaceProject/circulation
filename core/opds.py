@@ -158,7 +158,7 @@ class Annotator:
 
         if not updated and work.last_update_time:
             # NOTE: This is a default that works in most cases. When
-            # ordering ElasticSearch results by last update time,
+            # ordering Opensearch results by last update time,
             # `work` is a WorkSearchResult object containing a more
             # reliable value that you can use if you want.
             updated = work.last_update_time

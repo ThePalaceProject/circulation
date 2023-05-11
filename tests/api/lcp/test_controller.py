@@ -3,16 +3,27 @@ from unittest.mock import MagicMock, call, create_autospec, patch
 
 from flask import request
 
-from api.controller import CirculationManager
 from api.lcp.collection import LCPAPI
 from api.lcp.controller import LCPController
 from api.lcp.factory import LCPServerFactory
 from api.lcp.server import LCPServer
+from core.external_search import MockExternalSearchIndex
 from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model import ExternalIntegration
 from core.model.library import Library
 from tests.api.lcp import lcp_strings
+from tests.api.mockapi.circulation import (
+    MockCirculationAPI,
+    MockCirculationManager,
+    MockSharedCollectionAPI,
+)
 from tests.fixtures.api_controller import ControllerFixture
+
+manager_api_cls = dict(
+    circulationapi_cls=MockCirculationAPI,
+    sharedcollectionapi_cls=MockSharedCollectionAPI,
+    externalsearch_cls=MockExternalSearchIndex,
+)
 
 
 class TestLCPController:
@@ -34,7 +45,7 @@ class TestLCPController:
             credential_factory_constructor_mock.return_value = credential_factory
 
             patron = controller_fixture.default_patron
-            manager = CirculationManager(controller_fixture.db.session, testing=True)
+            manager = MockCirculationManager(controller_fixture.db.session)
             controller = LCPController(manager)
             controller.authenticated_patron_from_request = MagicMock(  # type: ignore
                 return_value=patron
@@ -85,7 +96,7 @@ class TestLCPController:
             lcp_server_factory_constructor_mock.return_value = lcp_server_factory
 
             patron = controller_fixture.default_patron
-            manager = CirculationManager(controller_fixture.db.session, testing=True)
+            manager = MockCirculationManager(controller_fixture.db.session)
             controller = LCPController(manager)
             controller.authenticated_patron_from_request = MagicMock(
                 return_value=patron
@@ -126,7 +137,7 @@ class TestLCPController:
             lcp_server_factory_constructor_mock.return_value = lcp_server_factory
 
             patron = controller_fixture.default_patron
-            manager = CirculationManager(controller_fixture.db.session, testing=True)
+            manager = MockCirculationManager(controller_fixture.db.session)
             controller = LCPController(manager)
             controller.authenticated_patron_from_request = MagicMock(
                 return_value=patron

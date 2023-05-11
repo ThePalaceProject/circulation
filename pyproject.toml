@@ -106,13 +106,46 @@ exclude = [
     'tests/core/test_scripts\.py',
 ]
 files = ["."]
-plugins = ["sqlmypy"]
+plugins = ["pydantic.mypy", "sqlmypy"]
 warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
+# This override is the equivalent of running mypy with the --strict flag.
+# This is a work in progress, but we should try to get as many of our files
+# into the module list here as possible.
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+module = [
+    "api.admin.model.dashboard_statistics",
+    "core.model.hassessioncache",
+]
+no_implicit_reexport = true
+strict_concatenate = true
+strict_equality = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# This override silences errors for modules in our own codebase that we import
+# from other covered modules. Ideally we will be able to remove this override
+# eventually, once we have type hints for all of our own code.
+follow_imports = "silent"
+module = [
+    "core.classifier.*",
+    "core.model.listeners",
+]
+
+[[tool.mypy.overrides]]
+# This override silences errors for modules we import that don't currently
+# have type hints, or type stubs that cover them. We should go through this
+# list periodically and remove modules that have since added type hints.
 ignore_missing_imports = true
 module = [
     "aws_xray_sdk.ext.*",
@@ -121,8 +154,6 @@ module = [
     # so it typically doesn't exist when running mypy, but since it only
     # contains a couple version strings it can be safely ignored
     "core._version",
-    "elasticsearch.*",
-    "elasticsearch_dsl.*",
     "expiringdict",
     "feedparser",
     "flask_babel",
@@ -135,10 +166,8 @@ module = [
     "money",
     "multipledispatch",
     "nameparser",
-    "oauth2client",
-    "onelogin",
     "onelogin.saml2.*",
-    "parameterized",
+    "opensearch_dsl.*",
     "pyfakefs.*",
     "pyld",
     "pymarc",
@@ -154,18 +183,6 @@ module = [
     "webpub_manifest_parser.*",
 ]
 
-[[tool.mypy.overrides]]
-follow_imports = "skip"
-module = [
-    "core.classifier.*",
-]
-
-[[tool.mypy.overrides]]
-follow_imports = "silent"
-module = [
-    "core.model.listeners",
-]
-
 [tool.poetry]
 authors = ["The Palace Project <info@thepalaceproject.org>"]
 description = "The Palace Project Manager Application"
@@ -178,14 +195,12 @@ version = "0"  # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
 alembic = {extras = ["tz"], version = "^1.8.1"}
-aws-xray-sdk = "~2.11"
+aws-xray-sdk = "~2.12"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
 click = "^8.1.3"
 contextlib2 = "21.6.0"
-elasticsearch = "~6.8"
-elasticsearch-dsl = "6.4.0"
 expiringdict = "1.2.2"
 feedparser = "6.0.10"
 Flask = "^2.2.3"
@@ -194,14 +209,17 @@ Flask-Cors = "3.0.10"
 flask-pydantic-spec = "^0.4.2"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "~1.9.3"
-isbnlib = "3.10.13"
+isbnlib = "^3.10.14"
+itsdangerous = "^2.1.2"
 lxml = "4.9.2"
 money = "1.3.0"
 multipledispatch = "0.6.0"
 nameparser = "1.1.2"  # nameparser is for author name manipulations
 nltk = "3.8.1"  # nltk is a textblob dependency.
+opensearch-dsl = "~1.0"
+opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "~3.0.1"
-Pillow = "9.4.0"
+Pillow = "9.5.0"
 py-bcrypt = "0.4"
 pycryptodome = "3.17"
 pyinstrument = "<4.5"
@@ -211,17 +229,20 @@ pymarc = "4.2.2"
 pyOpenSSL = "^23.1.0"
 pyparsing = "3.0.9"
 pypostalcode = "0.4.1"
-pyspellchecker = "0.7.1"
-pytest = ">=7.2.0"  # Can't be made a dev dep because mocks included beside prod code.
+pyspellchecker = "0.7.2"
 python = ">=3.8,<4"
 python-dateutil = "2.8.2"
-python-Levenshtein = "~0.20"
+python-Levenshtein = "~0.21"
 python3-saml = "~1.15.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
 redmail = "^0.6.0"
-requests = "~2.28"
+requests = "^2.29"
 SQLAlchemy = "~1.3.19"
 textblob = "0.17.1"
+# We import typing_extensions, so we can use Self in our type annotations.
+# - Self is included in Python 3.11
+# Once we upgrade to Python 3.11, we can remove this dependency.
+typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "4.1.1"
 urllib3 = "~1.26.14"
@@ -241,23 +262,19 @@ tox-gh-actions = "^3.0"
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = "^1.26.81"
 botocore-stubs = "^1.29.81"
-freezegun = "~1.2"
+freezegun = "~1.2.2"
 Jinja2 = "^3.1.2"
 mypy = "^1.0.1"
-parameterized = "^0.9"
 psycopg2-binary = "~2.9.5"
 pyfakefs = "~5.2.0"
+pytest = ">=7.2.0"
 pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
 sqlalchemy-stubs = "^0.4"
 types-aws-xray-sdk = "^2.11.0.13"
-types-Flask = "^1.1.6"
 types-Flask-Cors = "^3.0.10"
-types-freezegun = "^1.1.10"
-types-itsdangerous = "^1.1.6"
 types-jsonschema = "^4.17.0.5"
-types-mock = "^5.0.0.5"
 types-Pillow = "^9.4.0"
 types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"
@@ -277,8 +294,8 @@ addopts = [
     "--strict-markers",
 ]
 markers = [
-    "elasticsearch: mark test as requiring elasticsearch",
     "minio: mark test as requiring minio",
+    "opensearch: mark test as requiring opensearch",
 ]
 timeout = "600"
 timeout_method = "thread"

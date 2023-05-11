@@ -9,7 +9,7 @@ import pytest
 from api.authenticator import PatronData
 from api.config import CannotLoadConfiguration
 from api.millenium_patron import MilleniumPatronAPI
-from core.model import ConfigurationSetting
+from core.model import ConfigurationSetting, Patron
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_millenium_files import MilleniumFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -37,6 +37,12 @@ class MockAPI(MilleniumPatronAPI):
         self.queue.append(data)
 
     def request(self, *args, **kwargs) -> MockResponse:
+        self.requests_made.append((args, kwargs))
+        response = self.queue[0]
+        self.queue = self.queue[1:]
+        return MockResponse(response)
+
+    def request_post(self, *args, **kwargs) -> MockResponse:
         self.requests_made.append((args, kwargs))
         response = self.queue[0]
         self.queue = self.queue[1:]
@@ -133,24 +139,25 @@ class TestMilleniumPatronAPI:
             excinfo.value
         )
 
-    def test__remote_patron_lookup_no_such_patron(
+    def test_remote_patron_lookup_no_such_patron(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.no such barcode.html")
         patrondata = PatronData(authorization_identifier="bad barcode")
-        assert None == millenium_fixture.api._remote_patron_lookup(patrondata)
+        assert millenium_fixture.api.remote_patron_lookup(patrondata) is None
 
-    def test__remote_patron_lookup_success(
+    def test_remote_patron_lookup_success(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.success.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = millenium_fixture.api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
 
         # Although "good barcode" was successful in lookup this patron
         # up, it didn't show up in their patron dump as a barcode, so
         # the authorization_identifier from the patron dump took
         # precedence.
+        assert isinstance(patrondata, PatronData)
         assert "6666666" == patrondata.permanent_id
         assert "44444444444447" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
@@ -160,16 +167,17 @@ class TestMilleniumPatronAPI:
         assert "alice@sheldon.com" == patrondata.email_address
         assert PatronData.NO_VALUE == patrondata.block_reason
 
-    def test__remote_patron_lookup_success_nonsensical_labels(
+    def test_remote_patron_lookup_success_nonsensical_labels(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.success_nonsensical_labels.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = millenium_fixture.api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
 
         # The barcode is correctly captured from the "NONSENSE[pb]" element.
         # This checks that we care about the 'pb' code and don't care about
         # what comes before it.
+        assert isinstance(patrondata, PatronData)
         assert "6666666" == patrondata.permanent_id
         assert "44444444444447" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
@@ -179,17 +187,18 @@ class TestMilleniumPatronAPI:
         assert "alice@sheldon.com" == patrondata.email_address
         assert PatronData.NO_VALUE == patrondata.block_reason
 
-    def test__remote_patron_lookup_success_alternative_identifier(
+    def test_remote_patron_lookup_success_alternative_identifier(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api = millenium_fixture.mock_api(
             field_used_as_patron_identifier="pu"
         )
         millenium_fixture.api.enqueue("dump.success_alternative_identifier.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = millenium_fixture.api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
 
         # The identifier is correctly captured from the "MENINX[pu]" element.
+        assert isinstance(patrondata, PatronData)
         assert "6666666" == patrondata.permanent_id
         assert "alice" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
@@ -199,19 +208,20 @@ class TestMilleniumPatronAPI:
         assert "alice@sheldon.com" == patrondata.email_address
         assert PatronData.NO_VALUE == patrondata.block_reason
 
-    def test__remote_patron_lookup_barcode_spaces(
+    def test_remote_patron_lookup_barcode_spaces(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("dump.success_barcode_spaces.html")
-        patrondata = PatronData(authorization_identifier="44444444444447")
-        patrondata = millenium_fixture.api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="44444444444447")
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
+        assert isinstance(patrondata, PatronData)
         assert "44444444444447" == patrondata.authorization_identifier
         assert [
             "44444444444447",
             "4 444 4444 44444 7",
         ] == patrondata.authorization_identifiers
 
-    def test__remote_patron_lookup_block_rules(
+    def test_remote_patron_lookup_block_rules(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         """This patron has a value of "m" in MBLOCK[56], which generally
@@ -219,33 +229,45 @@ class TestMilleniumPatronAPI:
         """
         # Default behavior -- anything other than '-' means blocked.
         millenium_fixture.api.enqueue("dump.blocked.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = millenium_fixture.api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
+        assert isinstance(patrondata, PatronData)
         assert PatronData.UNKNOWN_BLOCK == patrondata.block_reason
 
         # If we set custom block types that say 'm' doesn't really
         # mean the patron is blocked, they're not blocked.
         api = millenium_fixture.mock_api(block_types="abcde")
         api.enqueue("dump.blocked.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = api.remote_patron_lookup(data)
+        assert isinstance(patrondata, PatronData)
         assert PatronData.NO_VALUE == patrondata.block_reason
 
         # If we set custom block types that include 'm', the patron
         # is blocked.
         api = millenium_fixture.mock_api(block_types="lmn")
         api.enqueue("dump.blocked.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = api.remote_patron_lookup(data)
+        assert isinstance(patrondata, PatronData)
         assert PatronData.UNKNOWN_BLOCK == patrondata.block_reason
+
+    def test_remote_patron_lookup_patron_data_identifier_none(
+        self, millenium_fixture: MilleniumPatronFixture
+    ):
+        """If the patron data has no identifier, we can't look them up."""
+        data = PatronData(authorization_identifier=None)
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
+        assert patrondata is None
 
     def test_parse_poorly_behaved_dump(self, millenium_fixture: MilleniumPatronFixture):
         """The HTML parser is able to handle HTML embedded in
         field values.
         """
         millenium_fixture.api.enqueue("dump.embedded_html.html")
-        patrondata = PatronData(authorization_identifier="good barcode")
-        patrondata = millenium_fixture.api._remote_patron_lookup(patrondata)
+        data = PatronData(authorization_identifier="good barcode")
+        patrondata = millenium_fixture.api.remote_patron_lookup(data)
+        assert isinstance(patrondata, PatronData)
         assert "abcd" == patrondata.authorization_identifier
 
     def test_incoming_authorization_identifier_retained(
@@ -281,17 +303,13 @@ class TestMilleniumPatronAPI:
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("pintest.no such barcode.html")
-        assert False == millenium_fixture.api.remote_authenticate(
-            "wrong barcode", "pin"
-        )
+        assert millenium_fixture.api.remote_authenticate("wrong barcode", "pin") is None
 
     def test_remote_authenticate_wrong_pin(
         self, millenium_fixture: MilleniumPatronFixture
     ):
         millenium_fixture.api.enqueue("pintest.bad.html")
-        assert False == millenium_fixture.api.remote_authenticate(
-            "barcode", "wrong pin"
-        )
+        assert millenium_fixture.api.remote_authenticate("barcode", "wrong pin") is None
 
     def test_remote_authenticate_correct_pin(
         self, millenium_fixture: MilleniumPatronFixture
@@ -300,6 +318,7 @@ class TestMilleniumPatronAPI:
         barcode = "barcode1234567!"
         pin = "!correct pin<>@/"
         patrondata = millenium_fixture.api.remote_authenticate(barcode, pin)
+        assert isinstance(patrondata, PatronData)
         # The return value includes everything we know about the
         # authenticated patron, which isn't much.
         assert "barcode1234567!" == patrondata.authorization_identifier
@@ -315,6 +334,41 @@ class TestMilleniumPatronAPI:
         # In particular, verify that the slash character in the PIN was encoded;
         # by default, parse.quote leaves it alone.
         assert "%2F" in url
+
+    def test_remote_authenticate_correct_pin_POST(
+        self, millenium_fixture: MilleniumPatronFixture
+    ):
+        """Test that a POST request is made if we ask for it. There's no need to repeat the entirety
+        of the tests for GET, as the code takes the same path for everything other than the initial
+        request."""
+        millenium_fixture.api.use_post = True
+        millenium_fixture.api.enqueue("pintest.good.html")
+        barcode = "barcode1234567!"
+        pin = "!correct pin<>@/"
+        patrondata = millenium_fixture.api.remote_authenticate(barcode, pin)
+        # The return value includes everything we know about the
+        # authenticated patron, which isn't much.
+        assert patrondata is not None
+        auth_id = patrondata.authorization_identifier
+        assert auth_id is not None
+        assert "barcode1234567!" == auth_id
+
+        # The PIN went out URL-encoded. The barcode did not.
+        # XXX: Do we actually want URL encoding? Does this make sense if the pin is
+        #      now inside the body of a POST?
+        [args, kwargs] = millenium_fixture.api.requests_made.pop()
+        [url] = args
+        assert kwargs == {
+            "data": "number=barcode1234567!&pin=%21correct%20pin%3C%3E%40%2F",
+            "headers": {"content-type": "application/x-www-form-urlencoded"},
+        }
+        assert url == "http://url/pintest"
+
+    def test_remote_authenticate_username_none(
+        self, millenium_fixture: MilleniumPatronFixture
+    ):
+        """If the username is none, we get none as a return value."""
+        assert millenium_fixture.api.remote_authenticate(None, "pin") is None
 
     def test_authentication_updates_patron_authorization_identifier(
         self, millenium_fixture: MilleniumPatronFixture
@@ -338,7 +392,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         p2 = millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice")
+            millenium_fixture.db.session, dict(username="alice", password="pin")
         )
         assert p2 == p
         assert "SECOND-barcode" == p.authorization_identifier
@@ -349,7 +403,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="FIRST-barcode")
+            millenium_fixture.db.session, dict(username="FIRST-barcode", password="pin")
         )
         assert "FIRST-barcode" == p.authorization_identifier
 
@@ -357,7 +411,8 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="SECOND-barcode")
+            millenium_fixture.db.session,
+            dict(username="SECOND-barcode", password="pin"),
         )
         assert "SECOND-barcode" == p.authorization_identifier
 
@@ -366,7 +421,7 @@ class TestMilleniumPatronAPI:
         p.authorization_identifier = "abcd"
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice")
+            millenium_fixture.db.session, dict(username="alice", password="pin")
         )
         assert "abcd" == p.authorization_identifier
         assert "alice" == p.username
@@ -380,7 +435,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="FIRST-barcode")
+            millenium_fixture.db.session, dict(username="FIRST-barcode", password="pin")
         )
         assert "FIRST-barcode" == p.authorization_identifier
 
@@ -390,7 +445,8 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="SECOND-barcode")
+            millenium_fixture.db.session,
+            dict(username="SECOND-barcode", password="pin"),
         )
         assert "SECOND-barcode" == p.authorization_identifier
 
@@ -400,7 +456,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="alice")
+            millenium_fixture.db.session, dict(username="alice", password="pin")
         )
         assert "FIRST-barcode" == p.authorization_identifier
 
@@ -418,7 +474,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.two_barcodes.html")
         millenium_fixture.api.authenticated_patron(
-            millenium_fixture.db.session, dict(username="FIRST-barcode")
+            millenium_fixture.db.session, dict(username="FIRST-barcode", password="pin")
         )
         assert "SECOND-barcode" == p.authorization_identifier
 
@@ -434,6 +490,7 @@ class TestMilleniumPatronAPI:
         alice = millenium_fixture.api.authenticate(
             millenium_fixture.db.session, dict(username="alice", password="4444")
         )
+        assert isinstance(alice, Patron)
         assert "44444444444447" == alice.authorization_identifier
         assert "alice" == alice.username
 
@@ -451,6 +508,7 @@ class TestMilleniumPatronAPI:
             millenium_fixture.db.session,
             dict(username="44444444444447", password="4444"),
         )
+        assert isinstance(alice, Patron)
         assert "44444444444447" == alice.authorization_identifier
         assert "alice" == alice.username
 
@@ -459,6 +517,7 @@ class TestMilleniumPatronAPI:
         alice = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, dict(username="alice", password="4444")
         )
+        assert isinstance(alice, Patron)
         assert "44444444444447" == alice.authorization_identifier
         assert "alice" == alice.username
 
@@ -484,9 +543,11 @@ class TestMilleniumPatronAPI:
         # hours ago.
         millenium_fixture.api.enqueue("pintest.good.html")
         auth = dict(username="44444444444447", password="4444")
+
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
+        assert isinstance(p2, Patron)
         assert p2 == p
         assert p2.last_external_sync == one_hour_ago
 
@@ -500,6 +561,7 @@ class TestMilleniumPatronAPI:
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
+        assert isinstance(p2, Patron)
         assert p2 == p
 
         # Since the sync was performed, last_external_sync was updated.
@@ -517,11 +579,12 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.invalid_expiration.html")
         auth = dict(username="44444444444447", password="4444")
+
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
         assert p2 == p
-        assert None == p.authorization_expires
+        assert p.authorization_expires is None
 
     def test_authentication_patron_invalid_fine_amount(
         self, millenium_fixture: MilleniumPatronFixture
@@ -531,6 +594,7 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api.enqueue("pintest.good.html")
         millenium_fixture.api.enqueue("dump.invalid_fines.html")
         auth = dict(username="44444444444447", password="4444")
+
         p2 = millenium_fixture.api.authenticated_patron(
             millenium_fixture.db.session, auth
         )
@@ -542,7 +606,7 @@ class TestMilleniumPatronAPI:
         patrondata = millenium_fixture.api.patron_dump_to_patrondata("alice", content)
         assert "44444444444447" == patrondata.authorization_identifier
         assert "alice" == patrondata.username
-        assert None == patrondata.library_identifier
+        assert patrondata.library_identifier is None
 
     def test_patron_dump_to_patrondata_restriction_field(
         self, millenium_fixture: MilleniumPatronFixture
@@ -612,10 +676,10 @@ class TestMilleniumPatronAPI:
         server's SSL certificate.
         """
         # By default, verify_certificate is True.
-        assert True == millenium_fixture.api.verify_certificate
+        assert millenium_fixture.api.verify_certificate is True
 
         api = millenium_fixture.mock_api(verify_certificate=False)
-        assert False == api.verify_certificate
+        assert api.verify_certificate is False
 
         # Test that the value of verify_certificate becomes the
         # 'verify' argument when _modify_request_kwargs() is called.
@@ -649,16 +713,16 @@ class TestMilleniumPatronAPI:
 
     def test_family_name_match(self):
         m = MilleniumPatronAPI.family_name_match
-        assert False == m(None, None)
-        assert False == m(None, "")
-        assert False == m("", None)
-        assert True == m("", "")
-        assert True == m("cher", "cher")
-        assert False == m("chert", "cher")
-        assert False == m("cher", "chert")
-        assert True == m("cherryh, c.j.", "cherryh")
-        assert True == m("c.j. cherryh", "cherryh")
-        assert True == m("caroline janice cherryh", "cherryh")
+        assert m(None, None) is False
+        assert m(None, "") is False
+        assert m("", None) is False
+        assert m("", "") is True
+        assert m("cher", "cher") is True
+        assert m("chert", "cher") is False
+        assert m("cher", "chert") is False
+        assert m("cherryh, c.j.", "cherryh") is True
+        assert m("c.j. cherryh", "cherryh") is True
+        assert m("caroline janice cherryh", "cherryh") is True
 
     def test_misconfigured_authentication_mode(
         self, millenium_fixture: MilleniumPatronFixture
@@ -679,17 +743,18 @@ class TestMilleniumPatronAPI:
         millenium_fixture.api = millenium_fixture.mock_api(
             password_keyboard=MilleniumPatronAPI.NULL_KEYBOARD
         )
-        assert False == millenium_fixture.api.collects_password
+        assert millenium_fixture.api.collects_password is False
         # If the patron lookup succeeds, the user is authenticated
         # as that patron.
         millenium_fixture.api.enqueue("dump.success.html")
         patrondata = millenium_fixture.api.remote_authenticate("44444444444447", None)
+        assert isinstance(patrondata, PatronData)
         assert "44444444444447" == patrondata.authorization_identifier
 
         # If it fails, the user is not authenticated.
         millenium_fixture.api.enqueue("dump.no such barcode.html")
         patrondata = millenium_fixture.api.remote_authenticate("44444444444447", None)
-        assert False == patrondata
+        assert patrondata is None
 
     def test_authorization_family_name_success(
         self, millenium_fixture: MilleniumPatronFixture
@@ -702,11 +767,12 @@ class TestMilleniumPatronAPI:
         patrondata = millenium_fixture.api.remote_authenticate(
             "44444444444447", "Sheldon"
         )
+        assert isinstance(patrondata, PatronData)
         assert "44444444444447" == patrondata.authorization_identifier
 
         # Since we got a full patron dump, the PatronData we get back
         # is complete.
-        assert True == patrondata.complete
+        assert patrondata.complete is True
 
     def test_authorization_family_name_failure(
         self, millenium_fixture: MilleniumPatronFixture
@@ -716,8 +782,9 @@ class TestMilleniumPatronAPI:
         """
         millenium_fixture.api = millenium_fixture.mock_api(auth_mode="family_name")
         millenium_fixture.api.enqueue("dump.success.html")
-        assert False == millenium_fixture.api.remote_authenticate(
-            "44444444444447", "wrong name"
+        assert (
+            millenium_fixture.api.remote_authenticate("44444444444447", "wrong name")
+            is None
         )
 
     def test_authorization_family_name_no_such_patron(
@@ -728,8 +795,9 @@ class TestMilleniumPatronAPI:
         """
         millenium_fixture.api = millenium_fixture.mock_api(auth_mode="family_name")
         millenium_fixture.api.enqueue("dump.no such barcode.html")
-        assert False == millenium_fixture.api.remote_authenticate(
-            "44444444444447", "somebody"
+        assert (
+            millenium_fixture.api.remote_authenticate("44444444444447", "somebody")
+            is None
         )
 
     def test_extract_postal_code(self):
@@ -746,9 +814,9 @@ class TestMilleniumPatronAPI:
             "10145-6789 Main Street Apartment #12345$Arvin CA 93203 (old address)"
         )
 
-        assert None == m("10145 Main Street Apartment 123456$Arvin CA")
-        assert None == m("10145 Main Street$Arvin CA")
-        assert None == m("123 Main Street")
+        assert m("10145 Main Street Apartment 123456$Arvin CA") is None
+        assert m("10145 Main Street$Arvin CA") is None
+        assert m("123 Main Street") is None
 
         # Some cases where we incorrectly detect a ZIP code where there is none.
         assert "12345" == m("10145 Main Street, Apartment #12345$Arvin CA")

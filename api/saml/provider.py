@@ -1,8 +1,10 @@
 import logging
+from typing import Optional
 
 from contextlib2 import contextmanager
 from flask import url_for
 from flask_babel import lazy_gettext as _
+from werkzeug.datastructures import Authorization
 
 from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
 from api.problem_details import *
@@ -85,6 +87,10 @@ class SAMLWebSSOAuthenticationProvider(
             self._patron_id_regular_expression = (
                 configuration.patron_id_regular_expression
             )
+
+    def get_credential_from_header(self, auth: Authorization) -> Optional[str]:
+        # We cannot extract the credential from the header, so we just return None
+        return None
 
     def _authentication_flow_document(self, db):
         """Creates a Authentication Flow object for use in an Authentication for OPDS document.

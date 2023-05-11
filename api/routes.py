@@ -676,16 +676,6 @@ def related_books(identifier_type, identifier):
     return app.manager.work_controller.related(identifier_type, identifier)
 
 
-@library_route(
-    "/works/<identifier_type>/<path:identifier>/report", methods=["GET", "POST"]
-)
-@has_library
-@allows_patron_web
-@returns_problem_detail
-def report(identifier_type, identifier):
-    return app.manager.work_controller.report(identifier_type, identifier)
-
-
 @library_route("/analytics/<identifier_type>/<path:identifier>/<event_type>")
 @has_library
 @allows_auth

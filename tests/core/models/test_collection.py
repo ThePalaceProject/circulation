@@ -1009,6 +1009,16 @@ class TestCollection:
         pool2 = db.licensepool(None, collection=collection2)
         work2.license_pools.append(pool2)
 
+        record, _ = CoverageRecord.add_for(
+            work.presentation_edition, collection.data_source, collection=collection
+        )
+        assert (
+            CoverageRecord.lookup(
+                work.presentation_edition, collection.data_source, collection=collection
+            )
+            != None
+        )
+
         # Finally, here's a mock ExternalSearchIndex so we can track when
         # Works are removed from the search index.
         class MockExternalSearchIndex:
@@ -1037,6 +1047,9 @@ class TestCollection:
 
         # The default library now has no collections.
         assert [] == db.default_library().collections
+
+        # The collection based coverage record got deleted
+        assert db.session.query(CoverageRecord).get(record.id) == None
 
         # The deletion of the Collection's sole LicensePool has
         # cascaded to Loan, Hold, License, and

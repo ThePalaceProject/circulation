@@ -475,7 +475,6 @@ class TestWork:
         # index.
         index_key = (
             search.works_index,
-            MockExternalSearchIndex.work_document_type,
             work.id,
         )
 

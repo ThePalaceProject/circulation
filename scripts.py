@@ -183,9 +183,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         )
         return parser
 
-    def __init__(
-        self, _db=None, cmd_args=None, testing=False, manager=None, *args, **kwargs
-    ):
+    def __init__(self, _db=None, cmd_args=None, manager=None, *args, **kwargs):
         """Constructor.
         :param _db: A database connection.
         :param cmd_args: A mock set of command-line arguments, to use instead
@@ -203,7 +201,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
         if not manager:
-            manager = CirculationManager(self._db, testing=testing)
+            manager = CirculationManager(self._db)
         from api.app import app
 
         app.manager = manager
@@ -828,7 +826,7 @@ class InstanceInitializationScript(TimestampScript):
 
     This script is intended for use in servers, Docker containers, etc,
     when the Circulation Manager app is being installed. It initializes
-    the database and sets an appropriate alias on the ElasticSearch index.
+    the database and sets an appropriate alias on the OpenSearch index.
 
     Because it's currently run every time a container is started, it must
     remain idempotent.
@@ -876,12 +874,12 @@ class InstanceInitializationScript(TimestampScript):
             )
 
     def do_run(self, ignore_search=False):
-        # Creates a "-current" alias on the Elasticsearch client.
+        # Creates a "-current" alias on the Opensearch client.
         if not ignore_search:
             try:
                 search_client = ExternalSearchIndex(self._db)
             except CannotLoadConfiguration as e:
-                # Elasticsearch isn't configured, so do nothing.
+                # Opensearch isn't configured, so do nothing.
                 pass
 
         # Stamp the most recent migration as the current state of the DB

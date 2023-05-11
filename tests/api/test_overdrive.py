@@ -15,7 +15,6 @@ from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.config import Configuration
 from api.overdrive import (
-    MockOverdriveAPI,
     NewTitlesOverdriveCollectionMonitor,
     OverdriveAPI,
     OverdriveCirculationMonitor,
@@ -39,8 +38,9 @@ from core.model import (
     RightsStatus,
 )
 from core.overdrive import OverdriveConfiguration
-from core.testing import DummyHTTPClient, MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
+from tests.api.mockapi.overdrive import MockOverdriveAPI
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 
 from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture

@@ -92,9 +92,9 @@ class TestViewController:
             assert 302 == response.status_code
             location = response.headers.get("Location")
             assert "sign_in" in location
-            assert "admin%2Fweb" in location
-            assert "collection%2Fa%252F(b)" in location
-            assert "book%2Fc%252F(d)" in location
+            assert "admin/web" in location
+            assert "collection/a%252F(b)" in location
+            assert "book/c%252F(d)" in location
 
     def test_redirect_to_library(self, admin_ctrl_fixture: AdminControllerFixture):
         # If the admin doesn't have access to any libraries, they get a message
@@ -439,6 +439,21 @@ class TestSignInController:
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
 
+    def test_admin_signin_no_external_domain(self, sign_in_fixture: SignInFixture):
+        # We don't permit redirecting to an external domain
+        sign_in_fixture.admin.password = "password"
+        with sign_in_fixture.ctrl.app.test_request_context(
+            "/admin/sign_in?redirect=http%3A%2F%2Fwww.example.com%2Fxyz"
+        ):
+            flask.session["admin_email"] = sign_in_fixture.admin.email
+            flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
+            response = sign_in_fixture.manager.admin_sign_in_controller.sign_in()
+            assert 400 == response.status_code
+            assert (
+                "Redirecting to an external domain is not allowed."
+                == response.get_data(as_text=True)
+            )
+
     def test_password_sign_in(self, sign_in_fixture: SignInFixture):
         # Returns an error if there's no admin auth service and no admins.
         with sign_in_fixture.ctrl.app.test_request_context(
@@ -503,6 +518,22 @@ class TestSignInController:
             )
             assert 302 == response.status_code
             assert "foo" == response.headers["Location"]
+
+        # Refuses to redirect to an unsafe location.
+        with sign_in_fixture.ctrl.app.test_request_context(
+            "/admin/sign_in_with_password", method="POST"
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("email", sign_in_fixture.admin.email),
+                    ("password", "password"),
+                    ("redirect", "http://www.example.com/passwordstealer"),
+                ]
+            )
+            response = (
+                sign_in_fixture.manager.admin_sign_in_controller.password_sign_in()
+            )
+            assert 400 == response.status_code
 
     def test_change_password(self, sign_in_fixture: SignInFixture):
         admin, ignore = create(

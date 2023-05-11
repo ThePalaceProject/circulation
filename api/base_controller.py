@@ -1,6 +1,7 @@
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from werkzeug.datastructures import Authorization
 
 from core.model import Library, Loan, Patron, get_one
 from core.util.problem_detail import ProblemDetail
@@ -20,16 +21,8 @@ class BaseCirculationManagerController:
         self._db = self.manager._db
 
     def authorization_header(self):
-        """Get the authentication header."""
-
-        # This is the basic auth header.
+        """Get the authentication object."""
         header = flask.request.authorization
-
-        # If we're using a token instead, flask doesn't extract it for us.
-        if not header:
-            if "Authorization" in flask.request.headers:
-                header = flask.request.headers["Authorization"]
-
         return header
 
     @property
@@ -65,14 +58,14 @@ class BaseCirculationManagerController:
         # Start off by assuming authentication will not work.
         flask.request.patron = None
 
-        header = self.authorization_header()
+        auth = self.authorization_header()
 
-        if not header:
+        if not auth:
             # No credentials were provided.
             return self.authenticate()
 
         try:
-            patron = self.authenticated_patron(header)
+            patron = self.authenticated_patron(auth)
         except RemoteInitiatedServerError as e:
             return REMOTE_INTEGRATION_FAILED.detailed(
                 _("Error in authentication service")
@@ -85,7 +78,7 @@ class BaseCirculationManagerController:
             flask.request.patron = patron
         return patron
 
-    def authenticated_patron(self, authorization_header):
+    def authenticated_patron(self, authorization_header: Authorization):
 
         """Look up the patron authenticated by the given authorization header.
 
