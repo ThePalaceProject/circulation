@@ -228,3 +228,11 @@ def test_settings_configuration_form_options_callable(mock_settings, mock_db):
     assert form[0]["options"] == [
         {"key": "xyz", "label": "ABC"},
     ]
+
+
+def test_form_field_no_form():
+    # Make we cannot create a FormField without a form
+    with pytest.raises(ValueError) as e:
+        FormField("default value")
+
+    assert str(e.value) == "form parameter is required."

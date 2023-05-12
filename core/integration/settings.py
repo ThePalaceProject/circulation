@@ -26,6 +26,16 @@ if TYPE_CHECKING:
 
 
 class FormFieldInfo(FieldInfo):
+    """
+    A Pydantic FieldInfo that includes a ConfigurationFormItem
+
+    This is used to store the ConfigurationFormItem for a field, so that
+    we can use it to generate a configuration form for the admin interface.
+
+    This class should not be called directly, rather it should be created by
+    calling the FormField function below.
+    """
+
     __slots__ = ("form",)
 
     def __init__(
@@ -46,7 +56,7 @@ class FormFieldInfo(FieldInfo):
             # is called before the field is used, and it will raise an exception if
             # it is None.
 
-            raise ValueError("form is required")
+            raise ValueError("form parameter is required.")
         super()._validate()
 
 
@@ -80,6 +90,14 @@ def FormField(
     repr: bool = True,
     **extra: Any,
 ) -> Any:
+    """
+    This function is equivalent to the Pydantic Field function, but instead of creating
+    a FieldInfo, it creates our FormFieldInfo class.
+
+    When creating a Pydantic model based on the BaseSettings class below, you should
+    use this function instead of Field to create fields that will be used to generate
+    a configuration form in the admin interface.
+    """
     field_info = FormFieldInfo(
         default,
         form=form,
@@ -130,7 +148,7 @@ class ConfigurationFormItem:
 
     This is used to generate the configuration form for the admin interface.
     Each ConfigurationFormItem corresponds to a field in the Pydantic model
-    and a field in the ConfigurationForm class.
+    and is added to the model using the FormField function above.
     """
 
     # The label for the form item, used as the field label in the admin interface.
@@ -204,7 +222,23 @@ class ConfigurationFormItem:
 
 
 class BaseSettings(BaseModel):
-    """Base class for all our database backed pydantic settings classes"""
+    """
+    Base class for all our database backed pydantic settings classes
+
+    Fields on the model should be defined using the FormField function above so
+    that we can create a configuration form in the admin interface based on the
+    model fields.
+
+    For example:
+    class MySettings(BaseSettings):
+      my_field: str = FormField(
+        "default value",
+        form=ConfigurationFormItem(
+            label="My Field",
+            description="This is my field",
+        ),
+      )
+    """
 
     @root_validator(pre=True)
     def extra_args(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -247,7 +281,7 @@ class BaseSettings(BaseModel):
         extra = Extra.allow
 
         # Allow population by field name. We store old field names from
-        # ConfigurationSettings as aliases so that we can load old settings,
+        # as aliases so that we can properly migrate old settings,
         # but we generally will populate the module using the field name
         # not the alias.
         allow_population_by_field_name = True
