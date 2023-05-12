@@ -9,7 +9,7 @@ import requests
 from flask_babel import lazy_gettext as _
 from pydantic import HttpUrl
 
-from core.integration.settings import ConfigurationFormItem
+from core.integration.settings import ConfigurationFormItem, FormField
 from core.model import Patron
 
 from .authenticator import (
@@ -22,25 +22,42 @@ from .circulation_exceptions import RemoteInitiatedServerError
 
 
 class FirstBookAuthenticationSettings(BasicAuthenticationProviderSettings):
-    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
-        url = ConfigurationFormItem(
+    url: HttpUrl = FormField(
+        "https://ebooksprod.firstbook.org/api/",
+        form=ConfigurationFormItem(
             label=_("URL"),
             description=_("The URL for the First Book authentication service."),
             required=True,
-        )
-
-        password = ConfigurationFormItem(
+        ),
+    )
+    password: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
             label=_("Key"),
             description=_("The key for the First Book authentication service."),
-        )
-
-    url: HttpUrl = "https://ebooksprod.firstbook.org/api/"  # type: ignore[assignment]
-    password: str
+        ),
+    )
     # Server-side validation happens before the identifier
     # is converted to uppercase, which means lowercase characters
     # are valid.
-    identifier_regular_expression: Pattern = re.compile(r"^[A-Za-z0-9@]+$")
-    password_regular_expression: Pattern = re.compile(r"^[0-9]+$")
+    identifier_regular_expression: Pattern = FormField(
+        re.compile(r"^[A-Za-z0-9@]+$"),
+        form=ConfigurationFormItem(
+            label="Identifier Regular Expression",
+            description="A patron's identifier will be immediately rejected if it doesn't match this "
+            "regular expression.",
+            weight=10,
+        ),
+    )
+    password_regular_expression: Optional[Pattern] = FormField(
+        re.compile(r"^[0-9]+$"),
+        form=ConfigurationFormItem(
+            label="Password Regular Expression",
+            description="A patron's password will be immediately rejected if it doesn't match this "
+            "regular expression.",
+            weight=10,
+        ),
+    )
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):

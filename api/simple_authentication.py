@@ -1,7 +1,11 @@
 from typing import List, Optional, Type, Union
 
 from core.analytics import Analytics
-from core.integration.settings import ConfigurationFormItem, ConfigurationFormItemType
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.model import Patron
 
 from .authenticator import (
@@ -14,22 +18,37 @@ from .config import CannotLoadConfiguration
 
 
 class SimpleAuthenticationSettings(BasicAuthenticationProviderSettings):
-    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
-        additional_test_identifiers = ConfigurationFormItem(
+    test_identifier: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Test identifier",
+            description="A test identifier to use when testing the authentication provider.",
+            required=True,
+        ),
+    )
+    test_password: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Test password",
+            description="A test password to use when testing the authentication provider.",
+        ),
+    )
+    additional_test_identifiers: Optional[List[str]] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Additional test identifiers",
             description="Identifiers for additional patrons to use in testing. "
             "The identifiers will all use the same test password as the first identifier.",
             type=ConfigurationFormItemType.LIST,
-        )
-        neighborhood = ConfigurationFormItem(
+        ),
+    )
+    neighborhood: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Test neighborhood",
             description="For analytics purposes, all patrons will be 'from' this neighborhood.",
-        )
-
-    additional_test_identifiers: Optional[List[str]] = None
-    neighborhood: Optional[str] = None
-    test_identifier: str
-    test_password: str
+        ),
+    )
 
 
 class SimpleAuthenticationProvider(BasicAuthenticationProvider):

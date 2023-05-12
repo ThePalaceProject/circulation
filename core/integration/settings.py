@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 from pydantic import (
     BaseModel,
@@ -12,7 +12,7 @@ from pydantic import (
     ValidationError,
     root_validator,
 )
-from pydantic.fields import ModelField
+from pydantic.fields import FieldInfo, ModelField, NoArgAnyCallable, Undefined
 from sqlalchemy.orm import Session
 
 from api.admin.problem_details import (
@@ -20,6 +20,97 @@ from api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
 )
 from core.util.problem_detail import ProblemDetail, ProblemError
+
+if TYPE_CHECKING:
+    from pydantic.typing import AbstractSetIntStr, MappingIntStrAny
+
+
+class FormFieldInfo(FieldInfo):
+    __slots__ = ("form",)
+
+    def __init__(
+        self,
+        default: Any = Undefined,
+        form: ConfigurationFormItem = None,  # type: ignore[assignment]
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(default, **kwargs)
+        self.form = form
+
+    def _validate(self) -> None:
+        if self.form is None:
+            # We do a type ignore above so that we can give form a default of none,
+            # since it needs a default value because it comes after other arguments
+            # with defaults in the function signature.
+            # We know it will never be None in practice because this function
+            # is called before the field is used, and it will raise an exception if
+            # it is None.
+
+            raise ValueError("form is required")
+        super()._validate()
+
+
+def FormField(
+    default: Any = Undefined,
+    *,
+    form: ConfigurationFormItem = None,  # type: ignore[assignment]
+    default_factory: Optional[NoArgAnyCallable] = None,
+    alias: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    exclude: Union[AbstractSetIntStr, MappingIntStrAny, Any] = None,
+    include: Union[AbstractSetIntStr, MappingIntStrAny, Any] = None,
+    const: Optional[bool] = None,
+    gt: Optional[float] = None,
+    ge: Optional[float] = None,
+    lt: Optional[float] = None,
+    le: Optional[float] = None,
+    multiple_of: Optional[float] = None,
+    allow_inf_nan: Optional[bool] = None,
+    max_digits: Optional[int] = None,
+    decimal_places: Optional[int] = None,
+    min_items: Optional[int] = None,
+    max_items: Optional[int] = None,
+    unique_items: Optional[bool] = None,
+    min_length: Optional[int] = None,
+    max_length: Optional[int] = None,
+    allow_mutation: bool = True,
+    regex: Optional[str] = None,
+    discriminator: Optional[str] = None,
+    repr: bool = True,
+    **extra: Any,
+) -> Any:
+    field_info = FormFieldInfo(
+        default,
+        form=form,
+        default_factory=default_factory,
+        alias=alias,
+        title=title,
+        description=description,
+        exclude=exclude,
+        include=include,
+        const=const,
+        gt=gt,
+        ge=ge,
+        lt=lt,
+        le=le,
+        multiple_of=multiple_of,
+        allow_inf_nan=allow_inf_nan,
+        max_digits=max_digits,
+        decimal_places=decimal_places,
+        min_items=min_items,
+        max_items=max_items,
+        unique_items=unique_items,
+        min_length=min_length,
+        max_length=max_length,
+        allow_mutation=allow_mutation,
+        regex=regex,
+        discriminator=discriminator,
+        repr=repr,
+        **extra,
+    )
+    field_info._validate()
+    return field_info
 
 
 class ConfigurationFormItemType(Enum):
@@ -161,16 +252,6 @@ class BaseSettings(BaseModel):
         # not the alias.
         allow_population_by_field_name = True
 
-    class ConfigurationForm:
-        """
-        Our Pydantic Models must have a class called ConfigurationForm
-        with a ConfigurationFormItem property for each field in the model.
-        This is used to generate the form in the admin interface by the
-        configuration_form method below.
-        """
-
-        ...
-
     @classmethod
     def logger(cls) -> logging.Logger:
         """Get the logger for this class"""
@@ -181,15 +262,12 @@ class BaseSettings(BaseModel):
         """Get the configuration dictionary for this class"""
         config = []
         for field in cls.__fields__.values():
-            config_item: ConfigurationFormItem | None = getattr(
-                cls.ConfigurationForm, field.name, None
-            )
-            if config_item is None:
+            if not isinstance(field.field_info, FormFieldInfo):
                 cls.logger().warning(
-                    f"Missing configuration form item for field {field.name}"
+                    f"{field.name} was not initialized with FormField, skipping."
                 )
                 continue
-            config.append(config_item.to_dict(db, field))
+            config.append(field.field_info.form.to_dict(db, field))
 
         # Sort by weight then return only the settings
         config.sort(key=lambda x: x[0])
@@ -211,9 +289,13 @@ class BaseSettings(BaseModel):
             super().__init__(**data)
         except ValidationError as e:
             error = e.errors()[0]
-            error_location = error["loc"][0]
-            item = getattr(self.ConfigurationForm, str(error_location), None)
-            item_label = item.label if item else error_location
+            error_location = str(error["loc"][0])
+            item = self.__fields__.get(error_location)
+            if item is not None and isinstance(item.field_info, FormFieldInfo):
+                item_label = item.field_info.form.label
+            else:
+                item_label = error_location
+
             if (
                 error["type"] == "value_error.problem_detail"
                 and "problem_detail" in error["ctx"]

@@ -11,6 +11,7 @@ from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
+    FormField,
     SettingsValidationError,
 )
 from core.util.problem_detail import ProblemDetail, ProblemError
@@ -32,16 +33,18 @@ def mock_settings(mock_problem_detail):
                 raise SettingsValidationError(mock_problem_detail)
             return v
 
-        test: Optional[str] = "test"
-        number: PositiveInt
-        # Intentionally not included in ConfigurationForm
-        missing: bool = False
-
-        class ConfigurationForm(BaseSettings.ConfigurationForm):
-            test = ConfigurationFormItem(label="Test", description="Test description")
-            number = ConfigurationFormItem(
+        test: Optional[str] = FormField(
+            "test",
+            form=ConfigurationFormItem(label="Test", description="Test description"),
+        )
+        number: PositiveInt = FormField(
+            ...,
+            form=ConfigurationFormItem(
                 label="Number", description="Number description"
-            )
+            ),
+        )
+        # Intentionally not set with FormField
+        missing: bool = False
 
     return MockSettings
 
@@ -190,7 +193,7 @@ def test_settings_configuration_form_logs_missing(mock_settings, mock_db, caplog
     caplog.set_level(logging.WARNING)
     _ = mock_settings.configuration_form(mock_db)
     assert len(caplog.records) == 1
-    assert "Missing configuration form item" in caplog.text
+    assert "was not initialized with FormField" in caplog.text
 
 
 def test_settings_configuration_form_options(mock_settings, mock_db):

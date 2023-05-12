@@ -7,7 +7,7 @@ Create Date: 2023-05-10 19:50:47.458800+00:00
 """
 import json
 from collections import defaultdict
-from typing import Any, Dict, Optional, Type, TypeVar, cast
+from typing import Any, Dict, Type, TypeVar
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -16,8 +16,8 @@ from alembic import op
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
     ConfigurationFormItemType,
+    FormFieldInfo,
 )
 from core.model import json_serializer
 
@@ -43,12 +43,10 @@ def _validate_and_load_settings(
     for key, setting in settings_dict.items():
         if key in aliases:
             key = aliases[key]
-        config_item = cast(
-            Optional[ConfigurationFormItem],
-            getattr(settings_class.ConfigurationForm, key, None),
-        )
-        if config_item is None:
+        field = settings_class.__fields__.get(key)
+        if field is None or not isinstance(field.field_info, FormFieldInfo):
             continue
+        config_item = field.field_info.form
         if (
             config_item.type == ConfigurationFormItemType.LIST
             or config_item.type == ConfigurationFormItemType.MENU

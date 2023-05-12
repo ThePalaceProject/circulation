@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Pattern, Union
 
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from pydantic import Field, PositiveInt, conint, validator
+from pydantic import PositiveInt, conint, validator
 from sqlalchemy.orm import Session
 
 from api.saml.configuration.problem_details import (
@@ -34,6 +34,7 @@ from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
+    FormField,
     SettingsValidationError,
 )
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
@@ -94,8 +95,9 @@ class FederatedIdentityProviderOptions:
 class SAMLWebSSOAuthenticationSettings(BaseSettings):
     """SAML Web SSO Authentication settings"""
 
-    class ConfigurationForm(BaseSettings.ConfigurationForm):
-        service_provider_xml_metadata = ConfigurationFormItem(
+    service_provider_xml_metadata: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
             label="Service Provider's XML Metadata",
             description=(
                 "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
@@ -104,13 +106,21 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
                 "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST."
             ),
             type=ConfigurationFormItemType.TEXTAREA,
-        )
-        service_provider_private_key = ConfigurationFormItem(
+        ),
+        alias="sp_xml_metadata",
+    )
+    service_provider_private_key: str = FormField(
+        "",
+        form=ConfigurationFormItem(
             label="Service Provider's Private Key",
             description="Private key used for encrypting SAML requests.",
             type=ConfigurationFormItemType.TEXTAREA,
-        )
-        federated_identity_provider_entity_ids = ConfigurationFormItem(
+        ),
+        alias="sp_private_key",
+    )
+    federated_identity_provider_entity_ids: Optional[List[str]] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="List of Federated IdPs",
             description=(
                 "List of federated (for example, from InCommon Federation) IdPs supported by this authentication provider. "
@@ -118,8 +128,12 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
             ),
             type=ConfigurationFormItemType.MENU,
             options=FederatedIdentityProviderOptions(),
-        )
-        patron_id_use_name_id = ConfigurationFormItem(
+        ),
+        alias="saml_federated_idp_entity_ids",
+    )
+    patron_id_use_name_id: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
             label=_("Patron ID: SAML NameID"),
             description=_(
                 "Configuration setting indicating whether SAML NameID should be searched for a unique patron ID. "
@@ -130,8 +144,12 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
                 "true": "Use SAML NameID",
                 "false": "Do NOT use SAML NameID",
             },
-        )
-        patron_id_attributes = ConfigurationFormItem(
+        ),
+        alias="saml_patron_id_use_name_id",
+    )
+    patron_id_attributes: Optional[List[str]] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label=_("Patron ID: SAML Attributes"),
             description=_(
                 "List of SAML attributes that MAY contain a unique patron ID. "
@@ -142,8 +160,12 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
             ),
             type=ConfigurationFormItemType.MENU,
             options={attribute: attribute.value for attribute in SAMLAttributeType},
-        )
-        patron_id_regular_expression = ConfigurationFormItem(
+        ),
+        alias="saml_patron_id_attributes",
+    )
+    patron_id_regular_expression: Optional[Pattern] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Patron ID: Regular expression",
             description=(
                 "Regular expression used to extract a unique patron ID from the attributes "
@@ -162,8 +184,12 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
                 the_regex_pattern=html.escape(r"(?P<patron_id>.+)@university\.org")
             ),
             type=ConfigurationFormItemType.TEXT,
-        )
-        non_federated_identity_provider_xml_metadata = ConfigurationFormItem(
+        ),
+        alias="saml_patron_id_regular_expression",
+    )
+    non_federated_identity_provider_xml_metadata: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Identity Provider's XML metadata",
             description=(
                 "SAML metadata of Identity Providers in an XML format. "
@@ -172,8 +198,12 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
                 "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect."
             ),
             type=ConfigurationFormItemType.TEXTAREA,
-        )
-        session_lifetime = ConfigurationFormItem(
+        ),
+        alias="idp_xml_metadata",
+    )
+    session_lifetime: Optional[PositiveInt] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Session Lifetime",
             description=(
                 "This configuration setting determines how long "
@@ -186,8 +216,12 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
                 "Accessing content protected by SAML will still be governed by the IdP and patrons "
                 "will have to reauthenticate each time the IdP's session expires."
             ),
-        )
-        filter_expression = ConfigurationFormItem(
+        ),
+        alias="saml_session_lifetime",
+    )
+    filter_expression: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Filter Expression",
             description=(
                 "Python expression used for filtering out patrons by their SAML attributes."
@@ -211,39 +245,29 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
                 "</pre>"
             ),
             type=ConfigurationFormItemType.TEXTAREA,
-        )
-        service_provider_strict_mode = ConfigurationFormItem(
+        ),
+        alias="saml_filter_expression",
+    )
+    service_provider_strict_mode: conint(ge=0, le=1) = FormField(  # type: ignore[valid-type]
+        0,
+        form=ConfigurationFormItem(
             label="Service Provider's Strict Mode",
             description=(
                 "If strict is 1, then the Python Toolkit will reject unsigned or unencrypted messages "
                 "if it expects them to be signed or encrypted. Also, it will reject the messages "
                 "if the SAML standard is not strictly followed."
             ),
-        )
-        service_provider_debug_mode = ConfigurationFormItem(
+        ),
+        alias="strict",
+    )
+    service_provider_debug_mode: conint(ge=0, le=1) = FormField(  # type: ignore[valid-type]
+        0,
+        form=ConfigurationFormItem(
             label="Service Provider's Debug Mode",
             description="Enable debug mode (outputs errors).",
-        )
-
-    service_provider_xml_metadata: str = Field(..., alias="sp_xml_metadata")
-    service_provider_private_key: str = Field("", alias="sp_private_key")
-    federated_identity_provider_entity_ids: Optional[List[str]] = Field(
-        None, alias="saml_federated_idp_entity_ids"
+        ),
+        alias="debug",
     )
-    patron_id_use_name_id: bool = Field(True, alias="saml_patron_id_use_name_id")
-    patron_id_attributes: Optional[List[str]] = Field(
-        None, alias="saml_patron_id_attributes"
-    )
-    patron_id_regular_expression: Optional[Pattern] = Field(
-        None, alias="saml_patron_id_regular_expression"
-    )
-    non_federated_identity_provider_xml_metadata: Optional[str] = Field(
-        None, alias="idp_xml_metadata"
-    )
-    session_lifetime: Optional[PositiveInt] = Field(None, alias="saml_session_lifetime")
-    filter_expression: Optional[str] = Field(None, alias="saml_filter_expression")
-    service_provider_strict_mode: conint(ge=0, le=1) = Field(0, alias="strict")  # type: ignore[valid-type]
-    service_provider_debug_mode: conint(ge=0, le=1) = Field(0, alias="debug")  # type: ignore[valid-type]
 
     @classmethod
     def logger(cls):

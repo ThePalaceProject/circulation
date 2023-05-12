@@ -8,10 +8,14 @@ import dateutil
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from money import Money
-from pydantic import Field, HttpUrl, validator
+from pydantic import HttpUrl, validator
 
 from core.analytics import Analytics
-from core.integration.settings import ConfigurationFormItem, ConfigurationFormItemType
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.model import Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -38,71 +42,6 @@ class AuthenticationMode(Enum):
 
 
 class MilleniumPatronSettings(BasicAuthenticationProviderSettings):
-    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
-        url = ConfigurationFormItem(
-            label="URL",
-        )
-        verify_certificate = ConfigurationFormItem(
-            label="Certificate Verification",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                "true": "Verify Certificate Normally (Required for production)",
-                "false": "Ignore Certificate Problems (For temporary testing only)",
-            },
-        )
-        block_types = ConfigurationFormItem(
-            label="Block Types",
-            description="Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other "
-            "than '-' indicates a block.",
-        )
-        identifier_blacklist = ConfigurationFormItem(
-            label="Identifier Blacklist",
-            description="Identifiers containing any of these strings are ignored when finding the 'correct' "
-            "identifier for a patron's record, even if it means they end up with no identifier at all. "
-            'If librarians invalidate library cards by adding strings like "EXPIRED" or "INVALID" '
-            "on to the beginning of the card number, put those strings here so the Circulation Manager "
-            "knows they do not represent real card numbers.",
-            type=ConfigurationFormItemType.LIST,
-        )
-        authentication_mode = ConfigurationFormItem(
-            label="Authentication Mode",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                AuthenticationMode.PIN: "PIN",
-                AuthenticationMode.FAMILY_NAME: "Family Name",
-            },
-        )
-        neighborhood_mode = ConfigurationFormItem(
-            label="Patron neighborhood field",
-            description="It's sometimes possible to guess a patron's neighborhood from their ILS record. "
-            "You can use this when analyzing circulation activity by neighborhood. If you don't need to do "
-            "this, it's better for patron privacy to disable this feature.",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                NeighborhoodMode.NO_NEIGHBORHOOD_MODE: "Disable this feature",
-                NeighborhoodMode.HOME_BRANCH_NEIGHBORHOOD_MODE: "Patron's home library branch is their neighborhood.",
-                NeighborhoodMode.POSTAL_CODE_NEIGHBORHOOD_MODE: "Patron's postal code is their neighborhood.",
-            },
-        )
-        field_used_as_patron_identifier = ConfigurationFormItem(
-            label="Field for patron identifier",
-            description="The name of the field used as a patron identifier. Typically, this will be the "
-            "<i>barcode</i> field which has code <tt>pb</tt>. Some systems, however, are configured to "
-            "use a different field (such as the <i>username</i> field, which has code <tt>pu</tt>).",
-            required=True,
-        )
-        use_post_requests = ConfigurationFormItem(
-            label="Use POST for requests",
-            description="Whether to use POST (instead of GET) HTTP requests. If this is a Virtual Library Card "
-            "integration, using POST will improve the security of this integration and is the recommended "
-            "setting. Otherwise, do not use POST, as it is NOT compatible with other Millenium integrations.",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                "true": "True",
-                "false": "False",
-            },
-        )
-
     @validator("neighborhood_mode", pre=True)
     def validate_neighborhood_mode(cls, v):
         # TODO: We should fix this in the admin ui interface.
@@ -114,40 +53,118 @@ class MilleniumPatronSettings(BasicAuthenticationProviderSettings):
         else:
             return v
 
-    url: HttpUrl
-    # A configuration value for whether or not to validate the SSL certificate
+    url: HttpUrl = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="URL",
+        ),
+    )
+    # A configuration value for whether to validate the SSL certificate
     # of the Millenium Patron API server.
-    verify_certificate: bool = True
+    verify_certificate: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
+            label="Certificate Verification",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "Verify Certificate Normally (Required for production)",
+                "false": "Ignore Certificate Problems (For temporary testing only)",
+            },
+        ),
+    )
     # The field to use when seeing which values of MBLOCK[p56] mean a patron
     # is blocked. By default, any value other than '-' indicates a block.
-    block_types: Optional[str] = None
+    block_types: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Block Types",
+            description="Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other "
+            "than '-' indicates a block.",
+        ),
+    )
     # Identifiers that contain any of these strings are ignored when
     # finding the "correct" identifier in a patron's record, even if
     # it means they end up with no identifier at all.
-    identifier_blacklist: List[str] = []
-    # The field to use when validating a patron's credential.
-    authentication_mode: AuthenticationMode = Field(
-        AuthenticationMode.PIN, alias="auth_mode"
+    identifier_blacklist: List[str] = FormField(
+        [],
+        form=ConfigurationFormItem(
+            label="Identifier Blacklist",
+            description="Identifiers containing any of these strings are ignored when finding the 'correct' "
+            "identifier for a patron's record, even if it means they end up with no identifier at all. "
+            'If librarians invalidate library cards by adding strings like "EXPIRED" or "INVALID" '
+            "on to the beginning of the card number, put those strings here so the Circulation Manager "
+            "knows they do not represent real card numbers.",
+            type=ConfigurationFormItemType.LIST,
+        ),
     )
-    neighborhood_mode: NeighborhoodMode = NeighborhoodMode.NO_NEIGHBORHOOD_MODE
+    # The field to use when validating a patron's credential.
+    authentication_mode: AuthenticationMode = FormField(
+        AuthenticationMode.PIN,
+        form=ConfigurationFormItem(
+            label="Authentication Mode",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                AuthenticationMode.PIN: "PIN",
+                AuthenticationMode.FAMILY_NAME: "Family Name",
+            },
+        ),
+        alias="auth_mode",
+    )
+    neighborhood_mode: NeighborhoodMode = FormField(
+        NeighborhoodMode.NO_NEIGHBORHOOD_MODE,
+        form=ConfigurationFormItem(
+            label="Patron neighborhood field",
+            description="It's sometimes possible to guess a patron's neighborhood from their ILS record. "
+            "You can use this when analyzing circulation activity by neighborhood. If you don't need to do "
+            "this, it's better for patron privacy to disable this feature.",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                NeighborhoodMode.NO_NEIGHBORHOOD_MODE: "Disable this feature",
+                NeighborhoodMode.HOME_BRANCH_NEIGHBORHOOD_MODE: "Patron's home library branch is their neighborhood.",
+                NeighborhoodMode.POSTAL_CODE_NEIGHBORHOOD_MODE: "Patron's postal code is their neighborhood.",
+            },
+        ),
+    )
     # The option that defines which field will be used for the patron identifier.
     # Defaults to the barcode field ("pb").
-    field_used_as_patron_identifier: str = "pb"
-    use_post_requests: bool = False
+    field_used_as_patron_identifier: str = FormField(
+        "pb",
+        form=ConfigurationFormItem(
+            label="Field for patron identifier",
+            description="The name of the field used as a patron identifier. Typically, this will be the "
+            "<i>barcode</i> field which has code <tt>pb</tt>. Some systems, however, are configured to "
+            "use a different field (such as the <i>username</i> field, which has code <tt>pu</tt>).",
+            required=True,
+        ),
+    )
+    use_post_requests: bool = FormField(
+        False,
+        form=ConfigurationFormItem(
+            label="Use POST for requests",
+            description="Whether to use POST (instead of GET) HTTP requests. If this is a Virtual Library Card "
+            "integration, using POST will improve the security of this integration and is the recommended "
+            "setting. Otherwise, do not use POST, as it is NOT compatible with other Millenium integrations.",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "True",
+                "false": "False",
+            },
+        ),
+    )
 
 
 class MilleniumPatronLibrarySettings(BasicAuthenticationProviderLibrarySettings):
-    class ConfigurationForm(
-        BasicAuthenticationProviderLibrarySettings.ConfigurationForm
-    ):
-        identifier_restriction_field = ConfigurationFormItem(
+    library_identifier_field: str = FormField(
+        "barcode",
+        form=ConfigurationFormItem(
             label="Library Identifier Field",
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to. The option 'barcode' matches the users barcode, other "
             "values are pulled directly from the patron record for example: 'P TYPE[p47]'. "
             "This value is not used if <em>Library Identifier Restriction Type</em> "
             "is set to 'No restriction'.",
-        )
+        ),
+    )
 
 
 class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):

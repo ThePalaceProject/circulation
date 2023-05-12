@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Type, TypeVar
 
 from werkzeug.datastructures import ImmutableMultiDict
 
 from core.integration.settings import (
     BaseSettings,
-    ConfigurationFormItem,
     ConfigurationFormItemType,
+    FormFieldInfo,
 )
 
 T = TypeVar("T", bound=BaseSettings)
@@ -47,12 +47,9 @@ class ProcessFormData:
         """
         return_data: Dict[str, Any] = {}
         for field in settings_class.__fields__.values():
-            form_item: Optional[ConfigurationFormItem] = getattr(
-                settings_class.ConfigurationForm, field.name, None
-            )
-            if form_item is None:
+            if not isinstance(field.field_info, FormFieldInfo):
                 continue
-
+            form_item = field.field_info.form
             if form_item.type == ConfigurationFormItemType.LIST:
                 return_data[field.name] = cls._process_list(field.name, form_data)
             elif form_item.type == ConfigurationFormItemType.MENU:

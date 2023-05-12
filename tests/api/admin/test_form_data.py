@@ -7,26 +7,31 @@ from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
+    FormField,
 )
 
 
 class MockSettings(BaseSettings):
-    class ConfigurationForm(BaseSettings.ConfigurationForm):
-        field1 = ConfigurationFormItem(
+    field1: List[str] = FormField(
+        [],
+        form=ConfigurationFormItem(
             label="Field 1",
             type=ConfigurationFormItemType.LIST,
-        )
-        field2 = ConfigurationFormItem(
+        ),
+    )
+    field2: List[str] = FormField(
+        [],
+        form=ConfigurationFormItem(
             label="Field 2",
             type=ConfigurationFormItemType.MENU,
-        )
-        field3 = ConfigurationFormItem(
+        ),
+    )
+    field3: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Field 3",
-        )
-
-    field1: List[str] = []
-    field2: List[str] = []
-    field3: Optional[str] = None
+        ),
+    )
 
 
 def test_get_settings():

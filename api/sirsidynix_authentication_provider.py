@@ -5,7 +5,7 @@ from gettext import gettext as _
 from typing import TYPE_CHECKING, List, Literal, Optional, Union
 from urllib.parse import urljoin
 
-from pydantic import Field
+from pydantic import HttpUrl
 
 from api.authenticator import (
     BasicAuthenticationProvider,
@@ -15,7 +15,11 @@ from api.authenticator import (
 )
 from core.analytics import Analytics
 from core.config import Configuration
-from core.integration.settings import ConfigurationFormItem, ConfigurationFormItemType
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.util.http import HTTP
 
 if TYPE_CHECKING:
@@ -31,31 +35,37 @@ class SirsiBlockReasons:
 
 
 class SirsiDynixHorizonAuthenticationSettings(BasicAuthenticationProviderSettings):
-    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
-        url = ConfigurationFormItem(
+    url: HttpUrl = FormField(
+        ...,
+        form=ConfigurationFormItem(
             label="Server URL",
             description="The external server url.",
-        )
-        client_id = ConfigurationFormItem(
+        ),
+    )
+    client_id: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
             label="Client ID",
             description="The client ID that should be used to identify this CM.",
-        )
-
-    url: str
-    client_id: str = Field(..., alias="CLIENT_ID")
+        ),
+        alias="CLIENT_ID",
+    )
 
 
 class SirsiDynixHorizonAuthenticationLibrarySettings(
     BasicAuthenticationProviderLibrarySettings
 ):
-    class ConfigurationForm(
-        BasicAuthenticationProviderLibrarySettings.ConfigurationForm
-    ):
-        library_id: ConfigurationFormItem = ConfigurationFormItem(
+    library_id: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
             label="Library ID",
             description="This is used to identify a unique library on the API. This must match what the API expects.",
-        )
-        library_disallowed_suffixes = ConfigurationFormItem(
+        ),
+        alias="LIBRARY_ID",
+    )
+    library_disallowed_suffixes: List[str] = FormField(
+        [],
+        form=ConfigurationFormItem(
             label="Disallowed Patron Suffixes",
             description=(
                 "Any patron type ending in this suffix will remain unauthenticated. "
@@ -63,8 +73,12 @@ class SirsiDynixHorizonAuthenticationLibrarySettings(
                 "If 'ls' is a disallowed suffix then the patron will not be authenticated."
             ),
             type=ConfigurationFormItemType.LIST,
-        )
-        library_identifier_field = ConfigurationFormItem(
+        ),
+        alias="LIBRARY_DISALLOWED_SUFFIXES",
+    )
+    library_identifier_field = FormField(
+        "patrontype",
+        form=ConfigurationFormItem(
             label="Library Identifier Field",
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to, different patron authentication methods provide different "
@@ -74,13 +88,8 @@ class SirsiDynixHorizonAuthenticationLibrarySettings(
                 "barcode": "Barcode",
                 "patrontype": "Patron Type",
             },
-        )
-
-    library_id: str = Field(..., alias="LIBRARY_ID")
-    library_disallowed_suffixes: List[str] = Field(
-        [], alias="LIBRARY_DISALLOWED_SUFFIXES"
+        ),
     )
-    library_identifier_field = "patrontype"
 
 
 class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
@@ -122,7 +131,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         super().__init__(
             library_id, integration_id, settings, library_settings, analytics
         )
-        self.server_url = settings.url
+        self.server_url = str(settings.url)
         # trailing slash, else urljoin has issues
         self.server_url = self.server_url + (
             "/" if not self.server_url.endswith("/") else ""

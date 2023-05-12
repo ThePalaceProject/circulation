@@ -4,7 +4,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import HttpUrl
 
-from core.integration.settings import ConfigurationFormItem
+from core.integration.settings import ConfigurationFormItem, FormField
 from core.model import Patron
 from core.util.http import HTTP
 
@@ -17,14 +17,13 @@ from .authenticator import (
 
 
 class KansasAuthenticationSettings(BasicAuthenticationProviderSettings):
-    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
-        url = ConfigurationFormItem(
+    url: HttpUrl = FormField(
+        "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails",
+        form=ConfigurationFormItem(
             label=_("URL"),
             required=True,
-        )
-
-    # Reason for ignore: https://github.com/pydantic/pydantic/issues/1684
-    url: HttpUrl = "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails"  # type: ignore[assignment]
+        ),
+    )
 
 
 class KansasAuthenticationAPI(BasicAuthenticationProvider):

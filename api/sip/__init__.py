@@ -13,7 +13,11 @@ from api.authenticator import (
 from api.sip.client import Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
 from core.analytics import Analytics
-from core.integration.settings import ConfigurationFormItem, ConfigurationFormItemType
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.model import Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
@@ -22,22 +26,48 @@ from core.util.http import RemoteIntegrationException
 class SIP2Settings(BasicAuthenticationProviderSettings):
     """Settings for SIP2 authentication providers."""
 
-    class ConfigurationForm(BasicAuthenticationProviderSettings.ConfigurationForm):
-        url = ConfigurationFormItem(label="Server")
-        port = ConfigurationFormItem(
+    # Hostname of the SIP server
+    url: str = FormField(..., form=ConfigurationFormItem(label="Server"))
+    # The port number to connect to on the SIP server.
+    port: PositiveInt = FormField(
+        6001,
+        form=ConfigurationFormItem(
             label="Port",
             required=True,
-        )
-        username = ConfigurationFormItem(
+        ),
+    )
+    # SIP field CN; the user ID to use when initiating a SIP session, if necessary.
+    # This is _not_ a patron identifier (SIP field AA); it identifies the SC
+    # creating the SIP session. SIP2 defines SC as "...any library automation
+    # device dealing with patrons or library materials."
+    username: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Login User ID",
-        )
-        password = ConfigurationFormItem(
+        ),
+    )
+    # Sip field CO; the password to use when initiating a SIP session, if necessary.
+    password: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Login Password",
-        )
-        location_code = ConfigurationFormItem(
+        ),
+    )
+    # SIP field CP; the location code to use when initiating a SIP session. A
+    # location code supposedly refers to the physical location of a self-checkout
+    # machine within a library system. Some libraries require a special location
+    # code to be provided when authenticating patrons; others may require the
+    # circulation manager to be treated as its own special 'location'.
+    location_code: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Location Code",
-        )
-        encoding = ConfigurationFormItem(
+        ),
+        alias="location code",
+    )
+    encoding: Sip2Encoding = FormField(
+        Sip2Encoding.cp850,
+        form=ConfigurationFormItem(
             label="Data Encoding",
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -49,8 +79,11 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 "850 encoding, but some ILSes allow some other encoding to be used, "
                 "usually UTF-8."
             ),
-        )
-        use_ssl = ConfigurationFormItem(
+        ),
+    )
+    use_ssl: bool = FormField(
+        False,
+        form=ConfigurationFormItem(
             label="Connect over SSL?",
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -58,8 +91,11 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 "false": "Connect to the SIP2 server over an ordinary socket connection",
             },
             required=True,
-        )
-        ssl_verification = ConfigurationFormItem(
+        ),
+    )
+    ssl_verification: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
             label="Perform SSL certificate verification.",
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -70,8 +106,11 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 "Strict certificate verification may be optionally turned off for "
                 "hosts that have misconfigured or untrusted certificates."
             ),
-        )
-        ils = ConfigurationFormItem(
+        ),
+    )
+    ils: Sip2Dialect = FormField(
+        Sip2Dialect.GENERIC_ILS,
+        form=ConfigurationFormItem(
             label="ILS",
             description=(
                 "Some ILS require specific SIP2 settings. If the ILS you are using "
@@ -83,8 +122,11 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 Sip2Dialect.AG_VERSO: "Auto-Graphics VERSO",
             },
             required=True,
-        )
-        ssl_certificate = ConfigurationFormItem(
+        ),
+    )
+    ssl_certificate: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="SSL Certificate",
             description=(
                 "The SSL certificate used to securely connect to an SSL-enabled SIP2 "
@@ -94,8 +136,11 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 "<code>-----END CERTIFICATE-----</code>"
             ),
             type=ConfigurationFormItemType.TEXTAREA,
-        )
-        ssl_key = ConfigurationFormItem(
+        ),
+    )
+    ssl_key: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="SSL Key",
             description=(
                 "The private key, if any, used to sign the SSL certificate above. "
@@ -104,12 +149,21 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 "<code>-----END PRIVATE KEY-----</code>"
             ),
             type=ConfigurationFormItemType.TEXTAREA,
-        )
-        field_seperator = ConfigurationFormItem(
+        ),
+    )
+    # The field delimiter (see "Variable-length fields" in the SIP2 spec). If no
+    # value is specified, the default (the pipe character) will be used.
+    field_separator: str = FormField(
+        "|",
+        form=ConfigurationFormItem(
             label="Field Seperator",
             required=True,
-        )
-        patron_status_block = ConfigurationFormItem(
+        ),
+        alias="field seperator",
+    )
+    patron_status_block: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
             label="SIP2 Patron Status Block",
             description=(
                 "Block patrons from borrowing based on the status of the SIP2 <em>patron status</em> field."
@@ -119,48 +173,20 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
                 "true": "Block based on patron status field",
                 "false": "No blocks based on patron status field",
             },
-        )
-
-    # Hostname of the SIP server
-    url: str
-    # The port number to connect to on the SIP server.
-    port: PositiveInt = 6001
-    # SIP field CN; the user ID to use when initiating a SIP session, if necessary.
-    # This is _not_ a patron identifier (SIP field AA); it identifies the SC
-    # creating the SIP session. SIP2 defines SC as "...any library automation
-    # device dealing with patrons or library materials."
-    username: Optional[str] = None
-    # Sip field CO; the password to use when initiating a SIP session, if necessary.
-    password: Optional[str] = None
-    # SIP field CP; the location code to use when initiating a SIP session. A
-    # location code supposedly refers to the physical location of a self-checkout
-    # machine within a library system. Some libraries require a special location
-    # code to be provided when authenticating patrons; others may require the
-    # circulation manager to be treated as its own special 'location'.
-    location_code: Optional[str] = Field(None, alias="location code")
-    encoding: Sip2Encoding = Sip2Encoding.cp850
-    use_ssl: bool = False
-    ssl_verification: bool = True
-    ils: Sip2Dialect = Sip2Dialect.GENERIC_ILS
-    ssl_certificate: Optional[str] = None
-    ssl_key: Optional[str] = None
-    # The field delimiter (see "Variable-length fields" in the SIP2 spec). If no
-    # value is specified, the default (the pipe character) will be used.
-    field_separator: str = Field("|", alias="field seperator")
-    patron_status_block: bool = Field(True, alias="patron status block")
+        ),
+        alias="patron status block",
+    )
 
 
 class SIP2LibrarySettings(BasicAuthenticationProviderLibrarySettings):
-    class ConfigurationForm(
-        BasicAuthenticationProviderLibrarySettings.ConfigurationForm
-    ):
-        institution_id: ConfigurationFormItem = ConfigurationFormItem(
+    # Used as the SIP2 AO field.
+    institution_id: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
             label="Institution ID",
             description="A specific identifier for the library or branch, if used in patron authentication",
-        )
-
-    # Used as the SIP2 AO field.
-    institution_id: Optional[str] = None
+        ),
+    )
 
 
 class SIP2AuthenticationProvider(BasicAuthenticationProvider):
