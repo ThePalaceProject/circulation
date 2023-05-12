@@ -76,7 +76,7 @@ from .admin.problem_details import (
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
 )
 from .config import CannotLoadConfiguration, Configuration, IntegrationException
-from .integration.registry.patron_auth import patron_auth_registry
+from .integration.registry.patron_auth import PatronAuthRegistry
 from .problem_details import *
 from .util.patron import PatronUtility
 
@@ -719,7 +719,7 @@ class LibraryAuthenticator:
         self.library_short_name = library.short_name
         self.authentication_document_annotator = authentication_document_annotator
         self.integration_registry = (
-            patron_auth_registry
+            PatronAuthRegistry()
             if integration_registry is None
             else integration_registry
         )

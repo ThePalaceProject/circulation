@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.admin.problem_details import *
 from api.authenticator import AuthenticationProvider
-from api.integration.registry.patron_auth import patron_auth_registry
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model import get_one, json_serializer
@@ -26,7 +26,7 @@ class PatronAuthServiceSelfTestsController:
         registry: Optional[IntegrationRegistry[AuthenticationProvider]] = None,
     ):
         self.db = db
-        self.registry = registry if registry else patron_auth_registry
+        self.registry = registry if registry else PatronAuthRegistry()
 
     def process_patron_auth_service_self_tests(
         self, identifier: Optional[int]

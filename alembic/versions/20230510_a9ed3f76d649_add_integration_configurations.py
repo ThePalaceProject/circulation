@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
-from api.integration.registry.patron_auth import patron_auth_registry
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -115,6 +115,7 @@ def upgrade() -> None:
         "where ei.goal = 'patron_auth'"
     )
 
+    patron_auth_registry = PatronAuthRegistry()
     for integration in integrations:
         protocol_class = patron_auth_registry[integration.protocol]
         settings = connection.execute(

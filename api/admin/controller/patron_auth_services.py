@@ -12,7 +12,7 @@ from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
 from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
 from api.controller import CirculationManager
-from api.integration.registry.patron_auth import patron_auth_registry
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings
@@ -39,7 +39,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
     ):
         super().__init__(manager)
 
-        self.registry = auth_registry if auth_registry else patron_auth_registry
+        self.registry = auth_registry if auth_registry else PatronAuthRegistry()
         self.type = _("patron authentication service")
         self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
         self._apis = None

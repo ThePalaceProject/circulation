@@ -37,7 +37,7 @@ from api.authenticator import (
 )
 from api.config import CannotLoadConfiguration, Configuration
 from api.custom_patron_catalog import CustomPatronCatalog
-from api.integration.registry.patron_auth import patron_auth_registry
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
 from api.opds import LibraryAnnotator
 from api.problem_details import *
@@ -756,6 +756,7 @@ class TestLibraryAuthenticator:
         self,
         db: DatabaseTransactionFixture,
         create_auth_integration_configuration: Callable[..., AuthProviderFixture],
+        patron_auth_registry: PatronAuthRegistry,
     ):
         library = db.default_library()
         protocol = patron_auth_registry.get_protocol(SIP2AuthenticationProvider)

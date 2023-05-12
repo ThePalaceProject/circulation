@@ -3,7 +3,7 @@ from typing import Callable, Optional, Tuple, Type
 import pytest
 
 from api.authenticator import AuthenticationProvider
-from api.integration.registry.patron_auth import patron_auth_registry
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
@@ -52,8 +52,15 @@ def create_auth_integration_configuration(
     return create_integration
 
 
+@pytest.fixture()
+def patron_auth_registry() -> PatronAuthRegistry:
+    return PatronAuthRegistry()
+
+
 @pytest.fixture
-def get_auth_protocol() -> Callable[[Type[AuthenticationProvider]], Optional[str]]:
+def get_auth_protocol(
+    patron_auth_registry: PatronAuthRegistry,
+) -> Callable[[Type[AuthenticationProvider]], Optional[str]]:
     return lambda x: patron_auth_registry.get_protocol(x)
 
 

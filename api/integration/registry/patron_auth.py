@@ -6,10 +6,10 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 
 if TYPE_CHECKING:
-    from api.authenticator import AuthenticationProvider
+    from api.authenticator import AuthenticationProvider  # noqa: autoflake
 
 
-class PatronAuthRegistry(IntegrationRegistry[AuthenticationProvider]):
+class PatronAuthRegistry(IntegrationRegistry["AuthenticationProvider"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
 
@@ -35,6 +35,3 @@ class PatronAuthRegistry(IntegrationRegistry[AuthenticationProvider]):
             SirsiDynixHorizonAuthenticationProvider,
             canonical="api.sirsidynix_authentication_provider",
         )
-
-
-patron_auth_registry: IntegrationRegistry[AuthenticationProvider] = PatronAuthRegistry()

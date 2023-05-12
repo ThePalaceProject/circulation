@@ -14,7 +14,7 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.app import app
 from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
-from api.integration.registry.patron_auth import patron_auth_registry
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.util.flask import PalaceFlask
@@ -89,6 +89,7 @@ class ControllerFixture:
         self.vendor_ids = vendor_id_fixture
         self.db = db
         self.app = app
+        self.patron_auth_registry = PatronAuthRegistry()
 
         # PRESERVE_CONTEXT_ON_EXCEPTION needs to be off in tests
         # to prevent one test failure from breaking later tests as well.
@@ -202,7 +203,9 @@ class ControllerFixture:
             _db, library, Goals.PATRON_AUTH_GOAL
         ).all()
         if len(auth_integrations) == 0:
-            protocol = patron_auth_registry.get_protocol(SimpleAuthenticationProvider)
+            protocol = self.patron_auth_registry.get_protocol(
+                SimpleAuthenticationProvider
+            )
             settings = SimpleAuthenticationProvider.settings_class()(
                 test_identifier="unittestuser",
                 test_password="unittestpassword",
