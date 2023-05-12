@@ -110,6 +110,7 @@ def upgrade() -> None:
     connection = op.get_bind()
     integrations = connection.execute(
         "select ei.id, ei.protocol, ei.name from externalintegrations ei "
+        "join externalintegrations_libraries eil on ei.id = eil.externalintegration_id "
         "where ei.goal = 'patron_auth'"
     )
 
@@ -152,6 +153,12 @@ def upgrade() -> None:
         ).fetchone()
 
         for library_id, library_settings_dict in library_settings.items():
+            library_association = connection.execute(
+                "select * from externalintegrations_libraries where externalintegration_id = %s and library_id = %s",
+                (integration.id, library_id),
+            ).first()
+            if not library_association:
+                continue
             library_settings_class = protocol_class.library_settings_class()
             library_settings_obj = _validate_and_load_settings(
                 library_settings_class, library_settings_dict
