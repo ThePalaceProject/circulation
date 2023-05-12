@@ -110,7 +110,6 @@ def upgrade() -> None:
     connection = op.get_bind()
     integrations = connection.execute(
         "select ei.id, ei.protocol, ei.name from externalintegrations ei "
-        "join externalintegrations_libraries eil on ei.id = eil.externalintegration_id "
         "where ei.goal = 'patron_auth'"
     )
 
