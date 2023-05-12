@@ -26,7 +26,7 @@ class PatronAuthServiceSelfTestsController:
         registry: Optional[IntegrationRegistry[AuthenticationProvider]] = None,
     ):
         self.db = db
-        self.registry = registry if registry else patron_auth_registry()
+        self.registry = registry if registry else patron_auth_registry
 
     def process_patron_auth_service_self_tests(
         self, identifier: Optional[int]

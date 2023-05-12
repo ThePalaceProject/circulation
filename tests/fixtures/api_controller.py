@@ -202,7 +202,7 @@ class ControllerFixture:
             _db, library, Goals.PATRON_AUTH_GOAL
         ).all()
         if len(auth_integrations) == 0:
-            protocol = patron_auth_registry().get_protocol(SimpleAuthenticationProvider)
+            protocol = patron_auth_registry.get_protocol(SimpleAuthenticationProvider)
             settings = SimpleAuthenticationProvider.settings_class()(
                 test_identifier="unittestuser",
                 test_password="unittestpassword",

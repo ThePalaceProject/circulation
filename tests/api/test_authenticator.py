@@ -758,7 +758,7 @@ class TestLibraryAuthenticator:
         create_auth_integration_configuration: Callable[..., AuthProviderFixture],
     ):
         library = db.default_library()
-        protocol = patron_auth_registry().get_protocol(SIP2AuthenticationProvider)
+        protocol = patron_auth_registry.get_protocol(SIP2AuthenticationProvider)
         _, integration = create_auth_integration_configuration(
             protocol,
             library,

@@ -719,7 +719,7 @@ class LibraryAuthenticator:
         self.library_short_name = library.short_name
         self.authentication_document_annotator = authentication_document_annotator
         self.integration_registry = (
-            patron_auth_registry()
+            patron_auth_registry
             if integration_registry is None
             else integration_registry
         )

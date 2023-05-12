@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import (
-    Callable,
     Dict,
     Generic,
     Iterator,
@@ -140,17 +139,3 @@ class IntegrationRegistry(Generic[T]):
 
     def __repr__(self) -> str:
         return f"<IntegrationRegistry: {self._lookup}>"
-
-
-class SingletonIntegrationRegistry(Generic[T]):
-    def __init__(self, creation_callback: Callable[[], IntegrationRegistry[T]]):
-        self._creation_callback = creation_callback
-        self._instance: Optional[IntegrationRegistry[T]] = None
-
-    def __call__(self) -> IntegrationRegistry[T]:
-        if self._instance is None:
-            self._instance = self._creation_callback()
-        return self._instance
-
-    def reset(self) -> None:
-        self._instance = None

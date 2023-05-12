@@ -116,7 +116,7 @@ def upgrade() -> None:
     )
 
     for integration in integrations:
-        protocol_class = patron_auth_registry()[integration.protocol]
+        protocol_class = patron_auth_registry[integration.protocol]
         settings = connection.execute(
             "select cs.library_id, cs.key, cs.value from configurationsettings cs "
             "where cs.external_integration_id = (%s)",

@@ -54,7 +54,7 @@ def create_auth_integration_configuration(
 
 @pytest.fixture
 def get_auth_protocol() -> Callable[[Type[AuthenticationProvider]], Optional[str]]:
-    return lambda x: patron_auth_registry().get_protocol(x)
+    return lambda x: patron_auth_registry.get_protocol(x)
 
 
 @pytest.fixture

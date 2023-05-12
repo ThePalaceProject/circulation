@@ -39,7 +39,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
     ):
         super().__init__(manager)
 
-        self.registry = auth_registry if auth_registry else patron_auth_registry()
+        self.registry = auth_registry if auth_registry else patron_auth_registry
         self.type = _("patron authentication service")
         self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
         self._apis = None

@@ -3,11 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.integration.goals import Goals
-from core.integration.registry import (
-    IntegrationRegistry,
-    IntegrationRegistryException,
-    SingletonIntegrationRegistry,
-)
+from core.integration.registry import IntegrationRegistry, IntegrationRegistryException
 
 
 @pytest.fixture
@@ -113,24 +109,3 @@ def test_registry_get_protocol_returns_default_if_integration_not_registered(
 
     # default is not none
     assert registry.get_protocol(object, "default") == "default"
-
-
-def test_singleton_registry():
-    """Test that the registry is a singleton."""
-    mock_creation_callback = MagicMock()
-    mock_creation_callback.return_value = "test"
-
-    singleton = SingletonIntegrationRegistry(mock_creation_callback)
-    assert singleton._creation_callback == mock_creation_callback
-    assert singleton._instance is None
-    assert mock_creation_callback.call_count == 0
-
-    # first call creates the instance
-    assert singleton() == "test"
-    assert singleton._instance == "test"
-    assert mock_creation_callback.call_count == 1
-
-    # second call returns the instance, and doesn't call the callback again
-    assert singleton() == "test"
-    assert singleton._instance == "test"
-    assert mock_creation_callback.call_count == 1
