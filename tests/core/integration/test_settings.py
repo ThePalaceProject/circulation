@@ -179,11 +179,11 @@ def test_settings_configuration_form_weights(
     mock_settings, test_config_dict, number_config_dict, mock_db
 ):
     # Make sure that the configuration form is sorted by weight
-    mock_settings.ConfigurationForm.test = dataclasses.replace(
-        mock_settings.ConfigurationForm.test, weight=100
+    mock_settings.__fields__["test"].field_info.form = dataclasses.replace(
+        mock_settings.__fields__["test"].field_info.form, weight=100
     )
-    mock_settings.ConfigurationForm.number = dataclasses.replace(
-        mock_settings.ConfigurationForm.number, weight=1
+    mock_settings.__fields__["number"].field_info.form = dataclasses.replace(
+        mock_settings.__fields__["number"].field_info.form, weight=1
     )
     form = mock_settings.configuration_form(mock_db)
     assert form == [number_config_dict, test_config_dict]
@@ -197,8 +197,8 @@ def test_settings_configuration_form_logs_missing(mock_settings, mock_db, caplog
 
 
 def test_settings_configuration_form_options(mock_settings, mock_db):
-    mock_settings.ConfigurationForm.test = dataclasses.replace(
-        mock_settings.ConfigurationForm.test,
+    mock_settings.__fields__["test"].field_info.form = dataclasses.replace(
+        mock_settings.__fields__["test"].field_info.form,
         options={"option1": "Option 1", "option2": "Option 2"},
         type=ConfigurationFormItemType.SELECT,
     )
@@ -217,8 +217,8 @@ def test_settings_configuration_form_options_callable(mock_settings, mock_db):
         called_with = db
         return {"xyz": "ABC"}
 
-    mock_settings.ConfigurationForm.test = dataclasses.replace(
-        mock_settings.ConfigurationForm.test,
+    mock_settings.__fields__["test"].field_info.form = dataclasses.replace(
+        mock_settings.__fields__["test"].field_info.form,
         options=options_callable,
         type=ConfigurationFormItemType.SELECT,
     )
