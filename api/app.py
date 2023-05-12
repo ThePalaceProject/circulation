@@ -11,6 +11,7 @@ from core.flask_sqlalchemy_session import flask_scoped_session
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.log import LogConfiguration
 from core.model import ConfigurationSetting, SessionManager
+from core.model.configuration import access_exclusive_lock_configurationsettings
 from core.util import LanguageCodes
 from core.util.cache import CachedData
 
@@ -76,14 +77,15 @@ def initialize_admin(_db=None):
     if getattr(app, "manager", None) is not None:
         setup_admin_controllers(app.manager)
     _db = _db or app._db
-    _db.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
-    # The secret key is used for signing cookies for admin login
-    app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
-    # Create a default Local Analytics service if one does not
-    # already exist.
 
-    local_analytics = LocalAnalyticsProvider.initialize(_db)
-    _db.commit()
+    with access_exclusive_lock_configurationsettings(_db) as db_session:
+        # The secret key is used for signing cookies for admin login
+        app.secret_key = ConfigurationSetting.sitewide_secret(
+            db_session, Configuration.SECRET_KEY
+        )
+        # Create a default Local Analytics service if one does not
+        # already exist.
+        local_analytics = LocalAnalyticsProvider.initialize(db_session)
 
 
 def initialize_circulation_manager():
