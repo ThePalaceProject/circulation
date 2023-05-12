@@ -346,7 +346,7 @@ class SIPClient(Constants):
             # We're implicitly logged in.
             self.must_log_in = False
         self.login_password = login_password
-        self.dialect = dialect
+        self.dialect_config = dialect.config
 
     def login(self):
         """Log in to the SIP server if required."""
@@ -373,7 +373,7 @@ class SIPClient(Constants):
 
     def end_session(self, *args, **kwargs):
         """Send end session message."""
-        if self.dialect.value.sendEndSession:
+        if self.dialect_config.sendEndSession:
             return self.make_request(
                 self.end_session_message,
                 self.end_session_response_parser,

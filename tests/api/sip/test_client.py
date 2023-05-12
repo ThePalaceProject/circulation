@@ -726,6 +726,6 @@ class TestClientDialects:
         sip = sip_client_factory(dialect=dialect)
         sip.queue_response("36Y201610210000142637AO3|AA25891000331441|AF|AG")
         sip.end_session("username", "password")
-        assert sip.dialect == dialect
+        assert sip.dialect_config == dialect.config
         assert sip.read_count == expected_read_count
         assert sip.write_count == expected_write_count
