@@ -4,8 +4,8 @@ from typing import Callable, List
 import pytest
 from lxml import etree
 
-from api.authenticator import BasicAuthenticationProviderLibrarySettings, PatronData
-from api.kansas_patron import KansasAuthenticationAPI, KansasAuthenticationSettings
+from api.authenticator import BasicAuthProviderLibrarySettings, PatronData
+from api.kansas_patron import KansasAuthenticationAPI, KansasAuthSettings
 
 from ..fixtures.api_kansas_files import KansasPatronFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -59,9 +59,9 @@ def mock_integration_id() -> int:
 
 
 @pytest.fixture
-def create_settings() -> Callable[..., KansasAuthenticationSettings]:
+def create_settings() -> Callable[..., KansasAuthSettings]:
     return partial(
-        KansasAuthenticationSettings,
+        KansasAuthSettings,
         url="http://url.com/",
         test_identifier="barcode",
     )
@@ -71,7 +71,7 @@ def create_settings() -> Callable[..., KansasAuthenticationSettings]:
 def create_provider(
     mock_library_id: int,
     mock_integration_id: int,
-    create_settings: Callable[..., KansasAuthenticationSettings],
+    create_settings: Callable[..., KansasAuthSettings],
     api_kansas_files_fixture: KansasPatronFilesFixture,
 ) -> Callable[..., MockAPI]:
     return partial(
@@ -79,7 +79,7 @@ def create_provider(
         library_id=mock_library_id,
         integration_id=mock_integration_id,
         settings=create_settings(),
-        library_settings=BasicAuthenticationProviderLibrarySettings(),
+        library_settings=BasicAuthProviderLibrarySettings(),
         files=api_kansas_files_fixture,
     )
 

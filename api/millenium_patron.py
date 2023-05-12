@@ -24,8 +24,8 @@ from core.util.xmlparser import XMLParser
 
 from .authenticator import (
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronData,
 )
 
@@ -41,7 +41,7 @@ class AuthenticationMode(Enum):
     FAMILY_NAME = "family_name"
 
 
-class MilleniumPatronSettings(BasicAuthenticationProviderSettings):
+class MilleniumPatronSettings(BasicAuthProviderSettings):
     @validator("neighborhood_mode", pre=True)
     def validate_neighborhood_mode(cls, v):
         # TODO: We should fix this in the admin ui interface.
@@ -153,7 +153,7 @@ class MilleniumPatronSettings(BasicAuthenticationProviderSettings):
     )
 
 
-class MilleniumPatronLibrarySettings(BasicAuthenticationProviderLibrarySettings):
+class MilleniumPatronLibrarySettings(BasicAuthProviderLibrarySettings):
     library_identifier_field: str = FormField(
         "barcode",
         form=ConfigurationFormItem(

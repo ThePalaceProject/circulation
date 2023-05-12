@@ -15,7 +15,7 @@ from api.saml.auth import (
 )
 from api.saml.configuration.model import (
     SAMLOneLoginConfiguration,
-    SAMLWebSSOAuthenticationSettings,
+    SAMLWebSSOAuthSettings,
 )
 from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.model import (
@@ -366,7 +366,7 @@ class TestSAMLAuthenticationManagerFactory:
     def test_create(self):
         # Arrange
         factory = SAMLAuthenticationManagerFactory()
-        configuration = create_autospec(spec=SAMLWebSSOAuthenticationSettings)
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
 
         # Act
         result = factory.create(configuration)

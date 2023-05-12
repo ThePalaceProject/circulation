@@ -6,11 +6,7 @@ from typing import Callable, cast
 
 import pytest
 
-from api.authenticator import (
-    BasicAuthenticationProviderLibrarySettings,
-    Keyboards,
-    PatronData,
-)
+from api.authenticator import BasicAuthProviderLibrarySettings, Keyboards, PatronData
 from api.sip import SIP2AuthenticationProvider, SIP2LibrarySettings, SIP2Settings
 from api.sip.client import Constants, Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect
@@ -161,9 +157,7 @@ class TestSIP2AuthenticationProvider:
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_settings: Callable[..., SIP2Settings],
-        create_library_settings: Callable[
-            ..., BasicAuthenticationProviderLibrarySettings
-        ],
+        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
     ) -> None:
         settings = create_settings(
             url="server.com",
@@ -204,9 +198,7 @@ class TestSIP2AuthenticationProvider:
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_settings: Callable[..., SIP2Settings],
-        create_library_settings: Callable[
-            ..., BasicAuthenticationProviderLibrarySettings
-        ],
+        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
     ) -> None:
         provider = create_provider()
 

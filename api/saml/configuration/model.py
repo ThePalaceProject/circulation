@@ -10,6 +10,7 @@ from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, conint, validator
 from sqlalchemy.orm import Session
 
+from api.authenticator import AuthProviderLibrarySettings, AuthProviderSettings
 from api.saml.configuration.problem_details import (
     SAML_GENERIC_PARSING_ERROR,
     SAML_INCORRECT_FILTRATION_EXPRESSION,
@@ -31,7 +32,6 @@ from api.saml.metadata.model import (
 from api.saml.metadata.parser import SAMLMetadataParser, SAMLMetadataParsingError
 from core.exceptions import BaseError
 from core.integration.settings import (
-    BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
@@ -92,7 +92,7 @@ class FederatedIdentityProviderOptions:
         return {entity_id: label for entity_id, label in identity_providers}
 
 
-class SAMLWebSSOAuthenticationSettings(BaseSettings):
+class SAMLWebSSOAuthSettings(AuthProviderSettings):
     """SAML Web SSO Authentication settings"""
 
     service_provider_xml_metadata: str = FormField(
@@ -354,6 +354,10 @@ class SAMLWebSSOAuthenticationSettings(BaseSettings):
         return v
 
 
+class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
+    ...
+
+
 class SAMLOneLoginConfiguration:
     """Converts metadata objects to the OneLogin's SAML Toolkit format"""
 
@@ -379,7 +383,7 @@ class SAMLOneLoginConfiguration:
     SECURITY = "security"
     AUTHN_REQUESTS_SIGNED = "authnRequestsSigned"
 
-    def __init__(self, configuration: SAMLWebSSOAuthenticationSettings):
+    def __init__(self, configuration: SAMLWebSSOAuthSettings):
         """Initializes a new instance of SAMLOneLoginConfiguration class
 
         :param configuration: Configuration object containing SAML metadata
@@ -584,7 +588,7 @@ class SAMLOneLoginConfiguration:
         return onelogin_service_provider
 
     @property
-    def configuration(self) -> SAMLWebSSOAuthenticationSettings:
+    def configuration(self) -> SAMLWebSSOAuthSettings:
         """Returns original configuration
 
         :return: Original configuration

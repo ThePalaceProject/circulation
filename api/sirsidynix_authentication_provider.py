@@ -9,8 +9,8 @@ from pydantic import HttpUrl
 
 from api.authenticator import (
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronData,
 )
 from core.analytics import Analytics
@@ -34,7 +34,7 @@ class SirsiBlockReasons:
     PATRON_BLOCKED = _("Patron has been blocked.")
 
 
-class SirsiDynixHorizonAuthenticationSettings(BasicAuthenticationProviderSettings):
+class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
     url: HttpUrl = FormField(
         ...,
         form=ConfigurationFormItem(
@@ -52,9 +52,7 @@ class SirsiDynixHorizonAuthenticationSettings(BasicAuthenticationProviderSetting
     )
 
 
-class SirsiDynixHorizonAuthenticationLibrarySettings(
-    BasicAuthenticationProviderLibrarySettings
-):
+class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
     library_id: str = FormField(
         ...,
         form=ConfigurationFormItem(
@@ -111,21 +109,21 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
         return "SirsiDynix Horizon Webservice Authentication"
 
     @classmethod
-    def settings_class(cls) -> type[SirsiDynixHorizonAuthenticationSettings]:
-        return SirsiDynixHorizonAuthenticationSettings
+    def settings_class(cls) -> type[SirsiDynixHorizonAuthSettings]:
+        return SirsiDynixHorizonAuthSettings
 
     @classmethod
     def library_settings_class(
         cls,
-    ) -> type[SirsiDynixHorizonAuthenticationLibrarySettings]:
-        return SirsiDynixHorizonAuthenticationLibrarySettings
+    ) -> type[SirsiDynixHorizonAuthLibrarySettings]:
+        return SirsiDynixHorizonAuthLibrarySettings
 
     def __init__(
         self,
         library_id: int,
         integration_id: int,
-        settings: SirsiDynixHorizonAuthenticationSettings,
-        library_settings: SirsiDynixHorizonAuthenticationLibrarySettings,
+        settings: SirsiDynixHorizonAuthSettings,
+        library_settings: SirsiDynixHorizonAuthLibrarySettings,
         analytics: Optional[Analytics] = None,
     ):
         super().__init__(

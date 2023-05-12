@@ -3,15 +3,8 @@ from typing import Callable
 
 import pytest
 
-from api.authenticator import (
-    BasicAuthenticationProviderLibrarySettings,
-    Keyboards,
-    PatronData,
-)
-from api.simple_authentication import (
-    SimpleAuthenticationProvider,
-    SimpleAuthenticationSettings,
-)
+from api.authenticator import BasicAuthProviderLibrarySettings, Keyboards, PatronData
+from api.simple_authentication import SimpleAuthenticationProvider, SimpleAuthSettings
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -26,16 +19,14 @@ def mock_integration_id() -> int:
 
 
 @pytest.fixture
-def create_library_settings() -> Callable[
-    ..., BasicAuthenticationProviderLibrarySettings
-]:
-    return partial(BasicAuthenticationProviderLibrarySettings)
+def create_library_settings() -> Callable[..., BasicAuthProviderLibrarySettings]:
+    return partial(BasicAuthProviderLibrarySettings)
 
 
 @pytest.fixture
-def create_settings() -> Callable[..., SimpleAuthenticationSettings]:
+def create_settings() -> Callable[..., SimpleAuthSettings]:
     return partial(
-        SimpleAuthenticationSettings,
+        SimpleAuthSettings,
         test_identifier="barcode",
         test_password="pass",
     )
@@ -45,8 +36,8 @@ def create_settings() -> Callable[..., SimpleAuthenticationSettings]:
 def create_provider(
     mock_library_id: int,
     mock_integration_id: int,
-    create_settings: Callable[..., SimpleAuthenticationSettings],
-    create_library_settings: Callable[..., BasicAuthenticationProviderLibrarySettings],
+    create_settings: Callable[..., SimpleAuthSettings],
+    create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
 ) -> Callable[..., SimpleAuthenticationProvider]:
     return partial(
         SimpleAuthenticationProvider,
@@ -60,7 +51,7 @@ def create_provider(
 class TestSimpleAuth:
     def test_simple(
         self,
-        create_settings: Callable[..., SimpleAuthenticationSettings],
+        create_settings: Callable[..., SimpleAuthSettings],
         create_provider: Callable[..., SimpleAuthenticationProvider],
     ):
         settings = create_settings()
@@ -78,7 +69,7 @@ class TestSimpleAuth:
 
     def test_neighborhood(
         self,
-        create_settings: Callable[..., SimpleAuthenticationSettings],
+        create_settings: Callable[..., SimpleAuthSettings],
         create_provider: Callable[..., SimpleAuthenticationProvider],
     ):
         settings = create_settings(
@@ -94,7 +85,7 @@ class TestSimpleAuth:
 
     def test_no_password_authentication(
         self,
-        create_settings: Callable[..., SimpleAuthenticationSettings],
+        create_settings: Callable[..., SimpleAuthSettings],
         create_provider: Callable[..., SimpleAuthenticationProvider],
     ):
         """The SimpleAuthenticationProvider can be made even
@@ -118,7 +109,7 @@ class TestSimpleAuth:
 
     def test_additional_identifiers(
         self,
-        create_settings: Callable[..., SimpleAuthenticationSettings],
+        create_settings: Callable[..., SimpleAuthSettings],
         create_provider: Callable[..., SimpleAuthenticationProvider],
     ):
         settings = create_settings(
@@ -180,7 +171,7 @@ class TestSimpleAuth:
 
     def test_remote_patron_lookup(
         self,
-        create_settings: Callable[..., SimpleAuthenticationSettings],
+        create_settings: Callable[..., SimpleAuthSettings],
         create_provider: Callable[..., SimpleAuthenticationProvider],
         db: DatabaseTransactionFixture,
     ):

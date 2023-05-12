@@ -6,8 +6,8 @@ from pydantic import Field, PositiveInt
 
 from api.authenticator import (
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronData,
 )
 from api.sip.client import Sip2Encoding, SIPClient
@@ -23,7 +23,7 @@ from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
 
 
-class SIP2Settings(BasicAuthenticationProviderSettings):
+class SIP2Settings(BasicAuthProviderSettings):
     """Settings for SIP2 authentication providers."""
 
     # Hostname of the SIP server
@@ -178,7 +178,7 @@ class SIP2Settings(BasicAuthenticationProviderSettings):
     )
 
 
-class SIP2LibrarySettings(BasicAuthenticationProviderLibrarySettings):
+class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
     # Used as the SIP2 AO field.
     institution_id: Optional[str] = FormField(
         None,

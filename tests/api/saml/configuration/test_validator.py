@@ -4,7 +4,7 @@ from api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
 )
-from api.saml.configuration.model import SAMLWebSSOAuthenticationSettings
+from api.saml.configuration.model import SAMLWebSSOAuthSettings
 from api.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
@@ -113,7 +113,7 @@ class TestSAMLSettingsValidator:
 
         if expected_validation_result is not None:
             with pytest.raises(ProblemError) as exception:
-                SAMLWebSSOAuthenticationSettings(**submitted_settings)
+                SAMLWebSSOAuthSettings(**submitted_settings)
 
             assert (
                 expected_validation_result.status_code
@@ -124,4 +124,4 @@ class TestSAMLSettingsValidator:
             )
             assert expected_validation_result.uri == exception.value.problem_detail.uri
         else:
-            SAMLWebSSOAuthenticationSettings(**submitted_settings)
+            SAMLWebSSOAuthSettings(**submitted_settings)

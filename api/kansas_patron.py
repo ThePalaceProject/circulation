@@ -10,13 +10,13 @@ from core.util.http import HTTP
 
 from .authenticator import (
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronData,
 )
 
 
-class KansasAuthenticationSettings(BasicAuthenticationProviderSettings):
+class KansasAuthSettings(BasicAuthProviderSettings):
     url: HttpUrl = FormField(
         "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails",
         form=ConfigurationFormItem(
@@ -36,15 +36,15 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
         return "An authentication service for the Kansas State Library."
 
     @classmethod
-    def settings_class(cls) -> Type[KansasAuthenticationSettings]:
-        return KansasAuthenticationSettings
+    def settings_class(cls) -> Type[KansasAuthSettings]:
+        return KansasAuthSettings
 
     def __init__(
         self,
         library_id: int,
         integration_id: int,
-        settings: KansasAuthenticationSettings,
-        library_settings: BasicAuthenticationProviderLibrarySettings,
+        settings: KansasAuthSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
         analytics=None,
     ):
         super().__init__(

@@ -10,14 +10,14 @@ from core.model import Patron
 
 from .authenticator import (
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronData,
 )
 from .config import CannotLoadConfiguration
 
 
-class SimpleAuthenticationSettings(BasicAuthenticationProviderSettings):
+class SimpleAuthSettings(BasicAuthProviderSettings):
     test_identifier: str = FormField(
         ...,
         form=ConfigurationFormItem(
@@ -71,15 +71,15 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
         )
 
     @classmethod
-    def settings_class(cls) -> Type[SimpleAuthenticationSettings]:
-        return SimpleAuthenticationSettings
+    def settings_class(cls) -> Type[SimpleAuthSettings]:
+        return SimpleAuthSettings
 
     def __init__(
         self,
         library_id: int,
         integration_id: int,
-        settings: SimpleAuthenticationSettings,
-        library_settings: BasicAuthenticationProviderLibrarySettings,
+        settings: SimpleAuthSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
         analytics: Optional[Analytics] = None,
     ):
         super().__init__(

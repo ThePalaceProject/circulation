@@ -7,7 +7,10 @@ from werkzeug.datastructures import Authorization
 from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
 from api.problem_details import *
 from api.saml.auth import SAMLAuthenticationManagerFactory
-from api.saml.configuration.model import SAMLWebSSOAuthenticationSettings
+from api.saml.configuration.model import (
+    SAMLWebSSOAuthLibrarySettings,
+    SAMLWebSSOAuthSettings,
+)
 from api.saml.credential import SAMLCredentialManager
 from api.saml.metadata.model import (
     SAMLLocalizedMetadataItem,
@@ -15,7 +18,6 @@ from api.saml.metadata.model import (
     SAMLSubjectPatronIDExtractor,
 )
 from core.analytics import Analytics
-from core.integration.settings import BaseSettings
 from core.util.problem_detail import ProblemDetail
 
 SAML_INVALID_SUBJECT = pd(
@@ -36,8 +38,8 @@ class SAMLWebSSOAuthenticationProvider(BaseSAMLAuthenticationProvider):
         self,
         library_id: int,
         integration_id: int,
-        settings: SAMLWebSSOAuthenticationSettings,
-        library_settings: BaseSettings,
+        settings: SAMLWebSSOAuthSettings,
+        library_settings: SAMLWebSSOAuthLibrarySettings,
         analytics: Optional[Analytics] = None,
     ):
         """Initializes a new instance of SAMLAuthenticationProvider class"""
@@ -69,12 +71,12 @@ class SAMLWebSSOAuthenticationProvider(BaseSAMLAuthenticationProvider):
         return True
 
     @classmethod
-    def settings_class(cls) -> Type[SAMLWebSSOAuthenticationSettings]:
-        return SAMLWebSSOAuthenticationSettings
+    def settings_class(cls) -> Type[SAMLWebSSOAuthSettings]:
+        return SAMLWebSSOAuthSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[BaseSettings]:
-        return BaseSettings
+    def library_settings_class(cls) -> Type[SAMLWebSSOAuthLibrarySettings]:
+        return SAMLWebSSOAuthLibrarySettings
 
     def get_credential_from_header(self, auth: Authorization) -> Optional[str]:
         # We cannot extract the credential from the header, so we just return None

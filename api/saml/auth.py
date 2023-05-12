@@ -17,7 +17,7 @@ from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvalua
 from core.python_expression_dsl.parser import DSLParser
 
 if TYPE_CHECKING:
-    from api.saml.provider import SAMLWebSSOAuthenticationSettings
+    from api.saml.provider import SAMLWebSSOAuthSettings
 
 SAML_GENERIC_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/generic-error",
@@ -293,7 +293,7 @@ class SAMLAuthenticationManagerFactory:
     """Responsible for creating SAMLAuthenticationManager instances"""
 
     def create(
-        self, configuration: SAMLWebSSOAuthenticationSettings
+        self, configuration: SAMLWebSSOAuthSettings
     ) -> SAMLAuthenticationManager:
         """
         Creates a new instance of SAMLAuthenticationManager class

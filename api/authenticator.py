@@ -1267,6 +1267,14 @@ class LibraryAuthenticator:
         return headers
 
 
+class AuthProviderSettings(BaseSettings):
+    ...
+
+
+class AuthProviderLibrarySettings(BaseSettings):
+    ...
+
+
 class AuthenticationProvider(
     OPDSAuthenticationFlow,
     HasLibraryIntegrationConfiguration,
@@ -1279,8 +1287,8 @@ class AuthenticationProvider(
         self,
         library_id: int,
         integration_id: int,
-        settings: BaseSettings,
-        library_settings: BaseSettings,
+        settings: AuthProviderSettings,
+        library_settings: AuthProviderLibrarySettings,
         analytics: Analytics | None = None,
     ):
         self.library_id = library_id
@@ -1300,6 +1308,16 @@ class AuthenticationProvider(
             .filter(IntegrationConfiguration.id == self.integration_id)
             .one_or_none()
         )
+
+    @classmethod
+    def settings_class(cls) -> type[AuthProviderSettings]:
+        return AuthProviderSettings
+
+    @classmethod
+    def library_settings_class(
+        cls,
+    ) -> type[AuthProviderLibrarySettings]:
+        return AuthProviderLibrarySettings
 
     @property
     @abstractmethod
@@ -1371,7 +1389,7 @@ class PasswordLabels(Enum):
     PIN = "PIN"
 
 
-class BasicAuthenticationProviderSettings(BaseSettings):
+class BasicAuthProviderSettings(AuthProviderSettings):
     """Settings for the BasicAuthenticationProvider."""
 
     # Configuration settings that are common to all Basic Auth-type
@@ -1501,7 +1519,7 @@ class BasicAuthenticationProviderSettings(BaseSettings):
     )
 
 
-class BasicAuthenticationProviderLibrarySettings(BaseSettings):
+class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     # When multiple libraries share an ILS, a person may be able to
     # authenticate with the ILS but not be considered a patron of
     # _this_ library. This setting contains the rule for determining
@@ -1588,8 +1606,8 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         self,
         library_id: int,
         integration_id: int,
-        settings: BasicAuthenticationProviderSettings,
-        library_settings: BasicAuthenticationProviderLibrarySettings,
+        settings: BasicAuthProviderSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
         analytics: Analytics | None = None,
     ):
         """Create a BasicAuthenticationProvider."""
@@ -1660,14 +1678,14 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         return "http://opds-spec.org/auth/basic"
 
     @classmethod
-    def settings_class(cls) -> type[BasicAuthenticationProviderSettings]:
-        return BasicAuthenticationProviderSettings
+    def settings_class(cls) -> type[BasicAuthProviderSettings]:
+        return BasicAuthProviderSettings
 
     @classmethod
     def library_settings_class(
         cls,
-    ) -> type[BasicAuthenticationProviderLibrarySettings]:
-        return BasicAuthenticationProviderLibrarySettings
+    ) -> type[BasicAuthProviderLibrarySettings]:
+        return BasicAuthProviderLibrarySettings
 
     @abstractmethod
     def remote_patron_lookup(

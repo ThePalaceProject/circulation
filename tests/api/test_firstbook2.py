@@ -8,9 +8,9 @@ import jwt
 import pytest
 import requests
 
-from api.authenticator import BasicAuthenticationProviderLibrarySettings, PatronData
+from api.authenticator import BasicAuthProviderLibrarySettings, PatronData
 from api.circulation_exceptions import RemoteInitiatedServerError
-from api.firstbook2 import FirstBookAuthenticationAPI, FirstBookAuthenticationSettings
+from api.firstbook2 import FirstBookAuthenticationAPI, FirstBookAuthSettings
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -93,9 +93,9 @@ def mock_integration_id() -> int:
 
 
 @pytest.fixture
-def create_settings() -> Callable[..., FirstBookAuthenticationSettings]:
+def create_settings() -> Callable[..., FirstBookAuthSettings]:
     return partial(
-        FirstBookAuthenticationSettings,
+        FirstBookAuthSettings,
         url="http://example.com/",
         password="secret",
     )
@@ -105,14 +105,14 @@ def create_settings() -> Callable[..., FirstBookAuthenticationSettings]:
 def create_provider(
     mock_library_id: int,
     mock_integration_id: int,
-    create_settings: Callable[..., FirstBookAuthenticationSettings],
+    create_settings: Callable[..., FirstBookAuthSettings],
 ) -> Callable[..., MockFirstBookAuthenticationAPI]:
     return partial(
         MockFirstBookAuthenticationAPI,
         library_id=mock_library_id,
         integration_id=mock_integration_id,
         settings=create_settings(),
-        library_settings=BasicAuthenticationProviderLibrarySettings(),
+        library_settings=BasicAuthProviderLibrarySettings(),
         valid={"ABCD": "1234"},
     )
 
@@ -120,7 +120,7 @@ def create_provider(
 class TestFirstBook:
     def test_from_config(
         self,
-        create_settings: Callable[..., FirstBookAuthenticationSettings],
+        create_settings: Callable[..., FirstBookAuthSettings],
         create_provider: Callable[..., MockFirstBookAuthenticationAPI],
     ):
         settings = create_settings(

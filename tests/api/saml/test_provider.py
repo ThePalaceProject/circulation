@@ -10,7 +10,7 @@ from api.authenticator import PatronData
 from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import (
     SAMLOneLoginConfiguration,
-    SAMLWebSSOAuthenticationSettings,
+    SAMLWebSSOAuthSettings,
 )
 from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.model import (
@@ -246,7 +246,7 @@ class TestSAMLWebSSOAuthenticationProvider:
     def test_authentication_document(
         self,
         controller_fixture: ControllerFixture,
-        create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
         _,
@@ -427,7 +427,7 @@ class TestSAMLWebSSOAuthenticationProvider:
     )
     def test_remote_patron_lookup(
         self,
-        create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         _,
         subject,
@@ -686,7 +686,7 @@ class TestSAMLWebSSOAuthenticationProvider:
     def test_saml_callback(
         self,
         controller_fixture: ControllerFixture,
-        create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         _,
         subject,

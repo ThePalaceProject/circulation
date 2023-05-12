@@ -7,7 +7,7 @@ import sqlalchemy
 
 from api.saml.configuration.model import (
     SAMLOneLoginConfiguration,
-    SAMLWebSSOAuthenticationSettings,
+    SAMLWebSSOAuthSettings,
 )
 from api.saml.metadata.federations import incommon
 from api.saml.metadata.federations.model import (
@@ -64,7 +64,7 @@ IDENTITY_PROVIDERS = [
 
 class TestSAMLConfiguration:
     def test_get_service_provider_returns_correct_value(
-        self, create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings]
+        self, create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings]
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -90,7 +90,7 @@ class TestSAMLConfiguration:
     def test_get_identity_providers_returns_non_federated_idps(
         self,
         db: DatabaseTransactionFixture,
-        create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -119,7 +119,7 @@ class TestSAMLConfiguration:
     def test_get_identity_providers_returns_federated_idps(
         self,
         db: DatabaseTransactionFixture,
-        create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
     ):
         # Arrange
         federated_identity_provider_entity_ids = [
@@ -170,7 +170,7 @@ class TestSAMLConfiguration:
     def test_get_identity_providers_returns_both_non_federated_and_federated_idps(
         self,
         db: DatabaseTransactionFixture,
-        create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
     ):
         # Arrange
         federated_identity_provider_entity_ids = [
@@ -235,9 +235,7 @@ class TestSAMLSettings:
         # Without loading anything into the database there are no federated IdPs and no options
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in SAMLWebSSOAuthenticationSettings.configuration_form(
-                db.session
-            )
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
             if setting["key"] == "federated_identity_provider_entity_ids"
         ]
 
@@ -260,9 +258,7 @@ class TestSAMLSettings:
 
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in SAMLWebSSOAuthenticationSettings.configuration_form(
-                db.session
-            )
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
             if setting["key"] == "federated_identity_provider_entity_ids"
         ]
 
@@ -280,9 +276,7 @@ class TestSAMLSettings:
 
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in SAMLWebSSOAuthenticationSettings.configuration_form(
-                db.session
-            )
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
             if setting["key"] == "federated_identity_provider_entity_ids"
         ]
 
@@ -292,9 +286,7 @@ class TestSAMLSettings:
         federation.last_updated_at = datetime.now()
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in SAMLWebSSOAuthenticationSettings.configuration_form(
-                db.session
-            )
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
             if setting["key"] == "federated_identity_provider_entity_ids"
         ]
         assert 2 == len(federated_identity_provider_entity_ids["options"])
@@ -303,7 +295,7 @@ class TestSAMLSettings:
 class TestSAMLOneLoginConfiguration:
     def test_get_identity_provider_settings_returns_correct_result(self):
         # Arrange
-        configuration = create_autospec(spec=SAMLWebSSOAuthenticationSettings)
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         onelogin_configuration.get_identity_providers = MagicMock(
             return_value=IDENTITY_PROVIDERS
@@ -380,7 +372,7 @@ class TestSAMLOneLoginConfiguration:
         self, _, service_provider, expected_result
     ):
         # Arrange
-        configuration = create_autospec(spec=SAMLWebSSOAuthenticationSettings)
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         onelogin_configuration.get_service_provider = MagicMock(
             return_value=service_provider

@@ -11,9 +11,9 @@ from api.config import Configuration
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.sirsidynix_authentication_provider import (
     SirsiBlockReasons,
-    SirsiDynixHorizonAuthenticationLibrarySettings,
     SirsiDynixHorizonAuthenticationProvider,
-    SirsiDynixHorizonAuthenticationSettings,
+    SirsiDynixHorizonAuthLibrarySettings,
+    SirsiDynixHorizonAuthSettings,
     SirsiDynixPatronData,
 )
 from core.model import Patron
@@ -32,19 +32,17 @@ def mock_integration_id() -> int:
 
 
 @pytest.fixture
-def create_library_settings() -> Callable[
-    ..., SirsiDynixHorizonAuthenticationLibrarySettings
-]:
+def create_library_settings() -> Callable[..., SirsiDynixHorizonAuthLibrarySettings]:
     return partial(
-        SirsiDynixHorizonAuthenticationLibrarySettings,
+        SirsiDynixHorizonAuthLibrarySettings,
         library_id="libraryid",
     )
 
 
 @pytest.fixture
-def create_settings() -> Callable[..., SirsiDynixHorizonAuthenticationSettings]:
+def create_settings() -> Callable[..., SirsiDynixHorizonAuthSettings]:
     return partial(
-        SirsiDynixHorizonAuthenticationSettings,
+        SirsiDynixHorizonAuthSettings,
         url="http://example.org/sirsi/",
         test_identifier="barcode",
         client_id="clientid",
@@ -55,10 +53,8 @@ def create_settings() -> Callable[..., SirsiDynixHorizonAuthenticationSettings]:
 def create_provider(
     mock_library_id: int,
     mock_integration_id: int,
-    create_settings: Callable[..., SirsiDynixHorizonAuthenticationSettings],
-    create_library_settings: Callable[
-        ..., SirsiDynixHorizonAuthenticationLibrarySettings
-    ],
+    create_settings: Callable[..., SirsiDynixHorizonAuthSettings],
+    create_library_settings: Callable[..., SirsiDynixHorizonAuthLibrarySettings],
     monkeypatch: MonkeyPatch,
 ) -> Callable[..., SirsiDynixHorizonAuthenticationProvider]:
     monkeypatch.setenv(Configuration.SIRSI_DYNIX_APP_ID, "UNITTEST")
@@ -262,9 +258,7 @@ class TestSirsiDynixAuthenticationProvider:
     def test_full_auth_request(
         self,
         db: DatabaseTransactionFixture,
-        create_library_settings: Callable[
-            ..., SirsiDynixHorizonAuthenticationLibrarySettings
-        ],
+        create_library_settings: Callable[..., SirsiDynixHorizonAuthLibrarySettings],
         create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider],
         restriction_type,
         restriction,

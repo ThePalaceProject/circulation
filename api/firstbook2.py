@@ -14,14 +14,14 @@ from core.model import Patron
 
 from .authenticator import (
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     PatronData,
 )
 from .circulation_exceptions import RemoteInitiatedServerError
 
 
-class FirstBookAuthenticationSettings(BasicAuthenticationProviderSettings):
+class FirstBookAuthSettings(BasicAuthProviderSettings):
     url: HttpUrl = FormField(
         "https://ebooksprod.firstbook.org/api/",
         form=ConfigurationFormItem(
@@ -73,8 +73,8 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         )
 
     @classmethod
-    def settings_class(cls) -> type[FirstBookAuthenticationSettings]:
-        return FirstBookAuthenticationSettings
+    def settings_class(cls) -> type[FirstBookAuthSettings]:
+        return FirstBookAuthSettings
 
     @property
     def login_button_image(self) -> str | None:
@@ -91,8 +91,8 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         self,
         library_id: int,
         integration_id: int,
-        settings: FirstBookAuthenticationSettings,
-        library_settings: BasicAuthenticationProviderLibrarySettings,
+        settings: FirstBookAuthSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
         analytics=None,
     ):
         super().__init__(

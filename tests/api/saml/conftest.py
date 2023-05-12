@@ -8,7 +8,7 @@ import pytest
 
 from api.saml.configuration.model import (
     SAMLOneLoginConfiguration,
-    SAMLWebSSOAuthenticationSettings,
+    SAMLWebSSOAuthSettings,
 )
 from api.saml.metadata.model import (
     SAMLIdentityProviderMetadata,
@@ -23,9 +23,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def create_saml_configuration() -> Callable[..., SAMLWebSSOAuthenticationSettings]:
+def create_saml_configuration() -> Callable[..., SAMLWebSSOAuthSettings]:
     return partial(
-        SAMLWebSSOAuthenticationSettings,
+        SAMLWebSSOAuthSettings,
         service_provider_xml_metadata=CORRECT_XML_WITH_ONE_SP,
     )
 
@@ -39,7 +39,7 @@ def mock_integration_id() -> int:
 def create_saml_provider(
     controller_fixture: ControllerFixture,
     mock_integration_id: int,
-    create_saml_configuration: Callable[..., SAMLWebSSOAuthenticationSettings],
+    create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
 ) -> Callable[..., SAMLWebSSOAuthenticationProvider]:
     library = controller_fixture.db.default_library()
     return partial(
@@ -58,7 +58,7 @@ def create_mock_onelogin_configuration(
     def _create_mock(
         service_provider: SAMLServiceProviderMetadata,
         identity_providers: List[SAMLIdentityProviderMetadata],
-        configuration: Optional[SAMLWebSSOAuthenticationSettings] = None,
+        configuration: Optional[SAMLWebSSOAuthSettings] = None,
     ):
         if configuration is None:
             configuration = create_saml_configuration()

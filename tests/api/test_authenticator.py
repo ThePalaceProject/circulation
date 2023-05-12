@@ -27,8 +27,8 @@ from api.authenticator import (
     BarcodeFormats,
     BaseSAMLAuthenticationProvider,
     BasicAuthenticationProvider,
-    BasicAuthenticationProviderLibrarySettings,
-    BasicAuthenticationProviderSettings,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
     CirculationPatronProfileStorage,
     Keyboards,
     LibraryAuthenticator,
@@ -78,8 +78,8 @@ class MockBasic(BasicAuthenticationProvider):
         self,
         library_id: int,
         integration_id: int,
-        settings: BasicAuthenticationProviderSettings | None = None,
-        library_settings: BasicAuthenticationProviderLibrarySettings | None = None,
+        settings: BasicAuthProviderSettings | None = None,
+        library_settings: BasicAuthProviderLibrarySettings | None = None,
         analytics: Analytics | None = None,
         patrondata: PatronData | ProblemDetail | None = None,
         lookup_patrondata: PatronData | ProblemDetail | None | Literal[False] = False,
@@ -2013,7 +2013,7 @@ class TestBasicAuthenticationProvider:
     def test_patron_identifier_restriction(self, mock_basic: MockBasicFixture):
         # If the type is regex its converted into a regular expression.
         provider = mock_basic(
-            library_settings=BasicAuthenticationProviderLibrarySettings(
+            library_settings=BasicAuthProviderLibrarySettings(
                 library_identifier_restriction_type=LibraryIdentifierRestriction.REGEX,
                 library_identifier_restriction_criteria="^abcd",
             )
@@ -2023,7 +2023,7 @@ class TestBasicAuthenticationProvider:
 
         # If its type is list, make sure its converted into a list
         provider = mock_basic(
-            library_settings=BasicAuthenticationProviderLibrarySettings(
+            library_settings=BasicAuthProviderLibrarySettings(
                 library_identifier_restriction_type=LibraryIdentifierRestriction.LIST,
                 library_identifier_restriction_criteria="a,b,c",
             )
@@ -2032,7 +2032,7 @@ class TestBasicAuthenticationProvider:
 
         # If its type is prefix make sure its a string
         provider = mock_basic(
-            library_settings=BasicAuthenticationProviderLibrarySettings(
+            library_settings=BasicAuthProviderLibrarySettings(
                 library_identifier_restriction_type=LibraryIdentifierRestriction.PREFIX,
                 library_identifier_restriction_criteria="abc",
             )
@@ -2041,7 +2041,7 @@ class TestBasicAuthenticationProvider:
 
         # If its type is string make sure its a string
         provider = mock_basic(
-            library_settings=BasicAuthenticationProviderLibrarySettings(
+            library_settings=BasicAuthProviderLibrarySettings(
                 library_identifier_restriction_type=LibraryIdentifierRestriction.STRING,
                 library_identifier_restriction_criteria="abc",
             )
@@ -2050,7 +2050,7 @@ class TestBasicAuthenticationProvider:
 
         # If its type is none make sure its actually None
         provider = mock_basic(
-            library_settings=BasicAuthenticationProviderLibrarySettings(
+            library_settings=BasicAuthProviderLibrarySettings(
                 library_identifier_restriction_type=LibraryIdentifierRestriction.NONE,
                 library_identifier_restriction_criteria="abc",
             )
@@ -2059,7 +2059,7 @@ class TestBasicAuthenticationProvider:
 
     def test_constructor(self, mock_basic: MockBasicFixture):
         provider = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 test_identifier="username",
                 test_password="pw",
                 identifier_regular_expression="idre",  # type: ignore[arg-type]
@@ -2095,7 +2095,7 @@ class TestBasicAuthenticationProvider:
         # password don't actually authenticate anyone. We don't crash,
         # but we can't look up the testing patron either.
         missing_patron = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 test_identifier="1",
                 test_password="2",
             )
@@ -2115,7 +2115,7 @@ class TestBasicAuthenticationProvider:
         # We configure a testing patron but authenticating them
         # results in a problem detail document.
         problem_patron = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 test_identifier="1",
                 test_password="2",
             )
@@ -2150,7 +2150,7 @@ class TestBasicAuthenticationProvider:
         # their username and password.
         patron = db.patron()
         present_patron = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 test_identifier="1",
                 test_password="2",
             )
@@ -2195,7 +2195,7 @@ class TestBasicAuthenticationProvider:
 
     def test_server_side_validation(self, mock_basic: MockBasicFixture):
         provider = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 identifier_regular_expression="foo",  # type: ignore[arg-type]
                 password_regular_expression="bar",  # type: ignore[arg-type]
             )
@@ -2209,7 +2209,7 @@ class TestBasicAuthenticationProvider:
         # then the only values that will pass validation are null
         # and the empty string.
         provider = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 identifier_regular_expression="foo",  # type: ignore[arg-type]
                 password_regular_expression="bar",  # type: ignore[arg-type]
                 password_keyboard=Keyboards.NULL_KEYBOARD,
@@ -2232,7 +2232,7 @@ class TestBasicAuthenticationProvider:
 
         # Test maximum length of identifier and password.
         provider = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 identifier_maximum_length="5",  # type: ignore[arg-type]
                 password_maximum_length="10",  # type: ignore[arg-type]
             )
@@ -2315,7 +2315,7 @@ class TestBasicAuthenticationProvider:
     def test_authentication_flow_document(self, mock_basic: MockBasicFixture):
         """Test the default authentication provider document."""
         provider = mock_basic(
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 identifier_maximum_length=22,
                 password_maximum_length=7,
                 identifier_barcode_format=BarcodeFormats.BARCODE_FORMAT_CODABAR,
@@ -2488,7 +2488,7 @@ class TestBasicAuthenticationProviderAuthenticate:
 
         provider = mock_basic(
             patrondata=patrondata,
-            settings=BasicAuthenticationProviderSettings(
+            settings=BasicAuthProviderSettings(
                 identifier_regular_expression="foo",  # type: ignore[arg-type]
                 password_regular_expression="bar",  # type: ignore[arg-type]
             ),

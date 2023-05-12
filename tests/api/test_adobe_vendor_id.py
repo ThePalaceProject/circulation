@@ -14,13 +14,10 @@ from api.adobe_vendor_id import (
     AuthdataUtility,
     DeviceManagementRequestHandler,
 )
-from api.authenticator import BasicAuthenticationProviderLibrarySettings
+from api.authenticator import BasicAuthProviderLibrarySettings
 from api.config import Configuration
 from api.registration.constants import RegistrationConstants
-from api.simple_authentication import (
-    SimpleAuthenticationProvider,
-    SimpleAuthenticationSettings,
-)
+from api.simple_authentication import SimpleAuthenticationProvider, SimpleAuthSettings
 from core.config import CannotLoadConfiguration
 from core.model import (
     ConfigurationSetting,
@@ -321,10 +318,10 @@ class VendorIDModelFixture:
         # Set up a simple authentication provider that validates
         # one specific patron.
         library = vendor_id_fixture.db.default_library()
-        settings = SimpleAuthenticationSettings(
+        settings = SimpleAuthSettings(
             test_identifier="validpatron", test_password="password"
         )
-        library_settings = BasicAuthenticationProviderLibrarySettings()
+        library_settings = BasicAuthProviderLibrarySettings()
         self.authenticator = SimpleAuthenticationProvider(
             library_id=library.id,
             # Integration ID isn't used in these tests, so we can
