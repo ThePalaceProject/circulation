@@ -37,6 +37,16 @@ if TYPE_CHECKING:
     from core.model import Collection  # noqa: autoflake
 
 
+@contextmanager
+def access_exclusive_lock_configurationsettings(session: Session):
+    session.begin_nested()
+    session.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
+    try:
+        yield session
+    finally:
+        session.commit()
+
+
 class ExternalIntegrationLink(Base, HasSessionCache):
 
     __tablename__ = "externalintegrationslinks"

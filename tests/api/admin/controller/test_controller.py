@@ -61,6 +61,7 @@ from tests.fixtures.api_controller import ControllerFixture
 
 class TestViewController:
     def test_setting_up(self, admin_ctrl_fixture: AdminControllerFixture):
+
         # Test that the view is in setting-up mode if there's no auth service
         # and no admin with a password.
         admin_ctrl_fixture.admin.password_hashed = None
