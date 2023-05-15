@@ -6,6 +6,7 @@ Create Date: 2023-05-12 08:36:16.603825+00:00
 
 """
 import logging
+import re
 
 from alembic import op
 
@@ -21,6 +22,19 @@ log.setLevel(logging.INFO)
 log.disabled = False
 
 KEY = "use_post_requests"
+
+
+def match_expression(url: str) -> bool:
+    expressions = [
+        r"^https?://vlc\.(.*?\.)?thepalaceproject.org",
+        r"^(http://)?localhost",
+    ]
+    for expr in expressions:
+        match = re.match(expr, url)
+        if match is not None:
+            return True
+
+    return False
 
 
 def upgrade() -> None:
@@ -52,7 +66,7 @@ def upgrade() -> None:
             continue
 
         # Check if it is something we want to change at all
-        if not ("thepalaceproject.org" in url or "localhost" in url):
+        if not match_expression(url):
             log.info(f"Not an internal millenium implementation: {url}")
             continue
 
