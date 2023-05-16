@@ -57,6 +57,32 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
 
+  test-migrations:
+    name: Migration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      - name: Install Poetry
+        uses: ./.github/actions/poetry
+
+      - name: Install Tox
+        run: |
+          poetry install --only ci
+        env:
+          POETRY_VIRTUALENVS_CREATE: false
+
+      - name: Run Migration Tests
+        run: tox -e "migration-docker"
+
   docker-image-build:
     name: Docker build base
     runs-on: ubuntu-latest
