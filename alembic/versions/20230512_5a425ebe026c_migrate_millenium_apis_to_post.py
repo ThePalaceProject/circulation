@@ -26,7 +26,8 @@ KEY = "use_post_requests"
 
 def match_expression(url: str) -> bool:
     expressions = [
-        r"^https?://vlc\.(.*?\.)?thepalaceproject.org",
+        r"^https?://vlc\.(.*?\.)?palaceproject\.io",
+        r"^https?://vlc\.thepalaceproject\.org",
         r"^(http://)?localhost",
     ]
     for expr in expressions:
@@ -110,3 +111,18 @@ def downgrade() -> None:
             "UPDATE configurationsettings SET value='false'"
             + f" WHERE external_integration_id={integration_id} AND key='{KEY}'"
         )
+
+
+if __name__ == "__main__":
+    # Some testing code
+    assert match_expression("http://vlc.dev.palaceproject.io/api") == True
+    assert match_expression("https://vlc.staging.palaceproject.io/PATRONAPI") == True
+    assert match_expression("localhost:6500/PATRONAPI") == True
+    assert match_expression("http://localhost:6500/api") == True
+    assert match_expression("https://vlc.thepalaceproject.org/anything...") == True
+    assert match_expression("https://vendor.millenium.com/PATRONAPI") == False
+
+    import sys
+
+    log.addHandler(logging.StreamHandler(sys.stdout))
+    log.info("Match expression tests passed!!")
