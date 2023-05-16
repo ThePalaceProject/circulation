@@ -23,7 +23,7 @@ class TestHTTP:
     def test_retries_unspecified(self, mock_web_server: MockAPIServer):
         for i in range(1, 7):
             response = MockAPIServerResponse()
-            response.content = "Ouch.".encode("utf-8")
+            response.content = b"Ouch."
             response.status_code = 502
             mock_web_server.enqueue_response("GET", "/test", response)
 
@@ -37,12 +37,14 @@ class TestHTTP:
 
     def test_retries_none(self, mock_web_server: MockAPIServer):
         response = MockAPIServerResponse()
-        response.content = "Ouch.".encode("utf-8")
+        response.content = b"Ouch."
         response.status_code = 502
 
         mock_web_server.enqueue_response("GET", "/test", response)
         with pytest.raises(RequestNetworkException):
-            HTTP.request_with_timeout("GET", mock_web_server.url("/test"), max_retry_count=0)
+            HTTP.request_with_timeout(
+                "GET", mock_web_server.url("/test"), max_retry_count=0
+            )
 
         assert len(mock_web_server.requests()) == 1
         request = mock_web_server.requests().pop()
@@ -51,22 +53,24 @@ class TestHTTP:
 
     def test_retries_3(self, mock_web_server: MockAPIServer):
         response0 = MockAPIServerResponse()
-        response0.content = "Ouch.".encode("utf-8")
+        response0.content = b"Ouch."
         response0.status_code = 502
 
         response1 = MockAPIServerResponse()
-        response1.content = "Ouch.".encode("utf-8")
+        response1.content = b"Ouch."
         response1.status_code = 502
 
         response2 = MockAPIServerResponse()
-        response2.content = "OK!".encode("utf-8")
+        response2.content = b"OK!"
         response2.status_code = 200
 
         mock_web_server.enqueue_response("GET", "/test", response0)
         mock_web_server.enqueue_response("GET", "/test", response1)
         mock_web_server.enqueue_response("GET", "/test", response2)
 
-        response = HTTP.request_with_timeout("GET", mock_web_server.url("/test"), max_retry_count=3)
+        response = HTTP.request_with_timeout(
+            "GET", mock_web_server.url("/test"), max_retry_count=3
+        )
         assert response.status_code == 200
 
         assert len(mock_web_server.requests()) == 3
