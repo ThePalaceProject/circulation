@@ -117,6 +117,7 @@ class DatabaseFixture:
                 logging.info("imported " + imported.__name__)
 
         importlib.import_module("core.lane")
+        importlib.import_module("api.saml.metadata.federations.model")
 
         from core.model.customlist import customlist_sharedlibrary
 
