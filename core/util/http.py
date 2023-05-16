@@ -217,7 +217,7 @@ class HTTP:
         if not "timeout" in kwargs:
             kwargs["timeout"] = 20
 
-        max_retry_count = kwargs.pop("max_retry_count", None)
+        max_retry_count: int = int(kwargs.pop("max_retry_count", 5))
 
         # Unicode data can't be sent over the wire. Convert it
         # to UTF-8.
@@ -255,15 +255,14 @@ class HTTP:
 
             if make_request_with == sessions.Session.request:
                 with sessions.Session() as session:
-                    if max_retry_count is not None:
-                        # TODO: Verify the status codes for which it retries.
-                        #  Are there any status codes for which we would NOT want to retry (e.g., 401, 403)?
-                        #  Are there some that we want to ensure get retried (e.g., 502, which we get a lot).
-                        retry_strategy = Retry(total=max_retry_count)
-                        adapter = HTTPAdapter(max_retries=retry_strategy)
+                    # TODO: Verify the status codes for which it retries.
+                    #  Are there any status codes for which we would NOT want to retry (e.g., 401, 403)?
+                    #  Are there some that we want to ensure get retried (e.g., 502, which we get a lot).
+                    retry_strategy = Retry(total=max_retry_count)
+                    adapter = HTTPAdapter(max_retries=retry_strategy)
 
-                        session.mount("http://", adapter)
-                        session.mount("https://", adapter)
+                    session.mount("http://", adapter)
+                    session.mount("https://", adapter)
 
                     response = session.request(*args, **kwargs)
             else:
