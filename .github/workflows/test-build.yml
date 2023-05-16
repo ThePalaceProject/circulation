@@ -71,6 +71,11 @@ jobs:
         with:
           python-version: 3.9
 
+      - name: Install Apt Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+
       - name: Install Poetry
         uses: ./.github/actions/poetry
 
