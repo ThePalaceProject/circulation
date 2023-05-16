@@ -20,7 +20,6 @@ from werkzeug.datastructures import Authorization, Headers
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
-from api.circulation_exceptions import PatronAuthorizationFailedException
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from core.analytics import Analytics
@@ -28,12 +27,10 @@ from core.model import (
     CirculationEvent,
     ConfigurationSetting,
     ExternalIntegration,
-    ExternalIntegrationError,
     Library,
     Patron,
     PatronProfileStorage,
     Session,
-    create,
     get_one,
     get_one_or_create,
 )
@@ -46,7 +43,7 @@ from core.util.authentication_for_opds import (
     OPDSAuthenticationFlow,
 )
 from core.util.datetime_helpers import utc_now
-from core.util.http import RemoteIntegrationException, RequestTimedOut
+from core.util.http import RemoteIntegrationException
 from core.util.log import elapsed_time_logging
 from core.util.problem_detail import ProblemDetail
 
@@ -849,37 +846,11 @@ class LibraryAuthenticator:
 
         if provider and provider_token:
             # Turn the token/header into a patron
-            try:
-                if self._is_provider_available(_db, provider):
-                    return provider.authenticated_patron(_db, provider_token)
-                else:
-                    return REMOTE_INTEGRATION_FAILED
-            except (RequestTimedOut, RemoteIntegrationException) as ex:
-                name = provider.external_integration(_db).name
-                self.log.error(f"Authentication Provider Error ({name}): {ex}")
-                self._record_provider_error(_db, provider, ex)
-                return REMOTE_INTEGRATION_FAILED
-            except PatronAuthorizationFailedException:
-                return INVALID_CREDENTIALS
+            return provider.authenticated_patron(_db, provider_token)
 
         # We were unable to determine what was going on with the
         # Authenticate header.
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
-
-    def _record_provider_error(
-        self, _db, provider: AuthenticationProvider, error: Exception
-    ) -> ExternalIntegrationError:
-        record, _ = create(
-            _db,
-            ExternalIntegrationError,
-            external_integration_id=provider.external_integration_id,
-            time=utc_now(),
-            error=str(error),
-        )
-        return record
-
-    def _is_provider_available(self, _db, provider: AuthenticationProvider) -> bool:
-        return provider.external_integration(_db).status != ExternalIntegration.RED
 
     def get_credential_from_header(self, auth: Authorization):
         """Extract a password credential from a WWW-Authenticate header
