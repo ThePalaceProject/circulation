@@ -5,7 +5,7 @@ import flask
 import pytest
 
 from api.admin.controller import setup_admin_controllers
-from api.admin.routes import setup_admin
+from api.app import initialize_admin
 from api.config import Configuration
 from api.controller import CirculationManager
 from core.model import create
@@ -30,7 +30,7 @@ class AdminControllerFixture:
             controller_fixture.db.session, Configuration.SECRET_KEY
         ).value = "a secret"
 
-        setup_admin(controller_fixture.db.session)
+        initialize_admin(controller_fixture.db.session)
         setup_admin_controllers(controller_fixture.manager)
         self.admin, ignore = create(
             controller_fixture.db.session,
