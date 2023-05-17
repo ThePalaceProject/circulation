@@ -182,3 +182,5 @@ def downgrade() -> None:
         table_name="integration_configurations",
     )
     op.drop_table("integration_configurations")
+    sa.Enum(name="goals").drop(op.get_bind(), checkfirst=False)
+    sa.Enum(name="status").drop(op.get_bind(), checkfirst=False)
