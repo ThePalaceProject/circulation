@@ -80,6 +80,8 @@ def upgrade() -> None:
         # This setting may or may not exist
         if config_results and len(post_results) > 0:
             use_post = post_results[0][0]
+            if use_post is None:
+                use_post == "false"
         else:
             use_post = None
 
