@@ -2006,7 +2006,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         login_inputs: Dict[str, Any] = dict(keyboard=self.identifier_keyboard.value)
         if self.identifier_maximum_length:
             login_inputs["maximum_length"] = self.identifier_maximum_length
-        if self.identifier_barcode_format:
+        if self.identifier_barcode_format != BarcodeFormats.NONE:
             login_inputs["barcode_format"] = self.identifier_barcode_format.value
 
         password_inputs: Dict[str, Any] = dict(keyboard=self.password_keyboard.value)
