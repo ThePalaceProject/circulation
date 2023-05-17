@@ -192,7 +192,7 @@ class HTTP:
         )
 
     # The set of status codes on which a retry will be attempted (if the number of retries requested is non-zero).
-    RETRY_STATUS_CODES = list(range(500, 599))
+    RETRY_STATUS_CODES = list(range(500, 600))
 
     @classmethod
     def _request_with_timeout(

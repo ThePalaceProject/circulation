@@ -2857,4 +2857,6 @@ class TestOPDSImportMonitor:
                 monitor.follow_one_link(feed_url)
 
                 # Ensure that the correct retry count had been passed.
-                retry_constructor_mock.assert_called_once_with(total=retry_count)
+                retry_constructor_mock.assert_called_once_with(
+                    total=retry_count, status_forcelist=list(range(500, 600))
+                )
