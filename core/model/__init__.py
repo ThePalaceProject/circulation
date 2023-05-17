@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import warnings
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, Generator, List
 
 from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
@@ -294,7 +294,9 @@ DEBUG = False
 
 
 @contextmanager
-def pg_advisory_lock(connection: Session, lock_id: int | None) -> None:
+def pg_advisory_lock(
+    connection: Session, lock_id: int | None
+) -> Generator[None, None, None]:
     """Application wide locking based on Lock IDs
     :param connection: The database connection
     :param lock_id: The numeric lock ID to create, if None do not create a lock at all
