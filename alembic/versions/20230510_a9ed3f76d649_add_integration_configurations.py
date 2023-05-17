@@ -1,7 +1,7 @@
 """Add integration_configurations
 
 Revision ID: a9ed3f76d649
-Revises: f9985f6b7767
+Revises: 5a425ebe026c
 Create Date: 2023-05-10 19:50:47.458800+00:00
 
 """
@@ -23,7 +23,7 @@ from core.model import json_serializer
 
 # revision identifiers, used by Alembic.
 revision = "a9ed3f76d649"
-down_revision = "f9985f6b7767"
+down_revision = "5a425ebe026c"
 branch_labels = None
 depends_on = None
 
