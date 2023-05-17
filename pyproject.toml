@@ -126,6 +126,7 @@ module = [
     "api.admin.model.dashboard_statistics",
     "core.model.hassessioncache",
     "core.util.cache",
+    "tests.migration.*",
 ]
 no_implicit_reexport = true
 strict_concatenate = true
