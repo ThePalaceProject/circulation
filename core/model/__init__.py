@@ -294,7 +294,7 @@ DEBUG = False
 
 
 @contextmanager
-def pg_advisory_lock(connection: Session, lock_id: int | None):
+def pg_advisory_lock(connection: Session, lock_id: int | None) -> None:
     """Application wide locking based on Lock IDs
     :param connection: The database connection
     :param lock_id: The numeric lock ID to create, if None do not create a lock at all
