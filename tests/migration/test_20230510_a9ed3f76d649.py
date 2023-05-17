@@ -94,6 +94,7 @@ def test_migration(alembic_runner: MigrationContext, alembic_engine: Engine) -> 
             sip_integration,
         )
         insert_setting(connection, "patron status block", "false", sip_integration)
+        insert_setting(connection, "identifier_barcode_format", "", sip_integration)
         insert_setting(connection, "institution_id", "bar", sip_integration, library)
 
         # Add configuration settings for the millenium integration
