@@ -1372,8 +1372,8 @@ class Keyboards(Enum):
 
 
 class BarcodeFormats(Enum):
-    BARCODE_FORMAT_CODABAR = "Codabar"
-    BARCODE_FORMAT_NONE = "None"
+    CODABAR = "Codabar"
+    NONE = "None"
 
 
 class IdentifierLabels(Enum):
@@ -1412,7 +1412,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
         ),
     )
     identifier_barcode_format: BarcodeFormats = FormField(
-        BarcodeFormats.BARCODE_FORMAT_NONE,
+        BarcodeFormats.NONE,
         form=ConfigurationFormItem(
             label="Patron identifier barcode format",
             description="Many libraries render patron identifiers as barcodes on "
@@ -1421,8 +1421,8 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             "manually typing in their identifiers.",
             type=ConfigurationFormItemType.SELECT,
             options={
-                BarcodeFormats.BARCODE_FORMAT_NONE: "Patron identifiers are not rendered as barcodes",
-                BarcodeFormats.BARCODE_FORMAT_CODABAR: "Patron identifiers are rendered as barcodes "
+                BarcodeFormats.NONE: "Patron identifiers are not rendered as barcodes",
+                BarcodeFormats.CODABAR: "Patron identifiers are rendered as barcodes "
                 "in Codabar format",
             },
             required=True,

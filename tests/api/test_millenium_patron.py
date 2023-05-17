@@ -654,18 +654,14 @@ class TestMilleniumPatronAPI:
         assert PatronData.NO_VALUE == patrondata.neighborhood
 
         # Patron neighborhood may be the identifier of their home library branch.
-        settings = create_settings(
-            neighborhood_mode=NeighborhoodMode.HOME_BRANCH_NEIGHBORHOOD_MODE
-        )
+        settings = create_settings(neighborhood_mode=NeighborhoodMode.HOME_BRANCH)
         provider = create_provider(settings=settings)
         content = provider.sample_data("dump.success.html")
         patrondata = provider.patron_dump_to_patrondata("alice", content)
         assert "mm" == patrondata.neighborhood
 
         # Or it may be the ZIP code of their home address.
-        settings = create_settings(
-            neighborhood_mode=NeighborhoodMode.POSTAL_CODE_NEIGHBORHOOD_MODE
-        )
+        settings = create_settings(neighborhood_mode=NeighborhoodMode.POSTAL_CODE)
         provider = create_provider(settings=settings)
         patrondata = provider.patron_dump_to_patrondata("alice", content)
         assert "10001" == patrondata.neighborhood

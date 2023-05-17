@@ -2318,7 +2318,7 @@ class TestBasicAuthenticationProvider:
             settings=BasicAuthProviderSettings(
                 identifier_maximum_length=22,
                 password_maximum_length=7,
-                identifier_barcode_format=BarcodeFormats.BARCODE_FORMAT_CODABAR,
+                identifier_barcode_format=BarcodeFormats.CODABAR,
             )
         )
 

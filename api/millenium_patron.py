@@ -31,9 +31,9 @@ from .authenticator import (
 
 
 class NeighborhoodMode(Enum):
-    NO_NEIGHBORHOOD_MODE = "disabled"
-    HOME_BRANCH_NEIGHBORHOOD_MODE = "home_branch"
-    POSTAL_CODE_NEIGHBORHOOD_MODE = "postal_code"
+    DISABLED = "disabled"
+    HOME_BRANCH = "home_branch"
+    POSTAL_CODE = "postal_code"
 
 
 class AuthenticationMode(Enum):
@@ -49,7 +49,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
         #  default value, unless the user has changed it. Which causes us to
         #  fail validation. So if no option is selected, we use the default.
         if v is None:
-            return NeighborhoodMode.NO_NEIGHBORHOOD_MODE
+            return NeighborhoodMode.DISABLED
         else:
             return v
 
@@ -111,7 +111,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
         alias="auth_mode",
     )
     neighborhood_mode: NeighborhoodMode = FormField(
-        NeighborhoodMode.NO_NEIGHBORHOOD_MODE,
+        NeighborhoodMode.DISABLED,
         form=ConfigurationFormItem(
             label="Patron neighborhood field",
             description="It's sometimes possible to guess a patron's neighborhood from their ILS record. "
@@ -119,9 +119,9 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
             "this, it's better for patron privacy to disable this feature.",
             type=ConfigurationFormItemType.SELECT,
             options={
-                NeighborhoodMode.NO_NEIGHBORHOOD_MODE: "Disable this feature",
-                NeighborhoodMode.HOME_BRANCH_NEIGHBORHOOD_MODE: "Patron's home library branch is their neighborhood.",
-                NeighborhoodMode.POSTAL_CODE_NEIGHBORHOOD_MODE: "Patron's postal code is their neighborhood.",
+                NeighborhoodMode.DISABLED: "Disable this feature",
+                NeighborhoodMode.HOME_BRANCH: "Patron's home library branch is their neighborhood.",
+                NeighborhoodMode.POSTAL_CODE: "Patron's postal code is their neighborhood.",
             },
         ),
     )
@@ -497,14 +497,12 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 external_type = v
             elif (
                 k == self.HOME_BRANCH_FIELD
-                and self.neighborhood_mode
-                == NeighborhoodMode.HOME_BRANCH_NEIGHBORHOOD_MODE
+                and self.neighborhood_mode == NeighborhoodMode.HOME_BRANCH
             ):
                 neighborhood = v.strip()
             elif (
                 k == self.ADDRESS_FIELD
-                and self.neighborhood_mode
-                == NeighborhoodMode.POSTAL_CODE_NEIGHBORHOOD_MODE
+                and self.neighborhood_mode == NeighborhoodMode.POSTAL_CODE
             ):
                 neighborhood = self.extract_postal_code(v)
             elif k == self.ERROR_MESSAGE_FIELD:
