@@ -2015,6 +2015,10 @@ class JSONQuery(Query):
         REGEX = "regex"
         CONTAINS = "contains"
 
+    # Reserved characters and their mapping to escaped characters
+    RESERVED_CHARS = '.?+*|{}[]()"\\#@&<>~'
+    RESERVED_CHARS_MAP = dict(map(lambda ch: (ord(ch), f"\\{ch}"), RESERVED_CHARS))
+
     _KEYWORD_ONLY = {"keyword": True}
     _LONG_TYPE = {"type": "long"}
     _BOOL_TYPE = {"type": "bool"}
@@ -2187,6 +2191,11 @@ class JSONQuery(Query):
         # In case values need to be transformed
         if old_key in self.VALUE_TRANSORMS:
             value = self.VALUE_TRANSORMS[old_key](value)
+
+        # The contains/regex operators are a regex match
+        # So we must replace special operators where encountered
+        if op in {self.Operators.CONTAINS, self.Operators.REGEX}:
+            value = value.translate(self.RESERVED_CHARS_MAP)
 
         key = self.FIELD_TRANSFORMS.get(
             old_key, old_key
