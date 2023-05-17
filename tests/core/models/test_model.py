@@ -10,6 +10,7 @@ from core.model import (
     Timestamp,
     get_one,
     numericrange_to_tuple,
+    pg_advisory_lock,
     tuple_to_numericrange,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -97,3 +98,28 @@ class TestNumericRangeConversion:
         assert (2, 6) == m(two_to_six_inclusive)
         two_to_six_exclusive = NumericRange(2, 6, "()")
         assert (3, 5) == m(two_to_six_exclusive)
+
+
+class TestAdvisoryLock:
+    TEST_LOCK_ID = 999999
+
+    def _lock_exists(self, session, lock_id):
+        result = list(session.execute(f"SELECT * from pg_locks where objid={lock_id}"))
+        return len(result) != 0
+
+    def test_lock_unlock(self, db: DatabaseTransactionFixture):
+        with pg_advisory_lock(db.session, self.TEST_LOCK_ID):
+            assert self._lock_exists(db.session, self.TEST_LOCK_ID) == True
+        assert self._lock_exists(db.session, self.TEST_LOCK_ID) == False
+
+    def test_exception_case(self, db: DatabaseTransactionFixture):
+        try:
+            with pg_advisory_lock(db.session, self.TEST_LOCK_ID):
+                assert self._lock_exists(db.session, self.TEST_LOCK_ID) == True
+                raise Exception("Lock should open!!")
+        except:
+            assert self._lock_exists(db.session, self.TEST_LOCK_ID) == False
+
+    def test_no_lock_id(self, db: DatabaseTransactionFixture):
+        with pg_advisory_lock(db.session, None):
+            assert self._lock_exists(db.session, self.TEST_LOCK_ID) == False
