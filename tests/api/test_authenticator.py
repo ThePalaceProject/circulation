@@ -2212,7 +2212,7 @@ class TestBasicAuthenticationProvider:
             settings=BasicAuthProviderSettings(
                 identifier_regular_expression="foo",  # type: ignore[arg-type]
                 password_regular_expression="bar",  # type: ignore[arg-type]
-                password_keyboard=Keyboards.NULL_KEYBOARD,
+                password_keyboard=Keyboards.NULL,
             )
         )
         assert provider.server_side_validation("food", "barbecue") is False

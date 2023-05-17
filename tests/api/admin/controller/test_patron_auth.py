@@ -66,8 +66,8 @@ def common_args() -> List[Tuple[str, str]]:
     return [
         ("test_identifier", "user"),
         ("test_password", "pass"),
-        ("identifier_keyboard", Keyboards.DEFAULT_KEYBOARD.value),
-        ("password_keyboard", Keyboards.DEFAULT_KEYBOARD.value),
+        ("identifier_keyboard", Keyboards.DEFAULT.value),
+        ("password_keyboard", Keyboards.DEFAULT.value),
         ("identifier_barcode_format", BarcodeFormats.BARCODE_FORMAT_CODABAR.value),
     ]
 

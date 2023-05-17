@@ -773,7 +773,7 @@ class TestMilleniumPatronAPI:
         """Test authorization when no password is required, only
         patron identifier.
         """
-        settings = create_settings(password_keyboard=Keyboards.NULL_KEYBOARD)
+        settings = create_settings(password_keyboard=Keyboards.NULL)
         api = create_provider(settings=settings)
 
         assert api.collects_password is False

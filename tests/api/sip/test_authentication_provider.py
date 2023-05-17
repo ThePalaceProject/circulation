@@ -341,7 +341,7 @@ class TestSIP2AuthenticationProvider:
         create_settings: Callable[..., SIP2Settings],
     ):
         settings = create_settings(
-            password_keyboard=Keyboards.NULL_KEYBOARD,
+            password_keyboard=Keyboards.NULL,
         )
         provider = create_provider(settings=settings)
         client = cast(MockSIPClient, provider.client)

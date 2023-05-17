@@ -1365,10 +1365,10 @@ class LibraryIdentifierRestriction(Enum):
 class Keyboards(Enum):
     """Used by the mobile app to determine which keyboard to display"""
 
-    DEFAULT_KEYBOARD = "Default"
-    EMAIL_ADDRESS_KEYBOARD = "Email address"
+    DEFAULT = "Default"
+    EMAIL_ADDRESS = "Email address"
     NUMBER_PAD = "Number pad"
-    NULL_KEYBOARD = "No input"
+    NULL = "No input"
 
 
 class BarcodeFormats(Enum):
@@ -1451,13 +1451,13 @@ class BasicAuthProviderSettings(AuthProviderSettings):
         ),
     )
     identifier_keyboard: Keyboards = FormField(
-        Keyboards.DEFAULT_KEYBOARD,
+        Keyboards.DEFAULT,
         form=ConfigurationFormItem(
             label="Keyboard for identifier entry",
             type=ConfigurationFormItemType.SELECT,
             options={
-                Keyboards.DEFAULT_KEYBOARD: "System default",
-                Keyboards.EMAIL_ADDRESS_KEYBOARD: "Email address entry",
+                Keyboards.DEFAULT: "System default",
+                Keyboards.EMAIL_ADDRESS: "Email address entry",
                 Keyboards.NUMBER_PAD: "Number pad",
             },
             required=True,
@@ -1465,14 +1465,14 @@ class BasicAuthProviderSettings(AuthProviderSettings):
         ),
     )
     password_keyboard: Keyboards = FormField(
-        Keyboards.DEFAULT_KEYBOARD,
+        Keyboards.DEFAULT,
         form=ConfigurationFormItem(
             label="Keyboard for password entry",
             type=ConfigurationFormItemType.SELECT,
             options={
-                Keyboards.DEFAULT_KEYBOARD: "System default",
+                Keyboards.DEFAULT: "System default",
                 Keyboards.NUMBER_PAD: "Number pad",
-                Keyboards.NULL_KEYBOARD: "Patrons have no password and should not be prompted for one.",
+                Keyboards.NULL: "Patrons have no password and should not be prompted for one.",
             },
             weight=10,
         ),
@@ -1725,7 +1725,7 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         """Does this BasicAuthenticationProvider expect a username
         and a password, or just a username?
         """
-        return self.password_keyboard != Keyboards.NULL_KEYBOARD
+        return self.password_keyboard != Keyboards.NULL
 
     def testing_patron(
         self, _db: Session

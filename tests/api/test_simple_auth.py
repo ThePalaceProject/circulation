@@ -92,7 +92,7 @@ class TestSimpleAuth:
         simpler by having it authenticate solely based on username.
         """
         settings = create_settings(
-            password_keyboard=Keyboards.NULL_KEYBOARD,
+            password_keyboard=Keyboards.NULL,
         )
         provider = create_provider(settings=settings)
 
@@ -175,7 +175,7 @@ class TestSimpleAuth:
         create_provider: Callable[..., SimpleAuthenticationProvider],
         db: DatabaseTransactionFixture,
     ):
-        settings = create_settings(password_keyboard=Keyboards.NULL_KEYBOARD)
+        settings = create_settings(password_keyboard=Keyboards.NULL)
         provider = create_provider(settings=settings)
 
         patron_data = PatronData(authorization_identifier="barcode")
