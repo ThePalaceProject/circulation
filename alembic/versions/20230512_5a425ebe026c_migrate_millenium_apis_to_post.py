@@ -41,7 +41,8 @@ def match_expression(url: str) -> bool:
 def upgrade() -> None:
     """Set 'use_post_requests' to 'true' for 'api.millenium' integrations.
     But only those that are for the following urls
-    - thepalaceproject.org
+    - vlc.thepalaceproject.org
+    - vlc.*.palaceproject.io
     - localhost
     """
     conn = op.get_bind()
