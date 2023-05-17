@@ -2332,8 +2332,8 @@ class TestBasicAuthenticationProvider:
             assert doc["type"] == provider.flow_type
 
             labels = doc["labels"]
-            assert labels["login"] == provider.identifier_label.value
-            assert labels["password"] == provider.password_label.value
+            assert labels["login"] == provider.identifier_label
+            assert labels["password"] == provider.password_label
 
             inputs = doc["inputs"]
             assert inputs["login"]["keyboard"] == provider.identifier_keyboard.value

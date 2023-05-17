@@ -1376,19 +1376,6 @@ class BarcodeFormats(Enum):
     NONE = "None"
 
 
-class IdentifierLabels(Enum):
-    BARCODE = "Barcode"
-    EMAIL = "Email Address"
-    USERNAME = "Username"
-    LIBRARY_CARD = "Library Card"
-    CARD_NUMBER = "Card Number"
-
-
-class PasswordLabels(Enum):
-    PASSWORD = "Password"
-    PIN = "PIN"
-
-
 class BasicAuthProviderSettings(AuthProviderSettings):
     """Settings for the BasicAuthenticationProvider."""
 
@@ -1491,29 +1478,17 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             weight=10,
         ),
     )
-    identifier_label: IdentifierLabels = FormField(
-        IdentifierLabels.BARCODE,
+    identifier_label: str = FormField(
+        "Barcode",
         form=ConfigurationFormItem(
             label="Label for identifier entry",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                IdentifierLabels.BARCODE: "Barcode",
-                IdentifierLabels.EMAIL: "Email address",
-                IdentifierLabels.USERNAME: "Username",
-                IdentifierLabels.LIBRARY_CARD: "Library card",
-            },
             weight=10,
         ),
     )
-    password_label: PasswordLabels = FormField(
-        PasswordLabels.PIN,
+    password_label: str = FormField(
+        "PIN",
         form=ConfigurationFormItem(
             label="Label for password entry",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                PasswordLabels.PASSWORD: "Password",
-                PasswordLabels.PIN: "PIN",
-            },
             weight=10,
         ),
     )
@@ -2016,8 +1991,8 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         flow_doc: dict[str, Any] = dict(
             description=str(self.label()),
             labels=dict(
-                login=self.identifier_label.value,
-                password=self.password_label.value,
+                login=self.identifier_label,
+                password=self.password_label,
             ),
             inputs=dict(login=login_inputs, password=password_inputs),
         )
