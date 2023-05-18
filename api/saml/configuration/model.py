@@ -165,7 +165,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings):
                 "NOTE: If a SAML attribute contains several values, only the first will be used."
             ),
             type=ConfigurationFormItemType.MENU,
-            options={attribute: attribute.value for attribute in SAMLAttributeType},
+            options={attribute.name: attribute.name for attribute in SAMLAttributeType},
         ),
         alias="saml_patron_id_attributes",
         format="narrow",
