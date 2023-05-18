@@ -128,6 +128,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings):
             ),
             type=ConfigurationFormItemType.MENU,
             options=FederatedIdentityProviderOptions(),
+            format="narrow",
         ),
         alias="saml_federated_idp_entity_ids",
     )
@@ -148,7 +149,12 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings):
         alias="saml_patron_id_use_name_id",
     )
     patron_id_attributes: Optional[List[str]] = FormField(
-        None,
+        [
+            SAMLAttributeType.eduPersonUniqueId.name,
+            SAMLAttributeType.eduPersonTargetedID.name,
+            SAMLAttributeType.eduPersonPrincipalName.name,
+            SAMLAttributeType.uid.name,
+        ],
         form=ConfigurationFormItem(
             label=_("Patron ID: SAML Attributes"),
             description=_(
@@ -162,6 +168,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings):
             options={attribute: attribute.value for attribute in SAMLAttributeType},
         ),
         alias="saml_patron_id_attributes",
+        format="narrow",
     )
     patron_id_regular_expression: Optional[Pattern] = FormField(
         None,
