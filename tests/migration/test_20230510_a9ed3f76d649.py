@@ -67,20 +67,26 @@ def test_migration(alembic_runner: MigrationContext, alembic_engine: Engine) -> 
 
     # Insert configuration settings for testing
     with alembic_engine.connect() as connection:
-        # Set up a library
+        # Set up two libraries
         library = connection.execute(
             "INSERT INTO libraries (name, short_name) VALUES ('test', 'test') returning id"
         ).fetchone()[0]
+        library2 = connection.execute(
+            "INSERT INTO libraries (name, short_name) VALUES ('test2', 'test2') returning id"
+        ).fetchone()[0]
 
-        # Set up three integrations
+        # Set up four integrations
         sip_integration = connection.execute(
             "INSERT INTO externalintegrations (protocol, goal, name) VALUES ('api.sip', 'patron_auth', 'Integration 1') returning id"
         ).fetchone()[0]
         millenium_integration = connection.execute(
             "INSERT INTO externalintegrations (protocol, goal, name) VALUES ('api.millenium_patron', 'patron_auth', 'Integration 2') returning id"
         ).fetchone()[0]
+        simple_integration = connection.execute(
+            "INSERT INTO externalintegrations (protocol, goal, name) VALUES ('api.simple_authentication', 'patron_auth', 'Integration 3') returning id"
+        ).fetchone()[0]
         unrelated_integration = connection.execute(
-            "INSERT INTO externalintegrations (protocol, goal, name) VALUES ('unrelated', 'other_goal', 'Integration 3') returning id"
+            "INSERT INTO externalintegrations (protocol, goal, name) VALUES ('unrelated', 'other_goal', 'Integration 4') returning id"
         ).fetchone()[0]
 
         # Add configuration settings for the sip integration
@@ -116,10 +122,20 @@ def test_migration(alembic_runner: MigrationContext, alembic_engine: Engine) -> 
             library,
         )
 
+        # Add configuration settings for the simple integration
+        insert_setting(connection, "test_identifier", "123", simple_integration)
+        insert_setting(connection, "test_password", "456", simple_integration)
+
         # Associate the millenium integration with the library
         connection.execute(
             "INSERT INTO externalintegrations_libraries (library_id, externalintegration_id) VALUES (%s, %s)",
             (library, millenium_integration),
+        )
+
+        # Associate the simple integration with library 2
+        connection.execute(
+            "INSERT INTO externalintegrations_libraries (library_id, externalintegration_id) VALUES (%s, %s)",
+            (library2, simple_integration),
         )
 
     # Migrate back up, running our upgrade migration
@@ -132,7 +148,7 @@ def test_migration(alembic_runner: MigrationContext, alembic_engine: Engine) -> 
         integrations = connection.execute(
             "SELECT * FROM integration_configurations",
         )
-        assert integrations.rowcount == 2
+        assert integrations.rowcount == 3
 
         # Check that the sip integration was migrated correctly
         # The unknown setting 'setting1' was dropped, self test results were migrated, and the patron status block
@@ -168,19 +184,42 @@ def test_migration(alembic_runner: MigrationContext, alembic_engine: Engine) -> 
         }
         assert millenium_integration[3] == {}
 
+        # Check that the simple integration was migrated correctly
+        simple_integration = connection.execute(
+            "SELECT protocol, goal, settings, self_test_results, id FROM integration_configurations WHERE name = %s",
+            ("Integration 3",),
+        ).fetchone()
+        assert simple_integration is not None
+        assert simple_integration[0] == "api.simple_authentication"
+        assert simple_integration[1] == "PATRON_AUTH_GOAL"
+        assert simple_integration[2] == {
+            "test_identifier": "123",
+            "test_password": "456",
+        }
+        assert simple_integration[3] == {}
+
         # Check that we have the correct number of library integrations
         # The SIP integration has library settings, but no association with a library, so no
-        # library integration was created for it.
+        # library integration was created for it. And the simple auth integration has a library
+        # association, but no library settings, so we do create a integration with no settings for it.
         integrations = connection.execute(
-            "SELECT parent_id, library_id, settings FROM integration_library_configurations",
+            "SELECT parent_id, library_id, settings FROM integration_library_configurations ORDER BY library_id asc",
         )
-        assert integrations.rowcount == 1
+        assert integrations.rowcount == 2
 
         # Check that the millenium integration was migrated correctly
-        millenium_library_integration = integrations.fetchone()
+        [
+            millenium_library_integration,
+            simple_library_integration,
+        ] = integrations.fetchall()
         assert millenium_library_integration is not None
         assert millenium_library_integration[0] == millenium_integration[4]
         assert millenium_library_integration[1] == library
         assert millenium_library_integration[2] == {
             "library_identifier_field": "foo",
         }
+
+        assert simple_library_integration is not None
+        assert simple_library_integration[0] == simple_integration[4]
+        assert simple_library_integration[1] == library2
+        assert simple_library_integration[2] == {}

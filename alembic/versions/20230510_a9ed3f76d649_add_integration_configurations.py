@@ -7,12 +7,14 @@ Create Date: 2023-05-10 19:50:47.458800+00:00
 """
 import json
 from collections import defaultdict
-from typing import Any, Dict, Type, TypeVar
+from typing import Dict, Tuple, Type, TypeVar
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.engine import Connection, RowProxy
 
 from alembic import op
+from api.authenticator import AuthenticationProvider
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.settings import (
     BaseSettings,
@@ -28,37 +30,7 @@ branch_labels = None
 depends_on = None
 
 
-T = TypeVar("T", bound=BaseSettings)
-
-
-def _validate_and_load_settings(
-    settings_class: Type[T], settings_dict: Dict[str, str]
-) -> T:
-    aliases = {
-        f.alias: f.name
-        for f in settings_class.__fields__.values()
-        if f.alias is not None
-    }
-    parsed_settings_dict = {}
-    for key, setting in settings_dict.items():
-        if key in aliases:
-            key = aliases[key]
-        field = settings_class.__fields__.get(key)
-        if field is None or not isinstance(field.field_info, FormFieldInfo):
-            continue
-        config_item = field.field_info.form
-        if (
-            config_item.type == ConfigurationFormItemType.LIST
-            or config_item.type == ConfigurationFormItemType.MENU
-        ):
-            parsed_settings_dict[key] = json.loads(setting)
-        else:
-            parsed_settings_dict[key] = setting
-    return settings_class(**parsed_settings_dict)
-
-
-def upgrade() -> None:
-    # Add new tables for tracking integration configurations and errors.
+def _create_tables() -> None:
     op.create_table(
         "integration_configurations",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -106,72 +78,136 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("parent_id", "library_id"),
     )
 
-    # Migrate settings from the old configurationsettings table into integration_configurations.
+
+T = TypeVar("T", bound=BaseSettings)
+
+
+def _validate_and_load_settings(
+    settings_class: Type[T], settings_dict: Dict[str, str]
+) -> T:
+    aliases = {
+        f.alias: f.name
+        for f in settings_class.__fields__.values()
+        if f.alias is not None
+    }
+    parsed_settings_dict = {}
+    for key, setting in settings_dict.items():
+        if key in aliases:
+            key = aliases[key]
+        field = settings_class.__fields__.get(key)
+        if field is None or not isinstance(field.field_info, FormFieldInfo):
+            continue
+        config_item = field.field_info.form
+        if (
+            config_item.type == ConfigurationFormItemType.LIST
+            or config_item.type == ConfigurationFormItemType.MENU
+        ):
+            parsed_settings_dict[key] = json.loads(setting)
+        else:
+            parsed_settings_dict[key] = setting
+    return settings_class(**parsed_settings_dict)
+
+
+def _migrate_external_integration(
+    connection: Connection,
+    integration: RowProxy,
+    protocol_class: Type[AuthenticationProvider],
+) -> Tuple[int, Dict[str, Dict[str, str]]]:
+    settings = connection.execute(
+        "select cs.library_id, cs.key, cs.value from configurationsettings cs "
+        "where cs.external_integration_id = (%s)",
+        (integration.id,),
+    )
+    settings_dict = {}
+    library_settings: Dict[str, Dict[str, str]] = defaultdict(dict)
+    self_test_results = json_serializer({})
+    for setting in settings:
+        if not setting.value:
+            continue
+        if setting.key == "self_test_results":
+            self_test_results = setting.value
+            continue
+        if setting.library_id:
+            library_settings[setting.library_id][setting.key] = setting.value
+        else:
+            settings_dict[setting.key] = setting.value
+
+    # Load and validate the settings before storing them in the database.
+    settings_class = protocol_class.settings_class()
+    settings_obj = _validate_and_load_settings(settings_class, settings_dict)
+    integration_configuration = connection.execute(
+        "insert into integration_configurations "
+        "(protocol, goal, name, settings, self_test_results, status) "
+        "values (%s, 'PATRON_AUTH_GOAL', %s, %s, %s, 'GREEN')"
+        "returning id",
+        (
+            integration.protocol,
+            integration.name,
+            json_serializer(settings_obj.dict()),
+            self_test_results,
+        ),
+    ).fetchone()
+
+    return integration_configuration[0], library_settings
+
+
+def _migrate_library_settings(
+    connection: Connection,
+    integration_id: int,
+    library_id: int,
+    library_settings: Dict[str, str],
+    protocol_class: Type[AuthenticationProvider],
+) -> None:
+    library_settings_class = protocol_class.library_settings_class()
+    library_settings_obj = _validate_and_load_settings(
+        library_settings_class, library_settings
+    )
+    connection.execute(
+        "insert into integration_library_configurations "
+        "(parent_id, library_id, settings) "
+        "values (%s, %s, %s)",
+        (
+            integration_id,
+            library_id,
+            json_serializer(library_settings_obj.dict()),
+        ),
+    )
+
+
+def _migrate_settings() -> None:
     connection = op.get_bind()
-    integrations = connection.execute(
+    external_integrations = connection.execute(
         "select ei.id, ei.protocol, ei.name from externalintegrations ei "
         "where ei.goal = 'patron_auth'"
     )
 
     patron_auth_registry = PatronAuthRegistry()
-    for integration in integrations:
-        protocol_class = patron_auth_registry[integration.protocol]
-        settings = connection.execute(
-            "select cs.library_id, cs.key, cs.value from configurationsettings cs "
-            "where cs.external_integration_id = (%s)",
-            (integration.id,),
+    for external_integration in external_integrations:
+        protocol_class = patron_auth_registry[external_integration.protocol]
+        integration_id, library_settings = _migrate_external_integration(
+            connection, external_integration, protocol_class
         )
-        settings_dict = {}
-        library_settings: Dict[str, Dict[str, Any]] = defaultdict(dict)
-        self_test_results = json_serializer({})
-        for setting in settings:
-            if not setting.value:
-                continue
-            if setting.key == "self_test_results":
-                self_test_results = setting.value
-                continue
-            if setting.library_id:
-                library_settings[setting.library_id][setting.key] = setting.value
-            else:
-                settings_dict[setting.key] = setting.value
-
-        # Load and validate the settings before storing them in the database.
-        settings_class = protocol_class.settings_class()
-        settings_obj = _validate_and_load_settings(settings_class, settings_dict)
-        integration_configuration = connection.execute(
-            "insert into integration_configurations "
-            "(protocol, goal, name, settings, self_test_results, status) "
-            "values (%s, 'PATRON_AUTH_GOAL', %s, %s, %s, 'GREEN')"
-            "returning id",
-            (
-                integration.protocol,
-                integration.name,
-                json_serializer(settings_obj.dict()),
-                self_test_results,
-            ),
-        ).fetchone()
-
-        for library_id, library_settings_dict in library_settings.items():
-            library_association = connection.execute(
-                "select * from externalintegrations_libraries where externalintegration_id = %s and library_id = %s",
-                (integration.id, library_id),
-            ).first()
-            if not library_association:
-                continue
-            library_settings_class = protocol_class.library_settings_class()
-            library_settings_obj = _validate_and_load_settings(
-                library_settings_class, library_settings_dict
+        external_integration_library = connection.execute(
+            "select library_id from externalintegrations_libraries where externalintegration_id = %s",
+            (external_integration.id,),
+        )
+        for library in external_integration_library:
+            _migrate_library_settings(
+                connection,
+                integration_id,
+                library.library_id,
+                library_settings[library.library_id],
+                protocol_class,
             )
-            connection.execute(
-                "insert into integration_library_configurations "
-                "(parent_id, library_id, settings) "
-                "values (%s, %s, %s)",
-                (
-                    integration_configuration.id,
-                    library_id,
-                    json_serializer(library_settings_obj.dict()),
-                ),
-            )
+
+
+def upgrade() -> None:
+    # Add new tables for tracking integration configurations and errors.
+    _create_tables()
+
+    # Migrate settings from the configurationsettings table into integration_configurations.
+    # We leave the existing settings in the table, but they will no longer be used.
+    _migrate_settings()
 
 
 def downgrade() -> None:
