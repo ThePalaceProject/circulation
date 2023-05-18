@@ -188,6 +188,8 @@ class ConfigurationFormItem:
             return value.value
         if isinstance(value, bool):
             return str(value).lower()
+        if isinstance(value, int):
+            return str(value)
         return value
 
     def to_dict(self, db: Session, field: ModelField) -> Tuple[int, Dict[str, Any]]:
