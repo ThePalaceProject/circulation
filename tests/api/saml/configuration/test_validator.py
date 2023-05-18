@@ -1,20 +1,15 @@
 import pytest
-from werkzeug.datastructures import MultiDict
 
-from api.admin.problem_details import INCOMPLETE_CONFIGURATION
-from api.admin.validator import PatronAuthenticationValidatorFactory
-from api.saml.configuration.model import SAMLConfiguration
-from api.saml.configuration.validator import (
+from api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    INVALID_CONFIGURATION_OPTION,
+)
+from api.saml.configuration.model import SAMLWebSSOAuthSettings
+from api.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
-    SAMLSettingsValidator,
 )
-from api.saml.metadata.filter import SAMLSubjectFilter
-from api.saml.metadata.parser import SAMLMetadataParser
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
-from core.python_expression_dsl.parser import DSLParser
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemError
 from tests.api.saml import saml_strings
 
 
@@ -27,39 +22,28 @@ class TestSAMLSettingsValidator:
                 None,
                 None,
                 None,
-                INCOMPLETE_CONFIGURATION.detailed(
-                    "Required field 'Service Provider's XML Metadata' is missing"
-                ),
+                INCOMPLETE_CONFIGURATION,
             ),
             (
                 "empty_sp_metadata_and_empty_idp_metadata",
                 saml_strings.INCORRECT_XML,
                 saml_strings.INCORRECT_XML,
                 None,
-                INCOMPLETE_CONFIGURATION.detailed(
-                    "Required field 'Service Provider's XML Metadata' is missing"
-                ),
+                INCOMPLETE_CONFIGURATION,
             ),
             (
                 "incorrect_sp_metadata_and_incorrect_idp_metadata",
                 saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
                 None,
-                SAML_INCORRECT_METADATA.detailed(
-                    "Service Provider's metadata has incorrect format: "
-                    "Missing urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST AssertionConsumerService"
-                ),
+                SAML_INCORRECT_METADATA,
             ),
             (
                 "correct_sp_metadata_and_incorrect_idp_metadata",
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
                 None,
-                SAML_INCORRECT_METADATA.detailed(
-                    "Identity Provider's metadata has incorrect format: "
-                    "Missing urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect SingleSignOnService "
-                    "service declaration"
-                ),
+                SAML_INCORRECT_METADATA,
             ),
             (
                 "correct_sp_and_idp_metadata",
@@ -80,20 +64,14 @@ class TestSAMLSettingsValidator:
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"(?P<patron>.+)@university\.org",
-                SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION.detailed(
-                    "SAML patron ID regular expression '(?P<patron>.+)@university\\.org' "
-                    "does not have mandatory named group 'patron_id'"
-                ),
+                SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
             ),
             (
                 "incorrect_patron_id_regular_expression",
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"[",
-                SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION.detailed(
-                    "SAML patron ID regular expression '[' has an incorrect format: "
-                    "unterminated character set at position 0"
-                ),
+                INVALID_CONFIGURATION_OPTION,
             ),
         ],
     )
@@ -120,52 +98,30 @@ class TestSAMLSettingsValidator:
         :type expected_validation_result: Optional[ProblemDetail]
         """
         # Arrange
-        submitted_form_data = MultiDict()
+        submitted_settings = {}
 
         if sp_xml_metadata is not None:
-            submitted_form_data.add(
-                SAMLConfiguration.service_provider_xml_metadata.key, sp_xml_metadata
-            )
+            submitted_settings["service_provider_xml_metadata"] = sp_xml_metadata
         if idp_xml_metadata is not None:
-            submitted_form_data.add(
-                SAMLConfiguration.non_federated_identity_provider_xml_metadata.key,
-                idp_xml_metadata,
-            )
+            submitted_settings[
+                "non_federated_identity_provider_xml_metadata"
+            ] = idp_xml_metadata
         if patron_id_regular_expression is not None:
-            submitted_form_data.add(
-                SAMLConfiguration.patron_id_regular_expression.key,
-                patron_id_regular_expression,
+            submitted_settings[
+                "patron_id_regular_expression"
+            ] = patron_id_regular_expression
+
+        if expected_validation_result is not None:
+            with pytest.raises(ProblemError) as exception:
+                SAMLWebSSOAuthSettings(**submitted_settings)
+
+            assert (
+                expected_validation_result.status_code
+                == exception.value.problem_detail.status_code
             )
-
-        submitted_form = {"form": submitted_form_data}
-        metadata_parser = SAMLMetadataParser()
-        parser = DSLParser()
-        visitor = DSLEvaluationVisitor()
-        evaluator = DSLEvaluator(parser, visitor)
-        subject_filter = SAMLSubjectFilter(evaluator)
-        validator = SAMLSettingsValidator(metadata_parser, subject_filter)
-
-        # Act
-        settings = list(SAMLWebSSOAuthenticationProvider.SETTINGS)
-        result = validator.validate(settings, submitted_form)
-
-        # Assert
-        if isinstance(result, ProblemDetail):
-            assert expected_validation_result.response == result.response
+            assert (
+                expected_validation_result.title == exception.value.problem_detail.title
+            )
+            assert expected_validation_result.uri == exception.value.problem_detail.uri
         else:
-            assert expected_validation_result == result
-
-
-class TestSAMLSettingsValidatorFactory:
-    @pytest.mark.parametrize(
-        "_,protocol", [("validator_using_factory_method", "api.saml.provider")]
-    )
-    def test_create_can_create(self, _, protocol):
-        # Arrange
-        factory = PatronAuthenticationValidatorFactory()
-
-        # Act
-        result = factory.create(protocol)
-
-        # Assert
-        assert True == isinstance(result, SAMLSettingsValidator)
+            SAMLWebSSOAuthSettings(**submitted_settings)

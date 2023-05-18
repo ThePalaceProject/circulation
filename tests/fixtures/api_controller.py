@@ -14,21 +14,26 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.app import app
 from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
+from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.util.flask import PalaceFlask
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.integration.goals import Goals
 from core.lane import Lane
 from core.model import (
     Collection,
     ConfigurationSetting,
-    ExternalIntegration,
     Library,
     Patron,
     Session,
     Work,
     create,
     get_one_or_create,
+)
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
 )
 from core.util.string_helpers import base64
 from tests.api.mockapi.circulation import MockCirculationManager
@@ -84,6 +89,7 @@ class ControllerFixture:
         self.vendor_ids = vendor_id_fixture
         self.db = db
         self.app = app
+        self.patron_auth_registry = PatronAuthRegistry()
 
         # PRESERVE_CONTEXT_ON_EXCEPTION needs to be off in tests
         # to prevent one test failure from breaking later tests as well.
@@ -193,24 +199,32 @@ class ControllerFixture:
         # Create a simple authentication integration for this library,
         # unless it already has a way to authenticate patrons
         # (in which case we would just screw things up).
-        if not any(
-            [
-                x
-                for x in library.integrations
-                if x.goal == ExternalIntegration.PATRON_AUTH_GOAL
-            ]
-        ):
-            integration, ignore = create(
-                _db,
-                ExternalIntegration,
-                protocol="api.simple_authentication",
-                goal=ExternalIntegration.PATRON_AUTH_GOAL,
+        auth_integrations = IntegrationLibraryConfiguration.for_library_and_goal(
+            _db, library, Goals.PATRON_AUTH_GOAL
+        ).all()
+        if len(auth_integrations) == 0:
+            protocol = self.patron_auth_registry.get_protocol(
+                SimpleAuthenticationProvider
             )
-            p = SimpleAuthenticationProvider
-            integration.setting(p.TEST_IDENTIFIER).value = "unittestuser"
-            integration.setting(p.TEST_PASSWORD).value = "unittestpassword"
-            integration.setting(p.TEST_NEIGHBORHOOD).value = "Unit Test West"
-            library.integrations.append(integration)
+            settings = SimpleAuthenticationProvider.settings_class()(
+                test_identifier="unittestuser",
+                test_password="unittestpassword",
+                neighborhood="Unit Test West",
+            )
+            integration, _ = create(
+                _db,
+                IntegrationConfiguration,
+                name=self.db.fresh_str(),
+                protocol=protocol,
+                goal=Goals.PATRON_AUTH_GOAL,
+                settings=settings.dict(),
+            )
+            create(
+                _db,
+                IntegrationLibraryConfiguration,
+                library=library,
+                parent=integration,
+            )
 
         for k, v in [
             (Configuration.LARGE_COLLECTION_LANGUAGES, []),

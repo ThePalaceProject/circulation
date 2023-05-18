@@ -31,11 +31,12 @@ import re
 import socket
 import ssl
 import tempfile
+from enum import Enum
 from typing import Callable, Optional
 
 import certifi
 
-from api.sip.dialect import GenericILS
+from api.sip.dialect import Dialect
 from core.util.datetime_helpers import utc_now
 
 # SIP2 defines a large number of fields which are used in request and
@@ -205,6 +206,11 @@ class RequestResend(IOError):
     """
 
 
+class Sip2Encoding(Enum):
+    cp850 = "cp850"
+    utf8 = "utf8"
+
+
 class Constants:
     UNKNOWN_LANGUAGE = "000"
     ENGLISH = "001"
@@ -290,7 +296,7 @@ class SIPClient(Constants):
         ssl_verification=True,
         ssl_contexts: Callable[[ssl._SSLMethod], ssl.SSLContext] = ssl.SSLContext,
         encoding=Constants.DEFAULT_ENCODING,
-        dialect=GenericILS,
+        dialect=Dialect.GENERIC_ILS,
     ):
         """Initialize a client for (but do not connect to) a SIP2 server.
 
@@ -340,7 +346,7 @@ class SIPClient(Constants):
             # We're implicitly logged in.
             self.must_log_in = False
         self.login_password = login_password
-        self.dialect = dialect
+        self.dialect_config = dialect.config
 
     def login(self):
         """Log in to the SIP server if required."""
@@ -367,7 +373,7 @@ class SIPClient(Constants):
 
     def end_session(self, *args, **kwargs):
         """Send end session message."""
-        if self.dialect.sendEndSession:
+        if self.dialect_config.sendEndSession:
             return self.make_request(
                 self.end_session_message,
                 self.end_session_response_parser,
@@ -946,68 +952,3 @@ class SIPClient(Constants):
         text += checksum
 
         return text
-
-
-class MockSIPClient(SIPClient):
-    """A SIP client that relies on canned responses rather than a socket
-    connection.
-    """
-
-    def __init__(self, **kwargs):
-        # Override any settings that might cause us to actually
-        # make requests.
-        kwargs["target_server"] = None
-        kwargs["target_port"] = None
-        super().__init__(**kwargs)
-
-        self.read_count = 0
-        self.write_count = 0
-        self.requests = []
-        self.responses = []
-        self.status = []
-
-    def queue_response(self, response):
-        if isinstance(response, str):
-            # Make sure responses come in as bytestrings, as they would
-            # in real life.
-            response = response.encode(Constants.DEFAULT_ENCODING)
-        self.responses.append(response)
-
-    def connect(self):
-        # Since there is no socket, do nothing but reset the local
-        # connection-specific variables.
-        self.status.append("Creating new socket connection.")
-        self.reset_connection_state()
-        return None
-
-    def do_send(self, data):
-        self.write_count += 1
-        self.requests.append(data)
-
-    def read_message(self, max_size=1024 * 1024):
-        """Read a response message off the queue."""
-        self.read_count += 1
-        response = self.responses[0]
-        self.responses = self.responses[1:]
-        return response
-
-    def disconnect(self):
-        pass
-
-
-class MockSIPClientFactory:
-    """Pass this into SIP2AuthenticationProvider to instantiate a
-    MockSIPClient based on its configuration, _and_ to use that
-    MockSIPClient every single time; normally
-    SIP2AuthenticationProvider will instantiate a different client for
-    every simulated server interaction, making it impossible to queue
-    responses or look at the results.
-    """
-
-    def __init__(self):
-        self.client = None
-
-    def __call__(self, **kwargs):
-        if self.client is None:
-            self.client = MockSIPClient(**kwargs)
-        return self.client

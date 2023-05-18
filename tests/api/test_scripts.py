@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import datetime
 import json
@@ -5,6 +7,7 @@ import logging
 from functools import partial
 from io import StringIO
 from pathlib import Path
+from typing import TYPE_CHECKING, Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,7 +18,6 @@ from api.adobe_vendor_id import (
     AuthdataUtility,
     ShortClientTokenLibraryConfigurationScript,
 )
-from api.authenticator import BasicAuthenticationProvider
 from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
@@ -61,9 +63,12 @@ from scripts import (
     NovelistSnapshotScript,
 )
 from tests.api.mockapi.circulation import MockCirculationManager
-from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.sample_covers import SampleCoversFixture
-from tests.fixtures.search import ExternalSearchFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.sample_covers import SampleCoversFixture
+    from tests.fixtures.search import ExternalSearchFixture
 
 
 class TestAdobeAccountIDResetScript:
@@ -1550,15 +1555,14 @@ class TestGenerateShortTokenScript:
         return patron
 
     @pytest.fixture
-    def authentication_provider(self, db: DatabaseTransactionFixture):
+    def authentication_provider(
+        self,
+        db: DatabaseTransactionFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         barcode = "12345"
         pin = "abcd"
-        integration = db.external_integration(
-            "api.simple_authentication", goal=ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        db.default_library().integrations.append(integration)
-        integration.setting(BasicAuthenticationProvider.TEST_IDENTIFIER).value = barcode
-        integration.setting(BasicAuthenticationProvider.TEST_PASSWORD).value = pin
+        create_simple_auth_integration(db.default_library(), barcode, pin)
         return barcode, pin
 
     def test_run_days(

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import datetime
 import json
+from typing import TYPE_CHECKING, Callable
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
 from api.circulation import FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
@@ -26,8 +28,11 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.api.mockapi.enki import MockEnkiAPI
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.api_enki_files import EnkiFilesFixture
-from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.api_enki_files import EnkiFilesFixture
+    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class EnkiTestFixure:
@@ -86,7 +91,11 @@ class TestEnkiAPI:
     def test_collection(self, enki_test_fixture: EnkiTestFixure):
         assert enki_test_fixture.collection == enki_test_fixture.api.collection
 
-    def test__run_self_tests(self, enki_test_fixture: EnkiTestFixure):
+    def test__run_self_tests(
+        self,
+        enki_test_fixture: EnkiTestFixure,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         db = enki_test_fixture.db
 
         # Mock every method that will be called by the self-test.
@@ -117,14 +126,7 @@ class TestEnkiAPI:
         api.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
-        integration = db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        create_simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         (
