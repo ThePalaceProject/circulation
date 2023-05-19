@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from sqlalchemy import inspect
 
 if TYPE_CHECKING:
     from pytest_alembic import MigrationContext
     from sqlalchemy.engine import Engine
+
+    from tests.migration.conftest import (
+        CreateConfigSetting,
+        CreateExternalIntegration,
+        CreateLibrary,
+    )
 
 
 def assert_tables_exist(alembic_engine: Engine) -> None:
@@ -43,9 +49,9 @@ def assert_tables_dont_exist(alembic_engine: Engine) -> None:
 def test_migration(
     alembic_runner: MigrationContext,
     alembic_engine: Engine,
-    create_library: Callable[..., int],
-    create_external_integration: Callable[..., int],
-    create_config_setting: Callable[..., int],
+    create_library: CreateLibrary,
+    create_external_integration: CreateExternalIntegration,
+    create_config_setting: CreateConfigSetting,
 ) -> None:
     # Migrate to just before our migration
     alembic_runner.migrate_down_to("a9ed3f76d649")
