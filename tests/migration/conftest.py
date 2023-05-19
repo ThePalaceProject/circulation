@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 def database() -> Generator[DatabaseFixture, None, None]:
     # This is very similar to the normal database fixture and uses the same object,
     # but because these tests are done outside a transaction, we need this fixture
-    # to have function scope, so the dataabase schema is completely reset between
+    # to have function scope, so the database schema is completely reset between
     # tests.
     app = ApplicationFixture.create()
     db = DatabaseFixture.create()
