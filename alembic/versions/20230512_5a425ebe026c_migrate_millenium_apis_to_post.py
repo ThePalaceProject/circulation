@@ -81,7 +81,7 @@ def upgrade() -> None:
         if config_results and len(post_results) > 0:
             use_post = post_results[0][0]
             if use_post is None:
-                use_post == "false"
+                use_post = "false"
         else:
             use_post = None
 
