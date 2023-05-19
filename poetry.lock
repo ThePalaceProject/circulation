@@ -2,14 +2,14 @@
 
 [[package]]
 name = "alembic"
-version = "1.11.0"
+version = "1.11.1"
 description = "A database migration tool for SQLAlchemy."
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "alembic-1.11.0-py3-none-any.whl", hash = "sha256:f0e74af5a6ade86b72770790188aaf64122c9cba64efd1d7ff3323ac3fdb75e0"},
-    {file = "alembic-1.11.0.tar.gz", hash = "sha256:d8bf706124e96e526889ac9c87a0d50debd9ef325ef32ae5391cf0315bdab4e1"},
+    {file = "alembic-1.11.1-py3-none-any.whl", hash = "sha256:dc871798a601fab38332e38d6ddb38d5e734f60034baeb8e2db5b642fccd8ab8"},
+    {file = "alembic-1.11.1.tar.gz", hash = "sha256:6a810a6b012c88b33458fceb869aef09ac75d6ace5291915ba7fae44de372c01"},
 ]
 
 [package.dependencies]
@@ -2034,14 +2034,14 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "pre-commit"
-version = "3.3.1"
+version = "3.3.2"
 description = "A framework for managing and maintaining multi-language pre-commit hooks."
 category = "dev"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "pre_commit-3.3.1-py2.py3-none-any.whl", hash = "sha256:218e9e3f7f7f3271ebc355a15598a4d3893ad9fc7b57fe446db75644543323b9"},
-    {file = "pre_commit-3.3.1.tar.gz", hash = "sha256:733f78c9a056cdd169baa6cd4272d51ecfda95346ef8a89bf93712706021b907"},
+    {file = "pre_commit-3.3.2-py2.py3-none-any.whl", hash = "sha256:8056bc52181efadf4aac792b1f4f255dfd2fb5a350ded7335d251a68561e8cb6"},
+    {file = "pre_commit-3.3.2.tar.gz", hash = "sha256:66e37bec2d882de1f17f88075047ef8962581f83c234ac08da21a0c58953d1f0"},
 ]
 
 [package.dependencies]
@@ -3242,14 +3242,14 @@ tox = ">=3.0.0,<5.0"
 
 [[package]]
 name = "tox-gh-actions"
-version = "3.1.0"
+version = "3.1.1"
 description = "Seamless integration of tox into GitHub Actions"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "tox-gh-actions-3.1.0.tar.gz", hash = "sha256:d314349eff393b5cf8978a6a90bc8ecda385bdc9611fddc38e829649324dff6f"},
-    {file = "tox_gh_actions-3.1.0-py2.py3-none-any.whl", hash = "sha256:4db4ec96e7e52b45a83c36ed4b0bec19a3e946f23eb325c3e8629fdd1e41d63c"},
+    {file = "tox-gh-actions-3.1.1.tar.gz", hash = "sha256:8092fbedef53d29ca4f5ee35e15b4324b2edcd5c9dc17db56777cddac23ac3c1"},
+    {file = "tox_gh_actions-3.1.1-py2.py3-none-any.whl", hash = "sha256:06cbe70c80eb36c560df6e437c94a1782b894b1f7cc3afdd8cf85cdf62701bde"},
 ]
 
 [package.dependencies]
@@ -3281,14 +3281,14 @@ telegram = ["requests"]
 
 [[package]]
 name = "types-aws-xray-sdk"
-version = "2.12.0.0"
+version = "2.12.0.1"
 description = "Typing stubs for aws-xray-sdk"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-aws-xray-sdk-2.12.0.0.tar.gz", hash = "sha256:5c95986542cb906c3e08185b32081ef2a1c75c906f9f739e12aa8655eb4253a0"},
-    {file = "types_aws_xray_sdk-2.12.0.0-py3-none-any.whl", hash = "sha256:1a920a2b9f9810afbe6dcb49c6f2411ec756858d7498c38b2d1820710662636d"},
+    {file = "types-aws-xray-sdk-2.12.0.1.tar.gz", hash = "sha256:9c4fea4508a4ff6a73c8f0fad6b9e20cb8699dc97a714d40f1f15a43b3c9385b"},
+    {file = "types_aws_xray_sdk-2.12.0.1-py3-none-any.whl", hash = "sha256:3e4017f2f71d663537ee609f0a8304ac72cf5d65a62308439e8d593f2b695630"},
 ]
 
 [[package]]
