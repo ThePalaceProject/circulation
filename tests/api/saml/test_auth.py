@@ -1,5 +1,6 @@
 from copy import copy
-from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
+from typing import Callable
+from unittest.mock import MagicMock, create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -12,7 +13,10 @@ from api.saml.auth import (
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
 )
-from api.saml.configuration.model import SAMLConfiguration, SAMLOneLoginConfiguration
+from api.saml.configuration.model import (
+    SAMLOneLoginConfiguration,
+    SAMLWebSSOAuthSettings,
+)
 from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -28,15 +32,12 @@ from api.saml.metadata.model import (
     SAMLUIInfo,
 )
 from api.saml.metadata.parser import SAMLSubjectParser
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from core.model.configuration import ExternalIntegration, HasExternalIntegration
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
 from core.util.datetime_helpers import datetime_utc
 from core.util.string_helpers import base64
 from tests.api.saml import saml_strings
 from tests.fixtures.api_controller import ControllerFixture
-from tests.fixtures.database import DatabaseTransactionFixture
 
 SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS = SAMLServiceProviderMetadata(
     "http://opds.hilbertteam.net/metadata/",
@@ -96,18 +97,14 @@ class TestSAMLAuthenticationManager:
     def test_start_authentication(
         self,
         controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
         _,
         service_provider,
         identity_providers,
     ):
-        configuration = create_autospec(spec=SAMLConfiguration)
-        configuration.service_provider_debug_mode = MagicMock(return_value=False)
-        configuration.service_provider_strict_mode = MagicMock(return_value=False)
-        configuration.get_service_provider = MagicMock(return_value=service_provider)
-        configuration.get_identity_providers = MagicMock(
-            return_value=identity_providers
+        onelogin_configuration = create_mock_onelogin_configuration(
+            service_provider, identity_providers
         )
-        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         subject_parser = SAMLSubjectParser()
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
@@ -299,6 +296,8 @@ class TestSAMLAuthenticationManager:
     def test_finish_authentication(
         self,
         controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
         _,
         saml_response,
         current_time,
@@ -323,23 +322,15 @@ class TestSAMLAuthenticationManager:
                 side_effect=lambda *args, **kwargs: real_validate_sign(*args, **kwargs)
             )
 
-        filter_expression_mock = PropertyMock(return_value=filter_expression)
-        service_provider_debug_mode_mock = PropertyMock(return_value=False)
-        service_provider_strict_mode = PropertyMock(return_value=False)
+        configuration = create_saml_configuration(
+            filter_expression=filter_expression,
+            service_provider_debug_mode=False,
+            service_provider_strict_mode=False,
+        )
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, identity_providers, configuration
+        )
 
-        configuration = create_autospec(spec=SAMLConfiguration)
-        type(configuration).filter_expression = filter_expression_mock
-        type(
-            configuration
-        ).service_provider_debug_mode = service_provider_debug_mode_mock
-        type(configuration).service_provider_strict_mode = service_provider_strict_mode
-        configuration.get_service_provider = MagicMock(
-            return_value=SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS
-        )
-        configuration.get_identity_providers = MagicMock(
-            return_value=identity_providers
-        )
-        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         subject_parser = SAMLSubjectParser()
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
@@ -371,37 +362,14 @@ class TestSAMLAuthenticationManager:
                     assert expected_value == result
 
 
-class SAMLAuthFixture:
-    db: DatabaseTransactionFixture
-    integration: ExternalIntegration
-    authentication_provider: SAMLWebSSOAuthenticationProvider
-
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.integration = db.external_integration(
-            protocol=SAMLWebSSOAuthenticationProvider.NAME,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-        self.authentication_provider = SAMLWebSSOAuthenticationProvider(
-            db.default_library(), self.integration
-        )
-
-
-@pytest.fixture(scope="function")
-def saml_auth_fixture(db: DatabaseTransactionFixture) -> SAMLAuthFixture:
-    return SAMLAuthFixture(db)
-
-
 class TestSAMLAuthenticationManagerFactory:
-    def test_create(self, saml_auth_fixture: SAMLAuthFixture):
+    def test_create(self):
         # Arrange
         factory = SAMLAuthenticationManagerFactory()
-        integration_owner = create_autospec(spec=HasExternalIntegration)
-        integration_owner.external_integration = MagicMock(
-            return_value=saml_auth_fixture.integration
-        )
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
 
         # Act
-        result = factory.create(integration_owner)
+        result = factory.create(configuration)
 
         # Assert
-        assert True == isinstance(result, SAMLAuthenticationManager)
+        assert isinstance(result, SAMLAuthenticationManager)

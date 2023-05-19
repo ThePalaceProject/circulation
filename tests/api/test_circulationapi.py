@@ -1666,6 +1666,7 @@ class TestBaseCirculationAPI:
                 return PatronData(authorization_identifier="patron")
 
         basic: Union[MockBasic, "MockBasic2"] = MockBasic()
+
         authenticator.register_basic_auth_provider(basic)
         assert None == api.patron_email_address(
             patron, library_authenticator=authenticator

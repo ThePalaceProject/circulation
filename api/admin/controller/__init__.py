@@ -170,7 +170,7 @@ def setup_admin_controllers(manager):
     )
 
     manager.admin_patron_auth_service_self_tests_controller = (
-        PatronAuthServiceSelfTestsController(manager)
+        PatronAuthServiceSelfTestsController(manager._db)
     )
 
     from api.admin.controller.collection_settings import CollectionSettingsController

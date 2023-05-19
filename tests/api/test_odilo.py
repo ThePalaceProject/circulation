@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING, Callable
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
 from api.circulation_exceptions import *
 from api.odilo import (
@@ -28,8 +30,10 @@ from core.util.http import BadResponseException
 from tests.api.mockapi.odilo import MockOdiloAPI
 from tests.core.mock import MockRequestsResponse
 
-from ..fixtures.api_odilo_files import OdiloFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
+if TYPE_CHECKING:
+    from ..fixtures.api_odilo_files import OdiloFilesFixture
+    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.database import DatabaseTransactionFixture
 
 
 class OdiloFixture:
@@ -217,7 +221,11 @@ class TestOdiloAPI:
             odilo.db.session
         )
 
-    def test__run_self_tests(self, odilo: OdiloFixture):
+    def test__run_self_tests(
+        self,
+        odilo: OdiloFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         """Verify that OdiloAPI._run_self_tests() calls the right
         methods.
         """
@@ -254,14 +262,7 @@ class TestOdiloAPI:
         odilo.collection.libraries.append(no_default_patron)
 
         with_default_patron = odilo.db.default_library()
-        integration = odilo.db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        create_simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(odilo.db.session, odilo.collection)

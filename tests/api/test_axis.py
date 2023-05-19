@@ -1,14 +1,16 @@
+from __future__ import annotations
+
 import datetime
 import json
 import socket
 import ssl
 import urllib
 from functools import partial
+from typing import TYPE_CHECKING, Callable
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
 from api.axis import (
     AudiobookMetadataParser,
     AvailabilityResponseParser,
@@ -63,8 +65,10 @@ from core.util.http import RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail
 from tests.api.mockapi.axis import MockAxis360API
 
-from ..fixtures.api_axis_files import AxisFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
+if TYPE_CHECKING:
+    from ..fixtures.api_axis_files import AxisFilesFixture
+    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.database import DatabaseTransactionFixture
 
 
 class Axis360Fixture:
@@ -130,7 +134,11 @@ class TestAxis360API:
             == axis360.api.external_integration(object())
         )
 
-    def test__run_self_tests(self, axis360: Axis360Fixture):
+    def test__run_self_tests(
+        self,
+        axis360: Axis360Fixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.
 
@@ -160,14 +168,7 @@ class TestAxis360API:
         axis360.collection.libraries.append(no_default_patron)
 
         with_default_patron = axis360.db.default_library()
-        integration = axis360.db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        create_simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(axis360.db.session, axis360.collection)

@@ -33,15 +33,24 @@ exclude = [
     'core/classifier',
     'core/model/listeners\.py',
     'integration_tests/',
-    'tests/api/admin/controller/',
     # TODO: Post test-suite refactoring.
-    'tests/api/admin/test_routes.py',
+    'tests/api/admin/controller/test_admin_search_controller\.py',
+    'tests/api/admin/controller/test_analytics_services\.py',
+    'tests/api/admin/controller/test_announcement_service\.py',
+    'tests/api/admin/controller/test_catalog_services\.py',
+    'tests/api/admin/controller/test_collection_registrations\.py',
+    'tests/api/admin/controller/test_collection_self_tests\.py',
+    'tests/api/admin/controller/test_collections\.py',
+    'tests/api/admin/controller/test_controller\.py',
+    'tests/api/admin/controller/test_discovery_services\.py',
+    'tests/api/admin/controller/test_library\.py',
+    'tests/api/admin/controller/test_work_editor\.py',
+    'tests/api/admin/test_routes\.py',
     'tests/api/saml/metadata',
     'tests/api/saml/test_auth\.py',
     'tests/api/saml/test_provider\.py',
     'tests/api/test_adobe_vendor_id\.py',
     'tests/api/test_announcements\.py',
-    'tests/api/test_authenticator\.py',
     'tests/api/test_axis\.py',
     'tests/api/test_bibliotheca\.py',
     'tests/api/test_circulationapi\.py',
@@ -69,7 +78,6 @@ exclude = [
     'tests/api/test_registry\.py',
     'tests/api/test_routes\.py',
     'tests/api/test_scripts\.py',
-    'tests/api/test_selftest\.py',
     'tests/core/models/test_admin\.py',
     'tests/core/models/test_cachedfeed\.py',
     'tests/core/models/test_collection\.py',
@@ -123,9 +131,17 @@ disallow_subclassing_any = true
 disallow_untyped_decorators = true
 disallow_untyped_defs = true
 module = [
+    "api.admin.controller.patron_auth_services",
+    "api.admin.form_data",
     "api.admin.model.dashboard_statistics",
+    "api.integration.*",
+    "core.integration.*",
     "core.model.hassessioncache",
+    "core.model.integration",
+    "core.selftest",
+    "core.util.authentication_for_opds",
     "core.util.cache",
+    "tests.migration.*",
 ]
 no_implicit_reexport = true
 strict_concatenate = true
@@ -240,8 +256,9 @@ redmail = "^0.6.0"
 requests = "^2.29"
 SQLAlchemy = "~1.3.19"
 textblob = "0.17.1"
-# We import typing_extensions, so we can use Self in our type annotations.
-# - Self is included in Python 3.11
+# We import typing_extensions, so we can use new annotation features.
+# - ParamSpec (Python 3.10)
+# - Self (Python 3.11)
 # Once we upgrade to Python 3.11, we can remove this dependency.
 typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
@@ -269,6 +286,7 @@ mypy = "^1.0.1"
 psycopg2-binary = "~2.9.5"
 pyfakefs = "~5.2.0"
 pytest = ">=7.2.0"
+pytest-alembic = "^0.10.4"
 pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"

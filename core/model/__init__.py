@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import warnings
-from typing import TYPE_CHECKING, Dict, Generator, List
+from typing import TYPE_CHECKING, Any, Dict, Generator, List
 
 from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
+from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
@@ -293,6 +295,19 @@ def dump_query(query):
 DEBUG = False
 
 
+def json_encoder(obj: Any) -> Any:
+    # Handle Flask Babel LazyString objects.
+    if hasattr(obj, "__html__"):
+        return str(obj.__html__())
+
+    # Pass everything else off to Pydantic JSON encoder.
+    return pydantic_encoder(obj)
+
+
+def json_serializer(*args, **kwargs) -> str:
+    return json.dumps(*args, default=json_encoder, **kwargs)
+
+
 @contextmanager
 def pg_advisory_lock(
     connection: Session, lock_id: int | None
@@ -323,7 +338,7 @@ class SessionManager:
     @classmethod
     def engine(cls, url=None):
         url = url or Configuration.database_url()
-        return create_engine(url, echo=DEBUG)
+        return create_engine(url, echo=DEBUG, json_serializer=json_serializer)
 
     @classmethod
     def sessionmaker(cls, url=None, session=None):
@@ -556,7 +571,6 @@ from .collection import (
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,
-    ExternalIntegrationError,
     ExternalIntegrationLink,
 )
 from .contributor import Contribution, Contributor
@@ -568,6 +582,7 @@ from .devicetokens import DeviceToken
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier
+from .integration import IntegrationError
 from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import (

@@ -1,8 +1,18 @@
+from __future__ import annotations
+
 import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Optional,
+    Protocol,
+    runtime_checkable,
+)
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -10,7 +20,6 @@ import pytest
 from pymarc import parse_xml_to_array
 from pymarc.record import Record  # type: ignore
 
-from api.authenticator import BasicAuthenticationProvider
 from api.bibliotheca import (
     BibliothecaAPI,
     BibliothecaBibliographicCoverageProvider,
@@ -65,9 +74,12 @@ from core.util.http import BadResponseException
 from core.util.problem_detail import ProblemDetail
 from core.util.web_publication_manifest import AudiobookManifest
 from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
-from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
-from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.time import Time
+
+if TYPE_CHECKING:
+    from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
+    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.time import Time
 
 
 class BibliothecaAPITestFixture:
@@ -93,7 +105,11 @@ class TestBibliothecaAPI:
             == bibliotheca_fixture.api.external_integration(object())
         )
 
-    def test__run_self_tests(self, bibliotheca_fixture: BibliothecaAPITestFixture):
+    def test__run_self_tests(
+        self,
+        bibliotheca_fixture: BibliothecaAPITestFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         db = bibliotheca_fixture.db
         # Verify that BibliothecaAPI._run_self_tests() calls the right
         # methods.
@@ -120,14 +136,7 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
-        integration = db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        create_simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(db.session, bibliotheca_fixture.collection)
@@ -978,41 +987,52 @@ class TestErrorParser:
             assert problem_detail_title == problem.title
 
     @pytest.mark.parametrize(
-        "incoming_message, error_string",
+        "incoming_message, incoming_message_from_file, error_string",
         [
             (
                 # Simulate the message we get when the server goes down.
                 "The server has encountered an error",
+                None,
                 "The server has encountered an error",
             ),
             (
                 # Simulate the message we get when the server gives a vague error.
-                BibliothecaFilesFixture.files().sample_text("error_unknown.xml"),
+                None,
+                "error_unknown.xml",
                 "Unknown error",
             ),
             (
                 # Simulate the message we get when the error message is
                 # 'Authentication failed' but our authentication information is
                 # set up correctly.
-                BibliothecaFilesFixture.files().sample_text(
-                    "error_authentication_failed.xml"
-                ),
+                None,
+                "error_authentication_failed.xml",
                 "Authentication failed",
             ),
             (
                 """<weird>This error does not follow the standard set out by Bibliotheca.</weird>""",
+                None,
                 "Unknown error",
             ),
             (
                 # Empty error message
                 """<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Message/></Error>""",
+                None,
                 "Unknown error",
             ),
         ],
     )
     def test_remote_initiated_server_error(
-        self, incoming_message: str, error_string: str
+        self,
+        incoming_message: Optional[str],
+        incoming_message_from_file: Optional[str],
+        error_string: str,
+        api_bibliotheca_files_fixture: BibliothecaFilesFixture,
     ):
+        if incoming_message_from_file:
+            incoming_message = api_bibliotheca_files_fixture.files().sample_text(
+                incoming_message_from_file
+            )
         error = ErrorParser().process_all(incoming_message)
         problem = error.as_problem_detail_document()
 
@@ -1602,6 +1622,7 @@ class TestBibliothecaEventMonitor:
     def test_run_once(
         self,
         bibliotheca_fixture: BibliothecaAPITestFixture,
+        time_fixture: Time,
         db: DatabaseTransactionFixture,
     ):
         # run_once() slices the time between its start date
@@ -1665,7 +1686,7 @@ class TestBibliothecaEventMonitor:
         # The events we found were both from 2016, but that's not
         # considered when setting the timestamp.
         assert one_hour_ago - monitor.OVERLAP == after_timestamp.start
-        Time.time_eq(after_timestamp.finish, now)
+        time_fixture.time_eq(after_timestamp.finish, now)
         # The timestamp's achivements have been updated.
         assert "Events handled: 13." == after_timestamp.achievements
 
