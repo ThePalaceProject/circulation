@@ -60,7 +60,7 @@ The config file format is a YML file of the form:
   expected_status_code: int = 200"""
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls):  # pragma: no cover
         parser = ArgumentParser(
             "Test API Integrations",
             description=cls.CMDLINE_DESCRIPTION,

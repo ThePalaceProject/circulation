@@ -1,3 +1,4 @@
+from argparse import Namespace
 from io import StringIO
 from unittest.mock import Mock, call, patch
 
@@ -16,6 +17,7 @@ BASIC_YAML = """
 - name: Test
   endpoint: localhost
 """
+BASIC_YAML_DICT = [{"name": "Test", "endpoint": "localhost"}]
 
 
 class IntegrationTestFixture:
@@ -30,15 +32,13 @@ def integration_test(db: DatabaseTransactionFixture):
 
 class TestIntegrationTest:
     def test_read_config(self, integration_test: IntegrationTestFixture):
-        basic_yaml_dict = [{"name": "Test", "endpoint": "localhost"}]
-
         with patch("core.jobs.integration_test.open") as mock_open:
             mock_open.return_value = StringIO(BASIC_YAML)
             data = integration_test.script._read_config("on/disk/filepath")
 
             assert mock_open.call_count == 1
             assert mock_open.call_args == call("on/disk/filepath", "rb")
-            assert data == basic_yaml_dict
+            assert data == BASIC_YAML_DICT
 
         with patch(
             "core.jobs.integration_test.HTTP.get_with_timeout"
@@ -55,7 +55,7 @@ class TestIntegrationTest:
 
             assert get_with_timeout.call_count == 1
             assert get_with_timeout.call_args == call("http://...")
-            assert data == basic_yaml_dict
+            assert data == BASIC_YAML_DICT
 
     def test_read_config_decrypt(self, integration_test: IntegrationTestFixture):
         with patch("core.jobs.integration_test.read_file_bytes") as read_file_bytes:
@@ -155,3 +155,50 @@ class TestIntegrationTest:
             assert open.return_value.__enter__.return_value.write.call_args == call(
                 b"RANDOMBYTESIVencrypted bytes"
             )
+
+    def test__do_run(self, integration_test: IntegrationTestFixture):
+        script = integration_test.script
+        script.parse_command_line = Mock()
+
+        script.parse_command_line.return_value = Namespace(generate_key_file="keyfile")
+        with patch.object(script, "_generate_key_file") as generate_key_file:
+            script.do_run()
+            assert generate_key_file.call_count == 1
+            assert generate_key_file.call_args == call("keyfile")
+
+        script.parse_command_line.return_value = Namespace(
+            config="configfile",
+            key_file="keyfile",
+            encrypt_file="encryptfile",
+            generate_key_file=None,
+        )
+        with patch.object(script, "_encrypt") as encrypt:
+            script.do_run()
+            assert encrypt.call_count == 1
+            assert encrypt.call_args == call("configfile", "keyfile", "encryptfile")
+
+        script.parse_command_line.return_value = Namespace(
+            config="configfile",
+            key_file="keyfile",
+            generate_key_file=None,
+            encrypt_file=None,
+        )
+        with (
+            patch.object(script, "_run_test") as run_test,
+            patch.object(script, "_read_config") as read_config,
+        ):
+            read_config.return_value = BASIC_YAML_DICT
+            script.do_run()
+
+            assert read_config.call_args == call("configfile", key_file="keyfile")
+            assert run_test.call_count == 1
+            assert run_test.call_args == call(
+                IntegrationTestDetails(**BASIC_YAML_DICT[0])
+            )
+
+            # Test the exception case
+            run_test.side_effect = FailedIntegrationTest(
+                "Error", exception=Exception("...")
+            )
+            # Script does not fail
+            script.do_run()
