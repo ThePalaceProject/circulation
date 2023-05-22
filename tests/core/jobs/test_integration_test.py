@@ -158,7 +158,7 @@ class TestIntegrationTest:
 
     def test__do_run(self, integration_test: IntegrationTestFixture):
         script = integration_test.script
-        script.parse_command_line = Mock()
+        script.parse_command_line = Mock()  # type: ignore
 
         script.parse_command_line.return_value = Namespace(generate_key_file="keyfile")
         with patch.object(script, "_generate_key_file") as generate_key_file:
@@ -193,7 +193,7 @@ class TestIntegrationTest:
             assert read_config.call_args == call("configfile", key_file="keyfile")
             assert run_test.call_count == 1
             assert run_test.call_args == call(
-                IntegrationTestDetails(**BASIC_YAML_DICT[0])
+                IntegrationTestDetails(**BASIC_YAML_DICT[0])  # type: ignore
             )
 
             # Test the exception case

@@ -252,14 +252,15 @@ python-dateutil = "2.8.2"
 python-Levenshtein = "~0.21"
 python3-saml = "~1.15.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
+pyyaml = "^6.0"
 redmail = "^0.6.0"
 requests = "^2.29"
 SQLAlchemy = "~1.3.19"
 textblob = "0.17.1"
+types-pyyaml = "^6.0.12.9"
 # We import typing_extensions, so we can use new annotation features.
 # - ParamSpec (Python 3.10)
 # - Self (Python 3.11)
-# Once we upgrade to Python 3.11, we can remove this dependency.
 typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "4.1.1"

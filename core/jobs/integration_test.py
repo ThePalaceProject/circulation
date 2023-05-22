@@ -3,7 +3,7 @@ from __future__ import annotations
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from dataclasses import dataclass
 from json import JSONDecodeError
-from typing import Any, List
+from typing import Any, List, cast
 
 import yaml
 from Crypto.Cipher import AES
@@ -25,10 +25,10 @@ class IntegrationTestDetails:
     name: str
     endpoint: str
     method: str = "GET"
-    request_headers: dict = None
-    request_body: Any = None
-    request_json: dict = None
-    expected_json: dict = None
+    request_headers: dict | None = None
+    request_body: Any | None = None
+    request_json: dict | None = None
+    expected_json: dict | None = None
     expected_status_code: int = 200
 
 
@@ -90,7 +90,7 @@ The config file format is a YML file of the form:
         return parser
 
     def _read_config(
-        self, filepath: str, key_file: str = None, raw: bool = False
+        self, filepath: str, key_file: str | None = None, raw: bool = False
     ) -> List | bytes:
         """Read the config yml from a source.
         The file should be a yml with a list of IntegrationTestDetails as the content.
@@ -101,7 +101,7 @@ The config file format is a YML file of the form:
         if filepath.startswith("http"):
             response = HTTP.get_with_timeout(filepath)
             if response.status_code != 200:
-                raise Exception(f"Could not read remote file: {response.content}")
+                raise Exception(f"Could not read remote file: {response.content!r}")
             content = response.content
         else:
             content = read_file_bytes(filepath)
@@ -132,7 +132,7 @@ The config file format is a YML file of the form:
         :param filepath: The file to encrypt
         :param key_file: The key file to use for the encryption
         :param encrypt_file: The output file to write the encrypted content"""
-        content = self._read_config(filepath, raw=True)
+        content = cast(bytes, self._read_config(filepath, raw=True))
         iv = get_random_bytes(self.IV_SIZE)
         key = read_file_bytes(key_file)
 
@@ -158,7 +158,7 @@ The config file format is a YML file of the form:
             self._encrypt(args.config, args.key_file, args.encrypt_file)
             return
 
-        data = self._read_config(args.config, key_file=args.key_file)
+        data = cast(List[dict], self._read_config(args.config, key_file=args.key_file))
 
         for datapoint in data:
             test = IntegrationTestDetails(**datapoint)
@@ -203,7 +203,7 @@ The config file format is a YML file of the form:
                 )
         except JSONDecodeError:
             raise FailedIntegrationTest(
-                f"Response incorrect: {result.content} not a valid JSON response"
+                f"Response incorrect: {result.content!r} not a valid JSON response"
             )
 
         self.log.info(f"Test run successful {test.name} {test.endpoint}")
