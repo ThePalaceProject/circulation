@@ -1,4 +1,5 @@
 from argparse import Namespace
+from datetime import timedelta
 from io import StringIO
 from unittest.mock import Mock, call, patch
 
@@ -10,6 +11,7 @@ from core.jobs.integration_test import (
     IntegrationTest,
     IntegrationTestDetails,
 )
+from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 BASIC_YAML = """
@@ -73,7 +75,11 @@ class TestIntegrationTest:
             assert decrypted_data == content
 
     def test__run_test(self, integration_test: IntegrationTestFixture):
-        with patch("core.jobs.integration_test.HTTP.request_with_timeout") as request:
+        with patch(
+            "core.jobs.integration_test.HTTP.request_with_timeout"
+        ) as request, patch.object(
+            integration_test.script, "_test_ssl_validity"
+        ) as test_ssl:
             request.return_value = Mock(
                 status_code=204, json=lambda: dict(status="created")
             )
@@ -118,6 +124,12 @@ class TestIntegrationTest:
                 str(raised.value)
                 == "JSON response did not match the expected: {'status': 'deleted'} != {'status': 'created'}"
             )
+
+            # SSl expires soon
+            test_ssl.side_effect = FailedIntegrationTest("SSL Failure")
+            with pytest.raises(FailedIntegrationTest) as raised:
+                integration_test.script._run_test(details)
+            assert str(raised.value) == "SSL Failure"
 
     def test_generate_key_file(self, integration_test: IntegrationTestFixture):
         with patch("core.jobs.integration_test.open") as open:
@@ -194,3 +206,65 @@ class TestIntegrationTest:
             )
             # Script does not fail
             script.do_run()
+
+    def test__test_ssl_validity(self, integration_test: IntegrationTestFixture):
+        with patch(
+            "core.jobs.integration_test.get_server_certificate"
+        ) as get_cert, patch(
+            "core.jobs.integration_test.load_certificate"
+        ) as load_cert:
+            test = IntegrationTestDetails("Test", endpoint="https://localhost:543/path")
+
+            load_cert.return_value = Mock(get_notAfter=lambda: b"21000101000000Z")
+            # No exception should be raised
+            integration_test.script._test_ssl_validity(test)
+            assert get_cert.call_args == call(("localhost", 543))
+
+            get_cert.reset_mock()
+            load_cert.reset_mock()
+            # Past expiry
+            load_cert.return_value = Mock(get_notAfter=lambda: b"20000101000000Z")
+            with pytest.raises(FailedIntegrationTest) as raised:
+                integration_test.script._test_ssl_validity(test)
+            assert "The SSL certificate expires on 2000-01-01 00:00:00" in str(
+                raised.value
+            )
+
+            get_cert.reset_mock()
+            load_cert.reset_mock()
+            # Near future expiry
+            expiry = utc_now() + timedelta(
+                days=IntegrationTest.SSL_EXPIRY_THRESHOLD_DAYS - 1
+            )
+            load_cert.return_value = Mock(
+                get_notAfter=lambda: expiry.strftime("%Y%m%d%H%M%SZ").encode()
+            )
+            with pytest.raises(FailedIntegrationTest) as raised:
+                integration_test.script._test_ssl_validity(test)
+            assert (
+                f"The SSL certificate expires on {expiry.replace(microsecond=0)}"
+                == str(raised.value)
+            )
+
+            get_cert.reset_mock()
+            load_cert.reset_mock()
+            # Not after not found
+            load_cert.return_value = Mock(get_notAfter=lambda: None)
+            with pytest.raises(FailedIntegrationTest) as raised:
+                integration_test.script._test_ssl_validity(test)
+            assert f"No SSL expiry found for " in str(raised.value)
+
+            get_cert.reset_mock()
+            load_cert.reset_mock()
+            # Not after not found
+            get_cert.return_value = None
+            with pytest.raises(FailedIntegrationTest) as raised:
+                integration_test.script._test_ssl_validity(test)
+            assert f"No SSL certificate found for " in str(raised.value)
+
+            get_cert.reset_mock()
+            load_cert.reset_mock()
+            # Non https endpoint
+            details = IntegrationTestDetails("Test", endpoint="/path")
+            integration_test.script._test_ssl_validity(details)
+            assert get_cert.call_count == 0

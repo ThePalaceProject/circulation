@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import datetime
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from dataclasses import dataclass
 from json import JSONDecodeError
+from ssl import get_server_certificate
 from typing import Any, List, cast
+from urllib.parse import urlparse
 
+import pytz
 import yaml
+from OpenSSL.crypto import FILETYPE_PEM, X509, load_certificate
 
 from core.crypt.aes import CryptAESCBC
 from core.scripts import Script
+from core.util.datetime_helpers import utc_now
 from core.util.http import (
     HTTP,
     BadResponseException,
@@ -37,7 +43,6 @@ def read_file_bytes(filepath):
 
 
 class IntegrationTest(Script):
-    IV_SIZE = 16
     CMDLINE_DESCRIPTION = "Tests the API integrations based on a yml configuration file"
 
     CMDLINE_USAGE = """
@@ -57,6 +62,8 @@ The config file format is a YML file of the form:
   request_json: dict = None
   expected_json: dict = None
   expected_status_code: int = 200"""
+
+    SSL_EXPIRY_THRESHOLD_DAYS = 7
 
     @classmethod
     def arg_parser(cls):  # pragma: no cover
@@ -178,6 +185,9 @@ The config file format is a YML file of the form:
                 f"Network Failure: {ex.url}", exception=ex.args[0]
             )
 
+        # Run tests on the SSL certificate
+        self._test_ssl_validity(test)
+
         # Test the status code
         if (
             test.expected_status_code
@@ -199,6 +209,38 @@ The config file format is a YML file of the form:
             )
 
         self.log.info(f"Test run successful {test.name} {test.endpoint}")
+
+    def _test_ssl_validity(self, test: IntegrationTestDetails):
+        """Test the SSL certificate validity for the near future"""
+        url = test.endpoint
+
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            return
+
+        # Fetch and parse the certificate
+        if parsed.hostname:
+            context = get_server_certificate((parsed.hostname, parsed.port or 443))
+        else:
+            raise FailedIntegrationTest(f"Could not parse url structure {url}")
+
+        if not context:
+            raise FailedIntegrationTest(f"No SSL certificate found for {url}")
+
+        cert: X509 = load_certificate(FILETYPE_PEM, context.encode())
+        not_after = cert.get_notAfter()
+        if not not_after:
+            raise FailedIntegrationTest(f"No SSL expiry found for {url}")
+
+        # Parse the expiry and make it TZ aware
+        expires = datetime.datetime.strptime(not_after.decode(), "%Y%m%d%H%M%SZ")
+        expires = expires.replace(tzinfo=pytz.UTC)
+
+        # Validate the certificate
+        if expires - utc_now() < datetime.timedelta(
+            days=self.SSL_EXPIRY_THRESHOLD_DAYS
+        ):
+            raise FailedIntegrationTest(f"The SSL certificate expires on {expires}")
 
 
 class FailedIntegrationTest(Exception):
