@@ -128,13 +128,15 @@ class TestIntegrationTest:
 
     def test_encrypt(self, integration_test: IntegrationTestFixture):
         script = integration_test.script
-        with (
-            patch.object(script, "_read_config") as read_config,
-            patch("core.jobs.integration_test.read_file_bytes") as read_file_bytes,
-            patch("core.jobs.integration_test.get_random_bytes") as get_random_bytes,
-            patch("core.jobs.integration_test.AES") as aes,
-            patch("core.jobs.integration_test.open") as open,
-        ):
+        with patch.object(script, "_read_config") as read_config, patch(
+            "core.jobs.integration_test.read_file_bytes"
+        ) as read_file_bytes, patch(
+            "core.jobs.integration_test.get_random_bytes"
+        ) as get_random_bytes, patch(
+            "core.jobs.integration_test.AES"
+        ) as aes, patch(
+            "core.jobs.integration_test.open"
+        ) as open:
             read_file_bytes.return_value = b"filebytes"
             read_config.return_value = b"7 bytes"
             get_random_bytes.return_value = b"RANDOMBYTESIV"
@@ -183,10 +185,9 @@ class TestIntegrationTest:
             generate_key_file=None,
             encrypt_file=None,
         )
-        with (
-            patch.object(script, "_run_test") as run_test,
-            patch.object(script, "_read_config") as read_config,
-        ):
+        with patch.object(script, "_run_test") as run_test, patch.object(
+            script, "_read_config"
+        ) as read_config:
             read_config.return_value = BASIC_YAML_DICT
             script.do_run()
 
