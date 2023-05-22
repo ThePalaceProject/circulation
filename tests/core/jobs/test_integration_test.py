@@ -1,8 +1,8 @@
 from io import StringIO
-from typing import List
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
+from Crypto.Cipher import AES
 
 from core.jobs.integration_test import (
     FailedIntegrationTest,
@@ -22,9 +22,6 @@ class IntegrationTestFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.script = IntegrationTest(db.session)
 
-    def patch_config(self, data: List[dict]):
-        self.script._read_config = MagicMock(return_value=data)
-
 
 @pytest.fixture(scope="function")
 def integration_test(db: DatabaseTransactionFixture):
@@ -35,12 +32,12 @@ class TestIntegrationTest:
     def test_read_config(self, integration_test: IntegrationTestFixture):
         basic_yaml_dict = [{"name": "Test", "endpoint": "localhost"}]
 
-        with patch("core.jobs.integration_test.open") as open:
-            open.return_value = StringIO(BASIC_YAML)
+        with patch("core.jobs.integration_test.open") as mock_open:
+            mock_open.return_value = StringIO(BASIC_YAML)
             data = integration_test.script._read_config("on/disk/filepath")
 
-            assert open.call_count == 1
-            assert open.call_args == call("on/disk/filepath", "r")
+            assert mock_open.call_count == 1
+            assert mock_open.call_args == call("on/disk/filepath", "rb")
             assert data == basic_yaml_dict
 
         with patch(
@@ -59,6 +56,22 @@ class TestIntegrationTest:
             assert get_with_timeout.call_count == 1
             assert get_with_timeout.call_args == call("http://...")
             assert data == basic_yaml_dict
+
+    def test_read_config_decrypt(self, integration_test: IntegrationTestFixture):
+        with patch("core.jobs.integration_test.read_file_bytes") as read_file_bytes:
+            # Cipher content
+            content = b"16bytespadded   "
+            key = b"0" * 32
+            iv = b"i" * 16
+            cipher = AES.new(key, AES.MODE_CBC, iv=iv)
+            encrypted = iv + cipher.encrypt(content)
+            read_file_bytes.side_effect = [encrypted, key]
+
+            # Decrypt during the read
+            decrypted_data = integration_test.script._read_config(
+                "on/disk/filepath", key_file="keyfile", raw=True
+            )
+            assert decrypted_data == content
 
     def test__run_test(self, integration_test: IntegrationTestFixture):
         with patch("core.jobs.integration_test.HTTP.request_with_timeout") as request:
@@ -82,6 +95,7 @@ class TestIntegrationTest:
                 "http://...",
                 headers=details.request_headers,
                 data=details.request_body,
+                json=None,
             )
 
             # Error tests
@@ -104,4 +118,40 @@ class TestIntegrationTest:
             assert (
                 str(raised.value)
                 == "JSON response did not match the expected: {'status': 'deleted'} != {'status': 'created'}"
+            )
+
+    def test_generate_key_file(self, integration_test: IntegrationTestFixture):
+        with patch("core.jobs.integration_test.open") as open:
+            integration_test.script._generate_key_file("keyfile")
+        assert open.call_args == call("keyfile", "wb")
+        assert len(open.return_value.__enter__.return_value.write.call_args[0][0]) == 32
+
+    def test_encrypt(self, integration_test: IntegrationTestFixture):
+        script = integration_test.script
+        with (
+            patch.object(script, "_read_config") as read_config,
+            patch("core.jobs.integration_test.read_file_bytes") as read_file_bytes,
+            patch("core.jobs.integration_test.get_random_bytes") as get_random_bytes,
+            patch("core.jobs.integration_test.AES") as aes,
+            patch("core.jobs.integration_test.open") as open,
+        ):
+            read_file_bytes.return_value = b"filebytes"
+            read_config.return_value = b"7 bytes"
+            get_random_bytes.return_value = b"RANDOMBYTESIV"
+            aes.new.return_value.encrypt.return_value = b"encrypted bytes"
+            script._encrypt("filepath", "keyfile", "encryptfile")
+
+            # Assert the setup methods
+            assert read_file_bytes.call_args == call("keyfile")
+            assert aes.new.call_args == call(
+                b"filebytes", aes.MODE_CBC, iv=b"RANDOMBYTESIV"
+            )
+            assert aes.new.return_value.encrypt.call_args == call(
+                b"7 bytes" + (b" " * 9)
+            )  # padded to 16 bytes
+            assert open.call_args == call("encryptfile", "wb")
+
+            # The encrypted values written
+            assert open.return_value.__enter__.return_value.write.call_args == call(
+                b"RANDOMBYTESIVencrypted bytes"
             )
