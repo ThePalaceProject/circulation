@@ -6,9 +6,8 @@ from json import JSONDecodeError
 from typing import Any, List, cast
 
 import yaml
-from Crypto.Cipher import AES
-from Crypto.Random import get_random_bytes
 
+from core.crypt.aes import CryptAESCBC
 from core.scripts import Script
 from core.util.http import (
     HTTP,
@@ -109,9 +108,7 @@ The config file format is a YML file of the form:
         # Decryption
         if key_file:
             key = read_file_bytes(key_file)
-            iv, content = content[: self.IV_SIZE], content[self.IV_SIZE :]
-            cipher = AES.new(key, AES.MODE_CBC, iv=iv)
-            content = cipher.decrypt(content)
+            content = CryptAESCBC(key).decrypt(content)
 
         if not raw:
             yml = yaml.load(content, yaml.Loader)
@@ -121,11 +118,12 @@ The config file format is a YML file of the form:
 
     def _generate_key_file(self, filepath: str):
         """Generate a 32 byte random key file"""
-        bytelen = 32
-        key = get_random_bytes(bytelen)
+        key = CryptAESCBC.generate_key()
         with open(filepath, "wb") as wfp:
             wfp.write(key)
-        self.log.info(f"Successfully wrote a {bytelen} byte key into {filepath}")
+        self.log.info(
+            f"Successfully wrote a {CryptAESCBC.KEY_LENGTH} byte key into {filepath}"
+        )
 
     def _encrypt(self, filepath: str, key_file: str, encrypt_file: str):
         """Encrypt a textfile and write it to the encrypt_file.
@@ -133,14 +131,8 @@ The config file format is a YML file of the form:
         :param key_file: The key file to use for the encryption
         :param encrypt_file: The output file to write the encrypted content"""
         content = cast(bytes, self._read_config(filepath, raw=True))
-        iv = get_random_bytes(self.IV_SIZE)
         key = read_file_bytes(key_file)
-
-        # Opening 16 bytes with an IV
-        cipher = AES.new(key, AES.MODE_CBC, iv=iv)
-        content = content + b" " * (16 - len(content) % 16)
-        output = cipher.encrypt(content)
-        output = iv + output
+        output = CryptAESCBC(key).encrypt(content)
 
         with open(encrypt_file, "wb") as efp:
             efp.write(output)

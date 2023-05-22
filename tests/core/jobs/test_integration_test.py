@@ -3,8 +3,8 @@ from io import StringIO
 from unittest.mock import Mock, call, patch
 
 import pytest
-from Crypto.Cipher import AES
 
+from core.crypt.aes import CryptAESCBC
 from core.jobs.integration_test import (
     FailedIntegrationTest,
     IntegrationTest,
@@ -60,11 +60,10 @@ class TestIntegrationTest:
     def test_read_config_decrypt(self, integration_test: IntegrationTestFixture):
         with patch("core.jobs.integration_test.read_file_bytes") as read_file_bytes:
             # Cipher content
-            content = b"16bytespadded   "
+            content = b"content"
             key = b"0" * 32
-            iv = b"i" * 16
-            cipher = AES.new(key, AES.MODE_CBC, iv=iv)
-            encrypted = iv + cipher.encrypt(content)
+            cipher = CryptAESCBC(key)
+            encrypted = cipher.encrypt(content)
             read_file_bytes.side_effect = [encrypted, key]
 
             # Decrypt during the read
@@ -131,31 +130,23 @@ class TestIntegrationTest:
         with patch.object(script, "_read_config") as read_config, patch(
             "core.jobs.integration_test.read_file_bytes"
         ) as read_file_bytes, patch(
-            "core.jobs.integration_test.get_random_bytes"
-        ) as get_random_bytes, patch(
-            "core.jobs.integration_test.AES"
+            "core.jobs.integration_test.CryptAESCBC", spec=CryptAESCBC
         ) as aes, patch(
             "core.jobs.integration_test.open"
         ) as open:
             read_file_bytes.return_value = b"filebytes"
             read_config.return_value = b"7 bytes"
-            get_random_bytes.return_value = b"RANDOMBYTESIV"
-            aes.new.return_value.encrypt.return_value = b"encrypted bytes"
+            aes().encrypt.return_value = b"encrypted bytes"
             script._encrypt("filepath", "keyfile", "encryptfile")
 
             # Assert the setup methods
             assert read_file_bytes.call_args == call("keyfile")
-            assert aes.new.call_args == call(
-                b"filebytes", aes.MODE_CBC, iv=b"RANDOMBYTESIV"
-            )
-            assert aes.new.return_value.encrypt.call_args == call(
-                b"7 bytes" + (b" " * 9)
-            )  # padded to 16 bytes
+            assert aes().encrypt.call_args == call(b"7 bytes")
             assert open.call_args == call("encryptfile", "wb")
 
             # The encrypted values written
             assert open.return_value.__enter__.return_value.write.call_args == call(
-                b"RANDOMBYTESIVencrypted bytes"
+                b"encrypted bytes"
             )
 
     def test__do_run(self, integration_test: IntegrationTestFixture):
