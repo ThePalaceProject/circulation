@@ -2556,14 +2556,14 @@ testing = ["argcomplete", "attrs (>=19.2.0)", "hypothesis (>=3.56)", "mock", "no
 
 [[package]]
 name = "pytest-alembic"
-version = "0.10.4"
+version = "0.10.5"
 description = "A pytest plugin for verifying alembic migrations."
 category = "dev"
 optional = false
 python-versions = ">=3.6,<4"
 files = [
-    {file = "pytest_alembic-0.10.4-py3-none-any.whl", hash = "sha256:8e9a5340c918c6bd43b540d1f47fab9a27aaec39d66580c4b711f40cec7e9b90"},
-    {file = "pytest_alembic-0.10.4.tar.gz", hash = "sha256:368f2b28caaa791a9788fdebebe973406a34b33162e8614b7596147e524711f7"},
+    {file = "pytest_alembic-0.10.5-py3-none-any.whl", hash = "sha256:b273eedc46d521e02ea8ee6481353af072b533dd2aa93ade1113d87f57a3dd94"},
+    {file = "pytest_alembic-0.10.5.tar.gz", hash = "sha256:69f96a6e1cd3217e46e4df9f797e08e17a162c4a071e027bef43ebab961e7a53"},
 ]
 
 [package.dependencies]
