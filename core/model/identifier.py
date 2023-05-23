@@ -273,6 +273,7 @@ class Identifier(Base, IdentifierConstants):
         "LicensePool",
         back_populates="identifier",
         lazy="joined",
+        overlaps="delivery_mechanisms",
     )
 
     # One Identifier may have many Links.
@@ -287,7 +288,7 @@ class Identifier(Base, IdentifierConstants):
     # One identifier may participate in many Annotations.
     annotations = relationship("Annotation", backref="identifier")
 
-    # One Identifier can have have many LicensePoolDeliveryMechanisms.
+    # One Identifier can have many LicensePoolDeliveryMechanisms.
     delivery_mechanisms = relationship(
         "LicensePoolDeliveryMechanism",
         backref="identifier",

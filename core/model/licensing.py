@@ -268,6 +268,7 @@ class LicensePool(Base):
         primaryjoin="and_(LicensePool.data_source_id==LicensePoolDeliveryMechanism.data_source_id, LicensePool.identifier_id==LicensePoolDeliveryMechanism.identifier_id)",
         foreign_keys=(data_source_id, identifier_id),
         uselist=True,
+        overlaps="data_source, identifier",
     )
 
     def __repr__(self):
