@@ -7,7 +7,7 @@ import sys
 from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Union, cast
 
 import pytz
 from sqlalchemy import (
@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import contains_eager, joinedload, relationship
+from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
@@ -820,12 +821,18 @@ class Work(Base):
             )
             raise ValueError(error_message)
 
+        trigger_customlists_update = (
+            not self.presentation_edition or self.presentation_edition is NO_VALUE
+        )
         self.presentation_edition = new_presentation_edition
 
         # if the edition is the presentation edition for any license
         # pools, let them know they have a Work.
         for pool in self.presentation_edition.is_presentation_for:
             pool.work = self
+
+        if trigger_customlists_update:
+            add_work_to_customlists_for_collection(self)
 
     def calculate_presentation_edition(self, policy=None):
         """Which of this Work's Editions should be used as the default?
@@ -2245,3 +2252,28 @@ class Work(Base):
         if search_index is not None:
             search_index.remove_work(self)
         _db.delete(self)
+
+
+def add_work_to_customlists_for_collection(
+    pool_or_work: Union[LicensePool, Work]
+) -> None:
+    if isinstance(pool_or_work, Work):
+        work = pool_or_work
+        pools = work.license_pools
+    else:
+        work = pool_or_work.work
+        pools = [pool_or_work]
+
+    if work and work.presentation_edition:
+        for pool in pools:
+            if not pool.collection:
+                # This shouldn't happen, but don't crash if it does --
+                # the correct behavior is that the work not be added to
+                # any CustomLists.
+                continue
+            for list in pool.collection.customlists:
+                # Since the work was just created, we can assume that
+                # there's already a pending registration for updating the
+                # work's internal index, and decide not to create a
+                # second one.
+                list.add_entry(work, featured=True, update_external_index=False)

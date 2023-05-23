@@ -197,7 +197,8 @@ class DatabaseTransactionFixture:
     @staticmethod
     def create(database: DatabaseFixture) -> "DatabaseTransactionFixture":
         # Create a new connection to the database.
-        session = Session(database.connection)
+        session = SessionManager.session_from_connection(database.connection)
+
         transaction = database.connection.begin_nested()
         return DatabaseTransactionFixture(database, session, transaction)
 

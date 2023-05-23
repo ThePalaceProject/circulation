@@ -107,8 +107,7 @@ class Resource(Base):
     # A Resource may be transformed into many derivatives.
     transformations = relationship(
         "ResourceTransformation",
-        primaryjoin="ResourceTransformation.original_id==Resource.id",
-        foreign_keys=id,
+        foreign_keys="ResourceTransformation.original_id",
         lazy="joined",
         backref=backref("original", uselist=False),
         uselist=True,
@@ -117,8 +116,7 @@ class Resource(Base):
     # A derivative resource may have one original.
     derived_through = relationship(
         "ResourceTransformation",
-        primaryjoin="ResourceTransformation.derivative_id==Resource.id",
-        foreign_keys=id,
+        foreign_keys="ResourceTransformation.derivative_id",
         backref=backref("derivative", uselist=False),
         lazy="joined",
         uselist=False,

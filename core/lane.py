@@ -33,7 +33,6 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import Select
 
 from core.model.configuration import (
     ConfigurationAttributeValue,
@@ -63,7 +62,6 @@ from .model import (
     tuple_to_numericrange,
 )
 from .model.constants import EditionConstants
-from .model.listeners import directly_modified, site_configuration_has_changed
 from .problem_details import *
 from .util import LanguageCodes
 from .util.accept_language import parse_accept_language
@@ -2452,8 +2450,8 @@ class DatabaseBackedWorkList(WorkList):
             # Use a subquery to obtain the CustomList IDs of all
             # CustomLists from this DataSource. This is significantly
             # simpler than adding a join against CustomList.
-            customlist_ids = Select(
-                [CustomList.id], CustomList.data_source_id == self.list_datasource_id
+            customlist_ids = select(CustomList.id).where(
+                CustomList.data_source_id == self.list_datasource_id
             )
         else:
             customlist_ids = self.customlist_ids
@@ -3234,22 +3232,6 @@ lanes_customlists = Table(
     ),
     UniqueConstraint("lane_id", "customlist_id"),
 )
-
-
-@event.listens_for(Lane, "after_insert")
-@event.listens_for(Lane, "after_delete")
-@event.listens_for(LaneGenre, "after_insert")
-@event.listens_for(LaneGenre, "after_delete")
-def configuration_relevant_lifecycle_event(mapper, connection, target):
-    site_configuration_has_changed(target)
-
-
-@event.listens_for(Lane, "after_update")
-@event.listens_for(LaneGenre, "after_update")
-def configuration_relevant_update(mapper, connection, target):
-    suppressed = getattr(target, "_suppress_configuration_changes", False)
-    if directly_modified(target) and not suppressed:
-        site_configuration_has_changed(target)
 
 
 @event.listens_for(Lane.library_id, "set")

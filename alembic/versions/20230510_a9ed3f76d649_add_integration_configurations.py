@@ -11,7 +11,7 @@ from typing import Dict, Tuple, Type, TypeVar
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Connection, RowProxy
+from sqlalchemy.engine import Connection, Row
 
 from alembic import op
 from api.authenticator import AuthenticationProvider
@@ -110,7 +110,7 @@ def _validate_and_load_settings(
 
 def _migrate_external_integration(
     connection: Connection,
-    integration: RowProxy,
+    integration: Row,
     protocol_class: Type[AuthenticationProvider],
 ) -> Tuple[int, Dict[str, Dict[str, str]]]:
     settings = connection.execute(

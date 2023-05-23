@@ -844,11 +844,16 @@ class Collection(Base, HasSessionCache):
         # deleted.
         for i, pool in enumerate(self.licensepools):
             work = pool.work
+            if work:
+                # We need to remove the item from the collection manually, otherwise the deleted
+                # pool will continue to be on the work until we call commit, so we'll never get to
+                # the point where we delete the work.
+                # https://docs.sqlalchemy.org/en/14/orm/cascades.html#notes-on-delete-deleting-objects-referenced-from-collections-and-scalar-relationships
+                work.license_pools.remove(pool)
+                if not work.license_pools:
+                    work.delete(search_index)
+
             _db.delete(pool)
-            if not i % 100:
-                _db.commit()
-            if work and not work.license_pools:
-                work.delete(search_index)
 
         # Delete the ExternalIntegration associated with this
         # Collection, assuming it wasn't deleted already.
