@@ -3,7 +3,7 @@ from __future__ import annotations
 # Credential, DRMDeviceIdentifier, DelegatedPatronIdentifier
 import datetime
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Column,
@@ -14,7 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
@@ -39,7 +39,7 @@ class Credential(Base):
     expires = Column(DateTime(timezone=True), index=True)
 
     # One Credential can have many associated DRMDeviceIdentifiers.
-    drm_device_identifiers = relationship(
+    drm_device_identifiers: Mapped[List[DRMDeviceIdentifier]] = relationship(
         "DRMDeviceIdentifier", backref=backref("credential", lazy="joined")
     )
 

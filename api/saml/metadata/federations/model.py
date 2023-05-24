@@ -1,5 +1,9 @@
+from __future__ import annotations
+
+from typing import List
+
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from core.model import Base
 
@@ -16,7 +20,7 @@ class SAMLFederation(Base):
 
     certificate = Column(Text(), nullable=True)
 
-    identity_providers = relationship(
+    identity_providers: Mapped[List[SAMLFederatedIdentityProvider]] = relationship(
         "SAMLFederatedIdentityProvider", back_populates="federation"
     )
 
@@ -86,7 +90,7 @@ class SAMLFederatedIdentityProvider(Base):
     xml_metadata = Column(Text(), nullable=False)
 
     federation_id = Column(Integer, ForeignKey("samlfederations.id"), index=True)
-    federation = relationship(
+    federation: Mapped[SAMLFederation] = relationship(
         "SAMLFederation",
         foreign_keys=federation_id,
         back_populates="identity_providers",

@@ -7,15 +7,15 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, TypeVar
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy import Column, DateTime
 from sqlalchemy import Enum as saEnum
 from sqlalchemy import ForeignKey, Index, Integer, Unicode
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import and_
+from sqlalchemy.sql.expression import and_, text
 
 from core.model.hybrid import hybrid_property
 
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 @contextmanager
 def access_exclusive_lock_configurationsettings(session: Session):
     session.begin_nested()
-    session.execute("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;")
+    session.execute(text("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;"))
     try:
         yield session
     finally:
@@ -328,12 +328,12 @@ class ExternalIntegration(Base):
     # used to identify ExternalIntegrations from command-line scripts.
     name = Column(Unicode, nullable=True, unique=True)
 
-    status = Column(STATUS, server_default=str(GREEN))
+    status: Mapped[str] = Column(STATUS, server_default=str(GREEN))
     last_status_update = Column(DateTime, nullable=True)
 
     # Any additional configuration information goes into
     # ConfigurationSettings.
-    settings = relationship(
+    settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         backref="external_integration",
         cascade="all, delete",
@@ -342,27 +342,27 @@ class ExternalIntegration(Base):
 
     # Any number of Collections may designate an ExternalIntegration
     # as the source of their configuration
-    collections = relationship(
+    collections: Mapped[List[Collection]] = relationship(
         "Collection",
         backref="_external_integration",
         foreign_keys="Collection.external_integration_id",
     )
 
-    links = relationship(
+    links: Mapped[List[ExternalIntegrationLink]] = relationship(
         "ExternalIntegrationLink",
         backref="integration",
         foreign_keys="ExternalIntegrationLink.external_integration_id",
         cascade="all, delete-orphan",
     )
 
-    other_links = relationship(
+    other_links: Mapped[List[ExternalIntegrationLink]] = relationship(
         "ExternalIntegrationLink",
         backref="other_integration",
         foreign_keys="ExternalIntegrationLink.other_integration_id",
         cascade="all, delete-orphan",
     )
 
-    libraries = relationship(
+    libraries: Mapped[List[Library]] = relationship(
         "Library",
         back_populates="integrations",
         secondary=lambda: externalintegrations_libraries,

@@ -329,7 +329,8 @@ class TestHasCollectionSelfTests:
         assert success == result
 
         # Destroy the delivery mechanism.
-        [db.session.delete(x) for x in pool.delivery_mechanisms]
+        for x in pool.delivery_mechanisms:
+            db.session.delete(x)
 
         # Now a list of strings is returned, one for each problematic
         # book.

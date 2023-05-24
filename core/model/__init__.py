@@ -317,12 +317,12 @@ def pg_advisory_lock(
     """
     if lock_id is not None:
         # Create the lock
-        connection.execute(f"SELECT pg_advisory_lock({lock_id});")
+        connection.execute(text(f"SELECT pg_advisory_lock({lock_id});"))
         try:
             yield
         finally:
             # Close the lock
-            connection.execute(f"SELECT pg_advisory_unlock({lock_id});")
+            connection.execute(text(f"SELECT pg_advisory_unlock({lock_id});"))
     else:
         yield
 

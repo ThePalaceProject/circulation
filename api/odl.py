@@ -700,6 +700,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
                 .order_by(Hold.start)
                 .all()
             )
+            assert pool.licenses_owned is not None
             licenses_reserved = min(
                 pool.licenses_owned - len(current_loans), len(current_holds)
             )
@@ -754,6 +755,7 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         )
         holds_count = self._count_holds_before(holdinfo, pool)
 
+        assert pool.licenses_owned is not None
         remaining_licenses = pool.licenses_owned - loans_count
 
         if remaining_licenses > holds_count:

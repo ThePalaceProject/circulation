@@ -37,9 +37,9 @@ def _create_tables() -> None:
         sa.Column("protocol", sa.Unicode(), nullable=False),
         sa.Column("goal", sa.Enum("PATRON_AUTH_GOAL", name="goals"), nullable=False),
         sa.Column("name", sa.Unicode(), nullable=False),
-        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),  # type: ignore[call-arg]
+        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column(
-            "self_test_results", postgresql.JSONB(astext_type=sa.Text()), nullable=False  # type: ignore[call-arg]
+            "self_test_results", postgresql.JSONB(astext_type=sa.Text()), nullable=False
         ),
         sa.Column("status", sa.Enum("RED", "GREEN", name="status"), nullable=False),
         sa.Column("last_status_update", sa.DateTime(), nullable=True),
@@ -70,7 +70,7 @@ def _create_tables() -> None:
         "integration_library_configurations",
         sa.Column("parent_id", sa.Integer(), nullable=False),
         sa.Column("library_id", sa.Integer(), nullable=False),
-        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),  # type: ignore[call-arg]
+        sa.Column("settings", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.ForeignKeyConstraint(["library_id"], ["libraries.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["parent_id"], ["integration_configurations.id"], ondelete="CASCADE"
@@ -147,7 +147,7 @@ def _migrate_external_integration(
             self_test_results,
         ),
     ).fetchone()
-
+    assert integration_configuration is not None
     return integration_configuration[0], library_settings
 
 

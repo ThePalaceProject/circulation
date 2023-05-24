@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from urllib.parse import quote_plus
 
 from flask_babel import lazy_gettext as _
@@ -23,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import (
+    Mapped,
     aliased,
     backref,
     contains_eager,
@@ -2552,7 +2555,7 @@ class LaneGenre(Base):
         return lg
 
 
-Genre.lane_genres = relationship(  # type: ignore
+Genre.lane_genres = relationship(
     "LaneGenre", foreign_keys=LaneGenre.genre_id, backref="genre"
 )
 
@@ -2586,7 +2589,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
-    sublanes = relationship(
+    sublanes: Mapped[List[Lane]] = relationship(
         "Lane",
         backref=backref("parent", remote_side=[id]),
     )
@@ -2594,7 +2597,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # A lane may have multiple associated LaneGenres. For most lanes,
     # this is how the contents of the lanes are defined.
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
-    lane_genres = relationship(
+    lane_genres: Mapped[List[LaneGenre]] = relationship(
         "LaneGenre",
         foreign_keys="LaneGenre.lane_id",
         backref="lane",
@@ -2681,14 +2684,14 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     _visible = Column("visible", Boolean, default=True, nullable=False)
 
     # A Lane may have many CachedFeeds.
-    cachedfeeds = relationship(
+    cachedfeeds: Mapped[List[CachedFeed]] = relationship(
         "CachedFeed",
         backref="lane",
         cascade="all, delete-orphan",
     )
 
     # A Lane may have many CachedMARCFiles.
-    cachedmarcfiles = relationship(
+    cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
         backref="lane",
         cascade="all, delete-orphan",
@@ -3205,16 +3208,16 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         return lines
 
 
-Library.lanes = relationship(  # type: ignore
+Library.lanes = relationship(
     "Lane",
     backref="library",
     foreign_keys=Lane.library_id,
     cascade="all, delete-orphan",
 )
-DataSource.list_lanes = relationship(  # type: ignore
+DataSource.list_lanes = relationship(
     "Lane", backref="_list_datasource", foreign_keys=Lane._list_datasource_id
 )
-DataSource.license_lanes = relationship(  # type: ignore
+DataSource.license_lanes = relationship(
     "Lane", backref="license_datasource", foreign_keys=Lane.license_datasource_id
 )
 

@@ -106,7 +106,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
             # First time around we MUST delete any chains formed from this identifier before
             if parent_id not in completed_identifiers:
-                delete_stmt = delete(RecursiveEquivalencyCache).where(  # type: ignore
+                delete_stmt = delete(RecursiveEquivalencyCache).where(
                     RecursiveEquivalencyCache.parent_identifier_id == parent_id
                 )
                 self._db.execute(delete_stmt)

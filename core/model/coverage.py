@@ -1,4 +1,6 @@
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
@@ -12,7 +14,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
@@ -20,7 +22,7 @@ from ..util.datetime_helpers import utc_now
 from . import Base, SessionBulkOperation, get_one, get_one_or_create
 
 if TYPE_CHECKING:
-    from . import Equivalency  # noqa
+    from . import Equivalency
 
 
 class BaseCoverageRecord:
@@ -763,7 +765,9 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     equivalency_id = Column(
         Integer, ForeignKey("equivalents.id", ondelete="CASCADE"), index=True
     )
-    equivalency = relationship("Equivalency", foreign_keys=equivalency_id)
+    equivalency: Mapped[Equivalency] = relationship(
+        "Equivalency", foreign_keys=equivalency_id
+    )
 
     operation = Column(String(255), index=True, default=None)
 
@@ -778,14 +782,14 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     def bulk_add(
         cls,
         _db,
-        equivalents: List["Equivalency"],
+        equivalents: List[Equivalency],
         operation: str,
         status=BaseCoverageRecord.REGISTERED,
         batch_size=100,
     ):
         with SessionBulkOperation(_db, batch_size) as bulk:
             for eq in equivalents:
-                record = EquivalencyCoverageRecord(
+                record = EquivalencyCoverageRecord(  # type: ignore[call-arg]
                     equivalency_id=eq.id,
                     operation=operation,
                     status=status,
@@ -796,7 +800,7 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     @classmethod
     def add_for(
         cls,
-        equivalency: "Equivalency",
+        equivalency: Equivalency,
         operation: str,
         timestamp=None,
         status=CoverageRecord.SUCCESS,

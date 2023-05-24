@@ -584,6 +584,11 @@ class Authenticator:
             log_method=self.log.debug, message_prefix="populate_authenticators"
         ):
             for library in libraries:
+                if library.short_name is None:
+                    self.log.error(
+                        f"Library {library.name} ({library.id}) has no short name."
+                    )
+                    continue
                 self.library_authenticators[
                     library.short_name
                 ] = LibraryAuthenticator.from_config(_db, library, analytics)
@@ -727,7 +732,9 @@ class LibraryAuthenticator:
         self.basic_auth_provider = basic_auth_provider
         self.saml_providers_by_name = {}
         self.bearer_token_signing_secret = bearer_token_signing_secret
-        self.initialization_exceptions: Dict[Tuple[int, int], Exception] = {}
+        self.initialization_exceptions: Dict[
+            Tuple[int | None, int | None], Exception
+        ] = {}
 
         self.log = logging.getLogger("Authenticator")
 
@@ -769,6 +776,8 @@ class LibraryAuthenticator:
 
     @property
     def library(self) -> Library | None:
+        if self.library_id is None:
+            return None
         return Library.by_id(self._db, self.library_id)
 
     def assert_ready_for_token_signing(self):
@@ -804,7 +813,11 @@ class LibraryAuthenticator:
                 f"Was asked to register an integration with library {self.library_short_name}, which doesn't use it."
             )
 
-        impl_cls = self.integration_registry.get(integration.parent.protocol)
+        impl_cls = (
+            self.integration_registry.get(integration.parent.protocol)
+            if integration.parent.protocol
+            else None
+        )
         if not impl_cls:
             raise CannotLoadConfiguration(
                 f"Unable to load implementation for external integration: {integration.parent.protocol}."
@@ -827,8 +840,8 @@ class LibraryAuthenticator:
             settings = impl_cls.settings_class()(**integration.parent.settings)
             library_settings = impl_cls.library_settings_class()(**integration.settings)
             provider = impl_cls(
-                self.library_id,
-                integration.parent_id,
+                self.library_id,  # type: ignore[arg-type]
+                integration.parent_id,  # type: ignore[arg-type]
                 settings,
                 library_settings,
                 analytics,
@@ -1236,7 +1249,6 @@ class LibraryAuthenticator:
     def create_authentication_headers(self) -> Headers:
         """Create the HTTP headers to return with the OPDS
         authentication document."""
-        library = Library.by_id(self._db, self.library_id)
         headers = Headers()
         headers.add("Content-Type", AuthenticationForOPDSDocument.MEDIA_TYPE)
         headers.add(

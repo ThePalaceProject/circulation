@@ -46,7 +46,9 @@ def assert_setting(connection: Connection, integration_id: int, value: str) -> N
         "SELECT cs.value FROM configurationsettings cs join externalintegrations ei ON cs.external_integration_id = ei.id WHERE ei.id=%(id)s and cs.key='use_post_requests'",
         id=integration_id,
     )
-    assert result.fetchone()[0] == value
+    row = result.fetchone()
+    assert row is not None
+    assert row.value == value
 
 
 def test_migration(

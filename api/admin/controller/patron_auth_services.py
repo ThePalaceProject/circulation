@@ -209,7 +209,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             (existing_library_settings[library], submitted_library_settings[library])
             for library in existing_library_settings.keys()
             & submitted_library_settings.keys()
-            if self.get_library(library)
+            if library and self.get_library(library)
         ]
         new = [
             (

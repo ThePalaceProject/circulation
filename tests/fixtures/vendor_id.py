@@ -61,6 +61,7 @@ class VendorIDFixture:
             # Each library will get a slightly different short
             # name and secret for generating Short Client Tokens.
             library_uri = self.db.fresh_url()
+            assert library.short_name is not None
             short_name = library.short_name + "token"
             secret = library.short_name + " token secret"
             ConfigurationSetting.for_library_and_externalintegration(
