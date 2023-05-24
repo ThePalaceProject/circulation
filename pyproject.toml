@@ -31,7 +31,6 @@ disable_error_code = "annotation-unchecked"
 exclude = [
     'core/bin/repair/startup\.py',
     'core/classifier',
-    'core/model/listeners\.py',
     'integration_tests/',
     # TODO: Post test-suite refactoring.
     'tests/api/admin/controller/test_admin_search_controller\.py',
@@ -156,7 +155,6 @@ warn_unused_ignores = true
 follow_imports = "silent"
 module = [
     "core.classifier.*",
-    "core.model.listeners",
 ]
 
 [[tool.mypy.overrides]]

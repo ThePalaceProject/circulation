@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 import datetime
+import sys
+from collections import defaultdict
+from dataclasses import dataclass
+from enum import Enum
 from threading import RLock
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
@@ -17,6 +23,128 @@ from .configuration import ConfigurationSetting, ExternalIntegration
 from .library import Library
 from .licensing import LicensePool
 from .work import Work, add_work_to_customlists_for_collection
+
+# TODO: Remove this when we drop support for Python 3.9
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+else:
+    from typing_extensions import ParamSpec
+
+
+class State(Enum):
+    NEW = "new"
+    DELETED = "deleted"
+    DIRTY = "dirty"
+    ANY = "any"
+
+
+_before_flush_hooks: Dict[
+    Tuple[Type[Base], State], List[Callable[[Session, Base], None]]
+] = defaultdict(list)
+_before_flush_trigger_hooks: Dict[
+    Callable[[Session], None], Set[Type[Base]]
+] = defaultdict(set)
+
+
+P = ParamSpec("P")
+
+
+def before_flush(
+    model: Type[Base], state: State
+) -> Callable[[Callable[P, None]], Callable[P, None]]:
+    """
+    Decorator to register a function to be called before a flush.
+
+    The decorated function will be called when a model of the given type is in the given state. The function
+    will be called with two arguments: the session and the instance of the model that triggered the flush.
+    """
+
+    def decorator(func: Callable[P, None]) -> Callable[P, None]:
+        _before_flush_hooks[(model, state)].append(func)  # type: ignore[arg-type]
+        return func
+
+    return decorator
+
+
+def before_flush_trigger(
+    *models: Type[Base],
+) -> Callable[[Callable[P, None]], Callable[P, None]]:
+    """
+    Decorator to register a function to be triggered if any of the given models are added, deleted or modified.
+
+    Each decorated function will be called with a single argument: the session. It will be called once for each
+    flush, even if multiple models are added, deleted or modified.
+    """
+
+    def decorator(func: Callable[P, None]) -> Callable[P, None]:
+        _before_flush_trigger_hooks[func].update(models)  # type: ignore[index]
+        return func
+
+    return decorator
+
+
+def _fire_listeners(
+    listening_for: State,
+    session: Session,
+    triggers: Dict[Tuple[Type[Base], ...], Triggers],
+    instance_filter: Optional[Callable[[Base], bool]] = None,
+) -> None:
+    def default_instance_filter(_: Base) -> bool:
+        return True
+
+    if instance_filter is None:
+        instance_filter = default_instance_filter
+
+    hooks = {
+        model: listeners
+        for (model, state), listeners in _before_flush_hooks.items()
+        if state == State.ANY or state == listening_for
+    }
+    instances = getattr(session, listening_for.value)
+    for instance in instances:
+        for model, listeners in hooks.items():
+            if isinstance(instance, model) and instance_filter(instance):
+                for listener in listeners:
+                    listener(session, instance)
+        for models, trigger in triggers.items():
+            if (
+                isinstance(instance, models)
+                and not trigger.triggered
+                and instance_filter(instance)
+            ):
+                trigger.triggered = True
+
+
+@dataclass
+class Triggers:
+    hook: Callable[[Session], None]
+    triggered: bool = False
+
+
+def before_flush_event_listener(
+    session: Session, flush_context: UOWTransaction, instances: Optional[List[object]]
+) -> None:
+    triggers = {
+        tuple(models): Triggers(hook=hook)
+        for hook, models in _before_flush_trigger_hooks.items()
+    }
+
+    _fire_listeners(State.NEW, session, triggers)
+    _fire_listeners(State.DELETED, session, triggers)
+    _fire_listeners(State.DIRTY, session, triggers, before_flush_dirty_filter)
+
+    for models, trigger in triggers.items():
+        if trigger.triggered:
+            trigger.hook(session)
+
+
+def before_flush_dirty_filter(instance: Base) -> bool:
+    # Provide escape hatch for cases where we don't want to trigger the listener.
+    supressed = getattr(instance, "_suppress_configuration_changes", False)
+    if supressed:
+        return False
+    return directly_modified(instance)
+
 
 site_configuration_has_changed_lock = RLock()
 
@@ -127,6 +255,11 @@ def configuration_relevant_collection_change(target, value, initiator):
     site_configuration_has_changed(target)
 
 
+@before_flush_trigger(Library, ExternalIntegration, Collection, ConfigurationSetting)
+def configuration_relevant_lifecycle_event(session: Session):
+    site_configuration_has_changed(session)
+
+
 # Certain ORM events, however they occur, indicate that a work's
 # external index needs updating.
 
@@ -139,7 +272,8 @@ def licensepool_removed_from_work(target, value, initiator):
         target.external_index_needs_updating()
 
 
-def licensepool_deleted(session: Session, instance: Identifier) -> None:
+@before_flush(LicensePool, State.DELETED)
+def licensepool_deleted(session: Session, instance: LicensePool) -> None:
     """A LicensePool is deleted only when its collection is deleted.
     If this happens, we need to keep the Work's index up to date.
     """
@@ -188,6 +322,7 @@ def last_update_time_change(target, value, oldvalue, initator):
     target.external_index_needs_updating()
 
 
+@before_flush(Equivalency, State.DELETED)
 def equivalency_coverage_reset_on_equivalency_delete(
     session: Session, target: Equivalency
 ) -> None:
@@ -199,6 +334,7 @@ def equivalency_coverage_reset_on_equivalency_delete(
     )
 
 
+@before_flush(Identifier, State.NEW)
 def recursive_equivalence_on_identifier_create(
     session: Session, instance: Identifier
 ) -> None:
@@ -209,75 +345,11 @@ def recursive_equivalence_on_identifier_create(
     )
 
 
-def before_flush_event_listener(
-    session: Session, flush_context: UOWTransaction, instances: Optional[List[object]]
+@before_flush(Work, State.NEW)
+@before_flush(LicensePool, State.NEW)
+def add_work_to_customlists(
+    session: Session, instance: Union[Work, LicensePool]
 ) -> None:
-    from ..lane import Lane, LaneGenre
-
-    call_site_configuration_has_changed = False
-
-    for instance in session.new:
-        if isinstance(instance, Identifier):
-            recursive_equivalence_on_identifier_create(session, instance)
-        if isinstance(instance, (Work, LicensePool)):
-            add_work_to_customlists_for_collection(instance)
-        if (
-            isinstance(
-                instance,
-                (
-                    Library,
-                    ExternalIntegration,
-                    Collection,
-                    ConfigurationSetting,
-                    Lane,
-                    LaneGenre,
-                ),
-            )
-            and not call_site_configuration_has_changed
-        ):
-            call_site_configuration_has_changed = True
-
-    for instance in session.deleted:
-        if isinstance(instance, Equivalency):
-            equivalency_coverage_reset_on_equivalency_delete(session, instance)
-        if isinstance(instance, LicensePool):
-            licensepool_deleted(session, instance)
-        if (
-            isinstance(
-                instance,
-                (
-                    Library,
-                    ExternalIntegration,
-                    Collection,
-                    ConfigurationSetting,
-                    Lane,
-                    LaneGenre,
-                ),
-            )
-            and not call_site_configuration_has_changed
-        ):
-            call_site_configuration_has_changed = True
-
-    for instance in session.dirty:
-        if (
-            isinstance(
-                instance,
-                (
-                    Library,
-                    ExternalIntegration,
-                    Collection,
-                    ConfigurationSetting,
-                    Lane,
-                    LaneGenre,
-                ),
-            )
-            and not call_site_configuration_has_changed
-        ):
-            # Provide escape hatch for cases where we don't want to trigger
-            # a site configuration change.
-            suppressed = getattr(instance, "_suppress_configuration_changes", False)
-            if not suppressed and directly_modified(instance):
-                call_site_configuration_has_changed = True
-
-    if call_site_configuration_has_changed:
-        site_configuration_has_changed(session)
+    """Whenever a Work or LicensePool is created we must add it to the custom lists
+    for its collection"""
+    add_work_to_customlists_for_collection(instance)

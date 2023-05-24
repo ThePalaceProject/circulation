@@ -43,6 +43,7 @@ from core.model.configuration import (
     ExternalIntegration,
 )
 from core.model.hybrid import hybrid_property
+from core.model.listeners import before_flush_trigger, site_configuration_has_changed
 
 from .classifier import Classifier
 from .config import Configuration
@@ -3235,6 +3236,11 @@ lanes_customlists = Table(
     ),
     UniqueConstraint("lane_id", "customlist_id"),
 )
+
+
+@before_flush_trigger(Lane, LaneGenre)
+def configuration_relevant_lifecycle_event(session: Session):
+    site_configuration_has_changed(session)
 
 
 @event.listens_for(Lane.library_id, "set")
