@@ -579,7 +579,6 @@ class Hold(Base, LoanAndHoldMixin):
     __tablename__ = "holds"
     id = Column(Integer, primary_key=True)
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
-    patron: Patron
     integration_client_id = Column(
         Integer, ForeignKey("integrationclients.id"), index=True
     )
