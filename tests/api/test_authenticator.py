@@ -2327,7 +2327,7 @@ class TestBasicAuthenticationProvider:
         db = MagicMock(spec=Session)
 
         # Mock url_for so that the document can be generated.
-        with patch("api.authenticator.url_for") as url_for_patch:
+        with patch("api.authentication.basic.url_for") as url_for_patch:
             url_for_patch.return_value = "http://localhost/"
             doc = provider.authentication_flow_document(db)
             assert doc["description"] == provider.label()
