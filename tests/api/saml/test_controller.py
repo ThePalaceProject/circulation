@@ -5,7 +5,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 from flask import request
 
-from api.authenticator import Authenticator, PatronData
+from api.authentication.base import PatronData
+from api.authenticator import Authenticator
 from api.saml.auth import SAML_INCORRECT_RESPONSE, SAMLAuthenticationManager
 from api.saml.controller import (
     SAML_INVALID_REQUEST,

@@ -7,7 +7,8 @@ import flask
 import pytest
 from flask import Flask
 
-from api.authenticator import LibraryAuthenticator, PatronData
+from api.authentication.base import PatronData
+from api.authenticator import LibraryAuthenticator
 from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,

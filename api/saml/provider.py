@@ -4,7 +4,8 @@ from flask import url_for
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
-from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
+from api.authentication.base import PatronData
+from api.authenticator import BaseSAMLAuthenticationProvider
 from api.problem_details import *
 from api.saml.auth import SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import (

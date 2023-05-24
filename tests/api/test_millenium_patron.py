@@ -6,7 +6,8 @@ from urllib import parse
 
 import pytest
 
-from api.authenticator import Keyboards, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import Keyboards
 from api.millenium_patron import (
     AuthenticationMode,
     MilleniumPatronAPI,

@@ -6,7 +6,7 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 
 if TYPE_CHECKING:
-    from api.authenticator import AuthenticationProvider  # noqa: autoflake
+    pass
 
 
 class PatronAuthRegistry(IntegrationRegistry["AuthenticationProvider"]):

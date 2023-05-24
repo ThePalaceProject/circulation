@@ -22,18 +22,20 @@ from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
-from api.authenticator import (
-    Authenticator,
+from api.authentication.base import PatronData
+from api.authentication.basic import (
     BarcodeFormats,
-    BaseSAMLAuthenticationProvider,
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    CirculationPatronProfileStorage,
     Keyboards,
-    LibraryAuthenticator,
     LibraryIdentifierRestriction,
-    PatronData,
+)
+from api.authenticator import (
+    Authenticator,
+    BaseSAMLAuthenticationProvider,
+    CirculationPatronProfileStorage,
+    LibraryAuthenticator,
 )
 from api.config import CannotLoadConfiguration, Configuration
 from api.custom_patron_catalog import CustomPatronCatalog
