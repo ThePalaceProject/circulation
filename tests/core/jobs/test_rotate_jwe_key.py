@@ -8,6 +8,7 @@ class TestRotateJWEKeyScript:
         script = RotateJWEKeyScript(db.session)
         current = PatronJWEAccessTokenProvider.get_current_key(db.session)
         script.do_run()
+        db.session.expire_all()
         new_key = PatronJWEAccessTokenProvider.get_current_key(db.session)
 
         assert current.key_id != new_key.key_id

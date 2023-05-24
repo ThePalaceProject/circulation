@@ -12,7 +12,9 @@ if TYPE_CHECKING:
 class PatronAuthRegistry(IntegrationRegistry["AuthenticationProvider"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
-
+        from api.authentication.patron_authentication_provider import (
+            PatronAccessTokenAuthenticationProvider,
+        )
         from api.firstbook2 import FirstBookAuthenticationAPI
         from api.kansas_patron import KansasAuthenticationAPI
         from api.millenium_patron import MilleniumPatronAPI
@@ -23,6 +25,9 @@ class PatronAuthRegistry(IntegrationRegistry["AuthenticationProvider"]):
             SirsiDynixHorizonAuthenticationProvider,
         )
 
+        self.register(
+            PatronAccessTokenAuthenticationProvider, canonical="patron_auth_jwe"
+        )
         self.register(
             SimpleAuthenticationProvider, canonical="api.simple_authentication"
         )

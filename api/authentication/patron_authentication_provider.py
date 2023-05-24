@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Generator, Type
 
 from flask import url_for
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
-from api.authentication.access_token import AccessTokenProvider
-from api.authentication.base import AuthenticationProvider
+from api.authentication.access_token import (
+    AccessTokenProvider,
+    PatronAccessTokenAuthenticationSettings,
+)
+from api.authentication.base import AuthenticationProvider, AuthProviderSettings
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
@@ -120,3 +123,7 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         raise NotImplementedError()
+
+    @classmethod
+    def settings_class(cls) -> Type[AuthProviderSettings]:
+        return PatronAccessTokenAuthenticationSettings

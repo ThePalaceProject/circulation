@@ -3,16 +3,20 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
-from typing import Type
+from typing import Optional, Type, cast
 
 from jwcrypto import jwe, jwk
 
+from api.authentication.base import AuthProviderSettings
 from api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
+from core.integration.goals import Goals
+from core.integration.settings import ConfigurationFormItem, FormField
 from core.model import get_one_or_create
 from core.model.configuration import ExternalIntegration
+from core.model.integration import IntegrationConfiguration
 from core.model.patron import Patron
 from core.util.datetime_helpers import utc_now
 from core.util.problem_detail import ProblemDetail, ProblemError
@@ -41,10 +45,18 @@ class PatronAccessTokenProvider:
         raise NotImplementedError()
 
 
+class PatronAccessTokenAuthenticationSettings(AuthProviderSettings):
+    auth_key: Optional[str] = FormField(
+        None,
+        description="The JWE key used for the access token",
+        form=ConfigurationFormItem("Auth Key"),
+    )
+
+
 class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
     """Provide JWE based access tokens for patron auth"""
 
-    PATRON_AUTH_JWE_KEY = "PATRON_AUTH_JWE_KEY"
+    NAME = "Patron Access Token Provider"
 
     @classmethod
     def generate_key(cls) -> jwk.JWK:
@@ -53,12 +65,13 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return jwk.JWK.generate(kty="oct", size=256, kid=kid)
 
     @classmethod
-    def get_integration(cls, _db) -> ExternalIntegration:
+    def get_integration(cls, _db) -> IntegrationConfiguration:
         integration, _ = get_one_or_create(
             _db,
-            ExternalIntegration,
+            IntegrationConfiguration,
             protocol=ExternalIntegration.PATRON_AUTH_JWE,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL,
+            goal=Goals.PATRON_AUTH_GOAL,
+            name=cls.NAME,
         )
         return integration
 
@@ -68,30 +81,42 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         key = cls.generate_key()
         integration = cls.get_integration(_db)
 
-        kvalue_setting = integration.setting(cls.PATRON_AUTH_JWE_KEY)
-        kvalue_setting.value = key.export()
+        # We must make a copy() because sqlalchemy does not think
+        # a change in the same dict is a change at all.
+        # So the dict must be a new dict to register the change.
+        # https://docs.sqlalchemy.org/en/14/dialects/postgresql.html#sqlalchemy.dialects.postgresql.JSONB
+        settings_dict: dict = cast(dict, integration.settings.copy())
+        settings_dict["auth_key"] = key.export()
+        integration.settings = settings_dict
         return key
 
     @classmethod
-    def get_current_key(cls, _db, kid=None) -> jwk.JWK:
+    def get_current_key(cls, _db, kid=None, create=True) -> jwk.JWK:
         """Get the current JWK key for the CM
         :param kid: (Optional) If present, compare this value to the currently active kid,
                     raise a ValueError if found to be different
         """
         integration = cls.get_integration(_db)
 
-        kvalue_setting = integration.setting(cls.PATRON_AUTH_JWE_KEY)
+        settings = PatronAccessTokenAuthenticationSettings(
+            **cast(dict, integration.settings)
+        )
+        key: str | None = settings.auth_key
         # First time run, we don't have a value yet
-        if kvalue_setting.value_or_default(None) is None:
-            cls.rotate_key(_db)
+        if key is None:
+            if create:
+                jwk_key = cls.rotate_key(_db)
+            else:
+                return None
+        else:
+            jwk_key = jwk.JWK.from_json(key)
 
-        key = jwk.JWK.from_json(kvalue_setting.value)
-        if kid is not None and kid != key.key_id:
+        if kid is not None and kid != jwk_key.key_id:
             raise ValueError(
                 "Current KID has changed, the key has probably been rotated"
             )
 
-        return jwk.JWK.from_json(kvalue_setting.value)
+        return jwk_key
 
     @classmethod
     def generate_token(

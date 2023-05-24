@@ -83,18 +83,12 @@ class TestJWEProvider:
     def test_rotate_key(self, db: DatabaseTransactionFixture):
         key = PatronJWEAccessTokenProvider.rotate_key(db.session)
         integration = PatronJWEAccessTokenProvider.get_integration(db.session)
-        assert (
-            integration.setting(PatronJWEAccessTokenProvider.PATRON_AUTH_JWE_KEY).value
-            == key.export()
-        )
+        assert integration.settings["auth_key"] == key.export()
 
         key2 = PatronJWEAccessTokenProvider.rotate_key(db.session)
         assert key2.key_id != key.key_id
         assert key2.thumbprint() != key.thumbprint()
-        assert (
-            integration.setting(PatronJWEAccessTokenProvider.PATRON_AUTH_JWE_KEY).value
-            == key2.export()
-        )
+        assert integration.settings["auth_key"] == key2.export()
 
     def test_is_access_token(self, db: DatabaseTransactionFixture):
         patron = db.patron()
