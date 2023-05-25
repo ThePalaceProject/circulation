@@ -49,7 +49,6 @@ from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
 
-from .authenticator import Authenticator
 from .circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
@@ -66,9 +65,7 @@ class Axis360APIConstants:
     VERIFY_SSL = "verify_certificate"
 
 
-class Axis360API(
-    Authenticator, BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants
-):
+class Axis360API(BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants):
 
     NAME = ExternalIntegration.AXIS_360
 
