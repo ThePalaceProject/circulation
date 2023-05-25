@@ -29,8 +29,6 @@ from .constants import (
     MediaTypes,
 )
 
-CIRCULATION_ADVISORY_LOCK_ID = "1000000001"
-
 
 def flush(db):
     """Flush the database connection unless it's known to already be flushing."""
@@ -307,10 +305,6 @@ def json_serializer(*args, **kwargs) -> str:
     return json.dumps(*args, default=json_encoder, **kwargs)
 
 
-def acquire_advisory_lock(connection, lock_id):
-    connection.execute(f"SELECT pg_advisory_lock({lock_id});")
-
-
 class SessionManager:
 
     # A function that calculates recursively equivalent identifiers
@@ -357,41 +351,38 @@ class SessionManager:
             return engine, engine.connect()
 
         engine = cls.engine(url)
-        with engine.connect() as connection:
-            tx = connection.begin()
-            if initialize_schema or initialize_data:
-                acquire_advisory_lock(connection, CIRCULATION_ADVISORY_LOCK_ID)
+        if initialize_schema:
+            cls.initialize_schema(engine)
+        connection = engine.connect()
 
-            if initialize_schema:
-                cls.initialize_schema(connection)
+        # Check if the recursive equivalents function exists already.
+        query = (
+            select([literal_column("proname")])
+            .select_from(table("pg_proc"))
+            .where(literal_column("proname") == "fn_recursive_equivalents")
+        )
+        result = connection.execute(query)
+        result = list(result)
 
-            # Check if the recursive equivalents function exists already.
-            query = (
-                select([literal_column("proname")])
-                .select_from(table("pg_proc"))
-                .where(literal_column("proname") == "fn_recursive_equivalents")
+        # If it doesn't, create it.
+        if not result and initialize_data:
+            resource_file = os.path.join(
+                cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
             )
-            result = connection.execute(query)
-            result = list(result)
-
-            # If it doesn't, create it.
-            if not result and initialize_data:
-                resource_file = os.path.join(
-                    cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
+            if not os.path.exists(resource_file):
+                raise OSError(
+                    "Could not load recursive equivalents function from %s: file does not exist."
+                    % resource_file
                 )
-                if not os.path.exists(resource_file):
-                    raise OSError(
-                        "Could not load recursive equivalents function from %s: file does not exist."
-                        % resource_file
-                    )
-                sql = open(resource_file).read()
-                connection.execute(sql)
+            sql = open(resource_file).read()
+            connection.execute(sql)
 
-            if initialize_data:
-                session = Session(connection)
-                cls.initialize_data(session)
+        if initialize_data:
+            session = Session(connection)
+            cls.initialize_data(session)
 
-            tx.commit()
+        if connection:
+            connection.close()
 
         if initialize_schema and initialize_data:
             # Only cache the engine if all initialization has been performed.
@@ -411,7 +402,6 @@ class SessionManager:
     def initialize_schema(cls, engine):
         """Initialize the database schema."""
         # Use SQLAlchemy to create all the tables.
-
         to_create = [
             table_obj
             for name, table_obj in list(Base.metadata.tables.items())
@@ -430,16 +420,17 @@ class SessionManager:
                 initialize_schema=initialize_schema,
             )
         session = Session(connection)
+        if initialize_data:
+            session = cls.initialize_data(session)
         return session
 
     @classmethod
-    def initialize_data(cls, session):
+    def initialize_data(cls, session, set_site_configuration=True):
         # Create initial content.
         from .classification import Genre
         from .datasource import DataSource
         from .licensing import DeliveryMechanism
 
-        # otherwise  continue with the initialization
         list(DataSource.well_known_sources(session))
 
         # Create any genres not in the database.
