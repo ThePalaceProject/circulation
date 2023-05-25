@@ -24,7 +24,6 @@ from core.model import (
     json_serializer,
     site_configuration_has_changed,
 )
-from core.model.configuration import ExternalIntegration
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -51,9 +50,6 @@ class PatronAuthServicesController(AdminCirculationManagerController):
         """Cached result for integration implementations"""
         protocols = {}
         for name, api in self.registry:
-            # Ignore the internal protocol
-            if name == ExternalIntegration.PATRON_AUTH_JWE:
-                continue
 
             protocols[name] = {
                 "name": name,
@@ -91,10 +87,6 @@ class PatronAuthServicesController(AdminCirculationManagerController):
                 self.log.warning(
                     f"Unknown patron authentication service implementation: {service.protocol}"
                 )
-                continue
-
-            # Special case: Hide the JWE auth from the UI
-            if service.protocol == ExternalIntegration.PATRON_AUTH_JWE:
                 continue
 
             libraries = []

@@ -8,7 +8,6 @@ from typing import Type
 
 from jwcrypto import jwe, jwk
 
-from api.authentication.base import AuthProviderSettings
 from api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
@@ -47,10 +46,6 @@ class PatronAccessTokenProvider(ABC):
     @abstractmethod
     def get_integration(cls, _db):
         raise NotImplementedError()
-
-
-class PatronAccessTokenAuthenticationSettings(AuthProviderSettings):
-    pass
 
 
 class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):

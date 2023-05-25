@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, Type
+from typing import TYPE_CHECKING, Any, Dict, Generator, Type
 
 from flask import url_for
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
-from api.authentication.access_token import (
-    AccessTokenProvider,
-    PatronAccessTokenAuthenticationSettings,
+from api.authentication.access_token import AccessTokenProvider
+from api.authentication.base import (
+    AuthenticationProvider,
+    AuthProviderSettings,
+    BarcodeFormats,
 )
-from api.authentication.base import AuthenticationProvider, AuthProviderSettings
+from api.authentication.basic import BasicAuthProviderSettings
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
@@ -18,6 +20,10 @@ from core.util.problem_detail import ProblemDetail, ProblemError
 
 if TYPE_CHECKING:
     from core.model import Library
+
+
+class PatronAccessTokenAuthenticationSettings(BasicAuthProviderSettings):
+    pass
 
 
 class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
@@ -76,30 +82,42 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
 
     def _authentication_flow_document(self, _db):
         """This auth type should not have an entry in the authentication document"""
+        settings = PatronAccessTokenAuthenticationSettings(
+            **AccessTokenProvider.get_integration(_db).settings
+        )
         token_url = url_for(
             "patron_auth_token",
             library_short_name=self.library(_db).short_name,
             _external=True,
         )
-        inputs = {"login": {"keyboard": "default"}, "password": {"keyboard": "default"}}
         links = [
             {
                 "rel": "authenticate",
                 "href": token_url,
             }
         ]
-        labels = {
-            "login": "Barcode",
-            "password": "Pin",
-        }
+        login_inputs: Dict[str, Any] = dict(keyboard=settings.identifier_keyboard.value)
+        if settings.identifier_maximum_length:
+            login_inputs["maximum_length"] = settings.identifier_maximum_length
+        if settings.identifier_barcode_format != BarcodeFormats.NONE:
+            login_inputs["barcode_format"] = settings.identifier_barcode_format.value
 
-        return dict(
-            description=self.description(),
-            type=self.flow_type,
-            inputs=inputs,
-            links=links,
-            labels=labels,
+        password_inputs: Dict[str, Any] = dict(
+            keyboard=settings.password_keyboard.value
         )
+        if settings.password_maximum_length:
+            password_inputs["maximum_length"] = settings.password_maximum_length
+
+        flow_doc: dict[str, Any] = dict(
+            description=str(self.label()),
+            labels=dict(
+                login=settings.identifier_label,
+                password=settings.password_label,
+            ),
+            inputs=dict(login=login_inputs, password=password_inputs),
+            links=links,
+        )
+        return flow_doc
 
     def remote_patron_lookup(self, _db):
         """There is no remote lookup"""
@@ -111,7 +129,7 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
 
     @classmethod
     def description(cls) -> str:
-        return "Library Barcode + Token"
+        return "An internal authentication mechanism, DO NOT CREATE MANUALLY!!"
 
     @classmethod
     def identifies_individuals(cls):
