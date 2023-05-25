@@ -6,7 +6,6 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Generator, List
 
-from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from pydantic.json import pydantic_encoder
@@ -308,27 +307,12 @@ def json_serializer(*args, **kwargs) -> str:
     return json.dumps(*args, default=json_encoder, **kwargs)
 
 
-@contextmanager
-def pg_advisory_lock(
-    connection: Session, lock_id: int | None
-) -> Generator[None, None, None]:
-    """Application wide locking based on Lock IDs
-    :param connection: The database connection
-    :param lock_id: The numeric lock ID to create, if None do not create a lock at all
-    """
-    if lock_id is not None:
-        # Create the lock
-        connection.execute(f"SELECT pg_advisory_lock({lock_id});")
-        try:
-            yield
-        finally:
-            # Close the lock
-            connection.execute(f"SELECT pg_advisory_unlock({lock_id});")
-    else:
-        yield
+def acquire_advisory_lock(connection, lock_id):
+    connection.execute(f"SELECT pg_advisory_lock({lock_id});")
 
 
 class SessionManager:
+
     # A function that calculates recursively equivalent identifiers
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
@@ -375,45 +359,39 @@ class SessionManager:
         engine = cls.engine(url)
         with engine.connect() as connection:
             tx = connection.begin()
+            if initialize_schema or initialize_data:
+                acquire_advisory_lock(connection, CIRCULATION_ADVISORY_LOCK_ID)
 
-            # Only lock the application under certain conditions
-            lock_id = (
-                CIRCULATION_ADVISORY_LOCK_ID
-                if initialize_schema or initialize_data
-                else None
+            if initialize_schema:
+                cls.initialize_schema(connection)
+
+            # Check if the recursive equivalents function exists already.
+            query = (
+                select([literal_column("proname")])
+                .select_from(table("pg_proc"))
+                .where(literal_column("proname") == "fn_recursive_equivalents")
             )
+            result = connection.execute(query)
+            result = list(result)
 
-            with pg_advisory_lock(connection, lock_id):
-                if initialize_schema:
-                    cls.initialize_schema(connection)
-
-                # Check if the recursive equivalents function exists already.
-                query = (
-                    select([literal_column("proname")])
-                    .select_from(table("pg_proc"))
-                    .where(literal_column("proname") == "fn_recursive_equivalents")
+            # If it doesn't, create it.
+            if not result and initialize_data:
+                resource_file = os.path.join(
+                    cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
                 )
-                result = connection.execute(query)
-                result = list(result)
-
-                # If it doesn't, create it.
-                if not result and initialize_data:
-                    resource_file = os.path.join(
-                        cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
+                if not os.path.exists(resource_file):
+                    raise OSError(
+                        "Could not load recursive equivalents function from %s: file does not exist."
+                        % resource_file
                     )
-                    if not os.path.exists(resource_file):
-                        raise OSError(
-                            "Could not load recursive equivalents function from %s: file does not exist."
-                            % resource_file
-                        )
-                    sql = open(resource_file).read()
-                    connection.execute(sql)
+                sql = open(resource_file).read()
+                connection.execute(sql)
 
-                if initialize_data:
-                    session = Session(connection)
-                    cls.initialize_data(session)
+            if initialize_data:
+                session = Session(connection)
+                cls.initialize_data(session)
 
-                tx.commit()
+            tx.commit()
 
         if initialize_schema and initialize_data:
             # Only cache the engine if all initialization has been performed.
