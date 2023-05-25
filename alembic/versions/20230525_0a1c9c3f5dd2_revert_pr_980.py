@@ -17,14 +17,18 @@ branch_labels = None
 depends_on = None
 
 
+status_enum = sa.Enum("green", "red", name="external_integration_status")
+
+
 def upgrade() -> None:
     op.drop_table("externalintegrationerrors")
     op.drop_column("externalintegrations", "last_status_update")
     op.drop_column("externalintegrations", "status")
-    sa.Enum(name="external_integration_status").drop(op.get_bind(), checkfirst=False)
+    status_enum.drop(op.get_bind())
 
 
 def downgrade() -> None:
+    status_enum.create(op.get_bind())
     op.add_column(
         "externalintegrations",
         sa.Column(
