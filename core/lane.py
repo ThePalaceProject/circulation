@@ -37,13 +37,14 @@ from sqlalchemy.orm import (
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 
+from core.model.before_flush_decorator import Listener
 from core.model.configuration import (
     ConfigurationAttributeValue,
     ConfigurationSetting,
     ExternalIntegration,
 )
 from core.model.hybrid import hybrid_property
-from core.model.listeners import before_flush_trigger, site_configuration_has_changed
+from core.model.listeners import site_configuration_has_changed
 
 from .classifier import Classifier
 from .config import Configuration
@@ -2709,7 +2710,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         # be a temporary fix while we replace the need for the site_configuration_has_changed
         # and listeners at all.
         # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
-        self._suppress_configuration_changes = False
+        self._suppress_before_flush_listeners = False
 
     def get_library(self, _db):
         """For compatibility with WorkList.get_library()."""
@@ -3238,7 +3239,7 @@ lanes_customlists = Table(
 )
 
 
-@before_flush_trigger(Lane, LaneGenre)
+@Listener.before_flush((Lane, LaneGenre), one_shot=True)
 def configuration_relevant_lifecycle_event(session: Session):
     site_configuration_has_changed(session)
 

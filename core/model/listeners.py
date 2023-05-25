@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 import datetime
-import sys
-from collections import defaultdict
-from dataclasses import dataclass
-from enum import Enum
 from threading import RLock
-from typing import Callable, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Union
 
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.unitofwork import UOWTransaction
 
+from core.model.before_flush_decorator import Listener, ListenerState
 from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
 from core.query.coverage import EquivalencyCoverageQueries
 
@@ -23,128 +19,6 @@ from .configuration import ConfigurationSetting, ExternalIntegration
 from .library import Library
 from .licensing import LicensePool
 from .work import Work, add_work_to_customlists_for_collection
-
-# TODO: Remove this when we drop support for Python 3.9
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
-
-
-class State(Enum):
-    NEW = "new"
-    DELETED = "deleted"
-    DIRTY = "dirty"
-    ANY = "any"
-
-
-_before_flush_hooks: Dict[
-    Tuple[Type[Base], State], List[Callable[[Session, Base], None]]
-] = defaultdict(list)
-_before_flush_trigger_hooks: Dict[
-    Callable[[Session], None], Set[Type[Base]]
-] = defaultdict(set)
-
-
-P = ParamSpec("P")
-
-
-def before_flush(
-    model: Type[Base], state: State
-) -> Callable[[Callable[P, None]], Callable[P, None]]:
-    """
-    Decorator to register a function to be called before a flush.
-
-    The decorated function will be called when a model of the given type is in the given state. The function
-    will be called with two arguments: the session and the instance of the model that triggered the flush.
-    """
-
-    def decorator(func: Callable[P, None]) -> Callable[P, None]:
-        _before_flush_hooks[(model, state)].append(func)  # type: ignore[arg-type]
-        return func
-
-    return decorator
-
-
-def before_flush_trigger(
-    *models: Type[Base],
-) -> Callable[[Callable[P, None]], Callable[P, None]]:
-    """
-    Decorator to register a function to be triggered if any of the given models are added, deleted or modified.
-
-    Each decorated function will be called with a single argument: the session. It will be called once for each
-    flush, even if multiple models are added, deleted or modified.
-    """
-
-    def decorator(func: Callable[P, None]) -> Callable[P, None]:
-        _before_flush_trigger_hooks[func].update(models)  # type: ignore[index]
-        return func
-
-    return decorator
-
-
-def _fire_listeners(
-    listening_for: State,
-    session: Session,
-    triggers: Dict[Tuple[Type[Base], ...], Triggers],
-    instance_filter: Optional[Callable[[Base], bool]] = None,
-) -> None:
-    def default_instance_filter(_: Base) -> bool:
-        return True
-
-    if instance_filter is None:
-        instance_filter = default_instance_filter
-
-    hooks = {
-        model: listeners
-        for (model, state), listeners in _before_flush_hooks.items()
-        if state == State.ANY or state == listening_for
-    }
-    instances = getattr(session, listening_for.value)
-    for instance in instances:
-        for model, listeners in hooks.items():
-            if isinstance(instance, model) and instance_filter(instance):
-                for listener in listeners:
-                    listener(session, instance)
-        for models, trigger in triggers.items():
-            if (
-                isinstance(instance, models)
-                and not trigger.triggered
-                and instance_filter(instance)
-            ):
-                trigger.triggered = True
-
-
-@dataclass
-class Triggers:
-    hook: Callable[[Session], None]
-    triggered: bool = False
-
-
-def before_flush_event_listener(
-    session: Session, flush_context: UOWTransaction, instances: Optional[List[object]]
-) -> None:
-    triggers = {
-        tuple(models): Triggers(hook=hook)
-        for hook, models in _before_flush_trigger_hooks.items()
-    }
-
-    _fire_listeners(State.NEW, session, triggers)
-    _fire_listeners(State.DELETED, session, triggers)
-    _fire_listeners(State.DIRTY, session, triggers, before_flush_dirty_filter)
-
-    for models, trigger in triggers.items():
-        if trigger.triggered:
-            trigger.hook(session)
-
-
-def before_flush_dirty_filter(instance: Base) -> bool:
-    # Provide escape hatch for cases where we don't want to trigger the listener.
-    supressed = getattr(instance, "_suppress_configuration_changes", False)
-    if supressed:
-        return False
-    return directly_modified(instance)
-
 
 site_configuration_has_changed_lock = RLock()
 
@@ -224,14 +98,6 @@ def _site_configuration_has_changed(_db, cooldown=1):
         Configuration.site_configuration_last_update(_db, known_value=now)
 
 
-def directly_modified(obj):
-    """Return True only if `obj` has itself been modified, as opposed to
-    having an object added or removed to one of its associated
-    collections.
-    """
-    return Session.object_session(obj).is_modified(obj, include_collections=False)
-
-
 # Most of the time, we can know whether a change to the database is
 # likely to require that the application reload the portion of the
 # configuration it gets from the database. These hooks will call
@@ -255,7 +121,9 @@ def configuration_relevant_collection_change(target, value, initiator):
     site_configuration_has_changed(target)
 
 
-@before_flush_trigger(Library, ExternalIntegration, Collection, ConfigurationSetting)
+@Listener.before_flush(
+    (Library, ExternalIntegration, Collection, ConfigurationSetting), one_shot=True
+)
 def configuration_relevant_lifecycle_event(session: Session):
     site_configuration_has_changed(session)
 
@@ -272,7 +140,7 @@ def licensepool_removed_from_work(target, value, initiator):
         target.external_index_needs_updating()
 
 
-@before_flush(LicensePool, State.DELETED)
+@Listener.before_flush(LicensePool, ListenerState.deleted)
 def licensepool_deleted(session: Session, instance: LicensePool) -> None:
     """A LicensePool is deleted only when its collection is deleted.
     If this happens, we need to keep the Work's index up to date.
@@ -322,7 +190,7 @@ def last_update_time_change(target, value, oldvalue, initator):
     target.external_index_needs_updating()
 
 
-@before_flush(Equivalency, State.DELETED)
+@Listener.before_flush(Equivalency, ListenerState.deleted)
 def equivalency_coverage_reset_on_equivalency_delete(
     session: Session, target: Equivalency
 ) -> None:
@@ -334,7 +202,7 @@ def equivalency_coverage_reset_on_equivalency_delete(
     )
 
 
-@before_flush(Identifier, State.NEW)
+@Listener.before_flush(Identifier, ListenerState.new)
 def recursive_equivalence_on_identifier_create(
     session: Session, instance: Identifier
 ) -> None:
@@ -345,8 +213,7 @@ def recursive_equivalence_on_identifier_create(
     )
 
 
-@before_flush(Work, State.NEW)
-@before_flush(LicensePool, State.NEW)
+@Listener.before_flush((Work, LicensePool), ListenerState.new)
 def add_work_to_customlists(
     session: Session, instance: Union[Work, LicensePool]
 ) -> None:

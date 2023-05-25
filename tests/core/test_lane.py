@@ -4038,9 +4038,9 @@ class TestLane:
         lane2 = db.lane()
 
         # Updating the flag on one lane does not impact others
-        lane1._suppress_configuration_changes = True
-        assert lane1._suppress_configuration_changes is True
-        assert lane2._suppress_configuration_changes is False
+        lane1._suppress_before_flush_listeners = True
+        assert lane1._suppress_before_flush_listeners is True
+        assert lane2._suppress_before_flush_listeners is False
 
 
 class TestWorkListGroupsEndToEndData:

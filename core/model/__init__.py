@@ -343,7 +343,7 @@ class SessionManager:
     def setup_event_listener(
         cls, session: Union[Session, sessionmaker]
     ) -> Union[Session, sessionmaker]:
-        event.listen(session, "before_flush", before_flush_event_listener)
+        event.listen(session, "before_flush", Listener.before_flush_event_listener)
         return session
 
     @classmethod
