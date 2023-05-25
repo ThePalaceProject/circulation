@@ -107,7 +107,7 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
 
     @property
     def flow_type(self) -> str:
-        return "http://librarysimplified.org/authtype/basic-token"
+        return "http://thepalaceproject.org/authtype/basic-token"
 
     @classmethod
     def description(cls) -> str:

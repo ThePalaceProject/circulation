@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import ABC, abstractmethod
 from datetime import timedelta
-from typing import Optional, Type, cast
+from typing import Type
 
 from jwcrypto import jwe, jwk
 
@@ -13,9 +14,8 @@ from api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
 from core.integration.goals import Goals
-from core.integration.settings import ConfigurationFormItem, FormField
 from core.model import get_one_or_create
-from core.model.configuration import ExternalIntegration
+from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.integration import IntegrationConfiguration
 from core.model.patron import Patron
 from core.util.datetime_helpers import utc_now
@@ -23,40 +23,41 @@ from core.util.problem_detail import ProblemDetail, ProblemError
 from core.util.string_helpers import random_string
 
 
-class PatronAccessTokenProvider:
+class PatronAccessTokenProvider(ABC):
     """Provides access tokens for patron auth"""
 
     @classmethod
+    @abstractmethod
     def generate_token(
         cls, _db, patron: Patron, password: str, expires_in: int = 3600
     ) -> str:
         raise NotImplementedError()
 
     @classmethod
+    @abstractmethod
     def decode_token(cls, _db, token: str) -> dict | ProblemDetail:
         raise NotImplementedError()
 
     @classmethod
+    @abstractmethod
     def is_access_token(cls, token: str | None) -> bool:
         raise NotImplementedError()
 
     @classmethod
+    @abstractmethod
     def get_integration(cls, _db):
         raise NotImplementedError()
 
 
 class PatronAccessTokenAuthenticationSettings(AuthProviderSettings):
-    auth_key: Optional[str] = FormField(
-        None,
-        description="The JWE key used for the access token",
-        form=ConfigurationFormItem("Auth Key"),
-    )
+    pass
 
 
 class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
     """Provide JWE based access tokens for patron auth"""
 
     NAME = "Patron Access Token Provider"
+    KEY_NAME = "PATRON_JWE_KEY"
 
     @classmethod
     def generate_key(cls) -> jwk.JWK:
@@ -79,15 +80,8 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
     def rotate_key(cls, _db) -> jwk.JWK:
         """Rotate the current JWK key in the DB"""
         key = cls.generate_key()
-        integration = cls.get_integration(_db)
-
-        # We must make a copy() because sqlalchemy does not think
-        # a change in the same dict is a change at all.
-        # So the dict must be a new dict to register the change.
-        # https://docs.sqlalchemy.org/en/14/dialects/postgresql.html#sqlalchemy.dialects.postgresql.JSONB
-        settings_dict: dict = cast(dict, integration.settings.copy())
-        settings_dict["auth_key"] = key.export()
-        integration.settings = settings_dict
+        setting = ConfigurationSetting.sitewide(_db, cls.KEY_NAME)
+        setting.value = key.export()
         return key
 
     @classmethod
@@ -96,12 +90,9 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         :param kid: (Optional) If present, compare this value to the currently active kid,
                     raise a ValueError if found to be different
         """
-        integration = cls.get_integration(_db)
+        stored_key = ConfigurationSetting.sitewide(_db, cls.KEY_NAME)
+        key: str | None = stored_key.value
 
-        settings = PatronAccessTokenAuthenticationSettings(
-            **cast(dict, integration.settings)
-        )
-        key: str | None = settings.auth_key
         # First time run, we don't have a value yet
         if key is None:
             if create:
@@ -111,7 +102,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         else:
             jwk_key = jwk.JWK.from_json(key)
 
-        if kid is not None and kid != jwk_key.key_id:
+        if kid is not None and kid != jwk_key.get("kid"):
             raise ValueError(
                 "Current KID has changed, the key has probably been rotated"
             )
@@ -135,7 +126,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
             jwe.json_encode(payload),
             dict(
                 alg="dir",
-                kid=key.key_id,
+                kid=key.get("kid"),
                 typ="JWE",
                 enc="A128CBC-HS256",
                 exp=(utc_now() + timedelta(seconds=expires_in)).timestamp(),

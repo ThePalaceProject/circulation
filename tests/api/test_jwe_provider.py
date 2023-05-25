@@ -18,7 +18,7 @@ class TestJWEProvider:
     def test_generate_key(self):
         key = PatronJWEAccessTokenProvider.generate_key()
         assert type(key) == jwk.JWK
-        assert key.key_type == "oct"
+        assert key.get("kty") == "oct"
 
     def test_generate_token(self, db: DatabaseTransactionFixture):
         patron = db.patron()
@@ -33,10 +33,9 @@ class TestJWEProvider:
             hours=1
         )
         assert header["typ"] == "JWE"
-        assert (
-            header["kid"]
-            == PatronJWEAccessTokenProvider.get_current_key(db.session).key_id
-        )
+        assert header["kid"] == PatronJWEAccessTokenProvider.get_current_key(
+            db.session
+        ).get("kid")
 
     def test_get_current_key(self, db: DatabaseTransactionFixture):
         key1 = PatronJWEAccessTokenProvider.get_current_key(db.session)
@@ -47,7 +46,9 @@ class TestJWEProvider:
             PatronJWEAccessTokenProvider.get_current_key(db.session, kid="not-the-kid")
 
         assert (
-            PatronJWEAccessTokenProvider.get_current_key(db.session, kid=key1.key_id)
+            PatronJWEAccessTokenProvider.get_current_key(
+                db.session, kid=key1.get("kid")
+            )
             == key1
         )
 
@@ -82,13 +83,18 @@ class TestJWEProvider:
 
     def test_rotate_key(self, db: DatabaseTransactionFixture):
         key = PatronJWEAccessTokenProvider.rotate_key(db.session)
-        integration = PatronJWEAccessTokenProvider.get_integration(db.session)
-        assert integration.settings["auth_key"] == key.export()
+        stored_key = PatronJWEAccessTokenProvider.get_current_key(
+            db.session, create=False
+        )
+        assert stored_key == key
 
         key2 = PatronJWEAccessTokenProvider.rotate_key(db.session)
-        assert key2.key_id != key.key_id
+        stored_key = PatronJWEAccessTokenProvider.get_current_key(
+            db.session, create=False
+        )
+        assert key2.get("kid") != key.get("kid")
         assert key2.thumbprint() != key.thumbprint()
-        assert integration.settings["auth_key"] == key2.export()
+        assert stored_key == key2
 
     def test_is_access_token(self, db: DatabaseTransactionFixture):
         patron = db.patron()
