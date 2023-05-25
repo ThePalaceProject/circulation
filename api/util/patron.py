@@ -71,7 +71,7 @@ class PatronUtility:
         if cls.has_excess_fines(patron):
             raise OutstandingFines()
 
-        from api.authenticator import PatronData
+        from api.authentication.base import PatronData
 
         if patron.block_reason is None:
             return

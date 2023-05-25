@@ -12,11 +12,11 @@ from pydantic import HttpUrl
 from core.integration.settings import ConfigurationFormItem, FormField
 from core.model import Patron
 
-from .authenticator import (
+from .authentication.base import PatronData
+from .authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    PatronData,
 )
 from .circulation_exceptions import RemoteInitiatedServerError
 

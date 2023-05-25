@@ -10,7 +10,8 @@ from flask_babel import lazy_gettext as _
 from api.admin.controller import AdminCirculationManagerController
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
-from api.authenticator import AuthenticationProvider, BasicAuthenticationProvider
+from api.authentication.base import AuthenticationProvider
+from api.authentication.basic import BasicAuthenticationProvider
 from api.controller import CirculationManager
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals

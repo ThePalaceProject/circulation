@@ -27,7 +27,7 @@ from api.admin.password_admin_authentication_provider import (
 from api.admin.problem_details import *
 from api.admin.validator import Validator
 from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
-from api.authenticator import PatronData
+from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
 from core.lane import Lane, Pagination

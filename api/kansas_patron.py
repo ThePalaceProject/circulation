@@ -8,11 +8,11 @@ from core.integration.settings import ConfigurationFormItem, FormField
 from core.model import Patron
 from core.util.http import HTTP
 
-from .authenticator import (
+from .authentication.base import PatronData
+from .authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    PatronData,
 )
 
 

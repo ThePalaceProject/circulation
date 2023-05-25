@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 from freezegun import freeze_time
 
-from api.authenticator import PatronData
+from api.authentication.base import PatronData
 from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import (
     SAMLOneLoginConfiguration,

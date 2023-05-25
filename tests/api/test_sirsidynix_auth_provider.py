@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from api.authenticator import LibraryIdentifierRestriction, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import LibraryIdentifierRestriction
 from api.config import Configuration
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.sirsidynix_authentication_provider import (
