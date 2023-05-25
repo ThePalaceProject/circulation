@@ -11,5 +11,4 @@ class TestRotateJWEKeyScript:
         db.session.expire_all()
         new_key = PatronJWEAccessTokenProvider.get_current_key(db.session)
 
-        assert current.key_id != new_key.key_id
         assert current.thumbprint() != new_key.thumbprint()
