@@ -10,6 +10,7 @@ from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
+from sqlalchemy import MetaData
 from sqlalchemy.engine import Connection, Engine, Transaction
 from sqlalchemy.orm import Session
 
@@ -20,7 +21,6 @@ from core.config import Configuration
 from core.integration.goals import Goals
 from core.log import LogConfiguration
 from core.model import (
-    Base,
     Classification,
     Collection,
     Contributor,
@@ -49,7 +49,6 @@ from core.model import (
     create,
     get_one_or_create,
 )
-from core.model.devicetokens import DeviceToken
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -74,13 +73,10 @@ class ApplicationFixture:
         # Drop any existing schema. It will be recreated when
         # SessionManager.initialize() runs.
         engine = SessionManager.engine()
-        # Trying to drop all tables without reflecting first causes an issue
-        # since SQLAlchemy does not know the order of cascades
-        # Adding .reflect is throwing an error locally because tables are imported
-        # later and hence being defined twice
-        # Deleting the problematic table first fixes the issue, in this case DeviceToken
-        DeviceToken.__table__.drop(engine, checkfirst=True)
-        Base.metadata.drop_all(engine)
+        metadata_obj = MetaData()
+        metadata_obj.reflect(bind=engine)
+        metadata_obj.drop_all(engine)
+        metadata_obj.clear()
         return ApplicationFixture()
 
     def close(self):
