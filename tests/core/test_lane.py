@@ -1163,7 +1163,7 @@ class TestDatabaseBackedFacets:
             unlimited_access_high.id,
         ] == [x.id for x in title_order]
         assert ["sort_title", "sort_author", "id"] == [
-            x.name for x in title_order._distinct
+            x.name for x in title_order._distinct_on
         ]
 
         # This sort order is not supported, so the default is used.
@@ -1176,7 +1176,7 @@ class TestDatabaseBackedFacets:
             open_access_high.id,
         ] == [x.id for x in unsupported_order]
         assert ["sort_author", "sort_title", "id"] == [
-            x.name for x in unsupported_order._distinct
+            x.name for x in unsupported_order._distinct_on
         ]
 
 
@@ -3355,7 +3355,8 @@ class TestDatabaseBackedWorkList:
         work = db.work(with_license_pool=True)
         work.license_pools[0].superceded = True
         ignore, pool = db.edition(with_license_pool=True)
-        pool.work = work
+        work.license_pools.append(pool)
+        db.session.commit()
 
         lane = db.lane()
         [w] = lane.works_from_database(db.session).all()
@@ -4037,9 +4038,9 @@ class TestLane:
         lane2 = db.lane()
 
         # Updating the flag on one lane does not impact others
-        lane1._suppress_configuration_changes = True
-        assert lane1._suppress_configuration_changes is True
-        assert lane2._suppress_configuration_changes is False
+        lane1._suppress_before_flush_listeners = True
+        assert lane1._suppress_before_flush_listeners is True
+        assert lane2._suppress_before_flush_listeners is False
 
 
 class TestWorkListGroupsEndToEndData:

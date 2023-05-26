@@ -2450,7 +2450,7 @@ class AdminSearchController(AdminController):
         - Subject
         """
         library: Library = flask.request.library  # type: ignore
-        collection_ids = [coll.id for coll in library.collections]
+        collection_ids = [coll.id for coll in library.collections if coll.id]
         return self._search_field_values_cached(collection_ids)
 
     @classmethod

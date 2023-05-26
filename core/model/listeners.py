@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import datetime
 from threading import RLock
+from typing import Union
 
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.base import NO_VALUE
 
+from core.model.before_flush_decorator import Listener, ListenerState
 from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
 from core.query.coverage import EquivalencyCoverageQueries
 
@@ -15,7 +18,7 @@ from .collection import Collection
 from .configuration import ConfigurationSetting, ExternalIntegration
 from .library import Library
 from .licensing import LicensePool
-from .work import Work
+from .work import Work, add_work_to_customlists_for_collection
 
 site_configuration_has_changed_lock = RLock()
 
@@ -95,14 +98,6 @@ def _site_configuration_has_changed(_db, cooldown=1):
         Configuration.site_configuration_last_update(_db, known_value=now)
 
 
-def directly_modified(obj):
-    """Return True only if `obj` has itself been modified, as opposed to
-    having an object added or removed to one of its associated
-    collections.
-    """
-    return Session.object_session(obj).is_modified(obj, include_collections=False)
-
-
 # Most of the time, we can know whether a change to the database is
 # likely to require that the application reload the portion of the
 # configuration it gets from the database. These hooks will call
@@ -126,60 +121,11 @@ def configuration_relevant_collection_change(target, value, initiator):
     site_configuration_has_changed(target)
 
 
-@event.listens_for(Library, "after_insert")
-@event.listens_for(Library, "after_delete")
-@event.listens_for(ExternalIntegration, "after_insert")
-@event.listens_for(ExternalIntegration, "after_delete")
-@event.listens_for(Collection, "after_insert")
-@event.listens_for(Collection, "after_delete")
-@event.listens_for(ConfigurationSetting, "after_insert")
-@event.listens_for(ConfigurationSetting, "after_delete")
-def configuration_relevant_lifecycle_event(mapper, connection, target):
-    site_configuration_has_changed(target)
-
-
-@event.listens_for(Library, "after_update")
-@event.listens_for(ExternalIntegration, "after_update")
-@event.listens_for(Collection, "after_update")
-@event.listens_for(ConfigurationSetting, "after_update")
-def configuration_relevant_update(mapper, connection, target):
-    if directly_modified(target):
-        site_configuration_has_changed(target)
-
-
-# When a pool gets a work and a presentation edition for the first time,
-# the work should be added to any custom lists associated with the pool's
-# collection.
-# In some cases, the work may be generated before the presentation edition.
-# Then we need to add it when the work gets a presentation edition.
-@event.listens_for(LicensePool.work_id, "set")
-@event.listens_for(Work.presentation_edition_id, "set")
-def add_work_to_customlists_for_collection(pool_or_work, value, oldvalue, initiator):
-    if isinstance(pool_or_work, LicensePool):
-        work = pool_or_work.work
-        pools = [pool_or_work]
-    else:
-        work = pool_or_work
-        pools = work.license_pools
-
-    if (
-        (not oldvalue or oldvalue is NO_VALUE)
-        and value
-        and work
-        and work.presentation_edition
-    ):
-        for pool in pools:
-            if not pool.collection:
-                # This shouldn't happen, but don't crash if it does --
-                # the correct behavior is that the work not be added to
-                # any CustomLists.
-                continue
-            for list in pool.collection.customlists:
-                # Since the work was just created, we can assume that
-                # there's already a pending registration for updating the
-                # work's internal index, and decide not to create a
-                # second one.
-                list.add_entry(work, featured=True, update_external_index=False)
+@Listener.before_flush(
+    (Library, ExternalIntegration, Collection, ConfigurationSetting), one_shot=True
+)
+def configuration_relevant_lifecycle_event(session: Session):
+    site_configuration_has_changed(session)
 
 
 # Certain ORM events, however they occur, indicate that a work's
@@ -194,14 +140,14 @@ def licensepool_removed_from_work(target, value, initiator):
         target.external_index_needs_updating()
 
 
-@event.listens_for(LicensePool, "after_delete")
-def licensepool_deleted(mapper, connection, target):
+@Listener.before_flush(LicensePool, ListenerState.deleted)
+def licensepool_deleted(session: Session, instance: LicensePool) -> None:
     """A LicensePool is deleted only when its collection is deleted.
     If this happens, we need to keep the Work's index up to date.
     """
-    work = target.work
+    work = instance.work
     if work:
-        record = work.external_index_needs_updating()
+        work.external_index_needs_updating()
 
 
 @event.listens_for(LicensePool.collection_id, "set")
@@ -244,29 +190,33 @@ def last_update_time_change(target, value, oldvalue, initator):
     target.external_index_needs_updating()
 
 
-@event.listens_for(Equivalency, "before_delete")
-def equivalency_coverage_reset_on_equivalency_delete(mapper, _db, target: Equivalency):
+@Listener.before_flush(Equivalency, ListenerState.deleted)
+def equivalency_coverage_reset_on_equivalency_delete(
+    session: Session, target: Equivalency
+) -> None:
     """On equivalency delete reset the coverage records of ANY ids touching
     the deleted identifiers
-    TODO: This is a deprecated feature of listeners, we cannot write to the DB anymore
-    However we are doing this until we have a solution, ala queues
     """
-
-    session = Session(bind=_db)
     EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
         [target.input, target.output], _db=session
     )
 
 
-@event.listens_for(Identifier, "after_insert")
-def recursive_equivalence_on_identifier_create(mapper, connection, target: Identifier):
+@Listener.before_flush(Identifier, ListenerState.new)
+def recursive_equivalence_on_identifier_create(
+    session: Session, instance: Identifier
+) -> None:
     """Whenever an Identifier is created we must atleast have the 'self, self'
     recursion available in the Recursives table else the queries will be incorrect"""
-    session = Session(bind=connection)
     session.add(
-        RecursiveEquivalencyCache(
-            parent_identifier_id=target.id, identifier_id=target.id
-        )
+        RecursiveEquivalencyCache(parent_identifier=instance, identifier=instance)
     )
-    session.commit()
-    session.close()
+
+
+@Listener.before_flush((Work, LicensePool), ListenerState.new)
+def add_work_to_customlists(
+    session: Session, instance: Union[Work, LicensePool]
+) -> None:
+    """Whenever a Work or LicensePool is created we must add it to the custom lists
+    for its collection"""
+    add_work_to_customlists_for_collection(instance)

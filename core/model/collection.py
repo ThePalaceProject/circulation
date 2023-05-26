@@ -1,7 +1,9 @@
 # Collection, CollectionIdentifier, CollectionMissing
+from __future__ import annotations
+
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -14,7 +16,14 @@ from sqlalchemy import (
     exists,
     func,
 )
-from sqlalchemy.orm import backref, contains_eager, joinedload, mapper, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    backref,
+    contains_eager,
+    joinedload,
+    mapper,
+    relationship,
+)
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
@@ -50,7 +59,7 @@ class Collection(Base, HasSessionCache):
     """A Collection is a set of LicensePools obtained through some mechanism."""
 
     __tablename__ = "collections"
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, nullable=False)
 
     name = Column(Unicode, unique=True, nullable=False, index=True)
 
@@ -82,7 +91,7 @@ class Collection(Base, HasSessionCache):
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
     # SQLAlchemy will create a Collection-typed field called "parent".
-    parent: "Collection"
+    parent: Collection
 
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
@@ -92,12 +101,12 @@ class Collection(Base, HasSessionCache):
     # A collection may have many child collections. For example,
     # An Overdrive collection may have many children corresponding
     # to Overdrive Advantage collections.
-    children = relationship(
+    children: Mapped[List[Collection]] = relationship(
         "Collection", backref=backref("parent", remote_side=[id]), uselist=True
     )
 
     # A Collection can provide books to many Libraries.
-    libraries = relationship(
+    libraries: Mapped[List[Library]] = relationship(
         "Library",
         secondary=lambda: collections_libraries,
         backref="collections",
@@ -105,7 +114,7 @@ class Collection(Base, HasSessionCache):
     )
 
     # A Collection can include many LicensePools.
-    licensepools = relationship(
+    licensepools: Mapped[List[LicensePool]] = relationship(
         "LicensePool",
         back_populates="collection",
         cascade="all, delete-orphan",
@@ -113,19 +122,23 @@ class Collection(Base, HasSessionCache):
     )
 
     # A Collection can have many associated Credentials.
-    credentials = relationship("Credential", backref="collection", cascade="delete")
+    credentials: Mapped[List[Credential]] = relationship(
+        "Credential", backref="collection", cascade="delete"
+    )
 
     # A Collection can be monitored by many Monitors, each of which
     # will have its own Timestamp.
-    timestamps = relationship("Timestamp", backref="collection")
+    timestamps: Mapped[List[Timestamp]] = relationship(
+        "Timestamp", backref="collection"
+    )
 
-    catalog = relationship(
+    catalog: Mapped[List[Identifier]] = relationship(
         "Identifier", secondary=lambda: collections_identifiers, backref="collections"
     )
 
     # A Collection can be associated with multiple CoverageRecords
     # for Identifiers in its catalog.
-    coverage_records = relationship(
+    coverage_records: Mapped[List[CoverageRecord]] = relationship(
         "CoverageRecord", backref="collection", cascade="all"
     )
 
@@ -134,7 +147,7 @@ class Collection(Base, HasSessionCache):
     # also be added to the list. Admins can remove items from the
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
-    customlists = relationship(
+    customlists: Mapped[List[CustomList]] = relationship(
         "CustomList", secondary=lambda: collections_customlists, backref="collections"
     )
 
@@ -338,7 +351,7 @@ class Collection(Base, HasSessionCache):
     DEFAULT_AUDIENCE_KEY = "default_audience"
 
     @hybrid_property
-    def default_audience(self) -> Optional[str]:
+    def default_audience(self) -> str:
         """Return the default audience set up for this collection.
 
         :return: Default audience
@@ -348,7 +361,7 @@ class Collection(Base, HasSessionCache):
         return setting.value_or_default(None)
 
     @default_audience.setter
-    def default_audience(self, new_value: Optional[str]):
+    def default_audience(self, new_value: str) -> None:
         """Set the default audience for this collection.
 
         :param new_value: New default audience
@@ -844,11 +857,16 @@ class Collection(Base, HasSessionCache):
         # deleted.
         for i, pool in enumerate(self.licensepools):
             work = pool.work
+            if work:
+                # We need to remove the item from the collection manually, otherwise the deleted
+                # pool will continue to be on the work until we call commit, so we'll never get to
+                # the point where we delete the work.
+                # https://docs.sqlalchemy.org/en/14/orm/cascades.html#notes-on-delete-deleting-objects-referenced-from-collections-and-scalar-relationships
+                work.license_pools.remove(pool)
+                if not work.license_pools:
+                    work.delete(search_index)
+
             _db.delete(pool)
-            if not i % 100:
-                _db.commit()
-            if work and not work.license_pools:
-                work.delete(search_index)
 
         # Delete the ExternalIntegration associated with this
         # Collection, assuming it wasn't deleted already.
@@ -982,12 +1000,14 @@ class CollectionConfigurationStorage(BaseConfigurationStorage):
         self._collection_id = collection.id
 
     def save(self, db: Session, setting_name: str, value: Any):
-        """Save the value as as a new configuration setting
+        """Save the value as a new configuration setting
 
         :param db: Database session
         :param setting_name: Name of the library's configuration setting
         :param value: Value to be saved
         """
+        if self._collection_id is None:
+            raise ValueError("Collection ID is not set")
         collection = Collection.by_id(db, self._collection_id)
         integration = self._integration_owner.collection_external_integration(
             collection
@@ -1002,6 +1022,8 @@ class CollectionConfigurationStorage(BaseConfigurationStorage):
         :param db: Database session
         :param setting_name: Name of the library's configuration setting
         """
+        if self._collection_id is None:
+            raise ValueError("Collection ID is not set")
         collection = Collection.by_id(db, self._collection_id)
         integration = self._integration_owner.collection_external_integration(
             collection

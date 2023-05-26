@@ -244,6 +244,11 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
         self._db = _db
         self._external_integration = collection.external_integration
+        if collection.id is None:
+            raise ValueError(
+                "Collection passed into OverdriveAPI must have an ID, but %s does not"
+                % collection.name
+            )
         self._collection_id = collection.id
 
         # Initialize configuration information.

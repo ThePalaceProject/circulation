@@ -85,7 +85,7 @@ class PatronAuthServiceSelfTestsController:
     def get_protocol_class(
         self, integration: IntegrationConfiguration
     ) -> Type[AuthenticationProvider]:
-        if integration.protocol not in self.registry:
+        if not integration.protocol or integration.protocol not in self.registry:
             raise ProblemError(problem_detail=UNKNOWN_PROTOCOL)
         return self.registry[integration.protocol]
 

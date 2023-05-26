@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 import bcrypt
 from flask_babel import lazy_gettext as _
@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import Mapped, relationship, validates
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
@@ -42,7 +42,7 @@ class Admin(Base, HasSessionCache):
     password_hashed = Column(Unicode, index=True)
 
     # An Admin may have many roles.
-    roles = relationship(
+    roles: Mapped[List[AdminRole]] = relationship(
         "AdminRole", backref="admin", cascade="all, delete-orphan", uselist=True
     )
 
@@ -273,7 +273,7 @@ class AdminRole(Base, HasSessionCache):
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
-    library = relationship("Library", back_populates="adminroles")
+    library: Mapped[Library] = relationship("Library", back_populates="adminroles")
     role = Column(Unicode, nullable=False, index=True)
 
     __table_args__ = (UniqueConstraint("admin_id", "library_id", "role"),)
@@ -311,7 +311,10 @@ class AdminRole(Base, HasSessionCache):
         )
 
     def compare_role(self, other: AdminRole) -> int:
-        """Compare one role to the other for heirarchy"""
+        """Compare one role to the other for hierarchy"""
+        if not self.role or not other.role:
+            raise ValueError("Cannot compare role to None")
+
         self_ix = self.ROLES.index(self.role)
         other_ix = self.ROLES.index(other.role)
         if self_ix == other_ix:
