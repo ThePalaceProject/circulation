@@ -4,11 +4,11 @@ from typing import Callable, Optional, Type, Union
 
 from pydantic import Field, PositiveInt
 
-from api.authenticator import (
+from api.authentication.base import PatronData
+from api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    PatronData,
 )
 from api.sip.client import Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect

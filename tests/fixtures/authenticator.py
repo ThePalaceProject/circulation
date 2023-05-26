@@ -2,7 +2,7 @@ from typing import Callable, Optional, Tuple, Type
 
 import pytest
 
-from api.authenticator import AuthenticationProvider
+from api.authentication.base import AuthenticationProvider
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
 from api.saml.provider import SAMLWebSSOAuthenticationProvider

@@ -6,7 +6,8 @@ from typing import Callable, cast
 
 import pytest
 
-from api.authenticator import BasicAuthProviderLibrarySettings, Keyboards, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings, Keyboards
 from api.sip import SIP2AuthenticationProvider, SIP2LibrarySettings, SIP2Settings
 from api.sip.client import Constants, Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect

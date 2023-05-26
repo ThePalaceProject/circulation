@@ -3,7 +3,8 @@ from typing import Callable
 
 import pytest
 
-from api.authenticator import BasicAuthProviderLibrarySettings, Keyboards, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings, Keyboards
 from api.simple_authentication import SimpleAuthenticationProvider, SimpleAuthSettings
 from tests.fixtures.database import DatabaseTransactionFixture
 

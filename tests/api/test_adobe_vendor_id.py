@@ -14,7 +14,7 @@ from api.adobe_vendor_id import (
     AuthdataUtility,
     DeviceManagementRequestHandler,
 )
-from api.authenticator import BasicAuthProviderLibrarySettings
+from api.authentication.basic import BasicAuthProviderLibrarySettings
 from api.config import Configuration
 from api.registration.constants import RegistrationConstants
 from api.simple_authentication import SimpleAuthenticationProvider, SimpleAuthSettings
