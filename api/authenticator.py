@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from abc import ABC
-from typing import Dict, Iterable, List, Literal, Optional, Tuple, Type, cast
+from typing import Dict, Iterable, List, Literal, Optional, Tuple, Type
 
 import flask
 import jwt

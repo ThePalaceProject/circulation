@@ -22,6 +22,7 @@ from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
+from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import PatronData
 from api.authentication.basic import (
     BarcodeFormats,
@@ -31,7 +32,6 @@ from api.authentication.basic import (
     Keyboards,
     LibraryIdentifierRestriction,
 )
-from api.authentication.access_token import AccessTokenProvider
 from api.authenticator import (
     Authenticator,
     BaseSAMLAuthenticationProvider,
