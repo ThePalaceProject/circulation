@@ -7,11 +7,11 @@ from urllib.parse import urljoin
 
 from pydantic import HttpUrl
 
-from api.authenticator import (
+from api.authentication.base import PatronData
+from api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    PatronData,
 )
 from core.analytics import Analytics
 from core.config import Configuration

@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
+from api.authentication.basic import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
 from api.selftest import (
     HasCollectionSelfTests,

@@ -8,7 +8,8 @@ import jwt
 import pytest
 import requests
 
-from api.authenticator import BasicAuthProviderLibrarySettings, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings
 from api.circulation_exceptions import RemoteInitiatedServerError
 from api.firstbook2 import FirstBookAuthenticationAPI, FirstBookAuthSettings
 from tests.fixtures.database import DatabaseTransactionFixture

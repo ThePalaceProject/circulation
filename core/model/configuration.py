@@ -15,7 +15,7 @@ from sqlalchemy import Enum as saEnum
 from sqlalchemy import ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import and_, text
+from sqlalchemy.sql.expression import and_
 
 from core.model.hybrid import hybrid_property
 
@@ -35,16 +35,6 @@ if TYPE_CHECKING:
         IgnoredIdentifierConfiguration,
     )
     from core.model import Collection  # noqa: autoflake
-
-
-@contextmanager
-def access_exclusive_lock_configurationsettings(session: Session):
-    session.begin_nested()
-    session.execute(text("LOCK TABLE configurationsettings IN ACCESS EXCLUSIVE MODE;"))
-    try:
-        yield session
-    finally:
-        session.commit()
 
 
 class ExternalIntegrationLink(Base, HasSessionCache):

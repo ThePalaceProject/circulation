@@ -4,7 +4,8 @@ from typing import Callable, List
 import pytest
 from lxml import etree
 
-from api.authenticator import BasicAuthProviderLibrarySettings, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings
 from api.kansas_patron import KansasAuthenticationAPI, KansasAuthSettings
 
 from ..fixtures.api_kansas_files import KansasPatronFilesFixture

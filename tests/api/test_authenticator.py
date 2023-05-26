@@ -22,18 +22,20 @@ from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
-from api.authenticator import (
-    Authenticator,
+from api.authentication.base import PatronData
+from api.authentication.basic import (
     BarcodeFormats,
-    BaseSAMLAuthenticationProvider,
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    CirculationPatronProfileStorage,
     Keyboards,
-    LibraryAuthenticator,
     LibraryIdentifierRestriction,
-    PatronData,
+)
+from api.authenticator import (
+    Authenticator,
+    BaseSAMLAuthenticationProvider,
+    CirculationPatronProfileStorage,
+    LibraryAuthenticator,
 )
 from api.config import CannotLoadConfiguration, Configuration
 from api.custom_patron_catalog import CustomPatronCatalog
@@ -2326,7 +2328,7 @@ class TestBasicAuthenticationProvider:
         db = MagicMock(spec=Session)
 
         # Mock url_for so that the document can be generated.
-        with patch("api.authenticator.url_for") as url_for_patch:
+        with patch("api.authentication.basic.url_for") as url_for_patch:
             url_for_patch.return_value = "http://localhost/"
             doc = provider.authentication_flow_document(db)
             assert doc["description"] == provider.label()

@@ -4,7 +4,7 @@ from decimal import Decimal
 import dateutil
 import pytest
 
-from api.authenticator import PatronData
+from api.authentication.base import PatronData
 from api.circulation_exceptions import *
 from api.config import Configuration
 from api.util.patron import PatronUtility

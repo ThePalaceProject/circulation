@@ -10,7 +10,7 @@ from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, conint, validator
 from sqlalchemy.orm import Session
 
-from api.authenticator import AuthProviderLibrarySettings, AuthProviderSettings
+from api.authentication.base import AuthProviderLibrarySettings, AuthProviderSettings
 from api.saml.configuration.problem_details import (
     SAML_GENERIC_PARSING_ERROR,
     SAML_INCORRECT_FILTRATION_EXPRESSION,

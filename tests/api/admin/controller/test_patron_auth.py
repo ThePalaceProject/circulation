@@ -11,7 +11,11 @@ from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.exceptions import *
-from api.authenticator import BarcodeFormats, Keyboards, LibraryIdentifierRestriction
+from api.authentication.basic import (
+    BarcodeFormats,
+    Keyboards,
+    LibraryIdentifierRestriction,
+)
 from api.millenium_patron import AuthenticationMode, MilleniumPatronAPI
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider

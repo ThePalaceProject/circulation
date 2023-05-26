@@ -22,11 +22,11 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
 from core.util.xmlparser import XMLParser
 
-from .authenticator import (
+from .authentication.base import PatronData
+from .authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
-    PatronData,
 )
 
 

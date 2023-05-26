@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection, Row
 
 from alembic import op
-from api.authenticator import AuthenticationProvider
+from api.authentication.base import AuthenticationProvider
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.settings import (
     BaseSettings,

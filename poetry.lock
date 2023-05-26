@@ -120,18 +120,6 @@ html5lib = ["html5lib"]
 lxml = ["lxml"]
 
 [[package]]
-name = "blinker"
-version = "1.6.2"
-description = "Fast, simple object-to-object and broadcast signaling"
-category = "main"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "blinker-1.6.2-py3-none-any.whl", hash = "sha256:c3d739772abb7bc2860abf5f2ec284223d9ad5c76da018234f6f50d6f31ab1f0"},
-    {file = "blinker-1.6.2.tar.gz", hash = "sha256:4afd3de66ef3a9f8067559fb7a1cbe555c17dcbe15971b05d1b625c3e7abe213"},
-]
-
-[[package]]
 name = "boto3"
 version = "1.18.65"
 description = "The AWS SDK for Python"
@@ -153,14 +141,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.26.139"
-description = "Type annotations for boto3 1.26.139 generated with mypy-boto3-builder 7.14.5"
+version = "1.26.140"
+description = "Type annotations for boto3 1.26.140 generated with mypy-boto3-builder 7.14.5"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "boto3-stubs-1.26.139.tar.gz", hash = "sha256:e1eb346e607864182b189a2a352cdd11db56b8157cd8cf445e0548dac5b10147"},
-    {file = "boto3_stubs-1.26.139-py3-none-any.whl", hash = "sha256:bf1f40b9f8c490c8c89dadc47b8ebedaaa339e8c35a8e690dfb11c0f34b43836"},
+    {file = "boto3-stubs-1.26.140.tar.gz", hash = "sha256:a4f07e183e41112e33aae3fe352287f34f49a2c21714a8752ef3e5b93b712b2d"},
+    {file = "boto3_stubs-1.26.140-py3-none-any.whl", hash = "sha256:de15f6ba0070d09af6254c165bb56a8b3d5e937bd3637b029e5fac94da012159"},
 ]
 
 [package.dependencies]
@@ -203,7 +191,7 @@ backup-gateway = ["mypy-boto3-backup-gateway (>=1.26.0,<1.27.0)"]
 backupstorage = ["mypy-boto3-backupstorage (>=1.26.0,<1.27.0)"]
 batch = ["mypy-boto3-batch (>=1.26.0,<1.27.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.26.0,<1.27.0)"]
-boto3 = ["boto3 (==1.26.139)", "botocore (==1.29.139)"]
+boto3 = ["boto3 (==1.26.140)", "botocore (==1.29.140)"]
 braket = ["mypy-boto3-braket (>=1.26.0,<1.27.0)"]
 budgets = ["mypy-boto3-budgets (>=1.26.0,<1.27.0)"]
 ce = ["mypy-boto3-ce (>=1.26.0,<1.27.0)"]
@@ -540,14 +528,14 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.130"
+version = "1.29.140"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "botocore_stubs-1.29.130-py3-none-any.whl", hash = "sha256:622c4a5cd740498439008d81c5ded612146f4f0d575341c12591f978edbbe733"},
-    {file = "botocore_stubs-1.29.130.tar.gz", hash = "sha256:5f6f1967d23c45834858a055cbf65b66863f9f28d05f32f57bf52864a13512d9"},
+    {file = "botocore_stubs-1.29.140-py3-none-any.whl", hash = "sha256:e83394c5720eca45c7e21892925e3fcbf73aa1e53afc204be0cf50dd0f820c7b"},
+    {file = "botocore_stubs-1.29.140.tar.gz", hash = "sha256:45b147e58570966a82ea102273732eca8d877b447629de3c24725baea121b05a"},
 ]
 
 [package.dependencies]
@@ -944,23 +932,22 @@ testing = ["covdefaults (>=2.3)", "coverage (>=7.2.2)", "diff-cover (>=7.5)", "p
 
 [[package]]
 name = "flask"
-version = "2.3.2"
+version = "2.2.5"
 description = "A simple framework for building complex web applications."
 category = "main"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.7"
 files = [
-    {file = "Flask-2.3.2-py3-none-any.whl", hash = "sha256:77fd4e1249d8c9923de34907236b747ced06e5467ecac1a7bb7115ae0e9670b0"},
-    {file = "Flask-2.3.2.tar.gz", hash = "sha256:8c2f9abd47a9e8df7f0c3f091ce9497d011dc3b31effcf4c85a6e2b50f4114ef"},
+    {file = "Flask-2.2.5-py3-none-any.whl", hash = "sha256:58107ed83443e86067e41eff4631b058178191a355886f8e479e347fa1285fdf"},
+    {file = "Flask-2.2.5.tar.gz", hash = "sha256:edee9b0a7ff26621bd5a8c10ff484ae28737a2410d99b0bb9a6850c7fb977aa0"},
 ]
 
 [package.dependencies]
-blinker = ">=1.6.2"
-click = ">=8.1.3"
+click = ">=8.0"
 importlib-metadata = {version = ">=3.6.0", markers = "python_version < \"3.10\""}
-itsdangerous = ">=2.1.2"
-Jinja2 = ">=3.1.2"
-Werkzeug = ">=2.3.3"
+itsdangerous = ">=2.0"
+Jinja2 = ">=3.0"
+Werkzeug = ">=2.2.2"
 
 [package.extras]
 async = ["asgiref (>=3.2)"]
@@ -2647,14 +2634,14 @@ sqlalchemy = "*"
 
 [[package]]
 name = "pytest-cov"
-version = "4.0.0"
+version = "4.1.0"
 description = "Pytest plugin for measuring coverage."
 category = "dev"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 files = [
-    {file = "pytest-cov-4.0.0.tar.gz", hash = "sha256:996b79efde6433cdbd0088872dbc5fb3ed7fe1578b68cdbba634f14bb8dd0470"},
-    {file = "pytest_cov-4.0.0-py3-none-any.whl", hash = "sha256:2feb1b751d66a8bd934e5edfa2e961d11309dc37b73b0eabe73b5945fee20f6b"},
+    {file = "pytest-cov-4.1.0.tar.gz", hash = "sha256:3904b13dfbfec47f003b8e77fd5b589cd11904a21ddf1ab38a64f204d6a10ef6"},
+    {file = "pytest_cov-4.1.0-py3-none-any.whl", hash = "sha256:6ba70b9e97e69fcc3fb45bfeab2d0a138fb65c4d0d6a41ef33983ad114be8c3a"},
 ]
 
 [package.dependencies]
@@ -2751,7 +2738,7 @@ files = [
 name = "pyyaml"
 version = "6.0"
 description = "YAML parser and emitter for Python"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6"
 files = [
@@ -3434,6 +3421,21 @@ files = [
 ]
 
 [[package]]
+name = "types-pyopenssl"
+version = "23.1.0.3"
+description = "Typing stubs for pyOpenSSL"
+category = "main"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-pyOpenSSL-23.1.0.3.tar.gz", hash = "sha256:e7211088eff3e20d359888dedecb0994f7181d5cce0f26354dd47ca0484dc8a6"},
+    {file = "types_pyOpenSSL-23.1.0.3-py3-none-any.whl", hash = "sha256:ad024b07a1f4bffbca44699543c71efd04733a6c22781fa9673a971e410a3086"},
+]
+
+[package.dependencies]
+cryptography = ">=35.0.0"
+
+[[package]]
 name = "types-python-dateutil"
 version = "2.8.19.13"
 description = "Typing stubs for python-dateutil"
@@ -3455,6 +3457,18 @@ python-versions = "*"
 files = [
     {file = "types-pytz-2023.3.0.0.tar.gz", hash = "sha256:ecdc70d543aaf3616a7e48631543a884f74205f284cefd6649ddf44c6a820aac"},
     {file = "types_pytz-2023.3.0.0-py3-none-any.whl", hash = "sha256:4fc2a7fbbc315f0b6630e0b899fd6c743705abe1094d007b0e612d10da15e0f3"},
+]
+
+[[package]]
+name = "types-pyyaml"
+version = "6.0.12.10"
+description = "Typing stubs for PyYAML"
+category = "main"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-PyYAML-6.0.12.10.tar.gz", hash = "sha256:ebab3d0700b946553724ae6ca636ea932c1b0868701d4af121630e78d695fc97"},
+    {file = "types_PyYAML-6.0.12.10-py3-none-any.whl", hash = "sha256:662fa444963eff9b68120d70cda1af5a5f2aa57900003c2006d7626450eaae5f"},
 ]
 
 [[package]]
@@ -3498,14 +3512,14 @@ files = [
 
 [[package]]
 name = "typing-extensions"
-version = "4.6.1"
+version = "4.6.2"
 description = "Backported and Experimental Type Hints for Python 3.7+"
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "typing_extensions-4.6.1-py3-none-any.whl", hash = "sha256:6bac751f4789b135c43228e72de18637e9a6c29d12777023a703fd1a6858469f"},
-    {file = "typing_extensions-4.6.1.tar.gz", hash = "sha256:558bc0c4145f01e6405f4a5fdbd82050bd221b119f4bf72a961a1cfd471349d6"},
+    {file = "typing_extensions-4.6.2-py3-none-any.whl", hash = "sha256:3a8b36f13dd5fdc5d1b16fe317f5668545de77fa0b8e02006381fd49d731ab98"},
+    {file = "typing_extensions-4.6.2.tar.gz", hash = "sha256:06006244c70ac8ee83fa8282cb188f697b8db25bc8b4df07be1873c43897060c"},
 ]
 
 [[package]]
@@ -3783,4 +3797,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "6d61e17c70bdab49f29f3fbd21312349e516cde404f25ada9f7300d07bcc7cc5"
+content-hash = "8f4f9dde6619fdc2d20e5720eacc5bbbe5b992e43788f6cbaecd40dcde0c9357"

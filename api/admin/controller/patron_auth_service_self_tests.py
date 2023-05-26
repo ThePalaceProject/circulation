@@ -7,7 +7,7 @@ from flask import Response
 from sqlalchemy.orm import Session
 
 from api.admin.problem_details import *
-from api.authenticator import AuthenticationProvider
+from api.authentication.base import AuthenticationProvider
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
