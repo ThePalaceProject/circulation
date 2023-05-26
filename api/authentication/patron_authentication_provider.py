@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Generator, Type
+from typing import TYPE_CHECKING, Generator, Type, cast
 
 from flask import url_for
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from api.authentication.access_token import AccessTokenProvider
-from api.authentication.base import (
-    AuthenticationProvider,
-    AuthProviderSettings,
-    BarcodeFormats,
-)
-from api.authentication.basic import BasicAuthProviderSettings
+from api.authentication.base import AuthenticationProvider, AuthProviderSettings
+from api.authentication.basic import BasicAuthenticationProvider
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
@@ -22,17 +18,26 @@ if TYPE_CHECKING:
     from core.model import Library
 
 
-class PatronAccessTokenAuthenticationSettings(BasicAuthProviderSettings):
+class PatronAccessTokenAuthenticationSettings(AuthProviderSettings):
     pass
 
 
 class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
-    """Patron Authentication based on a CM generated Access Token"""
+    """Patron Authentication based on a CM generated Access Token
+    It is a companion to the basic authentication, and has no meaning without it.
+    """
 
-    def __init__(self, _db: Session, library: Library):
+    def __init__(
+        self,
+        _db: Session,
+        library: Library,
+        basic_provider: BasicAuthenticationProvider,
+    ):
         self._db = _db
-        self.library_id = library.id
+        self.library_id = cast(int, library.id)
         self.external_integration_id = AccessTokenProvider.get_integration(_db).id
+        # An access token provider is a companion authentication to the basic providers
+        self.basic_provider = basic_provider
 
     def authenticated_patron(
         self, _db: Session, token: dict | str
@@ -81,10 +86,7 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
         return None
 
     def _authentication_flow_document(self, _db):
-        """This auth type should not have an entry in the authentication document"""
-        settings = PatronAccessTokenAuthenticationSettings(
-            **AccessTokenProvider.get_integration(_db).settings
-        )
+        """This auth type should follow the entry of it's basic auth provider"""
         token_url = url_for(
             "patron_auth_token",
             library_short_name=self.library(_db).short_name,
@@ -96,27 +98,9 @@ class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
                 "href": token_url,
             }
         ]
-        login_inputs: Dict[str, Any] = dict(keyboard=settings.identifier_keyboard.value)
-        if settings.identifier_maximum_length:
-            login_inputs["maximum_length"] = settings.identifier_maximum_length
-        if settings.identifier_barcode_format != BarcodeFormats.NONE:
-            login_inputs["barcode_format"] = settings.identifier_barcode_format.value
-
-        password_inputs: Dict[str, Any] = dict(
-            keyboard=settings.password_keyboard.value
-        )
-        if settings.password_maximum_length:
-            password_inputs["maximum_length"] = settings.password_maximum_length
-
-        flow_doc: dict[str, Any] = dict(
-            description=str(self.label()),
-            labels=dict(
-                login=settings.identifier_label,
-                password=settings.password_label,
-            ),
-            inputs=dict(login=login_inputs, password=password_inputs),
-            links=links,
-        )
+        flow_doc = self.basic_provider._authentication_flow_document(_db)
+        flow_doc["description"] = str(self.label())
+        flow_doc["links"] = links
         return flow_doc
 
     def remote_patron_lookup(self, _db):

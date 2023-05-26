@@ -88,10 +88,10 @@ class TestPatronAuth:
         assert response.get("patron_auth_services") == []
         protocols = response.get("protocols")
         assert isinstance(protocols, list)
-        assert 8 == len(protocols)
-        assert SimpleAuthenticationProvider.__module__ == protocols[1].get("name")
-        assert "settings" in protocols[1]
-        assert "library_settings" in protocols[1]
+        assert 7 == len(protocols)
+        assert SimpleAuthenticationProvider.__module__ == protocols[0].get("name")
+        assert "settings" in protocols[0]
+        assert "library_settings" in protocols[0]
 
         settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         settings_ctrl_fixture.ctrl.db.session.flush()

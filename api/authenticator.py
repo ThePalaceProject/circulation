@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from abc import ABC
-from typing import Dict, Iterable, List, Literal, Optional, Tuple, Type
+from typing import Dict, Iterable, List, Literal, Optional, Tuple, Type, cast
 
 import flask
 import jwt
@@ -265,16 +265,18 @@ class LibraryAuthenticator:
             else integration_registry
         )
 
-        self.basic_auth_provider = basic_auth_provider
         self.saml_providers_by_name = {}
         self.bearer_token_signing_secret = bearer_token_signing_secret
         self.initialization_exceptions: Dict[
             Tuple[int | None, int | None], Exception
         ] = {}
 
-        self.access_token_authentication_provider = (
-            PatronAccessTokenAuthenticationProvider(_db, library)
+        self.basic_auth_provider: BasicAuthenticationProvider | None = None
+        self.access_token_authentication_provider: PatronAccessTokenAuthenticationProvider | None = (
+            None
         )
+        if basic_auth_provider:
+            self.register_basic_auth_provider(basic_auth_provider)
 
         self.log = logging.getLogger("Authenticator")
 
@@ -414,6 +416,12 @@ class LibraryAuthenticator:
         ):
             raise CannotLoadConfiguration("Two basic auth providers configured")
         self.basic_auth_provider = provider
+        if self.library is not None:
+            self.access_token_authentication_provider = (
+                PatronAccessTokenAuthenticationProvider(
+                    self._db, self.library, self.basic_auth_provider
+                )
+            )
 
     def register_saml_provider(
         self,
@@ -429,7 +437,8 @@ class LibraryAuthenticator:
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:
         """An iterator over all registered AuthenticationProviders."""
-        yield self.access_token_authentication_provider
+        if self.access_token_authentication_provider:
+            yield self.access_token_authentication_provider
         if self.basic_auth_provider:
             yield self.basic_auth_provider
         yield from self.saml_providers_by_name.values()
@@ -458,7 +467,10 @@ class LibraryAuthenticator:
             if auth.token is None:
                 return INVALID_SAML_BEARER_TOKEN
 
-            if AccessTokenProvider.is_access_token(auth.token):
+            if (
+                self.access_token_authentication_provider
+                and AccessTokenProvider.is_access_token(auth.token)
+            ):
                 provider = self.access_token_authentication_provider
                 provider_token = auth.token
             elif self.saml_providers_by_name:

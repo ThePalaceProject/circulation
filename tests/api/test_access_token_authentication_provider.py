@@ -1,8 +1,9 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from werkzeug.datastructures import Authorization
 
 from api.authentication.access_token import AccessTokenProvider
+from api.authentication.basic import BasicAuthenticationProvider
 from api.authentication.patron_authentication_provider import (
     PatronAccessTokenAuthenticationProvider,
 )
@@ -15,7 +16,7 @@ class TestAccessTokenAuthenticationProvider:
     def test_authenticated_patron(self, db: DatabaseTransactionFixture):
         patron = db.patron()
         provider = PatronAccessTokenAuthenticationProvider(
-            db.session, db.default_library()
+            db.session, db.default_library(), Mock()
         )
         with patch(
             "api.authentication.patron_authentication_provider.AccessTokenProvider"
@@ -46,7 +47,7 @@ class TestAccessTokenAuthenticationProvider:
 
     def test_authenticated_patron_errors(self, db: DatabaseTransactionFixture):
         provider = PatronAccessTokenAuthenticationProvider(
-            db.session, db.default_library()
+            db.session, db.default_library(), Mock()
         )
 
         # Bad token type
@@ -58,7 +59,7 @@ class TestAccessTokenAuthenticationProvider:
 
     def test_credential_from_header(self, db: DatabaseTransactionFixture):
         provider = PatronAccessTokenAuthenticationProvider(
-            db.session, db.default_library()
+            db.session, db.default_library(), Mock()
         )
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
@@ -71,14 +72,23 @@ class TestAccessTokenAuthenticationProvider:
         pwd = provider.get_credential_from_header(Authorization(auth_type="Basic"))
         assert pwd == None
 
-    def test_no_authentication_flow_document(
+    def test_authentication_flow_document(
         self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
     ):
         provider = PatronAccessTokenAuthenticationProvider(
-            db.session, db.default_library()
+            db.session, db.default_library(), Mock(spec=BasicAuthenticationProvider)
+        )
+        provider.basic_provider._authentication_flow_document.return_value = dict(
+            mock=True
         )
         with controller_fixture.request_context_with_library(
             "/", library=db.default_library()
         ):
             auth_doc = provider.authentication_flow_document(db.session)
+
+        # From the basic provider
+        assert auth_doc["mock"] == True
+        # Overrides in the token provider
         assert auth_doc["links"][0]["href"].endswith("/default/patrons/me/token/")
+        assert auth_doc["type"] == provider.flow_type
+        assert auth_doc["description"] == provider.label()

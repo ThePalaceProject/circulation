@@ -659,8 +659,7 @@ class TestLibraryAuthenticator:
             db.session, db.default_library()
         )
 
-        # The access token provider exists
-        assert len(list(authenticator.providers)) == 1
+        assert len(list(authenticator.providers)) == 0
 
     def test_configuration_exception_during_from_config_stored(
         self,
@@ -926,11 +925,11 @@ class TestLibraryAuthenticator:
             assert saml.authenticated_patron.call_count == 1
 
     def test_authenticated_patron_bearer_access_token(
-        self, db: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
     ):
+        basic = mock_basic()
         authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
+            _db=db.session, library=db.default_library(), basic_auth_provider=basic
         )
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "pass")
@@ -975,6 +974,11 @@ class TestLibraryAuthenticator:
         )
         assert authenticator.get_credential_from_header(credential) is None
 
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
+        )
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
         credential = Authorization(auth_type="bearer", token=token)
