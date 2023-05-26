@@ -3,7 +3,7 @@ from typing import Union
 
 from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import Mapped, backref, relationship
 
 from core.model.patron import Patron
 
@@ -33,7 +33,7 @@ class DeviceToken(Base):
         index=True,
         nullable=False,
     )
-    patron = relationship(
+    patron: Mapped[Patron] = relationship(
         "Patron", backref=backref("device_tokens", passive_deletes=True)
     )
 
@@ -61,7 +61,7 @@ class DeviceToken(Base):
         """Create a DeviceToken while ensuring sql issues are managed.
         Raises InvalidTokenTypeError, DuplicateDeviceTokenError"""
 
-        if token_type not in DeviceToken.token_type_enum.enums:
+        if token_type not in [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]:
             raise InvalidTokenTypeError(token_type)
 
         kwargs: dict = dict(device_token=device_token, token_type=token_type)

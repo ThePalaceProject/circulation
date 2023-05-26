@@ -616,6 +616,7 @@ class TestPatronAuth:
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            assert auth_service.id is not None
             response = controller.process_delete(auth_service.id)
             assert response.status_code == 200
 

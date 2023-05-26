@@ -1,14 +1,14 @@
 # Edition
-
+from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 from sqlalchemy import Column, Date, Enum, ForeignKey, Index, Integer, String, Unicode
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
 from ..util import LanguageCodes, TitleProcessor
@@ -24,7 +24,7 @@ from .licensing import DeliveryMechanism, LicensePool
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.model import CustomListEntry, DataSource, Work  # noqa: autoflake
+    from core.model import CustomListEntry, DataSource, Work
 
 
 class Edition(Base, EditionConstants):
@@ -38,7 +38,9 @@ class Edition(Base, EditionConstants):
     id = Column(Integer, primary_key=True)
 
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source = relationship("DataSource", back_populates="editions")
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="editions"
+    )
 
     MAX_THUMBNAIL_HEIGHT = 300
     MAX_THUMBNAIL_WIDTH = 200
@@ -56,13 +58,19 @@ class Edition(Base, EditionConstants):
 
     # An Edition may be the presentation edition for a single Work. If it's not
     # a presentation edition for a work, work will be None.
-    work = relationship("Work", uselist=False, backref="presentation_edition")
+    work: Mapped[Work] = relationship(
+        "Work", uselist=False, backref="presentation_edition"
+    )
 
     # An Edition may show up in many CustomListEntries.
-    custom_list_entries = relationship("CustomListEntry", backref="edition")
+    custom_list_entries: Mapped[List[CustomListEntry]] = relationship(
+        "CustomListEntry", backref="edition"
+    )
 
     # An Edition may be the presentation edition for many LicensePools.
-    is_presentation_for = relationship("LicensePool", backref="presentation_edition")
+    is_presentation_for: Mapped[List[LicensePool]] = relationship(
+        "LicensePool", backref="presentation_edition"
+    )
 
     title = Column(Unicode, index=True)
     sort_title = Column(Unicode, index=True)
@@ -79,7 +87,9 @@ class Edition(Base, EditionConstants):
     author = Column(Unicode, index=True)
     sort_author = Column(Unicode, index=True)
 
-    contributions = relationship("Contribution", back_populates="edition", uselist=True)
+    contributions: Mapped[List[Contribution]] = relationship(
+        "Contribution", back_populates="edition", uselist=True
+    )
 
     language = Column(Unicode, index=True)
     publisher = Column(Unicode, index=True)
@@ -111,7 +121,7 @@ class Edition(Base, EditionConstants):
     simple_opds_entry = Column(Unicode, default=None)
 
     # Information kept in here probably won't be used.
-    extra = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)
@@ -271,7 +281,7 @@ class Edition(Base, EditionConstants):
             Edition,
             data_source=data_source,
             primary_identifier=identifier,
-            **kwargs
+            **kwargs,
         )
         return r
 

@@ -176,7 +176,7 @@ class TestSiteConfigurationHasChanged:
         data.mock.assert_was_called()
 
         ConfigurationSetting.sitewide(session, "setting").value = "value2"
-        session.commit()
+        session.flush()
         data.mock.assert_was_called()
 
     def test_lane_change_updates_configuration(

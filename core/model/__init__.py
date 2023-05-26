@@ -4,13 +4,13 @@ import json
 import logging
 import os
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Generator, List
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Union
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
@@ -279,7 +279,6 @@ def dump_query(query):
     dialect = query.session.bind.dialect
     statement = query.statement
     comp = compiler.SQLCompiler(dialect, statement)
-    comp.compile()
     enc = dialect.encoding
     params = {}
     for k, v in list(comp.params.items()):
@@ -319,6 +318,13 @@ class SessionManager:
         return create_engine(url, echo=DEBUG, json_serializer=json_serializer)
 
     @classmethod
+    def setup_event_listener(
+        cls, session: Union[Session, sessionmaker]
+    ) -> Union[Session, sessionmaker]:
+        event.listen(session, "before_flush", Listener.before_flush_event_listener)
+        return session
+
+    @classmethod
     def sessionmaker(cls, url=None, session=None):
         if not (url or session):
             url = Configuration.database_url()
@@ -331,7 +337,9 @@ class SessionManager:
                 # use the same Connection for all of the tests so objects can
                 # be accessed. Otherwise, bind against an Engine object.
                 bind_obj = bind_obj.engine
-        return sessionmaker(bind=bind_obj)
+        session_factory = sessionmaker(bind=bind_obj)
+        cls.setup_event_listener(session_factory)
+        return session_factory
 
     @classmethod
     def resource_directory(cls):
@@ -378,8 +386,8 @@ class SessionManager:
             connection.execute(sql)
 
         if initialize_data:
-            session = Session(connection)
-            cls.initialize_data(session)
+            with cls.session_from_connection(connection) as session:
+                cls.initialize_data(session)
 
         if connection:
             connection.close()
@@ -419,9 +427,12 @@ class SessionManager:
                 initialize_data=initialize_data,
                 initialize_schema=initialize_schema,
             )
+        return cls.session_from_connection(connection)
+
+    @classmethod
+    def session_from_connection(cls, connection: Connection) -> Session:
         session = Session(connection)
-        if initialize_data:
-            session = cls.initialize_data(session)
+        cls.setup_event_listener(session)
         return session
 
     @classmethod

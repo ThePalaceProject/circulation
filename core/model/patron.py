@@ -1,9 +1,10 @@
 # LoanAndHoldMixin, Patron, Loan, Hold, Annotation, PatronProfileStorage
+from __future__ import annotations
 
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -18,7 +19,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
 from core.model.hybrid import hybrid_property
@@ -66,7 +67,7 @@ class Patron(Base):
     # individual human being may patronize multiple libraries, but
     # they will have a different patron account at each one.
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
-    library = relationship("Library", back_populates="patrons")
+    library: Mapped[Library] = relationship("Library", back_populates="patrons")
 
     # The patron's permanent unique identifier in an external library
     # system, probably never seen by the patron.
@@ -153,8 +154,10 @@ class Patron(Base):
     # be an explicit decision of the ILS integration code.
     cached_neighborhood = Column(Unicode, default=None, index=True)
 
-    loans = relationship("Loan", backref="patron", cascade="delete", uselist=True)
-    holds = relationship(
+    loans: Mapped[List[Loan]] = relationship(
+        "Loan", backref="patron", cascade="delete", uselist=True
+    )
+    holds: Mapped[List[Hold]] = relationship(
         "Hold",
         back_populates="patron",
         cascade="delete",
@@ -162,7 +165,7 @@ class Patron(Base):
         order_by="Hold.id",
     )
 
-    annotations = relationship(
+    annotations: Mapped[List[Annotation]] = relationship(
         "Annotation",
         backref="patron",
         order_by="desc(Annotation.timestamp)",
@@ -170,7 +173,9 @@ class Patron(Base):
     )
 
     # One Patron can have many associated Credentials.
-    credentials = relationship("Credential", backref="patron", cascade="delete")
+    credentials: Mapped[List[Credential]] = relationship(
+        "Credential", backref="patron", cascade="delete"
+    )
 
     __table_args__ = (
         UniqueConstraint("library_id", "username"),
@@ -531,7 +536,9 @@ class Loan(Base, LoanAndHoldMixin):
 
     # A Loan is always associated with a LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
-    license_pool = relationship("LicensePool", back_populates="loans")
+    license_pool: Mapped[LicensePool] = relationship(
+        "LicensePool", back_populates="loans"
+    )
 
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
@@ -570,14 +577,18 @@ class Hold(Base, LoanAndHoldMixin):
         Integer, ForeignKey("integrationclients.id"), index=True
     )
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
-    license_pool = relationship("LicensePool", back_populates="holds")
+    license_pool: Mapped[LicensePool] = relationship(
+        "LicensePool", back_populates="holds"
+    )
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
     external_identifier = Column(Unicode, unique=True, nullable=True)
 
-    patron = relationship("Patron", back_populates="holds", lazy="joined")
-    integration_client = relationship(
+    patron: Mapped[Patron] = relationship(
+        "Patron", back_populates="holds", lazy="joined"
+    )
+    integration_client: Mapped[IntegrationClient] = relationship(
         "IntegrationClient", back_populates="holds", lazy="joined"
     )
 

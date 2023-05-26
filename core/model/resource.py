@@ -1,5 +1,5 @@
 # Resource, ResourceTransformation, Hyperlink, Representation
-
+from __future__ import annotations
 
 import datetime
 import json
@@ -10,7 +10,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -27,7 +27,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
@@ -70,27 +70,29 @@ class Resource(Base):
 
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
-    cover_editions = relationship(
-        "Edition", backref="cover", foreign_keys=[Edition.cover_id]  # type: ignore
+    cover_editions: Mapped[List[Edition]] = relationship(
+        "Edition", backref="cover", foreign_keys=[Edition.cover_id]
     )
 
     # Many Works may use this resource (as opposed to other resources
     # linked to them with rel="description") as their summary.
     from .work import Work
 
-    summary_works = relationship(
+    summary_works: Mapped[List[Work]] = relationship(
         "Work", backref="summary", foreign_keys=[Work.summary_id]
     )
 
     # Many LicensePools (but probably one at most) may use this
     # resource in a delivery mechanism.
-    licensepooldeliverymechanisms = relationship(
+    licensepooldeliverymechanisms: Mapped[
+        List[LicensePoolDeliveryMechanism]
+    ] = relationship(
         "LicensePoolDeliveryMechanism",
         backref="resource",
-        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],  # type: ignore
+        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
     )
 
-    links = relationship("Hyperlink", backref="resource")
+    links: Mapped[List[Hyperlink]] = relationship("Hyperlink", backref="resource")
 
     # The DataSource that is the controlling authority for this Resource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
@@ -105,20 +107,18 @@ class Resource(Base):
     rights_explanation = Column(Unicode)
 
     # A Resource may be transformed into many derivatives.
-    transformations = relationship(
+    transformations: Mapped[List[ResourceTransformation]] = relationship(
         "ResourceTransformation",
-        primaryjoin="ResourceTransformation.original_id==Resource.id",
-        foreign_keys=id,
+        foreign_keys="ResourceTransformation.original_id",
         lazy="joined",
         backref=backref("original", uselist=False),
         uselist=True,
     )
 
     # A derivative resource may have one original.
-    derived_through = relationship(
+    derived_through: Mapped[ResourceTransformation] = relationship(
         "ResourceTransformation",
-        primaryjoin="ResourceTransformation.derivative_id==Resource.id",
-        foreign_keys=id,
+        foreign_keys="ResourceTransformation.derivative_id",
         backref=backref("derivative", uselist=False),
         lazy="joined",
         uselist=False,
@@ -381,7 +381,7 @@ class ResourceTransformation(Base):
     original_id = Column(Integer, ForeignKey("resources.id"), index=True)
 
     # The settings used for the transformation.
-    settings = Column(MutableDict.as_mutable(JSON), default={})
+    settings: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 
 
 class Hyperlink(Base, LinkRelations):
@@ -500,7 +500,9 @@ class Representation(Base, MediaTypes):
     # The media type of the representation.
     media_type = Column(Unicode)
 
-    resource = relationship("Resource", backref="representation", uselist=False)
+    resource: Mapped[Resource] = relationship(
+        "Resource", backref="representation", uselist=False
+    )
 
     ### Records of things we tried to do with this representation.
 
@@ -537,7 +539,7 @@ class Representation(Base, MediaTypes):
     # Representation.
     thumbnail_of_id = Column(Integer, ForeignKey("representations.id"), index=True)
 
-    thumbnails = relationship(
+    thumbnails: Mapped[List[Representation]] = relationship(
         "Representation",
         backref=backref("thumbnail_of", remote_side=[id]),
         lazy="joined",
@@ -578,7 +580,7 @@ class Representation(Base, MediaTypes):
     local_content_path = Column(Unicode)
 
     # A Representation may be a CachedMARCFile.
-    marc_file = relationship(
+    marc_file: Mapped[CachedMARCFile] = relationship(
         "CachedMARCFile",
         backref="representation",
         cascade="all, delete-orphan",
@@ -971,7 +973,7 @@ class Representation(Base, MediaTypes):
             do_get=do_post,
             max_age=max_age,
             response_reviewer=response_reviewer,
-            **kwargs
+            **kwargs,
         )
 
     @property

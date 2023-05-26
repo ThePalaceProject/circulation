@@ -7,14 +7,14 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 from urllib.parse import quote, unquote
 
 import isbnlib
-from sqlalchemy import Computed  # type: ignore
 from sqlalchemy import (
     Boolean,
     Column,
+    Computed,
     Float,
     ForeignKey,
     Integer,
@@ -22,8 +22,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import joinedload, relationship
-from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.orm import Mapped, joinedload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
@@ -236,22 +236,26 @@ class Identifier(Base, IdentifierConstants):
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
 
-    equivalencies = relationship(
+    equivalencies: Mapped[List[Equivalency]] = relationship(
         "Equivalency",
-        primaryjoin=("Identifier.id==Equivalency.input_id"),
-        backref="input_identifiers",
+        foreign_keys="Equivalency.input_id",
+        back_populates="input",
         cascade="all, delete-orphan",
+        uselist=True,
     )
 
-    inbound_equivalencies = relationship(
+    inbound_equivalencies: Mapped[List[Equivalency]] = relationship(
         "Equivalency",
-        primaryjoin=("Identifier.id==Equivalency.output_id"),
-        backref="output_identifiers",
+        foreign_keys="Equivalency.output_id",
+        back_populates="output",
         cascade="all, delete-orphan",
+        uselist=True,
     )
 
     # One Identifier may have many associated CoverageRecords.
-    coverage_records = relationship("CoverageRecord", backref="identifier")
+    coverage_records: Mapped[List[CoverageRecord]] = relationship(
+        "CoverageRecord", backref="identifier"
+    )
 
     def __repr__(self):
         records = self.primarily_identifies
@@ -263,30 +267,41 @@ class Identifier(Base, IdentifierConstants):
 
     # One Identifier may serve as the primary identifier for
     # several Editions.
-    primarily_identifies = relationship("Edition", backref="primary_identifier")
+    primarily_identifies: Mapped[List[Edition]] = relationship(
+        "Edition", backref="primary_identifier"
+    )
 
     # One Identifier may serve as the identifier for many
     # LicensePools, through different Collections.
-    licensed_through = relationship(
+    licensed_through: Mapped[List[LicensePool]] = relationship(
         "LicensePool",
         back_populates="identifier",
         lazy="joined",
+        overlaps="delivery_mechanisms",
     )
 
     # One Identifier may have many Links.
-    links = relationship("Hyperlink", backref="identifier", uselist=True)
+    links: Mapped[List[Hyperlink]] = relationship(
+        "Hyperlink", backref="identifier", uselist=True
+    )
 
     # One Identifier may be the subject of many Measurements.
-    measurements = relationship("Measurement", backref="identifier")
+    measurements: Mapped[List[Measurement]] = relationship(
+        "Measurement", backref="identifier"
+    )
 
     # One Identifier may participate in many Classifications.
-    classifications = relationship("Classification", backref="identifier")
+    classifications: Mapped[List[Classification]] = relationship(
+        "Classification", backref="identifier"
+    )
 
     # One identifier may participate in many Annotations.
-    annotations = relationship("Annotation", backref="identifier")
+    annotations: Mapped[List[Annotation]] = relationship(
+        "Annotation", backref="identifier"
+    )
 
-    # One Identifier can have have many LicensePoolDeliveryMechanisms.
-    delivery_mechanisms = relationship(
+    # One Identifier can have many LicensePoolDeliveryMechanisms.
+    delivery_mechanisms: Mapped[List[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
         backref="identifier",
         foreign_keys=lambda: [LicensePoolDeliveryMechanism.identifier_id],
@@ -1122,9 +1137,13 @@ class Equivalency(Base):
     # 'output' is the output
     id = Column(Integer, primary_key=True)
     input_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    input = relationship("Identifier", foreign_keys=input_id)
+    input: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=input_id, back_populates="equivalencies"
+    )
     output_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    output = relationship("Identifier", foreign_keys=output_id)
+    output: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=output_id, back_populates="inbound_equivalencies"
+    )
 
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
@@ -1194,11 +1213,15 @@ class RecursiveEquivalencyCache(Base):
     parent_identifier_id = Column(
         Integer, ForeignKey("identifiers.id", ondelete="CASCADE")
     )
-    parent_identifier = relationship("Identifier", foreign_keys=parent_identifier_id)
+    parent_identifier: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=parent_identifier_id
+    )
 
     # The identifier chained to the parent
     identifier_id = Column(Integer, ForeignKey("identifiers.id", ondelete="CASCADE"))
-    identifier = relationship("Identifier", foreign_keys=identifier_id)
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=identifier_id
+    )
 
     # Its always important to query for the parent id chain to self first
     # this can be easily accomplished by ORDER BY parent_identifier,is_parent DESC

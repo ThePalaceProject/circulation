@@ -31,7 +31,6 @@ disable_error_code = "annotation-unchecked"
 exclude = [
     'core/bin/repair/startup\.py',
     'core/classifier',
-    'core/model/listeners\.py',
     'integration_tests/',
     # TODO: Post test-suite refactoring.
     'tests/api/admin/controller/test_admin_search_controller\.py',
@@ -114,7 +113,7 @@ exclude = [
     'tests/core/test_scripts\.py',
 ]
 files = ["."]
-plugins = ["pydantic.mypy", "sqlmypy"]
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
@@ -156,7 +155,6 @@ warn_unused_ignores = true
 follow_imports = "silent"
 module = [
     "core.classifier.*",
-    "core.model.listeners",
 ]
 
 [[tool.mypy.overrides]]
@@ -228,6 +226,7 @@ fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "~1.9.3"
 isbnlib = "^3.10.14"
 itsdangerous = "^2.1.2"
+levenshtein = "~0.21"
 lxml = "4.9.2"
 money = "1.3.0"
 multipledispatch = "0.6.0"
@@ -249,17 +248,18 @@ pypostalcode = "0.4.1"
 pyspellchecker = "0.7.2"
 python = ">=3.8,<4"
 python-dateutil = "2.8.2"
-python-Levenshtein = "~0.21"
 python3-saml = "~1.15.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
+pyyaml = "^6.0"
 redmail = "^0.6.0"
 requests = "^2.29"
-SQLAlchemy = "~1.3.19"
+sqlalchemy = {version = "^1.4", extras = ["mypy"]}
 textblob = "0.17.1"
+types-pyopenssl = "^23.1.0.3"
+types-pyyaml = "^6.0.12.9"
 # We import typing_extensions, so we can use new annotation features.
 # - ParamSpec (Python 3.10)
 # - Self (Python 3.11)
-# Once we upgrade to Python 3.11, we can remove this dependency.
 typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "4.1.1"
@@ -290,7 +290,6 @@ pytest-alembic = "^0.10.4"
 pytest-cov = "^4.0.0"
 pytest-timeout = "*"
 requests-mock = "1.10.0"
-sqlalchemy-stubs = "^0.4"
 types-aws-xray-sdk = "^2.11.0.13"
 types-Flask-Cors = "^3.0.10"
 types-jsonschema = "^4.17.0.5"
