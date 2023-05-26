@@ -35,7 +35,7 @@ class CryptAESCBC(CryptBase):
         self._iv = value
 
     def _pad_content(self, content: bytes) -> bytes:
-        """Pad content to be encrpyted using the PKCS#7 protocol
+        """Pad content to be encrypted using the PKCS#7 protocol
         :param content: Content to be padded to a set block size
         """
         pad_length = self.PADDING - len(content) % self.PADDING
@@ -53,7 +53,7 @@ class CryptAESCBC(CryptBase):
     def encrypt(self, content: bytes) -> bytes:
         """Encrypt a given block of content.
         The content will be padded before encryption.
-        After encryption the IV will be pre-prended.
+        After encryption the IV will be preprended.
         :param content: Content to be encrypted
         """
         cipher = AES.new(self.key, AES.MODE_CBC, iv=self.iv)
@@ -63,7 +63,7 @@ class CryptAESCBC(CryptBase):
 
     def decrypt(self, content: bytes) -> bytes:
         """Decrypt content.
-        The method assumes the IV is pre-prended and PKCS#7 content padding has been done.
+        The method assumes the IV is preprended and PKCS#7 content padding has been done.
         :param content: Content to be decrypted
         """
         self.iv, encrypted = content[: self.IV_LENGTH], content[self.IV_LENGTH :]
