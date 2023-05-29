@@ -11,16 +11,31 @@ from api.admin.config import Configuration as AdminClientConfig
 from api.admin.dashboard_stats import generate_statistics
 from api.admin.model.dashboard_statistics import StatisticsResponse
 from api.app import api_spec, app
+from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
+from core.local_analytics_provider import LocalAnalyticsProvider
+from core.model import ConfigurationSetting
 from core.util.problem_detail import ProblemDetail, ProblemDetailModel
 
-from .controller import CustomListsController
+from .controller import CustomListsController, setup_admin_controllers
 from .templates import admin_sign_in_again as sign_in_again_template
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.
 app.permanent_session_lifetime = timedelta(hours=9)
+
+
+@app.before_first_request
+def setup_admin(_db=None):
+    if getattr(app, "manager", None) is not None:
+        setup_admin_controllers(app.manager)
+    _db = _db or app._db
+    # The secret key is used for signing cookies for admin login
+    app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+    # Create a default Local Analytics service if one does not
+    # already exist.
+    local_analytics = LocalAnalyticsProvider.initialize(_db)
 
 
 def allows_admin_auth_setup(f):

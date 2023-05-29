@@ -196,7 +196,7 @@ jobs:
         run: >
           docker run --rm --name test_container -d --platform ${{ matrix.platform }}
           --network ${{job.services.postgres.network}}
-          -e SIMPLIFIED_PRODUCTION_DATABASE="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
+          -e SIMPLIFIED_PRODUCTION_DATABASE="postgresql://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@postgres:5432/${{ env.POSTGRES_DB }}"
           test_image
 
       - name: Run tests

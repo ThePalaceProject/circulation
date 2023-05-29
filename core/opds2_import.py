@@ -201,7 +201,7 @@ class OPDS2Importer(
         self._parser: RWPMManifestParser = parser
         self._logger: logging.Logger = logging.getLogger(__name__)
 
-        self._external_integration_id: int = collection.external_integration.id
+        self._external_integration_id = collection.external_integration.id
         self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
         self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
 

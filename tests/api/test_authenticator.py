@@ -450,6 +450,7 @@ class TestCirculationPatronProfileStorage:
         doc = storage.profile_document
         [adobe] = doc["drm"]
         assert adobe["drm:vendor"] == "vendor id"
+        assert patron.library.short_name is not None
         assert adobe["drm:clientToken"].startswith(
             patron.library.short_name.upper() + "TOKEN"
         )

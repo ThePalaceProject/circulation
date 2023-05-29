@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from urllib.parse import quote_plus
 
 from flask_babel import lazy_gettext as _
@@ -23,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import (
+    Mapped,
     aliased,
     backref,
     contains_eager,
@@ -33,14 +36,15 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import Select
 
+from core.model.before_flush_decorator import Listener
 from core.model.configuration import (
     ConfigurationAttributeValue,
     ConfigurationSetting,
     ExternalIntegration,
 )
 from core.model.hybrid import hybrid_property
+from core.model.listeners import site_configuration_has_changed
 
 from .classifier import Classifier
 from .config import Configuration
@@ -63,7 +67,6 @@ from .model import (
     tuple_to_numericrange,
 )
 from .model.constants import EditionConstants
-from .model.listeners import directly_modified, site_configuration_has_changed
 from .problem_details import *
 from .util import LanguageCodes
 from .util.accept_language import parse_accept_language
@@ -2452,8 +2455,8 @@ class DatabaseBackedWorkList(WorkList):
             # Use a subquery to obtain the CustomList IDs of all
             # CustomLists from this DataSource. This is significantly
             # simpler than adding a join against CustomList.
-            customlist_ids = Select(
-                [CustomList.id], CustomList.data_source_id == self.list_datasource_id
+            customlist_ids = select(CustomList.id).where(
+                CustomList.data_source_id == self.list_datasource_id
             )
         else:
             customlist_ids = self.customlist_ids
@@ -2554,7 +2557,7 @@ class LaneGenre(Base):
         return lg
 
 
-Genre.lane_genres = relationship(  # type: ignore
+Genre.lane_genres = relationship(
     "LaneGenre", foreign_keys=LaneGenre.genre_id, backref="genre"
 )
 
@@ -2588,7 +2591,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
-    sublanes = relationship(
+    sublanes: Mapped[List[Lane]] = relationship(
         "Lane",
         backref=backref("parent", remote_side=[id]),
     )
@@ -2596,7 +2599,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # A lane may have multiple associated LaneGenres. For most lanes,
     # this is how the contents of the lanes are defined.
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
-    lane_genres = relationship(
+    lane_genres: Mapped[List[LaneGenre]] = relationship(
         "LaneGenre",
         foreign_keys="LaneGenre.lane_id",
         backref="lane",
@@ -2683,14 +2686,14 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     _visible = Column("visible", Boolean, default=True, nullable=False)
 
     # A Lane may have many CachedFeeds.
-    cachedfeeds = relationship(
+    cachedfeeds: Mapped[List[CachedFeed]] = relationship(
         "CachedFeed",
         backref="lane",
         cascade="all, delete-orphan",
     )
 
     # A Lane may have many CachedMARCFiles.
-    cachedmarcfiles = relationship(
+    cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
         backref="lane",
         cascade="all, delete-orphan",
@@ -2707,7 +2710,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         # be a temporary fix while we replace the need for the site_configuration_has_changed
         # and listeners at all.
         # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
-        self._suppress_configuration_changes = False
+        self._suppress_before_flush_listeners = False
 
     def get_library(self, _db):
         """For compatibility with WorkList.get_library()."""
@@ -3207,16 +3210,16 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         return lines
 
 
-Library.lanes = relationship(  # type: ignore
+Library.lanes = relationship(
     "Lane",
     backref="library",
     foreign_keys=Lane.library_id,
     cascade="all, delete-orphan",
 )
-DataSource.list_lanes = relationship(  # type: ignore
+DataSource.list_lanes = relationship(
     "Lane", backref="_list_datasource", foreign_keys=Lane._list_datasource_id
 )
-DataSource.license_lanes = relationship(  # type: ignore
+DataSource.license_lanes = relationship(
     "Lane", backref="license_datasource", foreign_keys=Lane.license_datasource_id
 )
 
@@ -3236,20 +3239,9 @@ lanes_customlists = Table(
 )
 
 
-@event.listens_for(Lane, "after_insert")
-@event.listens_for(Lane, "after_delete")
-@event.listens_for(LaneGenre, "after_insert")
-@event.listens_for(LaneGenre, "after_delete")
-def configuration_relevant_lifecycle_event(mapper, connection, target):
-    site_configuration_has_changed(target)
-
-
-@event.listens_for(Lane, "after_update")
-@event.listens_for(LaneGenre, "after_update")
-def configuration_relevant_update(mapper, connection, target):
-    suppressed = getattr(target, "_suppress_configuration_changes", False)
-    if directly_modified(target) and not suppressed:
-        site_configuration_has_changed(target)
+@Listener.before_flush((Lane, LaneGenre), one_shot=True)
+def configuration_relevant_lifecycle_event(session: Session):
+    site_configuration_has_changed(session)
 
 
 @event.listens_for(Lane.library_id, "set")

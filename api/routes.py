@@ -1,4 +1,5 @@
 import logging
+import os
 from functools import update_wrapper, wraps
 
 import flask
@@ -9,11 +10,34 @@ from werkzeug.exceptions import HTTPException
 
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import HasSessionCache
+from core.util.cache import CachedData
 from core.util.problem_detail import ProblemDetail
 
 from .app import app, babel
 from .config import Configuration
+from .controller import CirculationManager
 from .problem_details import REMOTE_INTEGRATION_FAILED
+
+
+@app.before_first_request
+def initialize_circulation_manager():
+    if os.environ.get("AUTOINITIALIZE") == "False":
+        # It's the responsibility of the importing code to set app.manager
+        # appropriately.
+        pass
+    else:
+        if getattr(app, "manager", None) is None:
+            try:
+                app.manager = CirculationManager(app._db)
+            except Exception:
+                logging.exception("Error instantiating circulation manager!")
+                raise
+            # Make sure that any changes to the database (as might happen
+            # on initial setup) are committed before continuing.
+            app.manager._db.commit()
+
+            # setup the cache data object
+            CachedData.initialize(app._db)
 
 
 @babel.localeselector

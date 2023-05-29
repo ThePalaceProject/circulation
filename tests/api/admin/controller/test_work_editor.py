@@ -752,7 +752,7 @@ class TestWorkController:
             work_fixture.english_1.presentation_edition,
             data_source_name=DataSource.OVERDRIVE,
         )
-        broken_lp.work = work_fixture.english_1
+        work_fixture.english_1.license_pools.append(broken_lp)
         broken_lp.suppressed = True
 
         with work_fixture.request_context_with_library_and_admin("/"):

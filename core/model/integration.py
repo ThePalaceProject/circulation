@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, List, Type
 
 from sqlalchemy import Column, DateTime
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import ForeignKey, Integer, Unicode
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Query, Session, relationship
+from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from core.integration.goals import Goals
 from core.integration.status import Status
@@ -62,7 +62,9 @@ class IntegrationConfiguration(Base):
     status = Column(SQLAlchemyEnum(Status), nullable=False, default=Status.GREEN)
     last_status_update = Column(DateTime, nullable=True)
 
-    library_configurations = relationship(
+    library_configurations: Mapped[
+        List[IntegrationLibraryConfiguration]
+    ] = relationship(
         "IntegrationLibraryConfiguration",
         back_populates="parent",
         uselist=True,
@@ -72,7 +74,7 @@ class IntegrationConfiguration(Base):
 
     @property
     def available(self) -> bool:
-        return self.status != Status.RED.value
+        return self.status != Status.RED
 
     def __repr__(self) -> str:
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
@@ -100,7 +102,7 @@ class IntegrationLibraryConfiguration(Base):
         primary_key=True,
         nullable=False,
     )
-    parent = relationship(
+    parent: Mapped[IntegrationConfiguration] = relationship(
         "IntegrationConfiguration", back_populates="library_configurations"
     )
 
@@ -112,7 +114,7 @@ class IntegrationLibraryConfiguration(Base):
         primary_key=True,
         nullable=False,
     )
-    library = relationship("Library")
+    library: Mapped[Library] = relationship("Library")
 
     # The configuration settings for this integration. Stored as json.
     settings = Column(JSONB, nullable=False, default=dict)
@@ -129,7 +131,7 @@ class IntegrationLibraryConfiguration(Base):
         cls, _db: Session, library: Library, goal: Goals
     ) -> Query[IntegrationLibraryConfiguration]:
         """Get the library configuration for the given library and goal"""
-        return (  # type: ignore[no-any-return]
+        return (
             _db.query(IntegrationLibraryConfiguration)
             .join(IntegrationConfiguration)
             .filter(

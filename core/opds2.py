@@ -166,7 +166,7 @@ class OPDS2Annotator:
             if contribution.role in key_mapping:
                 contributor = contribution.contributor
                 meta = {"name": contributor.display_name}
-                if len(contributor.aliases) > 0:
+                if contributor.aliases and len(contributor.aliases) > 0:
                     meta["additionalName"] = contributor.aliases[0]
 
                 # TODO: Marketplace adds links for the author based search

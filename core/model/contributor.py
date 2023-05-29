@@ -1,19 +1,20 @@
 # Contributor, Contribution
-
+from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import relationship, synonym
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
 from ..util.personal_names import display_name_to_sort_name
-from . import Base, flush, get_one_or_create
+from . import Base, flush, get_one, get_one_or_create
+from .hybrid import hybrid_property
 
 if TYPE_CHECKING:
     from core.model import Edition  # noqa: autoflake
@@ -51,9 +52,11 @@ class Contributor(Base):
     # provided by a publisher.
     biography = Column(Unicode)
 
-    extra = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 
-    contributions = relationship("Contribution", backref="contributor", uselist=True)
+    contributions: Mapped[List[Contribution]] = relationship(
+        "Contribution", back_populates="contributor", uselist=True
+    )
 
     # Types of roles
     AUTHOR_ROLE = "Author"
@@ -244,7 +247,7 @@ class Contributor(Base):
                     Contributor,
                     create_method_kwargs=create_method_kwargs,
                     on_multiple="interchangeable",
-                    **query
+                    **query,
                 )
                 if contributor:
                     contributors = [contributor]
@@ -255,14 +258,14 @@ class Contributor(Base):
 
         return contributors, new
 
-    @property
+    @hybrid_property
     def sort_name(self):
         return self._sort_name
 
     @sort_name.setter
     def sort_name(self, new_sort_name):
         """See if the passed-in value is in the prescribed Last, First format.
-        If it is, great, set the self._sprt_name to the new value.
+        If it is, great, set the self._sort_name to the new value.
 
         If new value is not in correct format, then
         attempt to re-format the value to look like: "Last, First Middle, Dr./Jr./etc.".
@@ -286,9 +289,6 @@ class Contributor(Base):
             return
 
         self._sort_name = new_sort_name
-
-    # tell SQLAlchemy to use the sort_name setter for ort_name, not _sort_name, after all.
-    sort_name = synonym("_sort_name", descriptor=sort_name)  # type: ignore
 
     def merge_into(self, destination):
         """Two Contributor records should be the same.
@@ -475,13 +475,15 @@ class Contribution(Base):
     __tablename__ = "contributions"
     id = Column(Integer, primary_key=True)
 
-    edition = relationship("Edition", back_populates="contributions")
+    edition: Mapped[Edition] = relationship("Edition", back_populates="contributions")
     edition_id = Column(Integer, ForeignKey("editions.id"), index=True, nullable=False)
 
     contributor_id = Column(
         Integer, ForeignKey("contributors.id"), index=True, nullable=False
     )
-    contributor: Contributor  # for typing
+    contributor: Mapped[Contributor] = relationship(
+        "Contributor", back_populates="contributions"
+    )
 
     role = Column(Unicode, index=True, nullable=False)
     __table_args__ = (UniqueConstraint("edition_id", "contributor_id", "role"),)

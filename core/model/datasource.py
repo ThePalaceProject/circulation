@@ -1,14 +1,14 @@
 # DataSource
-
+from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 from urllib.parse import quote, unquote
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import Mapped, backref, relationship
 
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants, IdentifierConstants
@@ -42,7 +42,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     name = Column(String, unique=True, index=True)
     offers_licenses = Column(Boolean, default=False)
     primary_identifier_type = Column(String, index=True)
-    extra = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 
     # One DataSource can have one IntegrationClient.
     integration_client_id = Column(
@@ -52,42 +52,58 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         index=True,
         nullable=True,
     )
-    integration_client = relationship(
+    integration_client: Mapped[IntegrationClient] = relationship(
         "IntegrationClient", backref=backref("data_source", uselist=False)
     )
 
     # One DataSource can generate many Editions.
-    editions = relationship("Edition", back_populates="data_source", uselist=True)
+    editions: Mapped[List[Edition]] = relationship(
+        "Edition", back_populates="data_source", uselist=True
+    )
 
     # One DataSource can generate many CoverageRecords.
-    coverage_records = relationship("CoverageRecord", backref="data_source")
+    coverage_records: Mapped[List[CoverageRecord]] = relationship(
+        "CoverageRecord", backref="data_source"
+    )
 
     # One DataSource can generate many IDEquivalencies.
-    id_equivalencies = relationship("Equivalency", backref="data_source")
+    id_equivalencies: Mapped[List[Equivalency]] = relationship(
+        "Equivalency", backref="data_source"
+    )
 
     # One DataSource can grant access to many LicensePools.
-    license_pools = relationship("LicensePool", back_populates="data_source")
+    license_pools: Mapped[List[LicensePool]] = relationship(
+        "LicensePool", back_populates="data_source", overlaps="delivery_mechanisms"
+    )
 
     # One DataSource can provide many Hyperlinks.
-    links = relationship("Hyperlink", backref="data_source")
+    links: Mapped[List[Hyperlink]] = relationship("Hyperlink", backref="data_source")
 
     # One DataSource can provide many Resources.
-    resources = relationship("Resource", backref="data_source")
+    resources: Mapped[List[Resource]] = relationship("Resource", backref="data_source")
 
     # One DataSource can generate many Measurements.
-    measurements = relationship("Measurement", backref="data_source")
+    measurements: Mapped[List[Measurement]] = relationship(
+        "Measurement", backref="data_source"
+    )
 
     # One DataSource can provide many Classifications.
-    classifications = relationship("Classification", backref="data_source")
+    classifications: Mapped[List[Classification]] = relationship(
+        "Classification", backref="data_source"
+    )
 
     # One DataSource can have many associated Credentials.
-    credentials = relationship("Credential", backref="data_source")
+    credentials: Mapped[List[Credential]] = relationship(
+        "Credential", backref="data_source"
+    )
 
     # One DataSource can generate many CustomLists.
-    custom_lists = relationship("CustomList", backref="data_source")
+    custom_lists: Mapped[List[CustomList]] = relationship(
+        "CustomList", backref="data_source"
+    )
 
-    # One DataSource can have provide many LicensePoolDeliveryMechanisms.
-    delivery_mechanisms = relationship(
+    # One DataSource can provide many LicensePoolDeliveryMechanisms.
+    delivery_mechanisms: Mapped[List[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
         backref="data_source",
         foreign_keys=lambda: [LicensePoolDeliveryMechanism.data_source_id],

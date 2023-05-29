@@ -32,6 +32,7 @@ from core.model import (
     Hyperlink,
     Identifier,
     Library,
+    LicensePool,
     RightsStatus,
     Timestamp,
     Work,
@@ -39,7 +40,7 @@ from core.model import (
     create,
     get_one,
 )
-from core.model.classification import Subject
+from core.model.classification import Classification, Subject
 from core.model.configuration import ExternalIntegrationLink
 from core.model.customlist import CustomList
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
@@ -1913,9 +1914,10 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
         assert 100 == script.batch_size
 
         # Assert all joins have been included in the Order By
-        ordered_by = script.query._order_by
-        for join in script.query._join_entities:
-            assert join.columns.id in ordered_by
+        ordered_by = script.query._order_by_clauses
+        for join in [Work, LicensePool, Identifier, Classification]:
+            assert join.id in ordered_by
+
         assert Work.id in ordered_by
 
     def test_paginate(self, db: DatabaseTransactionFixture):
@@ -2464,15 +2466,23 @@ class TestUpdateLaneSizeScript:
         db: DatabaseTransactionFixture,
         external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
+        library = db.default_library()
         lane1 = db.lane()
         lane2 = db.lane()
+
+        # Run the script to create all the default config settings.
+        UpdateLaneSizeScript(db.session).do_run(cmd_args=[])
+
+        # Set the lane sizes
         lane1.size = 100
         lane2.size = 50
 
-        # Commit changes to the DB so the lane creation listeners are fired
-        db.session.commit()
+        # Commit changes to the DB so the lane update listeners are fired
+        db.session.flush()
 
-        with patch("core.lane.site_configuration_has_changed") as lane_changed:
+        with patch(
+            "core.model.listeners.site_configuration_has_changed"
+        ) as listeners_changed:
             with patch(
                 "core.scripts.site_configuration_has_changed"
             ) as scripts_changed:
@@ -2482,7 +2492,7 @@ class TestUpdateLaneSizeScript:
         assert 0 == lane2.size
 
         # The listeners in lane.py shouldn't call site_configuration_has_changed
-        lane_changed.assert_not_called()
+        listeners_changed.assert_not_called()
 
         # The script should call site_configuration_has_changed once when it is done
         scripts_changed.assert_called_once()
