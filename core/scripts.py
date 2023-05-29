@@ -2749,7 +2749,7 @@ class UpdateLaneSizeScript(LaneSweeperScript):
         #
         # This is done because calling site_configuration_has_changed repeatedly
         # was causing performance problems, when we have lots of lanes to update.
-        lane._suppress_configuration_changes = True
+        lane._suppress_before_flush_listeners = True
         lane.update_size(self._db)
         self.log.info("%s: %d", lane.full_identifier, lane.size)
 

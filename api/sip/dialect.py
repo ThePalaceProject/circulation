@@ -1,25 +1,24 @@
-class Dialect:
-    """Describe a SIP2 dialect."""
+import dataclasses
+from enum import Enum
 
-    # Constants for each class
+
+@dataclasses.dataclass(frozen=True)
+class DialectConfig:
+    """Describe a SIP2 dialect_config."""
+
+    sendEndSession: bool
+
+
+class Dialect(Enum):
     GENERIC_ILS = "GenericILS"
     AG_VERSO = "AutoGraphicsVerso"
 
-    # Settings defined in each class
-    sendEndSession: bool = False
-
-    # Map a string to the correct class
-    @staticmethod
-    def load_dialect(dialect):
-        if dialect == Dialect.AG_VERSO:
-            return AutoGraphicsVerso
+    @property
+    def config(self) -> DialectConfig:
+        """Return the configuration for this dialect."""
+        if self == Dialect.GENERIC_ILS:
+            return DialectConfig(sendEndSession=True)
+        elif self == Dialect.AG_VERSO:
+            return DialectConfig(sendEndSession=False)
         else:
-            return GenericILS
-
-
-class GenericILS(Dialect):
-    sendEndSession = True
-
-
-class AutoGraphicsVerso(Dialect):
-    sendEndSession = False
+            raise NotImplementedError(f"Unknown dialect: {self}")

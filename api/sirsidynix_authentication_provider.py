@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import os
 from gettext import gettext as _
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, List, Literal, Optional, Union
 from urllib.parse import urljoin
 
-from sqlalchemy.orm import object_session
+from pydantic import HttpUrl
 
-from api.authenticator import BasicAuthenticationProvider, PatronData
+from api.authentication.base import PatronData
+from api.authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
+from core.analytics import Analytics
 from core.config import Configuration
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationSetting,
-    ExternalIntegration,
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
 )
 from core.util.http import HTTP
 
@@ -28,98 +34,114 @@ class SirsiBlockReasons:
     PATRON_BLOCKED = _("Patron has been blocked.")
 
 
-class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
-    """SirsiDynix Authentication API implementation.
+class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
+    url: HttpUrl = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Server URL",
+            description="The external server url.",
+        ),
+    )
+    client_id: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Client ID",
+            description="The client ID that should be used to identify this CM.",
+        ),
+        alias="CLIENT_ID",
+    )
 
-    Currently, is only used to authenticate patrons, there is no CRUD implemented for patron profiles.
-    It is recommended (but not mandatory) to have the environment variable `SIRSI_DYNIX_APP_ID` set, so that the API
-    requests have an identifying App ID attached to them, which is the recommended approach as per the SirsiDynix docs.
-    """
 
-    NAME = "SirsiDynix Horizon Authentication"
-    DESCRIPTION = "SirsiDynix Horizon Webservice Authentication"
-
-    DEFAULT_APP_ID = "PALACE"
-
-    class Keys:
-        """Keys relevant to the Settings module"""
-
-        CLIENT_ID = "CLIENT_ID"
-        LIBRARY_ID = "LIBRARY_ID"
-        LIBRARY_DISALLOWED_SUFFIXES = "LIBRARY_DISALLOWED_SUFFIXES"
-
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("Server URL"),
-            "description": _("The external server url."),
-            "required": True,
-        },
-        {
-            "key": Keys.CLIENT_ID,
-            "label": _("Client ID"),
-            "description": _("The client ID that should be used to identify this CM."),
-            "required": True,
-        },
-    ] + BasicAuthenticationProvider.SETTINGS
-
-    LIBRARY_SETTINGS = [
-        {
-            "key": Keys.LIBRARY_ID,
-            "label": _("Library ID"),
-            "description": _(
-                "This is used to identify a unique library on the API. This must match what the API expects."
-            ),
-            "required": True,
-        },
-        {
-            "key": Keys.LIBRARY_DISALLOWED_SUFFIXES,
-            "type": ConfigurationAttributeType.LIST.value,
-            "label": _("Disallowed Patron Suffixes"),
-            "description": _(
+class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
+    library_id: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Library ID",
+            description="This is used to identify a unique library on the API. This must match what the API expects.",
+        ),
+        alias="LIBRARY_ID",
+    )
+    library_disallowed_suffixes: List[str] = FormField(
+        [],
+        form=ConfigurationFormItem(
+            label="Disallowed Patron Suffixes",
+            description=(
                 "Any patron type ending in this suffix will remain unauthenticated. "
                 "Eg. A patronType of 'cls' and Library Prefix of 'c' will result in a suffix of 'ls'. "
                 "If 'ls' is a disallowed suffix then the patron will not be authenticated."
             ),
-            "required": False,
-        },
-    ] + BasicAuthenticationProvider.LIBRARY_SETTINGS
+            type=ConfigurationFormItemType.LIST,
+        ),
+        alias="LIBRARY_DISALLOWED_SUFFIXES",
+    )
+    library_identifier_field = FormField(
+        "patrontype",
+        form=ConfigurationFormItem(
+            label="Library Identifier Field",
+            description="This is the field on the patron record that the <em>Library Identifier Restriction "
+            "Type</em> is applied to, different patron authentication methods provide different "
+            "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
+            "is set to 'No restriction'.",
+            options={
+                "barcode": "Barcode",
+                "patrontype": "Patron Type",
+            },
+        ),
+    )
 
-    for setting in LIBRARY_SETTINGS:
-        if setting["key"] == BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD:
-            setting["options"] = [
-                {
-                    "key": BasicAuthenticationProvider.LIBRARY_IDENTIFIER_RESTRICTION_BARCODE,
-                    "label": _("Barcode"),
-                },
-                {"key": "patronType", "label": _("patronType")},
-            ]
-            setting["default"] = "patronType"
 
-    def __init__(self, library, integration: ExternalIntegration, analytics=None):
-        super().__init__(library, integration, analytics)
-        self.server_url = integration.url
+class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
+    """SirsiDynix Authentication API implementation.
+
+    Currently, is only used to authenticate patrons, there is no CRUD implemented for patron profiles.
+    It is recommended (but not mandatory) to have the environment variable `SIRSI_DYNIX_APP_ID` set, so that the API requests
+    have an identifiying App ID attached to them, which is the recommended approach as per the SirsiDynix docs.
+    """
+
+    DEFAULT_APP_ID = "PALACE"
+
+    @classmethod
+    def label(cls) -> str:
+        return "SirsiDynix Horizon Authentication"
+
+    @classmethod
+    def description(cls) -> str:
+        return "SirsiDynix Horizon Webservice Authentication"
+
+    @classmethod
+    def settings_class(cls) -> type[SirsiDynixHorizonAuthSettings]:
+        return SirsiDynixHorizonAuthSettings
+
+    @classmethod
+    def library_settings_class(
+        cls,
+    ) -> type[SirsiDynixHorizonAuthLibrarySettings]:
+        return SirsiDynixHorizonAuthLibrarySettings
+
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: SirsiDynixHorizonAuthSettings,
+        library_settings: SirsiDynixHorizonAuthLibrarySettings,
+        analytics: Optional[Analytics] = None,
+    ):
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
+        self.server_url = str(settings.url)
         # trailing slash, else urljoin has issues
         self.server_url = self.server_url + (
             "/" if not self.server_url.endswith("/") else ""
         )
 
-        _db = object_session(library)
-
-        self.sirsi_client_id = integration.setting(self.Keys.CLIENT_ID).value
+        self.sirsi_client_id = settings.client_id
         self.sirsi_app_id = os.environ.get(
             Configuration.SIRSI_DYNIX_APP_ID, default=self.DEFAULT_APP_ID
         )
-        self.sirsi_disallowed_suffixes = (
-            ConfigurationSetting.for_library_and_externalintegration(
-                _db, self.Keys.LIBRARY_DISALLOWED_SUFFIXES, library, integration
-            ).value_or_default([])
-        )
-        self.sirsi_library_id = (
-            ConfigurationSetting.for_library_and_externalintegration(
-                _db, self.Keys.LIBRARY_ID, library, integration
-            ).value
-        )
+
+        self.sirsi_disallowed_suffixes = library_settings.library_disallowed_suffixes
+        self.sirsi_library_id = library_settings.library_id
 
     def remote_authenticate(
         self, username: str | None, password: str | None
@@ -261,7 +283,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
     def api_read_patron_data(
         self, patron_key: str, session_token: str
-    ) -> Literal[False] | dict:
+    ) -> Union[Literal[False], dict]:
         """API request to pull basic patron information
 
         :param patron_key: The permanent external identifier for a patron
@@ -279,7 +301,7 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
 
     def api_patron_status_info(
         self, patron_key: str, session_token: str
-    ) -> Literal[False] | dict:
+    ) -> Union[Literal[False], dict]:
         """API request to pull patron status information, like fines
 
         :param patron_key: The permanent external identifier for a patron
@@ -306,6 +328,3 @@ class SirsiDynixPatronData(PatronData):
     def __init__(self, session_token=None, **kwargs):
         super().__init__(**kwargs)
         self.session_token = session_token
-
-
-AuthenticationProvider = SirsiDynixHorizonAuthenticationProvider

@@ -176,6 +176,7 @@ class TestLibraryAnnotator:
         )
 
         # A few checks to ensure that our setup is useful.
+        assert lib_short_name is not None
         assert len(lib_short_name) > 0
         assert client_base_1 != client_base_2
         assert expected_client_url_1 != expected_client_url_2

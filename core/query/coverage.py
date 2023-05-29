@@ -33,8 +33,19 @@ class EquivalencyCoverageQueries:
             _db, (p[0] for p in parent_ids)
         )
         records = []
-        for equiv in equivs:
 
+        # Make sure we haven't already added this record to the session, but not committed it yet
+        existing_records = {
+            (record.equivalency, record.operation)
+            for record in _db.new
+            if isinstance(record, EquivalencyCoverageRecord)
+        }
+        for equiv in equivs:
+            if (
+                equiv,
+                EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH,
+            ) in existing_records:
+                continue
             record, is_new = EquivalencyCoverageRecord.add_for(
                 equiv,
                 EquivalencyCoverageRecord.RECURSIVE_EQUIVALENCY_REFRESH,
@@ -43,6 +54,5 @@ class EquivalencyCoverageQueries:
             records.append(record)
 
         _db.add_all(records)
-        _db.commit()
 
         return records

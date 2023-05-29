@@ -1,11 +1,12 @@
-from typing import List
+from functools import partial
+from typing import Callable, List
 
 import pytest
 from lxml import etree
 
-from api.authenticator import PatronData
-from api.kansas_patron import KansasAuthenticationAPI
-from core.model import ExternalIntegration
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings
+from api.kansas_patron import KansasAuthenticationAPI, KansasAuthSettings
 
 from ..fixtures.api_kansas_files import KansasPatronFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -22,18 +23,21 @@ class MockAPI(KansasAuthenticationAPI):
 
     def __init__(
         self,
-        api_kansas_files_fixture: KansasPatronFilesFixture,
+        files: KansasPatronFilesFixture,
         library_id,
-        integration,
+        integration_id,
+        settings,
+        library_settings,
         analytics=None,
-        base_url=None,
     ):
-        super().__init__(library_id, integration, analytics, base_url)
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
         self.queue = []
-        self.api_kansas_files_fixture = api_kansas_files_fixture
+        self.files = files
 
     def sample_data(self, filename):
-        return self.api_kansas_files_fixture.sample_data(filename)
+        return self.files.sample_data(filename)
 
     def enqueue(self, filename):
         data = self.sample_data(filename)
@@ -45,129 +49,136 @@ class MockAPI(KansasAuthenticationAPI):
         return MockResponse(response)
 
 
-class KansasPatronFixture:
-    db: DatabaseTransactionFixture
-    api_kansas_files_fixture: KansasPatronFilesFixture
-    api: MockAPI
-    integration: ExternalIntegration
-
-    def __init__(
-        self,
-        db: DatabaseTransactionFixture,
-        api_kansas_files_fixture: KansasPatronFilesFixture,
-    ):
-        self.db = db
-        self.integration = db.external_integration(ExternalIntegration.PATRON_AUTH_GOAL)
-        self.api = MockAPI(
-            api_kansas_files_fixture,
-            db.default_library(),
-            self.integration,
-            base_url="http://test.com",
-        )
+@pytest.fixture
+def mock_library_id() -> int:
+    return 20
 
 
-@pytest.fixture(scope="function")
-def kansas_patron_fixture(
-    db: DatabaseTransactionFixture, api_kansas_files_fixture: KansasPatronFilesFixture
-) -> KansasPatronFixture:
-    return KansasPatronFixture(db, api_kansas_files_fixture)
+@pytest.fixture
+def mock_integration_id() -> int:
+    return 20
+
+
+@pytest.fixture
+def create_settings() -> Callable[..., KansasAuthSettings]:
+    return partial(
+        KansasAuthSettings,
+        url="http://url.com/",
+        test_identifier="barcode",
+    )
+
+
+@pytest.fixture
+def create_provider(
+    mock_library_id: int,
+    mock_integration_id: int,
+    create_settings: Callable[..., KansasAuthSettings],
+    api_kansas_files_fixture: KansasPatronFilesFixture,
+) -> Callable[..., MockAPI]:
+    return partial(
+        MockAPI,
+        library_id=mock_library_id,
+        integration_id=mock_integration_id,
+        settings=create_settings(),
+        library_settings=BasicAuthProviderLibrarySettings(),
+        files=api_kansas_files_fixture,
+    )
 
 
 class TestKansasPatronAPI:
-    def test_request(self, kansas_patron_fixture: KansasPatronFixture):
+    def test_request(self, api_kansas_files_fixture: KansasPatronFilesFixture):
         request = KansasAuthenticationAPI.create_authorize_request("12345", "6666")
-        mock_request = kansas_patron_fixture.api.sample_data("authorize_request.xml")
+        mock_request = api_kansas_files_fixture.sample_data("authorize_request.xml")
         parser = etree.XMLParser(remove_blank_text=True)
         mock_request = etree.tostring(etree.fromstring(mock_request, parser=parser))
         assert request == mock_request
 
-    def test_parse_response(self, kansas_patron_fixture: KansasPatronFixture):
-        api = kansas_patron_fixture.api
-        response = api.sample_data("authorization_response_good.xml")
-        authorized, patron_name, library_identifier = api.parse_authorize_response(
+    def test_parse_response(self, create_provider: Callable[..., MockAPI]):
+        provider = create_provider()
+        response = provider.sample_data("authorization_response_good.xml")
+        authorized, patron_name, library_identifier = provider.parse_authorize_response(
             response
         )
         assert authorized is True
         assert patron_name == "Montgomery Burns"
         assert library_identifier == "-2"
 
-        response = api.sample_data("authorization_response_bad.xml")
-        authorized, patron_name, library_identifier = api.parse_authorize_response(
+        response = provider.sample_data("authorization_response_bad.xml")
+        authorized, patron_name, library_identifier = provider.parse_authorize_response(
             response
         )
         assert authorized is False
         assert patron_name == "Jay Gee"
         assert library_identifier == "12"
 
-        response = api.sample_data("authorization_response_no_status.xml")
-        authorized, patron_name, library_identifier = api.parse_authorize_response(
+        response = provider.sample_data("authorization_response_no_status.xml")
+        authorized, patron_name, library_identifier = provider.parse_authorize_response(
             response
         )
         assert authorized is False
         assert patron_name == "Simpson"
         assert library_identifier == "test"
 
-        response = api.sample_data("authorization_response_no_id.xml")
-        authorized, patron_name, library_identifier = api.parse_authorize_response(
+        response = provider.sample_data("authorization_response_no_id.xml")
+        authorized, patron_name, library_identifier = provider.parse_authorize_response(
             response
         )
         assert authorized is True
         assert patron_name == "Gee"
         assert library_identifier is None
 
-        response = api.sample_data("authorization_response_empty_tag.xml")
-        authorized, patron_name, library_identifier = api.parse_authorize_response(
+        response = provider.sample_data("authorization_response_empty_tag.xml")
+        authorized, patron_name, library_identifier = provider.parse_authorize_response(
             response
         )
         assert authorized is False
         assert patron_name is None
         assert library_identifier == "0"
 
-    def test_remote_authenticate(self, kansas_patron_fixture: KansasPatronFixture):
-        api = kansas_patron_fixture.api
-        api.enqueue("authorization_response_good.xml")
-        patrondata = api.remote_authenticate("1234", "4321")
+    def test_remote_authenticate(self, create_provider: Callable[..., MockAPI]):
+        provider = create_provider()
+        provider.enqueue("authorization_response_good.xml")
+        patrondata = provider.remote_authenticate("1234", "4321")
         assert isinstance(patrondata, PatronData)
         assert patrondata.authorization_identifier == "1234"
         assert patrondata.permanent_id == "1234"
         assert patrondata.library_identifier == "-2"
         assert patrondata.personal_name == "Montgomery Burns"
 
-        api.enqueue("authorization_response_bad.xml")
-        patrondata = api.remote_authenticate("1234", "4321")
+        provider.enqueue("authorization_response_bad.xml")
+        patrondata = provider.remote_authenticate("1234", "4321")
         assert patrondata is None
 
-        api.enqueue("authorization_response_no_status.xml")
-        patrondata = api.remote_authenticate("1234", "4321")
+        provider.enqueue("authorization_response_no_status.xml")
+        patrondata = provider.remote_authenticate("1234", "4321")
         assert patrondata is None
 
-        api.enqueue("authorization_response_no_id.xml")
-        patrondata = api.remote_authenticate("1234", "4321")
+        provider.enqueue("authorization_response_no_id.xml")
+        patrondata = provider.remote_authenticate("1234", "4321")
         assert isinstance(patrondata, PatronData)
         assert patrondata.authorization_identifier == "1234"
         assert patrondata.permanent_id == "1234"
         assert patrondata.library_identifier == None
         assert patrondata.personal_name == "Gee"
 
-        api.enqueue("authorization_response_empty_tag.xml")
-        patrondata = api.remote_authenticate("1234", "4321")
+        provider.enqueue("authorization_response_empty_tag.xml")
+        patrondata = provider.remote_authenticate("1234", "4321")
         assert patrondata is None
 
-        api.enqueue("authorization_response_malformed.xml")
-        patrondata = api.remote_authenticate("1234", "4321")
+        provider.enqueue("authorization_response_malformed.xml")
+        patrondata = provider.remote_authenticate("1234", "4321")
         assert patrondata is None
 
-    def test_remote_patron_lookup(self, kansas_patron_fixture: KansasPatronFixture):
+    def test_remote_patron_lookup(
+        self, create_provider: Callable[..., MockAPI], db: DatabaseTransactionFixture
+    ):
         # Remote patron lookup is not supported. It always returns
         # the same PatronData object passed into it.
+        provider = create_provider()
         input_patrondata = PatronData()
-        output_patrondata = kansas_patron_fixture.api.remote_patron_lookup(
-            input_patrondata
-        )
+        output_patrondata = provider.remote_patron_lookup(input_patrondata)
         assert input_patrondata == output_patrondata
 
         # if anything else is passed in, it returns None
-        output_patrondata = kansas_patron_fixture.api.remote_patron_lookup(
-            kansas_patron_fixture.db.patron()
-        )
+        output_patrondata = provider.remote_patron_lookup(db.patron())
         assert output_patrondata is None

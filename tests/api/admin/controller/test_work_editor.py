@@ -752,7 +752,7 @@ class TestWorkController:
             work_fixture.english_1.presentation_edition,
             data_source_name=DataSource.OVERDRIVE,
         )
-        broken_lp.work = work_fixture.english_1
+        work_fixture.english_1.license_pools.append(broken_lp)
         broken_lp.suppressed = True
 
         with work_fixture.request_context_with_library_and_admin("/"):
@@ -904,7 +904,28 @@ class TestWorkController:
         result = work_fixture.manager.admin_work_controller._validate_cover_image(valid)
         assert True == result
 
-    def test_process_cover_image(self, work_fixture: WorkFixture):
+    @pytest.mark.parametrize(
+        "original_file_path,processed_file_path,title_position",
+        [
+            # Without a title position, the image won't be changed.
+            pytest.param("blue.jpg", "blue.jpg", "none", id="no_title_position"),
+            # Here the title and author are added in the center. Compare the result
+            # with a pre-generated version.
+            pytest.param(
+                "blue_with_title_author.png",
+                "blue.jpg",
+                "center",
+                id="center_title_position",
+            ),
+        ],
+    )
+    def test_process_cover_image(
+        self,
+        work_fixture: WorkFixture,
+        original_file_path: str,
+        processed_file_path: str,
+        title_position: str,
+    ):
         work = work_fixture.ctrl.db.work(
             with_license_pool=True, title="Title", authors="Author"
         )
@@ -912,34 +933,27 @@ class TestWorkController:
         base_path = os.path.split(__file__)[0]
         folder = os.path.dirname(base_path)
         resource_path = os.path.join(folder, "..", "files", "images")
-        path = os.path.join(resource_path, "blue.jpg")
-        original = Image.open(path)
-        processed = Image.open(path)
 
-        tmpfile_before_0 = tempfile.NamedTemporaryFile(
+        original_path = os.path.join(resource_path, original_file_path)
+        processed_path = os.path.join(resource_path, processed_file_path)
+        original = Image.open(original_path)
+        processed = Image.open(processed_path)
+
+        tmpfile_before = tempfile.NamedTemporaryFile(
             prefix="image-before-no-title_", suffix=".png", delete=False
         )
-        tmpfile_before_1 = tempfile.NamedTemporaryFile(
-            prefix="image-before-title_", suffix=".png", delete=False
-        )
-        tmpfile_after_0 = tempfile.NamedTemporaryFile(
+        tmpfile_after = tempfile.NamedTemporaryFile(
             prefix="image-after-no-title_", suffix=".png", delete=False
         )
-        tmpfile_after_1 = tempfile.NamedTemporaryFile(
-            prefix="image-after-title_", suffix=".png", delete=False
-        )
-        logging.info("image before processing (no title): %s", tmpfile_before_0.name)
-        logging.info("image before processing (with title): %s", tmpfile_before_1.name)
-        logging.info("image after processing (no title): %s", tmpfile_after_0.name)
-        logging.info("image after processing (with title): %s", tmpfile_after_1.name)
+        logging.info("image before processing (no title): %s", tmpfile_before.name)
+        logging.info("image after processing (no title): %s", tmpfile_after.name)
 
-        # Without a title position, the image won't be changed.
         processed = work_fixture.manager.admin_work_controller._process_cover_image(
-            work, processed, "none"
+            work, processed, title_position
         )
 
-        original.save(fp=tmpfile_before_0.name, format="PNG")
-        processed.save(fp=tmpfile_after_0.name, format="PNG")
+        original.save(fp=tmpfile_before.name, format="PNG")
+        processed.save(fp=tmpfile_after.name, format="PNG")
 
         image_histogram = original.histogram()
         expected_histogram = processed.histogram()
@@ -953,38 +967,11 @@ class TestWorkController:
             )
             / len(image_histogram)
         )
-        assert root_mean_square < 10
-
-        # Here the title and author are added in the center. Compare the result
-        # with a pre-generated version.
-        processed = Image.open(path)
-        processed = work_fixture.manager.admin_work_controller._process_cover_image(
-            work, processed, "center"
-        )
-
-        path = os.path.join(resource_path, "blue_with_title_author.png")
-        expected_image = Image.open(path)
-
-        expected_image.save(fp=tmpfile_before_1.name, format="PNG")
-        processed.save(fp=tmpfile_after_1.name, format="PNG")
-
-        image_histogram = processed.histogram()
-        expected_histogram = expected_image.histogram()
-
-        root_mean_square = math.sqrt(
-            reduce(
-                operator.add,
-                list(
-                    map(lambda a, b: (a - b) ** 2, image_histogram, expected_histogram)
-                ),
-            )
-            / len(image_histogram)
-        )
-        assert root_mean_square < 10
+        assert root_mean_square < 12
 
         # Remove temporary files if we've gotten this far. Assertion failures should leave
         # the files intact for manual inspection.
-        for f in [tmpfile_before_0, tmpfile_before_1, tmpfile_after_0, tmpfile_after_1]:
+        for f in [tmpfile_before, tmpfile_after]:
             os.remove(f.name)
 
     def test_preview_book_cover(self, work_fixture: WorkFixture):

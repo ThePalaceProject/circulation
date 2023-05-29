@@ -1,32 +1,24 @@
-import logging
-from typing import Optional
+from typing import Optional, Type
 
-from contextlib2 import contextmanager
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
-from api.authenticator import BaseSAMLAuthenticationProvider, PatronData
+from api.authentication.base import PatronData
+from api.authenticator import BaseSAMLAuthenticationProvider
 from api.problem_details import *
 from api.saml.auth import SAMLAuthenticationManagerFactory
-from api.saml.configuration.model import SAMLConfiguration, SAMLConfigurationFactory
-from api.saml.configuration.validator import SAMLSettingsValidator
+from api.saml.configuration.model import (
+    SAMLWebSSOAuthLibrarySettings,
+    SAMLWebSSOAuthSettings,
+)
 from api.saml.credential import SAMLCredentialManager
-from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.model import (
     SAMLLocalizedMetadataItem,
     SAMLSubject,
     SAMLSubjectPatronIDExtractor,
 )
-from api.saml.metadata.parser import SAMLMetadataParser
-from core.model import Session
-from core.model.configuration import (
-    ConfigurationMetadata,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
-from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
-from core.python_expression_dsl.parser import DSLParser
+from core.analytics import Analytics
 from core.util.problem_detail import ProblemDetail
 
 SAML_INVALID_SUBJECT = pd(
@@ -37,56 +29,55 @@ SAML_INVALID_SUBJECT = pd(
 )
 
 
-class SAMLWebSSOAuthenticationProvider(
-    BaseSAMLAuthenticationProvider, HasExternalIntegration
-):
+class SAMLWebSSOAuthenticationProvider(BaseSAMLAuthenticationProvider):
     """SAML authentication provider implementing Web Browser SSO profile using the following bindings:
     - HTTP-Redirect Binding for requests
     - HTTP-POST Binding for responses
     """
 
-    NAME = "SAML 2.0 Web SSO"
-
-    DESCRIPTION = _(
-        """SAML 2.0 authentication provider implementing the Web SSO profile using the following bindings:
-         HTTP-Redirect for requests and HTTP-POST for responses."""
-    )
-
-    def __init__(self, library, integration, analytics=None):
-        """Initializes a new instance of SAMLAuthenticationProvider class
-
-        :param library: Patrons authenticated through this provider
-            are associated with this Library. Don't store this object!
-            It's associated with a scoped database session. Just pull
-            normal Python objects out of it.
-        :type library: Library
-
-        :param integration: The ExternalIntegration that
-            configures this AuthenticationProvider. Don't store this
-            object! It's associated with a scoped database session. Just
-            pull normal Python objects out of it.
-        :type integration: ExternalIntegration
-        """
-        super(BaseSAMLAuthenticationProvider, self).__init__(
-            library, integration, analytics
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: SAMLWebSSOAuthSettings,
+        library_settings: SAMLWebSSOAuthLibrarySettings,
+        analytics: Optional[Analytics] = None,
+    ):
+        """Initializes a new instance of SAMLAuthenticationProvider class"""
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
         )
 
-        self._logger = logging.getLogger(__name__)
-        self._configuration_storage = ConfigurationStorage(self)
-        self._configuration_factory = SAMLConfigurationFactory(SAMLMetadataParser())
         self._authentication_manager_factory = SAMLAuthenticationManagerFactory()
         self._credential_manager = SAMLCredentialManager()
 
-        db = Session.object_session(library)
+        self._patron_id_use_name_id = settings.patron_id_use_name_id
+        self._patron_id_attributes = settings.patron_id_attributes
+        self._patron_id_regular_expression = settings.patron_id_regular_expression
+        self._settings = settings
 
-        with self.get_configuration(db) as configuration:
-            self._patron_id_use_name_id = ConfigurationMetadata.to_bool(
-                configuration.patron_id_use_name_id
-            )
-            self._patron_id_attributes = configuration.patron_id_attributes
-            self._patron_id_regular_expression = (
-                configuration.patron_id_regular_expression
-            )
+    @classmethod
+    def label(cls) -> str:
+        return "SAML 2.0 Web SSO"
+
+    @classmethod
+    def description(cls) -> str:
+        return (
+            "SAML 2.0 authentication provider implementing the Web SSO profile using the following bindings: "
+            "HTTP-Redirect for requests and HTTP-POST for responses."
+        )
+
+    @property
+    def identifies_individuals(self):
+        return True
+
+    @classmethod
+    def settings_class(cls) -> Type[SAMLWebSSOAuthSettings]:
+        return SAMLWebSSOAuthSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[SAMLWebSSOAuthLibrarySettings]:
+        return SAMLWebSSOAuthLibrarySettings
 
     def get_credential_from_header(self, auth: Authorization) -> Optional[str]:
         # We cannot extract the credential from the header, so we just return None
@@ -167,41 +158,36 @@ class SAMLWebSSOAuthenticationProvider(
         :return: Authentication Flow object for use in an Authentication for OPDS document
         :rtype: Dict
         """
-        flow_doc = {"type": self.FLOW_TYPE, "description": self.NAME, "links": []}
+        flow_doc = {"type": self.flow_type, "description": self.label(), "links": []}
 
-        with self._configuration_factory.create(
-            self._configuration_storage, db, SAMLConfiguration
-        ) as configuration:
-            configuration = self.get_authentication_manager(configuration).configuration
+        configuration = self.get_authentication_manager().configuration
 
-            for index, identity_provider in enumerate(
-                configuration.configuration.get_identity_providers(db)
-            ):
-                link = {
-                    "rel": "authenticate",
-                    "href": self._create_authenticate_url(
-                        db, identity_provider.entity_id
-                    ),
-                    "display_names": self._join_ui_info_items(
-                        self._get_idp_display_names(index + 1, identity_provider)
-                    ),
-                    "descriptions": self._join_ui_info_items(
-                        identity_provider.ui_info.descriptions
-                    ),
-                    "information_urls": self._join_ui_info_items(
-                        identity_provider.ui_info.information_urls
-                    ),
-                    "privacy_statement_urls": self._join_ui_info_items(
-                        identity_provider.ui_info.privacy_statement_urls
-                    ),
-                    "logo_urls": self._join_ui_info_items(
-                        identity_provider.ui_info.logo_urls
-                    ),
-                }
+        for index, identity_provider in enumerate(
+            configuration.get_identity_providers(db)
+        ):
+            link = {
+                "rel": "authenticate",
+                "href": self._create_authenticate_url(db, identity_provider.entity_id),
+                "display_names": self._join_ui_info_items(
+                    self._get_idp_display_names(index + 1, identity_provider)
+                ),
+                "descriptions": self._join_ui_info_items(
+                    identity_provider.ui_info.descriptions
+                ),
+                "information_urls": self._join_ui_info_items(
+                    identity_provider.ui_info.information_urls
+                ),
+                "privacy_statement_urls": self._join_ui_info_items(
+                    identity_provider.ui_info.privacy_statement_urls
+                ),
+                "logo_urls": self._join_ui_info_items(
+                    identity_provider.ui_info.logo_urls
+                ),
+            }
 
-                flow_doc["links"].append(link)
+            flow_doc["links"].append(link)
 
-            return flow_doc
+        return flow_doc
 
     @staticmethod
     def _get_idp_display_names(identity_provider_index, identity_provider):
@@ -224,9 +210,7 @@ class SAMLWebSSOAuthenticationProvider(
         elif identity_provider.organization.organization_display_names:
             return identity_provider.organization.organization_display_names
         else:
-            display_name = SAMLConfiguration.IDP_DISPLAY_NAME_DEFAULT_TEMPLATE.format(
-                identity_provider_index
-            )
+            display_name = f"Identity Provider #{identity_provider_index}"
             return [SAMLLocalizedMetadataItem(display_name, language="en")]
 
     def _create_authenticate_url(self, db, idp_entity_id):
@@ -248,7 +232,7 @@ class SAMLWebSSOAuthenticationProvider(
             "saml_authenticate",
             _external=True,
             library_short_name=library.short_name,
-            provider=self.NAME,
+            provider=self.label(),
             idp_entity_id=idp_entity_id,
         )
 
@@ -280,9 +264,6 @@ class SAMLWebSSOAuthenticationProvider(
     def _run_self_tests(self, _db):
         pass
 
-    def authenticate(self, db, header):
-        pass
-
     def authenticated_patron(self, db, token):
         """Go from a token to an authenticated Patron.
 
@@ -309,32 +290,14 @@ class SAMLWebSSOAuthenticationProvider(
         # to get a new token.
         return None
 
-    @contextmanager
-    def get_configuration(self, db):
-        """Return a SAMLConfiguration object.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: SAMLConfiguration object
-        :rtype: api.saml.configuration.model.SAMLConfiguration
-        """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, SAMLConfiguration
-        ) as configuration:
-            yield configuration
-
-    def get_authentication_manager(self, configuration):
+    def get_authentication_manager(self):
         """Returns SAML authentication manager used by this provider
-
-        :param configuration: SAMLConfiguration object
-        :type configuration: api.saml.configuration.model.SAMLConfiguration
 
         :return: SAML authentication manager used by this provider
         :rtype: SAMLAuthenticationManager
         """
         authentication_manager = self._authentication_manager_factory.create(
-            configuration
+            self._settings
         )
 
         return authentication_manager
@@ -406,22 +369,8 @@ class SAMLWebSSOAuthenticationProvider(
         )
 
         # Create a credential for the Patron
-        with self.get_configuration(db) as configuration:
-            credential = self._credential_manager.create_saml_token(
-                db, patron, subject, configuration.session_lifetime
-            )
+        credential = self._credential_manager.create_saml_token(
+            db, patron, subject, self._settings.session_lifetime
+        )
 
-            return credential, patron, patron_data
-
-
-def validator_factory():
-    metadata_parser = SAMLMetadataParser()
-    parser = DSLParser()
-    visitor = DSLEvaluationVisitor()
-    evaluator = DSLEvaluator(parser, visitor)
-    subject_filter = SAMLSubjectFilter(evaluator)
-
-    return SAMLSettingsValidator(metadata_parser, subject_filter)
-
-
-AuthenticationProvider = SAMLWebSSOAuthenticationProvider
+        return credential, patron, patron_data

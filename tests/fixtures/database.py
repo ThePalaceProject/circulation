@@ -6,7 +6,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Generator, Iterable, List, Optional, Tuple
+from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -17,6 +17,7 @@ import core.lane
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import Configuration
+from core.integration.goals import Goals
 from core.log import LogConfiguration
 from core.model import (
     Base,
@@ -49,6 +50,10 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.devicetokens import DeviceToken
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_config import KeyPairFixture
@@ -117,6 +122,7 @@ class DatabaseFixture:
                 logging.info("imported " + imported.__name__)
 
         importlib.import_module("core.lane")
+        importlib.import_module("api.saml.metadata.federations.model")
 
         from core.model.customlist import customlist_sharedlibrary
 
@@ -191,7 +197,8 @@ class DatabaseTransactionFixture:
     @staticmethod
     def create(database: DatabaseFixture) -> "DatabaseTransactionFixture":
         # Create a new connection to the database.
-        session = Session(database.connection)
+        session = SessionManager.session_from_connection(database.connection)
+
         transaction = database.connection.begin_nested()
         return DatabaseTransactionFixture(database, session, transaction)
 
@@ -947,6 +954,53 @@ def db(
     tr = DatabaseTransactionFixture.create(database)
     yield tr
     tr.close()
+
+
+@pytest.fixture
+def default_library(db: DatabaseTransactionFixture) -> Library:
+    return db.default_library()
+
+
+@pytest.fixture
+def create_integration_configuration(
+    db: DatabaseTransactionFixture,
+) -> Callable[..., IntegrationConfiguration]:
+    def create_integration(
+        protocol: str, goal: Goals, settings: Optional[dict] = None
+    ) -> IntegrationConfiguration:
+        integration, _ = create(
+            db.session,
+            IntegrationConfiguration,
+            name=db.fresh_str(),
+            protocol=protocol,
+            goal=goal,
+            settings=settings or {},
+        )
+        return integration
+
+    return create_integration
+
+
+@pytest.fixture
+def create_integration_library_configuration(
+    db: DatabaseTransactionFixture,
+) -> Callable[..., IntegrationLibraryConfiguration]:
+    def create_library_integration(
+        library: Library,
+        parent: IntegrationConfiguration,
+        settings: Optional[dict] = None,
+    ) -> IntegrationLibraryConfiguration:
+        settings = settings or {}
+        integration, _ = create(
+            db.session,
+            IntegrationLibraryConfiguration,
+            parent=parent,
+            library=library,
+            settings=settings,
+        )
+        return integration
+
+    return create_library_integration
 
 
 class DBStatementCounter:

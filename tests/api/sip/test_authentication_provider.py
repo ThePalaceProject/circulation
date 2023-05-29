@@ -1,15 +1,123 @@
 import json
 from datetime import datetime
 from decimal import Decimal
+from functools import partial
+from typing import Callable, cast
 
 import pytest
 
-from api.authenticator import PatronData
-from api.sip import SIP2AuthenticationProvider
-from api.sip.client import MockSIPClient, MockSIPClientFactory
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings, Keyboards
+from api.sip import SIP2AuthenticationProvider, SIP2LibrarySettings, SIP2Settings
+from api.sip.client import Constants, Sip2Encoding, SIPClient
+from api.sip.dialect import Dialect
 from core.config import CannotLoadConfiguration
 from core.util.http import RemoteIntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
+
+
+class MockSIPClient(SIPClient):
+    """A SIP client that relies on canned responses rather than a socket
+    connection.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.read_count = 0
+        self.write_count = 0
+        self.requests = []
+        self.responses = []
+        self.status = []
+
+    def queue_response(self, response):
+        if isinstance(response, str):
+            # Make sure responses come in as bytestrings, as they would
+            # in real life.
+            response = response.encode(Constants.DEFAULT_ENCODING)
+        self.responses.append(response)
+
+    def connect(self):
+        # Since there is no socket, do nothing but reset the local
+        # connection-specific variables.
+        self.status.append("Creating new socket connection.")
+        self.reset_connection_state()
+        return None
+
+    def do_send(self, data):
+        self.write_count += 1
+        self.requests.append(data)
+
+    def read_message(self, max_size=1024 * 1024):
+        """Read a response message off the queue."""
+        self.read_count += 1
+        response = self.responses[0]
+        self.responses = self.responses[1:]
+        return response
+
+    def disconnect(self):
+        pass
+
+
+@pytest.fixture
+def mock_sip_client() -> Callable[..., MockSIPClient]:
+    sip_client = None
+
+    def mock(client=MockSIPClient, **kwargs):
+        nonlocal sip_client
+        if sip_client is None:
+            sip_client = client(**kwargs)
+        return sip_client
+
+    return mock
+
+
+@pytest.fixture
+def mock_library_id() -> int:
+    return 20
+
+
+@pytest.fixture
+def mock_integration_id() -> int:
+    return 20
+
+
+@pytest.fixture
+def create_library_settings() -> Callable[..., SIP2LibrarySettings]:
+    return partial(SIP2LibrarySettings, institution_id="institution_id")
+
+
+@pytest.fixture
+def create_settings() -> Callable[..., SIP2Settings]:
+    """
+    Return a function that creates a SIP2Settings object.
+    With all the mandatory parameters set to default values.
+    """
+    return partial(SIP2Settings, url="server.com", test_identifier="test")
+
+
+@pytest.fixture
+def create_provider(
+    mock_library_id: int,
+    mock_integration_id: int,
+    create_settings: Callable[..., SIP2Settings],
+    create_library_settings: Callable[..., SIP2LibrarySettings],
+    mock_sip_client: Callable[..., MockSIPClient],
+) -> Callable[..., SIP2AuthenticationProvider]:
+    """
+    Return a function that creates a SIP2AuthenticationProvider object.
+
+    The function takes the same parameters as the SIP2AuthenticationProvider,
+    but gives default values for all the required arguments.
+    """
+    return partial(
+        SIP2AuthenticationProvider,
+        library_id=mock_library_id,
+        integration_id=mock_integration_id,
+        settings=create_settings(),
+        library_settings=create_library_settings(),
+        client=mock_sip_client,
+    )
 
 
 class TestSIP2AuthenticationProvider:
@@ -46,54 +154,73 @@ class TestSIP2AuthenticationProvider:
 
     end_session_response = b"36Y201610210000142637AO3|AA25891000331441|AF|AG"
 
-    def test_initialize_from_integration(self, db: DatabaseTransactionFixture):
-        p = SIP2AuthenticationProvider
-        integration = db.external_integration(db.fresh_str())
-        integration.url = "server.com"
-        integration.username = "user1"
-        integration.password = "pass1"
-        integration.setting(p.FIELD_SEPARATOR).value = "\t"
-        integration.setting(p.INSTITUTION_ID).value = "MAIN"
-        provider = p(db.default_library(), integration)
+    def test_initialize_from_settings(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
+    ) -> None:
+        settings = create_settings(
+            url="server.com",
+            username="user1",
+            password="pass1",
+            field_separator=">",
+            port=1234,
+            ils=Dialect.AG_VERSO,
+            encoding=Sip2Encoding.utf8,
+            patron_status_block=False,
+        )
+        library_settings = create_library_settings(institution_id="MAIN")
+        provider = create_provider(settings=settings, library_settings=library_settings)
 
         # A SIP2AuthenticationProvider was initialized based on the
         # integration values.
         assert "user1" == provider.login_user_id
         assert "pass1" == provider.login_password
-        assert "\t" == provider.field_separator
+        assert ">" == provider.field_separator
         assert "MAIN" == provider.institution_id
         assert "server.com" == provider.server
-
-        # Default port is 6001.
-        assert None == provider.port
+        assert 1234 == provider.port
+        assert Dialect.AG_VERSO == provider.dialect
+        assert Sip2Encoding.utf8.value == provider.encoding
+        assert provider.patron_status_should_block is False
 
         # And it's possible to get a SIP2Client that's configured
         # based on the same values.
-        client = provider._client
+        client = provider.client
         assert "user1" == client.login_user_id
         assert "pass1" == client.login_password
-        assert "\t" == client.separator
+        assert ">" == client.separator
         assert "MAIN" == client.institution_id
         assert "server.com" == client.target_server
-        assert 6001 == client.target_port
+        assert 1234 == client.target_port
 
-        # Try again, specifying a port.
-        integration.setting(p.PORT).value = "1234"
-        provider = p(db.default_library(), integration)
-        assert 1234 == provider.port
-        assert 1234 == provider._client.target_port
+    def test_initialize_from_settings_defaults(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+        create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
+    ) -> None:
+        provider = create_provider()
 
-    def test_remote_authenticate(self, db: DatabaseTransactionFixture):
-        integration = db.external_integration(db.fresh_str())
-        client = MockSIPClient()
-        auth = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=client
-        )
+        # Test that we get the default values
+        assert provider.port == 6001
+        assert provider.field_separator == "|"
+        assert provider.dialect == Dialect.GENERIC_ILS
+        assert provider.encoding == Sip2Encoding.cp850.value
+        assert provider.patron_status_should_block is True
+
+    def test_remote_authenticate(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ):
+        provider = create_provider()
+        client = cast(MockSIPClient, provider.client)
 
         # Some examples taken from a Sierra SIP API.
         client.queue_response(self.sierra_valid_login)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "foo@example.com" == patrondata.email_address
@@ -105,7 +232,7 @@ class TestSIP2AuthenticationProvider:
 
         client.queue_response(self.sierra_invalid_login)
         client.queue_response(self.end_session_response)
-        assert auth.remote_authenticate("user", "pass") is None
+        assert provider.remote_authenticate("user", "pass") is None
 
         # Since Sierra provides both the patron's fine amount and the
         # maximum allowable amount, we can determine just by looking
@@ -113,14 +240,14 @@ class TestSIP2AuthenticationProvider:
         # fines.
         client.queue_response(self.sierra_excessive_fines)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert PatronData.EXCESSIVE_FINES == patrondata.block_reason
 
         # A patron with an expired card.
         client.queue_response(self.evergreen_expired_card)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         # SIP extension field XI becomes sipserver_internal_id which
@@ -134,7 +261,7 @@ class TestSIP2AuthenticationProvider:
         # A patron with excessive fines
         client.queue_response(self.evergreen_excessive_fines)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "863718" == patrondata.permanent_id
@@ -156,20 +283,20 @@ class TestSIP2AuthenticationProvider:
         # still borrow books.
         client.queue_response(self.evergreen_hold_privileges_denied)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert PatronData.NO_VALUE == patrondata.block_reason
 
         client.queue_response(self.evergreen_card_reported_lost)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert PatronData.CARD_REPORTED_LOST == patrondata.block_reason
 
         # Some examples taken from a Polaris instance.
         client.queue_response(self.polaris_valid_pin)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert "25891000331441" == patrondata.authorization_identifier
         assert "foo@bar.com" == patrondata.email_address
@@ -179,18 +306,18 @@ class TestSIP2AuthenticationProvider:
 
         client.queue_response(self.polaris_wrong_pin)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert patrondata is None
 
         client.queue_response(self.polaris_expired_card)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert datetime(2016, 10, 25, 23, 59, 59) == patrondata.authorization_expires
 
         client.queue_response(self.polaris_excess_fines)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert isinstance(patrondata, PatronData)
         assert 11.50 == patrondata.fines
 
@@ -199,27 +326,30 @@ class TestSIP2AuthenticationProvider:
         # valid_patron_password='N' when that happens.
         client.queue_response(self.polaris_no_such_patron)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert patrondata is None
 
         # And once on an ILS that leaves valid_patron_password blank
         # when that happens.
         client.queue_response(self.tlc_no_such_patron)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
         assert patrondata is None
 
-    def test_remote_authenticate_no_password(self, db: DatabaseTransactionFixture):
-
-        integration = db.external_integration(db.fresh_str())
-        p = SIP2AuthenticationProvider
-        integration.setting(p.PASSWORD_KEYBOARD).value = p.NULL_KEYBOARD
-        auth = p(db.default_library(), integration, client=MockSIPClientFactory())
-        client = auth._client
+    def test_remote_authenticate_no_password(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+    ):
+        settings = create_settings(
+            password_keyboard=Keyboards.NULL,
+        )
+        provider = create_provider(settings=settings)
+        client = cast(MockSIPClient, provider.client)
         # This Evergreen instance doesn't use passwords.
         client.queue_response(self.evergreen_active_user)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", None)
+        patrondata = provider.remote_authenticate("user", None)
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         assert "863715" == patrondata.permanent_id
@@ -231,29 +361,33 @@ class TestSIP2AuthenticationProvider:
         # If a password is specified, it is not sent over the wire.
         client.queue_response(self.evergreen_active_user)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user2", "some password")
+        patrondata = provider.remote_authenticate("user2", "some password")
         assert isinstance(patrondata, PatronData)
         assert "12345" == patrondata.authorization_identifier
         request = client.requests[-1]
         assert b"user2" in request
         assert b"some password" not in request
 
-    def test_encoding(self, db: DatabaseTransactionFixture):
+    def test_encoding(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+    ):
         # It's possible to specify an encoding other than CP850
         # for communication with the SIP2 server.
         #
         # Here, we'll try it with UTF-8.
-        p = SIP2AuthenticationProvider
-        integration = db.external_integration(db.fresh_str())
-        integration.setting(p.ENCODING).value = "utf-8"
-        auth = p(db.default_library(), integration, client=MockSIPClientFactory())
+        settings = create_settings(
+            encoding=Sip2Encoding.utf8,
+        )
+        provider = create_provider(settings=settings)
+        client = cast(MockSIPClient, provider.client)
 
         # Queue the UTF-8 version of the patron information
         # as opposed to the CP850 version.
-        client = auth._client
         client.queue_response(self.sierra_valid_login_utf8)
         client.queue_response(self.end_session_response)
-        patrondata = auth.remote_authenticate("user", "pass")
+        patrondata = provider.remote_authenticate("user", "pass")
 
         # We're able to parse the message from the server and parse
         # out patron data, including the É character, with the proper
@@ -268,7 +402,9 @@ class TestSIP2AuthenticationProvider:
         assert PatronData.NO_VALUE == patrondata.block_reason
 
     def test_ioerror_during_connect_becomes_remoteintegrationexception(
-        self, db: DatabaseTransactionFixture
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
     ):
         """If the IP of the circulation manager has not been whitelisted,
         we generally can't even connect to the server.
@@ -278,10 +414,10 @@ class TestSIP2AuthenticationProvider:
             def connect(self):
                 raise OSError("Doom!")
 
-        integration = db.external_integration(db.fresh_str())
-        provider = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=CannotConnect
+        settings = create_settings(
+            url="unknown server",
         )
+        provider = create_provider(client=CannotConnect, settings=settings)
 
         with pytest.raises(RemoteIntegrationException) as excinfo:
             provider.remote_authenticate(
@@ -291,7 +427,9 @@ class TestSIP2AuthenticationProvider:
         assert "Error accessing unknown server: Doom!" in str(excinfo.value)
 
     def test_ioerror_during_send_becomes_remoteintegrationexception(
-        self, db: DatabaseTransactionFixture
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
     ):
         """If there's an IOError communicating with the server,
         it becomes a RemoteIntegrationException.
@@ -301,11 +439,11 @@ class TestSIP2AuthenticationProvider:
             def do_send(self, data):
                 raise OSError("Doom!")
 
-        integration = db.external_integration(db.fresh_str())
-        integration.url = "server.local"
-        provider = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=CannotSend
+        settings = create_settings(
+            url="server.local",
         )
+        provider = create_provider(client=CannotSend, settings=settings)
+
         with pytest.raises(RemoteIntegrationException) as excinfo:
             provider.remote_authenticate(
                 "username",
@@ -319,13 +457,17 @@ class TestSIP2AuthenticationProvider:
         assert datetime(2011, 1, 2, 10, 20, 30) == parse("20110102    102030")
         assert datetime(2011, 1, 2, 10, 20, 30) == parse("20110102UTC102030")
 
-    def test_remote_patron_lookup(self, db: DatabaseTransactionFixture):
+    def test_remote_patron_lookup(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+        mock_sip_client: Callable[..., MockSIPClient],
+    ):
         # When the SIP authentication provider needs to look up a patron,
         # it calls patron_information on its SIP client and passes in None
         # for the password.
-        patron = db.patron()
+        patron = PatronData()
         patron.authorization_identifier = "1234"
-        integration = db.external_integration(db.fresh_str())
 
         class Mock(MockSIPClient):
             def patron_information(self, identifier, password):
@@ -335,12 +477,12 @@ class TestSIP2AuthenticationProvider:
                     TestSIP2AuthenticationProvider.polaris_wrong_pin
                 )
 
-        client = Mock()
+        mock = partial(mock_sip_client, client=Mock)
+        provider = create_provider(client=mock)
+        client = cast(Mock, provider.client)
         client.queue_response(self.end_session_response)
-        auth = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=client
-        )
-        patron_data = auth.remote_patron_lookup(patron)
+
+        patron_data = provider.remote_patron_lookup(patron)
         assert patron_data is not None
         assert isinstance(patron_data, PatronData)
         assert "25891000331441" == patron_data.authorization_identifier
@@ -351,14 +493,17 @@ class TestSIP2AuthenticationProvider:
         assert client.patron_information == "1234"
         assert client.password is None
 
-    def test_info_to_patrondata_validate_password(self, db: DatabaseTransactionFixture):
-        integration = db.external_integration(db.fresh_str())
-        integration.url = "server.local"
-        provider = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=MockSIPClientFactory()
+    def test_info_to_patrondata_validate_password(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+    ):
+        settings = create_settings(
+            url="server.local",
         )
+        provider = create_provider(settings=settings)
+        client = cast(MockSIPClient, provider.client)
 
-        client = provider._client
         # Test with valid login, should return PatronData
         info = client.patron_information_parser(
             TestSIP2AuthenticationProvider.sierra_valid_login
@@ -382,14 +527,15 @@ class TestSIP2AuthenticationProvider:
         assert patron is None
 
     def test_info_to_patrondata_no_validate_password(
-        self, db: DatabaseTransactionFixture
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
     ):
-        integration = db.external_integration(db.fresh_str())
-        integration.url = "server.local"
-        provider = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=MockSIPClientFactory()
+        settings = create_settings(
+            url="server.local",
         )
-        client = provider._client
+        provider = create_provider(settings=settings)
+        client = cast(MockSIPClient, provider.client)
 
         # Test with valid login, should return PatronData
         info = client.patron_information_parser(
@@ -421,25 +567,30 @@ class TestSIP2AuthenticationProvider:
         assert patron.external_type is None
         assert "no borrowing privileges" == patron.block_reason
 
-    def test_patron_block_setting(self, db: DatabaseTransactionFixture):
-        integration_block = db.external_integration(
-            db.fresh_str(),
-            settings={SIP2AuthenticationProvider.PATRON_STATUS_BLOCK: "true"},
+    @pytest.mark.parametrize(
+        "patron_status_block, expected_block_reason",
+        [
+            (True, PatronData.NO_BORROWING_PRIVILEGES),
+            (False, PatronData.NO_VALUE),
+        ],
+    )
+    def test_patron_block_setting(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+        patron_status_block: bool,
+        expected_block_reason: str,
+    ):
+        settings = create_settings(
+            patron_status_block=patron_status_block,
         )
-        integration_noblock = db.external_integration(
-            db.fresh_str(),
-            settings={SIP2AuthenticationProvider.PATRON_STATUS_BLOCK: "false"},
-        )
+        provider = create_provider(settings=settings)
+        client = cast(MockSIPClient, provider.client)
 
-        # Test with blocked patron, block should be set
-        p = SIP2AuthenticationProvider(
-            db.default_library(), integration_block, client=MockSIPClientFactory()
-        )
-        client = p._client
         info = client.patron_information_parser(
             TestSIP2AuthenticationProvider.evergreen_expired_card
         )
-        patron = p.info_to_patrondata(info)
+        patron = provider.info_to_patrondata(info)
         assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
@@ -447,46 +598,34 @@ class TestSIP2AuthenticationProvider:
         assert "Booth Expired Test" == patron.personal_name
         assert 0 == patron.fines
         assert datetime(2008, 9, 7) == patron.authorization_expires
-        assert PatronData.NO_BORROWING_PRIVILEGES == patron.block_reason
+        assert expected_block_reason == patron.block_reason
 
-        # Test with blocked patron, block should not be set
-        p = SIP2AuthenticationProvider(
-            db.default_library(), integration_noblock, client=MockSIPClientFactory()
-        )
-        client = p._client
-        info = client.patron_information_parser(
-            TestSIP2AuthenticationProvider.evergreen_expired_card
-        )
-        patron = p.info_to_patrondata(info)
-        assert patron is not None
-        assert patron.__class__ == PatronData
-        assert "12345" == patron.authorization_identifier
-        assert "863716" == patron.permanent_id
-        assert "Booth Expired Test" == patron.personal_name
-        assert 0 == patron.fines
-        assert datetime(2008, 9, 7) == patron.authorization_expires
-        assert PatronData.NO_VALUE == patron.block_reason
-
-    def test_patron_block_setting_with_fines(self, db: DatabaseTransactionFixture):
-        integration_block = db.external_integration(
-            db.fresh_str(),
-            settings={SIP2AuthenticationProvider.PATRON_STATUS_BLOCK: "true"},
-        )
-        integration_noblock = db.external_integration(
-            db.fresh_str(),
-            settings={SIP2AuthenticationProvider.PATRON_STATUS_BLOCK: "false"},
-        )
-
+    @pytest.mark.parametrize(
+        "status_block,expected_block_reason",
+        [
+            (True, PatronData.EXCESSIVE_FINES),
+            (False, PatronData.NO_VALUE),
+        ],
+    )
+    def test_patron_block_setting_with_fines(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+        status_block: bool,
+        expected_block_reason: str,
+    ):
         # Test with blocked patron, block should be set
-        p = SIP2AuthenticationProvider(
-            db.default_library(), integration_block, client=MockSIPClientFactory()
+        settings = create_settings(
+            patron_status_block=status_block,
         )
-        client = p._client
+        provider = create_provider(settings=settings)
+        client = cast(MockSIPClient, provider.client)
+
         info = client.patron_information_parser(
             TestSIP2AuthenticationProvider.evergreen_excessive_fines
         )
         info["fee_limit"] = "10.0"
-        patron = p.info_to_patrondata(info)
+        patron = provider.info_to_patrondata(info)
         assert patron is not None
         assert patron.__class__ == PatronData
         assert "12345" == patron.authorization_identifier
@@ -494,29 +633,17 @@ class TestSIP2AuthenticationProvider:
         assert "Booth Excessive Fines Test" == patron.personal_name
         assert Decimal("100.0") == patron.fines
         assert datetime(2019, 10, 4) == patron.authorization_expires
-        assert PatronData.EXCESSIVE_FINES == patron.block_reason
+        assert expected_block_reason == patron.block_reason
 
-        # Test with a patron that has fines. No block should be set.
-        p = SIP2AuthenticationProvider(
-            db.default_library(), integration_noblock, client=MockSIPClientFactory()
+    def test_run_self_tests(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+        db: DatabaseTransactionFixture,
+    ):
+        settings = create_settings(
+            url="server.com",
         )
-        client = p._client
-        info = client.patron_information_parser(
-            TestSIP2AuthenticationProvider.evergreen_excessive_fines
-        )
-        patron = p.info_to_patrondata(info)
-        assert patron is not None
-        assert patron.__class__ == PatronData
-        assert "12345" == patron.authorization_identifier
-        assert "863718" == patron.permanent_id
-        assert "Booth Excessive Fines Test" == patron.personal_name
-        assert Decimal("100.0") == patron.fines
-        assert datetime(2019, 10, 4) == patron.authorization_expires
-        assert PatronData.NO_VALUE == patron.block_reason
-
-    def test_run_self_tests(self, db: DatabaseTransactionFixture):
-        integration = db.external_integration(db.fresh_str())
-        integration.url = "server.com"
 
         class MockBadConnection(MockSIPClient):
             def connect(self):
@@ -536,10 +663,8 @@ class TestSIP2AuthenticationProvider:
                     TestSIP2AuthenticationProvider.sierra_valid_login
                 )
 
-        auth = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=MockBadConnection
-        )
-        results = [r for r in auth._run_self_tests(db.session)]
+        provider = create_provider(settings=settings, client=MockBadConnection)
+        results = [r for r in provider._run_self_tests(db.session)]
 
         # If the connection doesn't work then don't bother running the other tests
         assert len(results) == 1
@@ -548,10 +673,8 @@ class TestSIP2AuthenticationProvider:
         assert isinstance(results[0].exception, IOError)
         assert results[0].exception.args == ("Could not connect",)
 
-        auth = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=MockSIPLogin
-        )
-        results = [x for x in auth._run_self_tests(db.session)]
+        provider = create_provider(settings=settings, client=MockSIPLogin)
+        results = [x for x in provider._run_self_tests(db.session)]
 
         assert len(results) == 2
         assert results[0].name == "Test Connection"
@@ -563,13 +686,14 @@ class TestSIP2AuthenticationProvider:
         assert results[1].exception.args == ("Error logging in",)
 
         # Set the log in username and password
-        integration.username = "user1"
-        integration.password = "pass1"
-        goodLoginClient = MockSIPLogin(login_user_id="user1", login_password="pass1")
-        auth = SIP2AuthenticationProvider(
-            db.default_library(), integration, client=goodLoginClient
+        settings = create_settings(
+            username="user1",
+            password="pass1",
+            test_identifier="",
+            test_password=None,
         )
-        results = [x for x in auth._run_self_tests(db.session)]
+        provider = create_provider(settings=settings, client=MockSIPLogin)
+        results = [x for x in provider._run_self_tests(db.session)]
 
         assert len(results) == 3
         assert results[0].name == "Test Connection"
@@ -588,22 +712,21 @@ class TestSIP2AuthenticationProvider:
         )
 
         # Now add the test patron credentials into the mocked client and SIP2 authenticator provider
-        patronDataClient = MockSIPLogin(login_user_id="user1", login_password="pass1")
-        valid_login_patron = patronDataClient.patron_information_parser(
-            TestSIP2AuthenticationProvider.sierra_valid_login
+        settings = create_settings(
+            username="user1",
+            password="pass1",
+            # The actual test patron credentials
+            test_identifier="usertest1",
+            test_password="userpassword1",
+            # Set verso ILS, since we don't need to send end session message
+            ils=Dialect.AG_VERSO,
         )
-
-        class MockSIP2PatronInformation(SIP2AuthenticationProvider):
-            def patron_information(self, username, password):
-                return valid_login_patron
-
-        auth = MockSIP2PatronInformation(
-            db.default_library(), integration, client=patronDataClient
+        library_id = db.default_library().id
+        provider = create_provider(
+            library_id=library_id, settings=settings, client=MockSIPLogin
         )
-        # The actual test patron credentials
-        auth.test_username = "usertest1"
-        auth.test_password = "userpassword1"
-        results = [x for x in auth._run_self_tests(db.session)]
+        client = cast(MockSIPClient, provider.client)
+        results = [x for x in provider._run_self_tests(db.session)]
 
         assert len(results) == 6
         assert results[0].name == "Test Connection"
@@ -624,10 +747,15 @@ class TestSIP2AuthenticationProvider:
 
         assert results[4].name == "Patron information request"
         assert results[4].success == True
-        assert results[4].result == patronDataClient.patron_information_request(
+        assert results[4].result == provider.client.patron_information_request(
             "usertest1", "userpassword1"
         )
 
         assert results[5].name == "Raw test patron information"
         assert results[5].success == True
-        assert results[5].result == json.dumps(valid_login_patron, indent=1)
+        assert results[5].result == json.dumps(
+            client.patron_information_parser(
+                TestSIP2AuthenticationProvider.sierra_valid_login
+            ),
+            indent=1,
+        )

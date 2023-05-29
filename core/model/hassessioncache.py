@@ -8,9 +8,8 @@ from collections import namedtuple
 from types import SimpleNamespace
 from typing import Callable, Hashable
 
-from sqlalchemy import Column
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Mapped, Session
 
 from . import get_one
 
@@ -20,8 +19,10 @@ else:
     from typing_extensions import Self
 
 
+CacheTuple = namedtuple("CacheTuple", ["id", "key", "stats"])
+
+
 class HasSessionCache:
-    CacheTuple = namedtuple("CacheTuple", ["id", "key", "stats"])
     CACHE_ATTRIBUTE = "_palace_cache"
 
     """
@@ -33,7 +34,7 @@ class HasSessionCache:
 
     @property
     @abstractmethod
-    def id(self) -> Column[int]:
+    def id(self) -> Mapped[int]:
         ...
 
     @abstractmethod
@@ -134,9 +135,7 @@ class HasSessionCache:
             _db.info[cls.CACHE_ATTRIBUTE] = {}
         cache = _db.info[cls.CACHE_ATTRIBUTE]
         if cls.__name__ not in cache:
-            cache[cls.__name__] = cls.CacheTuple(
-                {}, {}, SimpleNamespace(hits=0, misses=0)
-            )
+            cache[cls.__name__] = CacheTuple({}, {}, SimpleNamespace(hits=0, misses=0))
         return cache[cls.__name__]  # type: ignore[no-any-return]
 
     @classmethod

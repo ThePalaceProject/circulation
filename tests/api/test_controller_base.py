@@ -366,7 +366,7 @@ class TestBaseController:
         work = circulation_fixture.db.work(with_license_pool=True)
         [pool1] = work.license_pools
         pool2 = circulation_fixture.db.licensepool(None)
-        pool2.work = work
+        work.license_pools.append(pool2)
 
         # Either identifier suffices to identify the Work.
         for i in [pool1.identifier, pool2.identifier]:

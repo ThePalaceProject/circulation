@@ -1,31 +1,84 @@
-import logging
+from __future__ import annotations
+
+import re
 import time
-import urllib.parse
-from typing import Optional, Union
+from typing import Optional, Pattern, Union
 
 import jwt
 import requests
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 
-from core.model import ExternalIntegration, Patron
+from core.integration.settings import ConfigurationFormItem, FormField
+from core.model import Patron
 
-from .authenticator import BasicAuthenticationProvider, PatronData
+from .authentication.base import PatronData
+from .authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
 from .circulation_exceptions import RemoteInitiatedServerError
-from .config import CannotLoadConfiguration
+
+
+class FirstBookAuthSettings(BasicAuthProviderSettings):
+    url: HttpUrl = FormField(
+        "https://ebooksprod.firstbook.org/api/",
+        form=ConfigurationFormItem(
+            label=_("URL"),
+            description=_("The URL for the First Book authentication service."),
+            required=True,
+        ),
+    )
+    password: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label=_("Key"),
+            description=_("The key for the First Book authentication service."),
+        ),
+    )
+    # Server-side validation happens before the identifier
+    # is converted to uppercase, which means lowercase characters
+    # are valid.
+    identifier_regular_expression: Pattern = FormField(
+        re.compile(r"^[A-Za-z0-9@]+$"),
+        form=ConfigurationFormItem(
+            label="Identifier Regular Expression",
+            description="A patron's identifier will be immediately rejected if it doesn't match this "
+            "regular expression.",
+            weight=10,
+        ),
+    )
+    password_regular_expression: Optional[Pattern] = FormField(
+        re.compile(r"^[0-9]+$"),
+        form=ConfigurationFormItem(
+            label="Password Regular Expression",
+            description="A patron's password will be immediately rejected if it doesn't match this "
+            "regular expression.",
+            weight=10,
+        ),
+    )
 
 
 class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
-    NAME = "First Book"
+    @classmethod
+    def label(cls) -> str:
+        return "First Book"
 
-    DESCRIPTION = _(
-        """
-        An authentication service for Open eBooks that authenticates
-        using access codes and PINs. (This is the new version.)"""
-    )
+    @classmethod
+    def description(cls) -> str:
+        return (
+            "An authentication service for Open eBooks that authenticates using access codes and "
+            "PINs. (This is the new version.)"
+        )
 
-    DISPLAY_NAME = NAME
-    DEFAULT_IDENTIFIER_LABEL = _("Access Code")
-    LOGIN_BUTTON_IMAGE = "FirstBookLoginButton280.png"
+    @classmethod
+    def settings_class(cls) -> type[FirstBookAuthSettings]:
+        return FirstBookAuthSettings
+
+    @property
+    def login_button_image(self) -> str | None:
+        return "FirstBookLoginButton280.png"
 
     # The algorithm used to sign JWTs.
     ALGORITHM = "HS256"
@@ -34,36 +87,19 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     # patron's credentials.
     SUCCESS_MESSAGE = "Valid Code Pin Pair"
 
-    # Server-side validation happens before the identifier
-    # is converted to uppercase, which means lowercase characters
-    # are valid.
-    DEFAULT_IDENTIFIER_REGULAR_EXPRESSION = "^[A-Za-z0-9@]+$"
-    DEFAULT_PASSWORD_REGULAR_EXPRESSION = "^[0-9]+$"
-
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "format": "url",
-            "label": _("URL"),
-            "default": "https://ebooksprod.firstbook.org/api/",
-            "required": True,
-        },
-        {"key": ExternalIntegration.PASSWORD, "label": _("Key"), "required": True},
-    ] + BasicAuthenticationProvider.SETTINGS
-
-    log = logging.getLogger("First Book JWT authentication API")
-
-    def __init__(self, library_id, integration, analytics=None, root=None, secret=None):
-        super().__init__(library_id, integration, analytics)
-        root = root or integration.url
-        secret = secret or integration.password
-        if not (root and secret):
-            raise CannotLoadConfiguration("First Book server not configured.")
-        self.root = root
-        self.secret = secret
-
-    # Begin implementation of BasicAuthenticationProvider abstract
-    # methods.
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: FirstBookAuthSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
+        analytics=None,
+    ):
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
+        self.root = settings.url
+        self.secret = settings.password
 
     def remote_authenticate(
         self, username: Optional[str], password: Optional[str]
@@ -102,14 +138,14 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         try:
             response = self.request(url)
         except requests.exceptions.ConnectionError as e:
-            raise RemoteInitiatedServerError(str(e), self.NAME)
+            raise RemoteInitiatedServerError(str(e), self.__class__.__name__)
         content = response.content.decode("utf8")
         if response.status_code != 200:
             msg = "Got unexpected response code %d. Content: %s" % (
                 response.status_code,
                 content,
             )
-            raise RemoteInitiatedServerError(msg, self.NAME)
+            raise RemoteInitiatedServerError(msg, self.__class__.__name__)
         if self.SUCCESS_MESSAGE in content:
             return True
         return False
@@ -132,76 +168,3 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
         Defined solely so it can be overridden in the mock.
         """
         return requests.get(url)
-
-
-class MockFirstBookResponse:
-    def __init__(self, status_code, content):
-        self.status_code = status_code
-        # Guarantee that the response content is always a bytestring,
-        # as it would be in real life.
-        if isinstance(content, str):
-            content = content.encode("utf8")
-        self.content = content
-
-
-class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
-
-    SUCCESS = '"Valid Code Pin Pair"'
-    FAILURE = '{"code":404,"message":"Access Code Pin Pair not found"}'
-
-    def __init__(
-        self,
-        library,
-        integration,
-        valid={},
-        bad_connection=False,
-        failure_status_code=None,
-    ):
-        super().__init__(
-            library, integration, root="http://example.com/", secret="secret"
-        )
-        self.identifier_re = None
-        self.password_re = None
-
-        self.valid = valid
-        self.bad_connection = bad_connection
-        self.failure_status_code = failure_status_code
-
-        self.request_urls = []
-
-    def request(self, url):
-        self.request_urls.append(url)
-        if self.bad_connection:
-            # Simulate a bad connection.
-            raise requests.exceptions.ConnectionError("Could not connect!")
-        elif self.failure_status_code:
-            # Simulate a server returning an unexpected error code.
-            return MockFirstBookResponse(
-                self.failure_status_code, "Error %s" % self.failure_status_code
-            )
-        parsed = urllib.parse.urlparse(url)
-        token = parsed.path.split("/")[-1]
-        barcode, pin = self._decode(token)
-
-        # The barcode and pin must be present in self.valid.
-        if barcode in self.valid and self.valid[barcode] == pin:
-            return MockFirstBookResponse(200, self.SUCCESS)
-        else:
-            return MockFirstBookResponse(200, self.FAILURE)
-
-    def _decode(self, token):
-        # Decode a JWT. Only used in tests -- in production, this is
-        # First Book's job.
-
-        # The JWT must be signed with the shared secret.
-        payload = jwt.decode(token, self.secret, algorithms=self.ALGORITHM)
-
-        # The 'iat' field in the payload must be a recent timestamp.
-        assert (time.time() - int(payload["iat"])) < 2
-
-        return payload["barcode"], payload["pin"]
-
-
-# Specify which of the classes defined in this module is the
-# authentication provider.
-AuthenticationProvider = FirstBookAuthenticationAPI

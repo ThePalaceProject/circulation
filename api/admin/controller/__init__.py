@@ -48,7 +48,8 @@ from api.admin.templates import admin as admin_template
 from api.admin.templates import response_template_with_message_and_redirect_button
 from api.admin.validator import Validator
 from api.adobe_vendor_id import AuthdataUtility
-from api.authenticator import CannotCreateLocalPatron, LibraryAuthenticator, PatronData
+from api.authentication.base import CannotCreateLocalPatron, PatronData
+from api.authenticator import LibraryAuthenticator
 from api.axis import Axis360API
 from api.bibliotheca import BibliothecaAPI
 from api.config import Configuration
@@ -170,7 +171,7 @@ def setup_admin_controllers(manager):
     )
 
     manager.admin_patron_auth_service_self_tests_controller = (
-        PatronAuthServiceSelfTestsController(manager)
+        PatronAuthServiceSelfTestsController(manager._db)
     )
 
     from api.admin.controller.collection_settings import CollectionSettingsController
@@ -2449,7 +2450,7 @@ class AdminSearchController(AdminController):
         - Subject
         """
         library: Library = flask.request.library  # type: ignore
-        collection_ids = [coll.id for coll in library.collections]
+        collection_ids = [coll.id for coll in library.collections if coll.id]
         return self._search_field_values_cached(collection_ids)
 
     @classmethod

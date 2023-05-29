@@ -5367,6 +5367,26 @@ class TestJSONQuery:
         q = self._jq(self._leaf(key, value))
         q.search_query.to_dict().keys() == ["match" if is_text else "term"]
 
+    @pytest.mark.parametrize(
+        "value,escaped,contains",
+        [
+            ("&search##", r"\&search\#\#", True),
+            ("sea+@~r\\ch", "sea\\+\\@\\~r\\\\ch", True),
+            ("sea+@~r\\ch", "sea+@~r\\ch", False),
+        ],
+    )
+    def test_special_chars(self, value, escaped, contains):
+        q = self._jq(self._leaf("title", value, "contains" if contains else "eq"))
+        if contains:
+            assert (
+                q.search_query.to_dict()["regexp"]["title.keyword"]["value"]
+                == f".*{escaped}.*"
+            )
+        else:
+            assert (
+                q.search_query.to_dict()["match"]["title.keyword"]["query"] == escaped
+            )
+
 
 class TestExternalSearchJSONQueryData:
     audio_work: Work

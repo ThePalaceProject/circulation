@@ -2015,6 +2015,10 @@ class JSONQuery(Query):
         REGEX = "regex"
         CONTAINS = "contains"
 
+    # Reserved characters and their mapping to escaped characters
+    RESERVED_CHARS = '.?+*|{}[]()"\\#@&<>~'
+    RESERVED_CHARS_MAP = dict(map(lambda ch: (ord(ch), f"\\{ch}"), RESERVED_CHARS))
+
     _KEYWORD_ONLY = {"keyword": True}
     _LONG_TYPE = {"type": "long"}
     _BOOL_TYPE = {"type": "bool"}
@@ -2090,10 +2094,15 @@ class JSONQuery(Query):
         @staticmethod
         def data_source(value: str) -> int:
             """Transform a datasource name into a datasource id"""
-            sources = CachedData.cache.data_sources()  # type: ignore[union-attr]
-            for source in sources:
-                if source.name.lower() == value.lower():  # type: ignore[union-attr]
-                    return source.id
+            if CachedData.cache is not None:
+                sources = CachedData.cache.data_sources()
+                for source in sources:
+                    if (
+                        source.name is not None
+                        and source.id is not None
+                        and source.name.lower() == value.lower()
+                    ):
+                        return source.id
 
             # No such value was found, so return a non-id
             return 0
@@ -2187,6 +2196,11 @@ class JSONQuery(Query):
         # In case values need to be transformed
         if old_key in self.VALUE_TRANSORMS:
             value = self.VALUE_TRANSORMS[old_key](value)
+
+        # The contains/regex operators are a regex match
+        # So we must replace special operators where encountered
+        if op in {self.Operators.CONTAINS, self.Operators.REGEX}:
+            value = value.translate(self.RESERVED_CHARS_MAP)
 
         key = self.FIELD_TRANSFORMS.get(
             old_key, old_key

@@ -7,7 +7,6 @@ from threading import Thread
 from typing import Dict, List, Optional, Tuple, Type
 
 import flask
-import sqlalchemy
 from flask_babel import lazy_gettext as _
 
 from core.analytics import Analytics
@@ -687,7 +686,7 @@ class CirculationAPI:
 
     def __init__(
         self,
-        db: sqlalchemy.orm.session.Session,
+        db: Session,
         library: Library,
         analytics: Optional[Analytics] = None,
         api_map: Optional[Dict[int, Type[BaseCirculationAPI]]] = None,
@@ -758,7 +757,10 @@ class CirculationAPI:
                     self.api_for_collection[collection.id] = api
                     self.collection_ids_for_sync.append(collection.id)
 
-            if collection.protocol in fulfillment_post_processors_mapping:
+            if (
+                collection.protocol in fulfillment_post_processors_mapping
+                and collection.id
+            ):
                 fulfillment_post_processor = fulfillment_post_processors_mapping[
                     collection.protocol
                 ](collection)
@@ -829,6 +831,8 @@ class CirculationAPI:
         :param licensepool: License pool for which we need to get a fulfillment post-processor
         :return: Fulfillment post-processor to use for the given license pool
         """
+        if not licensepool.collection.id:
+            return None
         return self._fulfillment_post_processors_map.get(licensepool.collection.id)
 
     def can_revoke_hold(self, licensepool, hold):

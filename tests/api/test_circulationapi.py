@@ -7,7 +7,8 @@ import flask
 import pytest
 from flask import Flask
 
-from api.authenticator import LibraryAuthenticator, PatronData
+from api.authentication.base import PatronData
+from api.authenticator import LibraryAuthenticator
 from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
@@ -1666,6 +1667,7 @@ class TestBaseCirculationAPI:
                 return PatronData(authorization_identifier="patron")
 
         basic: Union[MockBasic, "MockBasic2"] = MockBasic()
+
         authenticator.register_basic_auth_provider(basic)
         assert None == api.patron_email_address(
             patron, library_authenticator=authenticator

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, PropertyMock
 import pytest
 
 from core.model import ConfigurationSetting
-from core.model.hassessioncache import HasSessionCache
+from core.model.hassessioncache import CacheTuple, HasSessionCache
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -41,8 +41,8 @@ class TestHasSessionCache:
         assert cache1 is not cache2
 
         # Each one is a CacheTuple instance
-        assert isinstance(cache1, mock_class.CacheTuple)
-        assert isinstance(cache2, mock_class.CacheTuple)
+        assert isinstance(cache1, CacheTuple)
+        assert isinstance(cache2, CacheTuple)
 
     def test_cache_insert(self, mock_db, mock_class, mock):
         db = mock_db()

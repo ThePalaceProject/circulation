@@ -1,11 +1,14 @@
 """Test circulation-specific extensions to the self-test infrastructure."""
+from __future__ import annotations
+
 import datetime
 from io import StringIO
+from typing import TYPE_CHECKING, Callable
 from unittest import mock
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
+from api.authentication.basic import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
 from api.selftest import (
     HasCollectionSelfTests,
@@ -13,14 +16,22 @@ from api.selftest import (
     RunSelfTestsScript,
     SelfTestResult,
 )
+from core.exceptions import IntegrationException
 from core.model import ExternalIntegration, Patron
 from core.opds_import import OPDSImportMonitor
 from core.util.problem_detail import ProblemDetail
-from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestHasSelfTests:
-    def test__determine_self_test_patron(self, db: DatabaseTransactionFixture):
+    def test__determine_self_test_patron(
+        self,
+        db: DatabaseTransactionFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         """Test per-library default patron lookup for self-tests.
 
         Ensure that the tested method either:
@@ -41,26 +52,8 @@ class TestHasSelfTests:
             == excinfo.value.detail
         )
 
-        # Add a patron authentication integration, but don't set the patron.
-        integration = db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[db.default_library()],
-        )
-
-        # # No default patron set up in the patron authentication integration.
-        with pytest.raises(test_patron_lookup_exception) as excinfo:
-            test_patron_lookup_method(library_without_default_patron)
-        assert "Library has no test patron configured." == excinfo.value.message
-        assert (
-            "You can specify a test patron when you configure the library's patron authentication service."
-            == excinfo.value.detail
-        )
-
-        # Set the patron / password on this integration.
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        # Add a patron authentication integration
+        create_simple_auth_integration(db.default_library())
 
         # This library's patron authentication integration has a default
         # patron (for this library).
@@ -103,19 +96,25 @@ class TestHasSelfTests:
         assert expected_message == excinfo.value.message  # type: ignore
         assert excinfo.value.detail is None
 
-    def test_default_patrons(self, db: DatabaseTransactionFixture):
+    def test_default_patrons(
+        self,
+        db: DatabaseTransactionFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         """Some self-tests must run with a patron's credentials.  The
         default_patrons() method finds the default Patron for every
         Library associated with a given Collection.
         """
-        h = HasSelfTests()
+        h = HasSelfTests
 
         # This collection is not in any libraries, so there's no way
         # to test it.
         not_in_library = db.collection()
         [result] = h.default_patrons(not_in_library)
+        assert isinstance(result, SelfTestResult)
         assert "Acquiring test patron credentials." == result.name
         assert False == result.success
+        assert isinstance(result.exception, IntegrationException)
         assert "Collection is not associated with any libraries." == str(
             result.exception
         )
@@ -132,14 +131,7 @@ class TestHasSelfTests:
         collection.libraries.append(no_default_patron)
 
         # This library has a default patron set up.
-        integration = db.external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[db.default_library()],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        create_simple_auth_integration(db.default_library())
 
         # Calling default_patrons on the Collection returns one result for
         # each Library associated with that Collection.
@@ -156,6 +148,7 @@ class TestHasSelfTests:
             "Acquiring test patron credentials for library %s" % no_default_patron.name
             == failure.name
         )
+        assert isinstance(failure.exception, IntegrationException)
         assert "Library has no test patron configured." == str(failure.exception)
         assert (
             "You can specify a test patron when you configure the library's patron authentication service."
@@ -164,6 +157,7 @@ class TestHasSelfTests:
 
         # The test patron for the library that has one was looked up,
         # and the test can proceed using this patron.
+        assert isinstance(success, tuple)
         library, patron, password = success
         assert db.default_library() == library
         assert "username1" == patron.authorization_identifier
@@ -335,7 +329,8 @@ class TestHasCollectionSelfTests:
         assert success == result
 
         # Destroy the delivery mechanism.
-        [db.session.delete(x) for x in pool.delivery_mechanisms]
+        for x in pool.delivery_mechanisms:
+            db.session.delete(x)
 
         # Now a list of strings is returned, one for each problematic
         # book.

@@ -216,6 +216,13 @@ CANNOT_CHANGE_PROTOCOL = pd(
     detail=_("A protocol can't be changed once it has been set."),
 )
 
+MISSING_PATRON_AUTH_NAME = pd(
+    "http://librarysimplified.org/terms/problem/missing-patron-auth-name",
+    status_code=400,
+    title=_("Missing patron auth service name."),
+    detail=_("You must identify the patron auth service by its name."),
+)
+
 PROTOCOL_DOES_NOT_SUPPORT_PARENTS = pd(
     "http://librarysimplified.org/terms/problem/protocol-does-not-support-parents",
     status_code=400,

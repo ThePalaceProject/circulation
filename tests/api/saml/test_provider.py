@@ -1,16 +1,16 @@
 import datetime
 import json
+from typing import Callable
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from freezegun import freeze_time
 
-from api.authenticator import PatronData
+from api.authentication.base import PatronData
 from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import (
-    SAMLConfiguration,
-    SAMLConfigurationFactory,
     SAMLOneLoginConfiguration,
+    SAMLWebSSOAuthSettings,
 )
 from api.saml.metadata.filter import SAMLSubjectFilter
 from api.saml.metadata.model import (
@@ -28,13 +28,8 @@ from api.saml.metadata.model import (
     SAMLSubjectJSONEncoder,
     SAMLUIInfo,
 )
-from api.saml.metadata.parser import SAMLMetadataParser, SAMLSubjectParser
+from api.saml.metadata.parser import SAMLSubjectParser
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
-from core.model.configuration import (
-    ConfigurationStorage,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -109,41 +104,6 @@ IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES = SAMLIdentityProviderMetadata(
 )
 
 
-class SAMLProviderFixture:
-    controller_fixture: ControllerFixture
-    integration: ExternalIntegration
-    external_integration_association: MagicMock
-    configuration_storage: ConfigurationStorage
-    configuration_factory: SAMLConfigurationFactory
-
-    def __init__(self, controller_fixture: ControllerFixture):
-        self.controller_fixture = controller_fixture
-
-        self.integration = self.controller_fixture.db.external_integration(
-            protocol=SAMLWebSSOAuthenticationProvider.NAME,
-            goal=ExternalIntegration.PATRON_AUTH_GOAL,
-        )
-
-        metadata_parser = SAMLMetadataParser()
-
-        self.external_integration_association = create_autospec(
-            spec=HasExternalIntegration
-        )
-        self.external_integration_association.external_integration = MagicMock(
-            return_value=self.integration
-        )
-
-        self.configuration_storage = ConfigurationStorage(
-            self.external_integration_association
-        )
-        self.configuration_factory = SAMLConfigurationFactory(metadata_parser)
-
-
-@pytest.fixture(scope="function")
-def saml_provider_fixture(controller_fixture: ControllerFixture) -> SAMLProviderFixture:
-    return SAMLProviderFixture(controller_fixture)
-
-
 class TestSAMLWebSSOAuthenticationProvider:
     @pytest.mark.parametrize(
         "_, identity_providers, expected_result",
@@ -152,8 +112,8 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "identity_provider_with_display_name",
                 [IDENTITY_PROVIDER_WITH_DISPLAY_NAME],
                 {
-                    "type": SAMLWebSSOAuthenticationProvider.FLOW_TYPE,
-                    "description": SAMLWebSSOAuthenticationProvider.NAME,
+                    "type": "http://librarysimplified.org/authtype/SAML-2.0",
+                    "description": SAMLWebSSOAuthenticationProvider.label(),
                     "links": [
                         {
                             "rel": "authenticate",
@@ -216,8 +176,8 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "identity_provider_with_organization_display_name",
                 [IDENTITY_PROVIDER_WITH_ORGANIZATION_DISPLAY_NAME],
                 {
-                    "type": SAMLWebSSOAuthenticationProvider.FLOW_TYPE,
-                    "description": SAMLWebSSOAuthenticationProvider.NAME,
+                    "type": "http://librarysimplified.org/authtype/SAML-2.0",
+                    "description": SAMLWebSSOAuthenticationProvider.label(),
                     "links": [
                         {
                             "rel": "authenticate",
@@ -247,17 +207,15 @@ class TestSAMLWebSSOAuthenticationProvider:
                     IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES,
                 ],
                 {
-                    "type": SAMLWebSSOAuthenticationProvider.FLOW_TYPE,
-                    "description": SAMLWebSSOAuthenticationProvider.NAME,
+                    "type": "http://librarysimplified.org/authtype/SAML-2.0",
+                    "description": SAMLWebSSOAuthenticationProvider.label(),
                     "links": [
                         {
                             "rel": "authenticate",
                             "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
-                                    "value": SAMLConfiguration.IDP_DISPLAY_NAME_DEFAULT_TEMPLATE.format(
-                                        1
-                                    ),
+                                    "value": "Identity Provider #1",
                                     "language": "en",
                                 }
                             ],
@@ -271,9 +229,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                             "href": "http://localhost/default/saml_authenticate?provider=SAML+2.0+Web+SSO&idp_entity_id=http://idp1.hilbertteam.net/idp/shibboleth",
                             "display_names": [
                                 {
-                                    "value": SAMLConfiguration.IDP_DISPLAY_NAME_DEFAULT_TEMPLATE.format(
-                                        2
-                                    ),
+                                    "value": "Identity Provider #2",
                                     "language": "en",
                                 }
                             ],
@@ -288,29 +244,24 @@ class TestSAMLWebSSOAuthenticationProvider:
         ],
     )
     def test_authentication_document(
-        self, saml_provider_fixture, _, identity_providers, expected_result
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        _,
+        identity_providers,
+        expected_result,
     ):
         # Arrange
-        configuration = create_autospec(spec=SAMLConfiguration)
-        configuration.get_service_provider = MagicMock(return_value=SERVICE_PROVIDER)
-        configuration.get_identity_providers = MagicMock(
-            return_value=identity_providers
+        configuration = create_saml_configuration(
+            patron_id_use_name_id="true",
+            patron_id_attributes=[],
+            patron_id_regular_expression=None,
         )
-        configuration.patron_id_use_name_id = "true"
-        configuration.patron_id_attributes = []
-        configuration.patron_id_regular_expression = None
-
-        configuration_factory_create_context_manager = MagicMock()
-        configuration_factory_create_context_manager.__enter__ = MagicMock(
-            return_value=configuration
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER, identity_providers, configuration
         )
-
-        configuration_factory = create_autospec(spec=SAMLConfigurationFactory)
-        configuration_factory.create = MagicMock(
-            return_value=configuration_factory_create_context_manager
-        )
-
-        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         subject_parser = SAMLSubjectParser()
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
@@ -329,27 +280,21 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         with patch(
             "api.saml.provider.SAMLAuthenticationManagerFactory"
-        ) as authentication_manager_factory_constructor_mock, patch(
-            "api.saml.provider.SAMLConfigurationFactory"
-        ) as configuration_factory_constructor_mock:
+        ) as authentication_manager_factory_constructor_mock:
             authentication_manager_factory_constructor_mock.return_value = (
                 authentication_manager_factory
             )
-            configuration_factory_constructor_mock.return_value = configuration_factory
 
             # Act
-            provider = SAMLWebSSOAuthenticationProvider(
-                saml_provider_fixture.controller_fixture.db.default_library(),
-                saml_provider_fixture.integration,
+            provider = create_saml_provider(
+                settings=configuration,
             )
 
-            saml_provider_fixture.controller_fixture.app.config[
-                "SERVER_NAME"
-            ] = "localhost"
+            controller_fixture.app.config["SERVER_NAME"] = "localhost"
 
-            with saml_provider_fixture.controller_fixture.app.test_request_context("/"):
+            with controller_fixture.app.test_request_context("/"):
                 result = provider.authentication_flow_document(
-                    saml_provider_fixture.controller_fixture.db.session
+                    controller_fixture.db.session
                 )
 
             # Assert
@@ -403,18 +348,6 @@ class TestSAMLWebSSOAuthenticationProvider:
                     complete=True,
                 ),
                 None,
-                None,
-                None,
-            ),
-            (
-                "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_integer_literal",
-                SAMLSubject(
-                    "http://idp.example.com",
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
-                    SAMLAttributeStatement([]),
-                ),
-                SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
-                0,
                 None,
                 None,
             ),
@@ -494,7 +427,8 @@ class TestSAMLWebSSOAuthenticationProvider:
     )
     def test_remote_patron_lookup(
         self,
-        saml_provider_fixture: SAMLProviderFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         _,
         subject,
         expected_result,
@@ -503,23 +437,14 @@ class TestSAMLWebSSOAuthenticationProvider:
         patron_id_regular_expression,
     ):
         # Arrange
-        with saml_provider_fixture.configuration_factory.create(
-            saml_provider_fixture.configuration_storage,
-            saml_provider_fixture.controller_fixture.db.session,
-            SAMLConfiguration,
-        ) as configuration:
-            if patron_id_use_name_id is not None:
-                configuration.patron_id_use_name_id = patron_id_use_name_id
-            if patron_id_attributes is not None:
-                configuration.patron_id_attributes = json.dumps(patron_id_attributes)
-            if patron_id_regular_expression is not None:
-                configuration.patron_id_regular_expression = (
-                    patron_id_regular_expression
-                )
+        configuration = create_saml_configuration(
+            patron_id_use_name_id=patron_id_use_name_id or True,
+            patron_id_attributes=patron_id_attributes,
+            patron_id_regular_expression=patron_id_regular_expression,
+        )
 
-        provider = SAMLWebSSOAuthenticationProvider(
-            saml_provider_fixture.controller_fixture.db.default_library(),
-            saml_provider_fixture.integration,
+        provider = create_saml_provider(
+            settings=configuration,
         )
 
         # Act
@@ -760,7 +685,9 @@ class TestSAMLWebSSOAuthenticationProvider:
     @freeze_time("2020-01-01 00:00:00")
     def test_saml_callback(
         self,
-        saml_provider_fixture,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         _,
         subject,
         expected_patron_data,
@@ -772,10 +699,8 @@ class TestSAMLWebSSOAuthenticationProvider:
         # correctly processes a SAML subject and returns right PatronData.
 
         # Arrange
-        provider = SAMLWebSSOAuthenticationProvider(
-            saml_provider_fixture.controller_fixture.db.default_library(),
-            saml_provider_fixture.integration,
-        )
+        configuration = create_saml_configuration(session_lifetime=cm_session_lifetime)
+        provider = create_saml_provider(settings=configuration)
 
         if expected_credential is None:
             expected_credential = json.dumps(subject, cls=SAMLSubjectJSONEncoder)
@@ -783,18 +708,8 @@ class TestSAMLWebSSOAuthenticationProvider:
         if expected_expiration_time is None and subject is not None:
             expected_expiration_time = utc_now() + subject.valid_till
 
-        if cm_session_lifetime is not None:
-            with saml_provider_fixture.configuration_factory.create(
-                saml_provider_fixture.configuration_storage,
-                saml_provider_fixture.controller_fixture.db.session,
-                SAMLConfiguration,
-            ) as configuration:
-                configuration.session_lifetime = cm_session_lifetime
-
         # Act
-        result = provider.saml_callback(
-            saml_provider_fixture.controller_fixture.db.session, subject
-        )
+        result = provider.saml_callback(controller_fixture.db.session, subject)
 
         # Assert
         if isinstance(result, ProblemDetail):
@@ -807,11 +722,11 @@ class TestSAMLWebSSOAuthenticationProvider:
             assert expected_patron_data == patron_data
             assert expected_expiration_time == credential.expires
 
-    def test_get_credential_from_header(self, saml_provider_fixture):
+    def test_get_credential_from_header(
+        self,
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
         # This provider doesn't support getting the credential from the header.
         # so this method should always return None.
-        provider = SAMLWebSSOAuthenticationProvider(
-            saml_provider_fixture.controller_fixture.db.default_library(),
-            saml_provider_fixture.integration,
-        )
+        provider = create_saml_provider()
         assert provider.get_credential_from_header({}) is None

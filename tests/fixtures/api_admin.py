@@ -8,9 +8,11 @@ from api.admin.controller import setup_admin_controllers
 from api.admin.routes import setup_admin
 from api.config import Configuration
 from api.controller import CirculationManager
+from core.integration.goals import Goals
 from core.model import create
 from core.model.admin import Admin, AdminRole
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
+from core.model.configuration import ConfigurationSetting
+from core.model.integration import IntegrationConfiguration
 from core.util.http import HTTP
 from tests.fixtures.api_controller import ControllerFixture, WorkSpec
 
@@ -76,8 +78,8 @@ class SettingsControllerFixture(AdminControllerFixture):
         super().__init__(controller_fixture)
 
         # Delete any existing patron auth services created by controller test setup.
-        for auth_service in self.ctrl.db.session.query(ExternalIntegration).filter(
-            ExternalIntegration.goal == ExternalIntegration.PATRON_AUTH_GOAL
+        for auth_service in self.ctrl.db.session.query(IntegrationConfiguration).filter(
+            IntegrationConfiguration.goal == Goals.PATRON_AUTH_GOAL
         ):
             self.ctrl.db.session.delete(auth_service)
 

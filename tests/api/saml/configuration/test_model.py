@@ -1,16 +1,13 @@
-import json
 from datetime import datetime
-from unittest.mock import MagicMock, PropertyMock, call, create_autospec
+from typing import Callable
+from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
 import sqlalchemy
 
-from api.app import initialize_database
-from api.authenticator import BaseSAMLAuthenticationProvider
 from api.saml.configuration.model import (
-    SAMLConfiguration,
-    SAMLConfigurationFactory,
     SAMLOneLoginConfiguration,
+    SAMLWebSSOAuthSettings,
 )
 from api.saml.metadata.federations import incommon
 from api.saml.metadata.federations.model import (
@@ -26,11 +23,6 @@ from api.saml.metadata.model import (
     SAMLUIInfo,
 )
 from api.saml.metadata.parser import SAMLMetadataParser
-from core.model.configuration import (
-    ConfigurationStorage,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
 from tests.api.saml import saml_strings
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -70,146 +62,73 @@ IDENTITY_PROVIDERS = [
 ]
 
 
-class SAMLModelFixture:
-    db: DatabaseTransactionFixture
-    saml_provider_integration: ExternalIntegration
-    saml_integration_association: MagicMock
-
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-
-        self.saml_provider_integration = self.db.external_integration(
-            "api.saml.provider", ExternalIntegration.PATRON_AUTH_GOAL
-        )
-
-        self.saml_integration_association = create_autospec(spec=HasExternalIntegration)
-        self.saml_integration_association.external_integration = MagicMock(
-            return_value=self.saml_provider_integration
-        )
-
-
-@pytest.fixture(scope="function")
-def saml_model_fixture(db: DatabaseTransactionFixture) -> SAMLModelFixture:
-    return SAMLModelFixture(db)
-
-
 class TestSAMLConfiguration:
     def test_get_service_provider_returns_correct_value(
-        self, saml_model_fixture: SAMLModelFixture
+        self, create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings]
     ):
         # Arrange
-        service_provider_metadata = saml_strings.CORRECT_XML_WITH_ONE_SP
-
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore[method-assign]
 
-        configuration_storage = ConfigurationStorage(
-            saml_model_fixture.saml_integration_association
+        configuration = create_saml_configuration(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP
         )
-        configuration_storage.load = MagicMock(side_effect=configuration_storage.load)  # type: ignore
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration._metadata_parser = metadata_parser
 
-        saml_configuration_factory = SAMLConfigurationFactory(metadata_parser)
+        # Act
+        service_provider = onelogin_configuration.get_service_provider()
 
-        with saml_configuration_factory.create(
-            configuration_storage, saml_model_fixture.db.session, SAMLConfiguration
-        ) as configuration:
-            configuration.service_provider_xml_metadata = service_provider_metadata
+        # Assert
+        assert isinstance(service_provider, SAMLServiceProviderMetadata) is True
+        assert saml_strings.SP_ENTITY_ID == service_provider.entity_id
 
-            # Act
-            service_provider = configuration.get_service_provider(
-                saml_model_fixture.db.session
-            )
-
-            # Assert
-            assert True == isinstance(service_provider, SAMLServiceProviderMetadata)
-            assert saml_strings.SP_ENTITY_ID == service_provider.entity_id
-
-            configuration_storage.load.assert_has_calls(
-                [
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.service_provider_xml_metadata.key,
-                    ),
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.service_provider_private_key.key,
-                    ),
-                ]
-            )
-            metadata_parser.parse.assert_called_once_with(service_provider_metadata)
+        metadata_parser.parse.assert_called_once_with(
+            configuration.service_provider_xml_metadata
+        )
 
     def test_get_identity_providers_returns_non_federated_idps(
-        self, saml_model_fixture: SAMLModelFixture
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
     ):
         # Arrange
-        identity_providers_metadata = saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
-
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore
-
-        configuration_storage = ConfigurationStorage(
-            saml_model_fixture.saml_integration_association
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore[method-assign]
+        configuration = create_saml_configuration(
+            non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
         )
-        configuration_storage.load = MagicMock(side_effect=configuration_storage.load)  # type: ignore
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration._metadata_parser = metadata_parser
 
-        saml_configuration_factory = SAMLConfigurationFactory(metadata_parser)
+        # Act
+        identity_providers = onelogin_configuration.get_identity_providers(db.session)
 
-        with saml_configuration_factory.create(
-            configuration_storage, saml_model_fixture.db.session, SAMLConfiguration
-        ) as configuration:
-            configuration.non_federated_identity_provider_xml_metadata = (
-                identity_providers_metadata
-            )
+        # Assert
+        assert 2 == len(identity_providers)
 
-            # Act
-            identity_providers = configuration.get_identity_providers(
-                saml_model_fixture.db.session
-            )
+        assert True == isinstance(identity_providers[0], SAMLIdentityProviderMetadata)
+        assert saml_strings.IDP_1_ENTITY_ID == identity_providers[0].entity_id
 
-            # Assert
-            assert 2 == len(identity_providers)
-
-            assert True == isinstance(
-                identity_providers[0], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_1_ENTITY_ID == identity_providers[0].entity_id
-
-            assert True == isinstance(
-                identity_providers[1], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_2_ENTITY_ID == identity_providers[1].entity_id
-
-            configuration_storage.load.assert_has_calls(
-                [
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.non_federated_identity_provider_xml_metadata.key,
-                    ),
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.federated_identity_provider_entity_ids.key,
-                    ),
-                ]
-            )
-            metadata_parser.parse.assert_called_once_with(identity_providers_metadata)
+        assert True == isinstance(identity_providers[1], SAMLIdentityProviderMetadata)
+        assert saml_strings.IDP_2_ENTITY_ID == identity_providers[1].entity_id
+        metadata_parser.parse.assert_called_once_with(
+            configuration.non_federated_identity_provider_xml_metadata
+        )
 
     def test_get_identity_providers_returns_federated_idps(
-        self, saml_model_fixture: SAMLModelFixture
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
     ):
         # Arrange
-        federated_identity_provider_entity_ids = json.dumps(
-            [saml_strings.IDP_1_ENTITY_ID, saml_strings.IDP_2_ENTITY_ID]
-        )
+        federated_identity_provider_entity_ids = [
+            saml_strings.IDP_1_ENTITY_ID,
+            saml_strings.IDP_2_ENTITY_ID,
+        ]
 
         metadata_parser = SAMLMetadataParser()
         metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore
-
-        configuration_storage = ConfigurationStorage(
-            saml_model_fixture.saml_integration_association
-        )
-        configuration_storage.load = MagicMock(side_effect=configuration_storage.load)  # type: ignore
-
-        saml_configuration_factory = SAMLConfigurationFactory(metadata_parser)
 
         federation = SAMLFederation("Test federation", "http://localhost")
         federated_idp_1 = SAMLFederatedIdentityProvider(
@@ -225,71 +144,42 @@ class TestSAMLConfiguration:
             saml_strings.CORRECT_XML_WITH_IDP_2,
         )
 
-        saml_model_fixture.db.session.add_all(
-            [federation, federated_idp_1, federated_idp_2]
+        db.session.add_all([federation, federated_idp_1, federated_idp_2])
+
+        configuration = create_saml_configuration(
+            federated_identity_provider_entity_ids=federated_identity_provider_entity_ids
         )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration._metadata_parser = metadata_parser
 
-        with saml_configuration_factory.create(
-            configuration_storage, saml_model_fixture.db.session, SAMLConfiguration
-        ) as configuration:
-            configuration.federated_identity_provider_entity_ids = (
-                federated_identity_provider_entity_ids
-            )
+        # Act
+        identity_providers = onelogin_configuration.get_identity_providers(db.session)
 
-            # Act
-            identity_providers = configuration.get_identity_providers(
-                saml_model_fixture.db.session
-            )
+        # Assert
+        assert 2 == len(identity_providers)
+        assert isinstance(identity_providers[0], SAMLIdentityProviderMetadata) is True
+        assert saml_strings.IDP_1_ENTITY_ID == identity_providers[0].entity_id
 
-            # Assert
-            assert 2 == len(identity_providers)
-            assert True == isinstance(
-                identity_providers[0], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_1_ENTITY_ID == identity_providers[0].entity_id
+        assert isinstance(identity_providers[1], SAMLIdentityProviderMetadata) is True
+        assert saml_strings.IDP_2_ENTITY_ID == identity_providers[1].entity_id
 
-            assert True == isinstance(
-                identity_providers[1], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_2_ENTITY_ID == identity_providers[1].entity_id
-
-            configuration_storage.load.assert_has_calls(
-                [
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.non_federated_identity_provider_xml_metadata.key,
-                    ),
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.federated_identity_provider_entity_ids.key,
-                    ),
-                ]
-            )
-            metadata_parser.parse.assert_has_calls(
-                [call(federated_idp_1.xml_metadata), call(federated_idp_2.xml_metadata)]
-            )
+        metadata_parser.parse.assert_has_calls(
+            [call(federated_idp_1.xml_metadata), call(federated_idp_2.xml_metadata)]
+        )
 
     def test_get_identity_providers_returns_both_non_federated_and_federated_idps(
-        self, saml_model_fixture: SAMLModelFixture
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
     ):
         # Arrange
-        non_federated_identity_providers_metadata = (
-            saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
-        )
-
-        federated_identity_provider_entity_ids = json.dumps(
-            [saml_strings.IDP_1_ENTITY_ID, saml_strings.IDP_2_ENTITY_ID]
-        )
+        federated_identity_provider_entity_ids = [
+            saml_strings.IDP_1_ENTITY_ID,
+            saml_strings.IDP_2_ENTITY_ID,
+        ]
 
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore
-
-        configuration_storage = ConfigurationStorage(
-            saml_model_fixture.saml_integration_association
-        )
-        configuration_storage.load = MagicMock(side_effect=configuration_storage.load)  # type: ignore
-
-        saml_configuration_factory = SAMLConfigurationFactory(metadata_parser)
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore[method-assign]
 
         federation = SAMLFederation("Test federation", "http://localhost")
         federated_idp_1 = SAMLFederatedIdentityProvider(
@@ -305,88 +195,58 @@ class TestSAMLConfiguration:
             saml_strings.CORRECT_XML_WITH_IDP_2,
         )
 
-        saml_model_fixture.db.session.add_all(
-            [federation, federated_idp_1, federated_idp_2]
+        db.session.add_all([federation, federated_idp_1, federated_idp_2])
+
+        configuration = create_saml_configuration(
+            non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS,
+            federated_identity_provider_entity_ids=federated_identity_provider_entity_ids,
         )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration._metadata_parser = metadata_parser
 
-        with saml_configuration_factory.create(
-            configuration_storage, saml_model_fixture.db.session, SAMLConfiguration
-        ) as configuration:
-            configuration.non_federated_identity_provider_xml_metadata = (
-                non_federated_identity_providers_metadata
-            )
-            configuration.federated_identity_provider_entity_ids = (
-                federated_identity_provider_entity_ids
-            )
+        # Act
+        identity_providers = onelogin_configuration.get_identity_providers(db.session)
 
-            # Act
-            identity_providers = configuration.get_identity_providers(
-                saml_model_fixture.db.session
-            )
+        # Assert
+        assert 4 == len(identity_providers)
+        assert isinstance(identity_providers[0], SAMLIdentityProviderMetadata) is True
+        assert saml_strings.IDP_1_ENTITY_ID == identity_providers[0].entity_id
 
-            # Assert
-            assert 4 == len(identity_providers)
-            assert True == isinstance(
-                identity_providers[0], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_1_ENTITY_ID == identity_providers[0].entity_id
+        assert isinstance(identity_providers[1], SAMLIdentityProviderMetadata) is True
+        assert saml_strings.IDP_2_ENTITY_ID == identity_providers[1].entity_id
 
-            assert True == isinstance(
-                identity_providers[1], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_2_ENTITY_ID == identity_providers[1].entity_id
+        assert isinstance(identity_providers[2], SAMLIdentityProviderMetadata) is True
+        assert saml_strings.IDP_1_ENTITY_ID == identity_providers[2].entity_id
 
-            assert True == isinstance(
-                identity_providers[2], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_1_ENTITY_ID == identity_providers[2].entity_id
+        assert isinstance(identity_providers[3], SAMLIdentityProviderMetadata) is True
+        assert saml_strings.IDP_2_ENTITY_ID == identity_providers[3].entity_id
 
-            assert True == isinstance(
-                identity_providers[3], SAMLIdentityProviderMetadata
-            )
-            assert saml_strings.IDP_2_ENTITY_ID == identity_providers[3].entity_id
-
-            configuration_storage.load.assert_has_calls(
-                [
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.non_federated_identity_provider_xml_metadata.key,
-                    ),
-                    call(
-                        saml_model_fixture.db.session,
-                        SAMLConfiguration.federated_identity_provider_entity_ids.key,
-                    ),
-                ]
-            )
-            metadata_parser.parse.assert_has_calls(
-                [
-                    call(non_federated_identity_providers_metadata),
-                    call(federated_idp_1.xml_metadata),
-                    call(federated_idp_2.xml_metadata),
-                ]
-            )
+        metadata_parser.parse.assert_has_calls(
+            [
+                call(configuration.non_federated_identity_provider_xml_metadata),
+                call(federated_idp_1.xml_metadata),
+                call(federated_idp_2.xml_metadata),
+            ]
+        )
 
 
 class TestSAMLSettings:
-    def test(self):
-        # Arrange
-
-        # Act, assert
+    def test(self, db: DatabaseTransactionFixture):
+        # Without loading anything into the database there are no federated IdPs and no options
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in BaseSAMLAuthenticationProvider.SETTINGS
-            if setting["key"]
-            == SAMLConfiguration.federated_identity_provider_entity_ids.key
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == "federated_identity_provider_entity_ids"
         ]
 
-        # Without an active database session there are no federated IdPs and no options
-        assert None == federated_identity_provider_entity_ids["options"]
+        assert len(federated_identity_provider_entity_ids["options"]) == 0
 
-        initialize_database(autoinitialize=False)
-
+        # Load a federated IdP into the database
         federation = SAMLFederation(
-            incommon.FEDERATION_TYPE, "http://incommon.org/metadata"
+            incommon.FEDERATION_TYPE,
+            "http://incommon.org/metadata",
         )
+        federation.last_updated_at = datetime.now()
         federated_identity_provider = SAMLFederatedIdentityProvider(
             federation,
             saml_strings.IDP_1_ENTITY_ID,
@@ -394,19 +254,16 @@ class TestSAMLSettings:
             saml_strings.CORRECT_XML_WITH_IDP_1,
         )
 
-        from api.app import app
-
-        app._db.add_all([federation, federated_identity_provider])
+        db.session.add_all([federation, federated_identity_provider])
 
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in BaseSAMLAuthenticationProvider.SETTINGS
-            if setting["key"]
-            == SAMLConfiguration.federated_identity_provider_entity_ids.key
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == "federated_identity_provider_entity_ids"
         ]
 
         # After getting an active database session options get initialized
-        assert 1 == len(federated_identity_provider_entity_ids["options"])
+        assert len(federated_identity_provider_entity_ids["options"]) == 1
 
         # A new idp shows up only after the last updated time
         federated_identity_provider_2 = SAMLFederatedIdentityProvider(
@@ -415,13 +272,12 @@ class TestSAMLSettings:
             saml_strings.IDP_2_UI_INFO_EN_DISPLAY_NAME,
             saml_strings.CORRECT_XML_WITH_IDP_2,
         )
-        app._db.add(federated_identity_provider_2)
+        db.session.add(federated_identity_provider_2)
 
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in BaseSAMLAuthenticationProvider.SETTINGS
-            if setting["key"]
-            == SAMLConfiguration.federated_identity_provider_entity_ids.key
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == "federated_identity_provider_entity_ids"
         ]
 
         # Only the first shows up yet
@@ -430,9 +286,8 @@ class TestSAMLSettings:
         federation.last_updated_at = datetime.now()
         [federated_identity_provider_entity_ids] = [
             setting
-            for setting in BaseSAMLAuthenticationProvider.SETTINGS
-            if setting["key"]
-            == SAMLConfiguration.federated_identity_provider_entity_ids.key
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == "federated_identity_provider_entity_ids"
         ]
         assert 2 == len(federated_identity_provider_entity_ids["options"])
 
@@ -440,11 +295,11 @@ class TestSAMLSettings:
 class TestSAMLOneLoginConfiguration:
     def test_get_identity_provider_settings_returns_correct_result(self):
         # Arrange
-        configuration = create_autospec(spec=SAMLConfiguration)
-        configuration.get_identity_providers = MagicMock(
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration.get_identity_providers = MagicMock(
             return_value=IDENTITY_PROVIDERS
         )
-        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         expected_result = {
             "idp": {
                 "entityId": IDENTITY_PROVIDERS[0].entity_id,
@@ -466,7 +321,7 @@ class TestSAMLOneLoginConfiguration:
 
         # Assert
         assert result == expected_result
-        configuration.get_identity_providers.assert_called_once_with(db)
+        onelogin_configuration.get_identity_providers.assert_called_once_with(db)
 
     @pytest.mark.parametrize(
         "_,service_provider,expected_result",
@@ -517,13 +372,14 @@ class TestSAMLOneLoginConfiguration:
         self, _, service_provider, expected_result
     ):
         # Arrange
-        configuration = create_autospec(spec=SAMLConfiguration)
-        configuration.get_service_provider = MagicMock(return_value=service_provider)
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
-        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+        onelogin_configuration.get_service_provider = MagicMock(
+            return_value=service_provider
+        )
 
         # Act
-        result = onelogin_configuration.get_service_provider_settings(db)
+        result = onelogin_configuration.get_service_provider_settings()
 
         # Assert
         result["sp"]["x509cert"] = saml_strings.strip_certificate(
@@ -531,31 +387,25 @@ class TestSAMLOneLoginConfiguration:
         )
 
         assert result == expected_result
-        configuration.get_service_provider.assert_called_once_with(db)
+        onelogin_configuration.get_service_provider.assert_called_once()
 
-    def test_get_settings_returns_correct_result(self):
+    def test_get_settings_returns_correct_result(self, create_saml_configuration):
         # Arrange
-        debug = False
-        strict = False
+        debug = 0
+        strict = 0
 
-        service_provider_debug_mode_mock = PropertyMock(return_value=debug)
-        service_provider_strict_mode_mock = PropertyMock(return_value=strict)
-
-        configuration = create_autospec(spec=SAMLConfiguration)
-        type(
-            configuration
-        ).service_provider_debug_mode = service_provider_debug_mode_mock
-        type(
-            configuration
-        ).service_provider_strict_mode = service_provider_strict_mode_mock
-        configuration.get_service_provider = MagicMock(
-            return_value=SERVICE_PROVIDER_WITH_CERTIFICATE
-        )
-        configuration.get_identity_providers = MagicMock(
-            return_value=IDENTITY_PROVIDERS
+        configuration = create_saml_configuration(
+            service_provider_strict_mode=debug,
+            service_provider_debug_mode=strict,
         )
 
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration.get_service_provider = MagicMock(
+            return_value=SERVICE_PROVIDER_WITH_CERTIFICATE
+        )
+        onelogin_configuration.get_identity_providers = MagicMock(
+            return_value=IDENTITY_PROVIDERS
+        )
 
         expected_result = {
             "debug": debug,
@@ -624,7 +474,5 @@ class TestSAMLOneLoginConfiguration:
         )
 
         assert result == expected_result
-        service_provider_debug_mode_mock.assert_called_with()
-        service_provider_strict_mode_mock.assert_called_with()
-        configuration.get_service_provider.assert_called_with(db)
-        configuration.get_identity_providers.assert_called_with(db)
+        onelogin_configuration.get_service_provider.assert_called_with()
+        onelogin_configuration.get_identity_providers.assert_called_with(db)

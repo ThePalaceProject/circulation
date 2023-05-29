@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from flask import request
@@ -12,6 +15,9 @@ from api.saml.metadata.parser import SAMLSubjectParser
 from core.problem_details import *
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
+
+if TYPE_CHECKING:
+    from api.saml.provider import SAMLWebSSOAuthSettings
 
 SAML_GENERIC_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/generic-error",
@@ -286,15 +292,15 @@ class SAMLAuthenticationManager:
 class SAMLAuthenticationManagerFactory:
     """Responsible for creating SAMLAuthenticationManager instances"""
 
-    def create(self, configuration):
+    def create(
+        self, configuration: SAMLWebSSOAuthSettings
+    ) -> SAMLAuthenticationManager:
         """
         Creates a new instance of SAMLAuthenticationManager class
 
         :param configuration: SAML authentication provider's configuration
-        :type configuration: api.saml.configuration.model.SAMLConfiguration
 
         :return: SAML authentication manager
-        :rtype: SAMLAuthenticationManager
         """
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         subject_parser = SAMLSubjectParser()

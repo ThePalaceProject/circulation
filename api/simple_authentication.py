@@ -1,12 +1,54 @@
-from typing import Optional, Union
-
-from flask_babel import lazy_gettext as _
+from typing import List, Optional, Type, Union
 
 from core.analytics import Analytics
-from core.model import ExternalIntegration, Library, Patron
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+from core.model import Patron
 
-from .authenticator import BasicAuthenticationProvider, PatronData
+from .authentication.base import PatronData
+from .authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
 from .config import CannotLoadConfiguration
+
+
+class SimpleAuthSettings(BasicAuthProviderSettings):
+    test_identifier: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Test identifier",
+            description="A test identifier to use when testing the authentication provider.",
+            required=True,
+        ),
+    )
+    test_password: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Test password",
+            description="A test password to use when testing the authentication provider.",
+        ),
+    )
+    additional_test_identifiers: Optional[List[str]] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Additional test identifiers",
+            description="Identifiers for additional patrons to use in testing. "
+            "The identifiers will all use the same test password as the first identifier.",
+            type=ConfigurationFormItemType.LIST,
+        ),
+    )
+    neighborhood: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Test neighborhood",
+            description="For analytics purposes, all patrons will be 'from' this neighborhood.",
+        ),
+    )
 
 
 class SimpleAuthenticationProvider(BasicAuthenticationProvider):
@@ -16,79 +58,46 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
     manager before connecting it to an ILS.
     """
 
-    NAME = "Simple Authentication Provider"
+    @classmethod
+    def label(cls) -> str:
+        return "Simple Authentication Provider"
 
-    DESCRIPTION = _(
-        """
-        An internal authentication service that authenticates a single patron.
-        This is useful for testing a circulation manager before connecting
-        it to an ILS."""
-    )
+    @classmethod
+    def description(cls) -> str:
+        return (
+            "An internal authentication service that authenticates a single patron. "
+            "This is useful for testing a circulation manager before connecting "
+            "it to an ILS."
+        )
 
-    ADDITIONAL_TEST_IDENTIFIERS = "additional_test_identifiers"
-
-    TEST_NEIGHBORHOOD = "neighborhood"
-
-    basic_settings = list(BasicAuthenticationProvider.SETTINGS)
-    for i, setting in enumerate(basic_settings):
-        if setting["key"] == BasicAuthenticationProvider.TEST_IDENTIFIER:
-            s = dict(**setting)
-            s[
-                "description"
-            ] = (
-                BasicAuthenticationProvider.TEST_IDENTIFIER_DESCRIPTION_FOR_REQUIRED_PASSWORD
-            )
-            basic_settings[i] = s
-        elif setting["key"] == BasicAuthenticationProvider.TEST_PASSWORD:
-            s = dict(**setting)
-            s["required"] = True
-            s[
-                "description"
-            ] = BasicAuthenticationProvider.TEST_PASSWORD_DESCRIPTION_REQUIRED
-            basic_settings[i] = s
-
-    SETTINGS = basic_settings + [
-        {
-            "key": ADDITIONAL_TEST_IDENTIFIERS,
-            "label": _("Additional test identifiers"),
-            "type": "list",
-            "description": _(
-                "Identifiers for additional patrons to use in testing. The identifiers will all use the same test password as the first identifier."
-            ),
-        },
-        {
-            "key": TEST_NEIGHBORHOOD,
-            "label": _("Test neighborhood"),
-            "description": _(
-                "For analytics purposes, all patrons will be 'from' this neighborhood."
-            ),
-        },
-    ]
+    @classmethod
+    def settings_class(cls) -> Type[SimpleAuthSettings]:
+        return SimpleAuthSettings
 
     def __init__(
         self,
-        library: Library,
-        integration: ExternalIntegration,
+        library_id: int,
+        integration_id: int,
+        settings: SimpleAuthSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
         analytics: Optional[Analytics] = None,
     ):
-        super().__init__(library, integration, analytics)
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
 
-        self.test_password = integration.setting(self.TEST_PASSWORD).value
-        test_identifier = integration.setting(self.TEST_IDENTIFIER).value
+        self.test_password = settings.test_password
+        test_identifier = settings.test_identifier
         if not (test_identifier and self.test_password):
             raise CannotLoadConfiguration("Test identifier and password not set.")
 
         self.test_identifiers = [test_identifier, test_identifier + "_username"]
-        additional_identifiers = integration.setting(
-            self.ADDITIONAL_TEST_IDENTIFIERS
-        ).json_value
+        additional_identifiers = settings.additional_test_identifiers
         if additional_identifiers:
             for identifier in additional_identifiers:
                 self.test_identifiers += [identifier, identifier + "_username"]
 
-        self.test_neighborhood = (
-            integration.setting(self.TEST_NEIGHBORHOOD).value or None
-        )
+        self.test_neighborhood = settings.neighborhood
 
     def remote_authenticate(
         self, username: Optional[str], password: Optional[str]
@@ -149,6 +158,3 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
             return None
 
         return self.generate_patrondata(patron_or_patrondata.authorization_identifier)
-
-
-AuthenticationProvider = SimpleAuthenticationProvider
