@@ -2,7 +2,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from pymarc import Field
+from pymarc import Field, Subfield
 
 from core.config import Configuration
 from core.marc import Annotator, MARCExporter
@@ -96,6 +96,6 @@ class LibraryAnnotator(Annotator):
                 Field(
                     tag="856",
                     indicators=["4", "0"],
-                    subfields=["u", url],
+                    subfields=[Subfield(code="u", value=url)],
                 )
             )
