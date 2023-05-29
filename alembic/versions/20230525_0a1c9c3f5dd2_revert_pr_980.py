@@ -17,18 +17,26 @@ branch_labels = None
 depends_on = None
 
 
-status_enum = sa.Enum("green", "red", name="external_integration_status")
+ext_int_status_enum = sa.Enum("green", "red", name="external_integration_status")
+int_status_enum = sa.Enum("GREEN", "RED", name="status")
 
 
 def upgrade() -> None:
+    # Drop external integration errors tables
     op.drop_table("externalintegrationerrors")
     op.drop_column("externalintegrations", "last_status_update")
     op.drop_column("externalintegrations", "status")
-    status_enum.drop(op.get_bind())
+    ext_int_status_enum.drop(op.get_bind())
+
+    # Drop integration errors tables
+    op.drop_table("integration_errors")
+    op.drop_column("integration_configurations", "status")
+    op.drop_column("integration_configurations", "last_status_update")
+    int_status_enum.drop(op.get_bind())
 
 
 def downgrade() -> None:
-    status_enum.create(op.get_bind())
+    ext_int_status_enum.create(op.get_bind())
     op.add_column(
         "externalintegrations",
         sa.Column(
@@ -63,4 +71,38 @@ def downgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name="externalintegrationerrors_pkey"),
+    )
+
+    int_status_enum.create(op.get_bind())
+    op.add_column(
+        "integration_configurations",
+        sa.Column(
+            "last_status_update",
+            postgresql.TIMESTAMP(),
+            autoincrement=False,
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "integration_configurations",
+        sa.Column(
+            "status",
+            postgresql.ENUM("RED", "GREEN", name="status"),
+            autoincrement=False,
+            nullable=False,
+        ),
+    )
+    op.create_table(
+        "integration_errors",
+        sa.Column("id", sa.INTEGER(), autoincrement=True, nullable=False),
+        sa.Column("time", postgresql.TIMESTAMP(), autoincrement=False, nullable=True),
+        sa.Column("error", sa.VARCHAR(), autoincrement=False, nullable=True),
+        sa.Column("integration_id", sa.INTEGER(), autoincrement=False, nullable=True),
+        sa.ForeignKeyConstraint(
+            ["integration_id"],
+            ["integration_configurations.id"],
+            name="fk_integration_error_integration_id",
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name="integration_errors_pkey"),
     )
