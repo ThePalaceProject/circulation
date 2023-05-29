@@ -2252,8 +2252,11 @@ class TestLibraryLoanAndHoldAnnotator:
         hold_1, _ = pool_1.on_hold_to(patron)
         hold_2, _ = pool_2.on_hold_to(patron)
 
-        # We removed licenses from one license pool so LibraryLoanAndHoldAnnotator should choose hold associated with
-        # the other license pool.
+        # When there is no licenses_owned/available on one license pool the LibraryLoanAndHoldAnnotator should choose
+        # hold associated with the other license pool.
+        pool_1.licenses_owned = 0
+        pool_1.licenses_available = 0
+
         assert hold_2 == LibraryLoanAndHoldAnnotator.choose_best_hold_for_work(
             [hold_1, hold_2]
         )
