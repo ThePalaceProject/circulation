@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from typing import TYPE_CHECKING, List
 
 from sqlalchemy import Column
@@ -11,11 +10,6 @@ from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from core.integration.goals import Goals
 from core.model import Base
-
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
 
 if TYPE_CHECKING:
     from core.model import Library
