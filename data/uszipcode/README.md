@@ -1,5 +1,5 @@
 # uszipcode
 
-This files source is [datahub.io](https://datahub.io/machu-gwu/uszipcode-0.2.0-simple_db/r/simple_db.sqlite).
+This files source is [from github](https://github.com/MacHu-GWU/uszipcode-project/releases/download/1.0.1.db/simple_db.sqlite).
 
 Its mirrored here for the reasons outlined in `api/admin/geographic_validator.py`.

@@ -1,9 +1,9 @@
 import json
-import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import uszipcode
 from flask_babel import lazy_gettext as _
@@ -25,10 +25,15 @@ class GeographicValidator(Validator):
         # library would otherwise download. This is done because the host for this file can
         # be flaky. There is an issue for this in the underlying library here:
         # https://github.com/MacHu-GWU/uszipcode-project/issues/40
-        db_file_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "data", "uszipcode"
+        db_file_path = str(
+            Path(__file__)
+            .parent.parent.parent.joinpath("data", "uszipcode", "simple_db.sqlite")
+            .absolute()
         )
-        return uszipcode.SearchEngine(simple_zipcode=True, db_file_dir=db_file_path)
+        return uszipcode.SearchEngine(
+            simple_or_comprehensive=uszipcode.SearchEngine.SimpleOrComprehensiveArgEnum.simple,
+            db_file_path=db_file_path,
+        )
 
     def validate_geographic_areas(self, values, db):
         # Note: the validator does not recognize data from US territories other than Puerto Rico.
