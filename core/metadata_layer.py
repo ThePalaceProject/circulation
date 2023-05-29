@@ -2428,16 +2428,16 @@ class MARCExtractor:
         metadata_records = []
 
         for record in reader:
-            title = record.title()
+            title = record.title
             if title.endswith(" /"):
                 title = title[: -len(" /")]
-            issued_year = cls.parse_year(record.pubyear())
-            publisher = record.publisher()
+            issued_year = cls.parse_year(record.pubyear)
+            publisher = record.publisher
             if publisher.endswith(","):
                 publisher = publisher[:-1]
 
             links = []
-            summary = record.notes()[0]["a"]
+            summary = record.notes[0]["a"]
 
             if summary:
                 summary_link = LinkData(
@@ -2455,10 +2455,10 @@ class MARCExtractor:
                     Classifier.FAST,
                     subject["a"],
                 )
-                for subject in record.subjects()
+                for subject in record.subjects
             ]
 
-            author = record.author()
+            author = record.author
             if author:
                 author = cls.name_cleanup(author)
                 author_names = [author]
