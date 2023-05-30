@@ -192,7 +192,7 @@ class HTTP:
         )
 
     # The set of status codes on which a retry will be attempted (if the number of retries requested is non-zero).
-    RETRY_STATUS_CODES = list(range(500, 600))
+    RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
     @classmethod
     def _request_with_timeout(
@@ -221,6 +221,7 @@ class HTTP:
             kwargs["timeout"] = 20
 
         max_retry_count: int = int(kwargs.pop("max_retry_count", 5))
+        backoff_factor: float = float(kwargs.pop("backoff_factor", 1.0))
 
         # Unicode data can't be sent over the wire. Convert it
         # to UTF-8.
@@ -259,7 +260,9 @@ class HTTP:
             if make_request_with == sessions.Session.request:
                 with sessions.Session() as session:
                     retry_strategy = Retry(
-                        total=max_retry_count, status_forcelist=cls.RETRY_STATUS_CODES
+                        total=max_retry_count,
+                        status_forcelist=cls.RETRY_STATUS_CODES,
+                        backoff_factor=backoff_factor,
                     )
                     adapter = HTTPAdapter(max_retries=retry_strategy)
 
