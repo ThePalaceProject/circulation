@@ -232,23 +232,22 @@ class Admin(Base, HasSessionCache):
 
     @staticmethod
     def validate_reset_password_token_and_fetch_admin(
-        token: str, _db: Session, secret_key: str
+        token: str, admin_id: int, _db: Session, secret_key: str
     ) -> ProblemDetail | Admin:
         serializer = URLSafeTimedSerializer(secret_key)
 
-        # We first load token without any checks and try to fetch admin from the database
-        is_safe, payload = serializer.loads_unsafe(token)
-
-        possible_admin = get_one(_db, Admin, email=payload)
+        # We first load admin using admin_id sent in the request.
+        possible_admin = get_one(_db, Admin, id=admin_id)
 
         if possible_admin is None:
             return INVALID_RESET_PASSWORD_TOKEN
 
-        # If there exists an admin that matches the email from the token we check for the validity of the token.
+        # There exists an admin that matches the admin_id sent in the request. Now we can check the validity of the
+        # sent token.
         # We use the existing password hash as a salt to invalidate token if the user has already used the same
         # token and already changed the password
         try:
-            serializer.loads(
+            admin_email = serializer.loads(
                 token,
                 max_age=Admin.RESET_PASSWORD_TOKEN_MAX_AGE,
                 salt=possible_admin.password_hashed,
@@ -258,6 +257,10 @@ class Admin(Base, HasSessionCache):
                 _("Reset password token has expired.")
             )
         except BadSignature:
+            return INVALID_RESET_PASSWORD_TOKEN
+
+        # We also check that deserialized admin email from the token matches the admin email from the database.
+        if possible_admin.email != admin_email:
             return INVALID_RESET_PASSWORD_TOKEN
 
         return possible_admin
