@@ -2233,6 +2233,48 @@ class TestLibraryLoanAndHoldAnnotator:
             == NOT_FOUND_ON_REMOTE
         )
 
+    def test_choose_best_hold_for_work(self, db: DatabaseTransactionFixture):
+        # First create two license pools for the same work so we could create two holds for the same work.
+        patron = db.patron()
+
+        coll_1 = db.collection(name="Collection 1")
+        coll_2 = db.collection(name="Collection 2")
+
+        work = db.work()
+
+        pool_1 = db.licensepool(
+            edition=work.presentation_edition, open_access=False, collection=coll_1
+        )
+        pool_2 = db.licensepool(
+            edition=work.presentation_edition, open_access=False, collection=coll_2
+        )
+
+        hold_1, _ = pool_1.on_hold_to(patron)
+        hold_2, _ = pool_2.on_hold_to(patron)
+
+        # When there is no licenses_owned/available on one license pool the LibraryLoanAndHoldAnnotator should choose
+        # hold associated with the other license pool.
+        pool_1.licenses_owned = 0
+        pool_1.licenses_available = 0
+
+        assert hold_2 == LibraryLoanAndHoldAnnotator.choose_best_hold_for_work(
+            [hold_1, hold_2]
+        )
+
+        # Now we have different number of licenses owned across two LPs and the same hold position.
+        # Hold associated with LP with more owned licenses will be chosen as best.
+        pool_1.licenses_owned = 2
+
+        pool_2.licenses_owned = 3
+        pool_2.licenses_available = 0
+
+        hold_1.position = 7
+        hold_2.position = 7
+
+        assert hold_2 == LibraryLoanAndHoldAnnotator.choose_best_hold_for_work(
+            [hold_1, hold_2]
+        )
+
 
 class SharedCollectionAnnotatorFixture:
     def __init__(self, db: DatabaseTransactionFixture):

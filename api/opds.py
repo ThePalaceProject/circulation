@@ -1645,11 +1645,22 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             work = loan.work
             if work:
                 active_loans_by_work[work] = loan
-        active_holds_by_work = {}
+
+        # There might be multiple holds for the same work so we gather all of them and choose the best one.
+        all_holds_by_work = {}
         for hold in patron.holds:
             work = hold.work
-            if work:
-                active_holds_by_work[work] = hold
+            if not work:
+                continue
+
+            if work not in all_holds_by_work:
+                all_holds_by_work[work] = []
+
+            all_holds_by_work[work].append(hold)
+
+        active_holds_by_work = {}
+        for work, list_of_holds in all_holds_by_work.items():
+            active_holds_by_work[work] = cls.choose_best_hold_for_work(list_of_holds)
 
         annotator = cls(
             circulation,
@@ -1672,6 +1683,41 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         if last_modified:
             response.last_modified = last_modified
         return response
+
+    @staticmethod
+    def choose_best_hold_for_work(list_of_holds):
+        # We don't want holds that are connected to license pools without any licenses owned. Also, we want hold that
+        # would result in the least wait time for the patron.
+
+        best = list_of_holds[0]
+
+        for hold in list_of_holds:
+            # We don't want holds with LPs with 0 licenses owned.
+            if hold.license_pool.licenses_owned == 0:
+                continue
+
+            # Our current hold's LP owns some licenses but maybe the best one wasn't changed yet.
+            if best.license_pool.licenses_owned == 0:
+                best = hold
+                continue
+
+            # Since these numbers are updated by different processes there might be situation where we don't have
+            # all data filled out.
+            hold_position = (
+                hold.position or hold.license_pool.patrons_in_hold_queue or 0
+            )
+            best_position = (
+                best.position or best.license_pool.patrons_in_hold_queue or 0
+            )
+
+            # Both the best hold and current hold own some licenses, try to figure out which one is better.
+            if (
+                hold_position / hold.license_pool.licenses_owned
+                < best_position / best.license_pool.licenses_owned
+            ):
+                best = hold
+
+        return best
 
     @classmethod
     def single_item_feed(

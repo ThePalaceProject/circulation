@@ -461,7 +461,7 @@ class TestBibliothecaAPI:
         # The queued response was converted into pymarc Record objects.
         assert all(isinstance(x, Record) for x in records)
         assert ["Siege and Storm", "Red Island House A Novel/"] == [
-            x.title() for x in records
+            x.title for x in records
         ]
 
         # If the API returns an error, an appropriate exception is raised.
