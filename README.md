@@ -156,7 +156,7 @@ grant all privileges on database circ to palace;
 To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
 
 ```sh
-export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
+export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
 ```
 
 ### Email sending
@@ -518,7 +518,7 @@ Make sure the ports and usernames are updated to reflect the local configuration
 
 ```sh
 # Set environment variables
-export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:9005/simplified_circulation_test"
+export SIMPLIFIED_TEST_DATABASE="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
 export SIMPLIFIED_TEST_OPENSEARCH="http://localhost:9200"
 
 # Run tox
