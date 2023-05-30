@@ -263,7 +263,9 @@ class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
             headers["x-sirs-sessionToken"] = session_token
 
         url = urljoin(self.server_url, path)
-        return HTTP.request_with_timeout(method, url, headers=headers, json=json)
+        return HTTP.request_with_timeout(
+            method, url, headers=headers, json=json, max_retry_count=0
+        )
 
     def api_patron_login(self, username: str, password: str) -> Literal[False] | dict:
         """API request to verify credentials of a user.

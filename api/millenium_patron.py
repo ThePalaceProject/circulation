@@ -365,6 +365,7 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         configuration, in a testable way.
         """
         kwargs["verify"] = self.verify_certificate
+        kwargs["max_retry_count"] = 0
 
     @classmethod
     def _patron_block_reason(cls, block_types, mblock_value):

@@ -82,7 +82,10 @@ class TestOverdriveCoreAPI:
         for code in [400, 403, 500, 501, 502, 503]:
             _r = MockAPIServerResponse()
             _r.status_code = code
-            mock_web_server.enqueue_response("GET", "/a/b/c", _r)
+
+            # The default is to retry 5 times, so enqueue 5 responses.
+            for i in range(0, 6):
+                mock_web_server.enqueue_response("GET", "/a/b/c", _r)
             try:
                 api.get(mock_web_server.url("/a/b/c"))
             except BadResponseException:

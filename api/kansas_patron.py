@@ -134,5 +134,6 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             self.base_url,
             data,
             headers={"Content-Type": "application/xml"},
+            max_retry_count=0,
             allowed_response_codes=["2xx"],
         )

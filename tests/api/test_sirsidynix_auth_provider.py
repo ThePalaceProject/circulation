@@ -103,6 +103,7 @@ class TestSirsiDynixAuthenticationProvider:
                 "http://example.org/sirsi/user/patron/login",
                 json=dict(login="username", password="pwd"),
                 headers=self._headers(provider),
+                max_retry_count=0,
             )
             assert response == response_dict
 
