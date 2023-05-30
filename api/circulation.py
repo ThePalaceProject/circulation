@@ -1163,7 +1163,7 @@ class CirculationAPI:
             loan_exception = e
 
         if loan_info:
-            # We successfuly secured a loan.  Now create it in our
+            # We successfully secured a loan.  Now create it in our
             # database.
             __transaction = self._db.begin_nested()
             loan, new_loan_record = licensepool.loan_to(
