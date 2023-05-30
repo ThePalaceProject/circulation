@@ -16,7 +16,3 @@ app_home=/home/simplified
 mkdir -p $app_home/service/uwsgi
 cp /ls_build/services/uwsgi.runit $app_home/service/uwsgi/run
 chown -R simplified:simplified $app_home/service
-
-# Create socket folder with correct permissions.
-mkdir /var/run/uwsgi
-chown simplified:simplified /var/run/uwsgi

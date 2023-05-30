@@ -12,8 +12,7 @@ source "${dir}/check_service_status.sh"
 # Wait for container to start
 wait_for_runit "$container"
 
-# In a webapp container, check that nginx and uwsgi are running.
-check_service_status "$container" /etc/service/nginx
+# In a webapp container, check that uwsgi is running.
 check_service_status "$container" /home/simplified/service/uwsgi
 
 # Make sure the web server is running.
