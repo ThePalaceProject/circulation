@@ -538,6 +538,11 @@ class SessionBulkOperation:
         self._objects = []
 
 
+# We rely on all of our sqlalchemy models being imported here, so that they are
+# registered with the declarative base. This is necessary to make sure that all
+# of our models are properly reflected in the database when we run migrations or
+# create a new database.
+
 from api.saml.metadata.federations.model import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
