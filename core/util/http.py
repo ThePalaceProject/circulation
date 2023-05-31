@@ -191,6 +191,9 @@ class HTTP:
             url, sessions.Session.request, http_method, *args, **kwargs
         )
 
+    # The set of status codes on which a retry will be attempted (if the number of retries requested is non-zero).
+    RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
+
     @classmethod
     def _request_with_timeout(
         cls, url: str, make_request_with: Callable[..., Response], *args, **kwargs
@@ -217,7 +220,8 @@ class HTTP:
         if not "timeout" in kwargs:
             kwargs["timeout"] = 20
 
-        max_retry_count = kwargs.pop("max_retry_count", None)
+        max_retry_count: int = int(kwargs.pop("max_retry_count", 5))
+        backoff_factor: float = float(kwargs.pop("backoff_factor", 1.0))
 
         # Unicode data can't be sent over the wire. Convert it
         # to UTF-8.
@@ -255,15 +259,15 @@ class HTTP:
 
             if make_request_with == sessions.Session.request:
                 with sessions.Session() as session:
-                    if max_retry_count is not None:
-                        # TODO: Verify the status codes for which it retries.
-                        #  Are there any status codes for which we would NOT want to retry (e.g., 401, 403)?
-                        #  Are there some that we want to ensure get retried (e.g., 502, which we get a lot).
-                        retry_strategy = Retry(total=max_retry_count)
-                        adapter = HTTPAdapter(max_retries=retry_strategy)
+                    retry_strategy = Retry(
+                        total=max_retry_count,
+                        status_forcelist=cls.RETRY_STATUS_CODES,
+                        backoff_factor=backoff_factor,
+                    )
+                    adapter = HTTPAdapter(max_retries=retry_strategy)
 
-                        session.mount("http://", adapter)
-                        session.mount("https://", adapter)
+                    session.mount("http://", adapter)
+                    session.mount("https://", adapter)
 
                     response = session.request(*args, **kwargs)
             else:
@@ -350,21 +354,26 @@ class HTTP:
             code in allowed_response_codes or series in allowed_response_codes
         ):
             error_message = status_code_not_in_allowed
-        if error_message:
-            response_content = response.content
-            if response_content and isinstance(response_content, bytes):
-                try:
-                    response_content = response_content.decode(expected_encoding)
-                except Exception as e:
-                    raise RequestNetworkException(url, e)
 
+        if error_message:
             raise BadResponseException(
                 url,
                 error_message % code,
                 status_code=code,
-                debug_message="Response content: %s" % response_content,
+                debug_message="Response content: %s"
+                % cls._decode_response_content(expected_encoding, response, url),
             )
         return response
+
+    @classmethod
+    def _decode_response_content(cls, expected_encoding, response, url) -> str:
+        response_content = response.content
+        if response_content and isinstance(response_content, bytes):
+            try:
+                response_content = response_content.decode(expected_encoding)
+            except Exception as e:
+                raise RequestNetworkException(url, e)
+        return response_content
 
     @classmethod
     def series(cls, status_code):
