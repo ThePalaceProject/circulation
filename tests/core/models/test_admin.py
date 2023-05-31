@@ -224,7 +224,16 @@ class TestAdmin:
         assert isinstance(invalid_token, ProblemDetail)
         assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
 
+        # Valid token but the admin email has changed in the meantime - strange situation - unsuccessful validation
+        admin.email = "changed@email.com"
+        invalid_email = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_email, ProblemDetail)
+        assert invalid_email == INVALID_RESET_PASSWORD_TOKEN
+
         # Valid token - admin is successfully extracted from token
+        valid_token = admin.generate_reset_password_token(secret_key)
         extracted_admin = Admin.validate_reset_password_token_and_fetch_admin(
             valid_token, admin.id, db_session, secret_key
         )
