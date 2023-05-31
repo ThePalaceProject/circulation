@@ -2858,5 +2858,7 @@ class TestOPDSImportMonitor:
 
                 # Ensure that the correct retry count had been passed.
                 retry_constructor_mock.assert_called_once_with(
-                    total=retry_count, status_forcelist=[429, 500, 502, 503, 504], backoff_factor=1.0
+                    total=retry_count,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                    backoff_factor=1.0,
                 )
