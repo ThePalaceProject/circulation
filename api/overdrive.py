@@ -11,6 +11,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.exc import StaleDataError
 
 from core.analytics import Analytics
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.model import (
     Collection,
@@ -31,6 +32,7 @@ from core.overdrive import (
     OverdriveConfiguration,
     OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
+    OverdriveSettings,
 )
 from core.scripts import Script
 from core.util.datetime_helpers import strptime_utc
@@ -38,6 +40,7 @@ from core.util.http import HTTP
 
 from .circulation import (
     BaseCirculationAPI,
+    BaseCirculationAPISettings,
     DeliveryMechanismInfo,
     FulfillmentInfo,
     HoldInfo,
@@ -65,10 +68,23 @@ class OverdriveAPIConstants:
     ]
 
 
+class OverdriveLibrarySettings(BaseSettings):
+    ils_name: str = FormField(
+        default=OverdriveCoreAPI.ILS_NAME_DEFAULT,
+        form=ConfigurationFormItem(
+            label=_("ILS Name"),
+            description=_(
+                "When multiple libraries share an Overdrive account, Overdrive uses a setting called 'ILS Name' to determine which ILS to check when validating a given patron."
+            ),
+        ),
+    )
+
+    ebook_loan_duration: Optional[str] = BaseCirculationAPISettings.ebook_loan_duration
+
+
 class OverdriveAPI(
     OverdriveCoreAPI, BaseCirculationAPI, HasSelfTests, OverdriveAPIConstants
 ):
-
     NAME = ExternalIntegration.OVERDRIVE
     DESCRIPTION = _(
         "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
@@ -143,6 +159,20 @@ class OverdriveAPI(
         "PatronHasExceededCheckoutLimit": PatronLoanLimitReached,
         "PatronHasExceededCheckoutLimit_ForCPC": PatronLoanLimitReached,
     }
+
+    @classmethod
+    def settings_class(cls):
+        return OverdriveSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OverdriveLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)
@@ -408,7 +438,6 @@ class OverdriveAPI(
         raise CannotLoan(code)
 
     def checkin(self, patron, pin, licensepool):
-
         # Get the loan for this patron to see whether or not they
         # have a delivery mechanism recorded.
         loan = None
@@ -559,7 +588,6 @@ class OverdriveAPI(
             if internal_format in self.STREAMING_FORMATS:
                 media_type += DeliveryMechanism.STREAMING_PROFILE
         except FormatNotAvailable as e:
-
             # It's possible the available formats for this book have changed and we
             # have an inaccurate delivery mechanism. Try to update the formats, but
             # reraise the error regardless.
@@ -694,7 +722,6 @@ class OverdriveAPI(
         return link["href"], link["type"]
 
     def lock_in_format(self, patron, pin, overdrive_id, format_type):
-
         overdrive_id = overdrive_id.upper()
         headers, document = self.fill_out_form(
             reserveId=overdrive_id, formatType=format_type
@@ -706,7 +733,6 @@ class OverdriveAPI(
     def extract_data_from_checkout_response(
         cls, checkout_response_json, format_type, error_url
     ):
-
         expires = cls.extract_expiration_date(checkout_response_json)
         return expires, cls.get_download_link(
             checkout_response_json, format_type, error_url

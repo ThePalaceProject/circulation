@@ -139,6 +139,11 @@ class ConfigurationFormItemType(Enum):
     SELECT = "select"
     LIST = "list"
     MENU = "menu"
+    NUMBER = "number"
+
+    @classmethod
+    def options_from_enum(cls, enum_: Enum) -> Dict:
+        return {e.value: e.name for e in enum_}
 
 
 @dataclass(frozen=True)
@@ -182,6 +187,9 @@ class ConfigurationFormItem:
     # weight will be displayed in the order they were added.
     weight: int = 0
 
+    # Allowed values for any field
+    allowed: List | None = None
+
     @staticmethod
     def get_form_value(value: Any) -> Any:
         if isinstance(value, Enum):
@@ -220,6 +228,9 @@ class ConfigurationFormItem:
             ]
         if self.format is not None:
             form_entry["format"] = self.format
+        if self.allowed is not None:
+            form_entry["allowed"] = self.allowed
+
         return self.weight, form_entry
 
 
@@ -299,6 +310,7 @@ class BaseSettings(BaseModel):
         config = []
         for field in cls.__fields__.values():
             if not isinstance(field.field_info, FormFieldInfo):
+                print(field)
                 cls.logger().warning(
                     f"{field.name} was not initialized with FormField, skipping."
                 )

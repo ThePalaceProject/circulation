@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.parse
+from typing import Optional
 
 import requests
 from flask_babel import lazy_gettext as _
@@ -9,6 +10,12 @@ from requests.auth import HTTPBasicAuth
 from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptorResultJSONEncoder
 from api.lcp.hash import HashingAlgorithm
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.lcp.credential import LCPHashedPassphrase, LCPUnhashedPassphrase
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -16,6 +23,14 @@ from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationOption,
 )
+
+
+class LCPServerConstants:
+    DEFAULT_PAGE_SIZE = 100
+    DEFAULT_PASSPHRASE_HINT = (
+        "If you do not remember your passphrase, please contact your administrator"
+    )
+    DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
 
 class LCPServerConfiguration(ConfigurationGrouping):
@@ -116,6 +131,111 @@ class LCPServerConfiguration(ConfigurationGrouping):
         ),
         type=ConfigurationAttributeType.NUMBER,
         required=False,
+    )
+
+
+class LCPServerSettings(BaseSettings):
+    lcpserver_url: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("LCP License Server's URL"),
+            description=_("URL of the LCP License Server"),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    lcpserver_user: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("LCP License Server's user"),
+            description=_("Name of the user used to connect to the LCP License Server"),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    lcpserver_password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("LCP License Server's password"),
+            description=_(
+                "Password of the user used to connect to the LCP License Server"
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    lcpserver_input_directory: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("LCP License Server's input directory"),
+            description=_(
+                "Full path to the directory containing encrypted books. "
+                "This directory should be the same as lcpencrypt's output directory"
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    lcpserver_page_size: Optional[int] = FormField(
+        default=LCPServerConstants.DEFAULT_PAGE_SIZE,
+        form=ConfigurationFormItem(
+            label=_("LCP License Server's page size"),
+            description=_("Number of licences returned by the server"),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
+    )
+
+    provider_name: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("LCP service provider's identifier"),
+            description=_("URI that identifies the provider in an unambiguous way"),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    passphrase_hint: Optional[str] = FormField(
+        default=LCPServerConstants.DEFAULT_PASSPHRASE_HINT,
+        form=ConfigurationFormItem(
+            label=_("Passphrase hint"),
+            description=_("Hint proposed to the user for selecting their passphrase"),
+            type=ConfigurationFormItemType.TEXT,
+            required=False,
+        ),
+    )
+
+    encryption_algorithm: Optional[str] = FormField(
+        default=LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+        form=ConfigurationFormItem(
+            label=_("Passphrase encryption algorithm"),
+            description=_("Algorithm used for encrypting the passphrase"),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            options=ConfigurationFormItemType.options_from_enum(HashingAlgorithm),
+        ),
+    )
+
+    max_printable_pages: Optional[int] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Maximum number or printable pages"),
+            description=_(
+                "Maximum number of pages that can be printed over the lifetime of the license"
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
+    )
+
+    max_copiable_pages: Optional[int] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Maximum number or copiable characters"),
+            description=_(
+                "Maximum number of characters that can be copied to the clipboard"
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
     )
 
 

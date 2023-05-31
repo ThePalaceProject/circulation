@@ -1,9 +1,12 @@
 import datetime
 import json
+from typing import Type
 
 import feedparser
 from flask_babel import lazy_gettext as _
 
+from core.integration.base import HasIntegrationConfiguration
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import FormatData, TimestampData
 from core.model import (
     Collection,
@@ -18,7 +21,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.opds_import import BaseOPDSImporterSettings, OPDSImporter, OPDSImportMonitor
 from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
@@ -28,7 +31,25 @@ from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
 
 
-class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
+class OPDSForDistributorsSettings(BaseOPDSImporterSettings):
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library's username or access key"),
+            required=True,
+        )
+    )
+
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library's password or secret key"),
+            required=True,
+        )
+    )
+
+
+class OPDSForDistributorsAPI(
+    BaseCirculationAPI, HasSelfTests, HasIntegrationConfiguration
+):
     NAME = "OPDS for Distributors"
     DESCRIPTION = _(
         "Import books from a distributor that requires authentication to get the OPDS feed and download books."
@@ -65,6 +86,16 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
     delivery_mechanism_to_internal_format = {
         (type, DeliveryMechanism.BEARER_TOKEN): type for type in SUPPORTED_MEDIA_TYPES
     }
+
+    @classmethod
+    def settings_class(cls) -> Type[BaseSettings]:
+        return OPDSForDistributorsSettings
+
+    def description(self):
+        return self.DESCRIPTION
+
+    def label(self):
+        return self.NAME
 
     def __init__(self, _db, collection):
         self.collection_id = collection.id

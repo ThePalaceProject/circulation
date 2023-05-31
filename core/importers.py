@@ -1,7 +1,13 @@
-from core.configuration.ignored_identifier import IgnoredIdentifierConfiguration
-from core.connection_config import ConnectionConfigurationTrait
-from core.model.formats import FormatPrioritiesConfigurationTrait
-from core.saml.wayfless import SAMLWAYFlessConfigurationTrait
+from core.configuration.ignored_identifier import (
+    IgnoredIdentifierConfiguration,
+    IgnoredIdentifierSettings,
+)
+from core.connection_config import ConnectionConfigurationTrait, ConnectionSetting
+from core.model.formats import (
+    FormatPrioritiesConfigurationTrait,
+    FormatPrioritiesSettings,
+)
+from core.saml.wayfless import SAMLWAYFlessConfigurationTrait, SAMLWAYFlessSetttings
 
 
 class BaseImporterConfiguration(
@@ -11,3 +17,12 @@ class BaseImporterConfiguration(
     IgnoredIdentifierConfiguration,
 ):
     """The abstract base class of importer configurations."""
+
+
+class BaseImporterSettings(
+    ConnectionSetting,
+    SAMLWAYFlessSetttings,
+    FormatPrioritiesSettings,
+    IgnoredIdentifierSettings,
+):
+    pass

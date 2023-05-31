@@ -15,6 +15,13 @@ from lxml import etree
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -52,6 +59,7 @@ from core.util.xmlparser import XMLParser
 from .circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
+    BaseCirculationAPISettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -63,21 +71,71 @@ from .web_publication_manifest import FindawayManifest, SpineItem
 
 class Axis360APIConstants:
     VERIFY_SSL = "verify_certificate"
-
-
-class Axis360API(BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants):
-
-    NAME = ExternalIntegration.AXIS_360
-
-    SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
-
-    SERVICE_NAME = "Axis 360"
     PRODUCTION_BASE_URL = "https://axis360api.baker-taylor.com/Services/VendorAPI/"
     QA_BASE_URL = "http://axis360apiqa.baker-taylor.com/Services/VendorAPI/"
     SERVER_NICKNAMES = {
         "production": PRODUCTION_BASE_URL,
         "qa": QA_BASE_URL,
     }
+
+
+class Axis360Settings(BaseSettings):
+    username: str = FormField(
+        form=ConfigurationFormItem(label=_("Username"), required=True)
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(label=_("Password"), required=True)
+    )
+    external_account_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            required=True,
+        )
+    )
+    url: str = FormField(
+        default=Axis360APIConstants.PRODUCTION_BASE_URL,
+        form=ConfigurationFormItem(
+            label=_("Server"),
+            required=True,
+            format="url",
+            allowed=list(Axis360APIConstants.SERVER_NICKNAMES.keys()),
+        ),
+    )
+    verify_certificate: Optional[str] = FormField(
+        default=True,
+        form=ConfigurationFormItem(
+            label=_("Verify SSL Certificate"),
+            description=_(
+                "This should always be True in production, it may need to be set to False to use the"
+                "Axis 360 QA Environment."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "True": _("True"),
+                "False": _("False"),
+            },
+        ),
+    )
+
+
+class Axis360LibrarySettings(BaseSettings):
+    default_loan_duration: Optional[
+        int
+    ] = BaseCirculationAPISettings.default_loan_duration
+
+
+class Axis360API(
+    BaseCirculationAPI,
+    HasCollectionSelfTests,
+    Axis360APIConstants,
+    HasLibraryIntegrationConfiguration,
+):
+
+    NAME = ExternalIntegration.AXIS_360
+
+    SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
+
+    SERVICE_NAME = "Axis 360"
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
 
     SETTINGS = [
@@ -91,10 +149,10 @@ class Axis360API(BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants
         {
             "key": ExternalIntegration.URL,
             "label": _("Server"),
-            "default": PRODUCTION_BASE_URL,
+            "default": Axis360APIConstants.PRODUCTION_BASE_URL,
             "required": True,
             "format": "url",
-            "allowed": list(SERVER_NICKNAMES.keys()),
+            "allowed": list(Axis360APIConstants.SERVER_NICKNAMES.keys()),
         },
         {
             "key": Axis360APIConstants.VERIFY_SSL,
@@ -147,6 +205,20 @@ class Axis360API(BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants
         (None, findaway_drm): "Acoustik",
         (None, axisnow_drm): AXISNOW,
     }
+
+    @classmethod
+    def settings_class(cls):
+        return Axis360Settings
+
+    @classmethod
+    def library_settings_class(cls):
+        return Axis360LibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return ""
 
     def __init__(self, _db, collection):
         if collection.protocol != ExternalIntegration.AXIS_360:
@@ -742,7 +814,6 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
 
 
 class Axis360Parser(XMLParser):
-
     NS = {"axis": "http://axis360api.baker-taylor.com/vendorAPI"}
 
     SHORT_DATE_FORMAT = "%m/%d/%Y"
@@ -774,7 +845,6 @@ class Axis360Parser(XMLParser):
 
 
 class BibliographicParser(Axis360Parser):
-
     DELIVERY_DATA_FOR_AXIS_FORMAT = {
         "Blio": None,  # Legacy format, handled the same way as AxisNow
         "Acoustik": (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
@@ -1109,7 +1179,6 @@ class BibliographicParser(Axis360Parser):
 
 
 class ResponseParser(Axis360Parser):
-
     id_type = Identifier.AXIS_360_ID
 
     SERVICE_NAME = "Axis 360"
@@ -1251,7 +1320,6 @@ class CheckoutResponseParser(ResponseParser):
             return i
 
     def process_one(self, e, namespaces):
-
         """Either turn the given document into a LoanInfo
         object, or raise an appropriate exception.
         """
@@ -1358,7 +1426,6 @@ class AvailabilityResponseParser(ResponseParser):
                 yield info
 
     def process_one(self, e, ns):
-
         # Figure out which book we're talking about.
         axis_identifier = self.text_of_subtag(e, "axis:titleId", ns)
         availability = self._xpath1(e, "axis:availability", ns)

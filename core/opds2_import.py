@@ -4,7 +4,7 @@ import logging
 from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
@@ -21,6 +21,7 @@ from webpub_manifest_parser.opds2.registry import (
 from webpub_manifest_parser.utils import encode, first_or_default
 
 from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
+from core.integration.settings import ConfigurationFormItem, FormField
 from core.mirror import MirrorUploader
 from core.model.configuration import (
     ConfigurationAttributeType,
@@ -58,7 +59,7 @@ from .model import (
     RightsStatus,
     Subject,
 )
-from .opds_import import OPDSImporter, OPDSImportMonitor
+from .opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
 from .util.http import BadResponseException
 from .util.opds_writer import OPDSFeed
 
@@ -139,6 +140,22 @@ class OPDS2ImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguratio
     )
 
 
+class OPDS2ImporterSettings(OPDSImporterSettings):
+    custom_accept_header: Optional[str] = FormField(
+        default="{}, {};q=0.9, */*;q=0.1".format(
+            OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
+        ),
+        form=ConfigurationFormItem(
+            label=_("Custom accept header"),
+            description=_(
+                "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
+            ),
+            type=ConfigurationAttributeType.TEXT,
+            required=False,
+        ),
+    )
+
+
 class OPDS2Importer(
     IgnoredIdentifierImporterMixin, OPDSImporter, HasExternalIntegration
 ):
@@ -150,6 +167,16 @@ class OPDS2Importer(
         OPDSImporter.SETTINGS + OPDS2ImporterConfiguration.to_settings()
     )
     NEXT_LINK_RELATION: str = "next"
+
+    @classmethod
+    def settings_class(self):
+        return OPDS2ImporterSettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(
         self,

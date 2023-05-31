@@ -1,10 +1,17 @@
 import base64
 import json
 import logging
+from typing import List
 
 from flask_babel import lazy_gettext as _
 
 from core.config import CannotLoadConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.model import Collection, ConfigurationSetting, IntegrationClient, get_one
 from core.util.http import HTTP
 
@@ -209,6 +216,33 @@ class SharedCollectionAPI:
         if hold and hold.integration_client != client:
             raise CannotReleaseHold(_("This hold belongs to a different library."))
         return api.release_hold_from_external_library(client, hold)
+
+
+class BaseSharedCollectionSettings(BaseSettings):
+    external_library_urls: Optional[List[str]] = FormField(
+        form=ConfigurationFormItem(
+            label=_(
+                "URLs for libraries on other circulation managers that use this collection"
+            ),
+            description=_(
+                "A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."
+            ),
+            type=ConfigurationFormItemType.LIST,
+            format="url",
+        )
+    )
+    ebook_loan_duration: Optional[int] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_(
+                "Ebook Loan Duration for libraries on other circulation managers (in Days)"
+            ),
+            description=_(
+                "When a patron from another library borrows an ebook from this collection, the circulation manager will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+        ),
+    )
 
 
 class BaseSharedCollectionAPI:

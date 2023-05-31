@@ -12,10 +12,16 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
 from api.circulation_exceptions import CannotFulfill
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
-from .importers import BaseImporterConfiguration
+from .importers import BaseImporterConfiguration, BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -120,7 +126,59 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     )
 
 
-class OverdriveCoreAPI(HasExternalIntegration):
+class OverdriveSettings(BaseImporterSettings):
+    """The basic Overdrive configuration"""
+
+    external_account_id: str = FormField(
+        alias="library_id",
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The library identifier.",
+            required=True,
+        ),
+    )
+    overdrive_website_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Website ID"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The web site identifier.",
+            required=True,
+        )
+    )
+    overdrive_client_key: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Key"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The Overdrive client key.",
+            required=True,
+        )
+    )
+    overdrive_client_secret: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Secret"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The Overdrive client secret.",
+            required=True,
+        )
+    )
+
+    overdrive_server_nickname: Optional[str] = FormField(
+        default=OverdriveConfiguration.PRODUCTION_SERVERS,
+        form=ConfigurationFormItem(
+            label=_("Server family"),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            description="Unless you hear otherwise from Overdrive, your integration should use their production servers.",
+            options={
+                OverdriveConfiguration.PRODUCTION_SERVERS: ("Production"),
+                OverdriveConfiguration.TESTING_SERVERS: _("Testing"),
+            },
+        ),
+    )
+
+
+class OverdriveCoreAPI(HasExternalIntegration, HasLibraryIntegrationConfiguration):
     # An OverDrive defined constant indicating the "main" or parent account
     # associated with an OverDrive collection.
     OVERDRIVE_MAIN_ACCOUNT_ID = -1

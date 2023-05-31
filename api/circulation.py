@@ -11,6 +11,11 @@ from flask_babel import lazy_gettext as _
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.mirror import MirrorUploader
 from core.model import (
     CirculationEvent,
@@ -412,6 +417,50 @@ class HoldInfo(CirculationInfo):
             self.fd(self.end_date),
             self.hold_position,
         )
+
+
+class BaseCirculationAPISettings:
+    """Not an inheritable BaseSettings object, this just holds reusable settings"""
+
+    ebook_loan_duration: Optional[int] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_("Ebook Loan Duration (in Days)"),
+            type=ConfigurationFormItemType.NUMBER,
+            description=_(
+                "When a patron uses SimplyE to borrow an ebook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+            ),
+        ),
+    )
+
+    # Add to LIBRARY_SETTINGS if your circulation API is for a
+    # distributor which includes audiobooks and allows clients to
+    # specify their own loan lengths.
+    audiobook_loan_duration: Optional[int] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_("Audiobook Loan Duration (in Days)"),
+            type=ConfigurationFormItemType.NUMBER,
+            description=_(
+                "When a patron uses SimplyE to borrow an audiobook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+            ),
+        ),
+    )
+
+    # Add to LIBRARY_SETTINGS if your circulation API is for a
+    # distributor with a default loan period negotiated out-of-band,
+    # such that the circulation manager cannot _specify_ the length of
+    # a loan.
+    default_loan_duration: Optional[int] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_("Default Loan Period (in Days)"),
+            type=ConfigurationFormItemType.NUMBER,
+            description=_(
+                "Until it hears otherwise from the distributor, this server will assume that any given loan for this library from this collection will last this number of days. This number is usually a negotiated value between the library and the distributor. This only affects estimates&mdash;it cannot affect the actual length of loans."
+            ),
+        ),
+    )
 
 
 class BaseCirculationAPI:

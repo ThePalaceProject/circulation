@@ -3064,7 +3064,9 @@ class TestDashboardController:
 
 
 class TestSettingsController:
-    def test_get_integration_protocols(self):
+    def test_get_integration_protocols(
+        self, admin_ctrl_fixture: AdminControllerFixture
+    ):
         """Test the _get_integration_protocols helper method."""
 
         class Protocol:
@@ -3077,7 +3079,9 @@ class TestSettingsController:
             LIBRARY_SETTINGS = [6]
             CARDINALITY = 1
 
-        [result] = SettingsController._get_integration_protocols([Protocol])
+        [result] = SettingsController(
+            admin_ctrl_fixture.manager
+        )._get_integration_protocols([Protocol])
         expect = dict(
             sitewide=True,
             description="my description",
@@ -3094,9 +3098,9 @@ class TestSettingsController:
         del Protocol.CARDINALITY
 
         # And look in a different place for the name.
-        [result] = SettingsController._get_integration_protocols(
-            [Protocol], protocol_name_attr="NAME"
-        )
+        [result] = SettingsController(
+            admin_ctrl_fixture.manager
+        )._get_integration_protocols([Protocol], protocol_name_attr="NAME")
 
         assert "my label" == result["name"]
         assert "cardinality" not in result

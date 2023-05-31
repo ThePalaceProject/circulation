@@ -10,6 +10,8 @@ from sqlalchemy.orm.session import Session
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
+from core.integration.base import HasIntegrationConfiguration
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -310,7 +312,32 @@ class OdiloRepresentationExtractor:
         return cls.odilo_medium_to_simplified_medium.get(format_received)
 
 
-class OdiloAPI(BaseCirculationAPI, HasSelfTests):
+class OdiloSettings(BaseSettings):
+    library_api_base_url: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library API base URL"),
+            description=_(
+                "This might look like <code>https://[library].odilo.us/api/v2</code>."
+            ),
+            required=True,
+            format="url",
+        )
+    )
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Key"),
+            required=True,
+        )
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Secret"),
+            required=True,
+        )
+    )
+
+
+class OdiloAPI(BaseCirculationAPI, HasSelfTests, HasIntegrationConfiguration):
     log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
 
@@ -377,6 +404,16 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
         "LOAN_ALREADY_RESERVED": AlreadyOnHold,
         "CHECKOUT_NOT_FOUND": NotCheckedOut,
     }
+
+    @classmethod
+    def settings_class(cls):
+        return OdiloSettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(self, _db, collection):
         self.odilo_bibliographic_coverage_provider = OdiloBibliographicCoverageProvider(

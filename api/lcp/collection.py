@@ -6,9 +6,10 @@ from flask import send_file
 from sqlalchemy import or_
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
-from api.lcp.encrypt import LCPEncryptionConfiguration
+from api.lcp.encrypt import LCPEncryptionConfiguration, LCPEncryptionSettings
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServer, LCPServerConfiguration
+from api.lcp.server import LCPServer, LCPServerConfiguration, LCPServerSettings
+from core.integration.base import HasIntegrationConfiguration
 from core.lcp.credential import LCPCredentialFactory
 from core.model import (
     Collection,
@@ -92,7 +93,11 @@ class LCPFulfilmentInfo(FulfillmentInfo):
         )
 
 
-class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
+class LCPSettings(LCPEncryptionSettings, LCPServerSettings):
+    pass
+
+
+class LCPAPI(BaseCirculationAPI, HasExternalIntegration, HasIntegrationConfiguration):
     """Implements LCP workflow"""
 
     NAME = ExternalIntegration.LCP
@@ -102,6 +107,16 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
     SETTINGS = (
         LCPServerConfiguration.to_settings() + LCPEncryptionConfiguration.to_settings()
     )
+
+    @classmethod
+    def settings_class(cls):
+        return LCPSettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(self, db, collection):
         """Initializes a new instance of LCPAPI class

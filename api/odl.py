@@ -18,7 +18,17 @@ from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
-from core.importers import BaseImporterConfiguration
+from core.importers import BaseImporterConfiguration, BaseImporterSettings
+from core.integration.base import (
+    HasIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration,
+)
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.lcp.credential import (
     LCPCredentialFactory,
     LCPHashedPassphrase,
@@ -60,10 +70,22 @@ from core.util.datetime_helpers import to_utc, utc_now
 from core.util.http import HTTP, BadResponseException, RemoteIntegrationException
 from core.util.string_helpers import base64
 
-from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from .circulation import (
+    BaseCirculationAPI,
+    BaseCirculationAPISettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from .circulation_exceptions import *
 from .lcp.hash import Hasher, HasherFactory, HashingAlgorithm
-from .shared_collection import BaseSharedCollectionAPI
+from .shared_collection import BaseSharedCollectionAPI, BaseSharedCollectionSettings
+
+
+class ODLAPIConstants:
+    DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
+    DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
+    DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
 
 class ODLAPIConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
@@ -151,7 +173,105 @@ class ODLAPIConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
     )
 
 
-class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration):
+class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
+    external_account_id: str = FormField(
+        key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
+        form=ConfigurationFormItem(
+            label=_("ODL feed URL"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+            format="url",
+        ),
+    )
+
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library's API username"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    password: str = FormField(
+        key=ExternalIntegration.PASSWORD,
+        form=ConfigurationFormItem(
+            label=_("Library's API password"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        ),
+    )
+
+    data_source: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Data source name"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    default_reservation_period: Optional[str] = FormField(
+        default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
+        form=ConfigurationFormItem(
+            label=_("Default Reservation Period (in Days)"),
+            description=_(
+                "The number of days a patron has to check out a book after a hold becomes available."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
+    )
+
+    passphrase_hint: str = FormField(
+        default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT,
+        form=ConfigurationFormItem(
+            label=_("Passphrase hint"),
+            description=_(
+                "Hint displayed to the user when opening an LCP protected publication."
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        ),
+    )
+
+    passphrase_hint_url: str = FormField(
+        default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT_URL,
+        form=ConfigurationFormItem(
+            label=_("Passphrase hint URL"),
+            description=_(
+                "Hint URL available to the user when opening an LCP protected publication."
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            format="url",
+            required=True,
+        ),
+    )
+
+    encryption_algorithm: Optional[str] = FormField(
+        default=ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+        form=ConfigurationFormItem(
+            label=_("Passphrase encryption algorithm"),
+            description=_("Algorithm used for encrypting the passphrase."),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            options=ConfigurationFormItemType.options_from_enum(HashingAlgorithm),
+        ),
+    )
+
+
+class ODLLibrarySettings(BaseSettings):
+    ebook_loan_duration: Optional[int] = BaseCirculationAPISettings.ebook_loan_duration
+
+
+class ODLAPI(
+    BaseCirculationAPI,
+    BaseSharedCollectionAPI,
+    HasExternalIntegration,
+    HasLibraryIntegrationConfiguration,
+):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
     of control to the library, but it requires the circulation manager to
@@ -206,6 +326,20 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         CANCELLED_STATUS,
         EXPIRED_STATUS,
     ]
+
+    @classmethod
+    def settings_class(cls):
+        return ODLSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return ODLLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(self, _db, collection):
         if collection.protocol != self.NAME:
@@ -1311,7 +1445,25 @@ class ODLHoldReaper(CollectionMonitor):
         return progress
 
 
-class SharedODLAPI(BaseCirculationAPI):
+class SharedODLSettings(BaseSettings):
+    external_account_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Base URL"),
+            description=_(
+                "The base URL for the collection on the other circulation manager."
+            ),
+            required=True,
+        )
+    )
+    data_source: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Data source name"),
+            required=True,
+        )
+    )
+
+
+class SharedODLAPI(BaseCirculationAPI, HasIntegrationConfiguration):
     """An API for circulation managers to use to connect to an ODL collection that's shared
     by another circulation manager.
     """
@@ -1340,6 +1492,16 @@ class SharedODLAPI(BaseCirculationAPI):
 
     SUPPORTS_REGISTRATION = True
     SUPPORTS_STAGING = False
+
+    @classmethod
+    def settings_class(cls):
+        return SharedODLSettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(self, _db, collection):
         if collection.protocol != self.NAME:

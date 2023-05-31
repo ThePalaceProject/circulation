@@ -4,12 +4,37 @@ from typing import Optional, Sequence, Set, Union
 from flask_babel import lazy_gettext as _
 
 from core.config import ConfigurationTrait
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationMetadata,
     ConfigurationOption,
 )
 from core.model.constants import IdentifierType
+
+ALL_IGNORED_IDENTIFIER_TYPES = {
+    identifier_type.value for identifier_type in IdentifierType
+}
+
+
+class IgnoredIdentifierSettings(BaseSettings):
+    # Todo: migrate the KEY field to lowercase
+    ignored_identifier_type = FormField(
+        default=tuple(),
+        form=ConfigurationFormItem(
+            label=_("List of identifiers that will be skipped"),
+            description=_(
+                "Circulation Manager will not be importing publications with identifiers having one of the selected types."
+            ),
+            type=ConfigurationAttributeType.MENU,
+            required=False,
+            options={
+                identifier_type: identifier_type
+                for identifier_type in ALL_IGNORED_IDENTIFIER_TYPES
+            },
+            format="narrow",
+        ),
+    )
 
 
 class IgnoredIdentifierConfiguration(ConfigurationTrait):
@@ -20,9 +45,6 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
     """
 
     KEY = "IGNORED_IDENTIFIER_TYPE"
-    ALL_IGNORED_IDENTIFIER_TYPES = {
-        identifier_type.value for identifier_type in IdentifierType
-    }
 
     ignored_identifier_types = ConfigurationMetadata(
         key=KEY,

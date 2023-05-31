@@ -66,6 +66,10 @@ from api.overdrive import OverdriveAPI
 from core.app_server import load_pagination_from_request
 from core.classifier import genres
 from core.external_search import ExternalSearchIndex
+from core.integration.base import (
+    HasIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration,
+)
 from core.lane import Lane, WorkList
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
@@ -1804,9 +1808,11 @@ class SettingsController(AdminCirculationManagerController):
 
         return None
 
-    @classmethod
-    def _get_integration_protocols(cls, provider_apis, protocol_name_attr="__module__"):
+    def _get_integration_protocols(
+        self, provider_apis, protocol_name_attr="__module__"
+    ):
         protocols = []
+        _db = self._db
         for api in provider_apis:
             protocol = dict()
             name = getattr(api, protocol_name_attr)
@@ -1829,6 +1835,8 @@ class SettingsController(AdminCirculationManagerController):
 
             settings = getattr(api, "SETTINGS", [])
             protocol["settings"] = list(settings)
+            if _db and issubclass(api, HasIntegrationConfiguration):
+                protocol["settings"] = api.settings_class().configuration_form(_db)
 
             child_settings = getattr(api, "CHILD_SETTINGS", None)
             if child_settings != None:
@@ -1837,6 +1845,11 @@ class SettingsController(AdminCirculationManagerController):
             library_settings = getattr(api, "LIBRARY_SETTINGS", None)
             if library_settings != None:
                 protocol["library_settings"] = list(library_settings)
+
+            if _db and issubclass(api, HasLibraryIntegrationConfiguration):
+                protocol[
+                    "library_settings"
+                ] = api.library_settings_class().configuration_form(_db)
 
             cardinality = getattr(api, "CARDINALITY", None)
             if cardinality != None:

@@ -4,7 +4,7 @@ import logging
 import traceback
 from contextlib import contextmanager
 from io import BytesIO
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Iterator, Optional
 from urllib.parse import urljoin, urlparse
 
 import dateutil
@@ -15,10 +15,18 @@ from lxml import etree
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
+from core.integration.base import HasIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+
 from .classifier import Classifier
 from .config import IntegrationException
 from .coverage import CoverageFailure
-from .importers import BaseImporterConfiguration
+from .importers import BaseImporterConfiguration, BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -163,7 +171,97 @@ class OPDSXMLParser(XMLParser):
     }
 
 
-class OPDSImporter:
+class BaseOPDSImporterSettings(BaseSettings):
+    NO_DEFAULT_AUDIENCE = ""
+
+    external_account_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("URL"),
+            required=True,
+            format="url",
+        )
+    )
+
+    data_source: str = FormField(
+        form=ConfigurationFormItem(label=_("Data source name"), required=True)
+    )
+
+    default_audience: Optional[str] = FormField(
+        default=NO_DEFAULT_AUDIENCE,
+        form=ConfigurationFormItem(
+            label=_("Default audience"),
+            description=_(
+                "If the vendor does not specify the target audience for their books, "
+                "assume the books have this target audience."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            format="narrow",
+            options={NO_DEFAULT_AUDIENCE: _("No default audience")}.update(
+                {audience: audience for audience in sorted(Classifier.AUDIENCES)}
+            ),
+            required=False,
+            # readOnly=True,
+        ),
+    )
+
+
+class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
+    username: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Username"),
+            description=_(
+                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
+            ),
+            weight=-1,
+        )
+    )
+
+    password: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Password"),
+            description=_(
+                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
+            ),
+            weight=-1,
+        )
+    )
+
+    custom_accept_header: Optional[str] = FormField(
+        default=",".join(
+            [
+                OPDSFeed.ACQUISITION_FEED_TYPE,
+                "application/atom+xml;q=0.9",
+                "application/xml;q=0.8",
+                "*/*;q=0.1",
+            ]
+        ),
+        form=ConfigurationFormItem(
+            label=_("Custom accept header"),
+            required=False,
+            description=_(
+                "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
+            ),
+            weight=-1,
+        ),
+    )
+
+    primary_identifier_source: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Identifer"),
+            required=False,
+            description=_("Which book identifier to use as ID."),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "": _("(Default) Use <id>"),
+                ExternalIntegration.DCTERMS_IDENTIFIER: _(
+                    "Use <dcterms:identifier> first, if not exist use <id>"
+                ),
+            },
+        )
+    )
+
+
+class OPDSImporter(HasIntegrationConfiguration):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -279,6 +377,16 @@ class OPDSImporter:
     # that should be treated as indicating success, rather than failure,
     # when they show up in <simplified:message> tags.
     SUCCESS_STATUS_CODES: list[int] | None = None
+
+    @classmethod
+    def settings_class(cls):
+        return OPDSImporterSettings
+
+    def label(self):
+        return "OPDS Importer"
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(
         self,
@@ -478,7 +586,6 @@ class OPDSImporter:
         return parse_identifier(self._db, identifier)
 
     def import_from_feed(self, feed, feed_url=None):
-
         # Keep track of editions that were imported. Pools and works
         # for those editions may be looked up or created.
         imported_editions = {}
@@ -1148,7 +1255,6 @@ class OPDSImporter:
         """
         path = "/atom:feed/simplified:message"
         for message_tag in parser._xpath(feed_tag, path):
-
             # First thing to do is determine which Identifier we're
             # talking about.
             identifier_tag = parser._xpath1(message_tag, "atom:id")
@@ -1236,7 +1342,6 @@ class OPDSImporter:
     def detail_for_elementtree_entry(
         cls, parser, entry_tag, data_source, feed_url=None, do_get=None
     ):
-
         """Turn an <atom:entry> tag into a dictionary of metadata that can be
         used as keyword arguments to the Metadata contructor.
 
@@ -1507,7 +1612,6 @@ class OPDSImporter:
 
         next_link_already_handled = False
         for i, link in enumerate(links):
-
             if link.rel not in (Hyperlink.THUMBNAIL_IMAGE, Hyperlink.IMAGE):
                 # This is not any kind of image. Ignore it.
                 continue
@@ -1754,7 +1858,6 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
 
         new_data = False
         for raw_identifier, remote_updated in last_update_dates:
-
             identifier = self._parse_identifier(raw_identifier)
             if not identifier:
                 # Maybe this is new, maybe not, but we can't associate

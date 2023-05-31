@@ -6,6 +6,13 @@ import time
 from flask_babel import lazy_gettext as _
 
 from core.analytics import Analytics
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -40,17 +47,51 @@ from .circulation_exceptions import *
 from .selftest import HasSelfTests, SelfTestResult
 
 
-class EnkiAPI(BaseCirculationAPI, HasSelfTests):
-
+class EnkiConstants:
     PRODUCTION_BASE_URL = "https://enkilibrary.org/API/"
 
+
+class EnkiSettings(BaseSettings):
+    url: str = FormField(
+        default=EnkiConstants.PRODUCTION_BASE_URL,
+        form=ConfigurationFormItem(
+            label=_("URL"),
+            required=True,
+            format="url",
+        ),
+    )
+
+
+class EnkiLibrarySettings(BaseSettings):
+    enki_library_id: str = FormField(
+        form=ConfigurationFormItem(label=_("Library ID"), required=True)
+    )
+    dont_display_reserves: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Show/Hide Titles with No Available Loans"),
+            required=False,
+            description=_(
+                "Titles with no available loans will not be displayed in the Catalog view."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                ConfigurationAttributeValue.YESVALUE.value: "Show",
+                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+            },
+        )
+    )
+
+
+class EnkiAPI(
+    BaseCirculationAPI, HasSelfTests, EnkiConstants, HasLibraryIntegrationConfiguration
+):
     ENKI_LIBRARY_ID_KEY = "enki_library_id"
     DESCRIPTION = _("Integrate an Enki collection.")
     SETTINGS = [
         {
             "key": ExternalIntegration.URL,
             "label": _("URL"),
-            "default": PRODUCTION_BASE_URL,
+            "default": EnkiConstants.PRODUCTION_BASE_URL,
             "required": True,
             "format": "url",
         },
@@ -103,6 +144,20 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
     SERVICE_NAME = "Enki"
     log = logging.getLogger("Enki API")
 
+    @classmethod
+    def settings_class(cls):
+        return EnkiSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return EnkiLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
+
     def __init__(self, _db, collection):
         self._db = _db
         if collection.protocol != self.ENKI:
@@ -129,7 +184,6 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
         return Collection.by_id(self._db, id=self.collection_id)
 
     def _run_self_tests(self, _db):
-
         now = utc_now()
 
         def count_recent_loans_and_holds():
@@ -805,7 +859,6 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
         return circulation_changes
 
     def process_book(self, bibliographic):
-
         """Make the local database reflect the state of the remote Enki
         collection for the given book.
 

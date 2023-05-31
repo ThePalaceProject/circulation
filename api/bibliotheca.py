@@ -19,6 +19,13 @@ from pymarc import parse_xml_to_array
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -57,14 +64,63 @@ from core.util.http import HTTP
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
 
-from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from .circulation import (
+    BaseCirculationAPI,
+    BaseCirculationAPISettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from .circulation_exceptions import *
 from .selftest import HasSelfTests, SelfTestResult
 from .web_publication_manifest import FindawayManifest, SpineItem
 
 
-class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
+class BibliothecaSettings(BaseSettings):
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Account ID"),
+            required=True,
+        )
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Account Key"),
+            required=True,
+        )
+    )
+    external_account_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            required=True,
+        )
+    )
 
+
+class BibliothecaLibrarySettings(BaseSettings):
+    default_loan_duration: Optional[
+        str
+    ] = BaseCirculationAPISettings.default_loan_duration
+
+    dont_display_resrves: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Show/Hide Titles with No Available Loans"),
+            required=False,
+            description=_(
+                "Titles with no available loans will not be displayed in the Catalog view."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                ConfigurationAttributeValue.YESVALUE.value: "Show",
+                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+            },
+        )
+    )
+
+
+class BibliothecaAPI(
+    BaseCirculationAPI, HasSelfTests, HasLibraryIntegrationConfiguration
+):
     NAME = ExternalIntegration.BIBLIOTHECA
     AUTH_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S GMT"
     ARGUMENT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -133,8 +189,21 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         v: k for k, v in list(delivery_mechanism_to_internal_format.items())
     }
 
-    def __init__(self, _db, collection):
+    @classmethod
+    def settings_class(cls):
+        return BibliothecaSettings
 
+    @classmethod
+    def library_settings_class(cls):
+        return BibliothecaLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return ""
+
+    def __init__(self, _db, collection):
         if collection.protocol != ExternalIntegration.BIBLIOTHECA:
             raise ValueError(
                 "Collection protocol is %s, but passed into BibliothecaAPI!"
@@ -388,7 +457,6 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
     TEMPLATE = "<%(request_type)s><ItemId>%(item_id)s</ItemId><PatronId>%(patron_id)s</PatronId></%(request_type)s>"
 
     def checkout(self, patron_obj, patron_password, licensepool, delivery_mechanism):
-
         """Check out a book on behalf of a patron.
 
         :param patron_obj: a Patron object for the patron who wants
@@ -621,7 +689,6 @@ class DummyBibliothecaAPIResponse:
 
 
 class ItemListParser(XMLParser):
-
     DATE_FORMAT = "%Y-%m-%d"
     YEAR_FORMAT = "%Y"
 
@@ -847,7 +914,6 @@ class ItemListParser(XMLParser):
 
 
 class BibliothecaParser(XMLParser):
-
     INPUT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
     def parse_date(self, value):

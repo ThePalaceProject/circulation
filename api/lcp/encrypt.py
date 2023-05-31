@@ -4,11 +4,18 @@ import os
 import re
 import subprocess
 from json import JSONEncoder
+from typing import Optional
 
 from flask_babel import lazy_gettext as _
 
 from api.lcp import utils
 from core.exceptions import BaseError
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.model.configuration import (
     ConfigurationAttributeType,
     ConfigurationGrouping,
@@ -18,6 +25,11 @@ from core.model.configuration import (
 
 class LCPEncryptionException(BaseError):
     """Raised in the case of any errors occurring during LCP encryption process"""
+
+
+class LCPEncryptionConstants:
+    DEFAULT_LCPENCRYPT_LOCATION = "/go/bin/lcpencrypt"
+    DEFAULT_LCPENCRYPT_DOCKER_IMAGE = "readium/lcpencrypt"
 
 
 class LCPEncryptionConfiguration(ConfigurationGrouping):
@@ -47,6 +59,35 @@ class LCPEncryptionConfiguration(ConfigurationGrouping):
         ),
         type=ConfigurationAttributeType.TEXT,
         required=False,
+    )
+
+
+class LCPEncryptionSettings(BaseSettings):
+    lcpencrypt_location: Optional[str] = FormField(
+        default=LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION,
+        form=ConfigurationFormItem(
+            label=_("lcpencrypt's location"),
+            description=_(
+                "Full path to the local lcpencrypt binary. "
+                "The default value is {}".format(
+                    LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION
+                )
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=False,
+        ),
+    )
+
+    lcpencrypt_output_directory: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("lcpencrypt's output directory"),
+            description=_(
+                "Full path to the directory where lcpencrypt stores encrypted content. "
+                "If not set encrypted books will be stored in lcpencrypt's working directory"
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=False,
+        )
     )
 
 

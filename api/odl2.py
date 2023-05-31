@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
@@ -9,7 +9,12 @@ from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
-from api.odl import ODLAPI, ODLImporter
+from api.odl import ODLAPI, ODLImporter, ODLSettings
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
 from core.model.configuration import (
@@ -64,9 +69,51 @@ class ODL2APIConfiguration(OPDSImporterConfiguration):
     )
 
 
+class ODL2Settings(ODLSettings):
+    odl2_skipped_license_formats: Optional[str] = FormField(
+        default=["text/html"],
+        form=ConfigurationFormItem(
+            label=_("Skipped license formats"),
+            description=_(
+                "List of license formats that will NOT be imported into Circulation Manager."
+            ),
+            type=ConfigurationFormItemType.LIST,
+            required=False,
+        ),
+    )
+
+    odl2_loan_limit: Optional[int] = FormField(
+        default=None,
+        form=ConfigurationFormItem(
+            label=_("Loan limit per patron"),
+            description=_(
+                "The maximum number of books a patron can have loaned out at any given time."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
+    )
+
+    odl2_hold_limit: Optional[int] = FormField(
+        default=None,
+        form=ConfigurationFormItem(
+            label=_("Hold limit per patron"),
+            description=_(
+                "The maximum number of books a patron can have on hold at any given time."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
+    )
+
+
 class ODL2API(ODLAPI):
     NAME = ExternalIntegration.ODL2
     SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
+
+    @classmethod
+    def settings_class(cls):
+        return ODL2Settings
 
     def __init__(self, _db, collection):
         self.loan_limit = collection.external_integration.setting(
