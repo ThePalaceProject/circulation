@@ -538,6 +538,11 @@ class SessionBulkOperation:
         self._objects = []
 
 
+from api.saml.metadata.federations.model import (
+    SAMLFederatedIdentityProvider,
+    SAMLFederation,
+)
+
 from .admin import Admin, AdminRole
 from .cachedfeed import CachedFeed, CachedMARCFile, WillNotGenerateExpensiveFeed
 from .circulationevent import CirculationEvent

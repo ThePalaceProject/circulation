@@ -5,7 +5,6 @@ import shutil
 import tempfile
 import time
 import uuid
-from pathlib import Path
 from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
 import pytest
@@ -106,27 +105,10 @@ class DatabaseFixture:
 
     @staticmethod
     def _load_core_model_classes():
-        path = Path(__file__)  # tests/fixtures/database.py
-        path = path.parent  # tests/fixtures
-        path = path.parent  # tests
-        path = path.parent  # .
-        path = os.path.join(path, "core", "model")
+        # Load all the core model classes so that they are registered with the ORM.
+        import core.model
 
-        list_modules = os.listdir(path)
-        list_modules.remove("__init__.py")
-
-        for module_file in list_modules:
-            if module_file.split(".")[-1] == "py":
-                module_name = "core.model." + module_file.split(".")[0]
-                imported = importlib.import_module(module_name)
-                logging.info("imported " + imported.__name__)
-
-        importlib.import_module("core.lane")
-        importlib.import_module("api.saml.metadata.federations.model")
-
-        from core.model.customlist import customlist_sharedlibrary
-
-        customlist_sharedlibrary.name
+        importlib.reload(core.model)
 
     @staticmethod
     def create() -> "DatabaseFixture":
