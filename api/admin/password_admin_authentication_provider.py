@@ -52,9 +52,11 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
             redirect=redirect, forgot_password_url=forgot_password_url
         )
 
-    def reset_password_template(self, reset_password_token, redirect):
+    def reset_password_template(self, reset_password_token, admin_id, redirect):
         reset_password_url = url_for(
-            "admin_reset_password", reset_password_token=reset_password_token
+            "admin_reset_password",
+            reset_password_token=reset_password_token,
+            admin_id=admin_id,
         )
         return self.RESET_PASSWORD_TEMPLATE % dict(
             redirect=redirect, reset_password_url=reset_password_url
@@ -109,10 +111,10 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
         EmailManager.send_email(subject, receivers, text=mail_text, html=mail_html)
 
     def validate_token_and_extract_admin(
-        self, reset_password_token: str, _db: Session
+        self, reset_password_token: str, admin_id: int, _db: Session
     ) -> Union[Admin, ProblemDetail]:
         secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
 
         return Admin.validate_reset_password_token_and_fetch_admin(
-            reset_password_token, _db, secret_key
+            reset_password_token, admin_id, _db, secret_key
         )

@@ -140,11 +140,13 @@ def admin_forgot_password():
     return app.manager.admin_reset_password_controller.forgot_password()
 
 
-@app.route("/admin/reset_password/<reset_password_token>", methods=["GET", "POST"])
+@app.route(
+    "/admin/reset_password/<reset_password_token>/<admin_id>", methods=["GET", "POST"]
+)
 @returns_problem_detail
-def admin_reset_password(reset_password_token):
+def admin_reset_password(reset_password_token, admin_id):
     return app.manager.admin_reset_password_controller.reset_password(
-        reset_password_token
+        reset_password_token, admin_id
     )
 
 

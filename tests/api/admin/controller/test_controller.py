@@ -685,7 +685,9 @@ class TestResetPasswordController:
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
             assert [] == reset_password_ctrl.admin_auth_providers
 
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(
+                token, admin_ctrl_fixture.admin.id
+            )
 
             assert (
                 response.status_code == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code
@@ -712,13 +714,25 @@ class TestResetPasswordController:
             assert sign_in_response.status_code == 302
             assert "foo" == sign_in_response.headers["Location"]
 
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(
+                token, admin_ctrl_fixture.admin.id
+            )
             assert response.status_code == 302
             assert "admin/web" in response.headers.get("Location")
 
         # If we use bad token we get an error response with "Try again" button
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(
+                token, admin_ctrl_fixture.admin.id
+            )
+
+            assert response.status_code == 401
+            assert "Try again" in response.get_data(as_text=True)
+
+        # If we use bad admin id we get an error response with "Try again" button
+        bad_admin_id = admin_ctrl_fixture.admin.id + 1
+        with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
+            response = reset_password_ctrl.reset_password(token, bad_admin_id)
 
             assert response.status_code == 401
             assert "Try again" in response.get_data(as_text=True)
@@ -741,10 +755,15 @@ class TestResetPasswordController:
                 call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
                 mail_text = call_kwargs["text"]
 
-                token = self._extract_reset_pass_token_from_mail_text(mail_text)
+                (
+                    token,
+                    admin_id,
+                ) = self._extract_reset_pass_token_and_admin_id_from_mail_text(
+                    mail_text
+                )
 
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(token, admin_id)
 
             assert response.status_code == 200
 
@@ -752,12 +771,15 @@ class TestResetPasswordController:
             assert "New Password" in response_body
             assert "Confirm New Password" in response_body
 
-    def _extract_reset_pass_token_from_mail_text(self, mail_text):
+    def _extract_reset_pass_token_and_admin_id_from_mail_text(self, mail_text):
         # Reset password url is in form of http[s]://url/admin/forgot_password/token
         reset_pass_url = re.search("(?P<url>https?://[^\\s]+)", mail_text).group("url")
-        token = reset_pass_url.split("/")[-1]
+        reset_pass_url_components = reset_pass_url.split("/")
 
-        return token
+        admin_id = int(reset_pass_url_components[-1])
+        token = reset_pass_url_components[-2]
+
+        return token, admin_id
 
     def test_reset_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
@@ -779,7 +801,31 @@ class TestResetPasswordController:
                 call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
                 mail_text = call_kwargs["text"]
 
-                token = self._extract_reset_pass_token_from_mail_text(mail_text)
+                (
+                    token,
+                    admin_id,
+                ) = self._extract_reset_pass_token_and_admin_id_from_mail_text(
+                    mail_text
+                )
+
+        # If we use bad token we get an error response with "Try again" button
+        with admin_ctrl_fixture.ctrl.app.test_request_context(
+            "/admin/reset_password", method="POST"
+        ):
+            response = reset_password_ctrl.reset_password("bad_token", admin_id)
+
+            assert response.status_code == 401
+            assert "Try again" in response.get_data(as_text=True)
+
+        # If we use bad admin id we get an error response with "Try again" button
+        bad_admin_id = admin_ctrl_fixture.admin.id + 1
+        with admin_ctrl_fixture.ctrl.app.test_request_context(
+            "/admin/reset_password", method="POST"
+        ):
+            response = reset_password_ctrl.reset_password(token, admin_id + 1)
+
+            assert response.status_code == 401
+            assert "Try again" in response.get_data(as_text=True)
 
         # If there is no passwords we get an error
         with admin_ctrl_fixture.ctrl.app.test_request_context(
@@ -787,7 +833,7 @@ class TestResetPasswordController:
         ):
             flask.request.form = MultiDict([])
 
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(token, admin_id)
             assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
 
         # If there is only one password we get an error
@@ -796,7 +842,7 @@ class TestResetPasswordController:
         ):
             flask.request.form = MultiDict([("password", "only_one")])
 
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(token, admin_id)
             assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
 
         # If there are both passwords but they do not match we also get an error
@@ -807,7 +853,7 @@ class TestResetPasswordController:
                 [("password", "something"), ("confirm_password", "something_different")]
             )
 
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(token, admin_id)
             assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
 
         # Finally, let's change that password!
@@ -822,7 +868,7 @@ class TestResetPasswordController:
                 [("password", new_password), ("confirm_password", new_password)]
             )
 
-            response = reset_password_ctrl.reset_password(token)
+            response = reset_password_ctrl.reset_password(token, admin_id)
             assert response.status_code == 200
 
             assert admin_ctrl_fixture.admin.has_password(new_password)

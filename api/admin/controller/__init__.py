@@ -756,12 +756,15 @@ class ResetPasswordController(AdminController):
         reset_password_url = url_for(
             "admin_reset_password",
             reset_password_token=reset_password_token,
+            admin_id=admin.id,
             _external=True,
         )
 
         return reset_password_url
 
-    def reset_password(self, reset_password_token: str) -> Optional[WerkzeugResponse]:
+    def reset_password(
+        self, reset_password_token: str, admin_id: int
+    ) -> Optional[WerkzeugResponse]:
         """Shows reset password page or process the reset password request"""
         auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
         if not auth:
@@ -782,7 +785,7 @@ class ResetPasswordController(AdminController):
             return admin_view_redirect
 
         admin_from_token = auth.validate_token_and_extract_admin(
-            reset_password_token, self._db
+            reset_password_token, admin_id, self._db
         )
 
         if isinstance(admin_from_token, ProblemDetail):
@@ -796,7 +799,7 @@ class ResetPasswordController(AdminController):
 
         if flask.request.method == "GET":
             auth_provider_html = auth.reset_password_template(
-                reset_password_token, admin_view_redirect
+                reset_password_token, admin_id, admin_view_redirect
             )
 
             html = self.RESET_PASSWORD_TEMPLATE % dict(
@@ -825,6 +828,7 @@ class ResetPasswordController(AdminController):
                     url_for(
                         "admin_reset_password",
                         reset_password_token=reset_password_token,
+                        admin_id=admin_id,
                     ),
                     "Try again",
                     is_error=True,

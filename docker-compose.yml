@@ -10,7 +10,7 @@ services:
     ports:
       - "6500:80"
     environment:
-      SIMPLIFIED_PRODUCTION_DATABASE: "postgres://palace:test@pg:5432/circ"
+      SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
 
   scripts:
     build:
@@ -18,7 +18,7 @@ services:
       dockerfile: docker/Dockerfile
       target: scripts
     environment:
-      SIMPLIFIED_PRODUCTION_DATABASE: "postgres://palace:test@pg:5432/circ"
+      SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
 
   pg:
     image: "postgres:12"

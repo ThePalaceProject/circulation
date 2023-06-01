@@ -19,7 +19,7 @@ Once the webapp Docker image is built, we can run it in a container with the fol
 # about the values listed here and their alternatives.
 $ docker run --name webapp -d \
     --p 80:80 \
-    -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
     ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
@@ -30,7 +30,7 @@ to access them as bellow:
 docker run \
 --link pg --link os \
 --name circ \
--e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+-e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
 -d -p 6500:80 \
 ghcr.io/thepalaceproject/circ-webapp:main
 ```
@@ -48,7 +48,7 @@ Once the scripts Docker image is built, we can run it in a container with the fo
 # about the values listed here and their alternatives.
 $ docker run --name scripts -d \
     -e TZ='YOUR_TIMEZONE_STRING' \
-    -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
     ghcr.io/thepalaceproject/circ-scripts:main
 ```
 
@@ -73,7 +73,7 @@ external log aggregator if you wish to capture logs from the job.
 # about the values listed here and their alternatives.
 $ docker run --name search_index_refresh -it \
     -e SIMPLIFIED_SCRIPT_NAME='refresh_materialized_views' \
-    -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
     ghcr.io/thepalaceproject/circ-exec:main
 ```
 
