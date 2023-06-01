@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
@@ -70,7 +70,7 @@ class ODL2APIConfiguration(OPDSImporterConfiguration):
 
 
 class ODL2Settings(ODLSettings):
-    odl2_skipped_license_formats: Optional[str] = FormField(
+    odl2_skipped_license_formats: Optional[List[str]] = FormField(
         default=["text/html"],
         form=ConfigurationFormItem(
             label=_("Skipped license formats"),

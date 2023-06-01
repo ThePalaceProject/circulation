@@ -1,0 +1,87 @@
+from dataclasses import dataclass
+from typing import Dict
+
+from pytest_alembic import MigrationContext
+from sqlalchemy.engine import Engine
+
+from tests.migration.conftest import (
+    CreateCollection,
+    CreateConfigSetting,
+    CreateExternalIntegration,
+    CreateLibrary,
+)
+
+
+@dataclass
+class IntegrationConfiguration:
+    name: str
+    goal: str
+    id: int
+    settings: dict
+    library_settings: Dict[int, Dict]
+
+
+def query_integration_configurations(
+    connection, goal: str, name: str
+) -> IntegrationConfiguration:
+    result = connection.execute(
+        "select id, name, protocol, goal, settings from integration_configurations where goal=%s and name=%s",
+        (goal, name),
+    ).fetchone()
+
+    library_results = connection.execute(
+        "select library_id, settings from integration_library_configurations where parent_id=%s",
+        result.id,
+    ).fetchall()
+
+    library_settings = {lr.library_id: lr.settings for lr in library_results}
+    return IntegrationConfiguration(
+        result.name, result.goal, result.id, result.settings, library_settings
+    )
+
+
+def test_migration(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    create_library: CreateLibrary,
+    create_external_integration: CreateExternalIntegration,
+    create_config_setting: CreateConfigSetting,
+    create_collection: CreateCollection,
+):
+    """Test the migration of configurationsettings to integration_configurations for the licenses type goals"""
+    alembic_runner.set_revision("a9ed3f76d649")
+    alembic_runner.migrate_up_to("b883671b7bc5")
+    with alembic_engine.connect() as connection:
+        library_id = create_library(connection)
+        integration_id = create_external_integration(
+            connection, "Axis 360", "licenses", "Test B&T"
+        )
+        create_config_setting(connection, "username", "username", integration_id)
+        create_config_setting(connection, "password", "password", integration_id)
+        create_config_setting(connection, "url", "http://url", integration_id)
+        create_config_setting(
+            connection, "default_loan_duration", 77, integration_id, library_id
+        )
+        create_collection(connection, "Test B&T", integration_id, "ExternalAccountID")
+
+        # Fake value, never used
+        create_config_setting(
+            connection, "external_account_id", "external_account_id", integration_id
+        )
+
+    alembic_runner.migrate_up_to("0af587ff8595")
+
+    with alembic_engine.connect() as connection:
+        configuration = query_integration_configurations(
+            connection, "licenses", "Test B&T"
+        )
+
+        assert configuration.settings == {
+            "username": "username",
+            "password": "password",
+            "url": "http://url",
+            "external_account_id": "ExternalAccountID",
+        }
+        assert configuration.library_settings == {
+            library_id: {"default_loan_duration": 77}
+        }
