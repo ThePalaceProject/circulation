@@ -8,6 +8,7 @@ from api.authentication.patron_authentication_provider import (
     PatronAccessTokenAuthenticationProvider,
 )
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
+from core.model.patron import Patron
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -26,6 +27,7 @@ class TestAccessTokenAuthenticationProvider:
             )
             got_patron = provider.authenticated_patron(db.session, "token-string")
 
+            assert type(got_patron) is Patron
             assert got_patron.id == patron.id
 
             # Any incorrect data would mean an invalid token
@@ -78,7 +80,7 @@ class TestAccessTokenAuthenticationProvider:
         provider = PatronAccessTokenAuthenticationProvider(
             db.session, db.default_library(), Mock(spec=BasicAuthenticationProvider)
         )
-        provider.basic_provider._authentication_flow_document.return_value = dict(
+        provider.basic_provider._authentication_flow_document.return_value = dict(  # type: ignore[attr-defined]
             mock=True
         )
         with controller_fixture.request_context_with_library(

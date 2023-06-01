@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import pytest
 from werkzeug.datastructures import Authorization
 
@@ -6,13 +8,16 @@ from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 
+if TYPE_CHECKING:
+    from api.controller import PatronAuthTokenController
+
 
 class PatronAuthTokenControllerFixture(CirculationControllerFixture):
     def __init__(
         self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
     ) -> None:
         super().__init__(db, vendor_id_fixture)
-        self.controller = self.manager.patron_auth_token
+        self.controller: PatronAuthTokenController = self.manager.patron_auth_token
 
 
 @pytest.fixture(scope="function")

@@ -10,14 +10,26 @@ from _pytest.monkeypatch import MonkeyPatch
 from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    INVALID_CONFIGURATION_OPTION,
+    INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
+    MISSING_PATRON_AUTH_NAME,
+    MISSING_SERVICE,
+    MULTIPLE_BASIC_AUTH_SERVICES,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    NO_SUCH_LIBRARY,
+    UNKNOWN_PROTOCOL,
+)
 from api.authentication.basic import (
     BarcodeFormats,
     Keyboards,
     LibraryIdentifierRestriction,
 )
 from api.millenium_patron import AuthenticationMode, MilleniumPatronAPI
-from api.problem_details import *
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider

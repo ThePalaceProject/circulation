@@ -4,7 +4,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from datetime import timedelta
-from typing import Type
+from typing import TYPE_CHECKING, Type
 
 from jwcrypto import jwe, jwk
 
@@ -12,14 +12,14 @@ from api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
-from core.integration.goals import Goals
-from core.model import get_one_or_create
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
-from core.model.integration import IntegrationConfiguration
+from core.model.configuration import ConfigurationSetting
 from core.model.patron import Patron
 from core.util.datetime_helpers import utc_now
 from core.util.problem_detail import ProblemDetail, ProblemError
 from core.util.string_helpers import random_string
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class PatronAccessTokenProvider(ABC):
@@ -30,22 +30,17 @@ class PatronAccessTokenProvider(ABC):
     def generate_token(
         cls, _db, patron: Patron, password: str, expires_in: int = 3600
     ) -> str:
-        raise NotImplementedError()
+        ...
 
     @classmethod
     @abstractmethod
     def decode_token(cls, _db, token: str) -> dict | ProblemDetail:
-        raise NotImplementedError()
+        ...
 
     @classmethod
     @abstractmethod
     def is_access_token(cls, token: str | None) -> bool:
-        raise NotImplementedError()
-
-    @classmethod
-    @abstractmethod
-    def get_integration(cls, _db):
-        raise NotImplementedError()
+        ...
 
 
 class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
@@ -61,18 +56,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return jwk.JWK.generate(kty="oct", size=256, kid=kid)
 
     @classmethod
-    def get_integration(cls, _db) -> IntegrationConfiguration:
-        integration, _ = get_one_or_create(
-            _db,
-            IntegrationConfiguration,
-            protocol=ExternalIntegration.PATRON_AUTH_JWE,
-            goal=Goals.PATRON_AUTH_GOAL,
-            name=cls.NAME,
-        )
-        return integration
-
-    @classmethod
-    def rotate_key(cls, _db) -> jwk.JWK:
+    def rotate_key(cls, _db: Session) -> jwk.JWK:
         """Rotate the current JWK key in the DB"""
         key = cls.generate_key()
         setting = ConfigurationSetting.sitewide(_db, cls.KEY_NAME)
@@ -80,10 +64,13 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return key
 
     @classmethod
-    def get_current_key(cls, _db, kid=None, create=True) -> jwk.JWK:
+    def get_current_key(
+        cls, _db: Session, kid: str | None = None, create: bool = True
+    ) -> jwk.JWK | None:
         """Get the current JWK key for the CM
         :param kid: (Optional) If present, compare this value to the currently active kid,
                     raise a ValueError if found to be different
+        :param create: (Optional) Create a key of no key exists in the system
         """
         stored_key = ConfigurationSetting.sitewide(_db, cls.KEY_NAME)
         key: str | None = stored_key.value
@@ -106,7 +93,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
 
     @classmethod
     def generate_token(
-        cls, _db, patron: Patron, password: str, expires_in: int = 3600
+        cls, _db: Session, patron: Patron, password: str, expires_in: int = 3600
     ) -> str:
         """Generate a JWE token for a patron
         :param patron: Generate a token for this patron
@@ -115,6 +102,9 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         :return: A compacted JWE token
         """
         key = cls.get_current_key(_db)
+        if not key:
+            raise RuntimeError("Could fetch the JWE key from the DB")
+
         payload = dict(id=patron.id, pwd=password, typ="patron")
 
         token = jwe.JWE(
@@ -131,7 +121,7 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return token.serialize(compact=True)
 
     @classmethod
-    def decode_token(cls, _db, token: str) -> dict | ProblemDetail:
+    def decode_token(cls, _db: Session, token: str) -> dict | ProblemDetail:
         """Decode the given token
         :param token: A serialized JWE token
         :return: The decrypted data dictionary from the token
