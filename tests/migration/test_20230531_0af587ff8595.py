@@ -54,7 +54,7 @@ def test_migration(
     with alembic_engine.connect() as connection:
         library_id = create_library(connection)
         integration_id = create_external_integration(
-            connection, "Axis 360", "licenses", "Test B&T"
+            connection, "Axis 360", "LICENSE_GOAL", "Test B&T"
         )
         create_config_setting(connection, "username", "username", integration_id)
         create_config_setting(connection, "password", "password", integration_id)
@@ -73,7 +73,7 @@ def test_migration(
 
     with alembic_engine.connect() as connection:
         configuration = query_integration_configurations(
-            connection, "licenses", "Test B&T"
+            connection, "LICENSE_GOAL", "Test B&T"
         )
 
         assert configuration.settings == {

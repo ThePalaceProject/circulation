@@ -1,4 +1,5 @@
 import json
+from typing import Dict, List
 
 import flask
 from flask import Response
@@ -14,6 +15,8 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.configuration import ExternalIntegrationLink
+from core.model.integration import IntegrationConfiguration
+from core.model.patron import Patron
 from core.util.problem_detail import ProblemDetail
 
 from . import SettingsController
@@ -69,33 +72,24 @@ class CollectionSettingsController(SettingsController):
         protocols = self._get_collection_protocols()
         user = flask.request.admin
         collections = []
-        protocolClass = None
+        collection_object: Collection
         for collection_object in collections_db:
             if not user or not user.can_see_collection(collection_object):
                 continue
 
             collection_dict = self.collection_to_dict(collection_object)
-
-            if collection_object.protocol in [p.get("name") for p in protocols]:
-                [protocol] = [
-                    p for p in protocols if p.get("name") == collection_object.protocol
-                ]
-                libraries = self.load_libraries(collection_object, user, protocol)
+            if collection_object.integration_configuration:
+                libraries = self.load_libraries(collection_object, user)
                 collection_dict["libraries"] = libraries
-                settings = self.load_settings(
-                    protocol.get("settings"),
-                    collection_object,
-                    collection_dict.get("settings"),
-                )
-                collection_dict["settings"] = settings
-                protocolClass = self.find_protocol_class(collection_object)
-
-            collection_dict["self_test_results"] = self._get_prior_test_results(
-                collection_object, protocolClass
-            )
-            collection_dict[
-                "marked_for_deletion"
-            ] = collection_object.marked_for_deletion
+                collection_dict[
+                    "settings"
+                ] = collection_object.integration_configuration.settings
+                collection_dict[
+                    "self_test_results"
+                ] = collection_object.integration_configuration.self_test_results
+                collection_dict[
+                    "marked_for_deletion"
+                ] = collection_object.marked_for_deletion
 
             collections.append(collection_dict)
 
@@ -112,19 +106,26 @@ class CollectionSettingsController(SettingsController):
             parent_id=collection_object.parent_id,
         )
 
-    def load_libraries(self, collection_object, user, protocol):
+    def load_libraries(self, collection_object: Collection, user: Patron) -> List[Dict]:
         """Get a list of the libraries that 1) are associated with this collection
         and 2) the user is affiliated with"""
 
         libraries = []
+        integration: IntegrationConfiguration = (
+            collection_object.integration_configuration
+        )
+        if not integration:
+            return []
         for library in collection_object.libraries:
             if not user or not user.is_librarian(library):
                 continue
-            libraries.append(
-                self._get_integration_library_info(
-                    collection_object.external_integration, library, protocol
-                )
-            )
+            library_info = dict(short_name=library.short_name)
+            # Find and update the librayr settings if they exist
+            for config in integration.library_configurations:
+                if library.id == config.library_id:
+                    library_info.update(config.settings)
+                    break
+            libraries.append(library_info)
 
         return libraries
 
@@ -260,7 +261,8 @@ class CollectionSettingsController(SettingsController):
         """Verify that the parent collection is set properly, then determine
         the type of the settings that need to be validated: are they 1) settings for a
         regular collection (e.g. client key and client secret for an Overdrive collection),
-        or 2) settings for a child collection (e.g. library ID for an Overdrive Advantage collection)?"""
+        or 2) settings for a child collection (e.g. library ID for an Overdrive Advantage collection)?
+        """
 
         parent_id = flask.request.form.get("parent_id")
         if parent_id and not protocol.get("child_settings"):
@@ -292,7 +294,8 @@ class CollectionSettingsController(SettingsController):
     def process_settings(self, settings, collection):
         """Go through the settings that the user has just submitted for this collection,
         and check that each setting is valid and that no required settings are missing.  If
-        the setting passes all of the validations, go ahead and set it for this collection."""
+        the setting passes all of the validations, go ahead and set it for this collection.
+        """
 
         for setting in settings:
             key = setting.get("key")

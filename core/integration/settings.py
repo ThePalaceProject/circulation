@@ -310,7 +310,6 @@ class BaseSettings(BaseModel):
         config = []
         for field in cls.__fields__.values():
             if not isinstance(field.field_info, FormFieldInfo):
-                print(field)
                 cls.logger().warning(
                     f"{field.name} was not initialized with FormField, skipping."
                 )

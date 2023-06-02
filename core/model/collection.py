@@ -51,7 +51,12 @@ from .work import Work
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.model import Credential, CustomList, Timestamp  # noqa: autoflake
+    from core.model import (  # noqa: autoflake
+        Credential,
+        CustomList,
+        IntegrationConfiguration,
+        Timestamp,
+    )
 
 
 class Collection(Base, HasSessionCache):
@@ -83,6 +88,20 @@ class Collection(Base, HasSessionCache):
         Integer, ForeignKey("externalintegrations.id"), unique=True, index=True
     )
     _external_integration: ExternalIntegration
+
+    integration_configuration_id = Column(
+        Integer,
+        ForeignKey("integration_configurations.id", ondelete="SET NULL"),
+        unique=True,
+        index=True,
+    )
+    integration_configuration: Mapped[IntegrationConfiguration] = relationship(
+        "IntegrationConfiguration",
+        uselist=False,
+        back_populates="collection",
+        cascade="all,delete-orphan",
+        single_parent=True,
+    )
 
     # A Collection may specialize some other Collection. For instance,
     # an Overdrive Advantage collection is a specialization of an
@@ -924,6 +943,7 @@ collections_identifiers: Table = Table(
     ),
     UniqueConstraint("collection_id", "identifier_id"),
 )
+
 
 # Create an ORM model for the collections_identifiers join table
 # so it can be used in a bulk_insert_mappings call.

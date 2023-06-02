@@ -12,7 +12,7 @@ from core.integration.goals import Goals
 from core.model import Base
 
 if TYPE_CHECKING:
-    from core.model import Library
+    from core.model import Collection, Library
 
 
 class IntegrationConfiguration(Base):

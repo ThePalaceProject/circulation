@@ -25,7 +25,7 @@ branch_labels = None
 depends_on = None
 
 
-LICENSE_GOAL = "licenses"
+LICENSE_GOAL = "LICENSE_GOAL"
 
 
 def upgrade() -> None:
@@ -38,7 +38,8 @@ def upgrade() -> None:
     connection = op.get_bind()
 
     # Fetch all license type integrations
-    integrations = get_integrations(connection, LICENSE_GOAL)
+    # The old enum had 'licenses', the new enum has 'LICENSE_GOAL'
+    integrations = get_integrations(connection, "licenses")
     for integration in integrations:
         _id, protocol, name = integration
 
@@ -55,7 +56,7 @@ def upgrade() -> None:
         # License type integrations take their external_account_id data from the collection.
         # The configurationsetting for it seems to be unused, so we take the value from the collection
         collection = connection.execute(
-            "select external_account_id, name from collections where external_integration_id = %s",
+            "select id, external_account_id, name from collections where external_integration_id = %s",
             integration.id,
         ).fetchone()
         settings_class: BaseSettings = api_class.settings_class()
@@ -70,6 +71,12 @@ def upgrade() -> None:
             LICENSE_GOAL,
             settings_dict,
             name=collection.name,
+        )
+
+        # Connect the collection to the settings
+        connection.execute(
+            "UPDATE collections SET integration_configuration_id=%s where id=%s",
+            (integration_id, collection.id),
         )
 
         # If we have library settings too, then write each one into it's own row
