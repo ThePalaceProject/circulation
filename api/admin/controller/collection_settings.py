@@ -6,6 +6,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.model import (
     Collection,
     ConfigurationSetting,
@@ -17,7 +18,7 @@ from core.model import (
 from core.model.configuration import ExternalIntegrationLink
 from core.model.integration import IntegrationConfiguration
 from core.model.patron import Patron
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 from . import SettingsController
 
@@ -78,12 +79,18 @@ class CollectionSettingsController(SettingsController):
                 continue
 
             collection_dict = self.collection_to_dict(collection_object)
+            [protocol] = [
+                p for p in protocols if p["name"] == collection_object.protocol
+            ]
             if collection_object.integration_configuration:
                 libraries = self.load_libraries(collection_object, user)
                 collection_dict["libraries"] = libraries
                 collection_dict[
                     "settings"
                 ] = collection_object.integration_configuration.settings
+                self.load_settings(
+                    protocol["settings"], collection_object, collection_dict["settings"]
+                )
                 collection_dict[
                     "self_test_results"
                 ] = collection_object.integration_configuration.self_test_results
@@ -133,7 +140,7 @@ class CollectionSettingsController(SettingsController):
         """Compile the information about the collection that corresponds to the settings
         externally imposed by the collection's protocol."""
 
-        settings = {}
+        settings = collection_settings
         for protocol_setting in protocol_settings:
             if not protocol_setting:
                 continue
@@ -151,15 +158,8 @@ class CollectionSettingsController(SettingsController):
                         value = str(storage_integration.other_integration_id)
                     else:
                         value = self.NO_MIRROR_INTEGRATION
-                elif protocol_setting.get("type") in ("list", "menu"):
-                    value = collection_object.external_integration.setting(
-                        key
-                    ).json_value
-                else:
-                    value = collection_object.external_integration.setting(key).value
-                settings[key] = value
+                    settings[key] = value
         settings["external_account_id"] = collection_object.external_account_id
-        return settings
 
     def find_protocol_class(self, collection_object):
         """Figure out which class this collection's protocol belongs to, from the list
@@ -180,6 +180,7 @@ class CollectionSettingsController(SettingsController):
 
         name = flask.request.form.get("name")
         protocol_name = flask.request.form.get("protocol")
+        parent_id = flask.request.form.get("parent_id")
         fields = {"name": name, "protocol": protocol_name}
         id = flask.request.form.get("id")
         if id:
@@ -190,21 +191,32 @@ class CollectionSettingsController(SettingsController):
         if error:
             return error
 
+        settings_class = self._get_protocol_class(
+            LicenseProvidersRegistry(), protocol_name, is_child=(parent_id is not None)
+        )
+        if not settings_class:
+            return UNKNOWN_PROTOCOL
+
         if protocol_name and not collection:
             collection, is_new = get_one_or_create(self._db, Collection, name=name)
             if not is_new:
                 self._db.rollback()
                 return COLLECTION_NAME_ALREADY_IN_USE
+            collection.create_integration_configuration(protocol_name)
+            # Mirrors still use the external integration
+            # Remove the use of external integrations when Mirrors are migrated
+            # to use the integrtion configurations
             collection.create_external_integration(protocol_name)
 
         collection.name = name
         [protocol_dict] = [p for p in protocols if p.get("name") == protocol_name]
 
-        settings = self.validate_parent(protocol_dict, collection)
-        if isinstance(settings, ProblemDetail):
+        valid = self.validate_parent(protocol_dict, collection)
+        if isinstance(valid, ProblemDetail):
             self._db.rollback()
-            return settings
+            return valid
 
+        settings = protocol_dict["settings"]
         settings_error = self.process_settings(settings, collection)
         if settings_error:
             self._db.rollback()
@@ -235,13 +247,6 @@ class CollectionSettingsController(SettingsController):
         if fields.get("protocol"):
             if fields.get("protocol") not in [p.get("name") for p in protocols]:
                 return UNKNOWN_PROTOCOL
-            else:
-                [protocol] = [
-                    p for p in protocols if p.get("name") == fields.get("protocol")
-                ]
-                wrong_format = self.validate_formats(protocol.get("settings"))
-                if wrong_format:
-                    return wrong_format
         else:
             return NO_PROTOCOL_FOR_NEW_SERVICE
 
@@ -272,12 +277,10 @@ class CollectionSettingsController(SettingsController):
             if not parent:
                 return MISSING_PARENT
             collection.parent = parent
-            settings = protocol.get("child_settings")
         else:
             collection.parent = None
-            settings = protocol.get("settings")
 
-        return settings
+        return True
 
     def validate_external_account_id_setting(self, value, setting):
         """Check that the user has submitted any required values for associating
@@ -296,7 +299,12 @@ class CollectionSettingsController(SettingsController):
         and check that each setting is valid and that no required settings are missing.  If
         the setting passes all of the validations, go ahead and set it for this collection.
         """
-
+        settings_class = self._get_protocol_class(
+            LicenseProvidersRegistry(),
+            collection.protocol,
+            is_child=(flask.request.form.get("parent_id") is not None),
+        )
+        collection_settings = {}
         for setting in settings:
             key = setting.get("key")
             value = flask.request.form.get(key)
@@ -315,12 +323,16 @@ class CollectionSettingsController(SettingsController):
 
                 if isinstance(external_integration_link, ProblemDetail):
                     return external_integration_link
-            else:
-                result = self._set_integration_setting(
-                    collection.external_integration, setting
-                )
-                if isinstance(result, ProblemDetail):
-                    return result
+            elif key in flask.request.form:
+                # Only if the key was present in the request should we add it
+                collection_settings[key] = value
+
+        # validate then apply
+        try:
+            settings_class(**collection_settings)
+        except ProblemError as ex:
+            return ex.problem_detail
+        collection.integration_configuration.settings = collection_settings
 
     def _set_external_integration_link(
         self,
@@ -332,7 +344,6 @@ class CollectionSettingsController(SettingsController):
         """Find or create a ExternalIntegrationLink and either delete it
         or update the other external integration it links to.
         """
-
         collection_service = get_one(
             _db, ExternalIntegration, id=collection.external_integration_id
         )
@@ -373,6 +384,7 @@ class CollectionSettingsController(SettingsController):
         go ahead and associate it with this collection."""
 
         libraries = []
+        protocol_class = LicenseProvidersRegistry().get(protocol["name"])
         if flask.request.form.get("libraries"):
             libraries = json.loads(flask.request.form.get("libraries"))
 
@@ -389,13 +401,15 @@ class CollectionSettingsController(SettingsController):
                 )
             if collection not in library.collections:
                 library.collections.append(collection)
-            result = self._set_integration_library(
-                collection.external_integration, library_info, protocol
+            result = self._set_configuration_library(
+                collection.integration_configuration, library_info, protocol_class
             )
             if isinstance(result, ProblemDetail):
                 return result
+
+        short_names = [l.get("short_name") for l in libraries]
         for library in collection.libraries:
-            if library.short_name not in [l.get("short_name") for l in libraries]:
+            if library.short_name not in short_names:
                 collection.disassociate_library(library)
 
     # DELETE

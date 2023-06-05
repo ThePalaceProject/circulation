@@ -4,7 +4,16 @@ import json
 import logging
 import os
 import warnings
-from typing import Any, Dict, Generator, List, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
@@ -45,7 +54,12 @@ def flush(db):
         db.flush()
 
 
-def create(db, model, create_method="", create_method_kwargs=None, **kwargs):
+T = TypeVar("T")
+
+
+def create(
+    db: Session, model: Type[T], create_method="", create_method_kwargs=None, **kwargs
+) -> Tuple[T, Literal[True]]:
     kwargs.update(create_method_kwargs or {})
     created = getattr(model, create_method, model)(**kwargs)
     db.add(created)
@@ -53,7 +67,9 @@ def create(db, model, create_method="", create_method_kwargs=None, **kwargs):
     return created, True
 
 
-def get_one(db, model, on_multiple="error", constraint=None, **kwargs):
+def get_one(
+    db: Session, model: Type[T], on_multiple="error", constraint=None, **kwargs
+) -> T | None:
     """Gets an object from the database based on its attributes.
 
     :param constraint: A single clause that can be passed into
@@ -86,7 +102,9 @@ def get_one(db, model, on_multiple="error", constraint=None, **kwargs):
         return None
 
 
-def get_one_or_create(db, model, create_method="", create_method_kwargs=None, **kwargs):
+def get_one_or_create(
+    db: Session, model: Type[T], create_method="", create_method_kwargs=None, **kwargs
+) -> Tuple[T, bool]:
     one = get_one(db, model, **kwargs)
     if one:
         return one, False

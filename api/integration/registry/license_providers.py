@@ -23,6 +23,8 @@ class LicenseProvidersRegistry(IntegrationRegistry["BaseCirculationAPI"]):
         from api.odl2 import ODL2API
         from api.opds_for_distributors import OPDSForDistributorsAPI
         from api.overdrive import OverdriveAPI
+        from core.opds2_import import OPDS2Importer
+        from core.opds_import import OPDSImporter
 
         apis = {
             ExternalIntegration.OVERDRIVE: OverdriveAPI,
@@ -35,6 +37,8 @@ class LicenseProvidersRegistry(IntegrationRegistry["BaseCirculationAPI"]):
             ODL2API.NAME: ODL2API,
             SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
+            OPDSImporter.NAME: OPDSImporter,
+            OPDS2Importer.NAME: OPDS2Importer,
         }
 
         for name, api in apis.items():

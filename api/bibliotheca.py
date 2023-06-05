@@ -89,7 +89,7 @@ class BibliothecaSettings(BaseSettings):
             required=True,
         )
     )
-    external_account_id: str = FormField(
+    external_account_id: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             required=True,

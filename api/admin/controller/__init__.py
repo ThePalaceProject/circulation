@@ -13,6 +13,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
 )
@@ -93,6 +94,10 @@ from core.model import (
 from core.model.classification import Classification, Genre, Subject
 from core.model.configuration import ExternalIntegrationLink
 from core.model.edition import Edition
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
@@ -1808,6 +1813,17 @@ class SettingsController(AdminCirculationManagerController):
 
         return None
 
+    def _get_protocol_class(self, registry, protocol_name, is_child=False):
+        api_class = registry.get(protocol_name)
+        if not api_class:
+            return None
+        if is_child:
+            if getattr(api_class, "child_settings_class", False):
+                return api_class.child_settings_class()
+            else:
+                return PROTOCOL_DOES_NOT_SUPPORT_PARENTS
+        return api_class.settings_class()
+
     def _get_integration_protocols(
         self, provider_apis, protocol_name_attr="__module__"
     ):
@@ -1838,9 +1854,9 @@ class SettingsController(AdminCirculationManagerController):
             if _db and issubclass(api, HasIntegrationConfiguration):
                 protocol["settings"] = api.settings_class().configuration_form(_db)
 
-            child_settings = getattr(api, "CHILD_SETTINGS", None)
+            child_settings = getattr(api, "child_settings_class", None)
             if child_settings != None:
-                protocol["child_settings"] = list(child_settings)
+                protocol["child_settings"] = child_settings().configuration_form(_db)
 
             library_settings = getattr(api, "LIBRARY_SETTINGS", None)
             if library_settings != None:
@@ -2029,6 +2045,24 @@ class SettingsController(AdminCirculationManagerController):
             value = json.dumps(value)
 
         integration.setting(setting_key).value = value
+
+    def _set_configuration_library(
+        self,
+        configuration: IntegrationConfiguration,
+        library_info: dict,
+        protocol_class: Type[HasLibraryIntegrationConfiguration],
+    ) -> IntegrationLibraryConfiguration:
+        # We copy the data so we can remove unwanted keys like "short_name"
+        info_copy = library_info.copy()
+        library = get_one(self._db, Library, short_name=info_copy.pop("short_name"))
+        config = None
+
+        # Validate first
+        protocol_class.library_settings_class()(**info_copy)
+        # Attach the configuration
+        config = configuration.for_library(library.id, create=True)
+        config.settings = info_copy
+        return config
 
     def _set_integration_library(self, integration, library_info, protocol):
         library = get_one(self._db, Library, short_name=library_info.get("short_name"))

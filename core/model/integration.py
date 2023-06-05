@@ -60,6 +60,21 @@ class IntegrationConfiguration(Base):
         passive_deletes=True,
     )
 
+    collection: Mapped[Collection] = relationship("Collection", uselist=False)
+
+    def for_library(
+        self, library_id: int, create: bool = False
+    ) -> IntegrationLibraryConfiguration | None:
+        """Fetch the library configuraiton specifically by library_id"""
+        for config in self.library_configurations:
+            if config.library_id == library_id:
+                return config
+        if create:
+            config = IntegrationLibraryConfiguration(library_id=library_id, parent=self)
+            Session.object_session(self).add(config)
+            return config
+        return None
+
     def __repr__(self) -> str:
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
 

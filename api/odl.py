@@ -174,7 +174,7 @@ class ODLAPIConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
 
 
 class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
-    external_account_id: str = FormField(
+    external_account_id: Optional[str] = FormField(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         form=ConfigurationFormItem(
             label=_("ODL feed URL"),
@@ -1446,7 +1446,7 @@ class ODLHoldReaper(CollectionMonitor):
 
 
 class SharedODLSettings(BaseSettings):
-    external_account_id: str = FormField(
+    external_account_id: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Base URL"),
             description=_(

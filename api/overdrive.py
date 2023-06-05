@@ -82,6 +82,15 @@ class OverdriveLibrarySettings(BaseSettings):
     ebook_loan_duration: Optional[str] = BaseCirculationAPISettings.ebook_loan_duration
 
 
+class OverdriveChildSettings(BaseSettings):
+    external_account_id: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            required=True,
+        )
+    )
+
+
 class OverdriveAPI(
     OverdriveCoreAPI, BaseCirculationAPI, HasSelfTests, OverdriveAPIConstants
 ):
@@ -167,6 +176,10 @@ class OverdriveAPI(
     @classmethod
     def library_settings_class(cls):
         return OverdriveLibrarySettings
+
+    @classmethod
+    def child_settings_class(cls):
+        return OverdriveChildSettings
 
     def label(self):
         return self.NAME

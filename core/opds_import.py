@@ -174,7 +174,7 @@ class OPDSXMLParser(XMLParser):
 class BaseOPDSImporterSettings(BaseSettings):
     NO_DEFAULT_AUDIENCE = ""
 
-    external_account_id: str = FormField(
+    external_account_id: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("URL"),
             required=True,

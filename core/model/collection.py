@@ -28,7 +28,12 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
+from core.integration.goals import Goals
 from core.model.hybrid import hybrid_property
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 
 from ..util.string_helpers import base64
 from . import Base, create, get_one, get_one_or_create
@@ -51,12 +56,7 @@ from .work import Work
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.model import (  # noqa: autoflake
-        Credential,
-        CustomList,
-        IntegrationConfiguration,
-        Timestamp,
-    )
+    from core.model import Credential, CustomList, Timestamp  # noqa: autoflake
 
 
 class Collection(Base, HasSessionCache):
@@ -277,7 +277,9 @@ class Collection(Base, HasSessionCache):
         """What protocol do we need to use to get licenses for this
         collection?
         """
-        return self.external_integration.protocol
+        return (
+            self.integration_configuration and self.integration_configuration.protocol
+        )
 
     @protocol.setter
     def protocol(self, new_protocol):
@@ -287,7 +289,7 @@ class Collection(Base, HasSessionCache):
                 "Proposed new protocol (%s) contradicts parent collection's protocol (%s)."
                 % (new_protocol, self.parent.protocol)
             )
-        self.external_integration.protocol = new_protocol
+        self.integration_configuration.protocol = new_protocol
         for child in self.children:
             child.protocol = new_protocol
 
@@ -418,6 +420,28 @@ class Collection(Base, HasSessionCache):
         self.external_integration_id = external_integration.id
         return external_integration
 
+    def create_integration_configuration(self, protocol):
+        _db = Session.object_session(self)
+        goal = Goals.LICENSE_GOAL
+        if self.integration_configuration_id:
+            integration = self.integration_configuration
+        else:
+            integration, is_new = create(
+                _db,
+                IntegrationConfiguration,
+                protocol=protocol,
+                goal=goal,
+                name=self.name,
+            )
+        if integration.protocol != protocol:
+            raise ValueError(
+                "Located ExternalIntegration, but its protocol (%s) does not match desired protocol (%s)."
+                % (integration.protocol, protocol)
+            )
+        self.integration_configuration_id = integration.id
+        # Immediately accessing the relationship fills out the data
+        return self.integration_configuration
+
     @property
     def external_integration(self) -> ExternalIntegration:
         """Find the external integration for this Collection, assuming
@@ -546,14 +570,26 @@ class Collection(Base, HasSessionCache):
         self.libraries.remove(library)
 
         _db = Session.object_session(self)
-        qu = (
-            _db.query(ConfigurationSetting)
-            .filter(ConfigurationSetting.library == library)
-            .filter(
-                ConfigurationSetting.external_integration == self.external_integration
+        if self.external_integration_id:
+            qu = (
+                _db.query(ConfigurationSetting)
+                .filter(ConfigurationSetting.library == library)
+                .filter(
+                    ConfigurationSetting.external_integration
+                    == self.external_integration
+                )
             )
-        )
-        qu.delete()
+            qu.delete()
+        if self.integration_configuration_id:
+            qu = (
+                _db.query(IntegrationLibraryConfiguration)
+                .filter(IntegrationLibraryConfiguration.library_id == library.id)
+                .filter(
+                    IntegrationLibraryConfiguration.parent_id
+                    == self.integration_configuration_id
+                )
+            )
+            qu.delete()
 
     @classmethod
     def _decode_metadata_identifier(cls, metadata_identifier):

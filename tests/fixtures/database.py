@@ -168,6 +168,7 @@ class DatabaseTransactionFixture:
             ExternalIntegration.OPDS_IMPORT
         )
         integration.goal = ExternalIntegration.LICENSE_GOAL
+        collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
         if collection not in library.collections:
             library.collections.append(collection)
         return library
@@ -271,6 +272,8 @@ class DatabaseTransactionFixture:
         integration.url = url
         integration.username = username
         integration.password = password
+
+        collection.create_integration_configuration(protocol)
 
         if data_source_name:
             collection.data_source = data_source_name
@@ -718,6 +721,23 @@ class DatabaseTransactionFixture:
         )
 
         return external_integration_link
+
+    def integration_configuration(
+        self, protocol: str, goal=None, libraries=None, **kwargs
+    ):
+        integration, ignore = get_one_or_create(
+            self.session, IntegrationConfiguration, protocol=protocol, goal=goal
+        )
+        if libraries and not isinstance(libraries, list):
+            libraries = [libraries]
+        else:
+            libraries = []
+
+        for library in libraries:
+            integration.for_library(library.id, create=True)
+
+        integration.settings = kwargs
+        return integration
 
     def work_coverage_record(
         self, work, operation=None, status=CoverageRecord.SUCCESS

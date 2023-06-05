@@ -129,8 +129,7 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
 class OverdriveSettings(BaseImporterSettings):
     """The basic Overdrive configuration"""
 
-    external_account_id: str = FormField(
-        alias="library_id",
+    external_account_id: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             type=ConfigurationFormItemType.TEXT,
