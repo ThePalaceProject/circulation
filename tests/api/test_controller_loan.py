@@ -1421,12 +1421,12 @@ class TestLoanController:
     def test_loan_duration_settings_impact_on_loans_and_borrow_response(
         self,
         loan_fixture: LoanFixture,
-        target_loan_duration,
-        db_loan_duration,
-        opds_response_loan_duration,
-        collection_protocol,
-        collection_data_source_name,
-        collection_default_loan_period,
+        target_loan_duration: int,
+        db_loan_duration: int,
+        opds_response_loan_duration: int,
+        collection_protocol: str,
+        collection_data_source_name: str,
+        collection_default_loan_period: int,
     ):
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
