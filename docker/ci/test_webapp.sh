@@ -16,7 +16,7 @@ wait_for_runit "$container"
 docker exec "$container" curl --retry 15 --retry-delay 5 --retry-connrefused -4 --output /dev/null http://localhost/
 
 # In a webapp container, check that uwsgi is running.
-check_service_status "$container" /home/simplified/service/uwsgi
+check_service_status "$container" /etc/service/uwsgi
 
 # Make sure the web server is running.
 healthcheck=$(docker exec "$container" curl --write-out "%{http_code}" --silent --output /dev/null http://localhost/healthcheck.html)
