@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Union
+from typing import Any, Dict, Generator, List, Union
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
@@ -572,7 +572,7 @@ from .devicetokens import DeviceToken
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier
-from .integration import IntegrationError
+from .integration import IntegrationConfiguration, IntegrationLibraryConfiguration
 from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import (
