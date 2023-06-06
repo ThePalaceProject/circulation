@@ -2171,6 +2171,9 @@ class SettingsController(AdminCirculationManagerController):
                 if not item.protocol or not len(item.protocol):
                     return None
 
+                if not protocol_class:
+                    protocol_class = LicenseProvidersRegistry().get(item.protocol)
+
                 if item.protocol == OPDSImportMonitor.PROTOCOL:
                     protocol_class = OPDSImportMonitor
                     extra_args = (OPDSImporter,)

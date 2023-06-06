@@ -2,6 +2,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
 from api.axis import Axis360API
+from api.selftest import HasCollectionSelfTests
 from core.opds_import import OPDSImportMonitor
 from core.selftest import HasSelfTests
 from tests.api.mockapi.axis import MockAxis360API
@@ -33,8 +34,10 @@ class TestCollectionSelfTests:
     def test_collection_self_tests_test_get(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
+        old_prior_test_results = HasCollectionSelfTests.prior_test_results
+        HasCollectionSelfTests.prior_test_results = (
+            settings_ctrl_fixture.mock_prior_test_results
+        )
         collection = MockAxis360API.mock_collection(
             settings_ctrl_fixture.ctrl.db.session
         )
@@ -56,7 +59,7 @@ class TestCollectionSelfTests:
                 == settings_ctrl_fixture.self_test_results
             )
 
-        HasSelfTests.prior_test_results = old_prior_test_results
+        HasCollectionSelfTests.prior_test_results = old_prior_test_results
 
     def test_collection_self_tests_failed_post(
         self, settings_ctrl_fixture: SettingsControllerFixture

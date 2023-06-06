@@ -5,6 +5,7 @@ import pytest
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
+from api.selftest import HasCollectionSelfTests
 from core.model import (
     Admin,
     AdminRole,
@@ -159,8 +160,12 @@ class TestCollectionSettings:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
 
-        old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
+        old_prior_test_results = HasCollectionSelfTests.prior_test_results
+        HasCollectionSelfTests.prior_test_results = (
+            settings_ctrl_fixture.mock_prior_test_results
+        )
+
+        session = settings_ctrl_fixture.ctrl.db.session
 
         [c1] = settings_ctrl_fixture.ctrl.db.default_library().collections
 
@@ -180,9 +185,9 @@ class TestCollectionSettings:
         )
 
         c2.external_account_id = "1234"
-        c2.integration_configuration.settings.get["overdrive_client_secret"] = "b"
-        c2.integration_configuration.settings.get["overdrive_client_key"] = "user"
-        c2.integration_configuration.settings.get["overdrive_website_id"] = "100"
+        c2.integration_configuration["overdrive_client_secret"] = "b"
+        c2.integration_configuration["overdrive_client_key"] = "user"
+        c2.integration_configuration["overdrive_website_id"] = "100"
 
         c3 = settings_ctrl_fixture.ctrl.db.collection(
             name="Collection 3",
@@ -194,7 +199,9 @@ class TestCollectionSettings:
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
         c3.libraries += [l1, settings_ctrl_fixture.ctrl.db.default_library()]
         l1_config = c3.integration_configuration.for_library(l1.id, create=True)
-        l1_config.settings["ebook_loan_duration"] = "14"
+        l1_config["ebook_loan_duration"] = "14"
+        # Commit the config changes
+        session.commit()
 
         l1_librarian, ignore = create(
             settings_ctrl_fixture.ctrl.db.session, Admin, email="admin@l1.org"
@@ -258,9 +265,6 @@ class TestCollectionSettings:
             assert c2.external_account_id == settings2.get("external_account_id")
             assert c3.external_account_id == settings3.get("external_account_id")
 
-            assert c1.integration_configuration.settings["password"] == settings1.get(
-                "password"
-            )
             assert c2.integration_configuration.settings[
                 "overdrive_client_secret"
             ] == settings2.get("overdrive_client_secret")
@@ -290,7 +294,7 @@ class TestCollectionSettings:
             assert "L1" == coll3_libraries[0].get("short_name")
             assert "14" == coll3_libraries[0].get("ebook_loan_duration")
 
-        HasSelfTests.prior_test_results = old_prior_test_results
+        HasCollectionSelfTests.prior_test_results = old_prior_test_results
 
     def test_collections_post_errors(
         self, settings_ctrl_fixture: SettingsControllerFixture

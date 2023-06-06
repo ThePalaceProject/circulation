@@ -91,9 +91,9 @@ class CollectionSettingsController(SettingsController):
                 self.load_settings(
                     protocol["settings"], collection_object, collection_dict["settings"]
                 )
-                collection_dict[
-                    "self_test_results"
-                ] = collection_object.integration_configuration.self_test_results
+                collection_dict["self_test_results"] = self._get_prior_test_results(
+                    collection_object
+                )
                 collection_dict[
                     "marked_for_deletion"
                 ] = collection_object.marked_for_deletion

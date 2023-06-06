@@ -2,9 +2,9 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.controller.self_tests import SelfTestsController
 from api.admin.problem_details import *
+from api.selftest import HasCollectionSelfTests
 from core.model import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.selftest import HasSelfTests
 
 
 class CollectionSelfTestsController(SelfTestsController):
@@ -58,7 +58,7 @@ class CollectionSelfTestsController(SelfTestsController):
                 value, results = self.protocol_class.run_self_tests(
                     self._db, self.protocol_class, self._db, collection, OPDSImporter
                 )
-            elif issubclass(self.protocol_class, HasSelfTests):
+            elif issubclass(self.protocol_class, HasCollectionSelfTests):
                 value, results = self.protocol_class.run_self_tests(
                     self._db, self.protocol_class, self._db, collection
                 )

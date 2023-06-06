@@ -9,19 +9,41 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from core.integration.goals import Goals
-from core.model import Base
+from core.model import Base, create, get_one_or_create
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from core.model import Collection, Library
 
 
-class IntegrationConfiguration(Base):
+class SettingsModel:
+    """A dict like interface for any item with a settings property"""
+
+    def set(self, key, value):
+        """Setting any value in the settings dict can only
+        be signalled for a flush to the DB if the dict object has changed.
+        This is an SALAlchemy idiosyncrasy."""
+        settings = self.settings.copy()
+        settings[key] = value
+        self.settings = settings
+
+    def get(self, key):
+        return self.settings.get(key)
+
+    def __setitem__(self, key, value):
+        return self.set(key, value)
+
+    def __getitem__(self, key):
+        self.settings[key]
+
+
+class IntegrationConfiguration(Base, SettingsModel):
     """
     Integration Configuration
 
     This is used to store the configuration of integrations. It is
     a combination of the now deprecated ExternalIntegration and
-    ConfigutationSetting classes.
+    ConfigurationSetting classes.
 
     It stores the configuration settings for each external integration in
     a single json row in the database. These settings are then serialized
@@ -65,13 +87,18 @@ class IntegrationConfiguration(Base):
     def for_library(
         self, library_id: int, create: bool = False
     ) -> IntegrationLibraryConfiguration | None:
-        """Fetch the library configuraiton specifically by library_id"""
+        """Fetch the library configuration specifically by library_id"""
         for config in self.library_configurations:
             if config.library_id == library_id:
                 return config
         if create:
-            config = IntegrationLibraryConfiguration(library_id=library_id, parent=self)
-            Session.object_session(self).add(config)
+            session = Session.object_session(self)
+            config, _ = get_one_or_create(
+                session,
+                IntegrationLibraryConfiguration,
+                parent_id=self.id,
+                library_id=library_id,
+            )
             return config
         return None
 
@@ -79,7 +106,7 @@ class IntegrationConfiguration(Base):
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
 
 
-class IntegrationLibraryConfiguration(Base):
+class IntegrationLibraryConfiguration(Base, SettingsModel):
     """
     Integration Library Configuration
 

@@ -30,6 +30,7 @@ from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.lane import Lane, Pagination
 from core.model import (
     Admin,
@@ -3079,6 +3080,13 @@ class TestSettingsController:
             LIBRARY_SETTINGS = [6]
             CARDINALITY = 1
 
+            class ChildSettings(BaseSettings):
+                key: int = FormField(form=ConfigurationFormItem("key"))
+
+            @classmethod
+            def child_settings_class(cls):
+                return cls.ChildSettings
+
         [result] = SettingsController(
             admin_ctrl_fixture.manager
         )._get_integration_protocols([Protocol])
@@ -3087,7 +3095,7 @@ class TestSettingsController:
             description="my description",
             settings=[1, 2, 3],
             library_settings=[6],
-            child_settings=[4, 5],
+            child_settings=[{"label": "key", "key": "key", "required": True}],
             label="my label",
             cardinality=1,
             name="my name",

@@ -114,7 +114,7 @@ class HasSelfTests(CoreHasSelfTests, ABC):
         raise cls._NoValidLibrarySelfTestPatron(message, detail=detail)
 
 
-class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration):
+class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasSelfTests):
     """Extra tests to verify the integrity of imported
     collections of books.
 
