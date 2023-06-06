@@ -30,7 +30,7 @@ fi
 feed_type=$(docker exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/version.json)
 if ! [[ ${feed_type} == "application/json" ]]; then
   exit 1
-els5
+else
   echo "  OK"
 fi
 
