@@ -56,6 +56,7 @@ from api.bibliotheca import BibliothecaAPI
 from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
 from api.enki import EnkiAPI
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
@@ -103,7 +104,7 @@ from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
-from core.selftest import HasSelfTests
+from core.selftest import BaseHasSelfTests, HasSelfTests
 from core.util.cache import memoize
 from core.util.flask_util import OPDSFeedResponse
 from core.util.languages import LanguageCodes
@@ -2169,20 +2170,12 @@ class SettingsController(AdminCirculationManagerController):
             if self.type == "collection":
                 if not item.protocol or not len(item.protocol):
                     return None
-                provider_apis = list(self.PROVIDER_APIS)
-                provider_apis.append(OPDSImportMonitor)
 
                 if item.protocol == OPDSImportMonitor.PROTOCOL:
                     protocol_class = OPDSImportMonitor
+                    extra_args = (OPDSImporter,)
 
-                if protocol_class in provider_apis and issubclass(
-                    protocol_class, HasSelfTests
-                ):
-                    if item.protocol == OPDSImportMonitor.PROTOCOL:
-                        extra_args = (OPDSImporter,)
-                    else:
-                        extra_args = ()
-
+                if issubclass(protocol_class, BaseHasSelfTests):
                     self_test_results = protocol_class.prior_test_results(
                         self._db, protocol_class, self._db, item, *extra_args
                     )

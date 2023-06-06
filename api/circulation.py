@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import sys
@@ -8,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Type
 
 import flask
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration

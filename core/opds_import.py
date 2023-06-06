@@ -15,6 +15,7 @@ from lxml import etree
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
+from api.selftest import HasCollectionSelfTests
 from core.integration.base import HasIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
@@ -63,7 +64,6 @@ from .model.configuration import (
     HasExternalIntegration,
 )
 from .monitor import CollectionMonitor
-from .selftest import HasSelfTests
 from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
@@ -1680,7 +1680,9 @@ class OPDSImporter(HasIntegrationConfiguration):
         return series_name, series_position
 
 
-class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration):
+class OPDSImportMonitor(
+    CollectionMonitor, HasCollectionSelfTests, HasExternalIntegration
+):
     """Periodically monitor a Collection's OPDS archive feed and import
     every title it mentions.
     """

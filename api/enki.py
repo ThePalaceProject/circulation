@@ -44,7 +44,7 @@ from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class EnkiConstants:
@@ -83,7 +83,10 @@ class EnkiLibrarySettings(BaseSettings):
 
 
 class EnkiAPI(
-    BaseCirculationAPI, HasSelfTests, EnkiConstants, HasLibraryIntegrationConfiguration
+    BaseCirculationAPI,
+    HasCollectionSelfTests,
+    EnkiConstants,
+    HasLibraryIntegrationConfiguration,
 ):
     ENKI_LIBRARY_ID_KEY = "enki_library_id"
     DESCRIPTION = _("Integrate an Enki collection.")

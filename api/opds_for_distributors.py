@@ -5,6 +5,7 @@ from typing import Type
 import feedparser
 from flask_babel import lazy_gettext as _
 
+from api.selftest import HasCollectionSelfTests
 from core.integration.base import HasIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import FormatData, TimestampData
@@ -22,7 +23,6 @@ from core.model import (
     get_one,
 )
 from core.opds_import import BaseOPDSImporterSettings, OPDSImporter, OPDSImportMonitor
-from core.selftest import HasSelfTests
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
@@ -48,7 +48,7 @@ class OPDSForDistributorsSettings(BaseOPDSImporterSettings):
 
 
 class OPDSForDistributorsAPI(
-    BaseCirculationAPI, HasSelfTests, HasIntegrationConfiguration
+    BaseCirculationAPI, HasCollectionSelfTests, HasIntegrationConfiguration
 ):
     NAME = "OPDS for Distributors"
     DESCRIPTION = _(

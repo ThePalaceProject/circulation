@@ -49,9 +49,13 @@ def upgrade() -> None:
             api_class = other_apis[protocol]
 
         # Create the settings and library settings dicts from the configurationsettings
-        settings_dict, library_settings = get_configuration_settings(
+        settings_dict, library_settings, self_test_result = get_configuration_settings(
             connection, integration
         )
+
+        if "IGNORED_IDENTIFIER_TYPE" in settings_dict.keys():
+            value = settings_dict.pop("IGNORED_IDENTIFIER_TYPE")
+            settings_dict["ignored_identifier_types"] = value
 
         # License type integrations take their external_account_id data from the collection.
         # The configurationsetting for it seems to be unused, so we take the value from the collection
@@ -70,6 +74,7 @@ def upgrade() -> None:
             api_class,
             LICENSE_GOAL,
             settings_dict,
+            self_test_result,
             name=collection.name,
         )
 

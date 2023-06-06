@@ -43,7 +43,7 @@ from core.util.personal_names import sort_name_to_display_name
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class OdiloRepresentationExtractor:
@@ -337,7 +337,7 @@ class OdiloSettings(BaseSettings):
     )
 
 
-class OdiloAPI(BaseCirculationAPI, HasSelfTests, HasIntegrationConfiguration):
+class OdiloAPI(BaseCirculationAPI, HasCollectionSelfTests, HasIntegrationConfiguration):
     log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
 

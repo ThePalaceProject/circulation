@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import string
 from pathlib import Path
@@ -201,6 +202,8 @@ def create_config_setting() -> CreateConfigSetting:
         integration_id: Optional[int] = None,
         library_id: Optional[int] = None,
     ) -> int:
+        if type(value) in (tuple, list, dict):
+            value = json.dumps(value)
         setting = connection.execute(
             "INSERT INTO configurationsettings (key, value, external_integration_id, library_id) VALUES (%s, %s, %s, %s) returning id",
             (key, value, integration_id, library_id),

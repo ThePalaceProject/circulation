@@ -44,7 +44,7 @@ def _validate_and_load_settings(
 def get_configuration_settings(
     connection: Connection,
     integration: Row,
-) -> Tuple[Dict, Dict]:
+) -> Tuple[Dict, Dict, Dict]:
     settings = connection.execute(
         "select cs.library_id, cs.key, cs.value from configurationsettings cs "
         "where cs.external_integration_id = (%s)",
@@ -52,6 +52,7 @@ def get_configuration_settings(
     )
     settings_dict = {}
     library_settings: Dict[str, Dict[str, str]] = defaultdict(dict)
+    self_test_results = json_serializer({})
     for setting in settings:
         if not setting.value:
             continue
@@ -63,7 +64,7 @@ def get_configuration_settings(
         else:
             settings_dict[setting.key] = setting.value
 
-    return settings_dict, library_settings
+    return settings_dict, library_settings, self_test_results
 
 
 def _migrate_external_integration(
@@ -72,9 +73,9 @@ def _migrate_external_integration(
     protocol_class: Type[AuthenticationProvider],
     goal: str,
     settings_dict: Dict,
+    self_test_results: Dict,
     name=None,
 ) -> Tuple[int, Dict[str, Dict[str, str]]]:
-    self_test_results = json_serializer({})
     # Load and validate the settings before storing them in the database.
     settings_class = protocol_class.settings_class()
     settings_obj = _validate_and_load_settings(settings_class, settings_dict)

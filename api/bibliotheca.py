@@ -72,7 +72,7 @@ from .circulation import (
     LoanInfo,
 )
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 from .web_publication_manifest import FindawayManifest, SpineItem
 
 
@@ -119,7 +119,7 @@ class BibliothecaLibrarySettings(BaseSettings):
 
 
 class BibliothecaAPI(
-    BaseCirculationAPI, HasSelfTests, HasLibraryIntegrationConfiguration
+    BaseCirculationAPI, HasCollectionSelfTests, HasLibraryIntegrationConfiguration
 ):
     NAME = ExternalIntegration.BIBLIOTHECA
     AUTH_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S GMT"

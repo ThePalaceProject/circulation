@@ -49,12 +49,12 @@ def test_migration(
     create_collection: CreateCollection,
 ):
     """Test the migration of configurationsettings to integration_configurations for the licenses type goals"""
-    alembic_runner.set_revision("a9ed3f76d649")
-    alembic_runner.migrate_up_to("b883671b7bc5")
+    # alembic_runner.set_revision("a9ed3f76d649")
+    alembic_runner.migrate_down_to("a9ed3f76d649")
     with alembic_engine.connect() as connection:
         library_id = create_library(connection)
         integration_id = create_external_integration(
-            connection, "Axis 360", "LICENSE_GOAL", "Test B&T"
+            connection, "Axis 360", "licenses", "Test B&T"
         )
         create_config_setting(connection, "username", "username", integration_id)
         create_config_setting(connection, "password", "password", integration_id)
@@ -84,4 +84,62 @@ def test_migration(
         }
         assert configuration.library_settings == {
             library_id: {"default_loan_duration": 77}
+        }
+
+
+def test_key_rename(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    create_library: CreateLibrary,
+    create_external_integration: CreateExternalIntegration,
+    create_config_setting: CreateConfigSetting,
+    create_collection: CreateCollection,
+):
+
+    alembic_runner.migrate_down_to("a9ed3f76d649")
+    with alembic_engine.connect() as connection:
+        integration_id = create_external_integration(
+            connection, "Overdrive", "licenses", "Test Overdrive"
+        )
+        create_config_setting(
+            connection, "overdrive_website_id", "website", integration_id
+        )
+        create_config_setting(
+            connection, "overdrive_client_key", "overdrive_client_key", integration_id
+        )
+        create_config_setting(
+            connection,
+            "overdrive_client_secret",
+            "overdrive_client_secret",
+            integration_id,
+        )
+        create_config_setting(
+            connection, "prioritized_drm_schemes", ["P1", "P2"], integration_id
+        )
+        create_config_setting(
+            connection, "IGNORED_IDENTIFIER_TYPE", ["Overdrive ID"], integration_id
+        )
+        create_collection(
+            connection, "Test Overdrive", integration_id, "ExternalAccountID"
+        )
+
+        # Fake value, never used
+        create_config_setting(
+            connection, "external_account_id", "external_account_id", integration_id
+        )
+
+    alembic_runner.migrate_up_to("0af587ff8595")
+
+    with alembic_engine.connect() as connection:
+        configuration = query_integration_configurations(
+            connection, "LICENSE_GOAL", "Test Overdrive"
+        )
+
+        assert configuration.settings == {
+            "overdrive_website_id": "website",
+            "overdrive_client_key": "overdrive_client_key",
+            "overdrive_client_secret": "overdrive_client_secret",
+            "external_account_id": "ExternalAccountID",
+            "ignored_identifier_types": ["Overdrive ID"],
+            "prioritized_drm_schemes": ["P1", "P2"],
         }

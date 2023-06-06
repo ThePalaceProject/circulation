@@ -47,7 +47,7 @@ from .circulation import (
     LoanInfo,
 )
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class OverdriveAPIConstants:
@@ -92,7 +92,7 @@ class OverdriveChildSettings(BaseSettings):
 
 
 class OverdriveAPI(
-    OverdriveCoreAPI, BaseCirculationAPI, HasSelfTests, OverdriveAPIConstants
+    OverdriveCoreAPI, BaseCirculationAPI, HasCollectionSelfTests, OverdriveAPIConstants
 ):
     NAME = ExternalIntegration.OVERDRIVE
     DESCRIPTION = _(
