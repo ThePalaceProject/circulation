@@ -13,7 +13,7 @@ source "${dir}/check_service_status.sh"
 wait_for_runit "$container"
 
 # Wait for us to be able to connect to the webapp.
-docker exec "$container" curl --retry-connrefused --retry 10 --retry-delay 5 --silent --output /dev/null http://localhost/
+docker exec "$container" curl --retry 15 --retry-delay 5 --retry-connrefused -4 --output /dev/null http://localhost/
 
 # In a webapp container, check that uwsgi is running.
 check_service_status "$container" /home/simplified/service/uwsgi
@@ -30,7 +30,7 @@ fi
 feed_type=$(docker exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/version.json)
 if ! [[ ${feed_type} == "application/json" ]]; then
   exit 1
-else
+els5
   echo "  OK"
 fi
 
