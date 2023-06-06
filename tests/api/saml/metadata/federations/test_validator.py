@@ -4,9 +4,8 @@ from typing import Optional, Union
 
 import pytest
 from freezegun import freeze_time
-from parameterized import parameterized
 
-import tests.api.saml.fixtures as fixtures
+import tests.api.saml.saml_strings as fixtures
 from api.saml.metadata.federations import incommon
 from api.saml.metadata.federations.model import SAMLFederation
 from api.saml.metadata.federations.validator import (
@@ -18,7 +17,8 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 
 
 class TestSAMLFederatedMetadataExpirationValidator:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,current_time,metadata,expected_exception",
         [
             (
                 "incorrect_xml_str_type",
@@ -130,7 +130,7 @@ class TestSAMLFederatedMetadataExpirationValidator:
                 .encode(),
                 None,
             ),
-        ]
+        ],
     )
     def test_validate(
         self,
@@ -155,7 +155,8 @@ class TestSAMLFederatedMetadataExpirationValidator:
 
 
 class TestSAMLMetadataSignatureValidator:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_,certificate,metadata,expected_exception",
         [
             (
                 "without_signature",
@@ -180,7 +181,7 @@ class TestSAMLMetadataSignatureValidator:
                 ).read(),
                 None,
             ),
-        ]
+        ],
     )
     def test_validate(self, _, certificate, metadata, expected_exception):
         # Arrange

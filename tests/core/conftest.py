@@ -1,4 +1,5 @@
 pytest_plugins = [
+    "tests.fixtures.api_config",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",
     "tests.fixtures.marc_files",
@@ -9,4 +10,5 @@ pytest_plugins = [
     "tests.fixtures.sample_covers",
     "tests.fixtures.search",
     "tests.fixtures.time",
+    "tests.fixtures.tls_server",
 ]

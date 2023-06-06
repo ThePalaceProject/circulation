@@ -2,7 +2,7 @@ import base64
 import json
 import uuid
 from io import BytesIO
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 import flask
 import wcag_contrast_ratio
@@ -399,7 +399,7 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image, _format="PNG") -> str:
+    def _data_url_for_image(image: Image.Image, _format="PNG") -> str:
         """Produce the `data` URL for the setting's uploaded image file.
 
         :param image: A Pillow Image.
@@ -416,7 +416,7 @@ class LibrarySettingsController(SettingsController):
         return "data:image/png;base64,%s" % b64.decode("utf-8")
 
     def image_setting(
-        self, setting: Dict[str, Any], max_dimension=Configuration.LOGO_MAX_DIMENSION
+        self, setting: Dict[str, str], max_dimension=Configuration.LOGO_MAX_DIMENSION
     ) -> Optional[str]:
         """Retrieve an uploaded image file for the setting and return its data URL.
 
@@ -426,7 +426,7 @@ class LibrarySettingsController(SettingsController):
         :param image: A Python Image Library image object.
         :return: The `data` URL for the image file, if it was uploaded, else None.
         """
-        image_file = flask.request.files.get(setting.get("key"))
+        image_file = flask.request.files.get(setting.get("key", ""))
         if not image_file:
             return None
 

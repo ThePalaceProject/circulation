@@ -27,7 +27,6 @@ from core.model import (
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.overdrive import (
-    MockOverdriveCoreAPI,
     OverdriveBibliographicCoverageProvider,
     OverdriveConfiguration,
     OverdriveCoreAPI,
@@ -245,7 +244,7 @@ class OverdriveAPI(
             return response
 
     def get_patron_credential(
-        self, patron: Patron, pin: str, is_fulfillment=False
+        self, patron: Patron, pin: Optional[str], is_fulfillment=False
     ) -> Credential:
         """Create an OAuth token for the given patron.
 
@@ -673,10 +672,7 @@ class OverdriveAPI(
             )
 
         raise CannotFulfill(
-            "Cannot obtain a download link for patron[%r], overdrive_id[%s], format_type[%s].",
-            patron,
-            overdrive_id,
-            format_type,
+            f"Cannot obtain a download link for patron {patron!r}, overdrive_id {overdrive_id}, format_type {format_type}"
         )
 
     def get_fulfillment_link_from_download_link(
@@ -1267,37 +1263,6 @@ class OverdriveAPI(
         else:
             link += "&contentfile=true"
         return link
-
-
-class MockOverdriveResponse:
-    def __init__(self, status_code, headers, content):
-        self.status_code = status_code
-        self.headers = headers
-        self.content = content
-
-    def json(self):
-        return json.loads(self.content)
-
-
-class MockOverdriveAPI(MockOverdriveCoreAPI, OverdriveAPI):
-
-    library_data = '{"id":1810,"name":"My Public Library (MA)","type":"Library","collectionToken":"1a09d9203","links":{"self":{"href":"http://api.overdrive.com/v1/libraries/1810","type":"application/vnd.overdrive.api+json"},"products":{"href":"http://api.overdrive.com/v1/collections/1a09d9203/products","type":"application/vnd.overdrive.api+json"},"dlrHomepage":{"href":"http://ebooks.nypl.org","type":"text/html"}},"formats":[{"id":"audiobook-wma","name":"OverDrive WMA Audiobook"},{"id":"ebook-pdf-adobe","name":"Adobe PDF eBook"},{"id":"ebook-mediado","name":"MediaDo eBook"},{"id":"ebook-epub-adobe","name":"Adobe EPUB eBook"},{"id":"ebook-kindle","name":"Kindle Book"},{"id":"audiobook-mp3","name":"OverDrive MP3 Audiobook"},{"id":"ebook-pdf-open","name":"Open PDF eBook"},{"id":"ebook-overdrive","name":"OverDrive Read"},{"id":"video-streaming","name":"Streaming Video"},{"id":"ebook-epub-open","name":"Open EPUB eBook"}]}'
-
-    token_data = '{"access_token":"foo","token_type":"bearer","expires_in":3600,"scope":"LIB META AVAIL SRCH"}'
-
-    collection_token = "fake token"
-
-    def patron_request(self, patron, pin, *args, **kwargs):
-        response = self._make_request(*args, **kwargs)
-
-        # Modify the record of the request to include the patron information.
-        original_data = self.requests[-1]
-
-        # The last item in the record of the request is keyword arguments.
-        # Stick this information in there to minimize confusion.
-        original_data[-1]["_patron"] = patron
-        original_data[-1]["_pin"] = patron
-        return response
 
 
 class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):

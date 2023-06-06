@@ -2,12 +2,14 @@ from datetime import timedelta
 from functools import wraps
 
 import flask
-from flask import Response, make_response, redirect
+from flask import Response, make_response, redirect, url_for
 from flask_pydantic_spec import FileResponse as SpecFileResponse
 from flask_pydantic_spec import Request as SpecRequest
 from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
+from api.admin.dashboard_stats import generate_statistics
+from api.admin.model.dashboard_statistics import StatisticsResponse
 from api.app import api_spec, app
 from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
@@ -106,12 +108,6 @@ def returns_json_or_response_or_problem_detail(f):
     return decorated
 
 
-@app.route("/admin/GoogleAuth/callback")
-@returns_problem_detail
-def google_auth_callback():
-    return app.manager.admin_sign_in_controller.redirect_after_google_sign_in()
-
-
 @app.route("/admin/sign_in_with_password", methods=["POST"])
 @returns_problem_detail
 def password_auth():
@@ -136,6 +132,22 @@ def admin_sign_out():
 @requires_admin
 def admin_change_password():
     return app.manager.admin_sign_in_controller.change_password()
+
+
+@app.route("/admin/forgot_password", methods=["GET", "POST"])
+@returns_problem_detail
+def admin_forgot_password():
+    return app.manager.admin_reset_password_controller.forgot_password()
+
+
+@app.route(
+    "/admin/reset_password/<reset_password_token>/<admin_id>", methods=["GET", "POST"]
+)
+@returns_problem_detail
+def admin_reset_password(reset_password_token, admin_id):
+    return app.manager.admin_reset_password_controller.reset_password(
+        reset_password_token, admin_id
+    )
 
 
 @library_route("/admin/works/<identifier_type>/<path:identifier>", methods=["GET"])
@@ -333,10 +345,14 @@ def circulation_events():
 
 
 @app.route("/admin/stats")
+@api_spec.validate(resp=SpecResponse(HTTP_200=StatisticsResponse), tags=["admin.stats"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
 def stats():
-    return app.manager.admin_dashboard_controller.stats()
+    statistics_response: StatisticsResponse = (
+        app.manager.admin_dashboard_controller.stats(stats_function=generate_statistics)
+    )
+    return statistics_response.api_dict()
 
 
 @app.route("/admin/libraries", methods=["GET", "POST"])
@@ -391,22 +407,6 @@ def collection_library_registrations():
     return (
         app.manager.admin_collection_library_registrations_controller.process_collection_library_registrations()
     )
-
-
-@app.route("/admin/admin_auth_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_services():
-    return app.manager.admin_auth_services_controller.process_admin_auth_services()
-
-
-@app.route("/admin/admin_auth_service/<protocol>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_service(protocol):
-    return app.manager.admin_auth_services_controller.process_delete(protocol)
 
 
 @app.route("/admin/individual_admins", methods=["GET", "POST"])
@@ -516,22 +516,6 @@ def analytics_services():
 @requires_csrf_token
 def analytics_service(service_id):
     return app.manager.admin_analytics_services_controller.process_delete(service_id)
-
-
-@app.route("/admin/cdn_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def cdn_services():
-    return app.manager.admin_cdn_services_controller.process_cdn_services()
-
-
-@app.route("/admin/cdn_service/<service_id>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def cdn_service(service_id):
-    return app.manager.admin_cdn_services_controller.process_delete(service_id)
 
 
 @app.route("/admin/search_services", methods=["GET", "POST"])
@@ -835,7 +819,7 @@ def admin_sign_in_again():
         or isinstance(csrf_token, ProblemDetail)
     ):
         redirect_url = flask.request.url
-        return redirect(app.manager.url_for("admin_sign_in", redirect=redirect_url))
+        return redirect(url_for("admin_sign_in", redirect=redirect_url, _external=True))
     return flask.render_template_string(sign_in_again_template)
 
 
@@ -850,7 +834,7 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 
 @app.route("/admin/", strict_slashes=False)
 def admin_base(**kwargs):
-    return redirect(app.manager.url_for("admin_view"))
+    return redirect(url_for("admin_view", _external=True))
 
 
 # This path is used only in debug mode to serve frontend assets.

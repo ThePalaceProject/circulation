@@ -33,13 +33,6 @@ ADMIN_NOT_AUTHORIZED = pd(
     _("Your admin account is not authorized to make this request."),
 )
 
-GOOGLE_OAUTH_FAILURE = pd(
-    "http://librarysimplified.org/terms/problem/google-oauth-failure",
-    400,
-    _("Google OAuth Error"),
-    _("There was an error connecting with Google OAuth."),
-)
-
 INVALID_CSRF_TOKEN = pd(
     "http://librarysimplified.org/terms/problem/invalid-csrf-token",
     400,
@@ -221,6 +214,13 @@ CANNOT_CHANGE_PROTOCOL = pd(
     status_code=400,
     title=_("Cannot change protocol"),
     detail=_("A protocol can't be changed once it has been set."),
+)
+
+MISSING_PATRON_AUTH_NAME = pd(
+    "http://librarysimplified.org/terms/problem/missing-patron-auth-name",
+    status_code=400,
+    title=_("Missing patron auth service name."),
+    detail=_("You must identify the patron auth service by its name."),
 )
 
 PROTOCOL_DOES_NOT_SUPPORT_PARENTS = pd(

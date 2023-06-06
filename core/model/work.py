@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, List, Union, cast
 
 import pytz
 from sqlalchemy import (
@@ -23,7 +24,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import contains_eager, joinedload, relationship
+from sqlalchemy.orm import Mapped, contains_eager, joinedload, relationship
+from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
@@ -50,6 +52,11 @@ from .datasource import DataSource
 from .edition import Edition
 from .identifier import Identifier, RecursiveEquivalencyCache
 from .measurement import Measurement
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 # Import related models when doing type checking
 if TYPE_CHECKING:
@@ -78,9 +85,6 @@ class WorkGenre(Base):
 
     def __repr__(self):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
-
-
-WorkTypevar = TypeVar("WorkTypevar", bound="Work")
 
 
 class Work(Base):
@@ -125,40 +129,42 @@ class Work(Base):
     id = Column(Integer, primary_key=True)
 
     # One Work may have copies scattered across many LicensePools.
-    license_pools = relationship(
+    license_pools: Mapped[List[LicensePool]] = relationship(
         "LicensePool", backref="work", lazy="joined", uselist=True
     )
 
     # A Work takes its presentation metadata from a single Edition.
-    # But this Edition is a composite of provider, metadata wrangler, admin interface, etc.-derived Editions.
+    # But this Edition is a composite of provider, admin interface, etc.-derived Editions.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
 
     # One Work may have many associated WorkCoverageRecords.
-    coverage_records = relationship(
+    coverage_records: Mapped[List[WorkCoverageRecord]] = relationship(
         "WorkCoverageRecord", backref="work", cascade="all, delete-orphan"
     )
 
     # One Work may be associated with many CustomListEntries.
     # However, a CustomListEntry may lose its Work without
     # ceasing to exist.
-    custom_list_entries = relationship("CustomListEntry", backref="work")
+    custom_list_entries: Mapped[List[CustomListEntry]] = relationship(
+        "CustomListEntry", backref="work"
+    )
 
     # One Work may have multiple CachedFeeds, and if a CachedFeed
     # loses its Work, it ceases to exist.
-    cached_feeds = relationship(
+    cached_feeds: Mapped[List[CachedFeed]] = relationship(
         "CachedFeed", backref="work", cascade="all, delete-orphan"
     )
 
     # One Work may participate in many WorkGenre assignments.
     genres = association_proxy("work_genres", "genre", creator=WorkGenre.from_genre)
-    work_genres = relationship(
+    work_genres: Mapped[List[WorkGenre]] = relationship(
         "WorkGenre", backref="work", cascade="all, delete-orphan"
     )
     audience = Column(Unicode, index=True)
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
-    summary_id: Column[int | None] = Column(
+    summary_id: Mapped[int] = Column(
         Integer,
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,
@@ -817,12 +823,18 @@ class Work(Base):
             )
             raise ValueError(error_message)
 
+        trigger_customlists_update = (
+            not self.presentation_edition or self.presentation_edition is NO_VALUE
+        )
         self.presentation_edition = new_presentation_edition
 
         # if the edition is the presentation edition for any license
         # pools, let them know they have a Work.
         for pool in self.presentation_edition.is_presentation_for:
             pool.work = self
+
+        if trigger_customlists_update:
+            add_work_to_customlists_for_collection(self)
 
     def calculate_presentation_edition(self, policy=None):
         """Which of this Work's Editions should be used as the default?
@@ -1206,7 +1218,9 @@ class Work(Base):
                     break
             elif p.unlimited_access or p.self_hosted:
                 active_license_pool = p
-            elif edition and edition.title and p.licenses_owned > 0:
+            elif (
+                edition and edition.title and p.licenses_owned and p.licenses_owned > 0
+            ):
                 active_license_pool = p
         return active_license_pool
 
@@ -1435,13 +1449,11 @@ class Work(Base):
             self.secondary_appeal = self.NO_APPEAL
 
     # This can be used in func.to_char to convert a SQL datetime into a string
-    # that Elasticsearch can parse as a date.
-    ELASTICSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
+    # that Opensearch can parse as a date.
+    OPENSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents(
-        cls: type[WorkTypevar], works: list[WorkTypevar]
-    ) -> list[dict]:
+    def to_search_documents(cls, works: list[Self]) -> list[dict]:
         """In app to search documents needed to ease off the burden
         of complex queries from the DB cluster
         No recursive identifier policy is taken here as using the
@@ -1493,7 +1505,7 @@ class Work(Base):
                     Identifier.type,
                 ]
             )
-            .select_from(Identifier)  # type: ignore
+            .select_from(Identifier)
             .where(Identifier.id == literal_column("equivalent_cte.equivalent_id"))
         )
 
@@ -1546,7 +1558,7 @@ class Work(Base):
                 == literal_column("equivalent_cte.equivalent_id")
             )
             .select_from(
-                join(Classification, Subject, Classification.subject_id == Subject.id)  # type: ignore
+                join(Classification, Subject, Classification.subject_id == Subject.id)
             )
         )
 
@@ -1563,7 +1575,7 @@ class Work(Base):
             )
 
             try:
-                search_doc = cls.search_doc_as_dict(cast(WorkTypevar, item))
+                search_doc = cls.search_doc_as_dict(cast(Self, item))
                 results.append(search_doc)
             except:
                 logging.exception(f"Could not create search document for {item}")
@@ -1571,7 +1583,7 @@ class Work(Base):
         return results
 
     @classmethod
-    def search_doc_as_dict(cls: type[WorkTypevar], doc: WorkTypevar):
+    def search_doc_as_dict(cls, doc: Self):
         columns = {
             "work": [
                 "fiction",
@@ -1708,7 +1720,7 @@ class Work(Base):
         # Extra special genre massaging
         result["genres"] = []
         if doc.work_genres:
-            for item in doc.work_genres:  # type: ignore
+            for item in doc.work_genres:
                 genre = {
                     "scheme": Subject.SIMPLIFIED_GENRE,
                     "term": item.genre.id,
@@ -1733,7 +1745,7 @@ class Work(Base):
 
         result["customlists"] = []
         if doc.custom_list_entries:
-            for item in doc.custom_list_entries:  # type: ignore
+            for item in doc.custom_list_entries:
                 customlist: dict = {}
                 _set_value(item, "custom_list_entries", customlist)
                 result["customlists"].append(customlist)
@@ -1868,7 +1880,7 @@ class Work(Base):
 
         def explicit_bool(label, t):
             # Ensure we always generate True/False instead of
-            # True/None. Elasticsearch can't filter on null values.
+            # True/None. Opensearch can't filter on null values.
             return case([(t, True)], else_=False).label(label)
 
         licensepools = (
@@ -2244,3 +2256,28 @@ class Work(Base):
         if search_index is not None:
             search_index.remove_work(self)
         _db.delete(self)
+
+
+def add_work_to_customlists_for_collection(
+    pool_or_work: Union[LicensePool, Work]
+) -> None:
+    if isinstance(pool_or_work, Work):
+        work = pool_or_work
+        pools = work.license_pools
+    else:
+        work = pool_or_work.work
+        pools = [pool_or_work]
+
+    if work and work.presentation_edition:
+        for pool in pools:
+            if not pool.collection:
+                # This shouldn't happen, but don't crash if it does --
+                # the correct behavior is that the work not be added to
+                # any CustomLists.
+                continue
+            for list in pool.collection.customlists:
+                # Since the work was just created, we can assume that
+                # there's already a pending registration for updating the
+                # work's internal index, and decide not to create a
+                # second one.
+                list.add_entry(work, featured=True, update_external_index=False)

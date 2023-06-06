@@ -4,14 +4,12 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
-from typing import Dict, Optional, Type
+from typing import Dict, List, Optional, Tuple, Type
 
 import flask
-import sqlalchemy
 from flask_babel import lazy_gettext as _
 
 from core.analytics import Analytics
-from core.cdn import cdnify
 from core.config import CannotLoadConfiguration
 from core.mirror import MirrorUploader
 from core.model import (
@@ -397,12 +395,14 @@ class HoldInfo(CirculationInfo):
         end_date,
         hold_position,
         external_identifier=None,
+        integration_client=None,
     ):
         super().__init__(collection, data_source_name, identifier_type, identifier)
         self.start_date = start_date
         self.end_date = end_date
         self.hold_position = hold_position
         self.external_identifier = external_identifier
+        self.integration_client = integration_client
 
     def __repr__(self):
         return "<HoldInfo for {}/{}, start={} end={}, position={}>".format(
@@ -459,11 +459,11 @@ class BaseCirculationAPI:
 
     # These collection-specific settings should be inherited by all
     # distributors.
-    SETTINGS = []
+    SETTINGS: List[dict] = []
 
     # These library- and collection-specific settings should be
     # inherited by all distributors.
-    LIBRARY_SETTINGS = []
+    LIBRARY_SETTINGS: List[dict] = []
 
     BORROW_STEP = "borrow"
     FULFILL_STEP = "fulfill"
@@ -477,7 +477,7 @@ class BaseCirculationAPI:
     # wait til the point of fulfillment to set a delivery mechanism
     # (Overdrive), set this to FULFILL_STEP. If there is no choice of
     # delivery mechanisms (3M), set this to None.
-    SET_DELIVERY_MECHANISM_AT = FULFILL_STEP
+    SET_DELIVERY_MECHANISM_AT: Optional[str] = FULFILL_STEP
 
     # Different APIs have different internal names for delivery
     # mechanisms. This is a mapping of (content_type, drm_type)
@@ -486,7 +486,12 @@ class BaseCirculationAPI:
     # For instance, the combination ("application/epub+zip",
     # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
     # is called "ebook-epub-adobe" in Overdrive.
-    delivery_mechanism_to_internal_format = {}
+    delivery_mechanism_to_internal_format: Dict[
+        Tuple[Optional[str], Optional[str]], str
+    ] = {}
+
+    def __init__(self, _db, collection):
+        pass
 
     def internal_format(self, delivery_mechanism):
         """Look up the internal format for this delivery mechanism or
@@ -647,6 +652,9 @@ class CirculationFulfillmentPostProcessor(ABC):
     It takes a FulfillmentInfo object and transforms it according to its internal logic.
     """
 
+    def __init__(self, collection):
+        raise NotImplementedError()
+
     @abstractmethod
     def fulfill(
         self,
@@ -678,7 +686,7 @@ class CirculationAPI:
 
     def __init__(
         self,
-        db: sqlalchemy.orm.session.Session,
+        db: Session,
         library: Library,
         analytics: Optional[Analytics] = None,
         api_map: Optional[Dict[int, Type[BaseCirculationAPI]]] = None,
@@ -714,7 +722,7 @@ class CirculationAPI:
         self.analytics = analytics
         self.initialization_exceptions = dict()
         api_map = api_map or self.default_api_map
-        fulfillment_post_processors_map = (
+        fulfillment_post_processors_mapping = (
             fulfillment_post_processors_map
             or self.default_fulfillment_post_processors_map
         )
@@ -749,8 +757,11 @@ class CirculationAPI:
                     self.api_for_collection[collection.id] = api
                     self.collection_ids_for_sync.append(collection.id)
 
-            if collection.protocol in fulfillment_post_processors_map:
-                fulfillment_post_processor = fulfillment_post_processors_map[
+            if (
+                collection.protocol in fulfillment_post_processors_mapping
+                and collection.id
+            ):
+                fulfillment_post_processor = fulfillment_post_processors_mapping[
                     collection.protocol
                 ](collection)
                 self._fulfillment_post_processors_map[
@@ -767,7 +778,6 @@ class CirculationAPI:
         API class Y to handle that collection.
         """
         from api.lcp.collection import LCPAPI
-        from api.proquest.importer import ProQuestOPDS2Importer
 
         from .axis import Axis360API
         from .bibliotheca import BibliothecaAPI
@@ -789,7 +799,6 @@ class CirculationAPI:
             ODL2API.NAME: ODL2API,
             SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
-            ProQuestOPDS2Importer.NAME: ProQuestOPDS2Importer,
         }
 
     @property
@@ -822,6 +831,8 @@ class CirculationAPI:
         :param licensepool: License pool for which we need to get a fulfillment post-processor
         :return: Fulfillment post-processor to use for the given license pool
         """
+        if not licensepool.collection.id:
+            return None
         return self._fulfillment_post_processors_map.get(licensepool.collection.id)
 
     def can_revoke_hold(self, licensepool, hold):
@@ -1152,7 +1163,7 @@ class CirculationAPI:
             loan_exception = e
 
         if loan_info:
-            # We successfuly secured a loan.  Now create it in our
+            # We successfully secured a loan.  Now create it in our
             # database.
             __transaction = self._db.begin_nested()
             loan, new_loan_record = licensepool.loan_to(
@@ -1224,7 +1235,7 @@ class CirculationAPI:
         # to needing to put it on hold, but we do check for that case.
         __transaction = self._db.begin_nested()
         hold, is_new = licensepool.on_hold_to(
-            patron,
+            hold_info.integration_client or patron,
             hold_info.start_date or now,
             hold_info.end_date,
             hold_info.hold_position,
@@ -1511,9 +1522,9 @@ class CirculationAPI:
 
         rep = fulfillment.resource.representation
         if rep:
-            content_link = cdnify(rep.public_url)
+            content_link = rep.public_url
         else:
-            content_link = cdnify(fulfillment.resource.url)
+            content_link = fulfillment.resource.url
         media_type = rep.media_type
         return FulfillmentInfo(
             licensepool.collection,
@@ -1628,6 +1639,14 @@ class CirculationAPI:
                 log.debug(
                     "Synced %s in %.2f sec", self.api.__class__.__name__, after - before
                 )
+
+                # While testing we are in a Session scope
+                # we need to only close this if api._db is a flask_scoped_session.
+                if getattr(self.api, "_db", None) and type(self.api._db) != Session:
+                    # Since we are in a Thread using a flask_scoped_session
+                    # we can assume a new Session was opened due to the thread activity.
+                    # We must close this session to avoid connection pool leaks
+                    self.api._db.close()
 
         threads = []
         before = time.time()

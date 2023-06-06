@@ -12,7 +12,6 @@ from psycopg2.extras import NumericRange
 from sqlalchemy.orm import Session
 
 from core.classifier import Classifier, Contemporary_Romance, Epic_Fantasy, Fantasy
-from core.config import Configuration, temp_config
 from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
@@ -30,7 +29,6 @@ from core.model import (
     CustomListEntry,
     DataSource,
     DeliveryMechanism,
-    ExternalIntegration,
     Genre,
     Measurement,
     Representation,
@@ -1180,34 +1178,6 @@ class TestOPDS:
             x["href"] for x in feed["entries"][0]["links"] if "image" in x["rel"]
         )
         assert ["http://full/a", "http://thumbnail/b"] == links
-
-    def test_acquisition_feed_image_links_respect_cdn(
-        self, opds_fixture: TestOPDSFixture
-    ):
-        data, db, session = (
-            opds_fixture,
-            opds_fixture.db,
-            opds_fixture.db.session,
-        )
-
-        work = db.work(genre=Fantasy, with_open_access_download=True)
-        work.presentation_edition.cover_thumbnail_url = "http://thumbnail.com/b"
-        work.presentation_edition.cover_full_url = "http://full.com/a"
-
-        # Create some CDNS.
-        with temp_config() as config:
-            config[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {
-                "thumbnail.com": "http://foo/",
-                "full.com": "http://bar/",
-            }
-            config[Configuration.CDNS_LOADED_FROM_DATABASE] = True
-            work.calculate_opds_entries(verbose=False)
-
-        feed = feedparser.parse(work.simple_opds_entry)
-        links = sorted(
-            x["href"] for x in feed["entries"][0]["links"] if "image" in x["rel"]
-        )
-        assert ["http://bar/a", "http://foo/b"] == links
 
     def test_messages(self, opds_fixture: TestOPDSFixture):
         data, db, session = (

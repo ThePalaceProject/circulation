@@ -429,9 +429,16 @@ class TestAnnotator:
         work = db.work(with_license_pool=True)
         work.summary_text = "<p>Summary</p>"
 
+        # Build and validate a record with a `520|a` summary.
         record = Record()
         Annotator.add_summary(record, work)
-        self._check_field(record, "520", {"a": b" Summary "})
+        self._check_field(record, "520", {"a": " Summary "})
+        exported_record = record.as_marc()
+
+        # Round trip the exported record to validate it.
+        marc_reader = MARCReader(exported_record)
+        round_tripped_record = next(marc_reader)
+        self._check_field(round_tripped_record, "520", {"a": " Summary "})
 
     def test_add_simplified_genres(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)

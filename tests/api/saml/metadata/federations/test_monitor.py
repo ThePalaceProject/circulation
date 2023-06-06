@@ -6,12 +6,12 @@ from api.saml.metadata.federations.model import (
     SAMLFederation,
 )
 from api.saml.metadata.monitor import SAMLMetadataMonitor
-from tests.api.saml import fixtures
-from tests.api.saml.database_test import DatabaseTest
+from tests.api.saml import saml_strings
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestSAMLMetadataMonitor(DatabaseTest):
-    def test(self):
+class TestSAMLMetadataMonitor:
+    def test(self, db: DatabaseTransactionFixture):
         # Arrange
         expected_federation = SAMLFederation(
             "Test federation", "http://incommon.org/metadata"
@@ -19,29 +19,29 @@ class TestSAMLMetadataMonitor(DatabaseTest):
         expected_federated_identity_providers = [
             SAMLFederatedIdentityProvider(
                 expected_federation,
-                fixtures.IDP_1_ENTITY_ID,
-                fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME,
-                fixtures.CORRECT_XML_WITH_IDP_1,
+                saml_strings.IDP_1_ENTITY_ID,
+                saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME,
+                saml_strings.CORRECT_XML_WITH_IDP_1,
             ),
             SAMLFederatedIdentityProvider(
                 expected_federation,
-                fixtures.IDP_2_ENTITY_ID,
-                fixtures.IDP_2_UI_INFO_EN_DISPLAY_NAME,
-                fixtures.CORRECT_XML_WITH_IDP_2,
+                saml_strings.IDP_2_ENTITY_ID,
+                saml_strings.IDP_2_UI_INFO_EN_DISPLAY_NAME,
+                saml_strings.CORRECT_XML_WITH_IDP_2,
             ),
         ]
 
-        self._db.add_all([expected_federation])
-        self._db.add_all(expected_federated_identity_providers)
+        db.session.add_all([expected_federation])
+        db.session.add_all(expected_federated_identity_providers)
 
         loader = create_autospec(spec=SAMLFederatedIdentityProviderLoader)
         loader.load = MagicMock(return_value=expected_federated_identity_providers)
 
-        monitor = SAMLMetadataMonitor(self._db, loader)
+        monitor = SAMLMetadataMonitor(db.session, loader)
 
         # Act
         monitor.run_once(None)
 
         # Assert
-        identity_providers = self._db.query(SAMLFederatedIdentityProvider).all()
+        identity_providers = db.session.query(SAMLFederatedIdentityProvider).all()
         assert expected_federated_identity_providers == identity_providers

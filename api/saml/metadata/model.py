@@ -1,10 +1,9 @@
 import datetime
 import logging
-import re
 from enum import Enum
 from json import JSONDecoder, JSONEncoder
-from json.decoder import WHITESPACE
-from typing import Any, Optional, Union
+from json.decoder import WHITESPACE  # type: ignore
+from typing import Any, List, Optional, Pattern, Union
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
@@ -833,7 +832,7 @@ class SAMLNameID:
         )
 
     @property
-    def name_format(self) -> SAMLNameIDFormat:
+    def name_format(self) -> str:
         """Returns name ID's format
 
         :return: Name ID's format
@@ -1048,7 +1047,7 @@ class SAMLSubject:
         idp: str,
         name_id: SAMLNameID,
         attribute_statement: SAMLAttributeStatement,
-        valid_till: Optional[Union[datetime.datetime, datetime.timedelta]] = None,
+        valid_till: Optional[Union[datetime.datetime, datetime.timedelta, int]] = None,
     ):
         """Initializes a new instance of Subject class
 
@@ -1061,7 +1060,7 @@ class SAMLSubject:
             - https://wiki.shibboleth.net/confluence/display/IDP30/SessionConfiguration
         """
         self._idp = idp
-        self._name_id = name_id
+        self._name_id: Optional[SAMLNameID] = name_id
         self._attribute_statement = attribute_statement
         self._valid_till = valid_till
 
@@ -1113,7 +1112,7 @@ class SAMLSubject:
         return self._idp
 
     @property
-    def name_id(self) -> SAMLNameID:
+    def name_id(self) -> Optional[SAMLNameID]:
         """Return the name ID.
 
         :return: Name ID
@@ -1288,17 +1287,17 @@ class SAMLSubjectPatronIDExtractor:
 
     PATRON_ID_REGULAR_EXPRESSION_NAMED_GROUP = "patron_id"
 
-    def __init__(self, use_name_id=True, attributes=None, regular_expression=None):
+    def __init__(
+        self,
+        use_name_id: bool = True,
+        attributes: Optional[List[str]] = None,
+        regular_expression: Optional[Pattern] = None,
+    ):
         """Initialize a new instance of SAMLSubjectPatronIDExtractor class.
 
         :param use_name_id: Boolean value indicating whether NameID should be searched for a unique patron ID
-        :type use_name_id: bool
-
         :param attributes: List of SAML attributes which should be searched for a unique patron ID
-        :type attributes: List[SAMLAttributeType]
-
         :param regular_expression: Regular expression used to extract a unique patron ID from SAML attributes
-        :type regular_expression: str
         """
         # To keep backward compatibility, we assume that use_name_id is True by default.
         self._use_name_id = bool(use_name_id) if use_name_id is not None else True
@@ -1314,10 +1313,7 @@ class SAMLSubjectPatronIDExtractor:
             ]
         )
 
-        # If the regex is present, we compile it to speed up the matching process.
-        self._patron_id_regular_expression = (
-            re.compile(regular_expression) if regular_expression else None
-        )
+        self._patron_id_regular_expression = regular_expression
 
         self._logger = logging.getLogger(__name__)
 

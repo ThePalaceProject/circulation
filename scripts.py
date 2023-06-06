@@ -1,16 +1,15 @@
 import argparse
-import csv
 import logging
 import os
 import sys
 import time
 from datetime import timedelta
-from io import StringIO
+from pathlib import Path
 
-from sqlalchemy import or_
-
+from alembic import command, config
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
+from api.axis import Axis360BibliographicCoverageProvider
 from api.bibliotheca import BibliothecaCirculationSweep
 from api.config import CannotLoadConfiguration, Configuration
 from api.controller import CirculationManager
@@ -28,7 +27,6 @@ from api.opds_for_distributors import (
 )
 from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
-from core.external_list import CustomListFromCSV
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, FeaturedFacets, Lane, Pagination
 from core.marc import MARCExporter
@@ -46,7 +44,6 @@ from core.model import (
     Collection,
     ConfigurationSetting,
     Contribution,
-    CustomList,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -61,16 +58,12 @@ from core.model import (
     Representation,
     RightsStatus,
     SessionManager,
-    Subject,
-    Timestamp,
     get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
-from core.opds_import import MetadataWranglerOPDSLookup, OPDSImporter
 from core.scripts import (
     CollectionType,
-    DatabaseMigrationInitializationScript,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
@@ -85,85 +78,7 @@ from core.util.opds_writer import OPDSFeed
 
 
 class Script(CoreScript):
-    def load_config(self):
-        if not Configuration.instance:
-            Configuration.load(self._db)
-
-
-class CreateWorksForIdentifiersScript(Script):
-
-    """Do the bare minimum to associate each Identifier with an Edition
-    with title and author, so that we can calculate a permanent work
-    ID.
-    """
-
-    to_check = [Identifier.OVERDRIVE_ID, Identifier.THREEM_ID, Identifier.GUTENBERG_ID]
-    BATCH_SIZE = 100
-    name = "Create works for identifiers"
-
-    def __init__(self, metadata_web_app_url=None):
-        if metadata_web_app_url:
-            self.lookup = MetadataWranglerOPDSLookup(metadata_web_app_url)
-        else:
-            self.lookup = MetadataWranglerOPDSLookup.from_config(_db)
-
-    def run(self):
-
-        # We will try to fill in Editions that are missing
-        # title/author and as such have no permanent work ID.
-        #
-        # We will also try to create Editions for Identifiers that
-        # have no Edition.
-
-        either_title_or_author_missing = or_(
-            Edition.title == None,
-            Edition.sort_author == None,
-        )
-        edition_missing_title_or_author = (
-            self._db.query(Identifier)
-            .join(Identifier.primarily_identifies)
-            .filter(either_title_or_author_missing)
-        )
-
-        no_edition = (
-            self._db.query(Identifier)
-            .filter(Identifier.primarily_identifies == None)
-            .filter(Identifier.type.in_(self.to_check))
-        )
-
-        for q, descr in (
-            (
-                edition_missing_title_or_author,
-                "identifiers whose edition is missing title or author",
-            ),
-            (no_edition, "identifiers with no edition"),
-        ):
-            batch = []
-            self.log.debug("Trying to fix %d %s", q.count(), descr)
-            for i in q:
-                batch.append(i)
-                if len(batch) >= self.BATCH_SIZE:
-                    self.process_batch(batch)
-                    batch = []
-
-    def process_batch(self, batch):
-        response = self.lookup.lookup(batch)
-
-        if response.status_code != 200:
-            raise Exception(response.text)
-
-        content_type = response.headers["content-type"]
-        if content_type != OPDSFeed.ACQUISITION_FEED_TYPE:
-            raise Exception("Wrong media type: %s" % content_type)
-
-        importer = OPDSImporter(
-            self._db,
-            response.text,
-            overwrite_rels=[Hyperlink.DESCRIPTION, Hyperlink.IMAGE],
-        )
-        imported, messages_by_id = importer.import_from_feed()
-        self.log.info("%d successes, %d failures.", len(imported), len(messages_by_id))
-        self._db.commit()
+    ...
 
 
 class MetadataCalculationScript(Script):
@@ -242,48 +157,6 @@ class FillInAuthorScript(MetadataCalculationScript):
         )
 
 
-class UpdateStaffPicksScript(Script):
-
-    DEFAULT_URL_TEMPLATE = "https://docs.google.com/spreadsheets/d/%s/export?format=csv"
-
-    def run(self):
-        inp = self.open()
-        tag_fields = {
-            "tags": Subject.NYPL_APPEAL,
-        }
-
-        integ = Configuration.integration(Configuration.STAFF_PICKS_INTEGRATION)
-        fields = integ.get(Configuration.LIST_FIELDS, {})
-
-        importer = CustomListFromCSV(
-            DataSource.LIBRARY_STAFF, CustomList.STAFF_PICKS_NAME, **fields
-        )
-        reader = csv.DictReader(inp, dialect="excel-tab")
-        importer.to_customlist(self._db, reader)
-        self._db.commit()
-
-    def open(self):
-        if len(sys.argv) > 1:
-            return open(sys.argv[1])
-
-        url = Configuration.integration_url(Configuration.STAFF_PICKS_INTEGRATION, True)
-        if not url.startswith("https://") or url.startswith("http://"):
-            url = self.DEFAULT_URL_TEMPLATE % url
-        self.log.info("Retrieving %s", url)
-        representation, cached = Representation.get(
-            self._db,
-            url,
-            do_get=Representation.browser_http_get,
-            accept="text/csv",
-            max_age=timedelta(days=1),
-        )
-        if representation.status_code != 200:
-            raise ValueError("Unexpected status code %s" % representation.status_code)
-        if not representation.media_type.startswith("text/csv"):
-            raise ValueError("Unexpected media type %s" % representation.media_type)
-        return StringIO(representation.content)
-
-
 class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
 
     name = "Cache one representation per lane"
@@ -310,9 +183,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         )
         return parser
 
-    def __init__(
-        self, _db=None, cmd_args=None, testing=False, manager=None, *args, **kwargs
-    ):
+    def __init__(self, _db=None, cmd_args=None, manager=None, *args, **kwargs):
         """Constructor.
         :param _db: A database connection.
         :param cmd_args: A mock set of command-line arguments, to use instead
@@ -330,7 +201,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
         if not manager:
-            manager = CirculationManager(self._db, testing=testing)
+            manager = CirculationManager(self._db)
         from api.app import app
 
         app.manager = manager
@@ -955,7 +826,7 @@ class InstanceInitializationScript(TimestampScript):
 
     This script is intended for use in servers, Docker containers, etc,
     when the Circulation Manager app is being installed. It initializes
-    the database and sets an appropriate alias on the ElasticSearch index.
+    the database and sets an appropriate alias on the OpenSearch index.
 
     Because it's currently run every time a container is started, it must
     remain idempotent.
@@ -963,7 +834,7 @@ class InstanceInitializationScript(TimestampScript):
 
     name = "Instance initialization"
 
-    TEST_SQL = "select * from timestamps limit 1"
+    TEST_SQL = "SELECT * FROM pg_catalog.pg_tables where tablename='libraries';"
 
     def run(self, *args, **kwargs):
         # Create a special database session that doesn't initialize
@@ -977,7 +848,7 @@ class InstanceInitializationScript(TimestampScript):
             url, initialize_data=False, initialize_schema=False
         )
 
-        results = None
+        result = None
         try:
             # We need to check for the existence of a known table --
             # this will demonstrate that this script has been run before --
@@ -986,7 +857,7 @@ class InstanceInitializationScript(TimestampScript):
             #
             # Basically, if this succeeds, we can bail out and not run
             # the rest of the script.
-            results = list(_db.execute(self.TEST_SQL))
+            result = _db.execute(self.TEST_SQL).first()
         except Exception as e:
             # This did _not_ succeed, so the schema is probably not
             # initialized and we do need to run this script.. This
@@ -995,7 +866,7 @@ class InstanceInitializationScript(TimestampScript):
             # work.
             _db.close()
 
-        if results is None:
+        if result is None:
             super().run(*args, **kwargs)
         else:
             self.log.error(
@@ -1003,26 +874,18 @@ class InstanceInitializationScript(TimestampScript):
             )
 
     def do_run(self, ignore_search=False):
-        # Creates a "-current" alias on the Elasticsearch client.
+        # Creates a "-current" alias on the Opensearch client.
         if not ignore_search:
             try:
                 search_client = ExternalSearchIndex(self._db)
             except CannotLoadConfiguration as e:
-                # Elasticsearch isn't configured, so do nothing.
+                # Opensearch isn't configured, so do nothing.
                 pass
 
-        # Set a timestamp that represents the new database's version.
-        db_init_script = DatabaseMigrationInitializationScript(_db=self._db)
-        existing = get_one(
-            self._db,
-            Timestamp,
-            service=db_init_script.name,
-            service_type=Timestamp.SCRIPT_TYPE,
-        )
-        if existing:
-            # No need to run the script. We already have a timestamp.
-            return
-        db_init_script.run()
+        # Stamp the most recent migration as the current state of the DB
+        conf = config.Config(str(Path(__file__).parent.absolute() / "alembic.ini"))
+        conf.set_main_option("sqlalchemy.url", Configuration.database_url())
+        command.stamp(conf, "head")
 
         # Create a secret key if one doesn't already exist.
         ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY)
@@ -1224,7 +1087,7 @@ class DisappearingBookReportScript(Script):
         ]
         data.append(", ".join(title_removals))
 
-        print("\t".join([str(x).encode("utf8") for x in data]))
+        print("\t".join([str(x) for x in data]))
 
 
 class NYTBestSellerListsScript(TimestampScript):

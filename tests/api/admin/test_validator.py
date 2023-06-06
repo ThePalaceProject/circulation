@@ -1,12 +1,12 @@
 from io import StringIO
 
-from parameterized import parameterized
+import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.validator import PatronAuthenticationValidatorFactory, Validator
+from api.admin.validator import Validator
 from api.config import Configuration
 from api.shared_collection import BaseSharedCollectionAPI
-from tests.api.admin.fixtures.dummy_validator import (
+from tests.api.admin.dummy_validator.dummy_validator import (
     DummyAuthenticationProviderValidator,
 )
 
@@ -314,14 +314,15 @@ class TestValidator:
 
 
 class PatronAuthenticationValidatorFactoryTest:
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,protocol",
         [
             ("validator_using_class_name", "tests.admin.fixtures.dummy_validator"),
             (
                 "validator_using_factory_method",
                 "tests.admin.fixtures.dummy_validator_factory",
             ),
-        ]
+        ],
     )
     def test_create_can_create(self, name, protocol):
         # Arrange

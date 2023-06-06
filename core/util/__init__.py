@@ -7,11 +7,12 @@ import string
 from collections import Counter
 from typing import Any, Iterable, Optional
 
-import flask_sqlalchemy_session
 import sqlalchemy
 from money import Money
-from sqlalchemy import distinct
+from sqlalchemy import distinct, select
 from sqlalchemy.sql.functions import func
+
+import core.flask_sqlalchemy_session
 
 # For backwards compatibility, import items that were moved to
 # languages.py
@@ -29,22 +30,20 @@ def batch(iterable, size=1):
 def fast_query_count(query):
     """Counts the results of a query without using super-slow subquery"""
 
-    statement = query.enable_eagerloads(False).with_labels().statement
-    distinct_columns = statement._distinct
+    statement = query.selectable
+    table = statement.froms[0]
+    distinct_columns = statement._distinct_on
     new_columns = [func.count()]
-    if isinstance(distinct_columns, list):
+    if statement._distinct and isinstance(distinct_columns, (list, tuple)):
         # When using distinct to select from the db, the distinct
         # columns need to be incorporated into the count itself.
         new_columns = [func.count(distinct(func.concat(*distinct_columns)))]
 
-        # Then we can remove the distinct criteria from the statement
-        # itself by setting it to its default value, False.
-        statement._distinct = False
-    count_q = statement.with_only_columns(new_columns).order_by(None)
+    count_q = select().with_only_columns(new_columns).select_from(table).order_by(None)
     count = query.session.execute(count_q).scalar()
 
-    if query._limit and query._limit < count:
-        return query._limit
+    if query._limit_clause is not None and query._limit_clause.value < count:
+        return query._limit_clause.value
 
     return count
 
@@ -554,7 +553,10 @@ def is_session(value: object) -> bool:
     """
     return isinstance(
         value,
-        (sqlalchemy.orm.session.Session, flask_sqlalchemy_session.flask_scoped_session),
+        (
+            sqlalchemy.orm.session.Session,
+            core.flask_sqlalchemy_session.flask_scoped_session,
+        ),
     )
 
 

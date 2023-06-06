@@ -17,7 +17,6 @@ from sqlalchemy.exc import SQLAlchemyError
 import core
 from api.admin.config import Configuration as AdminUiConfig
 
-from .cdn import cdnify
 from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
@@ -26,11 +25,6 @@ from .problem_details import *
 from .util.flask_util import OPDSFeedResponse
 from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
-
-
-def cdn_url_for(*args, **kwargs):
-    base_url = url_for(*args, **kwargs)
-    return cdnify(base_url)
 
 
 def load_facets_from_request(
@@ -303,7 +297,7 @@ class URNLookupController:
         """Generate an OPDS feed describing works identified by identifier."""
         urns = flask.request.args.getlist("urn")
 
-        this_url = cdn_url_for(route_name, _external=True, urn=urns)
+        this_url = url_for(route_name, _external=True, urn=urns)
         handler = self.process_urns(urns, **process_urn_kwargs)
 
         if isinstance(handler, ProblemDetail):
@@ -341,7 +335,7 @@ class URNLookupController:
         should be possible to remove it.
         """
         handler = URNLookupHandler(self._db)
-        this_url = cdn_url_for(route_name, _external=True, urn=urn)
+        this_url = url_for(route_name, _external=True, urn=urn)
         handler.process_urns([urn])
 
         # A LookupAcquisitionFeed's .works is a list of (identifier,

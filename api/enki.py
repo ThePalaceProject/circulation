@@ -32,7 +32,6 @@ from core.model import (
 )
 from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
 
@@ -133,14 +132,14 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
 
         now = utc_now()
 
-        def count_loans_and_holds():
+        def count_recent_loans_and_holds():
             """Count recent circulation events that affected loans or holds."""
             one_hour_ago = now - datetime.timedelta(hours=1)
             count = len(list(self.recent_activity(one_hour_ago, now)))
             return "%s circulation events in the last hour" % count
 
         yield self.run_test(
-            "Counting recent circulation changes.", count_loans_and_holds
+            "Counting recent circulation changes.", count_recent_loans_and_holds
         )
 
         def count_title_changes():
@@ -167,11 +166,11 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
                 % library.name
             )
 
-            def count_loans_and_holds(patron, pin):
+            def count_patron_loans_and_holds(patron, pin):
                 activity = list(self.patron_activity(patron, pin))
                 return "Total loans and holds: %s" % len(activity)
 
-            yield self.run_test(task, count_loans_and_holds, patron, pin)
+            yield self.run_test(task, count_patron_loans_and_holds, patron, pin)
 
     def request(
         self,
@@ -509,47 +508,6 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
 
     def release_hold(self, patron, pin, licensepool):
         pass
-
-
-class MockEnkiAPI(EnkiAPI):
-    def __init__(self, _db, collection=None, *args, **kwargs):
-        self.responses = []
-        self.requests = []
-
-        library = DatabaseTest.make_default_library(_db)
-        if not collection:
-            collection, ignore = Collection.by_name_and_protocol(
-                _db, name="Test Enki Collection", protocol=EnkiAPI.ENKI
-            )
-            collection.protocol = EnkiAPI.ENKI
-        if collection not in library.collections:
-            library.collections.append(collection)
-
-        # Set the "Enki library ID" variable between the default library
-        # and this Enki collection.
-        ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.ENKI_LIBRARY_ID_KEY, library, collection.external_integration
-        ).value = "c"
-
-        super().__init__(_db, collection, *args, **kwargs)
-
-    def queue_response(self, status_code, headers={}, content=None):
-        from core.testing import MockRequestsResponse
-
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _request(self, method, url, headers, data, params, **kwargs):
-        """Override EnkiAPI._request to pull responses from a
-        queue instead of making real HTTP requests
-        """
-        self.requests.append([method, url, headers, data, params, kwargs])
-        response = self.responses.pop()
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
 
 
 class BibliographicParser:

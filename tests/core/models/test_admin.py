@@ -1,7 +1,13 @@
+from datetime import timedelta
+
 import pytest
+from freezegun import freeze_time
 
 from core.model import create
 from core.model.admin import Admin, AdminRole
+from core.problem_details import INVALID_RESET_PASSWORD_TOKEN
+from core.util.datetime_helpers import utc_now
+from core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -173,3 +179,63 @@ class TestAdmin:
         admin.remove_role(AdminRole.LIBRARIAN, admin_fixture.db.default_library())
         assert False == admin.can_see_collection(c1)
         assert False == admin.can_see_collection(c2)
+
+    def test_validate_reset_password_token_and_fetch_admin(
+        self, admin_fixture: AdminFixture
+    ):
+        admin = admin_fixture.admin
+        db_session = admin_fixture.db.session
+        secret_key = "secret"
+
+        # Random manually generated token - unsuccessful validation
+        random_token = "random"
+        invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
+            random_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_token, ProblemDetail)
+        assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
+
+        # Generated valid token but manually changed - unsuccessful validation
+        tampered_token = f"tampered-{admin.generate_reset_password_token(secret_key)}"
+        invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
+            tampered_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_token, ProblemDetail)
+        assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
+
+        # Valid token but too much time has passed - unsuccessful validation with "expired" keyword
+        valid_token = admin.generate_reset_password_token(secret_key)
+        with freeze_time(
+            utc_now() + timedelta(seconds=Admin.RESET_PASSWORD_TOKEN_MAX_AGE + 1)
+        ):
+            expired_token = Admin.validate_reset_password_token_and_fetch_admin(
+                valid_token, admin.id, db_session, secret_key
+            )
+            assert isinstance(expired_token, ProblemDetail)
+            assert expired_token.uri == INVALID_RESET_PASSWORD_TOKEN.uri
+            assert "expired" in expired_token.detail
+
+        # Valid token but invalid admin id - unsuccessful validation
+        valid_token = admin.generate_reset_password_token(secret_key)
+        invalid_admin_id = admin.id + 1
+        invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, invalid_admin_id, db_session, secret_key
+        )
+        assert isinstance(invalid_token, ProblemDetail)
+        assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
+
+        # Valid token but the admin email has changed in the meantime - strange situation - unsuccessful validation
+        admin.email = "changed@email.com"
+        invalid_email = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_email, ProblemDetail)
+        assert invalid_email == INVALID_RESET_PASSWORD_TOKEN
+
+        # Valid token - admin is successfully extracted from token
+        valid_token = admin.generate_reset_password_token(secret_key)
+        extracted_admin = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(extracted_admin, Admin)
+        assert extracted_admin == admin

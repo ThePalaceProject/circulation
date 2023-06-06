@@ -1,4 +1,6 @@
 # Library
+from __future__ import annotations
+
 import logging
 from collections import Counter
 from typing import TYPE_CHECKING, List
@@ -13,7 +15,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
@@ -23,6 +25,7 @@ from ..config import Configuration
 from ..entrypoint import EntryPoint
 from ..facets import FacetConstants
 from . import Base, get_one
+from .customlist import customlist_sharedlibrary
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .licensing import LicensePool
@@ -82,46 +85,53 @@ class Library(Base, HasSessionCache):
     library_registry_shared_secret = Column(Unicode, unique=True)
 
     # A library may have many Patrons.
-    patrons = relationship("Patron", backref="library", cascade="all, delete-orphan")
+    patrons: Mapped[List[Patron]] = relationship(
+        "Patron", back_populates="library", cascade="all, delete-orphan"
+    )
 
     # An Library may have many admin roles.
-    adminroles = relationship(
-        "AdminRole", backref="library", cascade="all, delete-orphan"
+    adminroles: Mapped[List[AdminRole]] = relationship(
+        "AdminRole", back_populates="library", cascade="all, delete-orphan"
     )
 
     # A Library may have many CachedFeeds.
-    cachedfeeds = relationship(
+    cachedfeeds: Mapped[List[CachedFeed]] = relationship(
         "CachedFeed",
         backref="library",
         cascade="all, delete-orphan",
     )
 
     # A Library may have many CachedMARCFiles.
-    cachedmarcfiles = relationship(
+    cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
         backref="library",
         cascade="all, delete-orphan",
     )
 
     # A Library may have many CustomLists.
-    custom_lists = relationship(
-        "CustomList",
-        backref="library",
-        lazy="joined",
+    custom_lists: Mapped[List[CustomList]] = relationship(
+        "CustomList", backref="library", lazy="joined", uselist=True
     )
+
     # Lists shared with this library
-    shared_custom_lists: "CustomList"
+    # shared_custom_lists: "CustomList"
+    shared_custom_lists: Mapped[List[CustomList]] = relationship(
+        "CustomList",
+        secondary=lambda: customlist_sharedlibrary,
+        back_populates="shared_locally_with_libraries",
+        uselist=True,
+    )
 
     # A Library may have many ExternalIntegrations.
-    integrations = relationship(
+    integrations: Mapped[List[ExternalIntegration]] = relationship(
         "ExternalIntegration",
-        secondary=lambda: externalintegrations_libraries,  # type: ignore
-        backref="libraries",
+        secondary=lambda: externalintegrations_libraries,
+        back_populates="libraries",
     )
 
     # Any additional configuration information is stored as
     # ConfigurationSettings.
-    settings = relationship(
+    settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         backref="library",
         lazy="joined",
@@ -129,7 +139,7 @@ class Library(Base, HasSessionCache):
     )
 
     # A Library may have many CirculationEvents
-    circulation_events = relationship(
+    circulation_events: Mapped[List[CirculationEvent]] = relationship(
         "CirculationEvent", backref="library", cascade="all, delete-orphan"
     )
 
@@ -139,7 +149,7 @@ class Library(Base, HasSessionCache):
     _has_root_lane_cache = ExpiringDict(max_len=1000, max_age_seconds=3600)
 
     # Typing specific
-    collections: List["Collection"]
+    collections: List[Collection]
 
     def __repr__(self):
         return (
@@ -481,7 +491,7 @@ class Library(Base, HasSessionCache):
                 library._is_default = False
 
 
-externalintegrations_libraries = Table(
+externalintegrations_libraries: Table = Table(
     "externalintegrations_libraries",
     Base.metadata,
     Column(

@@ -11,6 +11,21 @@ from ..util.datetime_helpers import utc_now
 from ..util.flask_util import OPDSFeedResponse
 from . import Base, flush, get_one, get_one_or_create
 
+# This named tuple makes it easy to manage the return value of
+# CachedFeed._prepare_keys.
+CachedFeedKeys = namedtuple(
+    "CachedFeedKeys",
+    [
+        "feed_type",
+        "library",
+        "work",
+        "lane_id",
+        "unique_key",
+        "facets_key",
+        "pagination_key",
+    ],
+)
+
 
 class CachedFeed(Base):
 
@@ -284,21 +299,6 @@ class CachedFeed(Base):
             should_refresh = True
         return should_refresh
 
-    # This named tuple makes it easy to manage the return value of
-    # _prepare_keys.
-    CachedFeedKeys = namedtuple(
-        "CachedFeedKeys",
-        [
-            "feed_type",
-            "library",
-            "work",
-            "lane_id",
-            "unique_key",
-            "facets_key",
-            "pagination_key",
-        ],
-    )
-
     @classmethod
     def _prepare_keys(cls, _db, worklist, facets, pagination):
         """Prepare various unique keys that will go into the database
@@ -348,7 +348,7 @@ class CachedFeed(Base):
             else:
                 pagination_key = pagination.query_string
 
-        return cls.CachedFeedKeys(
+        return CachedFeedKeys(
             feed_type=feed_type,
             library=library,
             work=work,

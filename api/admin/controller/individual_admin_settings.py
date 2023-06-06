@@ -4,6 +4,7 @@ from typing import Optional
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from sqlalchemy.exc import ProgrammingError
 
 from api.admin.exceptions import *
 from api.admin.problem_details import *
@@ -21,7 +22,7 @@ class IndividualAdminSettingsController(SettingsController):
             return self.process_post()
 
     def _highest_authorized_role(self) -> Optional[AdminRole]:
-        highest_role = None
+        highest_role: Optional[AdminRole] = None
         has_auth = False
 
         admin = getattr(flask.request, "admin", None)
@@ -97,7 +98,113 @@ class IndividualAdminSettingsController(SettingsController):
             individualAdmins=admins,
         )
 
+    def process_post_create_first_admin(self, email: str):
+        """Create the first admin in the system."""
+
+        # Passwords are always required, so check presence and validity up front.
+        password: Optional[str] = flask.request.form.get("password")
+        if not self.is_acceptable_password(password):
+            return self.unacceptable_password()
+
+        success = False
+        try:
+            admin, _ = get_one_or_create(self._db, Admin, email=email)
+            self.check_permissions(admin, settingUp=True)
+
+            # Update the roles, if requested.
+            roles_json = flask.request.form.get("roles")
+            if roles_json:
+                roles = json.loads(roles_json)
+            else:
+                roles = []
+
+            roles_error = self.handle_roles(admin, roles, settingUp=True)
+            if roles_error:
+                return roles_error
+
+            # Update the password, if requested.
+            self.handle_password(password, admin, is_new=True, settingUp=True)
+
+            success = True
+            return self.response(admin, is_new=True)
+        finally:
+            if not success:
+                self._db.rollback()
+
+    def process_post_create_new_admin(self, email: str):
+        """Create a new admin (not the first admin in the system)."""
+
+        # Passwords are always required, so check presence and validity up front.
+        password: Optional[str] = flask.request.form.get("password")
+        if not self.is_acceptable_password(password):
+            return self.unacceptable_password()
+
+        success = False
+        try:
+            admin, _ = get_one_or_create(self._db, Admin, email=email)
+            self.check_permissions(admin, settingUp=False)
+
+            # Update the roles, if requested.
+            roles_json = flask.request.form.get("roles")
+            if roles_json:
+                roles = json.loads(roles_json)
+            else:
+                roles = []
+
+            roles_error = self.handle_roles(admin, roles, settingUp=False)
+            if roles_error:
+                return roles_error
+
+            # Update the password, if requested.
+            self.handle_password(password, admin, is_new=True, settingUp=False)
+            success = True
+            return self.response(admin, is_new=True)
+        finally:
+            if not success:
+                self._db.rollback()
+
+    def process_post_update_existing_admin(self, admin: Admin):
+        """Update an existing admin."""
+        password: Optional[str] = flask.request.form.get("password")
+
+        success = False
+        try:
+            self.check_permissions(admin, settingUp=False)
+
+            # If a password is provided, it must be valid.
+            if password:
+                if not self.is_acceptable_password(password):
+                    return self.unacceptable_password()
+
+            # Update the roles, if requested.
+            roles_json = flask.request.form.get("roles")
+            if roles_json:
+                roles = json.loads(roles_json)
+            else:
+                roles = []
+
+            roles_error = self.handle_roles(admin, roles, settingUp=False)
+            if roles_error:
+                return roles_error
+
+            # Update the password, if requested.
+            self.handle_password(password, admin, is_new=False, settingUp=False)
+
+            success = True
+            return self.response(admin, is_new=False)
+        finally:
+            if not success:
+                self._db.rollback()
+
     def process_post(self):
+        # There are three possible paths through this method:
+        #
+        # 1. The admin being edited is the first admin to be created. In this case,
+        #    a password is required and pretty much everything is permitted.
+        # 2. The admin being edited doesn't exist, but is not the first admin in
+        #    the system. In this case, a password is required.
+        # 3. The admin being edited exists. In this case, a password is only required
+        #    if the intention is to change the password of the admin.
 
         email = flask.request.form.get("email")
 
@@ -106,34 +213,39 @@ class IndividualAdminSettingsController(SettingsController):
             return error
 
         # If there are no admins yet, anyone can create the first system admin.
-        settingUp = self._db.query(Admin).count() == 0
-        if settingUp and not flask.request.form.get("password"):
-            return INCOMPLETE_CONFIGURATION.detailed(
-                _("The password field cannot be blank.")
-            )
+        creating_first_admin = self._db.query(Admin).count() == 0
+        if creating_first_admin:
+            return self.process_post_create_first_admin(email)
 
         highest_role = self._highest_authorized_role()
-        if not settingUp and not highest_role:
+        if not highest_role:
             raise AdminNotAuthorized()
 
-        admin, is_new = get_one_or_create(self._db, Admin, email=email)
+        # Otherwise, check to see if the admin exists.
+        existing_admin = get_one(self._db, Admin, email=email)
+        if existing_admin is None:
+            return self.process_post_create_new_admin(email)
 
-        self.check_permissions(admin, settingUp)
+        # The admin exists. We might just be updating the password or roles.
+        return self.process_post_update_existing_admin(existing_admin)
 
-        roles = flask.request.form.get("roles")
-        if roles:
-            roles = json.loads(roles)
-        else:
-            roles = []
+    @staticmethod
+    def unacceptable_password():
+        return INCOMPLETE_CONFIGURATION.detailed(
+            _("The password field cannot be blank.")
+        )
 
-        roles_error = self.handle_roles(admin, roles, settingUp)
-        if roles_error:
-            return roles_error
+    @staticmethod
+    def is_acceptable_password(password: Optional[str]) -> bool:
+        # Forbid missing passwords.
+        if not password:
+            return False
 
-        password = flask.request.form.get("password")
-        self.handle_password(password, admin, is_new, settingUp)
+        # Forbid passwords that are empty after leading/trailing whitespace stripping.
+        if len(password.strip()) == 0:
+            return False
 
-        return self.response(admin, is_new)
+        return True
 
     def check_permissions(self, admin, settingUp):
         """Before going any further, check that the user actually has permission
@@ -164,10 +276,13 @@ class IndividualAdminSettingsController(SettingsController):
                 raise AdminNotAuthorized()
 
     def validate_form_fields(self, email):
-        """Check that 1) the user has entered something into the required email field,
+        """Check that 1) the user has entered something into the required fields,
         and 2) if so, the input is formatted as a valid email address."""
         if not email:
-            return INCOMPLETE_CONFIGURATION
+            return INCOMPLETE_CONFIGURATION.detailed(
+                _("The email field cannot be blank.")
+            )
+
         email_error = self.validate_formats(email)
         if email_error:
             return email_error
@@ -247,7 +362,7 @@ class IndividualAdminSettingsController(SettingsController):
                     # including this library's roles. Leave the non-visible roles alone.
                     continue
 
-    def handle_password(self, password, admin, is_new, settingUp):
+    def handle_password(self, password, admin: Admin, is_new, settingUp):
         """Check that the user has permission to change this type of admin's password"""
 
         # User = person submitting the form; admin = person who the form is about
@@ -255,7 +370,7 @@ class IndividualAdminSettingsController(SettingsController):
             # There are no admins yet; the user and the new system admin are the same person.
             user = admin
         else:
-            user = flask.request.admin
+            user: Admin = flask.request.admin  # type: ignore
 
         if password:
             # If the admin we're editing has a sitewide manager role, we've already verified
@@ -267,25 +382,28 @@ class IndividualAdminSettingsController(SettingsController):
             # NOTE: librarians can change their own passwords via SignInController.change_password(),
             # but not via this controller; this is because they don't have access to the
             # IndividualAdmins create/edit form.
+            message = None
             if not is_new and not admin.is_sitewide_library_manager():
                 can_change_pw = False
                 if not admin.roles:
                     can_change_pw = True
                 if admin.is_sitewide_librarian():
-                    # A manager of any library can change a sitewide librarian's password.
-                    if user.is_sitewide_library_manager():
+                    # Only a manager of the same or higher level can change the password
+                    if user.is_sitewide_librarian():
                         can_change_pw = True
                     else:
-                        for role in user.roles:
-                            if role.role == AdminRole.LIBRARY_MANAGER:
-                                can_change_pw = True
+                        message = "Only an administrator can change another administrators password."
                 else:
+                    # If any of the target users libraries are outside of logged-in users
+                    # libraries then they should not be able to change the password
                     for role in admin.roles:
-                        if user.is_library_manager(role.library):
-                            can_change_pw = True
+                        if not user.is_library_manager(role.library):
+                            message = f"User is part of '{role.library.name}', you are not authorized to change their password."
                             break
+                    else:
+                        can_change_pw = True
                 if not can_change_pw:
-                    raise AdminNotAuthorized()
+                    raise AdminNotAuthorized(message)
             admin.password = password
         try:
             self._db.flush()

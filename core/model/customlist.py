@@ -1,4 +1,5 @@
 # CustomList, CustomListEntry
+from __future__ import annotations
 
 import logging
 from functools import total_ordering
@@ -16,7 +17,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
@@ -58,13 +59,15 @@ class CustomList(Base):
     # cached when the list contents change.
     size = Column(Integer, nullable=False, default=0)
 
-    entries = relationship("CustomListEntry", backref="customlist", uselist=True)
+    entries: Mapped[List[CustomListEntry]] = relationship(
+        "CustomListEntry", backref="customlist", uselist=True
+    )
 
     # List sharing mechanisms
-    shared_locally_with_libraries = relationship(
+    shared_locally_with_libraries: Mapped[List[Library]] = relationship(
         "Library",
-        secondary=lambda: customlist_sharedlibrary,  # type: ignore
-        backref="shared_custom_lists",
+        secondary=lambda: customlist_sharedlibrary,
+        back_populates="shared_custom_lists",
         uselist=True,
     )
 
@@ -72,11 +75,11 @@ class CustomList(Base):
     auto_update_query = Column(Unicode, nullable=True)  # holds json data
     auto_update_facets = Column(Unicode, nullable=True)  # holds json data
     auto_update_last_update = Column(DateTime, nullable=True)
-    auto_update_status = Column(auto_update_status_enum, default=INIT)
+    auto_update_status: Mapped[str] = Column(auto_update_status_enum, default=INIT)  # type: ignore[assignment]
 
     # Typing specific
-    collections: List["Collection"]
-    library: "Library"
+    collections: List[Collection]
+    library: Library
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),
@@ -327,10 +330,11 @@ class CustomList(Base):
         return qu
 
     def update_size(self, db: Session):
-        self.size = CustomList.entries_having_works(db, self.id).count()
+        if self.id is not None:
+            self.size = CustomList.entries_having_works(db, self.id).count()
 
 
-customlist_sharedlibrary = Table(
+customlist_sharedlibrary: Table = Table(
     "customlist_sharedlibraries",
     Base.metadata,
     Column(
@@ -367,7 +371,7 @@ class CustomListEntry(Base):
     first_appearance = Column(DateTime(timezone=True), index=True)
     most_recent_appearance = Column(DateTime(timezone=True), index=True)
 
-    def set_work(self, metadata=None, metadata_client=None, policy=None):
+    def set_work(self, metadata=None, policy=None):
         """If possible, identify a locally known Work that is the same
         title as the title identified by this CustomListEntry.
 
@@ -390,7 +394,7 @@ class CustomListEntry(Base):
 
         # Try to guess based on metadata, if we can get a high-quality
         # guess.
-        potential_license_pools = metadata.guess_license_pools(_db, metadata_client)
+        potential_license_pools = metadata.guess_license_pools(_db)
         for lp, quality in sorted(
             list(potential_license_pools.items()), key=lambda x: -x[1]
         ):

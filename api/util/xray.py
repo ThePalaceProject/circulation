@@ -17,9 +17,7 @@ class PalaceXrayMiddleware(XRayMiddleware):
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
 
     @classmethod
-    def put_annotations(
-        cls, segment: Optional[Segment], seg_type: Optional[str] = None
-    ):
+    def put_annotations(cls, segment: Segment, seg_type: Optional[str] = None):
         if seg_type is not None:
             segment.put_annotation("type", seg_type)
 

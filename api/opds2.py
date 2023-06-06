@@ -53,7 +53,7 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
 class OPDS2NavigationsAnnotator(OPDS2Annotator):
     """API level implementation for the navigation feed OPDS2 annotator"""
 
-    def navigation_collection(self) -> dict:
+    def navigation_collection(self) -> list[dict]:
         """The OPDS2 navigation collection, currently only serves the publications link"""
         return [
             {
@@ -105,7 +105,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
             return fulfillment
 
         token = self.get_authentication_token(patron, token_auth.value)
-        if type(token) == ProblemDetail:
+        if isinstance(token, ProblemDetail):
             raise CannotFulfill()
 
         fulfillment.content_link = templated.expand(authentication_token=token)
@@ -117,12 +117,21 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         cls, patron: Patron, token_auth_url: str
     ) -> ProblemDetail | str:
         """Get the authentication token for a patron"""
-        url = URITemplate(token_auth_url).expand(patron_id=patron.username)
         log = logging.getLogger("OPDS2API")
+
+        patron_id = patron.username if patron.username else patron.external_identifier
+        if patron_id is None:
+            log.error(
+                f"Could not authenticate the patron({patron.authorization_identifier}): "
+                f"both username and external_identifier are None."
+            )
+            return INVALID_CREDENTIALS
+
+        url = URITemplate(token_auth_url).expand(patron_id=patron_id)
         response = HTTP.get_with_timeout(url)
         if response.status_code != 200:
             log.error(
-                f"Could not authenticate the patron({patron.username}): {response.content}"
+                f"Could not authenticate the patron({patron_id}): {str(response.content)}"
             )
             return INVALID_CREDENTIALS
 
@@ -130,7 +139,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         token = response.text
         if not token:
             log.error(
-                f"Could not authenticate the patron({patron.username}): {response.content}"
+                f"Could not authenticate the patron({patron_id}): {str(response.content)}"
             )
             return INVALID_CREDENTIALS
 

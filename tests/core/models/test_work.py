@@ -475,7 +475,6 @@ class TestWork:
         # index.
         index_key = (
             search.works_index,
-            MockExternalSearchIndex.work_document_type,
             work.id,
         )
 
@@ -2559,7 +2558,7 @@ class TestWorkConsolidation:
         )
         abcd_commercial.open_access = False
         abcd_commercial.presentation_edition.permanent_work_id = "abcd"
-        abcd_commercial.work = work1
+        work1.license_pools.append(abcd_commercial)
 
         # Here's another Work containing an open-access LicensePool
         # for literary work "efgh".
@@ -2574,7 +2573,7 @@ class TestWorkConsolidation:
             with_license_pool=True, with_open_access_download=True
         )
         efgh_2.presentation_edition.permanent_work_id = "efgh"
-        efgh_2.work = work1
+        work1.license_pools.append(efgh_2)
 
         # Let's fix these problems.
         work1.make_exclusive_open_access_for_permanent_work_id(

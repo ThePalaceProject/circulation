@@ -2,14 +2,13 @@ import os
 
 import pytest
 
-from core.config import Configuration
 from core.model import create
 from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import RightsStatus
 from core.model.resource import Hyperlink, Representation, Resource
-from core.testing import DummyHTTPClient, MockRequestsResponse
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     TemporaryDirectoryConfigurationFixture,
@@ -301,10 +300,8 @@ class TestRepresentation:
         path = os.path.join(tmp.directory(), filename)
         open(path, "wb").write(b"some text")
 
-        assert isinstance(Configuration.data_directory(), str)
-
         representation, ignore = db.representation(db.fresh_url(), "text/plain")
-        representation.set_fetched_content(None, filename)
+        representation.set_fetched_content(None, path)
         fh = representation.content_fh()
         assert b"some text" == fh.read()
 

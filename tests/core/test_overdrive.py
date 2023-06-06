@@ -19,7 +19,6 @@ from core.model import (
     Subject,
 )
 from core.overdrive import (
-    MockOverdriveCoreAPI,
     OverdriveAdvantageAccount,
     OverdriveBibliographicCoverageProvider,
     OverdriveConfiguration,
@@ -27,9 +26,10 @@ from core.overdrive import (
     OverdriveRepresentationExtractor,
 )
 from core.scripts import RunCollectionCoverageProviderScript
-from core.testing import MockRequestsResponse
 from core.util.http import BadResponseException
 from core.util.string_helpers import base64
+from tests.api.mockapi.overdrive import MockOverdriveCoreAPI
+from tests.core.mock import MockRequestsResponse
 from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 from tests.fixtures.overdrive import OverdriveFixture, OverdriveWithAPIFixture
 
@@ -82,7 +82,10 @@ class TestOverdriveCoreAPI:
         for code in [400, 403, 500, 501, 502, 503]:
             _r = MockAPIServerResponse()
             _r.status_code = code
-            mock_web_server.enqueue_response("GET", "/a/b/c", _r)
+
+            # The default is to retry 5 times, so enqueue 5 responses.
+            for i in range(0, 6):
+                mock_web_server.enqueue_response("GET", "/a/b/c", _r)
             try:
                 api.get(mock_web_server.url("/a/b/c"))
             except BadResponseException:
@@ -960,6 +963,7 @@ class TestOverdriveAdvantageAccount:
             "parent_id",
             "child_id",
             "Library Name",
+            "token value",
         )
 
         # We can't just create a Collection object for this object because

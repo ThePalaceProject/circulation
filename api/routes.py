@@ -306,13 +306,6 @@ def authentication_document():
     return app.manager.index_controller.authentication_document()
 
 
-@library_route("/public_key_document")
-@returns_problem_detail
-@compressible
-def public_key_document():
-    return app.manager.index_controller.public_key_document()
-
-
 @library_dir_route("/groups", defaults=dict(lane_identifier=None))
 @library_route("/groups/<lane_identifier>")
 @has_library
@@ -683,16 +676,6 @@ def related_books(identifier_type, identifier):
     return app.manager.work_controller.related(identifier_type, identifier)
 
 
-@library_route(
-    "/works/<identifier_type>/<path:identifier>/report", methods=["GET", "POST"]
-)
-@has_library
-@allows_patron_web
-@returns_problem_detail
-def report(identifier_type, identifier):
-    return app.manager.work_controller.report(identifier_type, identifier)
-
-
 @library_route("/analytics/<identifier_type>/<path:identifier>/<event_type>")
 @has_library
 @allows_auth
@@ -751,26 +734,6 @@ def adobe_drm_devices():
 @returns_problem_detail
 def adobe_drm_device(device_id):
     return app.manager.adobe_device_management.device_id_handler(device_id)
-
-
-# Route that redirects to the authentication URL for an OAuth provider
-@library_route("/oauth_authenticate")
-@has_library
-@returns_problem_detail
-def oauth_authenticate():
-    return app.manager.oauth_controller.oauth_authentication_redirect(
-        flask.request.args, app.manager._db
-    )
-
-
-# Redirect URI for OAuth providers, eg. Clever
-@library_route("/oauth_callback")
-@has_library
-@returns_problem_detail
-def oauth_callback():
-    return app.manager.oauth_controller.oauth_authentication_callback(
-        app.manager._db, flask.request.args
-    )
 
 
 # Route that redirects to the authentication URL for a SAML provider

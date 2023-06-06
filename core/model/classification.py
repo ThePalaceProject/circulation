@@ -1,8 +1,8 @@
 # Subject, Classification, Genre
-
+from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
@@ -15,12 +15,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from .. import classifier
-from ..classifier import COMICS_AND_GRAPHIC_NOVELS, Classifier, Erotica, GenreData
+from ..classifier import (  # type: ignore[attr-defined]
+    COMICS_AND_GRAPHIC_NOVELS,
+    Classifier,
+    Erotica,
+    GenreData,
+)
 from . import (
     Base,
     get_one,
@@ -139,7 +144,9 @@ class Subject(Base):
     checked = Column(Boolean, default=False, index=True)
 
     # One Subject may participate in many Classifications.
-    classifications = relationship("Classification", backref="subject")
+    classifications: Mapped[List[Classification]] = relationship(
+        "Classification", back_populates="subject"
+    )
 
     # Type + identifier must be unique.
     __table_args__ = (UniqueConstraint("type", "identifier"),)
@@ -342,6 +349,7 @@ class Classification(Base):
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
+    subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # How much weight the data source gives to this classification.
@@ -473,12 +481,12 @@ class Genre(Base, HasSessionCache):
     name = Column(Unicode, unique=True, index=True)
 
     # One Genre may have affinity with many Subjects.
-    subjects = relationship("Subject", backref="genre")
+    subjects: Mapped[List[Subject]] = relationship("Subject", backref="genre")
 
     # One Genre may participate in many WorkGenre assignments.
     works = association_proxy("work_genres", "work")
 
-    work_genres = relationship(
+    work_genres: Mapped[List[WorkGenre]] = relationship(
         "WorkGenre", backref="genre", cascade="all, delete-orphan"
     )
 

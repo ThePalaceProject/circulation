@@ -1,4 +1,6 @@
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
@@ -12,7 +14,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
@@ -20,7 +22,7 @@ from ..util.datetime_helpers import utc_now
 from . import Base, SessionBulkOperation, get_one, get_one_or_create
 
 if TYPE_CHECKING:
-    from . import Equivalency  # noqa
+    from . import Equivalency
 
 
 class BaseCoverageRecord:
@@ -376,6 +378,13 @@ class CoverageRecord(Base, BaseCoverageRecord):
         )
 
     @classmethod
+    def assert_coverage_operation(cls, operation, collection):
+        if operation == CoverageRecord.IMPORT_OPERATION and not collection:
+            raise ValueError(
+                "An 'import' type coverage must be associated with a collection"
+            )
+
+    @classmethod
     def lookup(
         cls, edition_or_identifier, data_source, operation=None, collection=None
     ):
@@ -383,13 +392,17 @@ class CoverageRecord(Base, BaseCoverageRecord):
         from .edition import Edition
         from .identifier import Identifier
 
+        cls.assert_coverage_operation(operation, collection)
+
         _db = Session.object_session(edition_or_identifier)
         if isinstance(edition_or_identifier, Identifier):
             identifier = edition_or_identifier
         elif isinstance(edition_or_identifier, Edition):
             identifier = edition_or_identifier.primary_identifier
         else:
-            raise ValueError("Cannot look up a coverage record for %r." % edition)
+            raise ValueError(
+                "Cannot look up a coverage record for %r." % edition_or_identifier
+            )
 
         if isinstance(data_source, (bytes, str)):
             data_source = DataSource.lookup(_db, data_source)
@@ -406,7 +419,7 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     @classmethod
     def add_for(
-        self,
+        cls,
         edition,
         data_source,
         operation=None,
@@ -416,6 +429,8 @@ class CoverageRecord(Base, BaseCoverageRecord):
     ):
         from .edition import Edition
         from .identifier import Identifier
+
+        cls.assert_coverage_operation(operation, collection)
 
         _db = Session.object_session(edition)
         if isinstance(edition, Identifier):
@@ -458,6 +473,8 @@ class CoverageRecord(Base, BaseCoverageRecord):
         if not identifiers:
             # Nothing to do.
             return
+
+        cls.assert_coverage_operation(operation, collection)
 
         _db = Session.object_session(identifiers[0])
         timestamp = timestamp or utc_now()
@@ -748,7 +765,9 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     equivalency_id = Column(
         Integer, ForeignKey("equivalents.id", ondelete="CASCADE"), index=True
     )
-    equivalency = relationship("Equivalency", foreign_keys=equivalency_id)
+    equivalency: Mapped[Equivalency] = relationship(
+        "Equivalency", foreign_keys=equivalency_id
+    )
 
     operation = Column(String(255), index=True, default=None)
 
@@ -763,14 +782,14 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     def bulk_add(
         cls,
         _db,
-        equivalents: List["Equivalency"],
+        equivalents: List[Equivalency],
         operation: str,
         status=BaseCoverageRecord.REGISTERED,
         batch_size=100,
     ):
         with SessionBulkOperation(_db, batch_size) as bulk:
             for eq in equivalents:
-                record = EquivalencyCoverageRecord(
+                record = EquivalencyCoverageRecord(  # type: ignore[call-arg]
                     equivalency_id=eq.id,
                     operation=operation,
                     status=status,
@@ -781,7 +800,7 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
     @classmethod
     def add_for(
         cls,
-        equivalency: "Equivalency",
+        equivalency: Equivalency,
         operation: str,
         timestamp=None,
         status=CoverageRecord.SUCCESS,

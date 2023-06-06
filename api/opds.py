@@ -1,17 +1,18 @@
+from __future__ import annotations
+
 import copy
 import logging
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import List, Optional
+from typing import Any
 
 from flask import url_for
 
 from api.lanes import DynamicLane
+from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.analytics import Analytics
-from core.app_server import cdn_url_for
-from core.cdn import cdnify
 from core.classifier import Classifier
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
@@ -35,18 +36,20 @@ from core.model import (
 from core.model.formats import FormatPriorities
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
+from core.util.flask_util import OPDSEntryResponse
 from core.util.opds_writer import OPDSFeed
+from core.util.problem_detail import ProblemDetail
 
 from .adobe_vendor_id import AuthdataUtility
 from .annotations import AnnotationWriter
-from .circulation import BaseCirculationAPI
+from .circulation import BaseCirculationAPI, FulfillmentInfo
 from .config import CannotLoadConfiguration, Configuration
 from .novelist import NoveListAPI
 
 
 class CirculationManagerAnnotator(Annotator):
 
-    hidden_content_types: List[str]
+    hidden_content_types: list[str]
 
     def __init__(
         self,
@@ -113,12 +116,6 @@ class CirculationManagerAnnotator(Annotator):
         else:
             return url_for(*args, **kwargs)
 
-    def cdn_url_for(self, *args, **kwargs):
-        if self.test_mode:
-            return self.test_url_for(True, *args, **kwargs)
-        else:
-            return cdn_url_for(*args, **kwargs)
-
     def test_url_for(self, cdn=False, *args, **kwargs):
         # Generate a plausible-looking URL that doesn't depend on Flask
         # being set up.
@@ -160,10 +157,10 @@ class CirculationManagerAnnotator(Annotator):
             kwargs.update(dict(list(pagination.items())))
         if extra_kwargs:
             kwargs.update(extra_kwargs)
-        return self.cdn_url_for(route, _external=True, **kwargs)
+        return self.url_for(route, _external=True, **kwargs)
 
     def navigation_url(self, lane):
-        return self.cdn_url_for(
+        return self.url_for(
             "navigation_feed",
             lane_identifier=self._lane_identifier(lane),
             library_short_name=lane.library.short_name,
@@ -186,7 +183,7 @@ class CirculationManagerAnnotator(Annotator):
     @staticmethod
     def _prioritized_formats_for_pool(
         licensepool: LicensePool,
-    ) -> (List[str], List[str]):
+    ) -> tuple[list[str], list[str]]:
         collection: Collection = licensepool.collection
         external: ExternalIntegration = collection.external_integration
 
@@ -200,14 +197,14 @@ class CirculationManagerAnnotator(Annotator):
                 FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
             )
         )
-        prioritized_drm_schemes: List[str] = drm_setting.json_value or []
+        prioritized_drm_schemes: list[str] = drm_setting.json_value or []
 
         content_setting: ConfigurationSetting = (
             ConfigurationSetting.for_externalintegration(
                 FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
             )
         )
-        prioritized_content_types: List[str] = content_setting.json_value or []
+        prioritized_content_types: list[str] = content_setting.json_value or []
 
         return prioritized_drm_schemes, prioritized_content_types
 
@@ -233,8 +230,8 @@ class CirculationManagerAnnotator(Annotator):
         return _prioritize
 
     def visible_delivery_mechanisms(
-        self, licensepool: Optional[LicensePool]
-    ) -> List[LicensePoolDeliveryMechanism]:
+        self, licensepool: LicensePool | None
+    ) -> list[LicensePoolDeliveryMechanism]:
         if not licensepool:
             return []
 
@@ -262,11 +259,11 @@ class CirculationManagerAnnotator(Annotator):
         entry,
         updated=None,
     ):
-        # If ElasticSearch included a more accurate last_update_time,
+        # If OpenSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
         updated = work.last_update_time
         if isinstance(work, WorkSearchResult):
-            # Elasticsearch puts this field in a list, but we've set it up
+            # Opensearch puts this field in a list, but we've set it up
             # so there will be at most one value.
             last_updates = getattr(work._hit, "last_update", [])
             if last_updates:
@@ -502,7 +499,6 @@ class CirculationManagerAnnotator(Annotator):
 
     def open_access_link(self, pool, lpdm):
         _db = Session.object_session(lpdm)
-        url = cdnify(lpdm.resource.url)
         kw = dict(rel=OPDSFeed.OPEN_ACCESS_REL, type="")
 
         # Start off assuming that the URL associated with the
@@ -516,7 +512,7 @@ class CirculationManagerAnnotator(Annotator):
             if rep.media_type:
                 kw["type"] = rep.media_type
             href = rep.public_url
-        kw["href"] = cdnify(href)
+        kw["href"] = href
         link_tag = AcquisitionFeed.link(**kw)
         link_tag.attrib.update(self.rights_attributes(lpdm))
         always_available = OPDSFeed.makeelement(
@@ -686,7 +682,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         else:
             kwargs = {}
 
-        return self.cdn_url_for(
+        return self.url_for(
             "acquisition_groups",
             lane_identifier=lane_identifier,
             library_short_name=self.library.short_name,
@@ -726,7 +722,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if not lanes:
             # I don't think this should ever happen?
             lane_name = None
-            url = self.cdn_url_for(
+            url = self.url_for(
                 "acquisition_groups",
                 lane_identifier=None,
                 library_short_name=self.library.short_name,
@@ -776,19 +772,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry
     ):
-        # Add a link for reporting problems.
-        feed.add_link_to_entry(
-            entry,
-            rel="issues",
-            href=self.url_for(
-                "report",
-                identifier_type=identifier.type,
-                identifier=identifier.identifier,
-                library_short_name=self.library.short_name,
-                _external=True,
-            ),
-        )
-
         super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )
@@ -1662,11 +1645,22 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             work = loan.work
             if work:
                 active_loans_by_work[work] = loan
-        active_holds_by_work = {}
+
+        # There might be multiple holds for the same work so we gather all of them and choose the best one.
+        all_holds_by_work = {}
         for hold in patron.holds:
             work = hold.work
-            if work:
-                active_holds_by_work[work] = hold
+            if not work:
+                continue
+
+            if work not in all_holds_by_work:
+                all_holds_by_work[work] = []
+
+            all_holds_by_work[work].append(hold)
+
+        active_holds_by_work = {}
+        for work, list_of_holds in all_holds_by_work.items():
+            active_holds_by_work[work] = cls.choose_best_hold_for_work(list_of_holds)
 
         annotator = cls(
             circulation,
@@ -1690,16 +1684,51 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             response.last_modified = last_modified
         return response
 
+    @staticmethod
+    def choose_best_hold_for_work(list_of_holds):
+        # We don't want holds that are connected to license pools without any licenses owned. Also, we want hold that
+        # would result in the least wait time for the patron.
+
+        best = list_of_holds[0]
+
+        for hold in list_of_holds:
+            # We don't want holds with LPs with 0 licenses owned.
+            if hold.license_pool.licenses_owned == 0:
+                continue
+
+            # Our current hold's LP owns some licenses but maybe the best one wasn't changed yet.
+            if best.license_pool.licenses_owned == 0:
+                best = hold
+                continue
+
+            # Since these numbers are updated by different processes there might be situation where we don't have
+            # all data filled out.
+            hold_position = (
+                hold.position or hold.license_pool.patrons_in_hold_queue or 0
+            )
+            best_position = (
+                best.position or best.license_pool.patrons_in_hold_queue or 0
+            )
+
+            # Both the best hold and current hold own some licenses, try to figure out which one is better.
+            if (
+                hold_position / hold.license_pool.licenses_owned
+                < best_position / best.license_pool.licenses_owned
+            ):
+                best = hold
+
+        return best
+
     @classmethod
     def single_item_feed(
         cls,
-        circulation,
-        item,
-        fulfillment=None,
+        circulation: Any,
+        item: LicensePool | Loan,
+        fulfillment: FulfillmentInfo | None = None,
         test_mode=False,
         feed_class=AcquisitionFeed,
         **response_kwargs,
-    ):
+    ) -> OPDSEntryResponse | ProblemDetail:
         """Construct a response containing a single OPDS entry representing an active loan
         or hold.
 
@@ -1712,7 +1741,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         :param response_kwargs: Extra keyword arguments to be passed into the OPDSEntryResponse
             constructor.
 
-        :return: An OPDSEntryResponse
+        :return: An OPDSEntryResponse or ProblemDetail
         """
         if not item:
             raise ValueError("Argument 'item' must be non-empty")
@@ -1730,10 +1759,25 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
                 )
             )
 
+        log = logging.getLogger(cls.__name__)
+
+        # Sometimes the pool or work may be None
+        # In those cases we have to protect against the exceptions
+        try:
+            work = license_pool.work or license_pool.presentation_edition.work
+        except AttributeError as ex:
+            log.error(f"Error retrieving a Work Object {ex}")
+            log.error(
+                f"Error Data: {license_pool} | {license_pool and license_pool.presentation_edition}"
+            )
+            return NOT_FOUND_ON_REMOTE
+
+        if not work:
+            return NOT_FOUND_ON_REMOTE
+
         _db = Session.object_session(item)
-        work = license_pool.work or license_pool.presentation_edition.work
-        active_loans_by_work = {}
-        active_holds_by_work = {}
+        active_loans_by_work: Any = {}
+        active_holds_by_work: Any = {}
         active_fulfillments_by_work = {}
         item_dictionary = None
 

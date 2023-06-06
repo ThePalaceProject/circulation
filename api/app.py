@@ -2,24 +2,24 @@ import logging
 import os
 import urllib.parse
 
-from flask import Flask
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
-from flask_sqlalchemy_session import flask_scoped_session
 
 from api.config import Configuration
+from core.flask_sqlalchemy_session import flask_scoped_session
 from core.log import LogConfiguration
 from core.model import SessionManager
 from core.util import LanguageCodes
 
+from .util.flask import PalaceFlask
 from .util.profilers import (
     PalaceCProfileProfiler,
     PalacePyInstrumentProfiler,
     PalaceXrayProfiler,
 )
 
-app = Flask(__name__)
-app._db = None
+app = PalaceFlask(__name__)
+app._db = None  # type: ignore [assignment]
 app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
     Configuration.localization_languages()[0]
 ]
@@ -62,7 +62,7 @@ def initialize_database(autoinitialize=True):
 
 
 from . import routes  # noqa
-from .admin import routes  # noqa
+from .admin import routes as admin_routes  # noqa
 
 
 def run(url=None):

@@ -1,4 +1,5 @@
 import sys
+from abc import ABC
 from typing import Iterable, Optional, Tuple, Union
 
 from sqlalchemy.orm.session import Session
@@ -14,10 +15,9 @@ from core.util.problem_detail import ProblemDetail
 
 from .authenticator import LibraryAuthenticator
 from .circulation import CirculationAPI
-from .feedbooks import FeedbooksImportMonitor, FeedbooksOPDSImporter
 
 
-class HasSelfTests(CoreHasSelfTests):
+class HasSelfTests(CoreHasSelfTests, ABC):
     """Circulation-specific enhancements for HasSelfTests.
 
     Circulation self-tests frequently need to test the ability to act
@@ -37,8 +37,9 @@ class HasSelfTests(CoreHasSelfTests):
             self.message = message
             self.detail = detail
 
+    @classmethod
     def default_patrons(
-        self, collection: Collection
+        cls, collection: Collection
     ) -> Iterable[Union[Tuple[Library, Patron, Optional[str]], SelfTestResult]]:
         """Find a usable default Patron for each of the libraries associated
         with the given Collection.
@@ -52,7 +53,7 @@ class HasSelfTests(CoreHasSelfTests):
         """
         _db = Session.object_session(collection)
         if not collection.libraries:
-            yield self.test_failure(
+            yield cls.test_failure(
                 "Acquiring test patron credentials.",
                 "Collection is not associated with any libraries.",
                 "Add the collection to a library that has a patron authentication service.",
@@ -63,16 +64,14 @@ class HasSelfTests(CoreHasSelfTests):
         for library in collection.libraries:
             task = "Acquiring test patron credentials for library %s" % library.name
             try:
-                patron, password = self._determine_self_test_patron(library, _db=_db)
+                patron, password = cls._determine_self_test_patron(library, _db=_db)
                 yield library, patron, password
-            except self._NoValidLibrarySelfTestPatron as e:
-                yield self.test_failure(task, e.message, e.detail)
+            except cls._NoValidLibrarySelfTestPatron as e:
+                yield cls.test_failure(task, e.message, e.detail)
             except IntegrationException as e:
-                yield self.test_failure(task, e)
+                yield cls.test_failure(task, e)
             except Exception as e:
-                yield self.test_failure(
-                    task, "Exception getting default patron: %r" % e
-                )
+                yield cls.test_failure(task, "Exception getting default patron: %r" % e)
 
     @classmethod
     def _determine_self_test_patron(
@@ -88,7 +87,10 @@ class HasSelfTests(CoreHasSelfTests):
         _db = _db or Session.object_session(library)
         library_authenticator = LibraryAuthenticator.from_config(_db, library)
         auth = library_authenticator.basic_auth_provider
-        patron, password = auth.testing_patron(_db) if auth else (None, None)
+        if auth is None:
+            patron, password = None, None
+        else:
+            patron, password = auth.testing_patron(_db)
         if isinstance(patron, Patron):
             return patron, password
 
@@ -96,12 +98,18 @@ class HasSelfTests(CoreHasSelfTests):
         # and will raise an exception.
         if patron is None:
             message = "Library has no test patron configured."
-            detail = "You can specify a test patron when you configure the library's patron authentication service."
+            detail = (
+                "You can specify a test patron when you configure "
+                "the library's patron authentication service."
+            )
         elif isinstance(patron, ProblemDetail):
             message = patron.detail
             detail = patron.debug_message
         else:
-            message = f"Authentication provider returned unexpected type ({type(patron)}) instead of patron."
+            message = (  # type: ignore[unreachable]
+                "Authentication provider returned unexpected type "
+                f"({type(patron)}) instead of patron."
+            )
             detail = None
         raise cls._NoValidLibrarySelfTestPatron(message, detail=detail)
 
@@ -120,7 +128,6 @@ class RunSelfTestsScript(LibraryInputScript):
         for library in parsed.libraries:
             api_map = CirculationAPI(self._db, library).default_api_map
             api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
-            api_map[ExternalIntegration.FEEDBOOKS] = FeedbooksImportMonitor
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
                 try:
@@ -141,7 +148,6 @@ class RunSelfTestsScript(LibraryInputScript):
         # constructors.
         extra_args = extra_args or {
             OPDSImportMonitor: [OPDSImporter],
-            FeedbooksImportMonitor: [FeedbooksOPDSImporter],
         }
         extra = extra_args.get(tester, [])
         constructor_args = [self._db, collection] + list(extra)

@@ -6,7 +6,12 @@ configured, not that the code is correct.
 """
 
 import datetime
+from typing import Generator, Optional
+from unittest.mock import MagicMock
 
+from sqlalchemy.orm import Session
+
+from core.model import ExternalIntegration
 from core.selftest import HasSelfTests, SelfTestResult
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
@@ -88,6 +93,11 @@ class TestSelfTestResult:
         assert "debug info" == d["exception"]["debug_message"]
 
 
+class MockSelfTest(HasSelfTests):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+        raise Exception("I don't work!")
+
+
 class TestHasSelfTests:
     def test_run_self_tests(self, db: DatabaseTransactionFixture):
         """See what might happen when run_self_tests tries to instantiate an
@@ -95,6 +105,8 @@ class TestHasSelfTests:
         """
 
         class Tester(HasSelfTests):
+            integration: Optional[ExternalIntegration]
+
             def __init__(self, extra_arg=None):
                 """This constructor works."""
                 self.invoked_with = extra_arg
@@ -119,7 +131,7 @@ class TestHasSelfTests:
                 self._run_self_tests_called_with = _db
                 return [SelfTestResult("a test result")]
 
-        mock_db = object()
+        mock_db = MagicMock(spec=Session)
 
         # This integration will be used to store the test results.
         integration = db.external_integration(db.fresh_str())
@@ -215,7 +227,7 @@ class TestHasSelfTests:
         assert failure.exception.debug_message.startswith("Traceback")
 
     def test_run_test_success(self):
-        o = HasSelfTests()
+        o = MockSelfTest()
         # This self-test method will succeed.
         def successful_test(arg, kwarg):
             return arg, kwarg
@@ -227,7 +239,7 @@ class TestHasSelfTests:
         assert (result.end - result.start).total_seconds() < 1
 
     def test_run_test_failure(self):
-        o = HasSelfTests()
+        o = MockSelfTest()
         # This self-test method will fail.
         def unsuccessful_test(arg, kwarg):
             raise IntegrationException(arg, kwarg)
@@ -243,7 +255,7 @@ class TestHasSelfTests:
         assert (result.end - result.start).total_seconds() < 1
 
     def test_test_failure(self):
-        o = HasSelfTests()
+        o = MockSelfTest()
 
         # You can pass in an Exception...
         exception = Exception("argh")

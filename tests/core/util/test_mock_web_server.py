@@ -64,7 +64,9 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler):
         _request = MockAPIServerRequest()
         _request.method = self.command
         for k in self.headers.keys():
-            _request.headers[k] = self.headers.get(k)
+            header = self.headers.get(k, None)
+            if header is not None:
+                _request.headers[k] = header
         _request.path = self.path
         _readable = int(self.headers.get("Content-Length") or 0)
         if _readable > 0:

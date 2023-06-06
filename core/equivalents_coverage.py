@@ -1,6 +1,6 @@
 from typing import List, Optional, Set
 
-from sqlalchemy import and_, delete
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Query, joinedload
 
 from core.coverage import BaseCoverageProvider, CoverageFailure
@@ -106,7 +106,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
             # First time around we MUST delete any chains formed from this identifier before
             if parent_id not in completed_identifiers:
-                delete_stmt = delete(RecursiveEquivalencyCache).where(  # type: ignore
+                delete_stmt = delete(RecursiveEquivalencyCache).where(
                     RecursiveEquivalencyCache.parent_identifier_id == parent_id
                 )
                 self._db.execute(delete_stmt)
@@ -175,8 +175,8 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         NOTE: There are no coveragerecords for these
         This might deserve its own batchable job
         """
-        qu = (
-            self._db.query(Identifier)
+        missing_identifiers = (
+            select(Identifier.id)
             .outerjoin(
                 RecursiveEquivalencyCache,
                 and_(
@@ -185,18 +185,17 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
                 ),
             )
             .filter(RecursiveEquivalencyCache.id == None)
-            .enable_eagerloads(False)
-            .yield_per(self.batch_size)
+            .execution_options(yield_per=self.batch_size)
         )
 
-        missing_identifiers = qu.all()
-
-        for identifier in missing_identifiers:
+        processed = []
+        for identifier in self._db.execute(missing_identifiers):
             self._db.add(
                 RecursiveEquivalencyCache(
                     parent_identifier_id=identifier.id, identifier_id=identifier.id
                 )
             )
+            processed.append(identifier.id)
         self._db.commit()
 
-        return missing_identifiers
+        return processed

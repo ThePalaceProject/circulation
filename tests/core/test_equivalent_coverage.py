@@ -340,7 +340,7 @@ class TestEquivalentCoverage:
         missing = data.provider.update_identity_recursive_equivalents()
 
         assert len(missing) == 1
-        assert missing[0].id == data.identifiers[3].id
+        assert missing[0] == data.identifiers[3].id
 
         recursives = (
             session.query(RecursiveEquivalencyCache)

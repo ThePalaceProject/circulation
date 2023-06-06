@@ -5,8 +5,7 @@ import shutil
 import tempfile
 import time
 import uuid
-from pathlib import Path
-from typing import Generator, Iterable, List, Optional, Tuple
+from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -17,6 +16,7 @@ import core.lane
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import Configuration
+from core.integration.goals import Goals
 from core.log import LogConfiguration
 from core.model import (
     Base,
@@ -49,8 +49,13 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.devicetokens import DeviceToken
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.api_config import KeyPairFixture
 
 
 class ApplicationFixture:
@@ -100,37 +105,16 @@ class DatabaseFixture:
 
     @staticmethod
     def _load_core_model_classes():
-        path = Path(__file__)  # tests/fixtures/database.py
-        path = path.parent  # tests/fixtures
-        path = path.parent  # tests
-        path = path.parent  # .
-        path = os.path.join(path, "core", "model")
+        # Load all the core model classes so that they are registered with the ORM.
+        import core.model
 
-        list_modules = os.listdir(path)
-        list_modules.remove("__init__.py")
-
-        for module_file in list_modules:
-            if module_file.split(".")[-1] == "py":
-                module_name = "core.model." + module_file.split(".")[0]
-                imported = importlib.import_module(module_name)
-                logging.info("imported " + imported.__name__)
-
-        importlib.import_module("core.lane")
-
-        from core.model.customlist import customlist_sharedlibrary
-
-        customlist_sharedlibrary.name
+        importlib.reload(core.model)
 
     @staticmethod
     def create() -> "DatabaseFixture":
         DatabaseFixture._load_core_model_classes()
         engine, connection = DatabaseFixture._get_database_connection()
 
-        # Avoid CannotLoadConfiguration errors related to CDN integrations.
-        Configuration.instance[Configuration.INTEGRATIONS] = Configuration.instance.get(
-            Configuration.INTEGRATIONS, {}
-        )
-        Configuration.instance[Configuration.INTEGRATIONS][ExternalIntegration.CDN] = {}
         return DatabaseFixture(engine, connection)
 
     def close(self):
@@ -170,7 +154,7 @@ class DatabaseTransactionFixture:
             "9780316075978",
         ]
 
-    def _make_default_library(self):
+    def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
         library, ignore = get_one_or_create(
             self._session,
@@ -195,7 +179,8 @@ class DatabaseTransactionFixture:
     @staticmethod
     def create(database: DatabaseFixture) -> "DatabaseTransactionFixture":
         # Create a new connection to the database.
-        session = Session(database.connection)
+        session = SessionManager.session_from_connection(database.connection)
+
         transaction = database.connection.begin_nested()
         return DatabaseTransactionFixture(database, session, transaction)
 
@@ -211,14 +196,8 @@ class DatabaseTransactionFixture:
         # Reset the Analytics singleton between tests.
         Analytics._reset_singleton_instance()
 
-        # Also roll back any record of those changes in the
-        # Configuration instance.
-        for key in [
-            Configuration.SITE_CONFIGURATION_LAST_UPDATE,
-            Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE,
-        ]:
-            if key in Configuration.instance:
-                del Configuration.instance[key]
+        Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
+        Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None
 
     @property
     def database(self) -> DatabaseFixture:
@@ -912,7 +891,6 @@ class TemporaryDirectoryConfigurationFixture:
         fix = TemporaryDirectoryConfigurationFixture()
         fix._directory = tempfile.mkdtemp(dir="/tmp")
         assert isinstance(fix._directory, str)
-        Configuration.instance[Configuration.DATA_DIRECTORY] = fix._directory
         return fix
 
     def close(self):
@@ -938,7 +916,7 @@ def temporary_directory_configuration() -> Iterable[
 
 
 @pytest.fixture(scope="session")
-def application() -> Iterable[ApplicationFixture]:
+def application(mock_config_key_pair: KeyPairFixture) -> Iterable[ApplicationFixture]:
     app = ApplicationFixture.create()
     yield app
     app.close()
@@ -958,6 +936,53 @@ def db(
     tr = DatabaseTransactionFixture.create(database)
     yield tr
     tr.close()
+
+
+@pytest.fixture
+def default_library(db: DatabaseTransactionFixture) -> Library:
+    return db.default_library()
+
+
+@pytest.fixture
+def create_integration_configuration(
+    db: DatabaseTransactionFixture,
+) -> Callable[..., IntegrationConfiguration]:
+    def create_integration(
+        protocol: str, goal: Goals, settings: Optional[dict] = None
+    ) -> IntegrationConfiguration:
+        integration, _ = create(
+            db.session,
+            IntegrationConfiguration,
+            name=db.fresh_str(),
+            protocol=protocol,
+            goal=goal,
+            settings=settings or {},
+        )
+        return integration
+
+    return create_integration
+
+
+@pytest.fixture
+def create_integration_library_configuration(
+    db: DatabaseTransactionFixture,
+) -> Callable[..., IntegrationLibraryConfiguration]:
+    def create_library_integration(
+        library: Library,
+        parent: IntegrationConfiguration,
+        settings: Optional[dict] = None,
+    ) -> IntegrationLibraryConfiguration:
+        settings = settings or {}
+        integration, _ = create(
+            db.session,
+            IntegrationLibraryConfiguration,
+            parent=parent,
+            library=library,
+            settings=settings,
+        )
+        return integration
+
+    return create_library_integration
 
 
 class DBStatementCounter:

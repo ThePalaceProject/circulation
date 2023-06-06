@@ -4,7 +4,7 @@ import pytest
 
 from core.classifier import Classifier
 from core.lane import Facets, Pagination, WorkList
-from core.model.cachedfeed import CachedFeed
+from core.model.cachedfeed import CachedFeed, CachedFeedKeys
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
@@ -42,7 +42,7 @@ class TestCachedFeed:
 
             # _prepare_keys always returns this named tuple. Manipulate its
             # members to test different bits of fetch().
-            _keys = CachedFeed.CachedFeedKeys(
+            _keys = CachedFeedKeys(
                 feed_type="mock type",
                 library=db.default_library(),
                 work=work,

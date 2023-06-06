@@ -19,18 +19,18 @@ Once the webapp Docker image is built, we can run it in a container with the fol
 # about the values listed here and their alternatives.
 $ docker run --name webapp -d \
     --p 80:80 \
-    -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
     ghcr.io/thepalaceproject/circ-webapp:main
 ```
 
-If the database and ElasticSearch(ES) are running in containers, use the --link option to let the webapp docker container
+If the database and OpenSearch(OS) are running in containers, use the --link option to let the webapp docker container
 to access them as bellow:
 
 ```sh
 docker run \
---link pg --link es \
+--link pg --link os \
 --name circ \
--e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+-e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
 -d -p 6500:80 \
 ghcr.io/thepalaceproject/circ-webapp:main
 ```
@@ -48,7 +48,7 @@ Once the scripts Docker image is built, we can run it in a container with the fo
 # about the values listed here and their alternatives.
 $ docker run --name scripts -d \
     -e TZ='YOUR_TIMEZONE_STRING' \
-    -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
     ghcr.io/thepalaceproject/circ-scripts:main
 ```
 
@@ -73,7 +73,7 @@ external log aggregator if you wish to capture logs from the job.
 # about the values listed here and their alternatives.
 $ docker run --name search_index_refresh -it \
     -e SIMPLIFIED_SCRIPT_NAME='refresh_materialized_views' \
-    -e SIMPLIFIED_PRODUCTION_DATABASE='postgres://[username]:[password]@[host]:[port]/[database_name]' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
     ghcr.io/thepalaceproject/circ-exec:main
 ```
 
@@ -89,7 +89,7 @@ Environment variables can be set with the `-e VARIABLE_KEY='variable_value'` opt
 - `auto` : Either initializes or migrates the database, depending on if it is new or not. This is the default value.
 - `ignore` : Does nothing.
 - `init` : Initializes the app against a brand new database. If you are running a circulation manager for the first
-time ever, use this value to set up an Elasticsearch alias and account for the database schema for future
+time ever, use this value to set up an Opensearch alias and account for the database schema for future
 migrations.
 - `migrate` : Migrates an existing database against a new release. Use this value when switching from one stable
 version to another.

@@ -376,7 +376,7 @@ pan||pa|Panjabi; Punjabi|pendjabi
 pap|||Papiamento|papiamento
 pau|||Palauan|palau
 peo|||Persian, Old (ca.600-400 B.C.)|perse, vieux (ca. 600-400 av. J.-C.)
-per|fas|fa|Persian|persan
+per|fas|fa|Persian; Farsi; Persian Farsi|persan
 phi|||Philippine languages|philippines, langues
 phn|||Phoenician|phénicien
 pli||pi|Pali|pali

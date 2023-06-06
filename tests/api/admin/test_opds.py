@@ -5,10 +5,10 @@ from api.opds import AcquisitionFeed
 from core.lane import Pagination
 from core.model import DataSource, ExternalIntegration, Measurement
 from core.model.configuration import ExternalIntegrationLink
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestOPDS(DatabaseTest):
+class TestOPDS:
     def links(self, entry, rel=None):
         if "feed" in entry:
             entry = entry["feed"]
@@ -23,39 +23,39 @@ class TestOPDS(DatabaseTest):
                 r.append(l)
         return r
 
-    def test_feed_includes_staff_rating(self):
-        work = self._work(with_open_access_download=True)
+    def test_feed_includes_staff_rating(self, db: DatabaseTransactionFixture):
+        work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
-        staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
         lp.identifier.add_measurement(
             staff_data_source, Measurement.RATING, 3, weight=1000
         )
 
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
-            AdminAnnotator(None, self._default_library, test_mode=True),
+            AdminAnnotator(None, db.default_library(), test_mode=True),
         )
         [entry] = feedparser.parse(str(feed))["entries"]
         rating = entry["schema_rating"]
         assert 3 == float(rating["schema:ratingvalue"])
         assert Measurement.RATING == rating["additionaltype"]
 
-    def test_feed_includes_refresh_link(self):
-        work = self._work(with_open_access_download=True)
+    def test_feed_includes_refresh_link(self, db: DatabaseTransactionFixture):
+        work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         lp.suppressed = False
-        self._db.commit()
+        db.session.commit()
 
         # If the metadata wrangler isn't configured, the link is left out.
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
-            AdminAnnotator(None, self._default_library, test_mode=True),
+            AdminAnnotator(None, db.default_library(), test_mode=True),
         )
         [entry] = feedparser.parse(str(feed))["entries"]
         assert [] == [
@@ -64,41 +64,18 @@ class TestOPDS(DatabaseTest):
             if x["rel"] == "http://librarysimplified.org/terms/rel/refresh"
         ]
 
-        # If we configure a metadata wrangler integration, the link appears.
-        integration = self._external_integration(
-            ExternalIntegration.METADATA_WRANGLER,
-            goal=ExternalIntegration.METADATA_GOAL,
-            settings={ExternalIntegration.URL: "http://metadata"},
-            password="pw",
-        )
-        integration.collections += [self._default_collection]
-        feed = AcquisitionFeed(
-            self._db,
-            "test",
-            "url",
-            [work],
-            AdminAnnotator(None, self._default_library, test_mode=True),
-        )
-        [entry] = feedparser.parse(str(feed))["entries"]
-        [refresh_link] = [
-            x
-            for x in entry["links"]
-            if x["rel"] == "http://librarysimplified.org/terms/rel/refresh"
-        ]
-        assert lp.identifier.identifier in refresh_link["href"]
-
-    def test_feed_includes_suppress_link(self):
-        work = self._work(with_open_access_download=True)
+    def test_feed_includes_suppress_link(self, db: DatabaseTransactionFixture):
+        work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         lp.suppressed = False
-        self._db.commit()
+        db.session.commit()
 
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
-            AdminAnnotator(None, self._default_library, test_mode=True),
+            AdminAnnotator(None, db.default_library(), test_mode=True),
         )
         [entry] = feedparser.parse(str(feed))["entries"]
         [suppress_link] = [
@@ -115,14 +92,14 @@ class TestOPDS(DatabaseTest):
         assert 0 == len(unsuppress_links)
 
         lp.suppressed = True
-        self._db.commit()
+        db.session.commit()
 
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
-            AdminAnnotator(None, self._default_library, test_mode=True),
+            AdminAnnotator(None, db.default_library(), test_mode=True),
         )
         [entry] = feedparser.parse(str(feed))["entries"]
         [unsuppress_link] = [
@@ -138,28 +115,28 @@ class TestOPDS(DatabaseTest):
         ]
         assert 0 == len(suppress_links)
 
-    def test_feed_includes_edit_link(self):
-        work = self._work(with_open_access_download=True)
+    def test_feed_includes_edit_link(self, db: DatabaseTransactionFixture):
+        work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
 
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
-            AdminAnnotator(None, self._default_library, test_mode=True),
+            AdminAnnotator(None, db.default_library(), test_mode=True),
         )
         [entry] = feedparser.parse(str(feed))["entries"]
         [edit_link] = [x for x in entry["links"] if x["rel"] == "edit"]
         assert lp.identifier.identifier in edit_link["href"]
 
-    def test_feed_includes_change_cover_link(self):
-        work = self._work(with_open_access_download=True)
+    def test_feed_includes_change_cover_link(self, db: DatabaseTransactionFixture):
+        work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
-        library = self._default_library
+        library = db.default_library()
 
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
@@ -177,24 +154,24 @@ class TestOPDS(DatabaseTest):
         # There is now a covers storage integration that is linked to the external
         # integration for a collection that the work is in. It will use that
         # covers mirror and the change cover link is included.
-        storage = self._external_integration(
+        storage = db.external_integration(
             ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL
         )
         storage.username = "user"
         storage.password = "pass"
 
-        collection = self._collection()
+        collection = db.collection()
         purpose = ExternalIntegrationLink.COVERS
-        external_integration_link = self._external_integration_link(
+        external_integration_link = db.external_integration_link(
             integration=collection._external_integration,
             other_integration=storage,
             purpose=purpose,
         )
         library.collections.append(collection)
-        work = self._work(with_open_access_download=True, collection=collection)
+        work = db.work(with_open_access_download=True, collection=collection)
         lp = work.license_pools[0]
         feed = AcquisitionFeed(
-            self._db,
+            db.session,
             "test",
             "url",
             [work],
@@ -209,30 +186,30 @@ class TestOPDS(DatabaseTest):
         ]
         assert lp.identifier.identifier in change_cover_link["href"]
 
-    def test_suppressed_feed(self):
+    def test_suppressed_feed(self, db: DatabaseTransactionFixture):
         # Test the ability to show a paginated feed of suppressed works.
 
-        work1 = self._work(with_open_access_download=True)
+        work1 = db.work(with_open_access_download=True)
         work1.license_pools[0].suppressed = True
 
-        work2 = self._work(with_open_access_download=True)
+        work2 = db.work(with_open_access_download=True)
         work2.license_pools[0].suppressed = True
 
         # This work won't be included in the feed since its
         # suppressed pool is superceded.
-        work3 = self._work(with_open_access_download=True)
+        work3 = db.work(with_open_access_download=True)
         work3.license_pools[0].suppressed = True
         work3.license_pools[0].superceded = True
 
         pagination = Pagination(size=1)
-        annotator = MockAnnotator(self._default_library)
+        annotator = MockAnnotator(db.default_library())
         titles = [work1.title, work2.title]
 
         def make_page(pagination):
             return AdminFeed.suppressed(
-                _db=self._db,
+                _db=db.session,
                 title="Hidden works",
-                url=self._url,
+                url=db.fresh_url(),
                 annotator=annotator,
                 pagination=pagination,
             )

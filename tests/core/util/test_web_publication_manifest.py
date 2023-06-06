@@ -1,5 +1,5 @@
-from core.testing import DatabaseTest
 from core.util.web_publication_manifest import AudiobookManifest, JSONable, Manifest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestJSONable:
@@ -82,10 +82,10 @@ class TestManifest:
             assert "missing" not in entry
 
 
-class TestUpdateBibliographicMetadata(DatabaseTest):
-    def test_update(self):
-        edition, pool = self._edition(with_license_pool=True)
-        edition.cover_thumbnail_url = self._url
+class TestUpdateBibliographicMetadata:
+    def test_update(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_license_pool=True)
+        edition.cover_thumbnail_url = db.fresh_url()
         [author] = edition.contributors
         manifest = Manifest()
         manifest.update_bibliographic_metadata(pool)

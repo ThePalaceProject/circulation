@@ -1,11 +1,18 @@
+from unittest.mock import MagicMock
+
 import pytest
+from sqlalchemy.orm import Session
 
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument as Doc
 from core.util.authentication_for_opds import OPDSAuthenticationFlow as Flow
 
 
 class MockFlow(Flow):
-    """A mock OPDSAuthenticationFlow that sets `type` in to_dict()"""
+    """A mock OPDSAuthenticationFlow"""
+
+    @property
+    def flow_type(self) -> str:
+        return "http://mock1/"
 
     def __init__(self, description):
         self.description = description
@@ -14,31 +21,11 @@ class MockFlow(Flow):
         return {
             "description": self.description,
             "arg": argument,
-            "type": "http://mock1/",
         }
 
 
-class MockFlowWithURI(Flow):
-    """A mock OPDSAuthenticationFlow that sets URI."""
-
-    FLOW_TYPE = "http://mock2/"
-
-    def _authentication_flow_document(self, argument):
-        return {}
-
-
-class MockFlowWithoutType(Flow):
-    """A mock OPDSAuthenticationFlow that has no type.
-
-    Calling authentication_flow_document() on this object will fail.
-    """
-
-    def _authentication_flow_document(self, argument):
-        return {}
-
-
 class TestOPDSAuthenticationFlow:
-    def test_flow_sets_type_at_runtime(self):
+    def test_flow_sets_type(self):
         """An OPDSAuthenticationFlow object can set `type` during
         to_dict().
         """
@@ -50,20 +37,18 @@ class TestOPDSAuthenticationFlow:
             "arg": "argument",
         } == doc
 
-    def test_flow_gets_type_from_uri(self):
-        """An OPDSAuthenticationFlow object can define the class variableURI
-        if it always uses that value for `type`.
+    def test_flow_calls__authentication_flow_document(self):
+        """An OPDSAuthenticationFlow object can set `type` during
+        to_dict().
         """
-        flow = MockFlowWithURI()
-        doc = flow.authentication_flow_document("argument")
-        assert {"type": "http://mock2/"} == doc
-
-    def test_flow_must_define_type(self):
-        """An OPDSAuthenticationFlow object must get a value for `type`
-        _somehow_, or authentication_flow_document() will fail.
-        """
-        flow = MockFlowWithoutType()
-        pytest.raises(ValueError, flow.authentication_flow_document, "argument")
+        db = MagicMock(spec=Session)
+        flow = MockFlow("description")
+        flow._authentication_flow_document = MagicMock(return_value={})
+        doc = flow.authentication_flow_document(db)
+        assert {
+            "type": "http://mock1/",
+        } == doc
+        flow._authentication_flow_document.assert_called_once_with(db)
 
 
 class TestAuthenticationForOPDSDocument:

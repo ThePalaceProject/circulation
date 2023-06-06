@@ -7,11 +7,13 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, TypeVar
 
 from flask_babel import lazy_gettext as _
-from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, DateTime
+from sqlalchemy import Enum as saEnum
+from sqlalchemy import ForeignKey, Index, Integer, Unicode
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
@@ -19,11 +21,12 @@ from core.model.hybrid import hybrid_property
 
 from ..config import CannotLoadConfiguration, Configuration
 from ..mirror import MirrorUploader
+from ..util.datetime_helpers import utc_now
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
-from .library import Library
+from .library import Library, externalintegrations_libraries
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
@@ -122,16 +125,36 @@ class ExternalIntegrationLink(Base, HasSessionCache):
     COLLECTION_MIRROR_SETTINGS = settings
 
 
+class ExternalIntegrationError(Base):
+    __tablename__ = "externalintegrationerrors"
+
+    id = Column(Integer, primary_key=True)
+    time = Column(DateTime, default=utc_now)
+    error = Column(Unicode)
+    external_integration_id = Column(
+        Integer,
+        ForeignKey(
+            "externalintegrations.id",
+            name="fk_error_externalintegrations_id",
+            ondelete="CASCADE",
+        ),
+    )
+
+
 class ExternalIntegration(Base):
 
     """An external integration contains configuration for connecting
     to a third-party API.
     """
 
+    GREEN = "green"
+    RED = "red"
+
+    STATUS = saEnum(GREEN, RED, name="external_integration_status")
+
     # Possible goals of ExternalIntegrations.
     #
-    # These integrations are associated with external services such as
-    # Google Enterprise which authenticate library administrators.
+    # These integrations are associated with external services which authenticate library administrators
     ADMIN_AUTH_GOAL = "admin_auth"
 
     # These integrations are associated with external services such as
@@ -152,12 +175,8 @@ class ExternalIntegration(Base):
     # S3 that provide access to book covers.
     STORAGE_GOAL = MirrorUploader.STORAGE_GOAL
 
-    # These integrations are associated with external services like
-    # Cloudfront or other CDNs that mirror and/or cache certain domains.
-    CDN_GOAL = "CDN"
-
     # These integrations are associated with external services such as
-    # Elasticsearch that provide indexed search.
+    # Opensearch that provide indexed search.
     SEARCH_GOAL = "search"
 
     # These integrations are associated with external services such as
@@ -232,7 +251,6 @@ class ExternalIntegration(Base):
     NOVELIST = "NoveList Select"
     NYPL_SHADOWCAT = "Shadowcat"
     NYT = "New York Times"
-    METADATA_WRANGLER = "Metadata Wrangler"
     CONTENT_SERVER = "Content Server"
 
     # Integrations with STORAGE_GOAL
@@ -240,11 +258,8 @@ class ExternalIntegration(Base):
     MINIO = "MinIO"
     LCP = "LCP"
 
-    # Integrations with CDN_GOAL
-    CDN = "CDN"
-
     # Integrations with SEARCH_GOAL
-    ELASTICSEARCH = "Elasticsearch"
+    OPENSEARCH = "Opensearch"
 
     # Integrations with DRM_GOAL
     ADOBE_VENDOR_ID = "Adobe Vendor ID"
@@ -255,15 +270,8 @@ class ExternalIntegration(Base):
     # Integrations with ANALYTICS_GOAL
     GOOGLE_ANALYTICS = "Google Analytics"
 
-    # Integrations with ADMIN_AUTH_GOAL
-    GOOGLE_OAUTH = "Google OAuth"
-
-    # List of such ADMIN_AUTH_GOAL integrations
-    ADMIN_AUTH_PROTOCOLS = [GOOGLE_OAUTH]
-
     # Integrations with LOGGING_GOAL
     INTERNAL_LOGGING = "Internal logging"
-    LOGGLY = "Loggly"
     CLOUDWATCH = "AWS Cloudwatch Logs"
 
     # Integrations with CATALOG_GOAL
@@ -310,9 +318,12 @@ class ExternalIntegration(Base):
     # used to identify ExternalIntegrations from command-line scripts.
     name = Column(Unicode, nullable=True, unique=True)
 
+    status: Mapped[str] = Column(STATUS, server_default=str(GREEN))
+    last_status_update = Column(DateTime, nullable=True)
+
     # Any additional configuration information goes into
     # ConfigurationSettings.
-    settings = relationship(
+    settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         backref="external_integration",
         cascade="all, delete",
@@ -321,24 +332,31 @@ class ExternalIntegration(Base):
 
     # Any number of Collections may designate an ExternalIntegration
     # as the source of their configuration
-    collections = relationship(
+    collections: Mapped[List[Collection]] = relationship(
         "Collection",
         backref="_external_integration",
         foreign_keys="Collection.external_integration_id",
     )
 
-    links = relationship(
+    links: Mapped[List[ExternalIntegrationLink]] = relationship(
         "ExternalIntegrationLink",
         backref="integration",
         foreign_keys="ExternalIntegrationLink.external_integration_id",
         cascade="all, delete-orphan",
     )
 
-    other_links = relationship(
+    other_links: Mapped[List[ExternalIntegrationLink]] = relationship(
         "ExternalIntegrationLink",
         backref="other_integration",
         foreign_keys="ExternalIntegrationLink.other_integration_id",
         cascade="all, delete-orphan",
+    )
+
+    libraries: Mapped[List[Library]] = relationship(
+        "Library",
+        back_populates="integrations",
+        secondary=lambda: externalintegrations_libraries,
+        uselist=True,
     )
 
     def __repr__(self):
@@ -800,7 +818,7 @@ class ConfigurationSetting(Base, HasSessionCache):
     MEANS_YES = {"true", "t", "yes", "y"}
 
     @property
-    def bool_value(self):
+    def bool_value(self) -> bool | None:
         """Turn the value into a boolean if possible.
         :return: A boolean, or None if there is no value.
         """
@@ -811,7 +829,7 @@ class ConfigurationSetting(Base, HasSessionCache):
         return None
 
     @property
-    def int_value(self):
+    def int_value(self) -> int | None:
         """Turn the value into an int if possible.
         :return: An integer, or None if there is no value.
         :raise ValueError: If the value cannot be converted to an int.
@@ -821,7 +839,7 @@ class ConfigurationSetting(Base, HasSessionCache):
         return None
 
     @property
-    def float_value(self):
+    def float_value(self) -> float | None:
         """Turn the value into an float if possible.
         :return: A float, or None if there is no value.
         :raise ValueError: If the value cannot be converted to a float.
@@ -863,7 +881,7 @@ class HasExternalIntegration(metaclass=ABCMeta):
     """Interface allowing to get access to an external integration"""
 
     @abstractmethod
-    def external_integration(self, db: Session) -> ExternalIntegration:
+    def external_integration(self, db: Session) -> Optional[ExternalIntegration]:
         """Returns an external integration associated with this object
 
         :param db: Database session
@@ -1396,7 +1414,7 @@ class ConfigurationGrouping(HasConfigurationSettings):
             }
 
     @classmethod
-    def to_settings(cls) -> list[dict]:
+    def to_settings(cls) -> list[dict[str, Any]]:
         """Return a list of settings in a format understandable by circulation-admin.
 
         :return: list of settings in a format understandable by circulation-admin.

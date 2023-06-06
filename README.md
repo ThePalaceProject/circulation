@@ -1,6 +1,7 @@
 # Palace Manager
 
 [![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![codecov](https://codecov.io/github/thepalaceproject/circulation/branch/main/graph/badge.svg?token=T09QW6DLH6)](https://codecov.io/github/thepalaceproject/circulation)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
@@ -34,6 +35,18 @@ August 2021, development will be done in the `main` branch and the `python2` bra
 absolutely necessary.
 
 ## Set Up
+
+### Docker Compose
+
+In order to help quickly set up a development environment, we include a [docker-compose.yml](./docker-compose.yml)
+file. This docker-compose file, will build the webapp and scripts containers from your local repository, and start
+those containers as well as all the necessary service containers.
+
+You can give this a try by running the following command:
+
+```shell
+docker-compose up --build
+```
 
 ### Python Set Up
 
@@ -97,27 +110,20 @@ Poetry can be installed using the command `curl -sSL https://install.python-poet
 More information about installation options can be found in the
 [poetry documentation](https://python-poetry.org/docs/master/#installation).
 
-### Elasticsearch
+### Opensearch
+
+Palace now supports Opensearch: please use it instead of Elasticsearch.
+Elasticsearch is no longer supported.
 
 #### Docker
 
-The easiest way to setup a local elasticsearch environment is to use docker.
+We recommend that you run Opensearch with docker using the following docker commands:
 
 ```sh
-docker run -d --name es -e discovery.type=single-node -p 9200:9200 elasticsearch:6.8.6
-docker exec es elasticsearch-plugin -s install analysis-icu
-docker restart es
+docker run --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
+docker exec opensearch opensearch-plugin -s install analysis-icu
+docker restart opensearch
 ```
-
-#### Local
-
-1. Download it [here](https://www.elastic.co/downloads/past-releases/elasticsearch-6-8-6).
-2. `cd` into the `elasticsearch-[version number]` directory.
-3. Run `$ elasticsearch-plugin install analysis-icu`
-4. Run `$ ./bin/elasticsearch`.
-5. You may be prompted to download [Java SE](https://www.oracle.com/java/technologies/javase-downloads.html). If so, go
-   ahead and do so.
-6. Check `http://localhost:9200` to make sure the Elasticsearch server is running.
 
 ### Database
 
@@ -150,7 +156,20 @@ grant all privileges on database circ to palace;
 To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
 
 ```sh
-export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
+export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
+```
+
+### Email sending
+
+To use the features that require sending emails, for example to reset the password for logged-out users, you will need
+to have a working SMTP server and set some environment variables:
+
+```sh
+export SIMPLIFIED_MAIL_SERVER=example.smtp.com
+export SIMPLIFIED_MAIL_PORT=465
+export SIMPLIFIED_MAIL_USERNAME=username
+export SIMPLIFIED_MAIL_PASSWORD=password
+export SIMPLIFIED_MAIL_SENDER=sender@example.com
 ```
 
 ### Running the Application
@@ -282,10 +301,10 @@ service has been configured.
 
 #### Configuring Search
 
-Navigate to `System Configuration → Search` and add a new Elasticsearch configuration. The required URL is
-the URL of the [Elasticsearch instance configured earlier](#elasticsearch):
+Navigate to `System Configuration → Search` and add a new search configuration. The required URL is
+the URL of the [Opensearch instance configured earlier](#opensearch):
 
-![Elasticsearch](.github/readme/search.png)
+![Opensearch](.github/readme/search.png)
 
 #### Generating Search Indices
 
@@ -493,14 +512,14 @@ If you already have elastic search or postgres running locally, you can run them
 following environment variables:
 
 - `SIMPLIFIED_TEST_DATABASE`
-- `SIMPLIFIED_TEST_ELASTICSEARCH`
+- `SIMPLIFIED_TEST_OPENSEARCH`
 
 Make sure the ports and usernames are updated to reflect the local configuration.
 
 ```sh
 # Set environment variables
-export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:9005/simplified_circulation_test"
-export SIMPLIFIED_TEST_ELASTICSEARCH="http://localhost:9200"
+export SIMPLIFIED_TEST_DATABASE="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
+export SIMPLIFIED_TEST_OPENSEARCH="http://localhost:9200"
 
 # Run tox
 tox -e "py38-{api,core}"
@@ -515,6 +534,22 @@ Only run the `test_google_analytics_provider` tests with Python 3.8 using docker
 
 ```sh
 tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
+```
+
+### Coverage Reports
+
+Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
+When the tests are run with github actions, the coverage report is automatically uploaded to
+[codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
+
+When running locally, the results from each individual run can be collected and combined into an HTML report using
+the `report` tox environment. This can be run on its own after running the tests, or as part of the tox environment
+selection.
+
+```shell
+# Run core and api tests under Python 3.8, using docker
+# containers for dependencies, and generate code coverage report
+tox -e "py38-{core,api}-docker,report"
 ```
 
 ## Usage with Docker
@@ -597,3 +632,7 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
           renderer = HTMLRenderer()
           renderer.open_in_browser(session)
       ```
+
+### Other Environment Variables
+
+- `SIMPLIFIED_SIRSI_DYNIX_APP_ID`: The Application ID for the SirsiDynix Authentication API (optional)

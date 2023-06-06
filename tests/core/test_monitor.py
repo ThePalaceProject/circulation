@@ -53,11 +53,11 @@ from core.monitor import (
     WorkReaper,
     WorkSweepMonitor,
 )
-from core.testing import (
+from core.util.datetime_helpers import datetime_utc, utc_now
+from tests.core.mock import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
 )
-from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time
 
