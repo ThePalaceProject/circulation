@@ -1446,10 +1446,10 @@ class TestLoanController:
 
             if collection_default_loan_period:
                 collection.default_loan_period_setting(
-                    loan_fixture.db.default_library
+                    loan_fixture.db.default_library()
                 ).value = collection_default_loan_period
 
-            loan_fixture.db._default_library.collections.append(collection)
+            loan_fixture.db.default_library().collections.append(collection)
 
             def create_work_and_return_license_pool_and_loan_info(**kwargs):
                 loan_start = kwargs.pop("loan_start", utc_now())
