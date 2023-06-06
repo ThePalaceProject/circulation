@@ -1867,7 +1867,7 @@ class TestLibraryAnnotator:
         work4 = annotator_fixture.db.work(with_license_pool=True)
 
         # Loan of a licensed book without a loan end.
-        work5 = self._work(with_license_pool=True)
+        work5 = annotator_fixture.db.work(with_license_pool=True)
         loan5, ignore = work5.license_pools[0].loan_to(patron, start=now)
 
         # Ensure the state variable
