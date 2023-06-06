@@ -10,9 +10,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, TypeVar
 
 from flask_babel import lazy_gettext as _
-from sqlalchemy import Column, DateTime
-from sqlalchemy import Enum as saEnum
-from sqlalchemy import ForeignKey, Index, Integer, Unicode
+from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
@@ -21,7 +19,6 @@ from core.model.hybrid import hybrid_property
 
 from ..config import CannotLoadConfiguration, Configuration
 from ..mirror import MirrorUploader
-from ..util.datetime_helpers import utc_now
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
@@ -125,32 +122,11 @@ class ExternalIntegrationLink(Base, HasSessionCache):
     COLLECTION_MIRROR_SETTINGS = settings
 
 
-class ExternalIntegrationError(Base):
-    __tablename__ = "externalintegrationerrors"
-
-    id = Column(Integer, primary_key=True)
-    time = Column(DateTime, default=utc_now)
-    error = Column(Unicode)
-    external_integration_id = Column(
-        Integer,
-        ForeignKey(
-            "externalintegrations.id",
-            name="fk_error_externalintegrations_id",
-            ondelete="CASCADE",
-        ),
-    )
-
-
 class ExternalIntegration(Base):
 
     """An external integration contains configuration for connecting
     to a third-party API.
     """
-
-    GREEN = "green"
-    RED = "red"
-
-    STATUS = saEnum(GREEN, RED, name="external_integration_status")
 
     # Possible goals of ExternalIntegrations.
     #
@@ -317,9 +293,6 @@ class ExternalIntegration(Base):
     # A unique name for this ExternalIntegration. This is primarily
     # used to identify ExternalIntegrations from command-line scripts.
     name = Column(Unicode, nullable=True, unique=True)
-
-    status: Mapped[str] = Column(STATUS, server_default=str(GREEN))
-    last_status_update = Column(DateTime, nullable=True)
 
     # Any additional configuration information goes into
     # ConfigurationSettings.
