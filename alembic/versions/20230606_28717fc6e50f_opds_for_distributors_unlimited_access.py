@@ -8,15 +8,16 @@ Create Date: 2023-06-06 10:08:35.892018+00:00
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = '28717fc6e50f'
-down_revision = 'a9ed3f76d649'
+revision = "28717fc6e50f"
+down_revision = "a9ed3f76d649"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
     connection = op.get_bind()
-    connection.execute("""
+    connection.execute(
+        """
   UPDATE
     licensepools AS lp
   SET
@@ -31,13 +32,14 @@ def upgrade() -> None:
     and lp.collection_id          = c.id
     and c.external_integration_id = e.id
     and e.protocol                = 'OPDS for Distributors'
-    """)
-    pass
+    """
+    )
 
 
 def downgrade() -> None:
     connection = op.get_bind()
-    connection.execute("""
+    connection.execute(
+        """
   UPDATE
     licensepools AS lp
   SET
@@ -52,5 +54,5 @@ def downgrade() -> None:
     and lp.collection_id          = c.id
     and c.external_integration_id = e.id
     and e.protocol                = 'OPDS for Distributors'
-    """)
-    pass
+    """
+    )
