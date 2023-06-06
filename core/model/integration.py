@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-import sys
-from typing import TYPE_CHECKING, List, Type
+from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import ForeignKey, Integer, Unicode
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from core.integration.goals import Goals
-from core.integration.status import Status
-from core.model import Base, create
-from core.util.datetime_helpers import utc_now
-
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
+from core.model import Base
 
 if TYPE_CHECKING:
     from core.model import Library
@@ -58,10 +50,6 @@ class IntegrationConfiguration(Base):
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)
 
-    # Status
-    status = Column(SQLAlchemyEnum(Status), nullable=False, default=Status.GREEN)
-    last_status_update = Column(DateTime, nullable=True)
-
     library_configurations: Mapped[
         List[IntegrationLibraryConfiguration]
     ] = relationship(
@@ -71,10 +59,6 @@ class IntegrationConfiguration(Base):
         cascade="all, delete",
         passive_deletes=True,
     )
-
-    @property
-    def available(self) -> bool:
-        return self.status != Status.RED
 
     def __repr__(self) -> str:
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
@@ -139,35 +123,3 @@ class IntegrationLibraryConfiguration(Base):
                 IntegrationLibraryConfiguration.library_id == library.id,
             )
         )
-
-
-class IntegrationError(Base):
-    __tablename__ = "integration_errors"
-
-    id = Column(Integer, primary_key=True)
-    time = Column(DateTime, default=utc_now)
-    error = Column(Unicode)
-    integration_id = Column(
-        Integer,
-        ForeignKey(
-            "integration_configurations.id",
-            name="fk_integration_error_integration_id",
-            ondelete="CASCADE",
-        ),
-    )
-
-    @classmethod
-    def record_error(
-        cls: Type[Self],
-        _db: Session,
-        integration: IntegrationConfiguration,
-        error: Exception,
-    ) -> Self:
-        record, _ = create(
-            _db,
-            IntegrationError,
-            integration_id=integration.id,
-            time=utc_now(),
-            error=str(error),
-        )
-        return record  # type: ignore[no-any-return]
