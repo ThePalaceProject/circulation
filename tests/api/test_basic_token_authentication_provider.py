@@ -4,23 +4,21 @@ from werkzeug.datastructures import Authorization
 
 from api.authentication.access_token import AccessTokenProvider
 from api.authentication.basic import BasicAuthenticationProvider
-from api.authentication.patron_authentication_provider import (
-    PatronAccessTokenAuthenticationProvider,
-)
+from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
 from core.model.patron import Patron
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestAccessTokenAuthenticationProvider:
+class TestBasicTokenAuthenticationProvider:
     def test_authenticated_patron(self, db: DatabaseTransactionFixture):
         patron = db.patron()
-        provider = PatronAccessTokenAuthenticationProvider(
+        provider = BasicTokenAuthenticationProvider(
             db.session, db.default_library(), Mock()
         )
         with patch(
-            "api.authentication.patron_authentication_provider.AccessTokenProvider"
+            "api.authentication.basic_token.AccessTokenProvider"
         ) as token_provider:
             token_provider.decode_token.return_value = dict(
                 id=patron.id, pwd="password"
@@ -48,7 +46,7 @@ class TestAccessTokenAuthenticationProvider:
             assert None == provider.authenticated_patron(db.session, "token-string")
 
     def test_authenticated_patron_errors(self, db: DatabaseTransactionFixture):
-        provider = PatronAccessTokenAuthenticationProvider(
+        provider = BasicTokenAuthenticationProvider(
             db.session, db.default_library(), Mock()
         )
 
@@ -60,7 +58,7 @@ class TestAccessTokenAuthenticationProvider:
         assert error == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
     def test_credential_from_header(self, db: DatabaseTransactionFixture):
-        provider = PatronAccessTokenAuthenticationProvider(
+        provider = BasicTokenAuthenticationProvider(
             db.session, db.default_library(), Mock()
         )
         patron = db.patron()
@@ -77,7 +75,7 @@ class TestAccessTokenAuthenticationProvider:
     def test_authentication_flow_document(
         self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
     ):
-        provider = PatronAccessTokenAuthenticationProvider(
+        provider = BasicTokenAuthenticationProvider(
             db.session, db.default_library(), Mock(spec=BasicAuthenticationProvider)
         )
         provider.basic_provider._authentication_flow_document.return_value = dict(  # type: ignore[attr-defined]

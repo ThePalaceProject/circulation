@@ -19,9 +19,7 @@ from api.announcements import Announcements
 from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import AuthenticationProvider
 from api.authentication.basic import BasicAuthenticationProvider
-from api.authentication.patron_authentication_provider import (
-    PatronAccessTokenAuthenticationProvider,
-)
+from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from core.analytics import Analytics
@@ -272,7 +270,7 @@ class LibraryAuthenticator:
         ] = {}
 
         self.basic_auth_provider: BasicAuthenticationProvider | None = None
-        self.access_token_authentication_provider: PatronAccessTokenAuthenticationProvider | None = (
+        self.access_token_authentication_provider: BasicTokenAuthenticationProvider | None = (
             None
         )
         if basic_auth_provider:
@@ -418,7 +416,7 @@ class LibraryAuthenticator:
         self.basic_auth_provider = provider
         if self.library is not None:
             self.access_token_authentication_provider = (
-                PatronAccessTokenAuthenticationProvider(
+                BasicTokenAuthenticationProvider(
                     self._db, self.library, self.basic_auth_provider
                 )
             )

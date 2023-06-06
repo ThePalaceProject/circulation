@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from core.model import Library
 
 
-class PatronAccessTokenAuthenticationProvider(AuthenticationProvider):
+class BasicTokenAuthenticationProvider(AuthenticationProvider):
     """Patron Authentication based on a CM generated Access Token
     It is a companion to the basic authentication, and has no meaning without it.
     """
