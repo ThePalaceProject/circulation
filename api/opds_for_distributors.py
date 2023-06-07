@@ -298,10 +298,12 @@ class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.NAME
 
     def update_work_for_edition(self, *args, **kwargs):
-        """After importing a LicensePool, set its availability
-        appropriately. Books imported through OPDS For Distributors are
-        not open-access, but a library that can perform this import has
-        a license for the title and can distribute unlimited copies.
+        """After importing a LicensePool, set its availability appropriately.
+
+        Books imported through OPDS For Distributors can be designated as
+        either Open Access (handled elsewhere) or licensed (handled here). For
+        licensed content, a library that can perform this import is deemed to
+        have a license for the title and can distribute unlimited copies.
         """
         pool, work = super().update_work_for_edition(
             *args, is_open_access=False, **kwargs
