@@ -518,12 +518,11 @@ class Collection(Base, HasSessionCache):
         # Only set a DataSource for Collections that don't have an
         # implied source.
         if self.protocol not in ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
-            setting = self.external_integration.setting(
-                Collection.DATA_SOURCE_NAME_SETTING
-            )
             if new_value is not None:
                 new_value = str(new_value)
-            setting.value = new_value
+            self.integration_configuration.set(
+                Collection.DATA_SOURCE_NAME_SETTING, new_value
+            )
 
     @property
     def parents(self):

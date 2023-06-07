@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
-from contextlib import contextmanager
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
@@ -23,17 +22,10 @@ from webpub_manifest_parser.utils import encode, first_or_default
 from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
 from core.integration.settings import ConfigurationFormItem, FormField
 from core.mirror import MirrorUploader
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationFactory,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from core.model.configuration import ConfigurationAttributeType, HasExternalIntegration
+from core.model.integration import IntegrationConfiguration
 
 from .coverage import CoverageFailure
-from .importers import BaseImporterConfiguration
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -45,7 +37,6 @@ from .metadata_layer import (
 )
 from .model import (
     Collection,
-    ConfigurationSetting,
     Contributor,
     DeliveryMechanism,
     Edition,
@@ -58,6 +49,7 @@ from .model import (
     Representation,
     RightsStatus,
     Subject,
+    get_one,
 )
 from .opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
 from .util.http import BadResponseException
@@ -122,24 +114,6 @@ class RWPMManifestParser:
         return result
 
 
-class OPDS2ImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """Contains configuration settings of OPDS2Importer.
-    Currently empty, but maintaining it as a base class for others"""
-
-    custom_accept_header_setting: ConfigurationMetadata = ConfigurationMetadata(
-        key=ExternalIntegration.CUSTOM_ACCEPT_HEADER,
-        label=_("Custom accept header"),
-        description=_(
-            "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
-        ),
-        type=ConfigurationAttributeType.TEXT,
-        required=False,
-        default="{}, {};q=0.9, */*;q=0.1".format(
-            OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
-        ),
-    )
-
-
 class OPDS2ImporterSettings(OPDSImporterSettings):
     custom_accept_header: Optional[str] = FormField(
         default="{}, {};q=0.9, */*;q=0.1".format(
@@ -163,9 +137,6 @@ class OPDS2Importer(
 
     NAME: str = ExternalIntegration.OPDS2_IMPORT
     DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
-    SETTINGS: list[dict] = (
-        OPDSImporter.SETTINGS + OPDS2ImporterConfiguration.to_settings()
-    )
     NEXT_LINK_RELATION: str = "next"
 
     @classmethod
@@ -229,8 +200,7 @@ class OPDS2Importer(
         self._logger: logging.Logger = logging.getLogger(__name__)
 
         self._external_integration_id = collection.external_integration.id
-        self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
-        self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
+        self._integration_configuration_id = collection.integration_configuration_id
 
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.
@@ -242,11 +212,9 @@ class OPDS2Importer(
         :param identifier: Identifier object
         :return: Boolean value indicating whether CM can import the identifier
         """
-        configuration = self._get_configuration(self._db)
-        with configuration as conf:
-            ignored_identifier_types = self._get_ignored_identifier_types(conf)
-
-        return identifier.type not in ignored_identifier_types
+        return identifier.type not in self._get_ignored_identifier_types(
+            self.integration_configuration()
+        )
 
     def _extract_subjects(self, subjects: list[core_ast.Subject]) -> list[SubjectData]:
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
@@ -806,19 +774,6 @@ class OPDS2Importer(
 
         return formats
 
-    @contextmanager
-    def _get_configuration(
-        self, db: sqlalchemy.orm.session.Session
-    ) -> Generator[OPDS2ImporterConfiguration, None, None]:
-        """Return the configuration object.
-        :param db: Database session
-        :return: Configuration object
-        """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, OPDS2ImporterConfiguration
-        ) as configuration:
-            yield configuration
-
     def external_integration(
         self, db: sqlalchemy.orm.session.Session
     ) -> ExternalIntegration:
@@ -827,6 +782,15 @@ class OPDS2Importer(
         :return: External integration associated with this object
         """
         return self.collection.external_integration
+
+    def integration_configuration(self) -> IntegrationConfiguration:
+        """Return an external integration associated with this object.
+        :param db: Database session
+        :return: External integration associated with this object
+        """
+        return get_one(
+            self._db, IntegrationConfiguration, id=self._integration_configuration_id
+        )
 
     @staticmethod
     def _get_publications(
@@ -975,10 +939,9 @@ class OPDS2Importer(
         for link in links:
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
-                auth_setting = ConfigurationSetting.for_externalintegration(
-                    ExternalIntegration.TOKEN_AUTH, self.collection.external_integration
-                )
-                auth_setting.value = link.href
+                self.integration_configuration()[
+                    ExternalIntegration.TOKEN_AUTH
+                ] = link.href
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None

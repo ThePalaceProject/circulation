@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, List
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class SettingsModel:
     """A dict like interface for any item with a settings property"""
 
-    def set(self, key, value):
+    def set(self, key: str, value: Any) -> None:
         """Setting any value in the settings dict can only
         be signalled for a flush to the DB if the dict object has changed.
         This is an SALAlchemy idiosyncrasy."""
@@ -27,13 +27,13 @@ class SettingsModel:
         settings[key] = value
         self.settings = settings
 
-    def get(self, key):
-        return self.settings.get(key)
+    def get(self, key: str, *args) -> Any:
+        return self.settings.get(key, *args)
 
-    def __setitem__(self, key, value):
-        return self.set(key, value)
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.set(key, value)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         self.settings[key]
 
 
