@@ -20,7 +20,7 @@ echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then \
       source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate
 
 # Install Python libraries.
-poetry install --only main,pg
+poetry install --only main
 poetry cache clear -n --all pypi
 
 # Install NLTK.

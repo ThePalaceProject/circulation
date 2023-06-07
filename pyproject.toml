@@ -211,6 +211,7 @@ version = "0"  # Version number is managed with tags in git
 [tool.poetry.dependencies]
 alembic = {extras = ["tz"], version = "^1.8.1"}
 aws-xray-sdk = "~2.12"
+bcrypt = "^4.0.1"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
@@ -236,7 +237,7 @@ opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "~3.0.1"
 Pillow = "9.5.0"
-py-bcrypt = "0.4"
+psycopg2-binary = "^2.9.6"
 pycryptodome = "^3.18"
 pyinstrument = "<4.6"
 PyJWT = "2.4.0"
@@ -250,6 +251,7 @@ python = ">=3.8,<4"
 python-dateutil = "2.8.2"
 python3-saml = "~1.15.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
+pyuwsgi = "^2.0.21"
 pyyaml = "^6.0"
 redmail = "^0.6.0"
 requests = "^2.29"
@@ -265,7 +267,6 @@ unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "4.1.1"
 urllib3 = "~1.26.14"
 uszipcode = "0.2.6"
-uWSGI = "~2.0.21"
 watchtower = "3.0.1"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"
 Werkzeug = "^2.2.3"
@@ -283,7 +284,6 @@ botocore-stubs = "^1.29.81"
 freezegun = "~1.2.2"
 Jinja2 = "^3.1.2"
 mypy = "^1.0.1"
-psycopg2-binary = "~2.9.5"
 pyfakefs = "~5.2.0"
 pytest = ">=7.2.0"
 pytest-alembic = "^0.10.4"
@@ -298,12 +298,6 @@ types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"
 types-pytz = "^2023.2"
 types-requests = "^2.28.11"
-
-[tool.poetry.group.pg]
-optional = true
-
-[tool.poetry.group.pg.dependencies]
-psycopg2 = "~2.9.5"
 
 [tool.pytest.ini_options]
 addopts = [

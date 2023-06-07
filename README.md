@@ -213,7 +213,7 @@ poetry install
 Install only the production dependencies:
 
 ```sh
-poetry install --only main,pg
+poetry install --only main
 ```
 
 Run the application with:

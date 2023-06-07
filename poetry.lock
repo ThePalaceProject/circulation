@@ -101,6 +101,41 @@ files = [
 pytz = ">=2015.7"
 
 [[package]]
+name = "bcrypt"
+version = "4.0.1"
+description = "Modern password hashing for your software and your servers"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "bcrypt-4.0.1-cp36-abi3-macosx_10_10_universal2.whl", hash = "sha256:b1023030aec778185a6c16cf70f359cbb6e0c289fd564a7cfa29e727a1c38f8f"},
+    {file = "bcrypt-4.0.1-cp36-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_24_aarch64.whl", hash = "sha256:08d2947c490093a11416df18043c27abe3921558d2c03e2076ccb28a116cb6d0"},
+    {file = "bcrypt-4.0.1-cp36-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0eaa47d4661c326bfc9d08d16debbc4edf78778e6aaba29c1bc7ce67214d4410"},
+    {file = "bcrypt-4.0.1-cp36-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ae88eca3024bb34bb3430f964beab71226e761f51b912de5133470b649d82344"},
+    {file = "bcrypt-4.0.1-cp36-abi3-manylinux_2_24_x86_64.whl", hash = "sha256:a522427293d77e1c29e303fc282e2d71864579527a04ddcfda6d4f8396c6c36a"},
+    {file = "bcrypt-4.0.1-cp36-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:fbdaec13c5105f0c4e5c52614d04f0bca5f5af007910daa8b6b12095edaa67b3"},
+    {file = "bcrypt-4.0.1-cp36-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:ca3204d00d3cb2dfed07f2d74a25f12fc12f73e606fcaa6975d1f7ae69cacbb2"},
+    {file = "bcrypt-4.0.1-cp36-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:089098effa1bc35dc055366740a067a2fc76987e8ec75349eb9484061c54f535"},
+    {file = "bcrypt-4.0.1-cp36-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:e9a51bbfe7e9802b5f3508687758b564069ba937748ad7b9e890086290d2f79e"},
+    {file = "bcrypt-4.0.1-cp36-abi3-win32.whl", hash = "sha256:2caffdae059e06ac23fce178d31b4a702f2a3264c20bfb5ff541b338194d8fab"},
+    {file = "bcrypt-4.0.1-cp36-abi3-win_amd64.whl", hash = "sha256:8a68f4341daf7522fe8d73874de8906f3a339048ba406be6ddc1b3ccb16fc0d9"},
+    {file = "bcrypt-4.0.1-pp37-pypy37_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bf4fa8b2ca74381bb5442c089350f09a3f17797829d958fad058d6e44d9eb83c"},
+    {file = "bcrypt-4.0.1-pp37-pypy37_pp73-manylinux_2_24_x86_64.whl", hash = "sha256:67a97e1c405b24f19d08890e7ae0c4f7ce1e56a712a016746c8b2d7732d65d4b"},
+    {file = "bcrypt-4.0.1-pp37-pypy37_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:b3b85202d95dd568efcb35b53936c5e3b3600c7cdcc6115ba461df3a8e89f38d"},
+    {file = "bcrypt-4.0.1-pp38-pypy38_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cbb03eec97496166b704ed663a53680ab57c5084b2fc98ef23291987b525cb7d"},
+    {file = "bcrypt-4.0.1-pp38-pypy38_pp73-manylinux_2_24_x86_64.whl", hash = "sha256:5ad4d32a28b80c5fa6671ccfb43676e8c1cc232887759d1cd7b6f56ea4355215"},
+    {file = "bcrypt-4.0.1-pp38-pypy38_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:b57adba8a1444faf784394de3436233728a1ecaeb6e07e8c22c8848f179b893c"},
+    {file = "bcrypt-4.0.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:705b2cea8a9ed3d55b4491887ceadb0106acf7c6387699fca771af56b1cdeeda"},
+    {file = "bcrypt-4.0.1-pp39-pypy39_pp73-manylinux_2_24_x86_64.whl", hash = "sha256:2b3ac11cf45161628f1f3733263e63194f22664bf4d0c0f3ab34099c02134665"},
+    {file = "bcrypt-4.0.1-pp39-pypy39_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:3100851841186c25f127731b9fa11909ab7b1df6fc4b9f8353f4f1fd952fbf71"},
+    {file = "bcrypt-4.0.1.tar.gz", hash = "sha256:27d375903ac8261cfe4047f6709d16f7d18d39b1ec92aaf72af989552a650ebd"},
+]
+
+[package.extras]
+tests = ["pytest (>=3.2.1,!=3.3.0)"]
+typecheck = ["mypy"]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.11.1"
 description = "Screen-scraping library"
@@ -2110,33 +2145,10 @@ pyyaml = ">=5.1"
 virtualenv = ">=20.10.0"
 
 [[package]]
-name = "psycopg2"
-version = "2.9.6"
-description = "psycopg2 - Python-PostgreSQL Database Adapter"
-category = "dev"
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "psycopg2-2.9.6-cp310-cp310-win32.whl", hash = "sha256:f7a7a5ee78ba7dc74265ba69e010ae89dae635eea0e97b055fb641a01a31d2b1"},
-    {file = "psycopg2-2.9.6-cp310-cp310-win_amd64.whl", hash = "sha256:f75001a1cbbe523e00b0ef896a5a1ada2da93ccd752b7636db5a99bc57c44494"},
-    {file = "psycopg2-2.9.6-cp311-cp311-win32.whl", hash = "sha256:53f4ad0a3988f983e9b49a5d9765d663bbe84f508ed655affdb810af9d0972ad"},
-    {file = "psycopg2-2.9.6-cp311-cp311-win_amd64.whl", hash = "sha256:b81fcb9ecfc584f661b71c889edeae70bae30d3ef74fa0ca388ecda50b1222b7"},
-    {file = "psycopg2-2.9.6-cp36-cp36m-win32.whl", hash = "sha256:11aca705ec888e4f4cea97289a0bf0f22a067a32614f6ef64fcf7b8bfbc53744"},
-    {file = "psycopg2-2.9.6-cp36-cp36m-win_amd64.whl", hash = "sha256:36c941a767341d11549c0fbdbb2bf5be2eda4caf87f65dfcd7d146828bd27f39"},
-    {file = "psycopg2-2.9.6-cp37-cp37m-win32.whl", hash = "sha256:869776630c04f335d4124f120b7fb377fe44b0a7645ab3c34b4ba42516951889"},
-    {file = "psycopg2-2.9.6-cp37-cp37m-win_amd64.whl", hash = "sha256:a8ad4a47f42aa6aec8d061fdae21eaed8d864d4bb0f0cade5ad32ca16fcd6258"},
-    {file = "psycopg2-2.9.6-cp38-cp38-win32.whl", hash = "sha256:2362ee4d07ac85ff0ad93e22c693d0f37ff63e28f0615a16b6635a645f4b9214"},
-    {file = "psycopg2-2.9.6-cp38-cp38-win_amd64.whl", hash = "sha256:d24ead3716a7d093b90b27b3d73459fe8cd90fd7065cf43b3c40966221d8c394"},
-    {file = "psycopg2-2.9.6-cp39-cp39-win32.whl", hash = "sha256:1861a53a6a0fd248e42ea37c957d36950da00266378746588eab4f4b5649e95f"},
-    {file = "psycopg2-2.9.6-cp39-cp39-win_amd64.whl", hash = "sha256:ded2faa2e6dfb430af7713d87ab4abbfc764d8d7fb73eafe96a24155f906ebf5"},
-    {file = "psycopg2-2.9.6.tar.gz", hash = "sha256:f15158418fd826831b28585e2ab48ed8df2d0d98f502a2b4fe619e7d5ca29011"},
-]
-
-[[package]]
 name = "psycopg2-binary"
 version = "2.9.6"
 description = "psycopg2 - Python-PostgreSQL Database Adapter"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.6"
 files = [
@@ -2202,17 +2214,6 @@ files = [
     {file = "psycopg2_binary-2.9.6-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:02c0f3757a4300cf379eb49f543fb7ac527fb00144d39246ee40e1df684ab514"},
     {file = "psycopg2_binary-2.9.6-cp39-cp39-win32.whl", hash = "sha256:c3dba7dab16709a33a847e5cd756767271697041fbe3fe97c215b1fc1f5c9848"},
     {file = "psycopg2_binary-2.9.6-cp39-cp39-win_amd64.whl", hash = "sha256:f6a88f384335bb27812293fdb11ac6aee2ca3f51d3c7820fe03de0a304ab6249"},
-]
-
-[[package]]
-name = "py-bcrypt"
-version = "0.4"
-description = "bcrypt password hashing and key derivation"
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "py-bcrypt-0.4.tar.gz", hash = "sha256:5fa13bce551468350d66c4883694850570f3da28d6866bb638ba44fe5eabda78"},
 ]
 
 [[package]]
@@ -2708,6 +2709,52 @@ python-versions = "*"
 files = [
     {file = "pytz-2021.3-py2.py3-none-any.whl", hash = "sha256:3672058bc3453457b622aab7a1c3bfd5ab0bdae451512f6cf25f64ed37f5b87c"},
     {file = "pytz-2021.3.tar.gz", hash = "sha256:acad2d8b20a1af07d4e4c9d2e9285c5ed9104354062f275f3fcd88dcef4f1326"},
+]
+
+[[package]]
+name = "pyuwsgi"
+version = "2.0.21"
+description = "The uWSGI server"
+category = "main"
+optional = false
+python-versions = "*"
+files = [
+    {file = "pyuwsgi-2.0.21-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:10cce470f3db6e5206c3fb9d46b86c5c915dcb6616a617101411006463e833ea"},
+    {file = "pyuwsgi-2.0.21-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0e06b41ad50b8d3d5a46374af8c8ed9bcf2627ea97f5718ef2da693ab3425656"},
+    {file = "pyuwsgi-2.0.21-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:977ce0f87e3f07571267b6572dcbe8b3d5d488cbc351d33c93ec6cce9737099a"},
+    {file = "pyuwsgi-2.0.21-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:243de3964aa40e9f15cc4be64bf5594bb4d3e847f9b563b3d8f3b2df9c1c1581"},
+    {file = "pyuwsgi-2.0.21-cp310-cp310-musllinux_1_1_aarch64.whl", hash = "sha256:47e29aca1e856315b18999e6527347cf461f7b333af13b33ba5926e2718c0a3c"},
+    {file = "pyuwsgi-2.0.21-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:0a6209bf09e14d3ceee1db6d1381346c361245552307388a1cf65229d33d306c"},
+    {file = "pyuwsgi-2.0.21-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:09942a86c5501367381b86561dcb69efa4207e1f604a4c5c4e58849f0b895619"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:7139eb6bdcb32b64431ba5d3058975d6a34cc52d58c2ffbf611625cd058018a7"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:871d0b9a61a143da0b0ba4a7249d198c804ad63a2374b5bccae7c584d805bdcd"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:78c3aaf8e89ee912730ad57e60832c0d10a267b521715c8d832eef19373075aa"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c8da171f2519739caad4bf4682a71b92527489eb71b3af41319bbc13f61e14dc"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:c9b67d7211e5d9439d1ecc11cf909fc214d05c332e47121d5f92913ebdf5c28c"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:c9fdd5032bd4a5d697ccfb50e2e5296c419eb53a8b44cacfcc55d7ceb629be2f"},
+    {file = "pyuwsgi-2.0.21-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:445998892e164e7f253d20ffd1ab6f7c9441c77e8d05e8a2525532ba663de0af"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:f76540fbcea52d333acfe172c7c91f284c4526eae8b0d146c60672dbcaece705"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:32eace989380b3677131fea2d5e719a870fcecb2a1db5830d80997e9f501c6db"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:26876ce2e934e004d1d98a06abb170743ec743a5cecc3867260f071f31c269e0"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e77e27ce32b64b34de26a2ec84cb8fff620153d7a207ea3cbea69b39c0b571b1"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-musllinux_1_1_aarch64.whl", hash = "sha256:62d9927a1178af61285b697caa736dfa34fcc48090db45f965859e1fa641f4bc"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-musllinux_1_1_i686.whl", hash = "sha256:ed867fa6d704338820304bd13bc6b20687e823ef70dfaf35c1db324598b60af4"},
+    {file = "pyuwsgi-2.0.21-cp37-cp37m-musllinux_1_1_x86_64.whl", hash = "sha256:c38f1e68db1dea7e8b47a64b855cd15e491d1920908be5887189a98ce5e968e9"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:be994a0cdaaf9733e00c2e3275b368586db067802cd0a1af682b0c55070f39c7"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0753b7ec6174afa590bd5724d25541209387b67f080dbe13db7d9655ef0077df"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6c17abbbba53eabdba7fc92a0321864adbf97e8460cfd9c01b714d6c3e3ccc4c"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:13524cea71a1cd2bb4586c773cbf6a9a1085f3e4ba1c52648b2823385c8d7d74"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-musllinux_1_1_aarch64.whl", hash = "sha256:f5b6c6d413430015f9cbadef2687ce334b2960d0df3cfba4181e39c4af242933"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:1f44454a0cf419436c0a99bd37586ce9776e3c10454dd3387d2afa9c4c9c4404"},
+    {file = "pyuwsgi-2.0.21-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:7375666a7dd22f1c9ad4c7d01e957c5941baa489f02cd76cf2064a63a8946dfe"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:56f92e057461bcd32e991661db3fb505a59b8ff35da5af12b062b9ebf1ddfc57"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4c005b1357c525fe63dfb83299ca77f478db4842ee8204e8ac6cb47267fc1920"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:10d36e255bd54e7d52ed7dc360821b06748e87a7d5aa826a48ddfa7c9baedb52"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8693e2a71da6e5f78fa4142893c1b201daadaf71d87275fd906ce6d02e3c9910"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-musllinux_1_1_aarch64.whl", hash = "sha256:e448bdd8fbacbd27dcdd58f1191ee61c58795a672cedc4ca661a8b83606a158a"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:837d295d3df3d4b6e1a9850922e25fc7a8836949f424a36985491be473f00d21"},
+    {file = "pyuwsgi-2.0.21-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:92371cb638707574fe93127f9c270216d12751a96e6a624237820a089f846ef5"},
+    {file = "pyuwsgi-2.0.21.tar.gz", hash = "sha256:211e8877f5191e347ba905232d04ab30e05ce31ba7a6dac4bfcb48de9845bb52"},
 ]
 
 [[package]]
@@ -3581,17 +3628,6 @@ docs = ["docfly (>=0.0.17)", "pygments", "rstobj (>=0.0.5)", "sphinx (==1.8.1)",
 tests = ["pytest (==3.2.3)", "pytest-cov (==2.5.1)", "python-Levenshtein"]
 
 [[package]]
-name = "uwsgi"
-version = "2.0.21"
-description = "The uWSGI server"
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "uwsgi-2.0.21.tar.gz", hash = "sha256:35a30d83791329429bc04fe44183ce4ab512fcf6968070a7bfba42fc5a0552a9"},
-]
-
-[[package]]
 name = "virtualenv"
 version = "20.23.0"
 description = "Virtual Python Environment builder"
@@ -3793,4 +3829,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "e821293306db85d9c41c13b65f9ce7d2784fd8e7052d1b47c3bca09fb31c440d"
+content-hash = "558c79c83adc3eea69b687cdefb843c9f93ac712ff748f4f4e61319bff390ab2"
