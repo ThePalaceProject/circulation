@@ -1,6 +1,6 @@
 import random
 from io import StringIO
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import patch
 
 import pytest
 import requests_mock
@@ -36,18 +36,8 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import (
-    ConfigurationFactory,
-    ConfigurationStorage,
-    ExternalIntegrationLink,
-    HasExternalIntegration,
-)
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImporterConfiguration,
-    OPDSImportMonitor,
-    OPDSXMLParser,
-)
+from core.model.configuration import ExternalIntegrationLink
+from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
@@ -1780,21 +1770,9 @@ class TestOPDSImporter:
             )
             library.collections.append(collection)
 
-            external_integration_association = create_autospec(
-                spec=HasExternalIntegration
-            )
-            external_integration_association.external_integration = MagicMock(
-                return_value=collection.external_integration
-            )
-            configuration_storage = ConfigurationStorage(
-                external_integration_association
-            )
-            configuration_factory = ConfigurationFactory()
-
-            with configuration_factory.create(
-                configuration_storage, session, OPDSImporterConfiguration
-            ) as configuration:
-                configuration.wayfless_url_template = "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}"
+            collection.integration_configuration[
+                "saml_wayfless_url_template"
+            ] = "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}"
 
             imported_editions, pools, works, failures = OPDSImporter(
                 session, collection=collection
@@ -2373,7 +2351,7 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        db.default_collection().external_integration.protocol = (
+        db.default_collection().integration_configuration.protocol = (
             ExternalIntegration.OVERDRIVE
         )
         with pytest.raises(ValueError) as excinfo:
@@ -2383,7 +2361,7 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        db.default_collection().external_integration.protocol = (
+        db.default_collection().integration_configuration.protocol = (
             ExternalIntegration.OPDS_IMPORT
         )
         db.default_collection().external_integration.setting("data_source").value = None
@@ -2823,21 +2801,11 @@ class TestOPDSImportMonitor:
         feed = data.content_server_mini_feed
         feed_url = "https://example.com/feed.opds"
 
-        # First, we need to override the default value of "Max retry count" configuration setting.
-        external_integration_association = create_autospec(spec=HasExternalIntegration)
-        external_integration_association.external_integration = MagicMock(
-            return_value=transaction.default_collection().external_integration
-        )
-        configuration_storage = ConfigurationStorage(external_integration_association)
-        configuration_factory = ConfigurationFactory()
-
-        with configuration_factory.create(
-            configuration_storage, session, OPDSImporterConfiguration
-        ) as configuration:
-            configuration.max_retry_count = retry_count
-
         # After we overrode the value of configuration setting we can instantiate OPDSImportMonitor.
         # It'll load new "Max retry count"'s value from the database.
+        transaction.default_collection().integration_configuration[
+            "max_retry_count"
+        ] = retry_count
         monitor = OPDSImportMonitor(
             session,
             collection=transaction.default_collection(),

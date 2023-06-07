@@ -500,9 +500,9 @@ class Collection(Base, HasSessionCache):
         data_source = None
         name = ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL.get(self.protocol)
         if not name:
-            name = self.external_integration.setting(
+            name = self.integration_configuration.get(
                 Collection.DATA_SOURCE_NAME_SETTING
-            ).value
+            )
         _db = Session.object_session(self)
         if name:
             data_source = DataSource.lookup(_db, name, autocreate=True)

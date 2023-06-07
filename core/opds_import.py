@@ -2,21 +2,19 @@ from __future__ import annotations
 
 import logging
 import traceback
-from contextlib import contextmanager
 from io import BytesIO
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import urljoin, urlparse
 
 import dateutil
 import feedparser
-import sqlalchemy
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
 from api.selftest import HasCollectionSelfTests
-from core.integration.base import HasIntegrationConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -57,9 +55,7 @@ from .model import (
     get_one,
 )
 from .model.configuration import (
-    ConfigurationFactory,
     ConfigurationGrouping,
-    ConfigurationStorage,
     ExternalIntegrationLink,
     HasExternalIntegration,
 )
@@ -261,7 +257,11 @@ class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
     )
 
 
-class OPDSImporter(HasIntegrationConfiguration):
+class OPDSImporterLibrarySettings(BaseSettings):
+    pass
+
+
+class OPDSImporter(HasLibraryIntegrationConfiguration):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -381,6 +381,10 @@ class OPDSImporter(HasIntegrationConfiguration):
     @classmethod
     def settings_class(cls):
         return OPDSImporterSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OPDSImporterLibrarySettings
 
     def label(self):
         return "OPDS Importer"
@@ -1698,7 +1702,12 @@ class OPDSImportMonitor(
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
     def __init__(
-        self, _db, collection, import_class, force_reimport=False, **import_class_kwargs
+        self,
+        _db,
+        collection: Collection,
+        import_class,
+        force_reimport=False,
+        **import_class_kwargs,
     ):
         if not collection:
             raise ValueError(
@@ -1718,40 +1727,22 @@ class OPDSImportMonitor(
             )
 
         self.external_integration_id = collection.external_integration.id
+        self.integration_configuration_id = collection.integration_configuration_id
         self.feed_url = self.opds_url(collection)
         self.force_reimport = force_reimport
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
-        self.custom_accept_header = collection.external_integration.custom_accept_header
+        self.username = collection.integration_configuration.get("username")
+        self.password = collection.integration_configuration.get("password")
+        self.custom_accept_header = collection.integration_configuration.get(
+            "custom_accept_header"
+        )
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
 
-        self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
-        self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-        self._max_retry_count: int | None = None
-
-        with self._get_configuration(_db) as configuration:
-            self._max_retry_count = (
-                int(configuration.max_retry_count)
-                if configuration.max_retry_count is not None
-                else None
-            )
+        self._max_retry_count: int | None = collection.integration_configuration.get(
+            "max_retry_count"
+        )
 
         super().__init__(_db, collection)
-
-    @contextmanager
-    def _get_configuration(
-        self, db: sqlalchemy.orm.session.Session
-    ) -> Iterator[OPDSImporterConfiguration]:
-        """Return the configuration object.
-
-        :param db: Database session
-        :return: Configuration object
-        """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, OPDSImporterConfiguration
-        ) as configuration:
-            yield configuration
 
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)

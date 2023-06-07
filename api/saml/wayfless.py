@@ -9,11 +9,7 @@ from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.saml.credential import SAMLCredentialManager
 from core.exceptions import BaseError
 from core.model import Collection, get_one
-from core.model.configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
+from core.model.configuration import ExternalIntegration, HasExternalIntegration
 from core.saml.wayfless import SAMLWAYFlessConfigurationTrait
 
 
@@ -50,16 +46,11 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
             )
 
         external: ExternalIntegration = collection.external_integration
-        wayfless_url_template_setting: ConfigurationSetting = (
-            ConfigurationSetting.for_externalintegration(
-                SAMLWAYFlessConfigurationTrait.WAYFLESS_URL_TEMPLATE_KEY, external
-            )
+        self._wayfless_url_template: Optional[
+            str
+        ] = collection.integration_configuration.get(
+            SAMLWAYFlessConfigurationTrait.WAYFLESS_URL_TEMPLATE_KEY
         )
-
-        if wayfless_url_template_setting:
-            self._wayfless_url_template: Optional[
-                str
-            ] = wayfless_url_template_setting.value
 
         self._external_integration_id: Optional[
             int

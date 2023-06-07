@@ -9,7 +9,8 @@ from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from api.lcp.encrypt import LCPEncryptionConfiguration, LCPEncryptionSettings
 from api.lcp.hash import HasherFactory
 from api.lcp.server import LCPServer, LCPServerConfiguration, LCPServerSettings
-from core.integration.base import HasIntegrationConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import BaseSettings
 from core.lcp.credential import LCPCredentialFactory
 from core.model import (
     Collection,
@@ -97,7 +98,13 @@ class LCPSettings(LCPEncryptionSettings, LCPServerSettings):
     pass
 
 
-class LCPAPI(BaseCirculationAPI, HasExternalIntegration, HasIntegrationConfiguration):
+class LCPLibrarySettings(BaseSettings):
+    pass
+
+
+class LCPAPI(
+    BaseCirculationAPI, HasExternalIntegration, HasLibraryIntegrationConfiguration
+):
     """Implements LCP workflow"""
 
     NAME = ExternalIntegration.LCP
@@ -111,6 +118,10 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration, HasIntegrationConfigura
     @classmethod
     def settings_class(cls):
         return LCPSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return LCPLibrarySettings
 
     def label(self):
         return self.NAME

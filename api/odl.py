@@ -19,10 +19,7 @@ from uritemplate import URITemplate
 from core import util
 from core.analytics import Analytics
 from core.importers import BaseImporterConfiguration, BaseImporterSettings
-from core.integration.base import (
-    HasIntegrationConfiguration,
-    HasLibraryIntegrationConfiguration,
-)
+from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -1463,7 +1460,11 @@ class SharedODLSettings(BaseSettings):
     )
 
 
-class SharedODLAPI(BaseCirculationAPI, HasIntegrationConfiguration):
+class SharedODLLibrarySettings(BaseSettings):
+    pass
+
+
+class SharedODLAPI(BaseCirculationAPI, HasLibraryIntegrationConfiguration):
     """An API for circulation managers to use to connect to an ODL collection that's shared
     by another circulation manager.
     """
@@ -1496,6 +1497,10 @@ class SharedODLAPI(BaseCirculationAPI, HasIntegrationConfiguration):
     @classmethod
     def settings_class(cls):
         return SharedODLSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return SharedODLLibrarySettings
 
     def label(self):
         return self.NAME

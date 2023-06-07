@@ -6,7 +6,7 @@ import feedparser
 from flask_babel import lazy_gettext as _
 
 from api.selftest import HasCollectionSelfTests
-from core.integration.base import HasIntegrationConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import FormatData, TimestampData
 from core.model import (
@@ -47,8 +47,12 @@ class OPDSForDistributorsSettings(BaseOPDSImporterSettings):
     )
 
 
+class OPDSForDistributorsLibrarySettings(BaseSettings):
+    pass
+
+
 class OPDSForDistributorsAPI(
-    BaseCirculationAPI, HasCollectionSelfTests, HasIntegrationConfiguration
+    BaseCirculationAPI, HasCollectionSelfTests, HasLibraryIntegrationConfiguration
 ):
     NAME = "OPDS for Distributors"
     DESCRIPTION = _(
@@ -90,6 +94,10 @@ class OPDSForDistributorsAPI(
     @classmethod
     def settings_class(cls) -> Type[BaseSettings]:
         return OPDSForDistributorsSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OPDSForDistributorsLibrarySettings
 
     def description(self):
         return self.DESCRIPTION

@@ -10,7 +10,7 @@ from sqlalchemy.orm.session import Session
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
-from core.integration.base import HasIntegrationConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import (
     CirculationData,
@@ -337,7 +337,13 @@ class OdiloSettings(BaseSettings):
     )
 
 
-class OdiloAPI(BaseCirculationAPI, HasCollectionSelfTests, HasIntegrationConfiguration):
+class OdiloLibrarySettings(BaseSettings):
+    pass
+
+
+class OdiloAPI(
+    BaseCirculationAPI, HasCollectionSelfTests, HasLibraryIntegrationConfiguration
+):
     log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
 
@@ -408,6 +414,10 @@ class OdiloAPI(BaseCirculationAPI, HasCollectionSelfTests, HasIntegrationConfigu
     @classmethod
     def settings_class(cls):
         return OdiloSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OdiloLibrarySettings
 
     def label(self):
         return self.NAME

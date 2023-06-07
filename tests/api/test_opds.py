@@ -46,6 +46,7 @@ from core.model import (
     get_one,
 )
 from core.model.formats import FormatPriorities
+from core.model.integration import IntegrationConfiguration
 from core.model.licensing import LicensePool
 from core.model.patron import Loan
 from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
@@ -195,16 +196,13 @@ class TestCirculationManagerAnnotator:
             None,
         )
 
-        external: ExternalIntegration = pool.collection.external_integration
-        prioritize_drm_setting = ConfigurationSetting.for_externalintegration(
-            FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
-        )
-        prioritize_content_type_setting = ConfigurationSetting.for_externalintegration(
-            FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
-        )
-
-        prioritize_drm_setting.value = f'["{DeliveryMechanism.LCP_DRM}"]'
-        prioritize_content_type_setting.value = f'["{MediaTypes.PDF_MEDIA_TYPE}"]'
+        config: IntegrationConfiguration = pool.collection.integration_configuration
+        config[FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY] = [
+            f"{DeliveryMechanism.LCP_DRM}"
+        ]
+        config[FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY] = [
+            f"{MediaTypes.PDF_MEDIA_TYPE}"
+        ]
 
         annotator = CirculationManagerAnnotator(
             circulation_fixture.lane,

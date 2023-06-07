@@ -6,7 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import Any
+from typing import Any, List
 
 from flask import url_for
 
@@ -25,7 +25,6 @@ from core.model import (
     ConfigurationSetting,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -34,6 +33,7 @@ from core.model import (
     Session,
 )
 from core.model.formats import FormatPriorities
+from core.model.integration import IntegrationConfiguration
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.flask_util import OPDSEntryResponse
@@ -48,7 +48,6 @@ from .novelist import NoveListAPI
 
 
 class CirculationManagerAnnotator(Annotator):
-
     hidden_content_types: list[str]
 
     def __init__(
@@ -185,48 +184,35 @@ class CirculationManagerAnnotator(Annotator):
         licensepool: LicensePool,
     ) -> tuple[list[str], list[str]]:
         collection: Collection = licensepool.collection
-        external: ExternalIntegration = collection.external_integration
+        config: IntegrationConfiguration = collection.integration_configuration
 
-        # Consult the configuration information for the external integration
+        # Consult the configuration information for the integration configuration
         # that underlies the license pool's collection. The configuration
         # information _might_ contain a set of prioritized DRM schemes and
         # content types.
-
-        drm_setting: ConfigurationSetting = (
-            ConfigurationSetting.for_externalintegration(
-                FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
-            )
+        prioritized_drm_schemes: list[str] = (
+            config.get(FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY) or []
         )
-        prioritized_drm_schemes: list[str] = drm_setting.json_value or []
 
-        content_setting: ConfigurationSetting = (
-            ConfigurationSetting.for_externalintegration(
-                FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
-            )
+        content_setting: List[str] = (
+            config.get(FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY) or []
         )
-        prioritized_content_types: list[str] = content_setting.json_value or []
-
-        return prioritized_drm_schemes, prioritized_content_types
+        return prioritized_drm_schemes, content_setting
 
     @staticmethod
     def _deprioritized_lcp_content(
         licensepool: LicensePool,
     ) -> bool:
         collection: Collection = licensepool.collection
-        external: ExternalIntegration = collection.external_integration
+        config: IntegrationConfiguration = collection.integration_configuration
 
-        # Consult the configuration information for the external integration
+        # Consult the configuration information for the integration configuration
         # that underlies the license pool's collection. The configuration
         # information _might_ contain a flag that indicates whether to deprioritize
         # LCP content. By default, if no configuration value is specified, then
         # the priority of LCP content will be left completely unchanged.
 
-        drm_setting: ConfigurationSetting = (
-            ConfigurationSetting.for_externalintegration(
-                FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, external
-            )
-        )
-        _prioritize: bool = drm_setting.bool_value or False
+        _prioritize: bool = config.get(FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY)
         return _prioritize
 
     def visible_delivery_mechanisms(
@@ -413,7 +399,6 @@ class CirculationManagerAnnotator(Annotator):
                 # we choose not to use visible_delivery_mechanisms --
                 # they already chose it and they're stuck with it.
                 for lpdm in active_license_pool.delivery_mechanisms:
-
                     if (
                         lpdm is active_loan.fulfillment
                         or lpdm.delivery_mechanism.is_streaming
@@ -569,7 +554,6 @@ class CirculationManagerAnnotator(Annotator):
 
 
 class LibraryAnnotator(CirculationManagerAnnotator):
-
     TERMS_OF_SERVICE = Configuration.TERMS_OF_SERVICE
     PRIVACY_POLICY = Configuration.PRIVACY_POLICY
     COPYRIGHT = Configuration.COPYRIGHT
@@ -1067,7 +1051,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             navigation_labels = ConfigurationSetting.for_library(
                 Configuration.WEB_HEADER_LABELS, self.library
             ).json_value
-            for (url, label) in zip(navigation_urls, navigation_labels):
+            for url, label in zip(navigation_urls, navigation_labels):
                 d = dict(
                     href=url,
                     title=label,
