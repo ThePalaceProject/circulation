@@ -10,15 +10,9 @@ apt-get update && apt-get upgrade -y -o Dpkg::Options::="--force-confold"
 install_clean --no-upgrade \
   python3 \
   python3-dev \
-  python3-setuptools \
   python3-venv \
   python3-pip \
   gcc \
-  libpcre3-dev \
-  libffi-dev \
-  libjpeg-dev \
-  libssl-dev \
-  libpq-dev \
   libxmlsec1-dev \
   libxmlsec1-openssl \
   pkg-config
