@@ -1,0 +1,82 @@
+# This Dockerfile build the base image that is used by all our other
+# circulation docker images. It is built on a schedule, since building the base
+# image is a long process, and we don't want to wait for it to build every time
+# we push a change to the code base.
+
+###############################################################################
+# This is a builder image that is used to build the lcpencrypt binary.
+FROM golang:1.17 AS lcp-builder
+
+RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
+
+###############################################################################
+# This is the main base image build. It is based on phusion/baseimage, which is
+# a minimal Ubuntu image. Eventually I'd like to switch to using the official
+# Ubuntu images, but this is the base image that the NYPL docker image uses, so
+# we continue to use it for now.
+#
+# Main repo for this image is here:
+# https://github.com/phusion/baseimage-docker
+FROM phusion/baseimage:focal-1.2.0 As baseimage
+
+ARG POETRY_VERSION=1.3.2
+
+# Copy LCP binary from builder into image.
+COPY --from=lcp-builder /go/bin/lcpencrypt /go/bin/lcpencrypt
+
+# Make sure base system is up to date
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confold" && \
+    /bd_build/cleanup.sh
+
+# Install required packages including python, pip, compiliers and libraries needed
+# to build the python wheels we need and poetry.
+RUN install_clean \
+      nginx \
+      python3 \
+      python3-dev \
+      python3-venv \
+      python3-pip \
+      gcc \
+      # needed for uwsgi
+      libpcre3-dev \
+      # needed for psycopg2
+      libpq-dev \
+      # needed for xmlsec
+      libxmlsec1-dev \
+      libxmlsec1-openssl \
+      pkg-config && \
+    curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version $POETRY_VERSION && \
+    ln -s /opt/poetry/bin/poetry /usr/local/bin/poetry && \
+    rm -rf /etc/logrotate.d/dpkg && \
+    rm /etc/nginx/sites-enabled/default && \
+    rm -rf /root/.cache && \
+    /bd_build/cleanup.sh
+
+# Create user and app folder
+RUN useradd -ms /bin/bash -U simplified && \
+    mkdir -p /var/www/circulation && \
+    su - simplified -c "ln -s /var/www/circulation /home/simplified/circulation" && \
+    chown -RHh simplified:simplified /home/simplified/circulation && \
+    mkdir /var/log/simplified
+
+WORKDIR /var/www/circulation
+COPY --chown=simplified:simplified poetry.lock pyproject.toml /var/www/circulation/
+
+# Setup virtualenv and install our python dependencies.
+# What we install is based on the poetry.lock file in the repo at the time this
+# image is built. These may get out of date, but we always rerun this step when
+# building the final image, so it will be up to date then. This gives is a base
+# to work from which speeds up the final image build.
+RUN python3 -m venv env && \
+    . env/bin/activate && \
+    pip install --upgrade pip && \
+    poetry install --only main,pg --sync && \
+    python3 -m textblob.download_corpora lite && \
+    mv /root/nltk_data /usr/lib/ && \
+    find /usr/lib/nltk_data -name *.zip -delete && \
+    rm -Rf /root/.cache && \
+    rm pyproject.toml && \
+    rm poetry.lock && \
+    rm -rf /root/.cache && \
+    /bd_build/cleanup.sh
