@@ -68,10 +68,7 @@ class Admin(Base, HasSessionCache):
     def has_password(self, password: str) -> bool:
         if self.password_hashed is None:
             return False
-        return (
-            self.password_hashed
-            == bcrypt.hashpw(password.encode(), self.password_hashed.encode()).decode()
-        )
+        return bcrypt.checkpw(password.encode(), self.password_hashed.encode())
 
     @classmethod
     def authenticate(cls, _db, email: str, password: str) -> Admin | None:
