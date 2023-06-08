@@ -264,7 +264,7 @@ At this point, the _library_ exists but does not contain any _collections_ and t
 
 Navigate to `System Configuration → Collections` and click _Create new collection_. You will prompted to enter
 details that will be used to source the data for the collection. A good starting point, for testing purposes,
-is to use an open access OPDS feed as a data source. The [Open Bookshelf](https://openbookshelf.dp.la/) is a good example
+is to use an open access OPDS feed as a data source. The [Open Bookshelf](https://palace-bookshelf-opds2.dp.la/v1/publications) is a good example
 of such a feed. Enter the following details:
 
 ![.github/readme/collection.png](.github/readme/collection.png)
