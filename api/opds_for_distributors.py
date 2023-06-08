@@ -106,13 +106,14 @@ class OPDSForDistributorsAPI(
         return self.NAME
 
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
         self.collection_id = collection.id
         self.external_integration_id = collection.external_integration.id
-        self.data_source_name = collection.external_integration.setting(
+        self.data_source_name = self.integration_configuration().get(
             Collection.DATA_SOURCE_NAME_SETTING
-        ).value
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
+        )
+        self.username = self.integration_configuration().get("username")
+        self.password = self.integration_configuration().get("password")
         self.feed_url = collection.external_account_id
         self.auth_url = None
 
@@ -335,6 +336,10 @@ class OPDSForDistributorsAPI(
 
 class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.NAME
+
+    @classmethod
+    def settings_class(cls):
+        return OPDSForDistributorsSettings
 
     def update_work_for_edition(self, *args, **kwargs):
         """After importing a LicensePool, set its availability

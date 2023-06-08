@@ -13,14 +13,17 @@ from lxml import etree
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
+from api.circulation import CirculationConfigurationMixin
 from api.selftest import HasCollectionSelfTests
 from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.goals import Goals
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
+from core.model.integration import IntegrationConfiguration
 
 from .classifier import Classifier
 from .config import IntegrationException
@@ -119,13 +122,13 @@ class SimplifiedOPDSLookup:
             )
 
     @classmethod
-    def from_protocol(
-        cls, _db, protocol, goal=ExternalIntegration.LICENSE_GOAL, library=None
-    ):
-        integration = ExternalIntegration.lookup(_db, protocol, goal, library=library)
-        if not integration or not integration.url:
+    def from_protocol(cls, _db, protocol, goal=Goals.LICENSE_GOAL, library=None):
+        config = get_one(_db, IntegrationConfiguration, protocol=protocol, goal=goal)
+        if config is not None and library is not None:
+            config = config.for_library(library.id)
+        if config is None:
             return None
-        return cls(integration.url)
+        return cls(config["url"])
 
     def __init__(self, base_url):
         if not base_url.endswith("/"):
@@ -261,7 +264,7 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
-class OPDSImporter(HasLibraryIntegrationConfiguration):
+class OPDSImporter(HasLibraryIntegrationConfiguration, CirculationConfigurationMixin):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -432,6 +435,9 @@ class OPDSImporter(HasLibraryIntegrationConfiguration):
         self._db = _db
         self.log = logging.getLogger("OPDS Importer")
         self._collection_id = collection.id if collection else None
+        self._integration_configuration_id = (
+            collection.integration_configuration.id if collection else None
+        )
         if self.collection and not data_source_name:
             # Use the Collection data_source for OPDS import.
             data_source = self.collection.data_source
@@ -1727,20 +1733,18 @@ class OPDSImportMonitor(
             )
 
         self.external_integration_id = collection.external_integration.id
-        self.integration_configuration_id = collection.integration_configuration_id
         self.feed_url = self.opds_url(collection)
         self.force_reimport = force_reimport
-        self.username = collection.integration_configuration.get("username")
-        self.password = collection.integration_configuration.get("password")
-        self.custom_accept_header = collection.integration_configuration.get(
-            "custom_accept_header"
-        )
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
+        config = self.importer.configuration()
+        self.username = config.username
+        self.password = config.password
 
-        self._max_retry_count: int | None = collection.integration_configuration.get(
-            "max_retry_count"
-        )
+        # Not all inherited settings have these
+        settings = self.importer.integration_configuration()
+        self.custom_accept_header = settings.get("custom_accept_header")
+        self._max_retry_count: int | None = settings.get("connection_max_retry_count")
 
         super().__init__(_db, collection)
 

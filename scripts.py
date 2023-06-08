@@ -1347,7 +1347,7 @@ class DirectoryImportScript(TimestampScript):
         data_source = DataSource.lookup(
             self._db, data_source_name, autocreate=True, offers_licenses=True
         )
-        collection.external_integration.set_setting(
+        collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 

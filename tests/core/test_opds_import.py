@@ -97,9 +97,9 @@ def opds_importer_fixture(
     data.feed_with_id_and_dcterms_identifier = opds_files_fixture.sample_data(
         "feed_with_id_and_dcterms_identifier.opds"
     )
-    db.default_collection().external_integration.setting(
+    db.default_collection().integration_configuration[
         "data_source"
-    ).value = DataSource.OA_CONTENT_SERVER
+    ] = DataSource.OA_CONTENT_SERVER
 
     return data
 
@@ -1067,9 +1067,9 @@ class TestOPDSImporter:
         book is imported and both DataSources are created.
         """
         feed = opds_files_fixture.sample_data("unrecognized_distributor.opds")
-        transaction.default_collection().external_integration.setting(
+        transaction.default_collection().integration_configuration[
             "data_source"
-        ).value = "some new source"
+        ] = "some new source"
         importer = OPDSImporter(
             session,
             collection=transaction.default_collection(),
@@ -1113,9 +1113,9 @@ class TestOPDSImporter:
 
         feed = feed.replace("{OVERDRIVE ID}", edition.primary_identifier.identifier)
 
-        transaction.default_collection().external_integration.setting(
+        transaction.default_collection().integration_configuration[
             "data_source"
-        ).value = DataSource.OVERDRIVE
+        ] = DataSource.OVERDRIVE
         imported_editions, imported_pools, imported_works, failures = OPDSImporter(
             session,
             collection=transaction.default_collection(),
@@ -1252,9 +1252,9 @@ class TestOPDSImporter:
         # imported edition generates a meaningful error message.
 
         feed = data.content_server_mini_feed
-        transaction.default_collection().external_integration.setting(
+        transaction.default_collection().integration_configuration[
             "data_source"
-        ).value = DataSource.OA_CONTENT_SERVER
+        ] = DataSource.OA_CONTENT_SERVER
         importer = DoomedWorkOPDSImporter(
             session, collection=transaction.default_collection()
         )
@@ -2364,7 +2364,7 @@ class TestOPDSImportMonitor:
         db.default_collection().integration_configuration.protocol = (
             ExternalIntegration.OPDS_IMPORT
         )
-        db.default_collection().external_integration.setting("data_source").value = None
+        db.default_collection().integration_configuration["data_source"] = None
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
         assert "Collection Default Collection has no associated data source." in str(
@@ -2804,7 +2804,7 @@ class TestOPDSImportMonitor:
         # After we overrode the value of configuration setting we can instantiate OPDSImportMonitor.
         # It'll load new "Max retry count"'s value from the database.
         transaction.default_collection().integration_configuration[
-            "max_retry_count"
+            "connection_max_retry_count"
         ] = retry_count
         monitor = OPDSImportMonitor(
             session,

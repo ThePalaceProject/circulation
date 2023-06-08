@@ -10,14 +10,7 @@ from api.circulation_exceptions import *
 from api.odl import ODLAPI
 from api.shared_collection import BaseSharedCollectionAPI, SharedCollectionAPI
 from core.config import CannotLoadConfiguration
-from core.model import (
-    ConfigurationSetting,
-    Hold,
-    IntegrationClient,
-    Loan,
-    create,
-    get_one,
-)
+from core.model import Hold, IntegrationClient, Loan, create, get_one
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -53,10 +46,9 @@ class SharedCollectionFixture:
             db.session, api_map={"Mock": MockAPI}
         )
         self.api = self.shared_collection.api(self.collection)
-        ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            self.collection.external_integration,
-        ).value = json.dumps(["http://library.org"])
+        self.collection.integration_configuration.set(
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, ["http://library.org"]
+        )
         self.client, ignore = IntegrationClient.register(
             db.session, "http://library.org"
         )
@@ -159,10 +151,9 @@ class TestSharedCollectionAPI:
         auth_response = json.dumps(
             {"links": [{"href": "http://library.org", "rel": "start"}]}
         )
-        ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            shared_collection_fixture.collection.external_integration,
-        ).value = None
+        shared_collection_fixture.collection.integration_configuration.set(
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, None
+        )
         pytest.raises(
             AuthorizationFailedException,
             shared_collection_fixture.shared_collection.register,
@@ -175,10 +166,9 @@ class TestSharedCollectionAPI:
         auth_response = json.dumps(
             {"links": [{"href": "http://differentlibrary.org", "rel": "start"}]}
         )
-        ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            shared_collection_fixture.collection.external_integration,
-        ).value = json.dumps(["http://library.org"])
+        shared_collection_fixture.collection.integration_configuration.set(
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, ["http://library.org"]
+        )
         pytest.raises(
             AuthorizationFailedException,
             shared_collection_fixture.shared_collection.register,

@@ -20,11 +20,7 @@ from core.model import (
     Loan,
     get_one,
 )
-from core.model.configuration import (
-    ConfigurationFactory,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from core.model.configuration import HasExternalIntegration
 from core.util.datetime_helpers import utc_now
 
 
@@ -184,13 +180,11 @@ class LCPAPI(
         :return: New instance of LCPServer
         :rtype: LCPServer
         """
-        configuration_storage = ConfigurationStorage(self)
-        configuration_factory = ConfigurationFactory()
+
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
         lcp_server = LCPServer(
-            configuration_storage,
-            configuration_factory,
+            self.configuration,
             hasher_factory,
             credential_factory,
         )

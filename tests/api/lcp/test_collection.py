@@ -9,12 +9,7 @@ from api.lcp.collection import LCPAPI, LCPFulfilmentInfo
 from api.lcp.encrypt import LCPEncryptionConfiguration
 from api.lcp.server import LCPServer, LCPServerConfiguration
 from core.model import DataSource, ExternalIntegration
-from core.model.configuration import (
-    ConfigurationAttribute,
-    ConfigurationFactory,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from core.model.configuration import ConfigurationAttribute, HasExternalIntegration
 from core.util.datetime_helpers import utc_now
 from tests.api.lcp import lcp_strings
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -30,8 +25,6 @@ class LCPAPIFixture:
         integration_association.external_integration = MagicMock(
             return_value=self.integration
         )
-        self.configuration_storage = ConfigurationStorage(integration_association)
-        self.configuration_factory = ConfigurationFactory()
 
 
 @pytest.fixture(scope="function")
@@ -395,50 +388,46 @@ class TestLCPAPI:
         lcp_server_mock = create_autospec(spec=LCPServer)
         lcp_server_mock.generate_license = MagicMock(return_value=lcp_license)
 
-        with lcp_api_fixture.configuration_factory.create(
-            lcp_api_fixture.configuration_storage,
-            lcp_api_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
+        configuration = lcp_api_fixture.lcp_collection.integration_configuration
 
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
-                lcp_server_constructor.return_value = lcp_server_mock
+        with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            lcp_server_constructor.return_value = lcp_server_mock
 
-                configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-                configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-                configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-                configuration.lcpserver_input_directory = (
-                    lcp_strings.LCPSERVER_INPUT_DIRECTORY
-                )
-                configuration.provider_name = lcp_strings.PROVIDER_NAME
-                configuration.passphrase_hint = lcp_strings.TEXT_HINT
-                configuration.encryption_algorithm = (
-                    LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-                )
+            configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
+            configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
+            configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
+            configuration[
+                "lcpserver_input_directory"
+            ] = lcp_strings.LCPSERVER_INPUT_DIRECTORY
+            configuration["provider_name"] = lcp_strings.PROVIDER_NAME
+            configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
+            configuration[
+                "encryption_algorithm"
+            ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
 
-                # Act
-                loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
+            # Act
+            loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
 
-                # Assert
-                assert loan.collection_id == lcp_api_fixture.lcp_collection.id
-                assert (
-                    loan.collection(lcp_api_fixture.db.session)
-                    == lcp_api_fixture.lcp_collection
-                )
-                assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
-                assert loan.data_source_name == data_source_name
-                assert loan.identifier_type == license_pool.identifier.type
-                assert loan.external_identifier == lcp_license["id"]
-                assert loan.start_date == start_date
-                assert loan.end_date == end_date
+            # Assert
+            assert loan.collection_id == lcp_api_fixture.lcp_collection.id
+            assert (
+                loan.collection(lcp_api_fixture.db.session)
+                == lcp_api_fixture.lcp_collection
+            )
+            assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
+            assert loan.data_source_name == data_source_name
+            assert loan.identifier_type == license_pool.identifier.type
+            assert loan.external_identifier == lcp_license["id"]
+            assert loan.start_date == start_date
+            assert loan.end_date == end_date
 
-                lcp_server_mock.generate_license.assert_called_once_with(
-                    lcp_api_fixture.db.session,
-                    lcp_strings.CONTENT_ID,
-                    patron,
-                    start_date,
-                    end_date,
-                )
+            lcp_server_mock.generate_license.assert_called_once_with(
+                lcp_api_fixture.db.session,
+                lcp_strings.CONTENT_ID,
+                patron,
+                start_date,
+                end_date,
+            )
 
     @freeze_time("2020-01-01 00:00:00")
     def test_checkout_with_existing_loan(self, lcp_api_fixture):
@@ -467,45 +456,41 @@ class TestLCPAPI:
 
         license_pool.loan_to(patron, external_identifier=loan_identifier)
 
-        with lcp_api_fixture.configuration_factory.create(
-            lcp_api_fixture.configuration_storage,
-            lcp_api_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
-                lcp_server_constructor.return_value = lcp_server_mock
+        configuration = lcp_api_fixture.lcp_collection.integration_configuration
+        with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            lcp_server_constructor.return_value = lcp_server_mock
 
-                configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-                configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-                configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-                configuration.lcpserver_input_directory = (
-                    lcp_strings.LCPSERVER_INPUT_DIRECTORY
-                )
-                configuration.provider_name = lcp_strings.PROVIDER_NAME
-                configuration.passphrase_hint = lcp_strings.TEXT_HINT
-                configuration.encryption_algorithm = (
-                    LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-                )
+            configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
+            configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
+            configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
+            configuration[
+                "lcpserver_input_directory"
+            ] = lcp_strings.LCPSERVER_INPUT_DIRECTORY
+            configuration["provider_name"] = lcp_strings.PROVIDER_NAME
+            configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
+            configuration[
+                "encryption_algorithm"
+            ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
 
-                # Act
-                loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
+            # Act
+            loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
 
-                # Assert
-                assert loan.collection_id == lcp_api_fixture.lcp_collection.id
-                assert (
-                    loan.collection(lcp_api_fixture.db.session)
-                    == lcp_api_fixture.lcp_collection
-                )
-                assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
-                assert loan.data_source_name == data_source_name
-                assert loan.identifier_type == license_pool.identifier.type
-                assert loan.external_identifier == loan_identifier
-                assert loan.start_date == start_date
-                assert loan.end_date == end_date
+            # Assert
+            assert loan.collection_id == lcp_api_fixture.lcp_collection.id
+            assert (
+                loan.collection(lcp_api_fixture.db.session)
+                == lcp_api_fixture.lcp_collection
+            )
+            assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
+            assert loan.data_source_name == data_source_name
+            assert loan.identifier_type == license_pool.identifier.type
+            assert loan.external_identifier == loan_identifier
+            assert loan.start_date == start_date
+            assert loan.end_date == end_date
 
-                lcp_server_mock.get_license.assert_called_once_with(
-                    lcp_api_fixture.db.session, loan_identifier, patron
-                )
+            lcp_server_mock.get_license.assert_called_once_with(
+                lcp_api_fixture.db.session, loan_identifier, patron
+            )
 
     @freeze_time("2020-01-01 00:00:00")
     def test_fulfil(self, lcp_api_fixture):
@@ -528,57 +513,50 @@ class TestLCPAPI:
         lcp_server_mock = create_autospec(spec=LCPServer)
         lcp_server_mock.get_license = MagicMock(return_value=lcp_license)
 
-        with lcp_api_fixture.configuration_factory.create(
-            lcp_api_fixture.configuration_storage,
-            lcp_api_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
-                lcp_server_constructor.return_value = lcp_server_mock
+        configuration = lcp_api_fixture.lcp_collection.integration_configuration
+        with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            lcp_server_constructor.return_value = lcp_server_mock
 
-                configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-                configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-                configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-                configuration.lcpserver_input_directory = (
-                    lcp_strings.LCPSERVER_INPUT_DIRECTORY
-                )
+            configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
+            configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
+            configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
+            configuration[
+                "lcpserver_input_directory"
+            ] = lcp_strings.LCPSERVER_INPUT_DIRECTORY
 
-                configuration.provider_name = lcp_strings.PROVIDER_NAME
-                configuration.passphrase_hint = lcp_strings.TEXT_HINT
-                configuration.encryption_algorithm = (
-                    LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-                )
+            configuration["provider_name"] = lcp_strings.PROVIDER_NAME
+            configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
+            configuration[
+                "encryption_algorithm"
+            ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
 
-                # Act
-                license_pool.loan_to(
-                    patron,
-                    start=today,
-                    end=expires,
-                    external_identifier=lcp_license["id"],
-                )
-                fulfilment_info = lcp_api.fulfill(
-                    patron, "pin", license_pool, "internal format"
-                )
+            # Act
+            license_pool.loan_to(
+                patron,
+                start=today,
+                end=expires,
+                external_identifier=lcp_license["id"],
+            )
+            fulfilment_info = lcp_api.fulfill(
+                patron, "pin", license_pool, "internal format"
+            )
 
-                # Assert
-                assert isinstance(fulfilment_info, LCPFulfilmentInfo) == True
-                assert (
-                    fulfilment_info.collection_id == lcp_api_fixture.lcp_collection.id
-                )
-                assert (
-                    fulfilment_info.collection(lcp_api_fixture.db.session)
-                    == lcp_api_fixture.lcp_collection
-                )
-                assert (
-                    fulfilment_info.license_pool(lcp_api_fixture.db.session)
-                    == license_pool
-                )
-                assert fulfilment_info.data_source_name == data_source_name
-                assert fulfilment_info.identifier_type == license_pool.identifier.type
+            # Assert
+            assert isinstance(fulfilment_info, LCPFulfilmentInfo) == True
+            assert fulfilment_info.collection_id == lcp_api_fixture.lcp_collection.id
+            assert (
+                fulfilment_info.collection(lcp_api_fixture.db.session)
+                == lcp_api_fixture.lcp_collection
+            )
+            assert (
+                fulfilment_info.license_pool(lcp_api_fixture.db.session) == license_pool
+            )
+            assert fulfilment_info.data_source_name == data_source_name
+            assert fulfilment_info.identifier_type == license_pool.identifier.type
 
-                lcp_server_mock.get_license.assert_called_once_with(
-                    lcp_api_fixture.db.session, lcp_license["id"], patron
-                )
+            lcp_server_mock.get_license.assert_called_once_with(
+                lcp_api_fixture.db.session, lcp_license["id"], patron
+            )
 
     def test_patron_activity_returns_correct_result(self, lcp_api_fixture):
         # Arrange

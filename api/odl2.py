@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, List, Optional
 
-from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
@@ -19,9 +18,7 @@ from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
 from core.model.configuration import (
     ConfigurationAttributeType,
-    ConfigurationFactory,
     ConfigurationMetadata,
-    ConfigurationStorage,
     ExternalIntegration,
     HasExternalIntegration,
 )
@@ -116,12 +113,8 @@ class ODL2API(ODLAPI):
         return ODL2Settings
 
     def __init__(self, _db, collection):
-        self.loan_limit = collection.external_integration.setting(
-            "odl2_loan_limit"
-        ).int_value
-        self.hold_limit = collection.external_integration.setting(
-            "odl2_hold_limit"
-        ).int_value
+        self.loan_limit = collection.integration_configuration.get("odl2_loan_limit")
+        self.hold_limit = collection.integration_configuration.get("odl2_hold_limit")
         super().__init__(_db, collection)
 
     def _checkout(self, patron_or_client: Patron, licensepool, hold=None):
@@ -159,6 +152,10 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     """
 
     NAME = ODL2API.NAME
+
+    @classmethod
+    def settings_class(cls):
+        return ODL2Settings
 
     def __init__(
         self,
@@ -216,26 +213,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             map_from_collection,
             mirrors,
         )
-
         self._logger = logging.getLogger(__name__)
-
-        self._configuration_storage = ConfigurationStorage(self)
-        self._configuration_factory = ConfigurationFactory()
-
-    @contextmanager
-    def _get_configuration(self, db):
-        """Return the configuration object.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: Configuration object
-        :rtype: ODL2APIConfiguration
-        """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, ODL2APIConfiguration
-        ) as configuration:
-            yield configuration
 
     def _extract_publication_metadata(self, feed, publication, data_source_name):
         """Extract a Metadata object from webpub-manifest-parser's publication.
@@ -259,11 +237,9 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         licenses = []
         medium = None
 
-        with self._get_configuration(self._db) as configuration:
-            skipped_license_formats = configuration.skipped_license_formats
-
-            if skipped_license_formats:
-                skipped_license_formats = set(skipped_license_formats)
+        skipped_license_formats = self.configuration().odl2_skipped_license_formats
+        if skipped_license_formats:
+            skipped_license_formats = set(skipped_license_formats)
 
         if publication.licenses:
             for odl_license in publication.licenses:

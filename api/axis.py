@@ -226,13 +226,16 @@ class Axis360API(
                 "Collection protocol is %s, but passed into Axis360API!"
                 % collection.protocol
             )
-        self._db = _db
+
+        super().__init__(_db, collection)
         self.library_id = collection.external_account_id
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
+        self.username = self.integration_configuration().get("username")
+        self.password = self.integration_configuration().get("password")
 
         # Convert the nickname for a server into an actual URL.
-        base_url = collection.external_integration.url or self.PRODUCTION_BASE_URL
+        base_url = (
+            self.integration_configuration().get("url") or self.PRODUCTION_BASE_URL
+        )
         if base_url in self.SERVER_NICKNAMES:
             base_url = self.SERVER_NICKNAMES[base_url]
         if not base_url.endswith("/"):
@@ -250,9 +253,7 @@ class Axis360API(
 
         self.token = None
         self.collection_id = collection.id
-        verify_certificate = collection.external_integration.setting(
-            self.VERIFY_SSL
-        ).bool_value
+        verify_certificate = self.integration_configuration().get(self.VERIFY_SSL)
         self.verify_certificate: bool = (
             verify_certificate if verify_certificate is not None else True
         )

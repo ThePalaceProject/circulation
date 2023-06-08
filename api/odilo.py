@@ -434,17 +434,18 @@ class OdiloAPI(
                 "Collection protocol is %s, but passed into OdiloAPI!"
                 % collection.protocol
             )
+        super().__init__(_db, collection)
 
         self._db = _db
         self.analytics = Analytics(self._db)
 
         self.collection_id = collection.id
         self.token = None
-        self.client_key = collection.external_integration.username
-        self.client_secret = collection.external_integration.password
-        self.library_api_base_url = collection.external_integration.setting(
+        self.client_key = self.integration_configuration().get("username")
+        self.client_secret = self.integration_configuration().get("password")
+        self.library_api_base_url = self.integration_configuration().get(
             self.LIBRARY_API_BASE_URL
-        ).value
+        )
 
         if (
             not self.client_key

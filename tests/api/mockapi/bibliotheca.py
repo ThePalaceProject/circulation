@@ -25,9 +25,13 @@ class MockBibliothecaAPI(BibliothecaAPI):
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.BIBLIOTHECA
         )
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://bibliotheca.test"
+        config = collection.create_integration_configuration(
+            ExternalIntegration.BIBLIOTHECA
+        )
+        config["username"] = "a"
+        config["password"] = "b"
+        config["url"] = "http://bibliotheca.test"
+        config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
 

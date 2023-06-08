@@ -1,5 +1,4 @@
 import datetime
-import json
 from typing import Callable, List, Tuple
 
 import pytest
@@ -11,7 +10,7 @@ from webpub_manifest_parser.odl.semantic import (
 )
 
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
-from api.odl2 import ODL2API, ODL2APIConfiguration, ODL2Importer
+from api.odl2 import ODL2API, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
@@ -24,7 +23,6 @@ from core.model import (
     Work,
     create,
 )
-from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierConstants
 from core.model.patron import Hold
 from core.model.resource import Hyperlink
@@ -134,14 +132,9 @@ class TestODL2Importer(TestODLImporter):
         mock_get.add(moby_dick_license)
         feed = api_odl2_files_fixture.sample_text("feed.json")
 
-        configuration_storage = ConfigurationStorage(importer)
-        configuration_factory = ConfigurationFactory()
-
-        with configuration_factory.create(
-            configuration_storage, db.session, ODL2APIConfiguration
-        ) as configuration:
-            configuration.set_ignored_identifier_types([IdentifierConstants.URI])
-            configuration.skipped_license_formats = json.dumps(["text/html"])
+        config = importer.collection.integration_configuration
+        importer.set_ignored_identifier_types([IdentifierConstants.URI], config)
+        config["odl2_skipped_license_formats"] = ["text/html"]
 
         # Act
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
@@ -283,13 +276,9 @@ class TestODL2Importer(TestODLImporter):
         feed = api_odl2_files_fixture.sample_text("feed-audiobook-streaming.json")
         mock_get.add(license)
 
-        configuration_storage = ConfigurationStorage(importer)
-        configuration_factory = ConfigurationFactory()
-
-        with configuration_factory.create(
-            configuration_storage, db.session, ODL2APIConfiguration
-        ) as configuration:
-            configuration.skipped_license_formats = json.dumps(["text/html"])
+        importer.collection.integration_configuration[
+            "odl2_skipped_license_formats"
+        ] = ["text/html"]
 
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
 

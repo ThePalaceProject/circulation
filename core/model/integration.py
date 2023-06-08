@@ -99,6 +99,7 @@ class IntegrationConfiguration(Base, SettingsModel):
                 parent_id=self.id,
                 library_id=library_id,
             )
+            session.refresh(self)
             return config
         return None
 
@@ -165,3 +166,16 @@ class IntegrationLibraryConfiguration(Base, SettingsModel):
                 IntegrationLibraryConfiguration.library_id == library.id,
             )
         )
+
+    # Settings model inheritance
+    # If the library configuration has no such value
+    # but the parent does, retrieve the parent value
+    def get(self, key, *args) -> Any:
+        if key not in self.settings and self.parent:
+            return self.parent.get(key, *args)
+        return super().get(key, *args)
+
+    def __getitem__(self, key) -> Any:
+        if key not in self.settings and self.parent:
+            return self.parent.settings[key]
+        return super.__getitem__(key)

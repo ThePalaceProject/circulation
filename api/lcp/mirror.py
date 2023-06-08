@@ -6,19 +6,12 @@ from sqlalchemy.orm import Session
 from api.lcp.encrypt import LCPEncryptor
 from api.lcp.hash import HasherFactory
 from api.lcp.importer import LCPImporter
-from api.lcp.server import LCPServer
+from api.lcp.server import LCPServer, LCPServerSettings
 from core.lcp.credential import LCPCredentialFactory
 from core.mirror import MirrorUploader
 from core.model import Collection, ExternalIntegration
-from core.model.collection import (
-    CollectionConfigurationStorage,
-    HasExternalIntegrationPerCollection,
-)
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationFactory,
-    ConfigurationMetadata,
-)
+from core.model.collection import HasExternalIntegrationPerCollection
+from core.model.configuration import ConfigurationAttributeType, ConfigurationMetadata
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3UploaderConfiguration
 
 
@@ -70,14 +63,12 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         :return: New instance of LCPImporter
         :rtype: LCPImporter
         """
-        configuration_storage = CollectionConfigurationStorage(self, collection)
-        configuration_factory = ConfigurationFactory()
+        configuration = collection.integration_configuration
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
-        lcp_encryptor = LCPEncryptor(configuration_storage, configuration_factory)
+        lcp_encryptor = LCPEncryptor(configuration)
         lcp_server = LCPServer(
-            configuration_storage,
-            configuration_factory,
+            lambda: LCPServerSettings(**configuration.settings),
             hasher_factory,
             credential_factory,
         )

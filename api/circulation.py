@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
+    BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
@@ -37,7 +39,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.opds2_import import OPDS2Importer
+from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 
 from .circulation_exceptions import *
@@ -466,7 +468,24 @@ class BaseCirculationAPISettings:
     )
 
 
-class BaseCirculationAPI:
+class CirculationConfigurationMixin:
+    def integration_configuration(self) -> IntegrationConfiguration:
+        config = get_one(
+            self._db, IntegrationConfiguration, id=self._integration_configuration_id
+        )
+        if config is None:
+            raise ValueError(
+                f"No Configuration available for {self.__class__.__name__} (id={self._integration_configuration_id})"
+            )
+        return config
+
+    def configuration(self) -> BaseSettings:
+        return self.settings_class()(**self.integration_configuration().settings)
+
+
+class BaseCirculationAPI(
+    HasLibraryIntegrationConfiguration, CirculationConfigurationMixin
+):
     """Encapsulates logic common to all circulation APIs."""
 
     # Add to LIBRARY_SETTINGS if your circulation API is for a
@@ -543,7 +562,8 @@ class BaseCirculationAPI:
     ] = {}
 
     def __init__(self, _db, collection):
-        pass
+        self._db = _db
+        self._integration_configuration_id = collection.integration_configuration.id
 
     def internal_format(self, delivery_mechanism):
         """Look up the internal format for this delivery mechanism or
@@ -862,6 +882,7 @@ class CirculationAPI:
         :return: Mapping of protocols to fulfillment post-processors.
         """
         from api.opds2 import TokenAuthenticationFulfillmentProcessor
+        from core.opds2_import import OPDS2Importer
         from core.opds_import import OPDSImporter
 
         from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor

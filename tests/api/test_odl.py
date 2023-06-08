@@ -35,7 +35,6 @@ from api.odl import (
 from api.problem_details import NO_LICENSES
 from core.model import (
     Collection,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -833,12 +832,13 @@ class TestODLAPI:
         library = hold.patron.library
 
         # Set the reservation period and loan period.
-        odl_api_test_fixture.collection.external_integration.set_setting(
+        odl_api_test_fixture.collection.integration_configuration.set(
             Collection.DEFAULT_RESERVATION_PERIOD_KEY, 3
         )
-        odl_api_test_fixture.collection.external_integration.set_setting(
+        odl_api_test_fixture.collection.integration_configuration.set(
             Collection.EBOOK_LOAN_DURATION_KEY, 6
         )
+        odl_api_test_fixture.db.session.commit()
 
         # A hold that's already reserved and has an end date doesn't change.
         info.end_date = tomorrow
@@ -1059,7 +1059,6 @@ class TestODLAPI:
             9,
         )
         odl_api_test_fixture.api._update_hold_data(hold)
-        print(hold.start, hold.end, hold.position)
         assert hold.position == 0
         assert hold.end.date() == (hold.start + datetime.timedelta(days=3)).date()
 
@@ -1068,7 +1067,7 @@ class TestODLAPI:
     ):
         licenses = [odl_api_test_fixture.license]
 
-        odl_api_test_fixture.collection.external_integration.set_setting(
+        odl_api_test_fixture.collection.integration_configuration.set(
             Collection.DEFAULT_RESERVATION_PERIOD_KEY, 3
         )
 
@@ -1724,7 +1723,7 @@ class TestODLImporter:
     ) -> DataSource:
         collection = odl_test_fixture.collection(odl_test_fixture.library())
         data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        collection.external_integration.set_setting(
+        collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
         return data_source
@@ -2305,7 +2304,7 @@ class TestODLHoldReaper:
         pool = odl_test_fixture.pool(license)
 
         data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        collection.external_integration.set_setting(
+        collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
         reaper = ODLHoldReaper(db.session, collection, api=api)
@@ -2352,7 +2351,7 @@ class SharedODLAPIFixture:
         self.db = db
         self.files = api_odl_files_fixture
         self.collection = MockSharedODLAPI.mock_collection(db.session)
-        self.collection.external_integration.set_setting(
+        self.collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks"
         )
         self.api = MockSharedODLAPI(db.session, self.collection)
@@ -2392,12 +2391,10 @@ class TestSharedODLAPI:
 
         # Once the library registers, it gets a shared secret that is included
         # in request headers.
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            ExternalIntegration.PASSWORD,
-            shared_odl.patron.library,
-            shared_odl.collection.external_integration,
-        ).value = "secret"
+        config = shared_odl.collection.integration_configuration
+        config.for_library(shared_odl.patron.library.id, create=True).set(
+            ExternalIntegration.PASSWORD, "secret"
+        )
 
         def do_get2(url, headers=None, allowed_response_codes=None):
             assert "test url" == url
@@ -2967,7 +2964,7 @@ class TestSharedODLImporter:
         feed = api_odl_files_fixture.sample_data("shared_collection_feed.opds")
         data_source = DataSource.lookup(db.session, "DPLA Exchange", autocreate=True)
         collection = MockSharedODLAPI.mock_collection(db.session)
-        collection.external_integration.set_setting(
+        collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 

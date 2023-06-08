@@ -12,7 +12,7 @@ from core.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
-from core.model import Collection, ConfigurationSetting, IntegrationClient, get_one
+from core.model import Collection, IntegrationClient, get_one
 from core.util.http import HTTP
 
 from .circulation_exceptions import *
@@ -129,12 +129,14 @@ class SharedCollectionAPI:
                 _("Remote authentication document"),
             )
 
-        external_library_urls = ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            collection.external_integration,
-        ).json_value
+        external_library_urls = (
+            collection.integration_configuration.get(
+                BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS
+            )
+            or []
+        )
 
-        if not external_library_urls or start_url not in external_library_urls:
+        if start_url not in external_library_urls:
             raise AuthorizationFailedException(
                 _(
                     "Your library's URL is not one of the allowed URLs for this collection. Ask the collection administrator to add %(library_url)s to the list of allowed URLs.",
@@ -170,10 +172,9 @@ class SharedCollectionAPI:
 
     def check_client_authorization(self, collection, client):
         """Verify that an IntegrationClient is whitelisted for access to the collection."""
-        external_library_urls = ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            collection.external_integration,
-        ).json_value
+        external_library_urls = collection.integration_configuration.get(
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, []
+        )
         if client.url not in [
             IntegrationClient.normalize_url(url) for url in external_library_urls
         ]:

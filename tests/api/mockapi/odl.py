@@ -22,6 +22,8 @@ class MockSharedODLAPI(SharedODLAPI):
             ),
         )
         integration = collection.create_external_integration(protocol=SharedODLAPI.NAME)
+        config = collection.create_integration_configuration(SharedODLAPI.NAME)
+        config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
 

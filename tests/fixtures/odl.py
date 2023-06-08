@@ -91,12 +91,12 @@ class ODLTestFixture:
         integration = collection.create_external_integration(
             protocol=integration_protocol
         )
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://metadata"
-        collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks"
-        )
+        config = collection.create_integration_configuration(integration_protocol)
+        config["username"] = "a"
+        config["password"] = "b"
+        config["url"] = "http://metadata"
+        config.set(Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks")
+        config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
 
@@ -273,7 +273,7 @@ class ODL2TestFixture(ODLTestFixture):
     def collection(self, library) -> Collection:
         collection = super().collection(library)
         collection.name = "Test ODL2 Collection"
-        collection.external_integration.protocol = ExternalIntegration.ODL2
+        collection.integration_configuration.protocol = ExternalIntegration.ODL2
         return collection
 
     def api(self, collection) -> ODL2API:

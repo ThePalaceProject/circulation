@@ -536,7 +536,7 @@ class TestOPDSForDistributorsImporter:
         collection = MockOPDSForDistributorsAPI.mock_collection(
             opds_dist_api_fixture.db.session
         )
-        collection.external_integration.set_setting(
+        collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
 
@@ -664,7 +664,7 @@ class TestOPDSForDistributorsImporter:
             collection = MockOPDSForDistributorsAPI.mock_collection(
                 opds_dist_api_fixture.db.session, name=name
             )
-            collection.external_integration.set_setting(
+            collection.integration_configuration.set(
                 Collection.DATA_SOURCE_NAME_SETTING, data_source.name
             )
             return collection
@@ -733,7 +733,7 @@ class TestOPDSForDistributorsReaperMonitor:
         collection = MockOPDSForDistributorsAPI.mock_collection(
             opds_dist_api_fixture.db.session
         )
-        collection.external_integration.set_setting(
+        collection.integration_configuration.set(
             Collection.DATA_SOURCE_NAME_SETTING, data_source.name
         )
         monitor = MockOPDSForDistributorsReaperMonitor(

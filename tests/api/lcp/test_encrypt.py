@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import patch
 
 import pytest
 from pyfakefs.fake_filesystem_unittest import Patcher
@@ -10,25 +10,21 @@ from api.lcp.encrypt import (
     LCPEncryptionResult,
     LCPEncryptor,
 )
+from core.integration.goals import Goals
 from core.model import Identifier
-from core.model.configuration import (
-    ConfigurationFactory,
-    ConfigurationStorage,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
+from core.model.integration import IntegrationConfiguration
 from tests.api.lcp import lcp_strings
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class LCPEncryptFixture:
     db: DatabaseTransactionFixture
-    integration: ExternalIntegration
+    integration: IntegrationConfiguration
 
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
-        self.integration = self.db.external_integration(
-            protocol=LCPAPI.NAME, goal=ExternalIntegration.LICENSE_GOAL
+        self.integration = self.db.integration_configuration(
+            protocol=LCPAPI.NAME, goal=Goals.LICENSE_GOAL
         )
 
 
@@ -105,7 +101,7 @@ class TestLCPEncryptor:
     )
     def test_local_lcpencrypt(
         self,
-        lcp_encrypt_fixture,
+        lcp_encrypt_fixture: LCPEncryptFixture,
         _,
         file_path,
         lcpencrypt_output,
@@ -114,52 +110,46 @@ class TestLCPEncryptor:
         create_file,
     ):
         # Arrange
-        integration_owner = create_autospec(spec=HasExternalIntegration)
-        integration_owner.external_integration = MagicMock(
-            return_value=lcp_encrypt_fixture.integration
-        )
-        configuration_storage = ConfigurationStorage(integration_owner)
-        configuration_factory = ConfigurationFactory()
-        encryptor = LCPEncryptor(configuration_storage, configuration_factory)
+        # integration_owner = create_autospec(spec=HasIntegrationConfiguration)
+        # integration_owner.integration_configuration = MagicMock(
+        #     return_value=lcp_encrypt_fixture.integration
+        # )
+        configuration = lcp_encrypt_fixture.integration
+        encryptor = LCPEncryptor(configuration)
         identifier = Identifier(identifier=lcp_strings.BOOK_IDENTIFIER)
 
-        with configuration_factory.create(
-            configuration_storage,
-            lcp_encrypt_fixture.db.session,
-            LCPEncryptionConfiguration,
-        ) as configuration:
-            configuration.lcpencrypt_location = (
+        configuration[
+            "lcpencrypt_location"
+        ] = LCPEncryptionConfiguration.DEFAULT_LCPENCRYPT_LOCATION
+
+        with Patcher() as patcher:
+            patcher.fs.create_file(
                 LCPEncryptionConfiguration.DEFAULT_LCPENCRYPT_LOCATION
             )
 
-            with Patcher() as patcher:
-                patcher.fs.create_file(
-                    LCPEncryptionConfiguration.DEFAULT_LCPENCRYPT_LOCATION
-                )
+            if create_file:
+                patcher.fs.create_file(file_path)
 
-                if create_file:
-                    patcher.fs.create_file(file_path)
+            with patch("subprocess.check_output") as subprocess_check_output_mock:
+                subprocess_check_output_mock.return_value = lcpencrypt_output
 
-                with patch("subprocess.check_output") as subprocess_check_output_mock:
-                    subprocess_check_output_mock.return_value = lcpencrypt_output
-
-                    if expected_exception:
-                        with pytest.raises(
-                            expected_exception.__class__
-                        ) as exception_metadata:
-                            encryptor.encrypt(
-                                lcp_encrypt_fixture.db.session,
-                                file_path,
-                                identifier.identifier,
-                            )
-
-                        # Assert
-                        assert exception_metadata.value == expected_exception
-                    else:
-                        # Assert
-                        result = encryptor.encrypt(
+                if expected_exception:
+                    with pytest.raises(
+                        expected_exception.__class__
+                    ) as exception_metadata:
+                        encryptor.encrypt(
                             lcp_encrypt_fixture.db.session,
                             file_path,
                             identifier.identifier,
                         )
-                        assert result == expected_result
+
+                    # Assert
+                    assert exception_metadata.value == expected_exception
+                else:
+                    # Assert
+                    result = encryptor.encrypt(
+                        lcp_encrypt_fixture.db.session,
+                        file_path,
+                        identifier.identifier,
+                    )
+                    assert result == expected_result

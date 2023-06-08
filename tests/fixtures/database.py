@@ -54,6 +54,7 @@ from core.model.integration import (
 )
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
+from core.util.string_helpers import random_string
 from tests.fixtures.api_config import KeyPairFixture
 
 
@@ -723,10 +724,14 @@ class DatabaseTransactionFixture:
         return external_integration_link
 
     def integration_configuration(
-        self, protocol: str, goal=None, libraries=None, **kwargs
+        self, protocol: str, goal=None, libraries=None, name=None, **kwargs
     ):
         integration, ignore = get_one_or_create(
-            self.session, IntegrationConfiguration, protocol=protocol, goal=goal
+            self.session,
+            IntegrationConfiguration,
+            protocol=protocol,
+            goal=goal,
+            name=(name or random_string(16)),
         )
         if libraries and not isinstance(libraries, list):
             libraries = [libraries]

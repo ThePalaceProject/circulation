@@ -737,8 +737,8 @@ class TestAxis360API:
         ("setting", "setting_value", "attribute", "attribute_value"),
         [
             (Axis360API.VERIFY_SSL, None, "verify_certificate", True),
-            (Axis360API.VERIFY_SSL, "True", "verify_certificate", True),
-            (Axis360API.VERIFY_SSL, "False", "verify_certificate", False),
+            (Axis360API.VERIFY_SSL, True, "verify_certificate", True),
+            (Axis360API.VERIFY_SSL, False, "verify_certificate", False),
         ],
     )
     def test_integration_settings(
@@ -749,9 +749,9 @@ class TestAxis360API:
         attribute_value,
         axis360: Axis360Fixture,
     ):
-        external_integration = axis360.collection.external_integration
+        config = axis360.collection.integration_configuration
         if setting_value is not None:
-            external_integration.setting(setting).value = setting_value
+            config[setting] = setting_value
         api = MockAxis360API(axis360.db.session, axis360.collection)
         assert getattr(api, attribute) == attribute_value
 

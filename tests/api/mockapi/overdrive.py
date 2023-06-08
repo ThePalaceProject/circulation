@@ -35,13 +35,15 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.OVERDRIVE
         )
-        integration.set_setting(OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, client_key)
-        integration.set_setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, client_secret
+        config = collection.create_integration_configuration(
+            ExternalIntegration.OVERDRIVE
         )
-        integration.set_setting(OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, website_id)
+        config.set(OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, client_key)
+        config.set(OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, client_secret)
+        config.set(OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, website_id)
         library.collections.append(collection)
-        OverdriveCoreAPI.ils_name_setting(_db, collection, library).value = ils_name
+        config.for_library(library.id, create=True)["ils_name"] = ils_name
+        _db.refresh(config)
         return collection
 
     def __init__(self, _db, collection, *args, **kwargs):

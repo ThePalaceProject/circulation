@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -37,11 +37,7 @@ from core.model.integration import (
 
 from ..util.string_helpers import base64
 from . import Base, create, get_one, get_one_or_create
-from .configuration import (
-    BaseConfigurationStorage,
-    ConfigurationSetting,
-    ExternalIntegration,
-)
+from .configuration import ConfigurationSetting, ExternalIntegration
 from .constants import EditionConstants
 from .coverage import CoverageRecord, WorkCoverageRecord
 from .datasource import DataSource
@@ -225,6 +221,7 @@ class Collection(Base, HasSessionCache):
                 )
             integration = collection.create_external_integration(protocol=protocol)
             collection.external_integration.protocol = protocol
+            collection.create_integration_configuration(protocol)
         return collection, is_new
 
     @classmethod
@@ -240,11 +237,12 @@ class Collection(Base, HasSessionCache):
         if protocol:
             qu = (
                 qu.join(
-                    ExternalIntegration,
-                    ExternalIntegration.id == Collection.external_integration_id,
+                    IntegrationConfiguration,
+                    IntegrationConfiguration.id
+                    == Collection.integration_configuration_id,
                 )
-                .filter(ExternalIntegration.goal == ExternalIntegration.LICENSE_GOAL)
-                .filter(ExternalIntegration.protocol == protocol)
+                .filter(IntegrationConfiguration.goal == Goals.LICENSE_GOAL)
+                .filter(IntegrationConfiguration.protocol == protocol)
                 .filter(Collection.marked_for_deletion == False)
             )
 
@@ -296,13 +294,15 @@ class Collection(Base, HasSessionCache):
     @hybrid_property
     def primary_identifier_source(self):
         """Identify if should try to use another identifier than <id>"""
-        return self.external_integration.primary_identifier_source
+        return self.integration_configuration.get(
+            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
+        )
 
     @primary_identifier_source.setter
     def primary_identifier_source(self, new_primary_identifier_source):
         """Modify the primary identifier source in use by this Collection."""
-        self.external_integration.primary_identifier_source = (
-            new_primary_identifier_source
+        self.integration_configuration.set(
+            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE, new_primary_identifier_source
         )
 
     # For collections that can control the duration of the loans they
@@ -321,7 +321,7 @@ class Collection(Base, HasSessionCache):
         collection has it for this number of days.
         """
         return (
-            self.default_loan_period_setting(library, medium).int_value
+            self.default_loan_period_setting(library, medium)
             or self.STANDARD_DEFAULT_LOAN_PERIOD
         )
 
@@ -336,11 +336,10 @@ class Collection(Base, HasSessionCache):
         else:
             key = self.EBOOK_LOAN_DURATION_KEY
         if isinstance(library, Library):
-            return ConfigurationSetting.for_library_and_externalintegration(
-                _db, key, library, self.external_integration
-            )
+            config = self.integration_configuration.for_library(library.id)
+            return config and config.get(key)
         elif isinstance(library, IntegrationClient):
-            return self.external_integration.setting(key)
+            return self.integration_configuration.get(key)
 
     DEFAULT_RESERVATION_PERIOD_KEY = "default_reservation_period"
     STANDARD_DEFAULT_RESERVATION_PERIOD = 3
@@ -352,18 +351,16 @@ class Collection(Base, HasSessionCache):
         check it out before it goes to the next person in line.
         """
         return (
-            self.external_integration.setting(
-                self.DEFAULT_RESERVATION_PERIOD_KEY,
-            ).int_value
+            self.integration_configuration.get(self.DEFAULT_RESERVATION_PERIOD_KEY)
             or self.STANDARD_DEFAULT_RESERVATION_PERIOD
         )
 
     @default_reservation_period.setter
     def default_reservation_period(self, new_value):
         new_value = int(new_value)
-        self.external_integration.setting(
-            self.DEFAULT_RESERVATION_PERIOD_KEY
-        ).value = str(new_value)
+        self.integration_configuration.set(
+            self.DEFAULT_RESERVATION_PERIOD_KEY, new_value
+        )
 
     # When you import an OPDS feed, you may know the intended audience of the works (e.g. children or researchers),
     # even though the OPDS feed may not contain that information.
@@ -377,9 +374,7 @@ class Collection(Base, HasSessionCache):
 
         :return: Default audience
         """
-        setting = self.external_integration.setting(self.DEFAULT_AUDIENCE_KEY)
-
-        return setting.value_or_default(None)
+        return self.integration_configuration.get(self.DEFAULT_AUDIENCE_KEY)
 
     @default_audience.setter
     def default_audience(self, new_value: str) -> None:
@@ -387,9 +382,7 @@ class Collection(Base, HasSessionCache):
 
         :param new_value: New default audience
         """
-        setting = self.external_integration.setting(self.DEFAULT_AUDIENCE_KEY)
-
-        setting.value = str(new_value)
+        self.integration_configuration.set(self.DEFAULT_AUDIENCE_KEY, str(new_value))
 
     def create_external_integration(self, protocol):
         """Create an ExternalIntegration for this Collection.
@@ -1036,55 +1029,3 @@ class HasExternalIntegrationPerCollection(metaclass=ABCMeta):
         :return: External integration associated with the collection
         """
         raise NotImplementedError()
-
-
-class CollectionConfigurationStorage(BaseConfigurationStorage):
-    """Serializes and deserializes values as library's configuration settings"""
-
-    def __init__(
-        self,
-        external_integration_association: HasExternalIntegrationPerCollection,
-        collection: Collection,
-    ):
-        """Initializes a new instance of ConfigurationStorage class
-
-        :param external_integration_association: Association with an external integtation
-        :param collection: Collection object
-        """
-        self._integration_owner = external_integration_association
-        self._collection_id = collection.id
-
-    def save(self, db: Session, setting_name: str, value: Any):
-        """Save the value as a new configuration setting
-
-        :param db: Database session
-        :param setting_name: Name of the library's configuration setting
-        :param value: Value to be saved
-        """
-        if self._collection_id is None:
-            raise ValueError("Collection ID is not set")
-        collection = Collection.by_id(db, self._collection_id)
-        integration = self._integration_owner.collection_external_integration(
-            collection
-        )
-        ConfigurationSetting.for_externalintegration(
-            setting_name, integration
-        ).value = value
-
-    def load(self, db: Session, setting_name: str) -> Any:
-        """Loads and returns the library's configuration setting
-
-        :param db: Database session
-        :param setting_name: Name of the library's configuration setting
-        """
-        if self._collection_id is None:
-            raise ValueError("Collection ID is not set")
-        collection = Collection.by_id(db, self._collection_id)
-        integration = self._integration_owner.collection_external_integration(
-            collection
-        )
-        value = ConfigurationSetting.for_externalintegration(
-            setting_name, integration
-        ).value
-
-        return value

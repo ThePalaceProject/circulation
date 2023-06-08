@@ -11,7 +11,6 @@ from api.circulation_exceptions import *
 from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
 from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
-    ConfigurationSetting,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -79,13 +78,11 @@ class TestEnkiAPI:
         # Associate another library with the mock Enki collection
         # and set its Enki library ID.
         other_library = db.library()
-        integration = enki_test_fixture.api.external_integration(db.session)
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            enki_test_fixture.api.ENKI_LIBRARY_ID_KEY,
-            other_library,
-            integration,
-        ).value = "other library id"
+        config = enki_test_fixture.api.integration_configuration()
+        config.for_library(other_library.id, create=True).set(
+            enki_test_fixture.api.ENKI_LIBRARY_ID_KEY, "other library id"
+        )
+        db.session.commit()
         assert "other library id" == m(other_library)
 
     def test_collection(self, enki_test_fixture: EnkiTestFixure):

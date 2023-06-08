@@ -36,11 +36,11 @@ class MockOdiloAPI(OdiloAPI):
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.ODILO
         )
-        integration.username = "username"
-        integration.password = "password"
-        integration.setting(
-            OdiloAPI.LIBRARY_API_BASE_URL
-        ).value = "http://library_api_base_url/api/v2"
+        config = collection.create_integration_configuration(ExternalIntegration.ODILO)
+        config["username"] = "username"
+        config["password"] = "password"
+        config.set(OdiloAPI.LIBRARY_API_BASE_URL, "http://library_api_base_url/api/v2")
+        config.for_library(library.id, create=True)
         library.collections.append(collection)
 
         return collection

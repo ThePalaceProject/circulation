@@ -26,7 +26,6 @@ from core.metadata_layer import (
 from core.model import (
     Classification,
     Collection,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -34,7 +33,6 @@ from core.model import (
     Hyperlink,
     Identifier,
     Representation,
-    Session,
     Subject,
 )
 from core.model.configuration import ConfigurationAttributeValue
@@ -168,19 +166,21 @@ class EnkiAPI(
                 "Collection protocol is %s, but passed into EnkiAPI!"
                 % collection.protocol
             )
+        super().__init__(_db, collection)
 
         self.collection_id = collection.id
-        self.base_url = collection.external_integration.url or self.PRODUCTION_BASE_URL
+        self.base_url = (
+            self.integration_configuration().get("url") or self.PRODUCTION_BASE_URL
+        )
 
     def external_integration(self, _db):
         return self.collection.external_integration
 
     def enki_library_id(self, library):
         """Find the Enki library ID for the given library."""
-        _db = Session.object_session(library)
-        return ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.ENKI_LIBRARY_ID_KEY, library, self.external_integration(_db)
-        ).value
+        config = self.integration_configuration().for_library(library.id)
+        if config:
+            return config.get(self.ENKI_LIBRARY_ID_KEY)
 
     @property
     def collection(self):

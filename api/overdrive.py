@@ -29,7 +29,6 @@ from core.model import (
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.overdrive import (
     OverdriveBibliographicCoverageProvider,
-    OverdriveConfiguration,
     OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
     OverdriveSettings,
@@ -98,30 +97,6 @@ class OverdriveAPI(
     DESCRIPTION = _(
         "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
     )
-
-    SETTINGS = OverdriveConfiguration.to_settings()
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        {
-            "key": OverdriveCoreAPI.ILS_NAME_KEY,
-            "label": _("ILS Name"),
-            "default": OverdriveCoreAPI.ILS_NAME_DEFAULT,
-            "description": _(
-                "When multiple libraries share an Overdrive account, Overdrive uses a setting called 'ILS Name' to determine which ILS to check when validating a given patron."
-            ),
-        },
-        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING,
-    ]
-
-    # An Overdrive Advantage collection inherits everything except the library id
-    # from its parent.
-    CHILD_SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Library ID"),
-            "required": True,
-        },
-    ]
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 

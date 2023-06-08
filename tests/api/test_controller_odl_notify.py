@@ -29,12 +29,13 @@ class ODLFixture:
         integration = self.collection.create_external_integration(
             protocol=self.integration_protocol()
         )
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://metadata"
-        self.collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks"
+        config = self.collection.create_integration_configuration(
+            self.integration_protocol()
         )
+        config["username"] = "a"
+        config["password"] = "b"
+        config["url"] = "http://metadata"
+        config.set(Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks")
         self.library.collections.append(self.collection)
         self.work = self.db.work(with_license_pool=True, collection=self.collection)
 

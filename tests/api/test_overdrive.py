@@ -1644,17 +1644,21 @@ class TestOverdriveAPI:
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
-        db.default_collection().external_integration.protocol = "Overdrive"
+        db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
-        ).value = "user"
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
-        ).value = "password"
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
-        ).value = "100"
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, "user"
+        )
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, "password"
+        )
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, "100"
+        )
+        db.default_collection().integration_configuration.for_library(
+            patron.library.id, create=True
+        )
+        db.session.refresh(db.default_collection().integration_configuration)
 
         # Mocked testing credentials
         encoded_auth = base64.b64encode(b"TestingKey:TestingSecret")
@@ -1687,17 +1691,17 @@ class TestOverdriveAPI:
         db = overdrive_api_fixture.db
         patron = db.patron()
         patron.authorization_identifier = "barcode"
-        db.default_collection().external_integration.protocol = "Overdrive"
+        db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
-        ).value = "user"
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
-        ).value = "password"
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
-        ).value = "100"
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, "user"
+        )
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, "password"
+        )
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, "100"
+        )
 
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
@@ -1724,17 +1728,20 @@ class TestOverdriveAPI:
         patron = db.patron()
         work = db.work(with_license_pool=True)
         patron.authorization_identifier = "barcode"
-        db.default_collection().external_integration.protocol = "Overdrive"
+        db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY
-        ).value = "user"
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET
-        ).value = "password"
-        db.default_collection().external_integration.setting(
-            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID
-        ).value = "100"
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, "user"
+        )
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, "password"
+        )
+        db.default_collection().integration_configuration.set(
+            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, "100"
+        )
+        db.default_collection().integration_configuration.for_library(
+            patron.library.id, create=True
+        )
 
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS

@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import json
 import os
 import urllib.parse
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import requests
 from flask_babel import lazy_gettext as _
@@ -23,6 +25,9 @@ from core.model.configuration import (
     ConfigurationMetadata,
     ConfigurationOption,
 )
+
+if TYPE_CHECKING:
+    pass
 
 
 class LCPServerConstants:
@@ -244,18 +249,11 @@ class LCPServer:
 
     def __init__(
         self,
-        configuration_storage,
-        configuration_factory,
+        get_configuration,
         hasher_factory,
         credential_factory,
     ):
         """Initializes a new instance of LCPServer class
-
-        :param configuration_storage: ConfigurationStorage object
-        :type configuration_storage: ConfigurationStorage
-
-        :param configuration_factory: Factory creating LCPEncryptionConfiguration instance
-        :type configuration_factory: api.config.ConfigurationFactory
 
         :param hasher_factory: Factory responsible for creating Hasher implementations
         :type hasher_factory: hash.HasherFactory
@@ -263,35 +261,26 @@ class LCPServer:
         :param credential_factory: Factory responsible for creating Hasher implementations
         :type credential_factory: credential.CredentialFactory
         """
-        self._configuration_storage = configuration_storage
-        self._configuration_factory = configuration_factory
+        self.get_configuration = get_configuration
         self._hasher_factory = hasher_factory
         self._credential_factory = credential_factory
         self._hasher_instance = None
 
-    def _get_hasher(self, configuration):
+    def _get_hasher(self):
         """Returns a Hasher instance
-
-        :param configuration: Configuration object
-        :type configuration: LCPServerConfiguration
 
         :return: Hasher instance
         :rtype: hash.Hasher
         """
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                configuration.encryption_algorithm
+                self.get_configuration().encryption_algorithm
             )
 
         return self._hasher_instance
 
-    def _create_partial_license(
-        self, db, configuration, patron, license_start=None, license_end=None
-    ):
+    def _create_partial_license(self, db, patron, license_start=None, license_end=None):
         """Creates a partial LCP license used an input by the LCP License Server for generation of LCP licenses
-
-        :param configuration: Configuration object
-        :type configuration: LCPServerConfiguration
 
         :param patron: Patron object
         :type patron: Patron
@@ -305,18 +294,19 @@ class LCPServer:
         :return: Partial LCP license
         :rtype: Dict
         """
-        hasher = self._get_hasher(configuration)
+        hasher = self._get_hasher()
         unhashed_passphrase: LCPUnhashedPassphrase = (
             self._credential_factory.get_patron_passphrase(db, patron)
         )
         hashed_passphrase: LCPHashedPassphrase = unhashed_passphrase.hash(hasher)
         self._credential_factory.set_hashed_passphrase(db, patron, hashed_passphrase)
 
+        config = self.get_configuration()
         partial_license = {
-            "provider": configuration.provider_name,
+            "provider": config.provider_name,
             "encryption": {
                 "user_key": {
-                    "text_hint": configuration.passphrase_hint,
+                    "text_hint": config.passphrase_hint,
                     "hex_value": hashed_passphrase.hashed,
                 }
             },
@@ -330,8 +320,8 @@ class LCPServer:
         rights_fields = [
             license_start,
             license_end,
-            configuration.max_printable_pages,
-            configuration.max_copiable_pages,
+            config.max_printable_pages,
+            config.max_copiable_pages,
         ]
 
         if any(
@@ -346,25 +336,16 @@ class LCPServer:
             partial_license["rights"]["start"] = utils.format_datetime(license_start)
         if license_end:
             partial_license["rights"]["end"] = utils.format_datetime(license_end)
-        if (
-            configuration.max_printable_pages is not None
-            and configuration.max_printable_pages != ""
-        ):
-            partial_license["rights"]["print"] = int(configuration.max_printable_pages)
-        if (
-            configuration.max_copiable_pages is not None
-            and configuration.max_copiable_pages != ""
-        ):
-            partial_license["rights"]["copy"] = int(configuration.max_copiable_pages)
+        if config.max_printable_pages is not None and config.max_printable_pages != "":
+            partial_license["rights"]["print"] = int(config.max_printable_pages)
+        if config.max_copiable_pages is not None and config.max_copiable_pages != "":
+            partial_license["rights"]["copy"] = int(config.max_copiable_pages)
 
         return partial_license
 
     @staticmethod
     def _send_request(configuration, method, path, payload, json_encoder=None):
         """Sends a request to the LCP License Server
-
-        :param configuration: Configuration object
-        :type configuration: LCPServerConfiguration
 
         :param path: URL path part
         :type path: string
@@ -403,27 +384,23 @@ class LCPServer:
         :param encrypted_content: LCPEncryptionResult object containing information about encrypted content
         :type encrypted_content: LCPEncryptionResult
         """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, LCPServerConfiguration
-        ) as configuration:
-            content_location = os.path.join(
-                configuration.lcpserver_input_directory,
-                encrypted_content.protected_content_disposition,
-            )
-            payload = LCPEncryptionResult(
-                content_id=encrypted_content.content_id,
-                content_encryption_key=encrypted_content.content_encryption_key,
-                protected_content_location=content_location,
-                protected_content_disposition=encrypted_content.protected_content_disposition,
-                protected_content_type=encrypted_content.protected_content_type,
-                protected_content_length=encrypted_content.protected_content_length,
-                protected_content_sha256=encrypted_content.protected_content_sha256,
-            )
-            path = f"/contents/{encrypted_content.content_id}"
+        config = self.get_configuration()
+        content_location = os.path.join(
+            config.lcpserver_input_directory,
+            encrypted_content.protected_content_disposition,
+        )
+        payload = LCPEncryptionResult(
+            content_id=encrypted_content.content_id,
+            content_encryption_key=encrypted_content.content_encryption_key,
+            protected_content_location=content_location,
+            protected_content_disposition=encrypted_content.protected_content_disposition,
+            protected_content_type=encrypted_content.protected_content_type,
+            protected_content_length=encrypted_content.protected_content_length,
+            protected_content_sha256=encrypted_content.protected_content_sha256,
+        )
+        path = f"/contents/{encrypted_content.content_id}"
 
-            self._send_request(
-                configuration, "put", path, payload, LCPEncryptorResultJSONEncoder
-            )
+        self._send_request(config, "put", path, payload, LCPEncryptorResultJSONEncoder)
 
     def generate_license(self, db, content_id, patron, license_start, license_end):
         """Generates a new LCP license
@@ -449,18 +426,15 @@ class LCPServer:
         :return: LCP license
         :rtype: Dict
         """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, LCPServerConfiguration
-        ) as configuration:
-            partial_license_payload = self._create_partial_license(
-                db, configuration, patron, license_start, license_end
-            )
-            path = f"contents/{content_id}/license"
-            response = self._send_request(
-                configuration, "post", path, partial_license_payload
-            )
+        partial_license_payload = self._create_partial_license(
+            db, patron, license_start, license_end
+        )
+        path = f"contents/{content_id}/license"
+        response = self._send_request(
+            self.get_configuration(), "post", path, partial_license_payload
+        )
 
-            return response.json()
+        return response.json()
 
     def get_license(self, db, license_id, patron):
         """Returns an existing license
@@ -477,16 +451,11 @@ class LCPServer:
         :return: Existing license
         :rtype: string
         """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, LCPServerConfiguration
-        ) as configuration:
-            partial_license_payload = self._create_partial_license(
-                db, configuration, patron
-            )
-            path = f"licenses/{license_id}"
+        partial_license_payload = self._create_partial_license(db, patron)
+        path = f"licenses/{license_id}"
 
-            response = self._send_request(
-                configuration, "post", path, partial_license_payload
-            )
+        response = self._send_request(
+            self.get_configuration(), "post", path, partial_license_payload
+        )
 
-            return response.json()
+        return response.json()

@@ -1,17 +1,12 @@
 import datetime
 import json
-from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
 from core.config import Configuration
 from core.model import create, get_one_or_create
 from core.model.circulationevent import CirculationEvent
-from core.model.collection import (
-    Collection,
-    CollectionConfigurationStorage,
-    HasExternalIntegrationPerCollection,
-)
+from core.model.collection import Collection
 from core.model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
@@ -1119,28 +1114,3 @@ class TestCollectionForMetadataWrangler:
         db = example_collection_fixture.database_fixture
         collection = create(db.session, Collection, name="banana")[0]
         assert True == isinstance(collection, Collection)
-
-
-class TestCollectionConfigurationStorage:
-    def test_load(self, example_collection_fixture: ExampleCollectionFixture):
-        db = example_collection_fixture.database_fixture
-        # Arrange
-        lcp_collection = db.collection("Test Collection", DataSource.LCP)
-        external_integration = lcp_collection.external_integration
-        external_integration_association = create_autospec(
-            spec=HasExternalIntegrationPerCollection
-        )
-        external_integration_association.collection_external_integration = MagicMock(
-            return_value=external_integration
-        )
-        storage = CollectionConfigurationStorage(
-            external_integration_association, lcp_collection
-        )
-        setting_name = "Test"
-        expected_result = "Test"
-
-        # Act
-        storage.save(db.session, setting_name, expected_result)
-        result = storage.load(db.session, setting_name)
-
-        assert result == expected_result

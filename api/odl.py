@@ -34,7 +34,6 @@ from core.lcp.credential import (
 from core.metadata_layer import FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -52,11 +51,9 @@ from core.model import (
 )
 from core.model.configuration import (
     ConfigurationAttributeType,
-    ConfigurationFactory,
     ConfigurationGrouping,
     ConfigurationMetadata,
     ConfigurationOption,
-    ConfigurationStorage,
     HasExternalIntegration,
 )
 from core.model.licensing import LicenseStatus
@@ -210,7 +207,7 @@ class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
         )
     )
 
-    default_reservation_period: Optional[str] = FormField(
+    default_reservation_period: Optional[int] = FormField(
         default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
         form=ConfigurationFormItem(
             label=_("Default Reservation Period (in Days)"),
@@ -339,24 +336,24 @@ class ODLAPI(
         return self.DESCRIPTION
 
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
+        print(collection.protocol, self.NAME)
         if collection.protocol != self.NAME:
             raise ValueError(
-                "Collection protocol is %s, but passed into ODLAPI!"
-                % collection.protocol
+                "Collection protocol is %s, but passed into %s!"
+                % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        self.data_source_name = collection.external_integration.setting(
+        self.data_source_name = collection.integration_configuration.get(
             Collection.DATA_SOURCE_NAME_SETTING
-        ).value
+        )
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
+        self.username = collection.integration_configuration.get("username")
+        self.password = collection.integration_configuration.get("password")
         self.analytics = Analytics(_db)
 
-        self._configuration_storage = ConfigurationStorage(self)
-        self._configuration_factory = ConfigurationFactory()
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Optional[Hasher] = None
@@ -385,7 +382,7 @@ class ODLAPI(
         """
         return get_one(db, Collection, id=self.collection_id)
 
-    def _get_hasher(self, configuration):
+    def _get_hasher(self):
         """Returns a Hasher instance
 
         :param configuration: Configuration object
@@ -394,10 +391,11 @@ class ODLAPI(
         :return: Hasher instance
         :rtype: hash.Hasher
         """
+        config = self.configuration()
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                configuration.encryption_algorithm
-                if configuration.encryption_algorithm
+                config.encryption_algorithm
+                if config.encryption_algorithm
                 else ODLAPIConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
             )
 
@@ -459,39 +457,34 @@ class ODLAPI(
 
             db = Session.object_session(loan)
             patron = loan.patron
+            hasher = self._get_hasher()
 
-            with self._configuration_factory.create(
-                self._configuration_storage, db, ODLAPIConfiguration
-            ) as configuration:
-                hasher = self._get_hasher(configuration)
+            unhashed_pass: LCPUnhashedPassphrase = (
+                self._credential_factory.get_patron_passphrase(db, patron)
+            )
+            hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
+            self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
+            encoded_pass: str = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
 
-                unhashed_pass: LCPUnhashedPassphrase = (
-                    self._credential_factory.get_patron_passphrase(db, patron)
-                )
-                hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
-                self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
-                encoded_pass: str = base64.b64encode(
-                    binascii.unhexlify(hashed_pass.hashed)
-                )
+            notification_url = self._url_for(
+                "odl_notify",
+                library_short_name=library_short_name,
+                loan_id=loan.id,
+                _external=True,
+            )
 
-                notification_url = self._url_for(
-                    "odl_notify",
-                    library_short_name=library_short_name,
-                    loan_id=loan.id,
-                    _external=True,
-                )
-
-                url_template = URITemplate(loan.license.checkout_url)
-                url = url_template.expand(
-                    id=id,
-                    checkout_id=checkout_id,
-                    patron_id=patron_id,
-                    expires=expires.isoformat(),
-                    notification_url=notification_url,
-                    passphrase=encoded_pass,
-                    hint=configuration.passphrase_hint,
-                    hint_url=configuration.passphrase_hint_url,
-                )
+            config = self.configuration()
+            url_template = URITemplate(loan.license.checkout_url)
+            url = url_template.expand(
+                id=id,
+                checkout_id=checkout_id,
+                patron_id=patron_id,
+                expires=expires.isoformat(),
+                notification_url=notification_url,
+                passphrase=encoded_pass,
+                hint=config.passphrase_hint,
+                hint_url=config.passphrase_hint_url,
+            )
 
         response = self._get(url)
 
@@ -1509,15 +1502,16 @@ class SharedODLAPI(BaseCirculationAPI, HasLibraryIntegrationConfiguration):
         return self.DESCRIPTION
 
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
         if collection.protocol != self.NAME:
             raise ValueError(
                 "Collection protocol is %s, but passed into SharedODLPI!"
                 % collection.protocol
             )
         self.collection_id = collection.id
-        self.data_source_name = collection.external_integration.setting(
+        self.data_source_name = self.integration_configuration().get(
             Collection.DATA_SOURCE_NAME_SETTING
-        ).value
+        )
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
@@ -1567,12 +1561,10 @@ class SharedODLAPI(BaseCirculationAPI, HasLibraryIntegrationConfiguration):
         patron = patron or flask.request.patron
         _db = Session.object_session(patron)
         collection = self.collection(_db)
-        shared_secret = ConfigurationSetting.for_library_and_externalintegration(
-            _db,
-            ExternalIntegration.PASSWORD,
-            patron.library,
-            collection.external_integration,
-        ).value
+        config = collection.integration_configuration
+        shared_secret = config.for_library(patron.library.id).get(
+            ExternalIntegration.PASSWORD
+        )
         if not shared_secret:
             raise LibraryAuthorizationFailedException(
                 _(

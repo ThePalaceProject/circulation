@@ -21,6 +21,7 @@ from core.model.configuration import (
     ConfigurationGrouping,
     ConfigurationMetadata,
 )
+from core.model.integration import IntegrationConfiguration
 
 
 class LCPEncryptionException(BaseError):
@@ -319,23 +320,25 @@ class LCPEncryptor:
     class Parameters:
         """Parses input parameters for lcpencrypt"""
 
-        def __init__(self, file_path, identifier, configuration):
+        def __init__(
+            self,
+            file_path: str,
+            identifier: str,
+            configuration: IntegrationConfiguration,
+        ):
             """Initializes a new instance of Parameters class
 
             :param file_path: File path to the book to be encrypted
-            :type file_path: string
 
             :param identifier: Book's identifier
-            :type identifier: string
 
-            :param configuration: LCPEncryptionConfiguration instance
-            :type configuration: instance
+            :param configuration: IntegrationConfiguration instance
             """
-            self._lcpencrypt_location = configuration.lcpencrypt_location
+            self._lcpencrypt_location = configuration.get("lcpencrypt_location")
             self._input_file_path = str(file_path)
             self._content_id = str(identifier)
 
-            output_directory = configuration.lcpencrypt_output_directory
+            output_directory = configuration.get("lcpencrypt_output_directory")
 
             self._output_file_path = None
 
@@ -408,29 +411,17 @@ class LCPEncryptor:
 
     OUTPUT_REGEX = re.compile(r"(\{.+\})?(.+)", re.DOTALL)
 
-    def __init__(self, configuration_storage, configuration_factory):
+    def __init__(self, configuration: IntegrationConfiguration):
         """Initializes a new instance of LCPEncryptor class
 
-        :param configuration_storage: ConfigurationStorage object
-        :type configuration_storage: ConfigurationStorage
-
-        :param configuration_factory: Factory creating LCPEncryptionConfiguration instance
-        :type configuration_factory: api.config.ConfigurationFactory
+        :param configuration: The integration configuration of the collection
         """
         self._logger = logging.getLogger(__name__)
-        self._configuration_storage = configuration_storage
-        self._configuration_factory = configuration_factory
+        self.configuration = configuration
 
-    def _lcpencrypt_exists_locally(self, configuration):
-        """Returns a Boolean value indicating whether lcpencrypt exists locally
-
-        :param configuration: LCPEncryptionConfiguration instance
-        :type configuration: instance
-
-        :return: Boolean value indicating whether lcpencrypt exists locally
-        :rtype: bool
-        """
-        return os.path.isfile(configuration.lcpencrypt_location)
+    def _lcpencrypt_exists_locally(self):
+        """Returns a Boolean value indicating whether lcpencrypt exists locally"""
+        return os.path.isfile(self.configuration.get("lcpencrypt_location"))
 
     def _parse_output(self, output):
         """Parses lcpencrypt's output
@@ -472,7 +463,9 @@ class LCPEncryptor:
 
         return result
 
-    def _run_lcpencrypt_locally(self, file_path, identifier, configuration):
+    def _run_lcpencrypt_locally(
+        self, file_path: str, identifier: str
+    ) -> LCPEncryptionResult:
         """Runs lcpencrypt using a local binary
 
         :param file_path: File path to the book to be encrypted
@@ -480,9 +473,6 @@ class LCPEncryptor:
 
         :param identifier: Book's identifier
         :type identifier: string
-
-        :param configuration: LCPEncryptionConfiguration instance
-        :type configuration: instance
 
         :return: Encryption result
         :rtype: LCPEncryptionResult
@@ -493,7 +483,7 @@ class LCPEncryptor:
             )
         )
 
-        parameters = LCPEncryptor.Parameters(file_path, identifier, configuration)
+        parameters = LCPEncryptor.Parameters(file_path, identifier, self.configuration)
 
         try:
             if parameters.output_file_path:
@@ -552,14 +542,9 @@ class LCPEncryptor:
         :return: Encryption result
         :rtype: LCPEncryptionResult
         """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, LCPEncryptionConfiguration
-        ) as configuration:
-            if self._lcpencrypt_exists_locally(configuration):
-                result = self._run_lcpencrypt_locally(
-                    file_path, identifier, configuration
-                )
+        if self._lcpencrypt_exists_locally():
+            result = self._run_lcpencrypt_locally(file_path, identifier)
 
-                return result
-            else:
-                raise NotImplementedError()
+            return result
+        else:
+            raise NotImplementedError()

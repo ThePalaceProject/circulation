@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import datetime
 import json
 import os
 import urllib.parse
-from unittest.mock import MagicMock, create_autospec
+from typing import Literal
+from unittest.mock import MagicMock
 
 import pytest
 import requests_mock
@@ -10,15 +13,10 @@ import requests_mock
 from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServer, LCPServerConfiguration
+from api.lcp.server import LCPServer, LCPServerConfiguration, LCPServerSettings
 from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model.collection import Collection
-from core.model.configuration import (
-    ConfigurationFactory,
-    ConfigurationStorage,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
+from core.model.configuration import ExternalIntegration
 from tests.api.lcp import lcp_strings
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -27,8 +25,6 @@ class LCPServerFixture:
     db: DatabaseTransactionFixture
     lcp_collection: Collection
     integration: ExternalIntegration
-    configuration_storage: ConfigurationStorage
-    configuration_factory: ConfigurationFactory
     hasher_factory: HasherFactory
     credential_factory: LCPCredentialFactory
     lcp_server: LCPServer
@@ -36,19 +32,13 @@ class LCPServerFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.lcp_collection = self.db.collection(protocol=ExternalIntegration.LCP)
-        self.integration = self.lcp_collection.external_integration
-
-        integration_owner = create_autospec(spec=HasExternalIntegration)
-        integration_owner.external_integration = MagicMock(
-            return_value=self.integration
-        )
-        self.configuration_storage = ConfigurationStorage(integration_owner)
-        self.configuration_factory = ConfigurationFactory()
+        self.configuration = self.lcp_collection.integration_configuration
+        self.configuration["lcpserver_input_directory"] = "/tmp"
         self.hasher_factory = HasherFactory()
         self.credential_factory = LCPCredentialFactory()
+        print(self.lcp_collection.integration_configuration.settings)
         self.lcp_server = LCPServer(
-            self.configuration_storage,
-            self.configuration_factory,
+            lambda: LCPServerSettings(**self.configuration.settings),
             self.hasher_factory,
             self.credential_factory,
         )
@@ -63,17 +53,18 @@ class TestLCPServer:
     @pytest.mark.parametrize(
         "_, input_directory",
         [
-            ("empty_input_directory", ""),
             ("non_empty_input_directory", "/tmp/encrypted_books"),
         ],
     )
     def test_add_content(
-        self, lcp_server_fixture: LCPServerFixture, _, input_directory
+        self,
+        lcp_server_fixture: LCPServerFixture,
+        _: Literal["empty_input_directory", "non_empty_input_directory"],
+        input_directory: Literal["", "/tmp/encrypted_books"],
     ):
         # Arrange
         lcp_server = LCPServer(
-            lcp_server_fixture.configuration_storage,
-            lcp_server_fixture.configuration_factory,
+            lambda: LCPServerSettings(**lcp_server_fixture.configuration.settings),
             lcp_server_fixture.hasher_factory,
             lcp_server_fixture.credential_factory,
         )
@@ -90,59 +81,55 @@ class TestLCPServer:
             input_directory, encrypted_content.protected_content_disposition
         )
 
-        with lcp_server_fixture.configuration_factory.create(
-            lcp_server_fixture.configuration_storage,
-            lcp_server_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
-            configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-            configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-            configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-            configuration.lcpserver_input_directory = input_directory
-            configuration.provider_name = lcp_strings.PROVIDER_NAME
-            configuration.passphrase_hint = lcp_strings.TEXT_HINT
-            configuration.encryption_algorithm = (
-                LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+        configuration = lcp_server_fixture.configuration
+        configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
+        configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
+        configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
+        configuration["lcpserver_input_directory"] = input_directory
+        configuration["provider_name"] = lcp_strings.PROVIDER_NAME
+        configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
+        configuration[
+            "encryption_algorithm"
+        ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+
+        with requests_mock.Mocker() as request_mock:
+            url = urllib.parse.urljoin(
+                lcp_strings.LCPSERVER_URL, f"/contents/{lcp_strings.CONTENT_ID}"
             )
+            request_mock.put(url)
 
-            with requests_mock.Mocker() as request_mock:
-                url = urllib.parse.urljoin(
-                    lcp_strings.LCPSERVER_URL, f"/contents/{lcp_strings.CONTENT_ID}"
-                )
-                request_mock.put(url)
+            # Act
+            lcp_server.add_content(lcp_server_fixture.db.session, encrypted_content)
 
-                # Act
-                lcp_server.add_content(lcp_server_fixture.db.session, encrypted_content)
+            # Assert
+            assert request_mock.called == True
 
-                # Assert
-                assert request_mock.called == True
-
-                json_request = json.loads(request_mock.last_request.text)
-                assert json_request["content-id"] == encrypted_content.content_id
-                assert (
-                    json_request["content-encryption-key"]
-                    == encrypted_content.content_encryption_key
-                )
-                assert (
-                    json_request["protected-content-location"]
-                    == expected_protected_content_disposition
-                )
-                assert (
-                    json_request["protected-content-disposition"]
-                    == encrypted_content.protected_content_disposition
-                )
-                assert (
-                    json_request["protected-content-type"]
-                    == encrypted_content.protected_content_type
-                )
-                assert (
-                    json_request["protected-content-length"]
-                    == encrypted_content.protected_content_length
-                )
-                assert (
-                    json_request["protected-content-sha256"]
-                    == encrypted_content.protected_content_sha256
-                )
+            json_request = json.loads(request_mock.last_request.text)
+            assert json_request["content-id"] == encrypted_content.content_id
+            assert (
+                json_request["content-encryption-key"]
+                == encrypted_content.content_encryption_key
+            )
+            assert (
+                json_request["protected-content-location"]
+                == expected_protected_content_disposition
+            )
+            assert (
+                json_request["protected-content-disposition"]
+                == encrypted_content.protected_content_disposition
+            )
+            assert (
+                json_request["protected-content-type"]
+                == encrypted_content.protected_content_type
+            )
+            assert (
+                json_request["protected-content-length"]
+                == encrypted_content.protected_content_length
+            )
+            assert (
+                json_request["protected-content-sha256"]
+                == encrypted_content.protected_content_sha256
+            )
 
     @pytest.mark.parametrize(
         "_, license_start, license_end, max_printable_pages, max_copiable_pages",
@@ -187,11 +174,23 @@ class TestLCPServer:
     def test_generate_license(
         self,
         lcp_server_fixture: LCPServerFixture,
-        _,
-        license_start,
-        license_end,
-        max_printable_pages,
-        max_copiable_pages,
+        _: Literal[
+            "none_rights",
+            "license_start",
+            "license_end",
+            "max_printable_pages",
+            "max_printable_pages_empty_max_copiable_pages",
+            "empty_max_printable_pages",
+            "max_copiable_pages",
+            "empty_max_printable_pages_max_copiable_pages",
+            "empty_max_copiable_pages",
+            "dates",
+            "full_rights",
+        ],
+        license_start: datetime.datetime | None,
+        license_end: datetime.datetime | None,
+        max_printable_pages: Literal[10, ""] | None,
+        max_copiable_pages: Literal["", 1024] | None,
     ):
         # Arrange
         patron = lcp_server_fixture.db.patron()
@@ -203,91 +202,87 @@ class TestLCPServer:
             LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
         ).hash(expected_patron_passphrase.text)
 
-        with lcp_server_fixture.configuration_factory.create(
-            lcp_server_fixture.configuration_storage,
-            lcp_server_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
-            configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-            configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-            configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-            configuration.provider_name = lcp_strings.PROVIDER_NAME
-            configuration.passphrase_hint = lcp_strings.TEXT_HINT
-            configuration.encryption_algorithm = (
-                LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+        configuration = lcp_server_fixture.configuration
+        configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
+        configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
+        configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
+        configuration["provider_name"] = lcp_strings.PROVIDER_NAME
+        configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
+        configuration[
+            "encryption_algorithm"
+        ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+        configuration["max_printable_pages"] = max_printable_pages
+        configuration["max_copiable_pages"] = max_copiable_pages
+
+        lcp_server_fixture.credential_factory.get_patron_id = MagicMock(  # type: ignore
+            return_value=expected_patron_id
+        )
+        lcp_server_fixture.credential_factory.get_patron_passphrase = MagicMock(  # type: ignore
+            return_value=expected_patron_passphrase
+        )
+
+        with requests_mock.Mocker() as request_mock:
+            url = urllib.parse.urljoin(
+                lcp_strings.LCPSERVER_URL,
+                f"/contents/{lcp_strings.CONTENT_ID}/license",
             )
-            configuration.max_printable_pages = max_printable_pages
-            configuration.max_copiable_pages = max_copiable_pages
+            request_mock.post(url, json=lcp_strings.LCPSERVER_LICENSE)
 
-            lcp_server_fixture.credential_factory.get_patron_id = MagicMock(  # type: ignore
-                return_value=expected_patron_id
+            # Act
+            license = lcp_server_fixture.lcp_server.generate_license(
+                lcp_server_fixture.db.session,
+                lcp_strings.CONTENT_ID,
+                patron,
+                license_start,
+                license_end,
             )
-            lcp_server_fixture.credential_factory.get_patron_passphrase = MagicMock(  # type: ignore
-                return_value=expected_patron_passphrase
+
+            # Assert
+            assert request_mock.called == True
+            assert license == lcp_strings.LCPSERVER_LICENSE
+
+            json_request = json.loads(request_mock.last_request.text)
+            assert json_request["provider"] == lcp_strings.PROVIDER_NAME
+            assert json_request["user"]["id"] == expected_patron_id
+            assert (
+                json_request["encryption"]["user_key"]["text_hint"]
+                == lcp_strings.TEXT_HINT
+            )
+            assert (
+                json_request["encryption"]["user_key"]["hex_value"]
+                == expected_patron_key
             )
 
-            with requests_mock.Mocker() as request_mock:
-                url = urllib.parse.urljoin(
-                    lcp_strings.LCPSERVER_URL,
-                    f"/contents/{lcp_strings.CONTENT_ID}/license",
+            if license_start is not None:
+                assert json_request["rights"]["start"] == utils.format_datetime(
+                    license_start
                 )
-                request_mock.post(url, json=lcp_strings.LCPSERVER_LICENSE)
-
-                # Act
-                license = lcp_server_fixture.lcp_server.generate_license(
-                    lcp_server_fixture.db.session,
-                    lcp_strings.CONTENT_ID,
-                    patron,
-                    license_start,
-                    license_end,
+            if license_end is not None:
+                assert json_request["rights"]["end"] == utils.format_datetime(
+                    license_end
                 )
+            if max_printable_pages is not None and max_printable_pages != "":
+                assert json_request["rights"]["print"] == max_printable_pages
+            if max_copiable_pages is not None and max_copiable_pages != "":
+                assert json_request["rights"]["copy"] == max_copiable_pages
 
-                # Assert
-                assert request_mock.called == True
-                assert license == lcp_strings.LCPSERVER_LICENSE
-
-                json_request = json.loads(request_mock.last_request.text)
-                assert json_request["provider"] == lcp_strings.PROVIDER_NAME
-                assert json_request["user"]["id"] == expected_patron_id
-                assert (
-                    json_request["encryption"]["user_key"]["text_hint"]
-                    == lcp_strings.TEXT_HINT
-                )
-                assert (
-                    json_request["encryption"]["user_key"]["hex_value"]
-                    == expected_patron_key
-                )
-
-                if license_start is not None:
-                    assert json_request["rights"]["start"] == utils.format_datetime(
-                        license_start
-                    )
-                if license_end is not None:
-                    assert json_request["rights"]["end"] == utils.format_datetime(
-                        license_end
-                    )
-                if max_printable_pages is not None and max_printable_pages != "":
-                    assert json_request["rights"]["print"] == max_printable_pages
-                if max_copiable_pages is not None and max_copiable_pages != "":
-                    assert json_request["rights"]["copy"] == max_copiable_pages
-
-                all_rights_fields_are_empty = all(
-                    [
-                        rights_field is None or rights_field == ""
-                        for rights_field in [
-                            license_start,
-                            license_end,
-                            max_printable_pages,
-                            max_copiable_pages,
-                        ]
+            all_rights_fields_are_empty = all(
+                [
+                    rights_field is None or rights_field == ""
+                    for rights_field in [
+                        license_start,
+                        license_end,
+                        max_printable_pages,
+                        max_copiable_pages,
                     ]
-                )
-                if all_rights_fields_are_empty:
-                    assert ("rights" in json_request) == False
+                ]
+            )
+            if all_rights_fields_are_empty:
+                assert ("rights" in json_request) == False
 
-                lcp_server_fixture.credential_factory.get_patron_id.assert_called_once_with(
-                    lcp_server_fixture.db.session, patron
-                )
-                lcp_server_fixture.credential_factory.get_patron_passphrase.assert_called_once_with(
-                    lcp_server_fixture.db.session, patron
-                )
+            lcp_server_fixture.credential_factory.get_patron_id.assert_called_once_with(
+                lcp_server_fixture.db.session, patron
+            )
+            lcp_server_fixture.credential_factory.get_patron_passphrase.assert_called_once_with(
+                lcp_server_fixture.db.session, patron
+            )

@@ -210,15 +210,18 @@ class BibliothecaAPI(
                 % collection.protocol
             )
 
+        super().__init__(_db, collection)
+
         self._db = _db
         self.version = (
-            collection.external_integration.setting("version").value
-            or self.DEFAULT_VERSION
+            self.integration_configuration().get("version") or self.DEFAULT_VERSION
         )
-        self.account_id = collection.external_integration.username
-        self.account_key = collection.external_integration.password
+        self.account_id = self.integration_configuration().get("username")
+        self.account_key = self.integration_configuration().get("password")
         self.library_id = collection.external_account_id
-        self.base_url = collection.external_integration.url or self.DEFAULT_BASE_URL
+        self.base_url = (
+            self.integration_configuration().get("url") or self.DEFAULT_BASE_URL
+        )
 
         if not self.account_id or not self.account_key or not self.library_id:
             raise CannotLoadConfiguration("Bibliotheca configuration is incomplete.")
