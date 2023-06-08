@@ -176,14 +176,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.26.147"
-description = "Type annotations for boto3 1.26.147 generated with mypy-boto3-builder 7.14.5"
+version = "1.26.149"
+description = "Type annotations for boto3 1.26.149 generated with mypy-boto3-builder 7.14.5"
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "boto3-stubs-1.26.147.tar.gz", hash = "sha256:4b6a0c48cbca0164b63f13c8e89fe8332be33277a636c7d633fb475f1cdf5640"},
-    {file = "boto3_stubs-1.26.147-py3-none-any.whl", hash = "sha256:e179ba7a23fdf3e3f417c0744c30769fb07c2a4897accfb1f4fba6a6e1b8355a"},
+    {file = "boto3-stubs-1.26.149.tar.gz", hash = "sha256:57753f4cabf418379722d99eadb821bd5fac1cd4bfa3efc811c90951b637e591"},
+    {file = "boto3_stubs-1.26.149-py3-none-any.whl", hash = "sha256:f442b07c69240c59b6787304648916171aad6d65b2a59cfe9de41c241d6b8de6"},
 ]
 
 [package.dependencies]
@@ -226,7 +226,7 @@ backup-gateway = ["mypy-boto3-backup-gateway (>=1.26.0,<1.27.0)"]
 backupstorage = ["mypy-boto3-backupstorage (>=1.26.0,<1.27.0)"]
 batch = ["mypy-boto3-batch (>=1.26.0,<1.27.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.26.0,<1.27.0)"]
-boto3 = ["boto3 (==1.26.147)", "botocore (==1.29.147)"]
+boto3 = ["boto3 (==1.26.149)", "botocore (==1.29.149)"]
 braket = ["mypy-boto3-braket (>=1.26.0,<1.27.0)"]
 budgets = ["mypy-boto3-budgets (>=1.26.0,<1.27.0)"]
 ce = ["mypy-boto3-ce (>=1.26.0,<1.27.0)"]
@@ -563,14 +563,14 @@ crt = ["awscrt (==0.12.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.29.147"
+version = "1.29.149"
 description = "Type annotations and code completion for botocore"
 category = "dev"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "botocore_stubs-1.29.147-py3-none-any.whl", hash = "sha256:76d5612c503cf4c73e6700e4232a7ef553b896e59cd9b25cb31885fecd52c79b"},
-    {file = "botocore_stubs-1.29.147.tar.gz", hash = "sha256:91615913e0bcfd326acdbce526b635b7aef25f7c65683d061765f773ee7a2d55"},
+    {file = "botocore_stubs-1.29.149-py3-none-any.whl", hash = "sha256:77cc6f40c4ac0071772d94faa14afc5b10f03fce3e3e0e89fa3810eb33b30d38"},
+    {file = "botocore_stubs-1.29.149.tar.gz", hash = "sha256:c084d9f1f27b5befb9e732d97c51d928c618794c15bff85e4d500100d011b110"},
 ]
 
 [package.dependencies]
@@ -3050,14 +3050,14 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
 name = "requests-mock"
-version = "1.10.0"
+version = "1.11.0"
 description = "Mock out responses from the requests package"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "requests-mock-1.10.0.tar.gz", hash = "sha256:59c9c32419a9fb1ae83ec242d98e889c45bd7d7a65d48375cc243ec08441658b"},
-    {file = "requests_mock-1.10.0-py2.py3-none-any.whl", hash = "sha256:2fdbb637ad17ee15c06f33d31169e71bf9fe2bdb7bc9da26185be0dd8d842699"},
+    {file = "requests-mock-1.11.0.tar.gz", hash = "sha256:ef10b572b489a5f28e09b708697208c4a3b2b89ef80a9f01584340ea357ec3c4"},
+    {file = "requests_mock-1.11.0-py2.py3-none-any.whl", hash = "sha256:f7fae383f228633f6bececebdab236c478ace2284d6292c6e7e2867b9ab74d15"},
 ]
 
 [package.dependencies]
@@ -3066,7 +3066,7 @@ six = "*"
 
 [package.extras]
 fixture = ["fixtures"]
-test = ["fixtures", "mock", "purl", "pytest", "requests-futures", "sphinx", "testrepository (>=0.0.18)", "testtools"]
+test = ["fixtures", "mock", "purl", "pytest", "requests-futures", "sphinx", "testtools"]
 
 [[package]]
 name = "rfc3987"
@@ -3684,14 +3684,14 @@ test = ["websockets"]
 
 [[package]]
 name = "werkzeug"
-version = "2.3.4"
+version = "2.3.5"
 description = "The comprehensive WSGI web application library."
 category = "main"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "Werkzeug-2.3.4-py3-none-any.whl", hash = "sha256:48e5e61472fee0ddee27ebad085614ebedb7af41e88f687aaf881afb723a162f"},
-    {file = "Werkzeug-2.3.4.tar.gz", hash = "sha256:1d5a58e0377d1fe39d061a5de4469e414e78ccb1e1e59c0f5ad6fa1c36c52b76"},
+    {file = "Werkzeug-2.3.5-py3-none-any.whl", hash = "sha256:26c6a6a63a8a8d10a8d4e13e7f10821772ff5f138909262e89e946717c72b857"},
+    {file = "Werkzeug-2.3.5.tar.gz", hash = "sha256:f6426f626540009131f06482c73f10c536efd47125afc63c850cc950db9ae585"},
 ]
 
 [package.dependencies]
@@ -3817,4 +3817,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "3c15c0f5dff3e4e532103934001fcbda403a327bfffb7f76cef98d9b095c9661"
+content-hash = "d034492449ffe944292d2d44f160b8d22c8f074634026514af294d1feb029925"
