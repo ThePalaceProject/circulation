@@ -201,6 +201,7 @@ def create_config_setting() -> CreateConfigSetting:
         value: Optional[str] = None,
         integration_id: Optional[int] = None,
         library_id: Optional[int] = None,
+        associate_library: bool = False,
     ) -> int:
         if type(value) in (tuple, list, dict):
             value = json.dumps(value)
@@ -212,7 +213,7 @@ def create_config_setting() -> CreateConfigSetting:
         assert isinstance(setting.id, int)
 
         # If a library is associated with the setting we must associate the integration as well
-        if library_id:
+        if library_id and associate_library:
             relation = connection.execute(
                 "select * from externalintegrations_libraries where externalintegration_id=%s and library_id=%s",
                 (integration_id, library_id),

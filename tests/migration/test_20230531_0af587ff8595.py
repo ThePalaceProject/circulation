@@ -61,7 +61,12 @@ def test_migration(
         create_config_setting(connection, "password", "password", integration_id)
         create_config_setting(connection, "url", "http://url", integration_id)
         create_config_setting(
-            connection, "default_loan_duration", "77", integration_id, library_id
+            connection,
+            "default_loan_duration",
+            "77",
+            integration_id,
+            library_id,
+            associate_library=True,
         )
         create_collection(connection, "Test B&T", integration_id, "ExternalAccountID")
 
