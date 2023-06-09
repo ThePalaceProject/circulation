@@ -73,6 +73,6 @@ jobs:
           target: baseimage
           # If we are not doing a scheduled build, use the latest image as a cache to speed up the build
           cache-from: |
-            ${{ (github.event_name == 'schedule') && '' || format('type=registry,ref=ghcr.io/{0}/circ-baseimage:latest', github.repository_owner) }}
+            ${{ (github.event_name != 'schedule') && format('type=registry,ref=ghcr.io/{0}/circ-baseimage:latest', github.repository_owner) || '' }}
           cache-to: type=inline
           platforms: linux/amd64, linux/arm64
