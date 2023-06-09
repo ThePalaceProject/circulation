@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from typing import Dict
+from typing import Any, Dict
 
 from pytest_alembic import MigrationContext
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from tests.migration.conftest import (
     CreateCollection,
@@ -17,17 +17,18 @@ class IntegrationConfiguration:
     name: str
     goal: str
     id: int
-    settings: dict
-    library_settings: Dict[int, Dict]
+    settings: Dict[str, Any]
+    library_settings: Dict[int, Dict[str, Any]]
 
 
 def query_integration_configurations(
-    connection, goal: str, name: str
+    connection: Connection, goal: str, name: str
 ) -> IntegrationConfiguration:
     result = connection.execute(
         "select id, name, protocol, goal, settings from integration_configurations where goal=%s and name=%s",
         (goal, name),
     ).fetchone()
+    assert result is not None
 
     library_results = connection.execute(
         "select library_id, settings from integration_library_configurations where parent_id=%s",
@@ -47,7 +48,7 @@ def test_migration(
     create_external_integration: CreateExternalIntegration,
     create_config_setting: CreateConfigSetting,
     create_collection: CreateCollection,
-):
+) -> None:
     """Test the migration of configurationsettings to integration_configurations for the licenses type goals"""
     # alembic_runner.set_revision("a9ed3f76d649")
     alembic_runner.migrate_down_to("a9ed3f76d649")
@@ -60,7 +61,7 @@ def test_migration(
         create_config_setting(connection, "password", "password", integration_id)
         create_config_setting(connection, "url", "http://url", integration_id)
         create_config_setting(
-            connection, "default_loan_duration", 77, integration_id, library_id
+            connection, "default_loan_duration", "77", integration_id, library_id
         )
         create_collection(connection, "Test B&T", integration_id, "ExternalAccountID")
 
@@ -94,7 +95,7 @@ def test_key_rename(
     create_external_integration: CreateExternalIntegration,
     create_config_setting: CreateConfigSetting,
     create_collection: CreateCollection,
-):
+) -> None:
 
     alembic_runner.migrate_down_to("a9ed3f76d649")
     with alembic_engine.connect() as connection:
@@ -114,10 +115,10 @@ def test_key_rename(
             integration_id,
         )
         create_config_setting(
-            connection, "prioritized_drm_schemes", ["P1", "P2"], integration_id
+            connection, "prioritized_drm_schemes", '["P1", "P2"]', integration_id
         )
         create_config_setting(
-            connection, "IGNORED_IDENTIFIER_TYPE", ["Overdrive ID"], integration_id
+            connection, "IGNORED_IDENTIFIER_TYPE", '["Overdrive ID"]', integration_id
         )
         create_collection(
             connection, "Test Overdrive", integration_id, "ExternalAccountID"

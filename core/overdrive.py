@@ -4,7 +4,7 @@ import datetime
 import json
 import logging
 from threading import RLock
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, cast
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -131,10 +131,10 @@ class OverdriveSettings(BaseImporterSettings):
 
 
 class OverdriveData:
-    overdrive_client_key: str | None = None
-    overdrive_client_secret: str | None = None
+    overdrive_client_key: str
+    overdrive_client_secret: str
+    overdrive_website_id: str
     overdrive_server_nickname: str | None = None
-    overdrive_website_id: str | None = None
     connection_max_retry_count: int = 0
 
 
@@ -285,7 +285,9 @@ class OverdriveCoreAPI(
         self._collection_id = collection.id
 
         # Initialize configuration information.
-        self._integration_configuration_id = collection.integration_configuration.id
+        self._integration_configuration_id = cast(
+            int, collection.integration_configuration.id
+        )
         self._configuration = OverdriveData()
 
         if collection.parent:

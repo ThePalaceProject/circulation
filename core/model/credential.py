@@ -218,7 +218,11 @@ class Credential(Base):
             _db, Credential, data_source=data_source, type=token_type, patron=patron
         )
 
-        return cls._filter_invalid_credential(credential, allow_persistent_token)
+        return (
+            cls._filter_invalid_credential(credential, allow_persistent_token)
+            if credential
+            else None
+        )
 
     @classmethod
     def lookup_and_expire_temporary_token(cls, _db, data_source, type, token):

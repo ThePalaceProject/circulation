@@ -29,13 +29,10 @@ from .library import Library, externalintegrations_libraries
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.configuration.ignored_identifier import (  # noqa: autoflake
-        IgnoredIdentifierConfiguration,
-    )
     from core.model import Collection  # noqa: autoflake
 
 
-class ExternalIntegrationLink(Base, HasSessionCache):
+class ExternalIntegrationLink(Base):
 
     __tablename__ = "externalintegrationslinks"
 

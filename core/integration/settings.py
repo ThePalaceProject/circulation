@@ -3,7 +3,17 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from pydantic import (
     BaseModel,
@@ -142,7 +152,7 @@ class ConfigurationFormItemType(Enum):
     NUMBER = "number"
 
     @classmethod
-    def options_from_enum(cls, enum_: Enum) -> Dict:
+    def options_from_enum(cls, enum_: Type[Enum]) -> Dict[str, str]:
         return {e.value: e.name for e in enum_}
 
 
@@ -188,7 +198,7 @@ class ConfigurationFormItem:
     weight: int = 0
 
     # Allowed values for any field
-    allowed: List | None = None
+    allowed: List[Any] | None = None
 
     @staticmethod
     def get_form_value(value: Any) -> Any:

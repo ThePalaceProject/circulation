@@ -10,12 +10,13 @@ from core.config import IntegrationException
 from core.exceptions import BaseError
 from core.model import Collection, Library, LicensePool, Patron
 from core.model.integration import IntegrationConfiguration
+from core.selftest import BaseHasSelfTests
 from core.selftest import HasSelfTests as CoreHasSelfTests
 from core.selftest import HasSelfTestsIntegrationConfiguration, SelfTestResult
 from core.util.problem_detail import ProblemDetail
 
 
-class HasSelfTests(CoreHasSelfTests, ABC):
+class HasPatronSelfTests(BaseHasSelfTests, ABC):
     """Circulation-specific enhancements for HasSelfTests.
 
     Circulation self-tests frequently need to test the ability to act
@@ -114,7 +115,11 @@ class HasSelfTests(CoreHasSelfTests, ABC):
         raise cls._NoValidLibrarySelfTestPatron(message, detail=detail)
 
 
-class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasSelfTests):
+class HasSelfTests(CoreHasSelfTests, HasPatronSelfTests):
+    """Circulation specific self-tests, with the external integration paradigm"""
+
+
+class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelfTests):
     """Extra tests to verify the integrity of imported
     collections of books.
 

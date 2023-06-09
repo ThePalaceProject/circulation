@@ -6,7 +6,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, Optional, Tuple, Type
 
 import flask
 from flask_babel import lazy_gettext as _
@@ -468,7 +468,16 @@ class BaseCirculationAPISettings:
     )
 
 
-class CirculationConfigurationMixin:
+class BaseCirculationAPIProtocol:
+    _db: Session
+    _integration_configuration_id: Optional[int]
+
+    @classmethod
+    def settings_class(cls) -> Type[BaseSettings]:
+        raise NotImplementedError()
+
+
+class CirculationConfigurationMixin(BaseCirculationAPIProtocol):
     def integration_configuration(self) -> IntegrationConfiguration:
         config = get_one(
             self._db, IntegrationConfiguration, id=self._integration_configuration_id
@@ -487,54 +496,6 @@ class BaseCirculationAPI(
     HasLibraryIntegrationConfiguration, CirculationConfigurationMixin
 ):
     """Encapsulates logic common to all circulation APIs."""
-
-    # Add to LIBRARY_SETTINGS if your circulation API is for a
-    # distributor which includes ebooks and allows clients to specify
-    # their own loan lengths.
-    EBOOK_LOAN_DURATION_SETTING = {
-        "key": Collection.EBOOK_LOAN_DURATION_KEY,
-        "label": _("Ebook Loan Duration (in Days)"),
-        "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        "type": "number",
-        "description": _(
-            "When a patron uses SimplyE to borrow an ebook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
-        ),
-    }
-
-    # Add to LIBRARY_SETTINGS if your circulation API is for a
-    # distributor which includes audiobooks and allows clients to
-    # specify their own loan lengths.
-    AUDIOBOOK_LOAN_DURATION_SETTING = {
-        "key": Collection.AUDIOBOOK_LOAN_DURATION_KEY,
-        "label": _("Audiobook Loan Duration (in Days)"),
-        "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        "type": "number",
-        "description": _(
-            "When a patron uses SimplyE to borrow an audiobook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
-        ),
-    }
-
-    # Add to LIBRARY_SETTINGS if your circulation API is for a
-    # distributor with a default loan period negotiated out-of-band,
-    # such that the circulation manager cannot _specify_ the length of
-    # a loan.
-    DEFAULT_LOAN_DURATION_SETTING = {
-        "key": Collection.EBOOK_LOAN_DURATION_KEY,
-        "label": _("Default Loan Period (in Days)"),
-        "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        "type": "number",
-        "description": _(
-            "Until it hears otherwise from the distributor, this server will assume that any given loan for this library from this collection will last this number of days. This number is usually a negotiated value between the library and the distributor. This only affects estimates&mdash;it cannot affect the actual length of loans."
-        ),
-    }
-
-    # These collection-specific settings should be inherited by all
-    # distributors.
-    SETTINGS: List[dict] = []
-
-    # These library- and collection-specific settings should be
-    # inherited by all distributors.
-    LIBRARY_SETTINGS: List[dict] = []
 
     BORROW_STEP = "borrow"
     FULFILL_STEP = "fulfill"

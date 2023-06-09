@@ -20,9 +20,13 @@ from webpub_manifest_parser.opds2.registry import (
 from webpub_manifest_parser.utils import encode, first_or_default
 
 from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
-from core.integration.settings import ConfigurationFormItem, FormField
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.mirror import MirrorUploader
-from core.model.configuration import ConfigurationAttributeType, HasExternalIntegration
+from core.model.configuration import HasExternalIntegration
 from core.model.integration import IntegrationConfiguration
 
 from .coverage import CoverageFailure
@@ -124,7 +128,7 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
             description=_(
                 "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
             ),
-            type=ConfigurationAttributeType.TEXT,
+            type=ConfigurationFormItemType.TEXT,
             required=False,
         ),
     )
@@ -788,9 +792,14 @@ class OPDS2Importer(
         :param db: Database session
         :return: External integration associated with this object
         """
-        return get_one(
+        ext = get_one(
             self._db, IntegrationConfiguration, id=self._integration_configuration_id
         )
+        if not ext:
+            raise ValueError(
+                f"Integration Configuration not found {self._integration_configuration_id}"
+            )
+        return ext
 
     @staticmethod
     def _get_publications(

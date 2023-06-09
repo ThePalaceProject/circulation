@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List, Type
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -22,12 +22,12 @@ class SettingsModel:
     def set(self, key: str, value: Any) -> None:
         """Setting any value in the settings dict can only
         be signalled for a flush to the DB if the dict object has changed.
-        This is an SALAlchemy idiosyncrasy."""
+        This is an SQLAlchemy idiosyncrasy."""
         settings = self.settings.copy()
         settings[key] = value
-        self.settings = settings
+        self.settings: Dict[str, Any] = settings
 
-    def get(self, key: str, *args) -> Any:
+    def get(self, key: str, *args: List[Any]) -> Any:
         return self.settings.get(key, *args)
 
     def __setitem__(self, key: str, value: Any) -> None:
@@ -67,7 +67,7 @@ class IntegrationConfiguration(Base, SettingsModel):
     name = Column(Unicode, nullable=False, unique=True)
 
     # The configuration settings for this integration. Stored as json.
-    settings = Column(JSONB, nullable=False, default=dict)
+    settings: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)
@@ -144,7 +144,7 @@ class IntegrationLibraryConfiguration(Base, SettingsModel):
     library: Mapped[Library] = relationship("Library")
 
     # The configuration settings for this integration. Stored as json.
-    settings = Column(JSONB, nullable=False, default=dict)
+    settings: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 
     def __repr__(self) -> str:
         return (
@@ -170,12 +170,12 @@ class IntegrationLibraryConfiguration(Base, SettingsModel):
     # Settings model inheritance
     # If the library configuration has no such value
     # but the parent does, retrieve the parent value
-    def get(self, key, *args) -> Any:
+    def get(self, key: str, *args: List[Any]) -> Any:
         if key not in self.settings and self.parent:
             return self.parent.get(key, *args)
         return super().get(key, *args)
 
-    def __getitem__(self, key) -> Any:
+    def __getitem__(self, key: str) -> Any:
         if key not in self.settings and self.parent:
             return self.parent.settings[key]
-        return super.__getitem__(key)
+        return super().__getitem__(key)

@@ -66,7 +66,12 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
         :param db: SQLAlchemy session
         :return: ExternalIntegration object
         """
-        return get_one(db, ExternalIntegration, id=self._external_integration_id)
+        ext = get_one(db, ExternalIntegration, id=self._external_integration_id)
+        if ext is None:
+            raise ValueError(
+                f"External Integration not found: {self._external_integration_id}"
+            )
+        return ext
 
     def fulfill(
         self, patron, pin, licensepool, delivery_mechanism, fulfillment: FulfillmentInfo

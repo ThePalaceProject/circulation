@@ -282,7 +282,10 @@ class ODLAPI(
         :param db: Database session
         :return: Collection associated with this object
         """
-        return get_one(db, Collection, id=self.collection_id)
+        collection = get_one(db, Collection, id=self.collection_id)
+        if not collection:
+            raise ValueError(f"Collection not found: {self.collection_id}")
+        return collection
 
     def _get_hasher(self):
         """Returns a Hasher instance

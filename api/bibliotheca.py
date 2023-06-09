@@ -99,10 +99,10 @@ class BibliothecaSettings(BaseSettings):
 
 class BibliothecaLibrarySettings(BaseSettings):
     default_loan_duration: Optional[
-        str
+        int
     ] = BaseCirculationAPISettings.default_loan_duration
 
-    dont_display_resrves: Optional[str] = FormField(
+    dont_display_reserves: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,

@@ -78,7 +78,7 @@ class OverdriveLibrarySettings(BaseSettings):
         ),
     )
 
-    ebook_loan_duration: Optional[str] = BaseCirculationAPISettings.ebook_loan_duration
+    ebook_loan_duration: Optional[int] = BaseCirculationAPISettings.ebook_loan_duration
 
 
 class OverdriveChildSettings(BaseSettings):

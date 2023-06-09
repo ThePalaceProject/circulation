@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 from typing import Dict, Tuple, Type, TypeVar
 
-from sqlalchemy.engine import Connection, LegacyCursorResult, Row
+from sqlalchemy.engine import Connection, CursorResult, Row
 
 from api.authentication.base import AuthenticationProvider
 from core.integration.settings import (
@@ -44,7 +44,7 @@ def _validate_and_load_settings(
 def get_configuration_settings(
     connection: Connection,
     integration: Row,
-) -> Tuple[Dict, Dict, Dict]:
+) -> Tuple[Dict, Dict, str]:
     settings = connection.execute(
         "select cs.library_id, cs.key, cs.value from configurationsettings cs "
         "where cs.external_integration_id = (%s)",
@@ -119,7 +119,7 @@ def _migrate_library_settings(
     )
 
 
-def get_integrations(connection: Connection, goal: str) -> LegacyCursorResult:
+def get_integrations(connection: Connection, goal: str) -> CursorResult:
     external_integrations = connection.execute(
         "select ei.id, ei.protocol, ei.name from externalintegrations ei "
         "where ei.goal = %s",
@@ -130,7 +130,7 @@ def get_integrations(connection: Connection, goal: str) -> LegacyCursorResult:
 
 def get_library_for_integration(
     connection: Connection, integration_id: int
-) -> LegacyCursorResult:
+) -> CursorResult:
     external_integration_library = connection.execute(
         "select library_id from externalintegrations_libraries where externalintegration_id = %s",
         (integration_id,),

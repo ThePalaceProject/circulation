@@ -100,6 +100,7 @@ def get_one(
             return q.one()
     except NoResultFound:
         return None
+    return None
 
 
 def get_one_or_create(
