@@ -86,7 +86,7 @@ class TestODLNotificationController:
     ):
         db = controller_fixture.db
 
-        odl_fixture.collection.external_integration.protocol = protocol
+        odl_fixture.collection.integration_configuration.protocol = protocol
         odl_fixture.pool.licenses_owned = 10
         odl_fixture.pool.licenses_available = 5
         loan, ignore = odl_fixture.pool.loan_to(odl_fixture.patron)

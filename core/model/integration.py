@@ -34,7 +34,7 @@ class SettingsModel:
         self.set(key, value)
 
     def __getitem__(self, key: str) -> Any:
-        self.settings[key]
+        return self.settings[key]
 
 
 class IntegrationConfiguration(Base, SettingsModel):

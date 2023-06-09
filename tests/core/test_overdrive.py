@@ -5,6 +5,7 @@ import pytest
 
 from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
+from core.integration.goals import Goals
 from core.metadata_layer import LinkData
 from core.model import (
     Contributor,
@@ -170,8 +171,8 @@ class TestOverdriveCoreAPI:
         # You can instead initialize it to use the testing set of
         # hostnames.
         def api_with_setting(x):
-            integration = fixture.overdrive.collection.external_integration
-            integration.setting("overdrive_server_nickname").value = x
+            config = fixture.overdrive.collection.integration_configuration
+            config["overdrive_server_nickname"] = x
             return c(session, fixture.overdrive.collection)
 
         testing = api_with_setting(OverdriveConfiguration.TESTING_SERVERS)
@@ -393,10 +394,10 @@ class TestOverdriveCoreAPI:
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="1",
         )
-        main.external_integration.setting("overdrive_client_key").value = "user"
-        main.external_integration.setting("overdrive_client_secret").value = "password"
-        main.external_integration.setting("overdrive_website_id").value = "100"
-        main.external_integration.setting("ils_name").value = "default"
+        main.integration_configuration["overdrive_client_key"] = "user"
+        main.integration_configuration["overdrive_client_secret"] = "password"
+        main.integration_configuration["overdrive_website_id"] = "100"
+        main.integration_configuration["ils_name"] = "default"
 
         # Here's an Overdrive API client for that collection.
         overdrive_main = MockOverdriveCoreAPI(session, main)
@@ -987,6 +988,8 @@ class TestOverdriveAdvantageAccount:
         assert parent == collection.parent
         assert collection.external_account_id == account.library_id
         assert ExternalIntegration.LICENSE_GOAL == collection.external_integration.goal
+        assert ExternalIntegration.OVERDRIVE == collection.protocol
+        assert Goals.LICENSE_GOAL == collection.integration_configuration.goal
         assert ExternalIntegration.OVERDRIVE == collection.protocol
 
         # To ensure uniqueness, the collection was named after its

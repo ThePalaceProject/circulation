@@ -364,19 +364,19 @@ class OverdriveCoreAPI(
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
             parent_integration = collection.parent.integration_configuration
-
             for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
                 parent_value = parent_integration.get(key)
                 setattr(self._configuration, key, parent_value)
         else:
             self.parent_library_id = None
 
-        # Child settings should override parent settings where available
+        # Self settings should override parent settings where available
         settings = collection.integration_configuration.settings
         for name, schema in self.settings_class().schema()["properties"].items():
-            setattr(
-                self._configuration, name, settings.get(name, schema.get("default"))
-            )
+            if name in settings or not hasattr(self._configuration, name):
+                setattr(
+                    self._configuration, name, settings.get(name, schema.get("default"))
+                )
 
         if not self._configuration.overdrive_client_key:
             raise CannotLoadConfiguration("Overdrive client key is not configured")
@@ -466,11 +466,10 @@ class OverdriveCoreAPI(
 
     def ils_name(self, library):
         """Determine the ILS name to use for the given Library."""
-        return (
-            self.integration_configuration()
-            .for_library(library.id)
-            .get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
-        )
+        config = self.integration_configuration().for_library(library.id)
+        if not config:
+            return self.ILS_NAME_DEFAULT
+        return config.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
 
     @property
     def advantage_library_id(self):

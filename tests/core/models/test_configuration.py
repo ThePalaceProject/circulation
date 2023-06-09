@@ -649,9 +649,9 @@ class TestExternalIntegration:
         assert None == db.default_collection().data_source
 
         # data source will be automatically created if necessary.
-        db.default_collection().external_integration.setting(
-            Collection.DATA_SOURCE_NAME_SETTING
-        ).value = "New Data Source"
+        db.default_collection().integration_configuration.set(
+            Collection.DATA_SOURCE_NAME_SETTING, "New Data Source"
+        )
         assert "New Data Source" == db.default_collection().data_source.name
 
     def test_set_key_value_pair(

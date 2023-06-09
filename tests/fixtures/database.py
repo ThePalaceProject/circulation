@@ -169,7 +169,10 @@ class DatabaseTransactionFixture:
             ExternalIntegration.OPDS_IMPORT
         )
         integration.goal = ExternalIntegration.LICENSE_GOAL
-        collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
+        config = collection.create_integration_configuration(
+            ExternalIntegration.OPDS_IMPORT
+        )
+        config.for_library(library.id, create=True)
         if collection not in library.collections:
             library.collections.append(collection)
         return library
@@ -270,11 +273,11 @@ class DatabaseTransactionFixture:
         collection.external_account_id = external_account_id
         integration = collection.create_external_integration(protocol)
         integration.goal = ExternalIntegration.LICENSE_GOAL
-        integration.url = url
-        integration.username = username
-        integration.password = password
-
-        collection.create_integration_configuration(protocol)
+        config = collection.create_integration_configuration(protocol)
+        config.goal = Goals.LICENSE_GOAL
+        config["url"] = url
+        config["username"] = username
+        config["password"] = password
 
         if data_source_name:
             collection.data_source = data_source_name

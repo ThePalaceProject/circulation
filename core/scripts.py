@@ -1249,19 +1249,25 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     'No collection called "%s". You can create it, but you must specify a protocol.'
                     % name
                 )
+        config = collection.integration_configuration
         integration = collection.external_integration
         if protocol:
+            config.protocol = protocol
             integration.protocol = protocol
         if args.external_account_id:
             collection.external_account_id = args.external_account_id
 
         if args.url:
-            integration.url = args.url
+            config["url"] = args.url
         if args.username:
-            integration.username = args.username
+            config["username"] = args.username
         if args.password:
-            integration.password = args.password
+            config["password"] = args.password
         self.apply_settings(args.setting, integration)
+        if args.setting:
+            for setting in args.setting:
+                key, value = ConfigurationSettingScript._parse_setting(setting)
+                config[key] = value
 
         if hasattr(args, "library"):
             for name in args.library:
@@ -1274,6 +1280,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     raise ValueError(message)
                 if collection not in library.collections:
                     library.collections.append(collection)
+                    config.for_library(library.id, create=True)
         site_configuration_has_changed(_db)
         _db.commit()
         output.write("Configuration settings stored.\n")

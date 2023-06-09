@@ -260,12 +260,15 @@ class Collection(Base, HasSessionCache):
         qu = (
             _db.query(cls)
             .join(
-                ExternalIntegration,
-                cls.external_integration_id == ExternalIntegration.id,
+                IntegrationConfiguration,
+                cls.integration_configuration_id == IntegrationConfiguration.id,
             )
-            .join(ExternalIntegration.settings)
-            .filter(ConfigurationSetting.key == Collection.DATA_SOURCE_NAME_SETTING)
-            .filter(ConfigurationSetting.value == data_source)
+            .filter(
+                IntegrationConfiguration.settings[
+                    Collection.DATA_SOURCE_NAME_SETTING
+                ].astext
+                == data_source
+            )
             .filter(Collection.marked_for_deletion == False)
         )
         return qu
@@ -325,21 +328,26 @@ class Collection(Base, HasSessionCache):
             or self.STANDARD_DEFAULT_LOAN_PERIOD
         )
 
-    def default_loan_period_setting(self, library, medium=EditionConstants.BOOK_MEDIUM):
+    def default_loan_period_setting(
+        self, library, medium=EditionConstants.BOOK_MEDIUM, set_value=None
+    ):
         """Until we hear otherwise from the license provider, we assume
         that someone who borrows a non-open-access item from this
         collection has it for this number of days.
         """
-        _db = Session.object_session(library)
         if medium == EditionConstants.AUDIO_MEDIUM:
             key = self.AUDIOBOOK_LOAN_DURATION_KEY
         else:
             key = self.EBOOK_LOAN_DURATION_KEY
         if isinstance(library, Library):
             config = self.integration_configuration.for_library(library.id)
-            return config and config.get(key)
         elif isinstance(library, IntegrationClient):
-            return self.integration_configuration.get(key)
+            config = self.integration_configuration
+
+        if config:
+            if set_value is not None:
+                config.set(key, set_value)
+            return config.get(key)
 
     DEFAULT_RESERVATION_PERIOD_KEY = "default_reservation_period"
     STANDARD_DEFAULT_RESERVATION_PERIOD = 3
@@ -559,8 +567,6 @@ class Collection(Base, HasSessionCache):
             # No-op.
             return
 
-        self.libraries.remove(library)
-
         _db = Session.object_session(self)
         if self.external_integration_id:
             qu = (
@@ -572,6 +578,10 @@ class Collection(Base, HasSessionCache):
                 )
             )
             qu.delete()
+        else:
+            raise ValueError(
+                "No known external integration for collection %s" % self.name
+            )
         if self.integration_configuration_id:
             qu = (
                 _db.query(IntegrationLibraryConfiguration)
@@ -582,6 +592,12 @@ class Collection(Base, HasSessionCache):
                 )
             )
             qu.delete()
+        else:
+            raise ValueError(
+                "No known integration configuration for collection %s" % self.name
+            )
+
+        self.libraries.remove(library)
 
     @classmethod
     def _decode_metadata_identifier(cls, metadata_identifier):
@@ -623,6 +639,7 @@ class Collection(Base, HasSessionCache):
             # external_account_id.
             collection, is_new = create(_db, Collection, name=metadata_identifier)
             collection.create_external_integration(protocol)
+            collection.create_integration_configuration(protocol)
 
         if protocol == ExternalIntegration.OPDS_IMPORT:
             # For OPDS Import collections only, we store the URL to
@@ -659,16 +676,19 @@ class Collection(Base, HasSessionCache):
             lines.append('Name: "%s"' % self.name)
         if self.parent:
             lines.append("Parent: %s" % self.parent.name)
-        integration = self.external_integration
+        integration = self.integration_configuration
         if integration.protocol:
             lines.append('Protocol: "%s"' % integration.protocol)
         for library in self.libraries:
             lines.append('Used by library: "%s"' % library.short_name)
         if self.external_account_id:
             lines.append('External account ID: "%s"' % self.external_account_id)
-        for setting in sorted(integration.settings, key=lambda x: x.key):
-            if (include_secrets or not setting.is_secret) and setting.value is not None:
-                lines.append(f'Setting "{setting.key}": "{setting.value}"')
+        for name in sorted(integration.settings):
+            value = integration[name]
+            if (
+                include_secrets or not ConfigurationSetting._is_secret(name)
+            ) and value is not None:
+                lines.append(f'Setting "{name}": "{value}"')
         return lines
 
     def catalog_identifier(self, identifier):
