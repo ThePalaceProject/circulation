@@ -6,9 +6,9 @@ from flask import send_file
 from sqlalchemy import or_
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
-from api.lcp.encrypt import LCPEncryptionConfiguration, LCPEncryptionSettings
+from api.lcp.encrypt import LCPEncryptionSettings
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServer, LCPServerConfiguration, LCPServerSettings
+from api.lcp.server import LCPServer, LCPServerSettings
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings
 from core.lcp.credential import LCPCredentialFactory
@@ -106,10 +106,6 @@ class LCPAPI(
     NAME = ExternalIntegration.LCP
     SERVICE_NAME = "LCP"
     DESCRIPTION = "Manually imported collection protected using Readium LCP DRM"
-
-    SETTINGS = (
-        LCPServerConfiguration.to_settings() + LCPEncryptionConfiguration.to_settings()
-    )
 
     @classmethod
     def settings_class(cls):

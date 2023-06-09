@@ -24,7 +24,7 @@ from core.integration.settings import (
 
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
-from .importers import BaseImporterConfiguration, BaseImporterSettings
+from .importers import BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -52,13 +52,7 @@ from .model import (
     Subject,
     get_one_or_create,
 )
-from .model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
-    HasExternalIntegration,
-)
+from .model.configuration import HasExternalIntegration
 from .util.datetime_helpers import strptime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
@@ -83,68 +77,6 @@ class OverdriveConstants:
 
     PRODUCTION_SERVERS = "production"
     TESTING_SERVERS = "testing"
-
-
-class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """The basic Overdrive configuration"""
-
-    OVERDRIVE_CLIENT_KEY = "overdrive_client_key"
-    OVERDRIVE_CLIENT_SECRET = "overdrive_client_secret"
-    OVERDRIVE_SERVER_NICKNAME = "overdrive_server_nickname"
-    OVERDRIVE_WEBSITE_ID = "overdrive_website_id"
-
-    # Note that the library ID is not included here because it is not Overdrive-specific
-    OVERDRIVE_CONFIGURATION_KEYS = {
-        OVERDRIVE_CLIENT_KEY,
-        OVERDRIVE_CLIENT_SECRET,
-        OVERDRIVE_SERVER_NICKNAME,
-        OVERDRIVE_WEBSITE_ID,
-    }
-
-    library_id = ConfigurationMetadata(
-        key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
-        label=_("Library ID"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The library identifier.",
-        required=True,
-    )
-    overdrive_website_id = ConfigurationMetadata(
-        key=OVERDRIVE_WEBSITE_ID,
-        label=_("Website ID"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The web site identifier.",
-        required=True,
-    )
-    overdrive_client_key = ConfigurationMetadata(
-        key=OVERDRIVE_CLIENT_KEY,
-        label=_("Client Key"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The Overdrive client key.",
-        required=True,
-    )
-    overdrive_client_secret = ConfigurationMetadata(
-        key=OVERDRIVE_CLIENT_SECRET,
-        label=_("Client Secret"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The Overdrive client secret.",
-        required=True,
-    )
-
-    PRODUCTION_SERVERS = "production"
-    TESTING_SERVERS = "testing"
-
-    overdrive_server_nickname = ConfigurationMetadata(
-        key=OVERDRIVE_SERVER_NICKNAME,
-        label=_("Server family"),
-        type=ConfigurationAttributeType.SELECT,
-        required=False,
-        default=PRODUCTION_SERVERS,
-        description="Unless you hear otherwise from Overdrive, your integration should use their production servers.",
-        options=[
-            ConfigurationOption(label=_("Production"), key=PRODUCTION_SERVERS),
-            ConfigurationOption(label=_("Testing"), key=TESTING_SERVERS),
-        ],
-    )
 
 
 class OverdriveSettings(BaseImporterSettings):

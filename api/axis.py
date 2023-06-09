@@ -138,45 +138,6 @@ class Axis360API(
     SERVICE_NAME = "Axis 360"
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
 
-    SETTINGS = [
-        {"key": ExternalIntegration.USERNAME, "label": _("Username"), "required": True},
-        {"key": ExternalIntegration.PASSWORD, "label": _("Password"), "required": True},
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Library ID"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("Server"),
-            "default": Axis360APIConstants.PRODUCTION_BASE_URL,
-            "required": True,
-            "format": "url",
-            "allowed": list(Axis360APIConstants.SERVER_NICKNAMES.keys()),
-        },
-        {
-            "key": Axis360APIConstants.VERIFY_SSL,
-            "label": _("Verify SSL Certificate"),
-            "description": _(
-                "This should always be True in production, it may need to be set to False to use the"
-                "Axis 360 QA Environment."
-            ),
-            "type": "select",
-            "options": [
-                {"label": _("True"), "key": "True"},
-                {
-                    "label": _("False"),
-                    "key": "False",
-                },
-            ],
-            "default": True,
-        },
-    ] + BaseCirculationAPI.SETTINGS
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING
-    ]
-
     access_token_endpoint = "accesstoken"
     availability_endpoint = "availability/v2"
     fulfillment_endpoint = "getfullfillmentInfo/v2"

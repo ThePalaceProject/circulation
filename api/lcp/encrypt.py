@@ -16,11 +16,6 @@ from core.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-)
 from core.model.integration import IntegrationConfiguration
 
 
@@ -31,36 +26,6 @@ class LCPEncryptionException(BaseError):
 class LCPEncryptionConstants:
     DEFAULT_LCPENCRYPT_LOCATION = "/go/bin/lcpencrypt"
     DEFAULT_LCPENCRYPT_DOCKER_IMAGE = "readium/lcpencrypt"
-
-
-class LCPEncryptionConfiguration(ConfigurationGrouping):
-    """Contains different settings required by LCPEncryptor"""
-
-    DEFAULT_LCPENCRYPT_LOCATION = "/go/bin/lcpencrypt"
-    DEFAULT_LCPENCRYPT_DOCKER_IMAGE = "readium/lcpencrypt"
-
-    lcpencrypt_location = ConfigurationMetadata(
-        key="lcpencrypt_location",
-        label=_("lcpencrypt's location"),
-        description=_(
-            "Full path to the local lcpencrypt binary. "
-            "The default value is {}".format(DEFAULT_LCPENCRYPT_LOCATION)
-        ),
-        type=ConfigurationAttributeType.TEXT,
-        required=False,
-        default=DEFAULT_LCPENCRYPT_LOCATION,
-    )
-
-    lcpencrypt_output_directory = ConfigurationMetadata(
-        key="lcpencrypt_output_directory",
-        label=_("lcpencrypt's output directory"),
-        description=_(
-            "Full path to the directory where lcpencrypt stores encrypted content. "
-            "If not set encrypted books will be stored in lcpencrypt's working directory"
-        ),
-        type=ConfigurationAttributeType.TEXT,
-        required=False,
-    )
 
 
 class LCPEncryptionSettings(BaseSettings):

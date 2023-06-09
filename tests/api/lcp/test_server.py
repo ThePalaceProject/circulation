@@ -13,7 +13,7 @@ import requests_mock
 from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServer, LCPServerConfiguration, LCPServerSettings
+from api.lcp.server import LCPServer, LCPServerConstants, LCPServerSettings
 from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
@@ -90,7 +90,7 @@ class TestLCPServer:
         configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
         configuration[
             "encryption_algorithm"
-        ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+        ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
 
         with requests_mock.Mocker() as request_mock:
             url = urllib.parse.urljoin(
@@ -199,7 +199,7 @@ class TestLCPServer:
             "52a190d1-cd69-4794-9d7a-1ec50392697a"
         )
         expected_patron_key = lcp_server_fixture.hasher_factory.create(
-            LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+            LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
         ).hash(expected_patron_passphrase.text)
 
         configuration = lcp_server_fixture.configuration
@@ -210,7 +210,7 @@ class TestLCPServer:
         configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
         configuration[
             "encryption_algorithm"
-        ] = LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+        ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
         configuration["max_printable_pages"] = max_printable_pages
         configuration["max_copiable_pages"] = max_copiable_pages
 

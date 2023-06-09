@@ -60,19 +60,6 @@ class OPDSForDistributorsAPI(
     )
     BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
 
-    SETTINGS = OPDSImporter.BASE_SETTINGS + [
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Library's username or access key"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Library's password or secret key"),
-            "required": True,
-        },
-    ]
-
     # In OPDS For Distributors, all items are gated through the
     # BEARER_TOKEN access control scheme.
     #

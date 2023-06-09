@@ -29,7 +29,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     Representation,
@@ -88,32 +87,6 @@ class EnkiAPI(
 ):
     ENKI_LIBRARY_ID_KEY = "enki_library_id"
     DESCRIPTION = _("Integrate an Enki collection.")
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("URL"),
-            "default": EnkiConstants.PRODUCTION_BASE_URL,
-            "required": True,
-            "format": "url",
-        },
-    ] + BaseCirculationAPI.SETTINGS
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        {"key": ENKI_LIBRARY_ID_KEY, "label": _("Library ID"), "required": True},
-        {
-            "key": ExternalIntegration.DISPLAY_RESERVES,
-            "label": _("Show/Hide Titles with No Available Loans"),
-            "required": False,
-            "description": _(
-                "Titles with no available loans will not be displayed in the Catalog view."
-            ),
-            "type": "select",
-            "options": [
-                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
-                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
-            ],
-        },
-    ]
 
     list_endpoint = "ListAPI"
     item_endpoint = "ItemAPI"

@@ -5,7 +5,7 @@ from pyfakefs.fake_filesystem_unittest import Patcher
 
 from api.lcp.collection import LCPAPI
 from api.lcp.encrypt import (
-    LCPEncryptionConfiguration,
+    LCPEncryptionConstants,
     LCPEncryptionException,
     LCPEncryptionResult,
     LCPEncryptor,
@@ -120,12 +120,10 @@ class TestLCPEncryptor:
 
         configuration[
             "lcpencrypt_location"
-        ] = LCPEncryptionConfiguration.DEFAULT_LCPENCRYPT_LOCATION
+        ] = LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION
 
         with Patcher() as patcher:
-            patcher.fs.create_file(
-                LCPEncryptionConfiguration.DEFAULT_LCPENCRYPT_LOCATION
-            )
+            patcher.fs.create_file(LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION)
 
             if create_file:
                 patcher.fs.create_file(file_path)

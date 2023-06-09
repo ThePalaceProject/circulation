@@ -16,54 +16,13 @@ from core.integration.settings import (
 )
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationMetadata,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
+from core.model.configuration import ExternalIntegration, HasExternalIntegration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
-from core.opds_import import OPDSImporterConfiguration
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
 if TYPE_CHECKING:
     from core.model.patron import Patron
-
-
-class ODL2APIConfiguration(OPDSImporterConfiguration):
-    skipped_license_formats = ConfigurationMetadata(
-        key="odl2_skipped_license_formats",
-        label=_("Skipped license formats"),
-        description=_(
-            "List of license formats that will NOT be imported into Circulation Manager."
-        ),
-        type=ConfigurationAttributeType.LIST,
-        required=False,
-        default=["text/html"],
-    )
-
-    loan_limit = ConfigurationMetadata(
-        key="odl2_loan_limit",
-        label=_("Loan limit per patron"),
-        description=_(
-            "The maximum number of books a patron can have loaned out at any given time."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-        default=None,
-    )
-
-    hold_limit = ConfigurationMetadata(
-        key="odl2_hold_limit",
-        label=_("Hold limit per patron"),
-        description=_(
-            "The maximum number of books a patron can have on hold at any given time."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-        default=None,
-    )
 
 
 class ODL2Settings(ODLSettings):
@@ -106,7 +65,6 @@ class ODL2Settings(ODLSettings):
 
 class ODL2API(ODLAPI):
     NAME = ExternalIntegration.ODL2
-    SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
 
     @classmethod
     def settings_class(cls):

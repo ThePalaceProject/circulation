@@ -2,17 +2,11 @@ from typing import Optional, Sequence, Set, Union
 
 from flask_babel import lazy_gettext as _
 
-from core.config import ConfigurationTrait
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
-)
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationMetadata,
-    ConfigurationOption,
 )
 from core.model.constants import IdentifierType
 from core.model.integration import IntegrationConfiguration
@@ -38,32 +32,6 @@ class IgnoredIdentifierSettings(BaseSettings):
             },
             format="narrow",
         ),
-    )
-
-
-class IgnoredIdentifierConfiguration(ConfigurationTrait):
-    """
-    Configuration to allow ignored identifiers as a setting
-    The purpose is to allow the collections to record identifier types
-    that can be ignored during an import
-    """
-
-    KEY = "IGNORED_IDENTIFIER_TYPE"
-
-    ignored_identifier_types = ConfigurationMetadata(
-        key=KEY,
-        label=_("List of identifiers that will be skipped"),
-        description=_(
-            "Circulation Manager will not be importing publications with identifiers having one of the selected types."
-        ),
-        type=ConfigurationAttributeType.MENU,
-        required=False,
-        default=tuple(),
-        options=[
-            ConfigurationOption(identifier_type, identifier_type)
-            for identifier_type in ALL_IGNORED_IDENTIFIER_TYPES
-        ],
-        format="narrow",
     )
 
 

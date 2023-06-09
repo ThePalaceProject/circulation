@@ -19,12 +19,6 @@ from core.integration.settings import (
     FormField,
 )
 from core.lcp.credential import LCPHashedPassphrase, LCPUnhashedPassphrase
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
-)
 
 if TYPE_CHECKING:
     pass
@@ -36,107 +30,6 @@ class LCPServerConstants:
         "If you do not remember your passphrase, please contact your administrator"
     )
     DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
-
-
-class LCPServerConfiguration(ConfigurationGrouping):
-    """Contains LCP License Server's settings"""
-
-    DEFAULT_PAGE_SIZE = 100
-    DEFAULT_PASSPHRASE_HINT = (
-        "If you do not remember your passphrase, please contact your administrator"
-    )
-    DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
-
-    lcpserver_url = ConfigurationMetadata(
-        key="lcpserver_url",
-        label=_("LCP License Server's URL"),
-        description=_("URL of the LCP License Server"),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    lcpserver_user = ConfigurationMetadata(
-        key="lcpserver_user",
-        label=_("LCP License Server's user"),
-        description=_("Name of the user used to connect to the LCP License Server"),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    lcpserver_password = ConfigurationMetadata(
-        key="lcpserver_password",
-        label=_("LCP License Server's password"),
-        description=_("Password of the user used to connect to the LCP License Server"),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    lcpserver_input_directory = ConfigurationMetadata(
-        key="lcpserver_input_directory",
-        label=_("LCP License Server's input directory"),
-        description=_(
-            "Full path to the directory containing encrypted books. "
-            "This directory should be the same as lcpencrypt's output directory"
-        ),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    lcpserver_page_size = ConfigurationMetadata(
-        key="lcpserver_page_size",
-        label=_("LCP License Server's page size"),
-        description=_("Number of licences returned by the server"),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-        default=DEFAULT_PAGE_SIZE,
-    )
-
-    provider_name = ConfigurationMetadata(
-        key="provider_name",
-        label=_("LCP service provider's identifier"),
-        description=_("URI that identifies the provider in an unambiguous way"),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    passphrase_hint = ConfigurationMetadata(
-        key="passphrase_hint",
-        label=_("Passphrase hint"),
-        description=_("Hint proposed to the user for selecting their passphrase"),
-        type=ConfigurationAttributeType.TEXT,
-        required=False,
-        default=DEFAULT_PASSPHRASE_HINT,
-    )
-
-    encryption_algorithm = ConfigurationMetadata(
-        key="encryption_algorithm",
-        label=_("Passphrase encryption algorithm"),
-        description=_("Algorithm used for encrypting the passphrase"),
-        type=ConfigurationAttributeType.SELECT,
-        required=False,
-        default=DEFAULT_ENCRYPTION_ALGORITHM,
-        options=ConfigurationOption.from_enum(HashingAlgorithm),
-    )
-
-    max_printable_pages = ConfigurationMetadata(
-        key="max_printable_pages",
-        label=_("Maximum number or printable pages"),
-        description=_(
-            "Maximum number of pages that can be printed over the lifetime of the license"
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-    )
-
-    max_copiable_pages = ConfigurationMetadata(
-        key="max_copiable_pages",
-        label=_("Maximum number or copiable characters"),
-        description=_(
-            "Maximum number of characters that can be copied to the clipboard"
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-    )
 
 
 class LCPServerSettings(BaseSettings):

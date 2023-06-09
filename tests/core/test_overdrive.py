@@ -22,7 +22,7 @@ from core.model import (
 from core.overdrive import (
     OverdriveAdvantageAccount,
     OverdriveBibliographicCoverageProvider,
-    OverdriveConfiguration,
+    OverdriveConstants,
     OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
 )
@@ -166,7 +166,7 @@ class TestOverdriveCoreAPI:
 
         # By default, OverdriveCoreAPI is initialized with the production
         # set of hostnames.
-        assert fixture.api.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
+        assert fixture.api.hosts() == c.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
 
         # You can instead initialize it to use the testing set of
         # hostnames.
@@ -175,13 +175,13 @@ class TestOverdriveCoreAPI:
             config["overdrive_server_nickname"] = x
             return c(session, fixture.overdrive.collection)
 
-        testing = api_with_setting(OverdriveConfiguration.TESTING_SERVERS)
-        assert testing.hosts() == c.HOSTS[OverdriveConfiguration.TESTING_SERVERS]
+        testing = api_with_setting(OverdriveConstants.TESTING_SERVERS)
+        assert testing.hosts() == c.HOSTS[OverdriveConstants.TESTING_SERVERS]
 
         # If the setting doesn't make sense, we default to production
         # hostnames.
         bad = api_with_setting("nonsensical")
-        assert bad.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
+        assert bad.hosts() == c.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
 
     def test_endpoint(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
         fixture = overdrive_with_api_fixture

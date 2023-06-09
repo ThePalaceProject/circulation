@@ -28,7 +28,7 @@ from core.model.integration import IntegrationConfiguration
 from .classifier import Classifier
 from .config import IntegrationException
 from .coverage import CoverageFailure
-from .importers import BaseImporterConfiguration, BaseImporterSettings
+from .importers import BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -57,11 +57,7 @@ from .model import (
     Subject,
     get_one,
 )
-from .model.configuration import (
-    ConfigurationGrouping,
-    ExternalIntegrationLink,
-    HasExternalIntegration,
-)
+from .model.configuration import ExternalIntegrationLink, HasExternalIntegration
 from .monitor import CollectionMonitor
 from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
@@ -98,10 +94,6 @@ def parse_identifier(db, identifier):
         )
 
     return parsed_identifier
-
-
-class OPDSImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """The basic OPDS importer configuration"""
 
 
 class AccessNotAuthenticated(Exception):
@@ -282,94 +274,6 @@ class OPDSImporter(HasLibraryIntegrationConfiguration, CirculationConfigurationM
     DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
 
     NO_DEFAULT_AUDIENCE = ""
-
-    # These settings are used by all OPDS-derived import methods.
-    BASE_SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("URL"),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": Collection.DATA_SOURCE_NAME_SETTING,
-            "label": _("Data source name"),
-            "required": True,
-        },
-        {
-            "key": Collection.DEFAULT_AUDIENCE_KEY,
-            "label": _("Default audience"),
-            "description": _(
-                "If the vendor does not specify the target audience for their books, "
-                "assume the books have this target audience."
-            ),
-            "type": "select",
-            "format": "narrow",
-            "options": [{"key": NO_DEFAULT_AUDIENCE, "label": _("No default audience")}]
-            + [
-                {"key": audience, "label": audience}
-                for audience in sorted(Classifier.AUDIENCES)
-            ],
-            "default": NO_DEFAULT_AUDIENCE,
-            "required": False,
-            "readOnly": True,
-        },
-    ]
-
-    # These settings are used by 'regular' OPDS but not by OPDS For
-    # Distributors, which has its own way of doing authentication.
-    SETTINGS = (
-        BASE_SETTINGS
-        + [
-            {
-                "key": ExternalIntegration.USERNAME,
-                "label": _("Username"),
-                "description": _(
-                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
-                ),
-            },
-            {
-                "key": ExternalIntegration.PASSWORD,
-                "label": _("Password"),
-                "description": _(
-                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
-                ),
-            },
-            {
-                "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
-                "label": _("Custom accept header"),
-                "required": False,
-                "description": _(
-                    "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
-                ),
-                "default": ",".join(
-                    [
-                        OPDSFeed.ACQUISITION_FEED_TYPE,
-                        "application/atom+xml;q=0.9",
-                        "application/xml;q=0.8",
-                        "*/*;q=0.1",
-                    ]
-                ),
-            },
-            {
-                "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
-                "label": _("Identifer"),
-                "required": False,
-                "description": _("Which book identifier to use as ID."),
-                "type": "select",
-                "options": [
-                    {"key": "", "label": _("(Default) Use <id>")},
-                    {
-                        "key": ExternalIntegration.DCTERMS_IDENTIFIER,
-                        "label": _(
-                            "Use <dcterms:identifier> first, if not exist use <id>"
-                        ),
-                    },
-                ],
-            },
-        ]
-        + OPDSImporterConfiguration.to_settings()
-    )
 
     # Subclasses of OPDSImporter may define a different parser class that's
     # a subclass of OPDSXMLParser. For example, a subclass may want to use

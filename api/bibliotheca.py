@@ -135,41 +135,6 @@ class BibliothecaAPI(
     DEFAULT_VERSION = "2.0"
     DEFAULT_BASE_URL = "https://partner.yourcloudlibrary.com/"
 
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Account ID"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Account Key"),
-            "required": True,
-        },
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Library ID"),
-            "required": True,
-        },
-    ] + BaseCirculationAPI.SETTINGS
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING,
-        {
-            "key": ExternalIntegration.DISPLAY_RESERVES,
-            "label": _("Show/Hide Titles with No Available Loans"),
-            "required": False,
-            "description": _(
-                "Titles with no available loans will not be displayed in the Catalog view."
-            ),
-            "type": "select",
-            "options": [
-                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
-                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
-            ],
-        },
-    ]
-
     MAX_AGE = timedelta(days=730).seconds
     CAN_REVOKE_HOLD_WHEN_RESERVED = False
     SET_DELIVERY_MECHANISM_AT = None

@@ -18,7 +18,7 @@ from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
-from core.importers import BaseImporterConfiguration, BaseImporterSettings
+from core.importers import BaseImporterSettings
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
@@ -49,13 +49,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
-    HasExternalIntegration,
-)
+from core.model.configuration import HasExternalIntegration
 from core.model.licensing import LicenseStatus
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor
@@ -80,91 +74,6 @@ class ODLAPIConstants:
     DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
     DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
     DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
-
-
-class ODLAPIConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """Contains LCP License Server's settings"""
-
-    DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
-    DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
-    DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
-
-    feed_url = ConfigurationMetadata(
-        key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
-        label=_("ODL feed URL"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-        format="url",
-    )
-
-    username = ConfigurationMetadata(
-        key=ExternalIntegration.USERNAME,
-        label=_("Library's API username"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    password = ConfigurationMetadata(
-        key=ExternalIntegration.PASSWORD,
-        label=_("Library's API password"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    datasource_name = ConfigurationMetadata(
-        key=Collection.DATA_SOURCE_NAME_SETTING,
-        label=_("Data source name"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    default_reservation_period = ConfigurationMetadata(
-        key=Collection.DEFAULT_RESERVATION_PERIOD_KEY,
-        label=_("Default Reservation Period (in Days)"),
-        description=_(
-            "The number of days a patron has to check out a book after a hold becomes available."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
-        default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
-    )
-
-    passphrase_hint = ConfigurationMetadata(
-        key="passphrase_hint",
-        label=_("Passphrase hint"),
-        description=_(
-            "Hint displayed to the user when opening an LCP protected publication."
-        ),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-        default=DEFAULT_PASSPHRASE_HINT,
-    )
-
-    passphrase_hint_url = ConfigurationMetadata(
-        key="passphrase_hint_url",
-        label=_("Passphrase hint URL"),
-        description=_(
-            "Hint URL available to the user when opening an LCP protected publication."
-        ),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-        default=DEFAULT_PASSPHRASE_HINT_URL,
-        format="url",
-    )
-
-    encryption_algorithm = ConfigurationMetadata(
-        key="encryption_algorithm",
-        label=_("Passphrase encryption algorithm"),
-        description=_("Algorithm used for encrypting the passphrase."),
-        type=ConfigurationAttributeType.SELECT,
-        required=False,
-        default=DEFAULT_ENCRYPTION_ALGORITHM,
-        options=ConfigurationOption.from_enum(HashingAlgorithm),
-    )
 
 
 class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
@@ -284,12 +193,6 @@ class ODLAPI(
         "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
     )
 
-    SETTINGS = BaseSharedCollectionAPI.SETTINGS + ODLAPIConfiguration.to_settings()
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.EBOOK_LOAN_DURATION_SETTING
-    ]
-
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
     # Possible status values in the License Status Document:
@@ -384,9 +287,6 @@ class ODLAPI(
     def _get_hasher(self):
         """Returns a Hasher instance
 
-        :param configuration: Configuration object
-        :type configuration: LCPServerConfiguration
-
         :return: Hasher instance
         :rtype: hash.Hasher
         """
@@ -395,7 +295,7 @@ class ODLAPI(
             self._hasher_instance = self._hasher_factory.create(
                 config.encryption_algorithm
                 if config.encryption_algorithm
-                else ODLAPIConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+                else ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM
             )
 
         return self._hasher_instance
@@ -1466,22 +1366,6 @@ class SharedODLAPI(BaseCirculationAPI, HasLibraryIntegrationConfiguration):
         "Import books from an ODL collection that's hosted by another circulation manager in the consortium. If this circulation manager will be the main host for the collection, select %(odl_name)s instead.",
         odl_name=ODLAPI.NAME,
     )
-
-    SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Base URL"),
-            "description": _(
-                "The base URL for the collection on the other circulation manager."
-            ),
-            "required": True,
-        },
-        {
-            "key": Collection.DATA_SOURCE_NAME_SETTING,
-            "label": _("Data source name"),
-            "required": True,
-        },
-    ]
 
     SUPPORTS_REGISTRATION = True
     SUPPORTS_STAGING = False

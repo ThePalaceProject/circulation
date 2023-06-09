@@ -252,31 +252,6 @@ class BaseSharedCollectionAPI:
 
     EXTERNAL_LIBRARY_URLS = "external_library_urls"
 
-    SETTINGS = [
-        {
-            "key": EXTERNAL_LIBRARY_URLS,
-            "label": _(
-                "URLs for libraries on other circulation managers that use this collection"
-            ),
-            "description": _(
-                "A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."
-            ),
-            "type": "list",
-            "format": "url",
-        },
-        {
-            "key": Collection.EBOOK_LOAN_DURATION_KEY,
-            "label": _(
-                "Ebook Loan Duration for libraries on other circulation managers (in Days)"
-            ),
-            "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-            "description": _(
-                "When a patron from another library borrows an ebook from this collection, the circulation manager will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
-            ),
-            "type": "number",
-        },
-    ]
-
     def checkout_to_external_library(self, client, pool, hold=None):
         raise NotImplementedError()
 

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
+from core.configuration.ignored_identifier import IgnoredIdentifierSettings
 from core.model.hybrid import hybrid_property
 
 from ..config import CannotLoadConfiguration, Configuration
@@ -1103,9 +1104,7 @@ class ConfigurationMetadata:
 
     def __get__(
         self,
-        owner_instance: HasConfigurationSettings
-        | IgnoredIdentifierConfiguration
-        | None,
+        owner_instance: HasConfigurationSettings | IgnoredIdentifierSettings | None,
         owner_type: type | None,
     ) -> Any:
         """Returns a value of the setting
@@ -1164,9 +1163,7 @@ class ConfigurationMetadata:
 
     def __set__(
         self,
-        owner_instance: HasConfigurationSettings
-        | IgnoredIdentifierConfiguration
-        | None,
+        owner_instance: HasConfigurationSettings | IgnoredIdentifierSettings | None,
         value: Any,
     ) -> Any:
         """Updates the setting's value

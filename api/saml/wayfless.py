@@ -10,7 +10,7 @@ from api.saml.credential import SAMLCredentialManager
 from core.exceptions import BaseError
 from core.model import Collection, get_one
 from core.model.configuration import ExternalIntegration, HasExternalIntegration
-from core.saml.wayfless import SAMLWAYFlessConfigurationTrait
+from core.saml.wayfless import SAMLWAYFlessConstants
 
 
 class SAMLWAYFlessFulfillmentError(BaseError):
@@ -49,7 +49,7 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
         self._wayfless_url_template: Optional[
             str
         ] = collection.integration_configuration.get(
-            SAMLWAYFlessConfigurationTrait.WAYFLESS_URL_TEMPLATE_KEY
+            SAMLWAYFlessConstants.WAYFLESS_URL_TEMPLATE_KEY
         )
 
         self._external_integration_id: Optional[
@@ -101,11 +101,11 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
                 )
 
             acquisition_link = self._wayfless_url_template.replace(
-                SAMLWAYFlessConfigurationTrait.IDP_PLACEHOLDER,
+                SAMLWAYFlessConstants.IDP_PLACEHOLDER,
                 urllib.parse.quote(saml_subject.idp, safe=""),
             )
             acquisition_link = acquisition_link.replace(
-                SAMLWAYFlessConfigurationTrait.ACQUISITION_LINK_PLACEHOLDER,
+                SAMLWAYFlessConstants.ACQUISITION_LINK_PLACEHOLDER,
                 urllib.parse.quote(fulfillment.content_link, safe=""),
             )
 

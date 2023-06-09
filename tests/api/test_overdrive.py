@@ -38,7 +38,7 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.overdrive import OverdriveConfiguration
+from core.overdrive import OverdriveConstants
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.api.mockapi.overdrive import MockOverdriveAPI
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
@@ -1647,25 +1647,24 @@ class TestOverdriveAPI:
         db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, "user"
+            OverdriveConstants.OVERDRIVE_CLIENT_KEY, "user"
         )
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, "password"
+            OverdriveConstants.OVERDRIVE_CLIENT_SECRET, "password"
         )
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, "100"
+            OverdriveConstants.OVERDRIVE_WEBSITE_ID, "100"
         )
         db.default_collection().integration_configuration.for_library(
             patron.library.id, create=True
         )
-        db.session.refresh(db.default_collection().integration_configuration)
 
         # Mocked testing credentials
         encoded_auth = base64.b64encode(b"TestingKey:TestingSecret")
 
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
-        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         # but mock the request methods
         od_api._do_post = MagicMock()
         od_api._do_get = MagicMock()
@@ -1694,18 +1693,18 @@ class TestOverdriveAPI:
         db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, "user"
+            OverdriveConstants.OVERDRIVE_CLIENT_KEY, "user"
         )
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, "password"
+            OverdriveConstants.OVERDRIVE_CLIENT_SECRET, "password"
         )
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, "100"
+            OverdriveConstants.OVERDRIVE_WEBSITE_ID, "100"
         )
 
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
-        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
         od_api.get_download_link = MagicMock(return_value=None)
 
@@ -1731,20 +1730,20 @@ class TestOverdriveAPI:
         db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, "user"
+            OverdriveConstants.OVERDRIVE_CLIENT_KEY, "user"
         )
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, "password"
+            OverdriveConstants.OVERDRIVE_CLIENT_SECRET, "password"
         )
         db.default_collection().integration_configuration.set(
-            OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, "100"
+            OverdriveConstants.OVERDRIVE_WEBSITE_ID, "100"
         )
         db.default_collection().integration_configuration.for_library(
             patron.library.id, create=True
         )
 
         od_api = OverdriveAPI(db.session, db.default_collection())
-        od_api._server_nickname = OverdriveConfiguration.TESTING_SERVERS
+        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
 
         # Load the mock API data
         with open("tests/api/files/overdrive/no_drm_fulfill.json") as fp:

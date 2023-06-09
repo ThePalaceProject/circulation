@@ -26,9 +26,9 @@ from api.circulation_exceptions import (
     NotOnHold,
 )
 from api.odl import (
-    ODLAPIConfiguration,
     ODLHoldReaper,
     ODLImporter,
+    ODLSettings,
     SharedODLAPI,
     SharedODLImporter,
 )
@@ -138,9 +138,10 @@ class TestODLAPI:
         assert "loan.feedbooks.net" == parsed.netloc
         params = urllib.parse.parse_qs(parsed.query)
 
-        assert ODLAPIConfiguration.passphrase_hint.default == params.get("hint")[0]  # type: ignore
+        schema = ODLSettings.schema()["properties"]
+        assert schema["passphrase_hint"]["default"] == params.get("hint")[0]  # type: ignore
         assert (
-            ODLAPIConfiguration.passphrase_hint_url.default == params.get("hint_url")[0]  # type: ignore
+            schema["passphrase_hint_url"]["default"] == params.get("hint_url")[0]  # type: ignore
         )
 
         assert odl_api_test_fixture.license.identifier == params.get("id")[0]  # type: ignore
