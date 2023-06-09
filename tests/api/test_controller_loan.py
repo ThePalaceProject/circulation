@@ -29,9 +29,11 @@ from api.problem_details import (
     OUTSTANDING_FINES,
 )
 from core.model import (
+    Collection,
     ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
+    ExternalIntegration,
     Hold,
     Identifier,
     LicensePool,
@@ -1306,3 +1308,219 @@ class TestLoanController:
             # Since we went out the the vendor APIs,
             # patron.last_loan_activity_sync was updated.
             assert patron.last_loan_activity_sync > new_sync_time
+
+    @pytest.mark.parametrize(
+        "target_loan_duration, "
+        "db_loan_duration, "
+        "opds_response_loan_duration, "
+        "collection_protocol, "
+        "collection_data_source_name, "
+        "collection_default_loan_period",
+        [
+            [
+                # Loan without duration, collection without configured loan period
+                None,
+                None,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+                ExternalIntegration.OPDS_IMPORT,
+                None,
+                None,
+            ],  # DB and OPDS response loan duration mismatch
+            [
+                # Loan duration < CM STANDARD_DEFAULT_LOAN_PERIOD, collection without configured loan period
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                ExternalIntegration.OPDS_IMPORT,
+                None,
+                None,
+            ],
+            [
+                # Loan duration > CM STANDARD_DEFAULT_LOAN_PERIOD, collection without configured loan period
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                ExternalIntegration.OPDS_IMPORT,
+                None,
+                None,
+            ],
+            [
+                # Loan without duration, collection loan period < CM STANDARD_DEFAULT_LOAN_PERIOD
+                None,
+                None,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
+            ],  # DB and OPDS response loan duration mismatch
+            [
+                # Loan duration < collection loan period < CM STANDARD_DEFAULT_LOAN_PERIOD
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
+            ],
+            [
+                # Collection loan period < loan duration < CM STANDARD_DEFAULT_LOAN_PERIOD
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
+            ],
+            [
+                # Collection loan period < CM STANDARD_DEFAULT_LOAN_PERIOD < loan duration
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
+            ],
+            [
+                # Loan without duration, CM STANDARD_DEFAULT_LOAN_PERIOD < collection loan period
+                None,
+                None,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
+            ],  # DB and OPDS response loan duration mismatch
+            [
+                # Loan duration < CM STANDARD_DEFAULT_LOAN_PERIOD < collection loan period
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
+            ],
+            [
+                # CM STANDARD_DEFAULT_LOAN_PERIOD < loan duration < collection loan period
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
+            ],
+            [
+                # CM STANDARD_DEFAULT_LOAN_PERIOD < collection loan period < loan duration
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
+                ExternalIntegration.BIBLIOTHECA,
+                DataSource.BIBLIOTHECA,
+                Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
+            ],
+        ],
+    )
+    def test_loan_duration_settings_impact_on_loans_and_borrow_response(
+        self,
+        loan_fixture: LoanFixture,
+        target_loan_duration: int,
+        db_loan_duration: int,
+        opds_response_loan_duration: int,
+        collection_protocol: str,
+        collection_data_source_name: str,
+        collection_default_loan_period: int,
+    ):
+        with loan_fixture.request_context_with_library(
+            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        ):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+
+            loan_start = utc_now()
+
+            loan_end = None
+            if target_loan_duration:
+                loan_end = loan_start + datetime.timedelta(days=target_loan_duration)
+
+            collection = loan_fixture.db.collection(
+                protocol=collection_protocol,
+                data_source_name=collection_data_source_name,
+            )
+
+            if collection_default_loan_period:
+                collection.default_loan_period_setting(
+                    loan_fixture.db.default_library()
+                ).value = collection_default_loan_period
+
+            loan_fixture.db.default_library().collections.append(collection)
+
+            def create_work_and_return_license_pool_and_loan_info(**kwargs):
+                loan_start = kwargs.pop("loan_start", utc_now())
+                loan_end = kwargs.pop("loan_end", None)
+
+                work = loan_fixture.db.work(
+                    with_license_pool=True, with_open_access_download=False, **kwargs
+                )
+                license_pool = work.license_pools[0]
+
+                loan_info = LoanInfo(
+                    license_pool.collection,
+                    license_pool.data_source.name,
+                    license_pool.identifier.type,
+                    license_pool.identifier.identifier,
+                    loan_start,
+                    loan_end,
+                )
+
+                return license_pool, loan_info
+
+            license_pool, loan_info = create_work_and_return_license_pool_and_loan_info(
+                loan_start=loan_start,
+                loan_end=loan_end,
+                data_source_name=collection_data_source_name,
+                collection=collection,
+            )
+
+            loan_fixture.manager.d_circulation.queue_checkout(license_pool, loan_info)
+
+            response = loan_fixture.manager.loans.borrow(
+                license_pool.identifier.type, license_pool.identifier.identifier
+            )
+
+            loan = get_one(loan_fixture.db.session, Loan, license_pool=license_pool)
+            assert loan is not None
+
+            def parse_loan_until_field_from_opds_response(opds_response):
+                feed = feedparser.parse(opds_response.data)
+                [entry] = feed.get("entries")
+                availability = entry.get("opds_availability")
+                until = availability.get("until")
+
+                return until
+
+            loan_response_until = parse_loan_until_field_from_opds_response(response)
+
+            expected_db_loan_end = None
+            if db_loan_duration:
+                expected_db_loan_end = loan_start + datetime.timedelta(
+                    days=db_loan_duration
+                )
+
+            expected_opds_response_loan_end = None
+            if opds_response_loan_duration:
+                expected_opds_response_loan_end = loan_start + datetime.timedelta(
+                    days=opds_response_loan_duration
+                )
+
+            def format_datetime(none_or_datetime):
+                if none_or_datetime is None:
+                    return None
+
+                if isinstance(none_or_datetime, str):
+                    return none_or_datetime
+
+                return datetime.datetime.strftime(
+                    none_or_datetime, "%Y-%m-%dT%H:%M:%S+00:00"
+                )
+
+            assert format_datetime(loan.end) == format_datetime(expected_db_loan_end)
+            assert format_datetime(loan_response_until) == format_datetime(
+                expected_opds_response_loan_end
+            )

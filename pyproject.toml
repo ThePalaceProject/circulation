@@ -164,7 +164,6 @@ module = [
 ignore_missing_imports = true
 module = [
     "aws_xray_sdk.ext.*",
-    "bcrypt",
     # This is ignored because the file is created when building a container
     # so it typically doesn't exist when running mypy, but since it only
     # contains a couple version strings it can be safely ignored
@@ -211,6 +210,7 @@ version = "0"  # Version number is managed with tags in git
 [tool.poetry.dependencies]
 alembic = {extras = ["tz"], version = "^1.8.1"}
 aws-xray-sdk = "~2.12"
+bcrypt = "^4.0.1"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
@@ -236,7 +236,6 @@ opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "~3.0.1"
 Pillow = "9.5.0"
-py-bcrypt = "0.4"
 pycryptodome = "^3.18"
 pyinstrument = "<4.6"
 PyJWT = "2.4.0"
@@ -289,7 +288,7 @@ pytest = ">=7.2.0"
 pytest-alembic = "^0.10.4"
 pytest-cov = "^4.0.0"
 pytest-timeout = "*"
-requests-mock = "1.10.0"
+requests-mock = "1.11.0"
 types-aws-xray-sdk = "^2.11.0.13"
 types-Flask-Cors = "^3.0.10"
 types-jsonschema = "^4.17.0.5"

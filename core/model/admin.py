@@ -62,11 +62,13 @@ class Admin(Base, HasSessionCache):
         raise NotImplementedError("Password comparison is only with Admin.authenticate")
 
     @password.setter
-    def password(self, value):
-        self.password_hashed = str(bcrypt.hashpw(value, bcrypt.gensalt()))
+    def password(self, value: str) -> None:
+        self.password_hashed = bcrypt.hashpw(value.encode(), bcrypt.gensalt()).decode()
 
-    def has_password(self, password):
-        return self.password_hashed == bcrypt.hashpw(password, self.password_hashed)
+    def has_password(self, password: str) -> bool:
+        if self.password_hashed is None:
+            return False
+        return bcrypt.checkpw(password.encode(), self.password_hashed.encode())
 
     @classmethod
     def authenticate(cls, _db, email: str, password: str) -> Admin | None:
