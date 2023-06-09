@@ -117,6 +117,10 @@ class OPDSForDistributorsAPI(
         self.feed_url = collection.external_account_id
         self.auth_url = None
 
+    @property
+    def collection(self):
+        return Collection.by_id(self._db, id=self.collection_id)
+
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 

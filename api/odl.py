@@ -337,7 +337,6 @@ class ODLAPI(
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)
-        print(collection.protocol, self.NAME)
         if collection.protocol != self.NAME:
             raise ValueError(
                 "Collection protocol is %s, but passed into %s!"
