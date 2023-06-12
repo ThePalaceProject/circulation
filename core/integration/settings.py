@@ -152,7 +152,7 @@ class ConfigurationFormItemType(Enum):
     NUMBER = "number"
 
     @classmethod
-    def options_from_enum(cls, enum_: Type[Enum]) -> Dict[str, str]:
+    def options_from_enum(cls, enum_: Type[Enum]) -> Dict[Enum | str, str]:
         return {e.value: e.name for e in enum_}
 
 
