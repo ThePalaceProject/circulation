@@ -56,7 +56,8 @@ class BasicTokenAuthenticationProvider(AuthenticationProvider):
         try:
             patron_id = data["id"]
             # Ensure the password exists
-            data["pwd"]
+            if "pwd" not in data:
+                return PATRON_AUTH_ACCESS_TOKEN_INVALID
         except KeyError:
             return PATRON_AUTH_ACCESS_TOKEN_INVALID
 
