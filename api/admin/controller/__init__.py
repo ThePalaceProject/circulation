@@ -2048,6 +2048,8 @@ class SettingsController(AdminCirculationManagerController):
         library_info: dict,
         protocol_class: Type[HasLibraryIntegrationConfiguration],
     ) -> IntegrationLibraryConfiguration:
+        """Set the library configuration for the integration configuration.
+        The data will be validated first."""
         # We copy the data so we can remove unwanted keys like "short_name"
         info_copy = library_info.copy()
         library = get_one(self._db, Library, short_name=info_copy.pop("short_name"))

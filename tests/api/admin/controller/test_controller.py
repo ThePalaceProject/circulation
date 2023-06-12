@@ -4,7 +4,7 @@ import json
 import re
 from datetime import timedelta
 from io import StringIO
-from typing import Optional
+from typing import Any, Optional
 from unittest import mock
 
 import feedparser
@@ -30,6 +30,8 @@ from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.lane import Lane, Pagination
 from core.model import (
@@ -54,7 +56,7 @@ from core.model.collection import Collection
 from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
 from core.util.datetime_helpers import utc_now
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.core.util.test_flask_util import add_request_context
 from tests.fixtures.api_admin import AdminControllerFixture, SettingsControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
@@ -3386,3 +3388,81 @@ class TestSettingsController:
         assert ["https://url", "https://url/", "http://url", "http://url/"] == m(
             "https://url"
         )
+
+    def test__get_protocol_class(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        _get_protocol_class = (
+            settings_ctrl_fixture.manager.admin_settings_controller._get_protocol_class
+        )
+        registry = IntegrationRegistry[Any](Goals.LICENSE_GOAL)
+
+        class P1Settings(BaseSettings):
+            pass
+
+        class Protocol1:
+            @classmethod
+            def settings_class(cls):
+                return P1Settings
+
+        class P2Settings(BaseSettings):
+            pass
+
+        class P2ChildSettings(BaseSettings):
+            pass
+
+        class Protocol2:
+            @classmethod
+            def settings_class(cls):
+                return P2Settings
+
+            @classmethod
+            def child_settings_class(cls):
+                return P2ChildSettings
+
+        registry.register(Protocol1, canonical="1")
+        registry.register(Protocol2, canonical="2")
+
+        assert _get_protocol_class(registry, "3") == None
+        assert _get_protocol_class(registry, "1") == P1Settings
+        assert _get_protocol_class(registry, "2") == P2Settings
+        assert _get_protocol_class(registry, "2", is_child=True) == P2ChildSettings
+        assert (
+            _get_protocol_class(registry, "1", is_child=True)
+            == PROTOCOL_DOES_NOT_SUPPORT_PARENTS
+        )
+
+    def test__set_configuration_library(
+        self, settings_ctrl_fixture: SettingsControllerFixture
+    ):
+        db = settings_ctrl_fixture.ctrl.db
+        config = db.default_collection().integration_configuration
+        _set_configuration_library = (
+            settings_ctrl_fixture.manager.admin_settings_controller._set_configuration_library
+        )
+        library = db.library(short_name="short-name")
+
+        class P1LibrarySettings(BaseSettings):
+            key: str
+            value: str
+
+        class Protocol1:
+            @classmethod
+            def library_settings_class(cls):
+                return P1LibrarySettings
+
+        with pytest.raises(RuntimeError) as raised:
+            _set_configuration_library(
+                config, dict(short_name="not-short-name"), Protocol1
+            )
+        assert str(raised.value) == "Could not find the configuration library"
+
+        with pytest.raises(ProblemError) as raised:
+            _set_configuration_library(config, dict(short_name="short-name"), Protocol1)
+        assert raised.value.problem_detail.detail == "Required field 'key' is missing."
+
+        config = _set_configuration_library(
+            config, dict(short_name="short-name", key="key", value="value"), Protocol1
+        )
+        assert config.library == library
+        assert config.settings == dict(key="key", value="value")
