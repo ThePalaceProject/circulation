@@ -242,6 +242,7 @@ class TestSharedCollectionAPI:
         decrypted_secret = encryptor.decrypt(
             base64.b64decode(response.get("metadata", {}).get("shared_secret"))
         )
+        assert client is not None
         assert client.shared_secret == decrypted_secret.decode("utf-8")
 
     def test_borrow(self, shared_collection_fixture: SharedCollectionFixture):

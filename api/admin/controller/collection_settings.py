@@ -15,9 +15,9 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.admin import Admin
 from core.model.configuration import ExternalIntegrationLink
 from core.model.integration import IntegrationConfiguration
-from core.model.patron import Patron
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 from . import SettingsController
@@ -113,7 +113,7 @@ class CollectionSettingsController(SettingsController):
             parent_id=collection_object.parent_id,
         )
 
-    def load_libraries(self, collection_object: Collection, user: Patron) -> List[Dict]:
+    def load_libraries(self, collection_object: Collection, user: Admin) -> List[Dict]:
         """Get a list of the libraries that 1) are associated with this collection
         and 2) the user is affiliated with"""
 

@@ -4,7 +4,6 @@ from typing import Dict, Tuple, Type, TypeVar
 
 from sqlalchemy.engine import Connection, CursorResult, Row
 
-from api.authentication.base import AuthenticationProvider
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItemType,
@@ -70,12 +69,12 @@ def get_configuration_settings(
 def _migrate_external_integration(
     connection: Connection,
     integration: Row,
-    protocol_class: Type[AuthenticationProvider],
+    protocol_class: Type,
     goal: str,
     settings_dict: Dict,
-    self_test_results: Dict,
+    self_test_results: str,
     name=None,
-) -> Tuple[int, Dict[str, Dict[str, str]]]:
+) -> int:
     # Load and validate the settings before storing them in the database.
     settings_class = protocol_class.settings_class()
     settings_obj = _validate_and_load_settings(settings_class, settings_dict)
@@ -101,7 +100,7 @@ def _migrate_library_settings(
     integration_id: int,
     library_id: int,
     library_settings: Dict[str, str],
-    protocol_class: Type[AuthenticationProvider],
+    protocol_class: Type,
 ) -> None:
     library_settings_class = protocol_class.library_settings_class()
     library_settings_obj = _validate_and_load_settings(

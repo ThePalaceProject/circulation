@@ -319,11 +319,12 @@ class TestAnnotationWriter:
             motivation=Annotation.IDLING,
             target=json.dumps(target),
         )
+        assert annotation is not None
 
         with annotation_fixture.controller.app.test_request_context("/"):
             detail = AnnotationWriter.detail(annotation)
 
-            assert "annotations/%i" % annotation.id in detail["id"]
+            assert "annotations/%i" % (annotation.id or 0) in detail["id"]
             assert "Annotation" == detail["type"]
             assert Annotation.IDLING == detail["motivation"]
             compacted_target = {
@@ -354,11 +355,12 @@ class TestAnnotationWriter:
             motivation=Annotation.IDLING,
             content=json.dumps(body),
         )
+        assert annotation is not None
 
         with annotation_fixture.controller.app.test_request_context("/"):
             detail = AnnotationWriter.detail(annotation)
 
-            assert "annotations/%i" % annotation.id in detail["id"]
+            assert "annotations/%i" % (annotation.id or 0) in detail["id"]
             assert "Annotation" == detail["type"]
             assert Annotation.IDLING == detail["motivation"]
             compacted_body = {

@@ -33,7 +33,10 @@ from .credential import Credential
 if TYPE_CHECKING:
     from core.model import IntegrationClient  # noqa: autoflake
     from core.model.library import Library  # noqa: autoflake
-    from core.model.licensing import LicensePool  # noqa: autoflake
+    from core.model.licensing import (  # noqa: autoflake
+        LicensePool,
+        LicensePoolDeliveryMechanism,
+    )
 
     from .devicetokens import DeviceToken
 
@@ -539,6 +542,7 @@ class Loan(Base, LoanAndHoldMixin):
     integration_client_id = Column(
         Integer, ForeignKey("integrationclients.id"), index=True
     )
+    integration_client: IntegrationClient
 
     # A Loan is always associated with a LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
@@ -551,6 +555,7 @@ class Loan(Base, LoanAndHoldMixin):
     license_id = Column(Integer, ForeignKey("licenses.id"), index=True, nullable=True)
 
     fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
+    fulfillment: LicensePoolDeliveryMechanism
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     # Some distributors (e.g. Feedbooks) may have an identifier that can

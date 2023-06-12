@@ -6,6 +6,8 @@ Create Date: 2023-05-31 12:34:42.550703+00:00
 
 """
 
+from typing import Type
+
 from alembic import op
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.integration.base import HasLibraryIntegrationConfiguration
@@ -30,10 +32,6 @@ LICENSE_GOAL = "LICENSE_GOAL"
 
 def upgrade() -> None:
     registry = LicenseProvidersRegistry()
-    from core.opds2_import import OPDS2Importer
-    from core.opds_import import OPDSImporter
-
-    other_apis = {OPDSImporter.NAME: OPDSImporter, OPDS2Importer.NAME: OPDS2Importer}
 
     connection = op.get_bind()
 
@@ -46,7 +44,7 @@ def upgrade() -> None:
         # Get the right API class for it
         api_class = registry.get(protocol, None)
         if not api_class:
-            api_class = other_apis[protocol]
+            raise RuntimeError(f"Could not find API class for '{protocol}'")
 
         # Create the settings and library settings dicts from the configurationsettings
         settings_dict, library_settings, self_test_result = get_configuration_settings(
@@ -63,7 +61,11 @@ def upgrade() -> None:
             "select id, external_account_id, name from collections where external_integration_id = %s",
             integration.id,
         ).fetchone()
-        settings_class: BaseSettings = api_class.settings_class()
+        if not collection:
+            raise RuntimeError(
+                f"Could not fetch collection for integration {integration}"
+            )
+        settings_class: Type[BaseSettings] = api_class.settings_class()
         if "external_account_id" in settings_class.__fields__:
             settings_dict["external_account_id"] = collection.external_account_id
 

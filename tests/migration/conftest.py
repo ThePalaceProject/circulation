@@ -189,6 +189,7 @@ class CreateConfigSetting(Protocol):
         value: Optional[str] = None,
         integration_id: Optional[int] = None,
         library_id: Optional[int] = None,
+        associate_library: bool = False,
     ) -> int:
         ...
 

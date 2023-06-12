@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Type, cast
 
+from api.circulation import BaseCirculationAPI
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model.configuration import ExternalIntegration
-
-if TYPE_CHECKING:
-    from api.circulation import BaseCirculationAPI  # noqa: autoflake
 
 
 class LicenseProvidersRegistry(IntegrationRegistry["BaseCirculationAPI"]):
@@ -42,4 +40,4 @@ class LicenseProvidersRegistry(IntegrationRegistry["BaseCirculationAPI"]):
         }
 
         for name, api in apis.items():
-            self.register(api, canonical=name)
+            self.register(cast(Type[BaseCirculationAPI], api), canonical=name)

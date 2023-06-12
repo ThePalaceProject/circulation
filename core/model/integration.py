@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Type, overload
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -83,6 +83,18 @@ class IntegrationConfiguration(Base, SettingsModel):
     )
 
     collection: Mapped[Collection] = relationship("Collection", uselist=False)
+
+    @overload
+    def for_library(
+        self, library_id: int, create: Literal[True] = True
+    ) -> IntegrationLibraryConfiguration:
+        ...
+
+    @overload
+    def for_library(
+        self, library_id: int, create: Literal[False] = False
+    ) -> IntegrationLibraryConfiguration | None:
+        ...
 
     def for_library(
         self, library_id: int, create: bool = False

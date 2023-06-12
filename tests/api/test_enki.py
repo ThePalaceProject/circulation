@@ -78,7 +78,9 @@ class TestEnkiAPI:
         # Associate another library with the mock Enki collection
         # and set its Enki library ID.
         other_library = db.library()
+        assert other_library.id is not None
         config = enki_test_fixture.api.integration_configuration()
+        assert config is not None
         config.for_library(other_library.id, create=True).set(
             enki_test_fixture.api.ENKI_LIBRARY_ID_KEY, "other library id"
         )

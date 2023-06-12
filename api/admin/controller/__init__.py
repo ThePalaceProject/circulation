@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import copy
 import json
@@ -16,6 +18,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    cast,
 )
 
 import flask
@@ -1110,11 +1113,11 @@ class CustomListsController(AdminCirculationManagerController):
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
 
-        list: CustomList
+        list: CustomList | None
         if id:
             is_new = False
             list = get_one(self._db, CustomList, id=int(id), data_source=data_source)
-            if not list:
+            if list is None:
                 return MISSING_CUSTOM_LIST
             if list.library != library:
                 return CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST
@@ -1126,6 +1129,8 @@ class CustomListsController(AdminCirculationManagerController):
             list, is_new = create(
                 self._db, CustomList, name=name, data_source=data_source
             )
+            if list is None:
+                return INTERNAL_SERVER_ERROR.detailed("Could not create the list.")
             list.created = datetime.now()
             list.library = library
 
@@ -1281,9 +1286,7 @@ class CustomListsController(AdminCirculationManagerController):
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
-        list: CustomList = get_one(
-            self._db, CustomList, id=list_id, data_source=data_source
-        )
+        list = get_one(self._db, CustomList, id=list_id, data_source=data_source)
         if not list:
             return MISSING_CUSTOM_LIST
 
@@ -1364,7 +1367,9 @@ class CustomListsController(AdminCirculationManagerController):
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
-        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        customlist = get_one(self._db, CustomList, id=customlist_id)
+        if not customlist:
+            return MISSING_CUSTOM_LIST
         if customlist.library != flask.request.library:  # type: ignore
             return ADMIN_NOT_AUTHORIZED.detailed(
                 _("This library does not have permissions on this customlist.")
@@ -1810,6 +1815,11 @@ class SettingsController(AdminCirculationManagerController):
                 purpose=purpose,
             )
 
+            if not current_integration_link:
+                return INTERNAL_SERVER_ERROR.detailed(
+                    "Could not create integration link."
+                )
+
             current_integration_link.other_integration_id = storage_integration.id
 
         return None
@@ -2056,12 +2066,14 @@ class SettingsController(AdminCirculationManagerController):
         # We copy the data so we can remove unwanted keys like "short_name"
         info_copy = library_info.copy()
         library = get_one(self._db, Library, short_name=info_copy.pop("short_name"))
+        if not library:
+            raise RuntimeError("Could not find the configuration library")
         config = None
 
         # Validate first
         protocol_class.library_settings_class()(**info_copy)
         # Attach the configuration
-        config = configuration.for_library(library.id, create=True)
+        config = configuration.for_library(cast(int, library.id), create=True)
         config.settings = info_copy
         return config
 
