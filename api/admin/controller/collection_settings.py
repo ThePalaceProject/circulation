@@ -27,9 +27,11 @@ class CollectionSettingsController(SettingsController):
     def __init__(self, manager):
         super().__init__(manager)
         self.type = _("collection")
+        self.registry = LicenseProvidersRegistry()
 
     def _get_collection_protocols(self):
-        protocols = super()._get_collection_protocols(self.PROVIDER_APIS)
+        providers = [api_class for _, api_class in self.registry]
+        protocols = super()._get_collection_protocols(providers)
 
         # dedupe and only keep the latest SETTINGS
         # this will allow child objects to overwrite
@@ -163,13 +165,9 @@ class CollectionSettingsController(SettingsController):
 
     def find_protocol_class(self, collection_object):
         """Figure out which class this collection's protocol belongs to, from the list
-        of possible protocols defined in PROVIDER_APIS (in SettingsController)"""
+        of possible protocols defined in the registry"""
 
-        protocolClassFound = [
-            p for p in self.PROVIDER_APIS if p.NAME == collection_object.protocol
-        ]
-        if len(protocolClassFound) == 1:
-            return protocolClassFound[0]
+        return self.registry.get(collection_object.protocol)
 
     # POST
     def process_post(self):
@@ -192,7 +190,7 @@ class CollectionSettingsController(SettingsController):
             return error
 
         settings_class = self._get_protocol_class(
-            LicenseProvidersRegistry(), protocol_name, is_child=(parent_id is not None)
+            self.registry, protocol_name, is_child=(parent_id is not None)
         )
         if not settings_class:
             return UNKNOWN_PROTOCOL
@@ -300,7 +298,7 @@ class CollectionSettingsController(SettingsController):
         the setting passes all of the validations, go ahead and set it for this collection.
         """
         settings_class = self._get_protocol_class(
-            LicenseProvidersRegistry(),
+            self.registry,
             collection.protocol,
             is_child=(flask.request.form.get("parent_id") is not None),
         )
@@ -384,7 +382,7 @@ class CollectionSettingsController(SettingsController):
         go ahead and associate it with this collection."""
 
         libraries = []
-        protocol_class = LicenseProvidersRegistry().get(protocol["name"])
+        protocol_class = self.registry.get(protocol["name"])
         if flask.request.form.get("libraries"):
             libraries = json.loads(flask.request.form.get("libraries"))
 

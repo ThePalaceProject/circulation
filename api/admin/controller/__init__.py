@@ -1746,21 +1746,6 @@ class SettingsController(AdminCirculationManagerController):
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
 
-    PROVIDER_APIS = [
-        OPDSImporter,
-        OPDSForDistributorsAPI,
-        OPDS2Importer,
-        OverdriveAPI,
-        OdiloAPI,
-        BibliothecaAPI,
-        Axis360API,
-        EnkiAPI,
-        ODLAPI,
-        ODL2API,
-        SharedODLAPI,
-        LCPAPI,
-    ]
-
     def _set_storage_external_integration_link(
         self, service: ExternalIntegration, purpose: str, setting_key: str
     ) -> Optional[ProblemDetail]:

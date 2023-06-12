@@ -2,6 +2,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.controller.self_tests import SelfTestsController
 from api.admin.problem_details import *
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests
 from core.model import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
@@ -11,7 +12,8 @@ class CollectionSelfTestsController(SelfTestsController):
     def __init__(self, manager):
         super().__init__(manager)
         self.type = _("collection")
-        self.protocols = self._get_collection_protocols(self.PROVIDER_APIS)
+        self.registry = LicenseProvidersRegistry()
+        self.protocols = self._get_collection_protocols([p[1] for p in self.registry])
 
     def process_collection_self_tests(self, identifier):
         return self._manage_self_tests(identifier)
@@ -41,12 +43,7 @@ class CollectionSelfTestsController(SelfTestsController):
 
     def _find_protocol_class(self, collection):
         """Figure out which protocol is providing books to this collection"""
-        if collection.protocol in [p.get("name") for p in self.protocols]:
-            protocol_class_found = [
-                p for p in self.PROVIDER_APIS if p.NAME == collection.protocol
-            ]
-            if len(protocol_class_found) == 1:
-                return protocol_class_found[0]
+        return self.registry.get(collection.protocol)
 
     def run_tests(self, collection):
         collection_protocol = collection.protocol or None
