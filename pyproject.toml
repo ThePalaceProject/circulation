@@ -12,6 +12,7 @@ exclude_also = [
 
 [tool.coverage.run]
 branch = true
+omit = ["core/migration"]
 relative_files = true
 source = ["api", "core"]
 

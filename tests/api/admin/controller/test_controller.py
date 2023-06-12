@@ -949,7 +949,6 @@ class TestPatronController:
             )
 
     def test_lookup_patron(self, patron_controller_fixture: PatronControllerFixture):
-
         # Here's a patron.
         patron = patron_controller_fixture.ctrl.db.patron()
         patron.authorization_identifier = patron_controller_fixture.ctrl.db.fresh_str()
@@ -1600,6 +1599,17 @@ class TestCustomListsController:
             )
             assert json.dumps({}) == list.auto_update_facets
             assert mock_query.populate_query_pages.call_count == 1
+
+        # Bad DB connection
+        with mock.patch("api.admin.controller.create") as mock_create:
+            mock_create.return_value = (None, None)
+            error = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+                admin_librarian_fixture.ctrl.db.default_library(),
+                "new-list-name",
+                [],
+                [],
+            )
+            assert error.detail == "Could not create the list."
 
     def test_custom_list_get(self, admin_librarian_fixture: AdminLibrarianFixture):
         data_source = DataSource.lookup(
@@ -2595,7 +2605,6 @@ class TestLanesController:
         assert lane.library == library
 
     def test_lanes_edit(self, alm_fixture: AdminLibraryManagerFixture):
-
         work = alm_fixture.ctrl.db.work(with_license_pool=True)
 
         list1, ignore = alm_fixture.ctrl.db.customlist(

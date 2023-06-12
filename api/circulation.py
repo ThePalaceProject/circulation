@@ -478,6 +478,8 @@ class BaseCirculationAPIProtocol:
 
 
 class CirculationConfigurationMixin(BaseCirculationAPIProtocol):
+    """Any implementation that uses integration configuration settings"""
+
     def integration_configuration(self) -> IntegrationConfiguration:
         config = get_one(
             self._db, IntegrationConfiguration, id=self._integration_configuration_id
