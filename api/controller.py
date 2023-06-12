@@ -20,6 +20,8 @@ from lxml import etree
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
+from api.authentication.access_token import AccessTokenProvider
+from api.model.patron_auth import PatronAuthAccessToken
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
@@ -81,7 +83,7 @@ from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP, RemoteIntegrationException
 from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.opds_writer import OPDSFeed
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 from core.util.string_helpers import base64
 
 from .adobe_vendor_id import (
@@ -252,7 +254,6 @@ class CirculationManager:
 
         worklist = kwargs.get("worklist")
         if worklist is not None:
-
             # Try to get the index controller. If it's not initialized
             # for any reason, don't run this check -- we have bigger
             # problems.
@@ -485,6 +486,7 @@ class CirculationManager:
         self.odl_notification_controller = ODLNotificationController(self)
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
+        self.patron_auth_token = PatronAuthTokenController(self)
 
         from api.lcp.controller import LCPController
 
@@ -2785,3 +2787,31 @@ class StaticFileController(CirculationManagerController):
             os.path.abspath(os.path.dirname(__file__)), "..", "resources", "images"
         )
         return self.static_file(directory, filename)
+
+
+class PatronAuthTokenController(CirculationManagerController):
+    def get_token(self):
+        """Create a Patron Auth access token for an authenticated patron"""
+        patron = flask.request.patron
+        auth = flask.request.authorization
+        token_expiry = 3600
+
+        if not patron or auth.type.lower() != "basic":
+            return PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
+
+        try:
+            token = AccessTokenProvider.generate_token(
+                self._db,
+                patron,
+                auth["password"],
+                expires_in=token_expiry,
+            )
+        except ProblemError as ex:
+            logging.getLogger(self.__class__.__name__).error(
+                f"Could not generate Patron Auth Access Token: {ex}"
+            )
+            return ex.problem_detail
+
+        return PatronAuthAccessToken(
+            access_token=token, expires_in=token_expiry, token_type="Bearer"
+        ).api_dict()

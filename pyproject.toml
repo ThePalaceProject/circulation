@@ -63,6 +63,7 @@ exclude = [
     'tests/api/test_controller_scopedsession\.py',
     'tests/api/test_controller_work\.py',
     'tests/api/test_coverage\.py',
+    'tests/api/test_jwe_provider\.py',
     'tests/api/test_lanes\.py',
     'tests/api/test_local_analytics_exporter\.py',
     'tests/api/test_monitor\.py',
@@ -176,6 +177,7 @@ module = [
     "greenlet",
     "html_sanitizer",
     "isbnlib",
+    "jwcrypto",
     "lxml.*",
     "money",
     "multipledispatch",
@@ -226,6 +228,7 @@ fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "~1.9.3"
 isbnlib = "^3.10.14"
 itsdangerous = "^2.1.2"
+jwcrypto = "^1.4.2"
 levenshtein = "~0.21"
 lxml = "4.9.2"
 money = "1.3.0"
