@@ -212,7 +212,9 @@ class CirculationManagerAnnotator(Annotator):
         # LCP content. By default, if no configuration value is specified, then
         # the priority of LCP content will be left completely unchanged.
 
-        _prioritize: bool = config.get(FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY)
+        _prioritize: bool = config.get(
+            FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, False
+        )
         return _prioritize
 
     def visible_delivery_mechanisms(

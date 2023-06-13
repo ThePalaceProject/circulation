@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.parse
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import requests
 from flask_babel import lazy_gettext as _
@@ -11,14 +11,18 @@ from requests.auth import HTTPBasicAuth
 
 from api.lcp import utils
 from api.lcp.encrypt import LCPEncryptionResult, LCPEncryptorResultJSONEncoder
-from api.lcp.hash import HashingAlgorithm
+from api.lcp.hash import HasherFactory, HashingAlgorithm
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from core.lcp.credential import LCPHashedPassphrase, LCPUnhashedPassphrase
+from core.lcp.credential import (
+    LCPCredentialFactory,
+    LCPHashedPassphrase,
+    LCPUnhashedPassphrase,
+)
 
 if TYPE_CHECKING:
     pass
@@ -142,17 +146,15 @@ class LCPServer:
 
     def __init__(
         self,
-        get_configuration,
-        hasher_factory,
-        credential_factory,
+        get_configuration: Callable[[], BaseSettings],
+        hasher_factory: HasherFactory,
+        credential_factory: LCPCredentialFactory,
     ):
         """Initializes a new instance of LCPServer class
 
+        :param get_configuration: Factory responsible for providing configuration objects from the database
         :param hasher_factory: Factory responsible for creating Hasher implementations
-        :type hasher_factory: hash.HasherFactory
-
         :param credential_factory: Factory responsible for creating Hasher implementations
-        :type credential_factory: credential.CredentialFactory
         """
         self.get_configuration = get_configuration
         self._hasher_factory = hasher_factory

@@ -194,8 +194,10 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             parent_id=auth_service.id,
         )
         if not library_settings:
-            raise INTERNAL_SERVER_ERROR.detailed(
-                "Could not create the library configuration"
+            raise ProblemError(
+                INTERNAL_SERVER_ERROR.detailed(
+                    "Could not create the library configuration"
+                )
             )
         return library_settings
 
