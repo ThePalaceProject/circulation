@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
