@@ -110,3 +110,7 @@ HOME=/var/www/circulation
 # Rotate the patron auth JWE access token key daily
 #
 0 3 * * * root core/bin/run rotate_patron_auth_key >> /var/log/cron.log 2>&1
+
+# Notifications
+#
+10 12 * * * root core/bin/run loan_notifications >> /var/log/cron.log 2>&1
