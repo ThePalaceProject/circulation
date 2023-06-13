@@ -383,3 +383,9 @@ class MediaTypes:
             # multiple media types have the same extension, the most
             # common media type will be used.
             MEDIA_TYPE_FOR_EXTENSION[_extension] = _media_type
+
+
+class NotificationConstants:
+    ACTIVITY_SYNC_TYPE = "ActivitySync"
+    LOAN_EXPIRY_TYPE = "LoanExpiry"
+    HOLD_AVAILABLE_TYPE = "HoldAvailable"

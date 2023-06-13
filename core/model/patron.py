@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -34,6 +34,8 @@ if TYPE_CHECKING:
     from core.model import IntegrationClient  # noqa: autoflake
     from core.model.library import Library  # noqa: autoflake
     from core.model.licensing import LicensePool  # noqa: autoflake
+
+    from .devicetokens import DeviceToken
 
 
 class LoanAndHoldMixin:
@@ -177,6 +179,8 @@ class Patron(Base):
         "Credential", backref="patron", cascade="delete"
     )
 
+    device_tokens: list[DeviceToken]
+
     __table_args__ = (
         UniqueConstraint("library_id", "username"),
         UniqueConstraint("library_id", "authorization_identifier"),
@@ -190,7 +194,7 @@ class Patron(Base):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.neighborhood: Optional[str] = None
+        self.neighborhood: str | None = None
 
     def __repr__(self):
         def date(d):
@@ -262,6 +266,15 @@ class Patron(Base):
         """
         return 15 * 60
 
+    def is_last_loan_activity_stale(self) -> bool:
+        """Has the last_loan_activity_sync timestamp outlived the loan_activity_max_age seconds"""
+        if not self._last_loan_activity_sync:
+            return True
+
+        return utc_now() > self._last_loan_activity_sync + datetime.timedelta(
+            seconds=self.loan_activity_max_age
+        )
+
     @hybrid_property
     def last_loan_activity_sync(self):
         """When was the last time we asked the vendors about
@@ -270,19 +283,9 @@ class Patron(Base):
         :return: A datetime, or None if we know our loan data is
             stale.
         """
-        value = self._last_loan_activity_sync
-        if not value:
-            return value
-
-        # We have an answer, but it may be so old that we should clear
-        # it out.
-        now = utc_now()
-        expires = value + datetime.timedelta(seconds=self.loan_activity_max_age)
-        if now > expires:
-            # The value has expired. Clear it out.
-            value = None
-            self._last_loan_activity_sync = value
-        return value
+        if self.is_last_loan_activity_stale():
+            return None
+        return self._last_loan_activity_sync
 
     @last_loan_activity_sync.setter
     def last_loan_activity_sync(self, value):
@@ -529,7 +532,10 @@ Index("ix_patron_library_id_username", Patron.library_id, Patron.username)
 class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
     id = Column(Integer, primary_key=True)
+
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron: Patron  # typing
+
     integration_client_id = Column(
         Integer, ForeignKey("integrationclients.id"), index=True
     )
