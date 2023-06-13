@@ -27,7 +27,7 @@ class SettingsModel:
         settings[key] = value
         self.settings: Dict[str, Any] = settings
 
-    def get(self, key: str, *args: List[Any]) -> Any:
+    def get(self, key: str, *args: Any) -> Any:
         return self.settings.get(key, *args)
 
     def __setitem__(self, key: str, value: Any) -> None:
@@ -182,7 +182,7 @@ class IntegrationLibraryConfiguration(Base, SettingsModel):
     # Settings model inheritance
     # If the library configuration has no such value
     # but the parent does, retrieve the parent value
-    def get(self, key: str, *args: List[Any]) -> Any:
+    def get(self, key: str, *args: Any) -> Any:
         if key not in self.settings and self.parent:
             return self.parent.get(key, *args)
         return super().get(key, *args)
