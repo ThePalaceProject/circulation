@@ -365,10 +365,10 @@ class Configuration(ConfigurationConstants):
         """Returns a dictionary containing Firebase Cloud Messaging credentials.
 
         Credentials are provided as a JSON string, either (1) directly in an environment
-        variable or (2) in a file that is specified in another environment variable.  may be obtained from either (1) directly an environment variable
+        variable or (2) in a file that is specified in another environment variable.
         """
-        config_json = os.environ.get(cls.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE)
-        config_file = os.environ.get(cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE)
+        config_json = os.environ.get(cls.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE, "")
+        config_file = os.environ.get(cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, "")
         if not config_json and not config_file:
             raise CannotLoadConfiguration(
                 "FCM Credentials configuration environment variable not defined. "
