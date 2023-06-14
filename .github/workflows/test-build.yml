@@ -96,6 +96,12 @@ jobs:
       - name: Run Migration Tests
         run: tox -e "migration-docker"
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+
   docker-image-build:
     name: Docker build
     runs-on: ubuntu-latest
