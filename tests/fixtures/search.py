@@ -81,6 +81,8 @@ class ExternalSearchFixture:
             # Delete any other indexes created over the course of the test.
             for index in self.indexes:
                 self.search.indices.delete(index, ignore=[404])
+
+            self.search.indices.delete_alias(index="_all", name="_all", ignore=[404])
             ExternalSearchIndex.reset()
 
     def setup_index(self, new_index):
