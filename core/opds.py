@@ -674,6 +674,7 @@ class AcquisitionFeed(OPDSFeed):
         ]
         # Make a typical grouped feed.
         all_works = []
+        # print('----')
         for work, sublane in works_and_lanes:
             if sublane == worklist:
                 # We are looking at the groups feed for (e.g.)
@@ -700,8 +701,12 @@ class AcquisitionFeed(OPDSFeed):
                 # We want to assign this work to a group derived
                 # from the sublane.
                 v = dict(lane=sublane)
+
+            # print(work.target_age, v["lane"].display_name, v["lane"].target_age)
+
             annotator.lanes_by_work[work].append(v)
             all_works.append(work)
+        # print('----')
 
         all_works = annotator.sort_works_for_groups_feed(all_works)
         feed = AcquisitionFeed(_db, title, url, all_works, annotator)

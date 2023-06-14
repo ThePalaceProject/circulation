@@ -3209,6 +3209,15 @@ class Filter(SearchBase):
 
         clauses = []
 
+        both_limits = lower is not None and upper is not None
+
+        if Classifier.AUDIENCE_CHILDREN in self.audiences and both_limits:
+            # If children is audience we want only works with defined age range that matches lane's range
+            clauses.append(self._match_range("target_age.lower", "gte", lower))
+            clauses.append(self._match_range("target_age.upper", "lte", upper))
+
+            return Bool(must=clauses)
+
         if upper is not None:
             lower_does_not_exist = does_not_exist("target_age.lower")
             lower_in_range = self._match_range("target_age.lower", "lte", upper)

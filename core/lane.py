@@ -1813,6 +1813,8 @@ class WorkList:
         """
         from .external_search import ExternalSearchIndex
 
+        # TODO: PORIN extracting works for lanes
+
         search_engine = search_engine or ExternalSearchIndex.load(_db)
         filter = self.filter(_db, facets)
         hits = search_engine.query_works(
@@ -1863,6 +1865,7 @@ class WorkList:
         """Convert a list of lists of Hit objects into a list
         of lists of Work objects.
         """
+        # TODO: PORIN maybe something is here
         from .external_search import Filter, WorkSearchResult
 
         has_script_fields = None
@@ -2128,11 +2131,15 @@ class WorkList:
         # The simplest change would probably be to return a dictionary
         # mapping WorkList to Works and let the caller figure out the
         # ordering. In fact, we could start doing that now.
+
+        # TODO: PORIN featured lanes and works
+
         queries = []
         for lane in lanes:
             overview_facets = lane.overview_facets(_db, facets)
             from .external_search import Filter
 
+            # TODO: Porin maybe add filter
             filter = Filter.from_worklist(_db, lane, overview_facets)
             queries.append((None, filter, pagination))
         resultsets = list(search_engine.query_works_multi(queries))
@@ -3103,6 +3110,8 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
         display_name = " ".join(display_name_parts)
 
+        # TODO: Porin
+
         wl = WorkList()
         wl.initialize(
             self.library,
@@ -3187,6 +3196,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         :param facets: A faceting object, probably a SearchFacets.
         """
         search_target = self.search_target
+        # TODO: maybe useful
 
         if search_target == self:
             # The actual implementation happens in WorkList.
