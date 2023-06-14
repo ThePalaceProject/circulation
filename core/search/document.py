@@ -26,9 +26,7 @@ class SearchMappingFieldTypeScalar(SearchMappingFieldType):
         self._name = name
 
     def serialize(self) -> dict:
-        return {
-            "type": self._name
-        }
+        return {"type": self._name}
 
 
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/binary/
@@ -59,7 +57,9 @@ IP: SearchMappingFieldTypeScalar = SearchMappingFieldTypeScalar("ip")
 LONG: SearchMappingFieldTypeScalar = SearchMappingFieldTypeScalar("long")
 
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/unsigned-long/
-UNSIGNED_LONG: SearchMappingFieldTypeScalar = SearchMappingFieldTypeScalar("unsigned_long")
+UNSIGNED_LONG: SearchMappingFieldTypeScalar = SearchMappingFieldTypeScalar(
+    "unsigned_long"
+)
 
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/numeric/
 SHORT: SearchMappingFieldTypeScalar = SearchMappingFieldTypeScalar("short")
@@ -80,29 +80,29 @@ class SearchMappingFieldTypeParameterized(SearchMappingFieldType):
 
     def serialize(self) -> dict:
         output = dict(self._parameters)
-        output['type'] = self._name
+        output["type"] = self._name
         return output
 
 
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/date/
 def date() -> SearchMappingFieldTypeParameterized:
-    return SearchMappingFieldTypeParameterized('date')
+    return SearchMappingFieldTypeParameterized("date")
 
 
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/keyword/
 def keyword() -> SearchMappingFieldTypeParameterized:
-    return SearchMappingFieldTypeParameterized('keyword')
+    return SearchMappingFieldTypeParameterized("keyword")
 
 
 # See: https://www.elastic.co/guide/en/elasticsearch/plugins/current/analysis-icu-collation-keyword-field.html
 def icu_collation_keyword() -> SearchMappingFieldTypeParameterized:
-    return SearchMappingFieldTypeParameterized('icu_collation_keyword')
+    return SearchMappingFieldTypeParameterized("icu_collation_keyword")
 
 
 def sort_author_keyword() -> SearchMappingFieldTypeParameterized:
-    t = SearchMappingFieldTypeParameterized('text')
-    t.parameters['analyzer'] = 'en_sort_author_analyzer'
-    t.parameters['fielddata'] = 'true'
+    t = SearchMappingFieldTypeParameterized("text")
+    t.parameters["analyzer"] = "en_sort_author_analyzer"
+    t.parameters["fielddata"] = "true"
     return t
 
 
@@ -127,10 +127,7 @@ class SearchMappingFieldTypeObject(SearchMappingFieldType):
         for name, prop in self._properties.items():
             output_properties[name] = prop.serialize()
 
-        return {
-            "type": self._type,
-            "properties": output_properties
-        }
+        return {"type": self._type, "properties": output_properties}
 
 
 def nested() -> SearchMappingFieldTypeObject:
@@ -158,19 +155,18 @@ class SearchMappingFieldTypeCustomBasicText(SearchMappingFieldTypeCustom):
             "type": "text",
             "analyzer": "en_default_text_analyzer",
             "fields": {
-                "minimal": {
-                    "type": "text",
-                    "analyzer": "en_minimal_text_analyzer"
-                },
+                "minimal": {"type": "text", "analyzer": "en_minimal_text_analyzer"},
                 "with_stopwords": {
                     "type": "text",
                     "analyzer": "en_with_stopwords_text_analyzer",
                 },
-            }
+            },
         }
 
 
-BASIC_TEXT: SearchMappingFieldTypeCustomBasicText = SearchMappingFieldTypeCustomBasicText()
+BASIC_TEXT: SearchMappingFieldTypeCustomBasicText = (
+    SearchMappingFieldTypeCustomBasicText()
+)
 
 
 class SearchMappingFieldTypeCustomFilterable(SearchMappingFieldTypeCustom):
@@ -198,11 +194,13 @@ class SearchMappingFieldTypeCustomFilterable(SearchMappingFieldTypeCustom):
         return output
 
 
-FILTERABLE_TEXT: SearchMappingFieldTypeCustomFilterable = SearchMappingFieldTypeCustomFilterable()
+FILTERABLE_TEXT: SearchMappingFieldTypeCustomFilterable = (
+    SearchMappingFieldTypeCustomFilterable()
+)
 
 
 class SearchMappingFieldTypeCustomKeyword(SearchMappingFieldTypeCustom):
-    """A custom extension to the keyword type that ensures case-insensitivity. """
+    """A custom extension to the keyword type that ensures case-insensitivity."""
 
     def __init__(self):
         self._base = keyword()
@@ -242,10 +240,5 @@ class SearchMappingDocument:
         for name, prop in self._fields.items():
             output_properties[name] = prop.serialize()
 
-        output_mappings = {
-            "properties": output_properties
-        }
-        return {
-            "settings": self.settings,
-            "mappings": output_mappings
-        }
+        output_mappings = {"properties": output_properties}
+        return {"settings": self.settings, "mappings": output_mappings}

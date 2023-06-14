@@ -21,7 +21,9 @@ class SearchMigrator:
 
         target = self._revisions.available.get(version)
         if target is None:
-            raise SearchMigrationException(f'No support is available for schema version {version}')
+            raise SearchMigrationException(
+                f"No support is available for schema version {version}"
+            )
 
         # Does the empty index exist? Create it if not.
         self._service.create_empty_index(base_name)

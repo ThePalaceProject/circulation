@@ -1,8 +1,19 @@
 from typing import Dict
 
-from core.search.document import SearchMappingDocument, SearchMappingFieldType, FILTERABLE_TEXT, BASIC_TEXT, BOOLEAN, \
-    INTEGER, LONG, keyword, nested, FLOAT, icu_collation_keyword, \
-    sort_author_keyword
+from core.search.document import (
+    BASIC_TEXT,
+    BOOLEAN,
+    FILTERABLE_TEXT,
+    FLOAT,
+    INTEGER,
+    LONG,
+    SearchMappingDocument,
+    SearchMappingFieldType,
+    icu_collation_keyword,
+    keyword,
+    nested,
+    sort_author_keyword,
+)
 from core.search.revision import SearchSchemaRevision
 
 
@@ -170,66 +181,66 @@ class SearchV5(SearchSchemaRevision):
         )
 
         self._fields: Dict[str, SearchMappingFieldType] = {
-            'summary': BASIC_TEXT,
-            'title': FILTERABLE_TEXT,
-            'subtitle': FILTERABLE_TEXT,
-            'series': FILTERABLE_TEXT,
-            'classifications.term': FILTERABLE_TEXT,
-            'author': FILTERABLE_TEXT,
-            'publisher': FILTERABLE_TEXT,
-            'imprint': FILTERABLE_TEXT,
-            'presentation_ready': BOOLEAN,
-            'sort_title': icu_collation_keyword(),
-            'sort_author': sort_author_keyword(),
-            'series_position': INTEGER,
-            'work_id': INTEGER,
-            'last_update_time': LONG,
-            'published': LONG,
-            'audience': keyword(),
-            'language': keyword()
+            "summary": BASIC_TEXT,
+            "title": FILTERABLE_TEXT,
+            "subtitle": FILTERABLE_TEXT,
+            "series": FILTERABLE_TEXT,
+            "classifications.term": FILTERABLE_TEXT,
+            "author": FILTERABLE_TEXT,
+            "publisher": FILTERABLE_TEXT,
+            "imprint": FILTERABLE_TEXT,
+            "presentation_ready": BOOLEAN,
+            "sort_title": icu_collation_keyword(),
+            "sort_author": sort_author_keyword(),
+            "series_position": INTEGER,
+            "work_id": INTEGER,
+            "last_update_time": LONG,
+            "published": LONG,
+            "audience": keyword(),
+            "language": keyword(),
         }
 
         contributors = nested()
-        contributors.add_property('display_name', FILTERABLE_TEXT)
-        contributors.add_property('sort_name', FILTERABLE_TEXT)
-        contributors.add_property('family_name', FILTERABLE_TEXT)
-        contributors.add_property('role', keyword())
-        contributors.add_property('lc', keyword())
-        contributors.add_property('viaf', keyword())
-        self._fields['contributors'] = contributors
+        contributors.add_property("display_name", FILTERABLE_TEXT)
+        contributors.add_property("sort_name", FILTERABLE_TEXT)
+        contributors.add_property("family_name", FILTERABLE_TEXT)
+        contributors.add_property("role", keyword())
+        contributors.add_property("lc", keyword())
+        contributors.add_property("viaf", keyword())
+        self._fields["contributors"] = contributors
 
         licensepools = nested()
-        licensepools.add_property('collection_id', INTEGER)
-        licensepools.add_property('data_source_id', INTEGER)
-        licensepools.add_property('availability_time', LONG)
-        licensepools.add_property('available', BOOLEAN)
-        licensepools.add_property('open_access', BOOLEAN)
-        licensepools.add_property('suppressed', BOOLEAN)
-        licensepools.add_property('licensed', BOOLEAN)
-        licensepools.add_property('medium', keyword())
-        self._fields['licensepools'] = licensepools
+        licensepools.add_property("collection_id", INTEGER)
+        licensepools.add_property("data_source_id", INTEGER)
+        licensepools.add_property("availability_time", LONG)
+        licensepools.add_property("available", BOOLEAN)
+        licensepools.add_property("open_access", BOOLEAN)
+        licensepools.add_property("suppressed", BOOLEAN)
+        licensepools.add_property("licensed", BOOLEAN)
+        licensepools.add_property("medium", keyword())
+        self._fields["licensepools"] = licensepools
 
         identifiers = nested()
-        identifiers.add_property('type', keyword())
-        identifiers.add_property('identifier', keyword())
-        self._fields['identifiers'] = identifiers
+        identifiers.add_property("type", keyword())
+        identifiers.add_property("identifier", keyword())
+        self._fields["identifiers"] = identifiers
 
         genres = nested()
-        genres.add_property('scheme', keyword())
-        genres.add_property('name', keyword())
-        genres.add_property('term', keyword())
-        genres.add_property('weight', FLOAT)
-        self._fields['genres'] = genres
+        genres.add_property("scheme", keyword())
+        genres.add_property("name", keyword())
+        genres.add_property("term", keyword())
+        genres.add_property("weight", FLOAT)
+        self._fields["genres"] = genres
 
         customlists = nested()
-        customlists.add_property('list_id', INTEGER)
-        customlists.add_property('first_appearance', LONG)
-        customlists.add_property('featured', BOOLEAN)
-        self._fields['customlists'] = customlists
+        customlists.add_property("list_id", INTEGER)
+        customlists.add_property("first_appearance", LONG)
+        customlists.add_property("featured", BOOLEAN)
+        self._fields["customlists"] = customlists
 
     def mapping_document(self) -> SearchMappingDocument:
         document = SearchMappingDocument()
-        document.settings['analysis'] = dict(
+        document.settings["analysis"] = dict(
             filter=dict(self._filters),
             char_filter=dict(self._char_filters),
             normalizer=dict(self._normalizers),

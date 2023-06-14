@@ -18,7 +18,6 @@ class SearchSchemaRevision(ABC):
     @abstractmethod
     def mapping_document(self) -> SearchMappingDocument:
         """Produce a mapping document for this schema revision."""
-        pass
 
     @property
     def version(self) -> int:
@@ -27,9 +26,9 @@ class SearchSchemaRevision(ABC):
     def name_for_index(self, base_name: str) -> str:
         """Produce the name of the index as it will appear in Opensearch,
         such as 'circulation-works-v5'."""
-        return f'{base_name}-v{self.version}'
+        return f"{base_name}-v{self.version}"
 
     def name_for_indexed_pointer(self, base_name: str) -> str:
         """Produce the name of the "indexed pointer" as it will appear in Opensearch,
         such as 'circulation-works-v5-indexed'."""
-        return f'{base_name}-v{self.version}-indexed'
+        return f"{base_name}-v{self.version}-indexed"
