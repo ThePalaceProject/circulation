@@ -154,10 +154,15 @@ grant all privileges on database circ to palace;
 #### Environment variables
 
 To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
+The `SIMPLIFIED_FCM_CREDENTIALS_FILE` env variable should hold the path to the JSON format GCP service account key
 
 ```sh
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
+export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 ```
+
+The FCM credentials file can be downloaded once a Google Service account is created
+More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
 ### Email sending
 
@@ -264,8 +269,9 @@ At this point, the _library_ exists but does not contain any _collections_ and t
 
 Navigate to `System Configuration → Collections` and click _Create new collection_. You will prompted to enter
 details that will be used to source the data for the collection. A good starting point, for testing purposes,
-is to use an open access OPDS feed as a data source. The [Open Bookshelf](https://openbookshelf.dp.la/) is a good example
-of such a feed. Enter the following details:
+is to use an open access OPDS feed as a data source. The
+[Open Bookshelf](https://palace-bookshelf-opds2.dp.la/v1/publications) is a good example of such a feed. Enter the
+following details:
 
 ![.github/readme/collection.png](.github/readme/collection.png)
 
@@ -357,6 +363,16 @@ Examining collection "Palace Bookshelf"
 We can see from the above output that the vast majority of the books in the _Open Bookshelf_ collection
 were indexed correctly.
 
+### Sitewide Settings
+
+Some settings have been provided in the admin UI that configure or toggle various functions of the Circulation Manager.
+These can be found at `/admin/web/config/SitewideSettings` in the admin interface.
+
+#### Push Notification Status
+
+This setting is a toggle that may be used to turn on or off the ability for the the system
+to send the Loan and Hold reminders to the mobile applications.
+
 ### Installation Issues
 
 When running the `poetry install ...` command, you may run into installation issues. On newer macos machines, you may
@@ -379,6 +395,24 @@ the `xcode-select --install` command. If it does not work, you can try adding th
 ```sh
 export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 ```
+
+## Scheduled Jobs
+
+All jobs are scheduled via `cron`, as specified in the `docker/services/simplified_crontab` file.
+This includes all the import and reaper jobs, as well as other necessary background tasks, such as maintaining
+the search index and feed caches.
+
+### Job Requirements
+
+#### hold_notifications
+
+Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
+and the sitewide `PUSH_NOTIFICATIONS_STATUS` setting to be either `unset` or `true`
+
+#### loan_notifications
+
+Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
+and the sitewide `PUSH_NOTIFICATIONS_STATUS` setting to be either `unset` or `true`
 
 ## Code Style
 

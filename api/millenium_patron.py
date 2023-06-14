@@ -28,6 +28,7 @@ from .authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
+from .authenticator import BasicAuthenticationProvider
 
 
 class NeighborhoodMode(Enum):

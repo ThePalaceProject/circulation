@@ -6,14 +6,16 @@ import flask
 from flask import Response, make_response, request
 from flask_babel import lazy_gettext as _
 from flask_cors.core import get_cors_options, set_cors_headers
+from flask_pydantic_spec import Response as SpecResponse
 from werkzeug.exceptions import HTTPException
 
+from api.model.patron_auth import PatronAuthAccessToken
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import HasSessionCache
 from core.util.cache import CachedData
 from core.util.problem_detail import ProblemDetail
 
-from .app import app, babel
+from .app import api_spec, app, babel
 from .config import Configuration
 from .controller import CirculationManager
 from .problem_details import REMOTE_INTEGRATION_FAILED
@@ -521,6 +523,15 @@ def put_patron_devices():
 @returns_problem_detail
 def delete_patron_devices():
     return app.manager.patron_devices.delete_patron_device()
+
+
+@library_dir_route("/patrons/me/token", methods=["GET"])
+@api_spec.validate(resp=SpecResponse(HTTP_200=PatronAuthAccessToken), tags=["patron"])
+@has_library
+@requires_auth
+@returns_problem_detail
+def patron_auth_token():
+    return app.manager.patron_auth_token.get_token()
 
 
 @library_dir_route("/loans", methods=["GET", "HEAD"])

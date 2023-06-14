@@ -1,39 +1,16 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict, List
+from typing import Any, List
 
-from pydantic import BaseModel, Extra, Field, NonNegativeInt
+from pydantic import Field, NonNegativeInt
+
+from core.util.flask_util import CustomBaseModel
 
 if sys.version_info >= (3, 11):
     from typing import Self
 else:
     from typing_extensions import Self
-
-
-def _snake_to_camel_case(name: str) -> str:
-    """Convert from Python snake case to JavaScript lower camel case."""
-    new_name = "".join(word.title() for word in name.split("_") if word)
-    if not new_name:
-        raise ValueError("Name ('{name}') may not consist entirely of underscores.")
-    return f"{new_name[0].lower()}{new_name[1:]}"
-
-
-class CustomBaseModel(BaseModel):
-    class Config:
-        alias_generator = _snake_to_camel_case
-        allow_population_by_field_name = True
-        extra = Extra.forbid
-
-    def api_dict(
-        self, *args: Any, by_alias: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
-        """Return the instance in a form suitable for a web response.
-
-        By default, the properties use their lower camel case aliases,
-        rather than their Python class member names.
-        """
-        return self.dict(*args, by_alias=by_alias, **kwargs)
 
 
 class StatisticsBaseModel(CustomBaseModel):

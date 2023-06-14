@@ -1866,6 +1866,10 @@ class TestLibraryAnnotator:
         # Book with no loans or holds yet.
         work4 = annotator_fixture.db.work(with_license_pool=True)
 
+        # Loan of a licensed book without a loan end.
+        work5 = annotator_fixture.db.work(with_license_pool=True)
+        loan5, ignore = work5.license_pools[0].loan_to(patron, start=now)
+
         # Ensure the state variable
         assert annotator.identifies_patrons == True
 
@@ -1901,6 +1905,13 @@ class TestLibraryAnnotator:
         # Revert the annotator state
         annotator.identifies_patrons = True
 
+        opds_parser = OPDSXMLParser()
+
+        availability = opds_parser._xpath1(fulfill, "opds:availability")
+        assert _strftime(loan1.start) == availability.attrib.get("since")
+        assert loan1.end == availability.attrib.get("until")
+        assert None == loan1.end
+
         loan2_links = annotator.acquisition_links(
             loan2.license_pool, loan2, None, None, feed, loan2.license_pool.identifier
         )
@@ -1912,6 +1923,10 @@ class TestLibraryAnnotator:
         )
         assert "fulfill" in fulfill.attrib.get("href")
         assert "http://opds-spec.org/acquisition" == fulfill.attrib.get("rel")
+
+        availability = opds_parser._xpath1(fulfill, "opds:availability")
+        assert _strftime(loan2.start) == availability.attrib.get("since")
+        assert _strftime(loan2.end) == availability.attrib.get("until")
 
         # If a book is ready to be fulfilled, but the library has
         # hidden all of its available content types, the fulfill link does
@@ -1964,6 +1979,24 @@ class TestLibraryAnnotator:
         [borrow] = work4_links
         assert "borrow" in borrow.attrib.get("href")
         assert "http://opds-spec.org/acquisition/borrow" == borrow.attrib.get("rel")
+
+        loan5_links = annotator.acquisition_links(
+            loan5.license_pool, loan5, None, None, feed, loan5.license_pool.identifier
+        )
+        # Fulfill and revoke.
+        [revoke, fulfill] = sorted(loan5_links, key=lambda x: x.attrib.get("rel"))
+        assert "revoke_loan_or_hold" in revoke.attrib.get("href")
+        assert "http://librarysimplified.org/terms/rel/revoke" == revoke.attrib.get(
+            "rel"
+        )
+        assert "fulfill" in fulfill.attrib.get("href")
+        assert "http://opds-spec.org/acquisition" == fulfill.attrib.get("rel")
+
+        availability = opds_parser._xpath1(fulfill, "opds:availability")
+        assert _strftime(loan5.start) == availability.attrib.get("since")
+        # TODO: This currently fails, it should be uncommented when the CM 21 day loan bug is fixed
+        # assert loan5.end == availability.attrib.get("until")
+        assert None == loan5.end
 
         # If patron authentication is turned off for the library, then
         # only open-access links are displayed.

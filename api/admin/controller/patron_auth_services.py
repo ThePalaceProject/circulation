@@ -50,6 +50,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
         """Cached result for integration implementations"""
         protocols = {}
         for name, api in self.registry:
+
             protocols[name] = {
                 "name": name,
                 "label": api.label(),

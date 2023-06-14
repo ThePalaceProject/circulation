@@ -30,7 +30,7 @@ def admin_fixture(db: DatabaseTransactionFixture) -> AdminFixture:
 class TestAdmin:
     def test_password_hashed(self, admin_fixture: AdminFixture):
         pytest.raises(NotImplementedError, lambda: admin_fixture.admin.password)
-        assert admin_fixture.admin.password_hashed.startswith("$2a$")
+        assert admin_fixture.admin.password_hashed.startswith("$2b$")
 
     def test_with_password(self, admin_fixture: AdminFixture):
         session = admin_fixture.db.session

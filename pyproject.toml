@@ -63,6 +63,7 @@ exclude = [
     'tests/api/test_controller_scopedsession\.py',
     'tests/api/test_controller_work\.py',
     'tests/api/test_coverage\.py',
+    'tests/api/test_jwe_provider\.py',
     'tests/api/test_lanes\.py',
     'tests/api/test_local_analytics_exporter\.py',
     'tests/api/test_monitor\.py',
@@ -164,19 +165,21 @@ module = [
 ignore_missing_imports = true
 module = [
     "aws_xray_sdk.ext.*",
-    "bcrypt",
     # This is ignored because the file is created when building a container
     # so it typically doesn't exist when running mypy, but since it only
     # contains a couple version strings it can be safely ignored
     "core._version",
     "expiringdict",
     "feedparser",
+    "firebase_admin",
+    "firebase_admin.messaging",
     "flask_babel",
     "flask_pydantic_spec.*",
     "fuzzywuzzy",
     "greenlet",
     "html_sanitizer",
     "isbnlib",
+    "jwcrypto",
     "lxml.*",
     "money",
     "multipledispatch",
@@ -211,6 +214,7 @@ version = "0"  # Version number is managed with tags in git
 [tool.poetry.dependencies]
 alembic = {extras = ["tz"], version = "^1.8.1"}
 aws-xray-sdk = "~2.12"
+bcrypt = "^4.0.1"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
@@ -218,6 +222,7 @@ click = "^8.1.3"
 contextlib2 = "21.6.0"
 expiringdict = "1.2.2"
 feedparser = "6.0.10"
+firebase-admin = "^6.0.1"
 Flask = "^2.2.3"
 Flask-Babel = "2.0.0"
 Flask-Cors = "3.0.10"
@@ -226,6 +231,7 @@ fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "~1.9.3"
 isbnlib = "^3.10.14"
 itsdangerous = "^2.1.2"
+jwcrypto = "^1.4.2"
 levenshtein = "~0.21"
 lxml = "4.9.2"
 money = "1.3.0"
@@ -236,10 +242,9 @@ opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "~3.0.1"
 Pillow = "9.5.0"
-py-bcrypt = "0.4"
 pycryptodome = "^3.18"
 pyinstrument = "<4.6"
-PyJWT = "2.4.0"
+PyJWT = "2.6.0"
 PyLD = "2.0.3"
 pymarc = "5.1.0"
 pyOpenSSL = "^23.1.0"
@@ -289,7 +294,7 @@ pytest = ">=7.2.0"
 pytest-alembic = "^0.10.4"
 pytest-cov = "^4.0.0"
 pytest-timeout = "*"
-requests-mock = "1.10.0"
+requests-mock = "1.11.0"
 types-aws-xray-sdk = "^2.11.0.13"
 types-Flask-Cors = "^3.0.10"
 types-jsonschema = "^4.17.0.5"

@@ -202,6 +202,10 @@ jobs:
       - name: Run tests
         run: ./docker/ci/test_${{ matrix.image }}.sh test_container
 
+      - name: Output logs
+        if: failure()
+        run: docker logs test_container
+
       - name: Stop container
         if: always()
         run: docker stop test_container

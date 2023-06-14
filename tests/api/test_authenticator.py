@@ -22,6 +22,7 @@ from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
+from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import PatronData
 from api.authentication.basic import (
     BarcodeFormats,
@@ -657,7 +658,8 @@ class TestLibraryAuthenticator:
         authenticator = LibraryAuthenticator.from_config(
             db.session, db.default_library()
         )
-        assert [] == list(authenticator.providers)
+
+        assert len(list(authenticator.providers)) == 0
 
     def test_configuration_exception_during_from_config_stored(
         self,
@@ -922,6 +924,21 @@ class TestLibraryAuthenticator:
             assert response == "foo"
             assert saml.authenticated_patron.call_count == 1
 
+    def test_authenticated_patron_bearer_access_token(
+        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+    ):
+        basic = mock_basic()
+        authenticator = LibraryAuthenticator(
+            _db=db.session, library=db.default_library(), basic_auth_provider=basic
+        )
+        patron = db.patron()
+        token = AccessTokenProvider.generate_token(db.session, patron, "pass")
+        auth = Authorization(auth_type="bearer", token=token)
+
+        auth_patron = authenticator.authenticated_patron(db.session, auth)
+        assert type(auth_patron) == Patron
+        assert auth_patron.id == patron.id
+
     def test_authenticated_patron_unsupported_mechanism(
         self, db: DatabaseTransactionFixture
     ):
@@ -956,6 +973,16 @@ class TestLibraryAuthenticator:
             basic_auth_provider=None,
         )
         assert authenticator.get_credential_from_header(credential) is None
+
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            basic_auth_provider=basic,
+        )
+        patron = db.patron()
+        token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
+        credential = Authorization(auth_type="bearer", token=token)
+        assert authenticator.get_credential_from_header(credential) == "passworx"
 
     def test_create_authentication_document(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
@@ -1107,7 +1134,7 @@ class TestLibraryAuthenticator:
             # The main thing we need to test is that the
             # authentication sub-documents are assembled properly and
             # placed in the right position.
-            [basic_doc] = doc["authentication"]
+            [token_doc, basic_doc] = doc["authentication"]
 
             expect_basic = basic.authentication_flow_document(db.session)
             assert expect_basic == basic_doc
