@@ -3,9 +3,11 @@ build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
 [tool.coverage.report]
-exclude_lines = [
+exclude_also = [
     "if TYPE_CHECKING:",
-    "pragma: no cover",
+    '^\s*\.\.\.\s*$',
+    '^\s*pass\s*$',
+    '^\s*raise NotImplementedError\s*$',
 ]
 
 [tool.coverage.run]
