@@ -13,12 +13,15 @@ class TestLocalAnalyticsExporter:
         exporter = LocalAnalyticsExporter()
         c1 = db.collection(name="c1")
         c2 = db.collection(name="c2")
+        open_access = True
         w1 = db.work(with_open_access_download=True)
         w2 = db.work(with_open_access_download=True)
         [lp1] = w1.license_pools
         [lp2] = w2.license_pools
         lp1.collection = c1
         lp2.collection = c2
+        lp1.open_access = True
+        lp2.open_access = False
 
         edition1 = w1.presentation_edition
         edition1.publisher = "A publisher"
@@ -106,9 +109,10 @@ class TestLocalAnalyticsExporter:
             "",
             edition1.medium,
             lp1.data_source.name,
+            "true",
         ]
 
-        expected_column_count = 19
+        expected_column_count = 20
         for row in rows:
             assert expected_column_count == len(row)
             assert constant == row[2:]
@@ -151,6 +155,7 @@ class TestLocalAnalyticsExporter:
             "",
             edition1.medium,
             lp2.data_source.name,
+            "false",
         ] == rows[-1][1:]
 
         output = exporter.export(db.session, today, today)
