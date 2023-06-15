@@ -14,7 +14,7 @@ wait_for_runit "$container"
 
 # In a webapp container, check that nginx and uwsgi are running.
 check_service_status "$container" /etc/service/nginx
-check_service_status "$container" /home/simplified/service/uwsgi
+check_service_status "$container" /etc/service/uwsgi
 
 # Wait for UWSGI to be ready to accept connections.
 timeout 120s grep -q 'WSGI app .* ready in [0-9]* seconds' <(docker logs "$container" -f 2>&1)

@@ -1,13 +1,5 @@
 name: Build Base Image
 on:
-  push:
-    paths:
-      # We only want to build this image when the dockerfile or ci scripts change.
-      - '.github/workflows/build-base-image.yml'
-      - 'docker/Dockerfile.baseimage'
-    branches:
-      # All branches, but not tags
-      - '*'
   schedule:
     # Every Monday at 6:22am Eastern Time
     - cron: '22 10 * * 1'
@@ -54,13 +46,13 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ghcr.io/${{ github.repository_owner }}/circ-baseimage
-          # Only tag the image as latest if the event is a push to main, manually dispatched or a scheduled build
+          # Generate tags for the image
+          # We use the following tags:
+            # - The date in YYYYww format, which is the year and week number. 202052 is the last week of 2020.
+            # - The latest tag
           tags: |
             type=schedule,pattern={{date 'YYYYww'}}
-            type=ref,event=branch
-            ${{ (github.event_name == 'schedule') && 'type=raw,value=latest' || '' }}
-            ${{ (github.event_name == 'workflow_dispatch') && 'type=raw,value=latest' || '' }}
-            ${{ (github.event_name == 'push' && github.ref_name == 'main') && 'type=raw,value=latest' || '' }}
+            type=raw,value=latest
 
       - name: Build base image
         uses: docker/build-push-action@v4
@@ -71,8 +63,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           push: true
           target: baseimage
-          # If we are not doing a scheduled build, use the latest image as a cache to speed up the build
-          cache-from: |
-            ${{ (github.event_name != 'schedule') && format('type=registry,ref=ghcr.io/{0}/circ-baseimage:latest', github.repository_owner) || '' }}
           cache-to: type=inline
           platforms: linux/amd64, linux/arm64

@@ -97,16 +97,19 @@ jobs:
         run: tox -e "migration-docker"
 
   docker-image-build:
-    name: Docker build base
+    name: Docker build
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
 
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # Only build docker containers on a push event. Otherwise, we won't have
+    # permissions to push the built containers into registry.
+    if: github.event_name == 'push'
+
+    outputs:
+      baseimage-changed: ${{ steps.changes.outputs.baseimage }}
+      baseimage: ${{ steps.baseimage.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v3
@@ -123,17 +126,95 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Create version file
-        run: git rev-parse --short HEAD > .version
+      # If the base image build was changed, we build it first, so we can test
+      # using these changes throughout the rest of the build. If the base image
+      # build wasn't changed, we don't use it and just rely on scheduled build.
+      - name: Check if base image was changed by this branch
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            baseimage:
+              - 'docker/Dockerfile.baseimage'
 
+      # We use docker/metadata-action to generate tags, instead of using string
+      # interpolation, because it properly handles making sure special
+      # characters are escaped, and the repo owner string is lowercase.
+      - name: Generate tags for base image
+        id: baseimage-meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-baseimage
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+
+      # We are using docker/metadata-action here for the same reason as above.
+      - name: Generate tag for latest
+        id: baseimage-latest
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/circ-baseimage
+          tags: |
+            type=raw,value=latest
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.changes.outputs.baseimage == 'true'
+
+      # Build the base image, only if needed.
       - name: Build base image
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: ./docker/Dockerfile
-          target: base
-          cache-to: type=gha,mode=max,scope=buildkit-${{ github.run_id }}
+          file: ./docker/Dockerfile.baseimage
+          target: baseimage
+          cache-from: |
+            type=registry,ref=${{ fromJSON(steps.baseimage-latest.outputs.json).tags[0] }}
+            type=registry,ref=${{ fromJSON(steps.baseimage-meta.outputs.json).tags[0] }}
+          cache-to: |
+             type=inline
           platforms: linux/amd64, linux/arm64
+          tags: ${{ steps.baseimage-meta.outputs.tags }}
+          labels: ${{ steps.baseimage-meta.outputs.labels }}
+          push: true
+        if: steps.changes.outputs.baseimage == 'true'
+
+      # If the base image was changed, we need to use the tag we just pushed
+      # to build the common image. Otherwise, if the base image wasn't changed,
+      # we use the latest tag. If the local repo has a built base image, we use
+      # that, otherwise we just fall back to the main projects tag.
+      - name: Set correct base-image for common image build
+        id: baseimage
+        run: |
+          docker buildx imagetools inspect ${{ fromJSON(steps.baseimage-latest.outputs.json).tags[0] }} > /dev/null
+          tag_exists=$?
+          if [[ "${{ steps.changes.outputs.baseimage }}" == "true" ]]; then
+            tag="${{ fromJSON(steps.baseimage-meta.outputs.json).tags[0] }}"
+          elif [[ $tag_exists -eq 0 ]]; then
+            tag="${{ fromJSON(steps.baseimage-latest.outputs.json).tags[0] }}"
+          else
+            tag="ghcr.io/thepalaceproject/circ-baseimage:latest"
+          fi
+          echo "Base image tag: $tag"
+          echo tag="$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build common image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: common
+          cache-to: |
+            type=gha,scope=buildkit-${{ github.run_id }},mode=min
+          platforms: linux/amd64, linux/arm64
+          build-args: |
+            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
 
   docker-image-test:
     name: Docker test circ-${{ matrix.image }} (${{ matrix.platform }})
@@ -159,10 +240,6 @@ jobs:
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
 
-    # Only push docker containers on a push event. Otherwise we won't have
-    # permissions to create the docker containers.
-    if: github.event_name == 'push'
-
     steps:
       - uses: actions/checkout@v3
         with:
@@ -178,9 +255,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Create version file
-        run: git rev-parse --short HEAD > .version
-
       - name: Build image
         uses: docker/build-push-action@v4
         with:
@@ -191,6 +265,8 @@ jobs:
           target: ${{ matrix.image }}
           cache-from: type=gha,scope=buildkit-${{ github.run_id }}
           platforms: ${{ matrix.platform }}
+          build-args: |
+            BASE_IMAGE=${{ needs.docker-image-build.outputs.baseimage }}
 
       - name: Start container
         run: >
@@ -213,7 +289,7 @@ jobs:
   docker-image-push:
     name: Push circ-${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [test, test-migrations, docker-image-test]
+    needs: [test, test-migrations, docker-image-build, docker-image-test]
     permissions:
       contents: read
       packages: write
@@ -280,12 +356,11 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          # Push the built docker image only when the `NO_DOCKER_IMAGE` secret is not set.
-          # (Useful if you want to disable pushing of docker images in local forks of
-          # this repo).
-          push: ${{ secrets.NO_DOCKER_IMAGE == null }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           target: ${{ matrix.image }}
           cache-from: type=gha,scope=buildkit-${{ github.run_id }}
           platforms: linux/amd64, linux/arm64
+          build-args: |
+            BASE_IMAGE=${{ needs.docker-image-build.outputs.baseimage }}
