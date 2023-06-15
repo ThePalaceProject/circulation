@@ -52,7 +52,9 @@ class OPDSForDistributorsLibrarySettings(BaseSettings):
 
 
 class OPDSForDistributorsAPI(
-    BaseCirculationAPI, HasCollectionSelfTests, HasLibraryIntegrationConfiguration
+    BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
 ):
     NAME = "OPDS for Distributors"
     DESCRIPTION = _(
@@ -96,11 +98,11 @@ class OPDSForDistributorsAPI(
         super().__init__(_db, collection)
         self.collection_id = collection.id
         self.external_integration_id = collection.external_integration.id
-        self.data_source_name = self.integration_configuration().get(
-            Collection.DATA_SOURCE_NAME_SETTING
-        )
-        self.username = self.integration_configuration().get("username")
-        self.password = self.integration_configuration().get("password")
+
+        config = self.configuration()
+        self.data_source_name = config.data_source
+        self.username = config.username
+        self.password = config.password
         self.feed_url = collection.external_account_id
         self.auth_url = None
 

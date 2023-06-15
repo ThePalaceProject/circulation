@@ -170,7 +170,7 @@ class ODLLibrarySettings(BaseSettings):
 
 
 class ODLAPI(
-    BaseCirculationAPI,
+    BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
     BaseSharedCollectionAPI,
     HasExternalIntegration,
     HasLibraryIntegrationConfiguration,
@@ -246,14 +246,13 @@ class ODLAPI(
                 % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        self.data_source_name = collection.integration_configuration.get(
-            Collection.DATA_SOURCE_NAME_SETTING
-        )
+        config = self.configuration()
+        self.data_source_name = config.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
-        self.username = collection.integration_configuration.get("username")
-        self.password = collection.integration_configuration.get("password")
+        self.username = config.username
+        self.password = config.password
         self.analytics = Analytics(_db)
 
         self._hasher_factory = HasherFactory()
@@ -1359,7 +1358,10 @@ class SharedODLLibrarySettings(BaseSettings):
     pass
 
 
-class SharedODLAPI(BaseCirculationAPI, HasLibraryIntegrationConfiguration):
+class SharedODLAPI(
+    BaseCirculationAPI[SharedODLSettings, SharedODLLibrarySettings],
+    HasLibraryIntegrationConfiguration,
+):
     """An API for circulation managers to use to connect to an ODL collection that's shared
     by another circulation manager.
     """
@@ -1395,9 +1397,7 @@ class SharedODLAPI(BaseCirculationAPI, HasLibraryIntegrationConfiguration):
                 % collection.protocol
             )
         self.collection_id = collection.id
-        self.data_source_name = self.integration_configuration().get(
-            Collection.DATA_SOURCE_NAME_SETTING
-        )
+        self.data_source_name = self.configuration().data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 

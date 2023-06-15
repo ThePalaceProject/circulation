@@ -119,7 +119,9 @@ class BibliothecaLibrarySettings(BaseSettings):
 
 
 class BibliothecaAPI(
-    BaseCirculationAPI, HasCollectionSelfTests, HasLibraryIntegrationConfiguration
+    BaseCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
 ):
     NAME = ExternalIntegration.BIBLIOTHECA
     AUTH_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S GMT"
@@ -178,15 +180,12 @@ class BibliothecaAPI(
         super().__init__(_db, collection)
 
         self._db = _db
-        self.version = (
-            self.integration_configuration().get("version") or self.DEFAULT_VERSION
-        )
-        self.account_id = self.integration_configuration().get("username")
-        self.account_key = self.integration_configuration().get("password")
+        config = self.configuration()
+        self.version = self.DEFAULT_VERSION
+        self.account_id = config.username
+        self.account_key = config.password
         self.library_id = collection.external_account_id
-        self.base_url = (
-            self.integration_configuration().get("url") or self.DEFAULT_BASE_URL
-        )
+        self.base_url = self.DEFAULT_BASE_URL
 
         if not self.account_id or not self.account_key or not self.library_id:
             raise CannotLoadConfiguration("Bibliotheca configuration is incomplete.")

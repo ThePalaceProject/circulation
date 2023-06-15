@@ -30,7 +30,6 @@ class MockBibliothecaAPI(BibliothecaAPI):
         )
         config["username"] = "a"
         config["password"] = "b"
-        config["url"] = "http://bibliotheca.test"
         config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection

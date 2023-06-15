@@ -342,7 +342,9 @@ class OdiloLibrarySettings(BaseSettings):
 
 
 class OdiloAPI(
-    BaseCirculationAPI, HasCollectionSelfTests, HasLibraryIntegrationConfiguration
+    BaseCirculationAPI[OdiloSettings, OdiloLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
 ):
     log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
@@ -420,11 +422,10 @@ class OdiloAPI(
 
         self.collection_id = collection.id
         self.token = None
-        self.client_key = self.integration_configuration().get("username")
-        self.client_secret = self.integration_configuration().get("password")
-        self.library_api_base_url = self.integration_configuration().get(
-            self.LIBRARY_API_BASE_URL
-        )
+        config = self.configuration()
+        self.client_key = config.username
+        self.client_secret = config.password
+        self.library_api_base_url = config.library_api_base_url
 
         if (
             not self.client_key

@@ -70,6 +70,13 @@ class SharedCollectionFixture(ControllerFixture):
         from api.odl import ODLAPI
 
         self.collection = db.collection(protocol=ODLAPI.NAME)
+        self.collection.integration_configuration.settings = dict(
+            username="username",
+            password="password",
+            data_source="data_source",
+            passphrase_hint="Try Me!",
+            passphrase_hint_url="http://hint.url",
+        )
         db.default_library().collections = [self.collection]
         self.client, ignore = IntegrationClient.register(
             db.session, "http://library.org"

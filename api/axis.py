@@ -101,7 +101,7 @@ class Axis360Settings(BaseSettings):
             allowed=list(Axis360APIConstants.SERVER_NICKNAMES.keys()),
         ),
     )
-    verify_certificate: Optional[str] = FormField(
+    verify_certificate: Optional[bool] = FormField(
         default=True,
         form=ConfigurationFormItem(
             label=_("Verify SSL Certificate"),
@@ -125,7 +125,7 @@ class Axis360LibrarySettings(BaseSettings):
 
 
 class Axis360API(
-    BaseCirculationAPI,
+    BaseCirculationAPI[Axis360Settings, Axis360LibrarySettings],
     HasCollectionSelfTests,
     Axis360APIConstants,
     HasLibraryIntegrationConfiguration,
@@ -190,13 +190,12 @@ class Axis360API(
 
         super().__init__(_db, collection)
         self.library_id = collection.external_account_id
-        self.username = self.integration_configuration().get("username")
-        self.password = self.integration_configuration().get("password")
+        config = self.configuration()
+        self.username = config.username
+        self.password = config.password
 
         # Convert the nickname for a server into an actual URL.
-        base_url = (
-            self.integration_configuration().get("url") or self.PRODUCTION_BASE_URL
-        )
+        base_url = config.url or self.PRODUCTION_BASE_URL
         if base_url in self.SERVER_NICKNAMES:
             base_url = self.SERVER_NICKNAMES[base_url]
         if not base_url.endswith("/"):
@@ -214,9 +213,8 @@ class Axis360API(
 
         self.token = None
         self.collection_id = collection.id
-        verify_certificate = self.integration_configuration().get(self.VERIFY_SSL)
         self.verify_certificate: bool = (
-            verify_certificate if verify_certificate is not None else True
+            config.verify_certificate if config.verify_certificate is not None else True
         )
 
     @property

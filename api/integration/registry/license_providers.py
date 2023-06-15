@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Type, cast
 
-from api.circulation import BaseCirculationAPI
+from api.circulation import BaseCirculationAPIProtocol
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model.configuration import ExternalIntegration
 
 
-class LicenseProvidersRegistry(IntegrationRegistry["BaseCirculationAPI"]):
+class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
 
@@ -40,4 +40,4 @@ class LicenseProvidersRegistry(IntegrationRegistry["BaseCirculationAPI"]):
         }
 
         for name, api in apis.items():
-            self.register(cast(Type[BaseCirculationAPI], api), canonical=name)
+            self.register(cast(Type[BaseCirculationAPIProtocol], api), canonical=name)

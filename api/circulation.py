@@ -6,7 +6,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
-from typing import Dict, Optional, Tuple, Type
+from typing import Dict, Generic, Optional, Tuple, Type, TypeVar
 
 import flask
 from flask_babel import lazy_gettext as _
@@ -468,7 +468,7 @@ class BaseCirculationAPISettings:
     )
 
 
-class BaseCirculationAPIProtocol:
+class BaseCirculationAPIIntegrationProtocol:
     _db: Session
     _integration_configuration_id: Optional[int]
 
@@ -476,8 +476,18 @@ class BaseCirculationAPIProtocol:
     def settings_class(cls) -> Type[BaseSettings]:
         raise NotImplementedError()
 
+    @classmethod
+    def library_settings_class(cls) -> Type[BaseSettings]:
+        raise NotImplementedError()
 
-class CirculationConfigurationMixin(BaseCirculationAPIProtocol):
+
+SettingsType = TypeVar("SettingsType", bound=BaseSettings)
+LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings)
+
+
+class CirculationConfigurationMixin(
+    Generic[SettingsType, LibrarySettingsType], BaseCirculationAPIIntegrationProtocol
+):
     """Any implementation that uses integration configuration settings"""
 
     def integration_configuration(self) -> IntegrationConfiguration:
@@ -490,12 +500,69 @@ class CirculationConfigurationMixin(BaseCirculationAPIProtocol):
             )
         return config
 
-    def configuration(self) -> BaseSettings:
-        return self.settings_class()(**self.integration_configuration().settings)
+    # We have to ignore the return values due to a known bug in mypy
+    # https://github.com/python/mypy/issues/10003
+    def library_configuration(self, library_id) -> LibrarySettingsType | None:
+        libconfig = self.integration_configuration().for_library(library_id=library_id)
+        if libconfig:
+            config = self.library_settings_class()(**libconfig.settings)
+            return config  # type: ignore [return-value]
+        return None
+
+    def configuration(self) -> SettingsType:
+        return self.settings_class()(**self.integration_configuration().settings)  # type: ignore [return-value]
+
+
+class BaseCirculationAPIProtocol(BaseCirculationAPIIntegrationProtocol):
+    """Placeholder protocol used only in the LicenseProviderRegistry"""
+
+    def internal_format(self, delivery_mechanism):
+        ...
+
+    @classmethod
+    def default_notification_email_address(self, library_or_patron, pin):
+        ...
+
+    def patron_email_address(self, patron, library_authenticator=None):
+        ...
+
+    def checkin(self, patron, pin, licensepool):
+        ...
+
+    def checkout(self, patron, pin, licensepool, internal_format):
+        ...
+
+    def can_fulfill_without_loan(self, patron, pool, lpdm):
+        ...
+
+    def fulfill(
+        self,
+        patron,
+        pin,
+        licensepool,
+        internal_format=None,
+        part=None,
+        fulfill_part_url=None,
+    ):
+        ...
+
+    def patron_activity(self, patron, pin):
+        ...
+
+    def place_hold(self, patron, pin, licensepool, notification_email_address):
+        ...
+
+    def release_hold(self, patron, pin, licensepool):
+        ...
+
+    def update_availability(self, licensepool):
+        ...
 
 
 class BaseCirculationAPI(
-    HasLibraryIntegrationConfiguration, CirculationConfigurationMixin
+    HasLibraryIntegrationConfiguration,
+    CirculationConfigurationMixin[SettingsType, LibrarySettingsType],
+    Generic[SettingsType, LibrarySettingsType],
 ):
     """Encapsulates logic common to all circulation APIs."""
 

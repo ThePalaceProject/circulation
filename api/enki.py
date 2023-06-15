@@ -49,7 +49,7 @@ class EnkiConstants:
 
 
 class EnkiSettings(BaseSettings):
-    url: str = FormField(
+    url: Optional[str] = FormField(
         default=EnkiConstants.PRODUCTION_BASE_URL,
         form=ConfigurationFormItem(
             label=_("URL"),
@@ -80,7 +80,7 @@ class EnkiLibrarySettings(BaseSettings):
 
 
 class EnkiAPI(
-    BaseCirculationAPI,
+    BaseCirculationAPI[EnkiSettings, EnkiLibrarySettings],
     HasCollectionSelfTests,
     EnkiConstants,
     HasLibraryIntegrationConfiguration,
@@ -142,18 +142,15 @@ class EnkiAPI(
         super().__init__(_db, collection)
 
         self.collection_id = collection.id
-        self.base_url = (
-            self.integration_configuration().get("url") or self.PRODUCTION_BASE_URL
-        )
+        self.base_url = self.configuration().url or self.PRODUCTION_BASE_URL
 
     def external_integration(self, _db):
         return self.collection.external_integration
 
     def enki_library_id(self, library):
         """Find the Enki library ID for the given library."""
-        config = self.integration_configuration().for_library(library.id)
-        if config:
-            return config.get(self.ENKI_LIBRARY_ID_KEY)
+        if config := self.library_configuration(library.id):
+            return config.enki_library_id
 
     @property
     def collection(self):
@@ -210,7 +207,7 @@ class EnkiAPI(
         data=None,
         params=None,
         retry_on_timeout=True,
-        **kwargs
+        **kwargs,
     ):
         """Make an HTTP request to the Enki API."""
         headers = dict(extra_headers)
@@ -230,7 +227,7 @@ class EnkiAPI(
                 data,
                 params,
                 retry_on_timeout=False,
-                **kwargs
+                **kwargs,
             )
 
         # Look for the error indicator and raise
@@ -254,7 +251,7 @@ class EnkiAPI(
             params=params,
             timeout=90,
             disallowed_response_codes=None,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod

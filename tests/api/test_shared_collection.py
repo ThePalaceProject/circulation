@@ -42,6 +42,9 @@ class SharedCollectionFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.collection = db.collection(protocol="Mock")
+        self.collection.integration_configuration.settings = dict(
+            username="username", password="password", data_source="data_source"
+        )
         self.shared_collection = SharedCollectionAPI(
             db.session, api_map={"Mock": MockAPI}
         )
@@ -93,6 +96,9 @@ class TestSharedCollectionAPI:
         db = shared_collection_fixture.db
 
         collection = db.collection(protocol=ODLAPI.NAME)
+        collection.integration_configuration.settings = dict(
+            username="username", password="password", data_source="data_source"
+        )
         edition, pool = db.edition(with_license_pool=True, collection=collection)
         shared_collection = SharedCollectionAPI(db.session)
         assert isinstance(shared_collection.api_for_licensepool(pool), ODLAPI)
@@ -103,6 +109,9 @@ class TestSharedCollectionAPI:
         db = shared_collection_fixture.db
 
         collection = db.collection()
+        collection.integration_configuration.settings = dict(
+            username="username", password="password", data_source="data_source"
+        )
         shared_collection = SharedCollectionAPI(db.session)
         # The collection isn't a shared collection, so looking up its API
         # raises an exception.

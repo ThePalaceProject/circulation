@@ -71,9 +71,10 @@ class ODL2API(ODLAPI):
         return ODL2Settings
 
     def __init__(self, _db, collection):
-        self.loan_limit = collection.integration_configuration.get("odl2_loan_limit")
-        self.hold_limit = collection.integration_configuration.get("odl2_hold_limit")
         super().__init__(_db, collection)
+        config = self.configuration()
+        self.loan_limit = config.odl2_loan_limit
+        self.hold_limit = config.odl2_hold_limit
 
     def _checkout(self, patron_or_client: Patron, licensepool, hold=None):
         # If the loan limit is not None or 0
