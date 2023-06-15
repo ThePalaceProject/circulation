@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 class PatronAuthRegistry(IntegrationRegistry["AuthenticationProvider"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
-
         from api.firstbook2 import FirstBookAuthenticationAPI
         from api.kansas_patron import KansasAuthenticationAPI
         from api.millenium_patron import MilleniumPatronAPI

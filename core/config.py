@@ -42,6 +42,9 @@ class ConfigurationConstants:
     SYS_ADMIN_OR_MANAGER = 2
     SYS_ADMIN_ONLY = 3
 
+    TRUE = "true"
+    FALSE = "false"
+
 
 class Configuration(ConfigurationConstants):
 
@@ -50,6 +53,9 @@ class Configuration(ConfigurationConstants):
     # Environment variables that contain URLs to the database
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
+
+    # Environment variable for FCM service account key
+    FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE = "SIMPLIFIED_FCM_CREDENTIALS_FILE"
 
     # Environment variable for Overdrive fulfillment keys
     OD_PREFIX_PRODUCTION_PREFIX = "SIMPLIFIED"
@@ -65,6 +71,9 @@ class Configuration(ConfigurationConstants):
 
     # ConfigurationSetting to enable the MeasurementReaper script
     MEASUREMENT_REAPER = "measurement_reaper_enabled"
+
+    # Configuration key for push notifications status
+    PUSH_NOTIFICATIONS_STATUS = "push_notifications_status"
 
     # Lane policies
     DEFAULT_OPDS_FORMAT = "verbose_opds_entry"
@@ -163,6 +172,19 @@ class Configuration(ConfigurationConstants):
             ),
             "options": {"true": "true", "false": "false"},
             "default": "true",
+        },
+        {
+            "key": PUSH_NOTIFICATIONS_STATUS,
+            "label": _("Push notifications status"),
+            "type": "select",
+            "description": _(
+                "If this settings is 'true' push notification jobs will run as scheduled, and attempt to notify patrons via mobile push notifications."
+            ),
+            "options": [
+                {"key": ConfigurationConstants.TRUE, "label": _("True")},
+                {"key": ConfigurationConstants.FALSE, "label": _("False")},
+            ],
+            "default": ConfigurationConstants.TRUE,
         },
     ]
 
@@ -335,6 +357,17 @@ class Configuration(ConfigurationConstants):
         # Calling __to_string__ will hide the password.
         logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
+
+    @classmethod
+    def fcm_credentials_file(cls):
+        fcm_file = os.environ.get(cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE)
+        if not fcm_file:
+            raise CannotLoadConfiguration(
+                f"FCM Credentials File not defined in environment variable {cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE}"
+            )
+        if not os.path.exists(fcm_file):
+            raise FileNotFoundError(f"The file at {fcm_file} does not exist")
+        return fcm_file
 
     @classmethod
     def overdrive_fulfillment_keys(cls, testing=False) -> Dict[str, str]:

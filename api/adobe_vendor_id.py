@@ -817,7 +817,10 @@ class AuthdataUtility:
         """
         if not patron_identifier:
             raise ValueError("No patron identifier specified")
-        now = utc_now()
+
+        # pyjwt >2.6.0 does not validate tokens created in the same second
+        # so we create a token from 1 second in the past
+        now = utc_now() - datetime.timedelta(seconds=1)
         expires = now + datetime.timedelta(minutes=60)
         authdata = self._encode(self.library_uri, patron_identifier, now, expires)
         return self.vendor_id, authdata

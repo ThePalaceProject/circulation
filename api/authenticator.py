@@ -16,6 +16,10 @@ from werkzeug.datastructures import Authorization, Headers
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
 from api.announcements import Announcements
+from api.authentication.access_token import AccessTokenProvider
+from api.authentication.base import AuthenticationProvider
+from api.authentication.basic import BasicAuthenticationProvider
+from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.opds import LibraryAnnotator
 from core.analytics import Analytics
@@ -259,12 +263,18 @@ class LibraryAuthenticator:
             else integration_registry
         )
 
-        self.basic_auth_provider = basic_auth_provider
         self.saml_providers_by_name = {}
         self.bearer_token_signing_secret = bearer_token_signing_secret
         self.initialization_exceptions: Dict[
             Tuple[int | None, int | None], Exception
         ] = {}
+
+        self.basic_auth_provider: BasicAuthenticationProvider | None = None
+        self.access_token_authentication_provider: BasicTokenAuthenticationProvider | None = (
+            None
+        )
+        if basic_auth_provider:
+            self.register_basic_auth_provider(basic_auth_provider)
 
         self.log = logging.getLogger("Authenticator")
 
@@ -404,6 +414,12 @@ class LibraryAuthenticator:
         ):
             raise CannotLoadConfiguration("Two basic auth providers configured")
         self.basic_auth_provider = provider
+        if self.library is not None:
+            self.access_token_authentication_provider = (
+                BasicTokenAuthenticationProvider(
+                    self._db, self.library, self.basic_auth_provider
+                )
+            )
 
     def register_saml_provider(
         self,
@@ -419,6 +435,8 @@ class LibraryAuthenticator:
     @property
     def providers(self) -> Iterable[AuthenticationProvider]:
         """An iterator over all registered AuthenticationProviders."""
+        if self.access_token_authentication_provider:
+            yield self.access_token_authentication_provider
         if self.basic_auth_provider:
             yield self.basic_auth_provider
         yield from self.saml_providers_by_name.values()
@@ -441,21 +459,31 @@ class LibraryAuthenticator:
             # BasicAuthenticationProvider.
             provider = self.basic_auth_provider
             provider_token = auth.parameters
-        elif self.saml_providers_by_name and auth.type.lower() == "bearer":
+        elif auth.type.lower() == "bearer":
             # The patron wants to use an
             # SAMLAuthenticationProvider. Figure out which one.
             if auth.token is None:
                 return INVALID_SAML_BEARER_TOKEN
-            try:
-                provider_name, provider_token = self.decode_bearer_token(auth.token)
-            except jwt.exceptions.InvalidTokenError as e:
-                return INVALID_SAML_BEARER_TOKEN
-            saml_provider = self.saml_provider_lookup(provider_name)
-            if isinstance(saml_provider, ProblemDetail):
-                # There was a problem turning the provider name into
-                # a registered SAMLAuthenticationProvider.
-                return saml_provider
-            provider = saml_provider
+
+            if (
+                self.access_token_authentication_provider
+                and AccessTokenProvider.is_access_token(auth.token)
+            ):
+                provider = self.access_token_authentication_provider
+                provider_token = auth.token
+            elif self.saml_providers_by_name:
+                # The patron wants to use an
+                # SAMLAuthenticationProvider. Figure out which one.
+                try:
+                    provider_name, provider_token = self.decode_bearer_token(auth.token)
+                except jwt.exceptions.InvalidTokenError as e:
+                    return INVALID_SAML_BEARER_TOKEN
+                saml_provider = self.saml_provider_lookup(provider_name)
+                if isinstance(saml_provider, ProblemDetail):
+                    # There was a problem turning the provider name into
+                    # a registered SAMLAuthenticationProvider.
+                    return saml_provider
+                provider = saml_provider
 
         if provider and provider_token:
             # Turn the token/header into a patron
