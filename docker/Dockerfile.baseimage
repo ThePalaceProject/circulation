@@ -19,8 +19,6 @@ RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 # https://github.com/phusion/baseimage-docker
 FROM phusion/baseimage:focal-1.2.0 As baseimage
 
-ARG POETRY_VERSION=1.3.2
-
 # Copy LCP binary from builder into image.
 COPY --from=lcp-builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
@@ -28,6 +26,8 @@ COPY --from=lcp-builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confold" && \
     /bd_build/cleanup.sh
+
+ARG POETRY_VERSION=1.5.1
 
 # Install required packages including python, pip, compiliers and libraries needed
 # to build the python wheels we need and poetry.
