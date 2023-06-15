@@ -241,9 +241,12 @@ class SearchMappingDocument:
         self._fields = dict(fields)
 
     def serialize(self) -> dict:
+        output_properties = self.serialize_properties()
+        output_mappings = {"properties": output_properties}
+        return {"settings": self.settings, "mappings": output_mappings}
+
+    def serialize_properties(self):
         output_properties: dict = {}
         for name, prop in self._fields.items():
             output_properties[name] = prop.serialize()
-
-        output_mappings = {"properties": output_properties}
-        return {"settings": self.settings, "mappings": output_mappings}
+        return output_properties

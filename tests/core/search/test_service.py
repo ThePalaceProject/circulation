@@ -1,15 +1,16 @@
-from core.search.document import SearchMappingDocument
+from core.search.document import INTEGER, LONG, SearchMappingDocument, keyword
 from core.search.revision import SearchSchemaRevision
 from core.search.service import SearchServiceOpensearch1
 from tests.fixtures.search import ExternalSearchFixture
 
 
-class EmptyRevision(SearchSchemaRevision):
+class BasicMutableRevision(SearchSchemaRevision):
     def __init__(self, version: int):
         super().__init__(version)
+        self.document = SearchMappingDocument()
 
     def mapping_document(self) -> SearchMappingDocument:
-        return SearchMappingDocument()
+        return self.document
 
 
 class TestService:
@@ -36,7 +37,7 @@ class TestService:
     ):
         """Creating any index is idempotent."""
         service = SearchServiceOpensearch1(client=external_search_fixture.search)  # type: ignore
-        revision = EmptyRevision(23)
+        revision = BasicMutableRevision(23)
         service.create_index("base", revision)
         service.create_index("base", revision)
 
@@ -57,7 +58,7 @@ class TestService:
     def test_read_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the read pointer works."""
         service = SearchServiceOpensearch1(client=external_search_fixture.search)  # type: ignore
-        revision = EmptyRevision(23)
+        revision = BasicMutableRevision(23)
         service.create_index("base", revision)
         service.read_pointer_set("base", revision)
         assert "base-v23" == service.read_pointer("base")
@@ -74,10 +75,33 @@ class TestService:
     def test_write_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the write pointer works."""
         service = SearchServiceOpensearch1(client=external_search_fixture.search)  # type: ignore
-        revision = EmptyRevision(23)
+        revision = BasicMutableRevision(23)
         service.create_index("base", revision)
         service.write_pointer_set("base", revision)
 
         pointer = service.write_pointer("base")
         assert pointer is not None
         assert "base-v23" == pointer.target_name
+
+    def test_populate_index_idempotent(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        """Populating an index is idempotent."""
+        service = SearchServiceOpensearch1(client=external_search_fixture.search)  # type: ignore
+        revision = BasicMutableRevision(23)
+
+        document = revision.mapping_document()
+        document.properties["x"] = INTEGER
+        document.properties["y"] = LONG
+        document.properties["z"] = keyword()
+
+        service.create_index("base", revision)
+        service.populate_index("base", revision)
+        service.populate_index("base", revision)
+
+        indices = external_search_fixture.search.indices  # type: ignore
+        assert indices is not None
+        assert indices.exists(revision.name_for_index("base"))
+        assert indices.get(revision.name_for_index("base"))["base-v23"]["mappings"] == {
+            "properties": document.serialize_properties()
+        }
