@@ -48,6 +48,7 @@ class LocalAnalyticsExporter:
             "library_name",
             "medium",
             "distributor",
+            "open_access",
         ]
         output = BytesIO()
         writer = csv.writer(output, encoding="utf-8")
@@ -117,6 +118,7 @@ class LocalAnalyticsExporter:
                     Library.name.label("library_name"),
                     Edition.medium,
                     DataSource.name.label("distributor"),
+                    LicensePool.open_access,
                 ],
             )
             .select_from(
@@ -215,6 +217,7 @@ class LocalAnalyticsExporter:
                 events.library_name,
                 events.medium,
                 events.distributor,
+                case({True: "true", False: "false"}, value=events.open_access),
             ]
         ).select_from(events_alias)
         return query
