@@ -1,3 +1,5 @@
+from typing import Iterable
+
 from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import SearchService
 
@@ -16,8 +18,14 @@ class SearchMigrator:
         self._revisions = revisions
         self._service = service
 
-    def migrate(self, base_name: str, version: int):
-        """Migrate to the given version using the given base name (such as 'circulation-works')."""
+    def migrate(self, base_name: str, version: int, documents: Iterable[dict]):
+        """
+        Migrate to the given version using the given base name (such as 'circulation-works').
+
+        :arg base_name: The base name used for indices (such as 'circulation-works').
+        :arg version: The version number to which we are migrating
+        :arg documents: A generator that returns documents to be indexed. This is used to populate an index when upgrading to a new version.
+        """
 
         target = self._revisions.available.get(version)
         if target is None:
@@ -42,7 +50,7 @@ class SearchMigrator:
 
             # The index now definitely exists, but it might not be populated. Populate it if necessary.
             if not self._service.index_is_populated(base_name, target):
-                self._service.populate_index(base_name, target)
+                self._service.populate_index(base_name, target, documents)
 
             # Update the write pointer to point to the now-populated index.
             self._service.write_pointer_set(base_name, target)

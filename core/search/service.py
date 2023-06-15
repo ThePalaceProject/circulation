@@ -1,8 +1,9 @@
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
+import opensearchpy.helpers
 from opensearchpy import NotFoundError, OpenSearch, RequestError
 
 from core.search.revision import SearchSchemaRevision
@@ -65,7 +66,9 @@ class SearchService(ABC):
         """Return True if the index for the given base name and revision has been populated."""
 
     @abstractmethod
-    def populate_index(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def populate_index(
+        self, base_name: str, revision: SearchSchemaRevision, documents: Iterable[dict]
+    ) -> None:
         pass
 
     @abstractmethod
@@ -152,11 +155,14 @@ class SearchServiceOpensearch1(SearchService):
             name=revision.name_for_indexed_pointer(base_name)
         )
 
-    def populate_index(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def populate_index(
+        self, base_name: str, revision: SearchSchemaRevision, documents: Iterable[dict]
+    ) -> None:
         data = {"properties": revision.mapping_document().serialize_properties()}
         self._client.indices.put_mapping(
             index=revision.name_for_index(base_name), body=data
         )
+        opensearchpy.helpers.bulk(client=self._client, actions=documents)
 
     def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
         alias_name = self._write_pointer(base_name)

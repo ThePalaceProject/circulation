@@ -24,7 +24,7 @@ class TestMigrator:
         revisions = SearchRevisionDirectory.empty()
         migrator = SearchMigrator(revisions, service)
         with pytest.raises(SearchMigrationException):
-            migrator.migrate("any", 23)
+            migrator.migrate("any", 23, [])
 
     def test_migrate_empty(self):
         """With an empty search state, migrating to a supported version works."""
@@ -36,7 +36,7 @@ class TestMigrator:
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
         migrator = SearchMigrator(revisions, service)
-        migrator.migrate("works", revision.version)
+        migrator.migrate("works", revision.version, [])
 
         # The sequence of expected calls.
         service.create_empty_index.assert_called_with("works")
@@ -46,7 +46,7 @@ class TestMigrator:
         service.write_pointer.assert_called_with("works")
         # The new index is created and populated.
         service.create_index.assert_called_with("works", revision)
-        service.populate_index.assert_called_with("works", revision)
+        service.populate_index.assert_called_with("works", revision, [])
         # Both the read and write pointers are set.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
@@ -61,7 +61,7 @@ class TestMigrator:
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
         migrator = SearchMigrator(revisions, service)
-        migrator.migrate("works", revision.version)
+        migrator.migrate("works", revision.version, [])
 
         # The sequence of expected calls.
         service.create_empty_index.assert_called_with("works")
@@ -70,7 +70,7 @@ class TestMigrator:
         service.write_pointer.assert_called_with("works")
         # The index for version 3 is created and populated.
         service.create_index.assert_called_with("works", revision)
-        service.populate_index.assert_called_with("works", revision)
+        service.populate_index.assert_called_with("works", revision, [])
         # Both the read and write pointers are set.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
@@ -85,7 +85,7 @@ class TestMigrator:
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
         migrator = SearchMigrator(revisions, service)
-        migrator.migrate("works", revision.version)
+        migrator.migrate("works", revision.version, [])
 
         # The sequence of expected calls.
         service.create_empty_index.assert_called_with("works")
@@ -109,7 +109,7 @@ class TestMigrator:
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
         migrator = SearchMigrator(revisions, service)
-        migrator.migrate("works", revision.version)
+        migrator.migrate("works", revision.version, [])
 
         # The sequence of expected calls.
         service.create_empty_index.assert_called_with("works")
@@ -118,7 +118,7 @@ class TestMigrator:
         service.write_pointer.assert_called_with("works")
         # The index for version 3 exists but isn't populated, so it is populated.
         service.create_index.assert_called_with("works", revision)
-        service.populate_index.assert_called_with("works", revision)
+        service.populate_index.assert_called_with("works", revision, [])
         # Both the read and write pointers are updated.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
@@ -133,7 +133,7 @@ class TestMigrator:
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
         migrator = SearchMigrator(revisions, service)
-        migrator.migrate("works", revision.version)
+        migrator.migrate("works", revision.version, [])
 
         # The sequence of expected calls.
         service.create_empty_index.assert_called_with("works")
