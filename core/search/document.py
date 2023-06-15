@@ -211,6 +211,11 @@ class SearchMappingFieldTypeCustomKeyword(SearchMappingFieldTypeCustom):
         return output
 
 
+CUSTOM_KEYWORD: SearchMappingFieldTypeCustomKeyword = (
+    SearchMappingFieldTypeCustomKeyword()
+)
+
+
 class SearchMappingDocument:
     """
     A top-level Opensearch mapping document.
