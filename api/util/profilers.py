@@ -44,7 +44,6 @@ class PalacePyInstrumentProfiler(PalaceProfiler):
         # Don't import if we are not profiling
         from pyinstrument import Profiler
 
-        @app.before_first_request
         @app.before_request
         def before_request():
             if "profiler" not in g:

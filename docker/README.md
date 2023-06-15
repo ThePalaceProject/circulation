@@ -6,9 +6,9 @@ You will need **a PostgreSQL instance URL** in the format
 `postgresql://[username]:[password]@[host]:[port]/[database_name]`. Check the `./docker-compose.yml` file for an example.
 With this URL, you can create containers for both the web application (`circ-webapp`) and for the background cron jobs
 that import and update books and otherwise keep the app running smoothly (`circ-scripts`). Either container can be used
-to initialize or migrate the database. During the first deployment against a brand new database, the first container run
-can use the default `SIMPLIFIED_DB_TASK='auto'` or be run manually with `SIMPLIFIED_DB_TASK='init'`. See the
-"Environment Variables" section below for more information.
+to initialize or migrate the database. Database initialization uses a PostgreSQL Advisory Lock to make sure that only
+one instance is updating the schema at a time. Database migration uses Alembic to update the schema to the latest
+version. This initialization or migration is done automatically when the container is started.
 
 ### circ-webapp
 
@@ -81,18 +81,6 @@ $ docker run --name search_index_refresh -it \
 
 Environment variables can be set with the `-e VARIABLE_KEY='variable_value'` option on the `docker run` command.
 `SIMPLIFIED_PRODUCTION_DATABASE` is the only required environment variable.
-
-### `SIMPLIFIED_DB_TASK`
-
-*Optional.* Performs a task against the database at container runtime. Options are:
-
-- `auto` : Either initializes or migrates the database, depending on if it is new or not. This is the default value.
-- `ignore` : Does nothing.
-- `init` : Initializes the app against a brand new database. If you are running a circulation manager for the first
-time ever, use this value to set up an Opensearch alias and account for the database schema for future
-migrations.
-- `migrate` : Migrates an existing database against a new release. Use this value when switching from one stable
-version to another.
 
 ### `SIMPLIFIED_PRODUCTION_DATABASE`
 

@@ -99,8 +99,16 @@ class DatabaseFixture:
     @staticmethod
     def _get_database_connection() -> Tuple[Engine, Connection]:
         url = Configuration.database_url()
-        engine, connection = SessionManager.initialize(url)
+        engine = SessionManager.engine(url)
+        connection = engine.connect()
         return engine, connection
+
+    @staticmethod
+    def _initialize_database(connection: Connection):
+        SessionManager.initialize_schema(connection)
+        with Session(connection) as session:
+            # Initialize the database with default data
+            SessionManager.initialize_data(session)
 
     @staticmethod
     def _load_core_model_classes():
@@ -109,11 +117,11 @@ class DatabaseFixture:
 
         importlib.reload(core.model)
 
-    @staticmethod
-    def create() -> DatabaseFixture:
-        DatabaseFixture._load_core_model_classes()
-        engine, connection = DatabaseFixture._get_database_connection()
-
+    @classmethod
+    def create(cls) -> DatabaseFixture:
+        cls._load_core_model_classes()
+        engine, connection = cls._get_database_connection()
+        cls._initialize_database(connection)
         return DatabaseFixture(engine, connection)
 
     def close(self):

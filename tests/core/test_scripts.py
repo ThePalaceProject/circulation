@@ -6,7 +6,6 @@ import json
 import os
 import random
 from io import StringIO
-from pathlib import Path
 from unittest.mock import MagicMock, PropertyMock, call, patch
 
 import pytest
@@ -52,7 +51,6 @@ from core.overdrive import OverdriveAdvantageAccount
 from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
 from core.scripts import (
     AddClassificationScript,
-    AlembicMigrateVersion,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
     CollectionInputScript,
@@ -2785,38 +2783,6 @@ class TestCustomListUpdateEntriesScript:
             session.refresh(prev_entry)
         assert custom_list.auto_update_status == CustomList.UPDATED
         assert custom_list.size == len(data.populated_books)
-
-
-class TestAlembicMigrateVersionScript:
-    def test_find_alembic_ini(self, db: DatabaseTransactionFixture):
-        # Make sure we get the correct path to alembic.ini
-        with patch("core.scripts.upgrade") as mock:
-            AlembicMigrateVersion().run()
-            mock.assert_called_once()
-            filename = mock.call_args.args[0].config_file_name
-
-        assert "alembic.ini" in filename
-        assert Path(filename).exists()
-
-    @pytest.mark.parametrize(
-        "args", [([]), (["--upgrade", "fakerevision"]), (["-u", "fakerevision"])]
-    )
-    def test_upgrade(self, db: DatabaseTransactionFixture, args):
-        with patch("core.scripts.upgrade") as upgrade:
-            with patch("core.scripts.downgrade") as downgrade:
-                AlembicMigrateVersion().do_run(args)
-                upgrade.assert_called_once()
-                downgrade.assert_not_called()
-
-    @pytest.mark.parametrize(
-        "args", [(["--downgrade", "fakerevision"]), (["-d", "fakerevision"])]
-    )
-    def test_downgrade(self, db: DatabaseTransactionFixture, args):
-        with patch("core.scripts.upgrade") as upgrade:
-            with patch("core.scripts.downgrade") as downgrade:
-                AlembicMigrateVersion().do_run(args)
-                downgrade.assert_called_once()
-                upgrade.assert_not_called()
 
 
 class TestLoanNotificationsScript:
