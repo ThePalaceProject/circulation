@@ -13,7 +13,7 @@ class CollectionSelfTestsController(SelfTestsController):
         super().__init__(manager)
         self.type = _("collection")
         self.registry = LicenseProvidersRegistry()
-        self.protocols = self._get_collection_protocols([p[1] for p in self.registry])
+        self.protocols = self._get_collection_protocols(self.registry.integrations)
 
     def process_collection_self_tests(self, identifier):
         return self._manage_self_tests(identifier)

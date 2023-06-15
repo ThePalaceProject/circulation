@@ -30,8 +30,7 @@ class CollectionSettingsController(SettingsController):
         self.registry = LicenseProvidersRegistry()
 
     def _get_collection_protocols(self):
-        providers = [api_class for _, api_class in self.registry]
-        protocols = super()._get_collection_protocols(providers)
+        protocols = super()._get_collection_protocols(self.registry.integrations)
 
         # dedupe and only keep the latest SETTINGS
         # this will allow child objects to overwrite
@@ -93,12 +92,12 @@ class CollectionSettingsController(SettingsController):
                 self.load_settings(
                     protocol["settings"], collection_object, collection_dict["settings"]
                 )
-                collection_dict["self_test_results"] = self._get_prior_test_results(
-                    collection_object
-                )
-                collection_dict[
-                    "marked_for_deletion"
-                ] = collection_object.marked_for_deletion
+            collection_dict["self_test_results"] = self._get_prior_test_results(
+                collection_object
+            )
+            collection_dict[
+                "marked_for_deletion"
+            ] = collection_object.marked_for_deletion
 
             collections.append(collection_dict)
 
@@ -129,7 +128,7 @@ class CollectionSettingsController(SettingsController):
             if not user or not user.is_librarian(library):
                 continue
             library_info = dict(short_name=library.short_name)
-            # Find and update the librayr settings if they exist
+            # Find and update the library settings if they exist
             for config in integration.library_configurations:
                 if library.id == config.library_id:
                     library_info.update(config.settings)
@@ -189,7 +188,7 @@ class CollectionSettingsController(SettingsController):
         if error:
             return error
 
-        settings_class = self._get_protocol_class(
+        settings_class = self._get_settings_class(
             self.registry, protocol_name, is_child=(parent_id is not None)
         )
         if not settings_class:
@@ -202,8 +201,8 @@ class CollectionSettingsController(SettingsController):
                 return COLLECTION_NAME_ALREADY_IN_USE
             collection.create_integration_configuration(protocol_name)
             # Mirrors still use the external integration
-            # Remove the use of external integrations when Mirrors are migrated
-            # to use the integrtion configurations
+            # TODO: Remove the use of external integrations when Mirrors are migrated
+            # to use the integration configurations
             collection.create_external_integration(protocol_name)
 
         collection.name = name
@@ -297,7 +296,7 @@ class CollectionSettingsController(SettingsController):
         and check that each setting is valid and that no required settings are missing.  If
         the setting passes all of the validations, go ahead and set it for this collection.
         """
-        settings_class = self._get_protocol_class(
+        settings_class = self._get_settings_class(
             self.registry,
             collection.protocol,
             is_child=(flask.request.form.get("parent_id") is not None),

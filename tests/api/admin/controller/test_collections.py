@@ -735,7 +735,7 @@ class TestCollectionSettings:
             ("external_account_id", "1234"),
             ("username", "user2"),
             ("password", "password"),
-            ("url", "http://axis/"),
+            ("url", "http://axis.test/"),
         ]
 
     def test_collections_post_edit_mirror_integration(
@@ -858,7 +858,7 @@ class TestCollectionSettings:
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
-                    ("url", "http://axis/"),
+                    ("url", "http://axis.test/"),
                     (
                         "libraries",
                         json.dumps([{"short_name": "L1", "ebook_loan_duration": "14"}]),
@@ -885,7 +885,7 @@ class TestCollectionSettings:
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
-                    ("url", "http://axis/"),
+                    ("url", "http://axis.test/"),
                     ("libraries", json.dumps([])),
                 ]
             )

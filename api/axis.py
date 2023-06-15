@@ -11,6 +11,7 @@ from typing import Union
 import certifi
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import HttpUrl
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
@@ -92,12 +93,11 @@ class Axis360Settings(BaseSettings):
             required=True,
         )
     )
-    url: str = FormField(
+    url: HttpUrl = FormField(
         default=Axis360APIConstants.PRODUCTION_BASE_URL,
         form=ConfigurationFormItem(
             label=_("Server"),
             required=True,
-            format="url",
             allowed=list(Axis360APIConstants.SERVER_NICKNAMES.keys()),
         ),
     )

@@ -11,8 +11,9 @@ from core.integration.settings import (
 
 
 class ConnectionSetting(BaseSettings):
-    connection_max_retry_count: Optional[int] = FormField(
+    max_retry_count: Optional[int] = FormField(
         default=3,
+        alias="connection_max_retry_count",
         form=ConfigurationFormItem(
             label=_("Connection retry limit"),
             description=_(

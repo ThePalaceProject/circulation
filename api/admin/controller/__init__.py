@@ -25,7 +25,7 @@ import flask
 from flask import Request, Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
-from pydantic import BaseModel
+from pydantic import BaseModel, BaseSettings
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -75,6 +75,7 @@ from core.integration.base import (
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
 )
+from core.integration.registry import IntegrationRegistry
 from core.lane import Lane, WorkList
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
@@ -1129,8 +1130,6 @@ class CustomListsController(AdminCirculationManagerController):
             list, is_new = create(
                 self._db, CustomList, name=name, data_source=data_source
             )
-            if list is None:
-                return INTERNAL_SERVER_ERROR.detailed("Could not create the list.")
             list.created = datetime.now()
             list.library = library
 
@@ -1792,7 +1791,7 @@ class SettingsController(AdminCirculationManagerController):
             ):
                 return MISSING_INTEGRATION
 
-            current_integration_link, ignore = get_one_or_create(
+            current_integration_link_created, ignore = get_one_or_create(
                 self._db,
                 ExternalIntegrationLink,
                 library_id=None,
@@ -1800,16 +1799,15 @@ class SettingsController(AdminCirculationManagerController):
                 purpose=purpose,
             )
 
-            if not current_integration_link:
-                return INTERNAL_SERVER_ERROR.detailed(
-                    "Could not create integration link."
-                )
-
-            current_integration_link.other_integration_id = storage_integration.id
+            current_integration_link_created.other_integration_id = (
+                storage_integration.id
+            )
 
         return None
 
-    def _get_protocol_class(self, registry, protocol_name, is_child=False):
+    def _get_settings_class(
+        self, registry: IntegrationRegistry, protocol_name: str, is_child=False
+    ) -> BaseSettings | ProblemDetail | None:
         api_class = registry.get(protocol_name)
         if not api_class:
             return None

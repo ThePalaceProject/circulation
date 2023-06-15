@@ -594,7 +594,8 @@ class Collection(Base, HasSessionCache):
             qu.delete()
         else:
             raise ValueError(
-                "No known integration configuration for collection %s" % self.name
+                "No known integration library configuration for collection %s"
+                % self.name
             )
 
         self.libraries.remove(library)

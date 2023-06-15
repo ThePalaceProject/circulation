@@ -135,7 +135,7 @@ class OverdriveData:
     overdrive_client_secret: str
     overdrive_website_id: str
     overdrive_server_nickname: str | None = None
-    connection_max_retry_count: int = 0
+    max_retry_count: int = 0
 
 
 class OverdriveCoreAPI(
@@ -716,14 +716,14 @@ class OverdriveCoreAPI(
     def _do_get(self, url: str, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = int(self._configuration.connection_max_retry_count)
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
         kwargs["timeout"] = 120
         return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _do_post(self, url: str, payload, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = int(self._configuration.connection_max_retry_count)
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
         kwargs["timeout"] = 120
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 

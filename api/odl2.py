@@ -26,8 +26,9 @@ if TYPE_CHECKING:
 
 
 class ODL2Settings(ODLSettings):
-    odl2_skipped_license_formats: Optional[List[str]] = FormField(
+    skipped_license_formats: Optional[List[str]] = FormField(
         default=["text/html"],
+        alias="odl2_skipped_license_formats",
         form=ConfigurationFormItem(
             label=_("Skipped license formats"),
             description=_(
@@ -38,8 +39,9 @@ class ODL2Settings(ODLSettings):
         ),
     )
 
-    odl2_loan_limit: Optional[int] = FormField(
+    loan_limit: Optional[int] = FormField(
         default=None,
+        alias="odl2_loan_limit",
         form=ConfigurationFormItem(
             label=_("Loan limit per patron"),
             description=_(
@@ -50,8 +52,9 @@ class ODL2Settings(ODLSettings):
         ),
     )
 
-    odl2_hold_limit: Optional[int] = FormField(
+    hold_limit: Optional[int] = FormField(
         default=None,
+        alias="odl2_hold_limit",
         form=ConfigurationFormItem(
             label=_("Hold limit per patron"),
             description=_(
@@ -73,8 +76,8 @@ class ODL2API(ODLAPI):
     def __init__(self, _db, collection):
         super().__init__(_db, collection)
         config = self.configuration()
-        self.loan_limit = config.odl2_loan_limit
-        self.hold_limit = config.odl2_hold_limit
+        self.loan_limit = config.loan_limit
+        self.hold_limit = config.hold_limit
 
     def _checkout(self, patron_or_client: Patron, licensepool, hold=None):
         # If the loan limit is not None or 0
@@ -196,7 +199,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         licenses = []
         medium = None
 
-        skipped_license_formats = self.configuration().odl2_skipped_license_formats
+        skipped_license_formats = self.configuration().skipped_license_formats
         if skipped_license_formats:
             skipped_license_formats = set(skipped_license_formats)
 

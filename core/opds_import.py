@@ -1646,9 +1646,16 @@ class OPDSImportMonitor(
         self.password = config.password
 
         # Not all inherited settings have these
-        settings = self.importer.integration_configuration()
-        self.custom_accept_header = settings.get("custom_accept_header")
-        self._max_retry_count: int | None = settings.get("connection_max_retry_count")
+        # OPDSforDistributors does not use this setting
+        settings = self.importer.configuration()
+        try:
+            self.custom_accept_header = settings.custom_accept_header
+        except AttributeError:
+            self.custom_accept_header = None
+        try:
+            self._max_retry_count: int | None = settings.max_retry_count
+        except AttributeError:
+            self._max_retry_count = 0
 
         super().__init__(_db, collection)
 
