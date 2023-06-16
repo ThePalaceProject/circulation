@@ -12,6 +12,13 @@ from core.config import CannotLoadConfiguration
 from core.config import Configuration as CoreConfiguration
 from core.model import ConfigurationSetting
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import FilesFixture
+
+
+@pytest.fixture()
+def notifications_files_fixture() -> FilesFixture:
+    """Provides access to notifications test files."""
+    return FilesFixture("util/notifications")
 
 
 class TestConfiguration:
@@ -201,17 +208,56 @@ class TestConfiguration:
         )
 
     @patch.object(os, "environ", new=dict())
-    def test_fcm_credentials_file(self):
-        with pytest.raises(CannotLoadConfiguration):
-            Configuration.fcm_credentials_file()
+    def test_fcm_credentials(self, notifications_files_fixture):
+        invalid_json = "{ this is invalid JSON }"
+        valid_credentials_json = notifications_files_fixture.sample_text(
+            "fcm-credentials-valid-json.json"
+        )
+        valid_credentials_object = json.loads(valid_credentials_json)
 
+        # No FCM credentials environment variable present.
+        with pytest.raises(
+            CannotLoadConfiguration,
+            match=r"FCM Credentials configuration environment variable not defined.",
+        ):
+            Configuration.fcm_credentials()
+
+        # Non-existent file.
         os.environ[
             Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
         ] = "filedoesnotexist.deleteifitdoes"
-        with pytest.raises(FileNotFoundError):
-            Configuration.fcm_credentials_file()
+        with pytest.raises(
+            FileNotFoundError,
+            match=r"The FCM credentials file .* does not exist.",
+        ):
+            Configuration.fcm_credentials()
 
+        # Valid JSON file.
         os.environ[
             Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
-        ] = os.path.abspath(__file__)
-        assert os.path.abspath(__file__) == Configuration.fcm_credentials_file()
+        ] = notifications_files_fixture.sample_path("fcm-credentials-valid-json.json")
+        assert valid_credentials_object == Configuration.fcm_credentials()
+
+        # Setting more than one FCM credentials environment variable is not valid.
+        os.environ[
+            Configuration.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE
+        ] = valid_credentials_json
+        with pytest.raises(
+            CannotLoadConfiguration,
+            match=r"Both JSON .* and file-based .* FCM Credential environment variables are defined, but only one is allowed.",
+        ):
+            Configuration.fcm_credentials()
+
+        # Down to just the JSON FCM credentials environment variable.
+        del os.environ[Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE]
+        assert valid_credentials_object == Configuration.fcm_credentials()
+
+        # But we should get an exception if the JSON is invalid.
+        os.environ[
+            Configuration.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE
+        ] = invalid_json
+        with pytest.raises(
+            CannotLoadConfiguration,
+            match=r"Cannot parse value of FCM credential environment variable .* as JSON.",
+        ):
+            Configuration.fcm_credentials()
