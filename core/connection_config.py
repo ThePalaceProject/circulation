@@ -1,6 +1,7 @@
 from typing import Optional
 
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 
 from core.integration.settings import (
     BaseSettings,
@@ -11,7 +12,7 @@ from core.integration.settings import (
 
 
 class ConnectionSetting(BaseSettings):
-    max_retry_count: Optional[int] = FormField(
+    max_retry_count: Optional[PositiveInt] = FormField(
         default=3,
         alias="connection_max_retry_count",
         form=ConfigurationFormItem(

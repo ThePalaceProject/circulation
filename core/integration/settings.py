@@ -197,9 +197,6 @@ class ConfigurationFormItem:
     # weight will be displayed in the order they were added.
     weight: int = 0
 
-    # Allowed values for any field
-    allowed: List[Any] | None = None
-
     @staticmethod
     def get_form_value(value: Any) -> Any:
         if isinstance(value, Enum):
@@ -238,8 +235,6 @@ class ConfigurationFormItem:
             ]
         if self.format is not None:
             form_entry["format"] = self.format
-        if self.allowed is not None:
-            form_entry["allowed"] = self.allowed
 
         return self.weight, form_entry
 

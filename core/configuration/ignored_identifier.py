@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Set, Union
+from typing import List, Optional, Sequence, Set, Union
 
 from flask_babel import lazy_gettext as _
 
@@ -17,7 +17,7 @@ ALL_IGNORED_IDENTIFIER_TYPES = {
 
 
 class IgnoredIdentifierSettings(BaseSettings):
-    ignored_identifier_types: Optional[list] = FormField(
+    ignored_identifier_types: Optional[List[IdentifierType]] = FormField(
         default=[],
         form=ConfigurationFormItem(
             label=_("List of identifiers that will be skipped"),

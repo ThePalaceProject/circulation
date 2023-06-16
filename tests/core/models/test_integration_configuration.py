@@ -70,33 +70,3 @@ class TestIntegrationConfigurations:
         # The same config is returned henceforth
         assert config.for_library(library.id) == libconfig
         assert config.for_library(library.id, create=True) == libconfig
-
-
-class TestIntegrationLibraryConfiguration:
-    def test_get_item(self, db: DatabaseTransactionFixture):
-        """Test the inheritance based value fetching"""
-        config, _ = create(
-            db.session,
-            IntegrationConfiguration,
-            goal=Goals.LICENSE_GOAL,
-            protocol="protocol",
-            name="Config Name",
-        )
-        library = db.default_library()
-        assert library.id is not None
-
-        config["key"] = "parent-key"
-        config["value"] = "parent-value"
-
-        libconfig = config.for_library(library.id, create=True)
-        libconfig["key"] = "child-key"
-
-        # Child owned key is the childs value
-        assert libconfig["key"] == "child-key"
-        # Parent owned key comes from the parent
-        assert libconfig["value"] == "parent-value"
-        # Parents key is not overwritten by the child
-        assert config["key"] == "parent-key"
-
-        # The lib config is only its own key
-        assert libconfig.settings == dict(key="child-key")

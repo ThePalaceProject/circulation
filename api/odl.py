@@ -13,6 +13,7 @@ import sqlalchemy
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import PositiveInt
 from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
 
@@ -116,7 +117,7 @@ class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
         )
     )
 
-    default_reservation_period: Optional[int] = FormField(
+    default_reservation_period: Optional[PositiveInt] = FormField(
         default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
         form=ConfigurationFormItem(
             label=_("Default Reservation Period (in Days)"),

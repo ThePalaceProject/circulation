@@ -11,8 +11,9 @@ from typing import Union
 import certifi
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from pydantic import HttpUrl
+from pydantic import validator
 
+from api.admin.validator import Validator
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
@@ -93,12 +94,11 @@ class Axis360Settings(BaseSettings):
             required=True,
         )
     )
-    url: HttpUrl = FormField(
+    url: str = FormField(
         default=Axis360APIConstants.PRODUCTION_BASE_URL,
         form=ConfigurationFormItem(
             label=_("Server"),
             required=True,
-            allowed=list(Axis360APIConstants.SERVER_NICKNAMES.keys()),
         ),
     )
     verify_certificate: Optional[bool] = FormField(
@@ -116,6 +116,16 @@ class Axis360Settings(BaseSettings):
             },
         ),
     )
+
+    @validator("url")
+    def _validate_url(cls, v):
+        # Validate if the url provided is valid http or a valid nickname
+        valid_names = list(Axis360APIConstants.SERVER_NICKNAMES.keys())
+        if not Validator._is_url(v, valid_names):
+            raise ValueError(
+                f"Server nickname must be one of {valid_names}, or an 'http[s]' URL."
+            )
+        return v
 
 
 class Axis360LibrarySettings(BaseSettings):

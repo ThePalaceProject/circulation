@@ -833,12 +833,11 @@ class TestODLAPI:
         library = hold.patron.library
 
         # Set the reservation period and loan period.
-        odl_api_test_fixture.collection.integration_configuration.set(
-            Collection.DEFAULT_RESERVATION_PERIOD_KEY, 3
+        config = odl_api_test_fixture.collection.integration_configuration.for_library(
+            library.id
         )
-        odl_api_test_fixture.collection.integration_configuration.set(
-            Collection.EBOOK_LOAN_DURATION_KEY, 6
-        )
+        config.set(Collection.DEFAULT_RESERVATION_PERIOD_KEY, 3)
+        config.set(Collection.EBOOK_LOAN_DURATION_KEY, 6)
         odl_api_test_fixture.db.session.commit()
 
         # A hold that's already reserved and has an end date doesn't change.

@@ -328,25 +328,29 @@ class Collection(Base, HasSessionCache):
             or self.STANDARD_DEFAULT_LOAN_PERIOD
         )
 
+    @classmethod
+    def loan_period_key(cls, medium=EditionConstants.BOOK_MEDIUM):
+        if medium == EditionConstants.AUDIO_MEDIUM:
+            return cls.AUDIOBOOK_LOAN_DURATION_KEY
+        else:
+            return cls.EBOOK_LOAN_DURATION_KEY
+
     def default_loan_period_setting(
-        self, library, medium=EditionConstants.BOOK_MEDIUM, set_value=None
+        self,
+        library,
+        medium=EditionConstants.BOOK_MEDIUM,
     ):
         """Until we hear otherwise from the license provider, we assume
         that someone who borrows a non-open-access item from this
         collection has it for this number of days.
         """
-        if medium == EditionConstants.AUDIO_MEDIUM:
-            key = self.AUDIOBOOK_LOAN_DURATION_KEY
-        else:
-            key = self.EBOOK_LOAN_DURATION_KEY
+        key = self.loan_period_key(medium)
         if isinstance(library, Library):
             config = self.integration_configuration.for_library(library.id)
         elif isinstance(library, IntegrationClient):
             config = self.integration_configuration
 
         if config:
-            if set_value is not None:
-                config.set(key, set_value)
             return config.get(key)
 
     DEFAULT_RESERVATION_PERIOD_KEY = "default_reservation_period"

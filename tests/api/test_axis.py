@@ -16,6 +16,7 @@ from api.axis import (
     AvailabilityResponseParser,
     Axis360AcsFulfillmentInfo,
     Axis360API,
+    Axis360APIConstants,
     Axis360BibliographicCoverageProvider,
     Axis360CirculationMonitor,
     Axis360FulfillmentInfo,
@@ -62,7 +63,7 @@ from core.scripts import RunCollectionCoverageProviderScript
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
 
 if TYPE_CHECKING:
@@ -754,6 +755,34 @@ class TestAxis360API:
             config[setting] = setting_value
         api = MockAxis360API(axis360.db.session, axis360.collection)
         assert getattr(api, attribute) == attribute_value
+
+    @pytest.mark.parametrize(
+        ("setting", "setting_value", "is_valid", "expected"),
+        [
+            (
+                "url",
+                "production",
+                True,
+                Axis360APIConstants.SERVER_NICKNAMES["production"],
+            ),
+            ("url", "qa", True, Axis360APIConstants.SERVER_NICKNAMES["qa"]),
+            ("url", "not-production", False, None),
+            ("url", "http://any.url.will.do", True, "http://any.url.will.do/"),
+        ],
+    )
+    def test_integration_settings_url(
+        self, setting, setting_value, is_valid, expected, axis360: Axis360Fixture
+    ):
+        config = axis360.collection.integration_configuration
+        config[setting] = setting_value
+
+        if is_valid:
+            api = MockAxis360API(axis360.db.session, axis360.collection)
+            assert api.base_url == expected
+        else:
+            pytest.raises(
+                ProblemError, MockAxis360API, axis360.db.session, axis360.collection
+            )
 
 
 class TestCirculationMonitor:

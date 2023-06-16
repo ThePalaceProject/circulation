@@ -1127,11 +1127,12 @@ class CustomListsController(AdminCirculationManagerController):
         elif old_list_with_name:
             return CUSTOM_LIST_NAME_ALREADY_IN_USE
         else:
-            list, is_new = create(
+            new_list, is_new = create(
                 self._db, CustomList, name=name, data_source=data_source
             )
-            list.created = datetime.now()
-            list.library = library
+            new_list.created = datetime.now()
+            new_list.library = library
+            list = new_list
 
         # Test JSON viability of auto update data
         try:

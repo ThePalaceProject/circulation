@@ -115,7 +115,7 @@ class OverdriveSettings(BaseImporterSettings):
         )
     )
 
-    overdrive_server_nickname: Optional[str] = FormField(
+    overdrive_server_nickname: str = FormField(
         default=OverdriveConstants.PRODUCTION_SERVERS,
         form=ConfigurationFormItem(
             label=_("Server family"),
@@ -134,7 +134,7 @@ class OverdriveData:
     overdrive_client_key: str
     overdrive_client_secret: str
     overdrive_website_id: str
-    overdrive_server_nickname: str | None = None
+    overdrive_server_nickname: str = OverdriveConstants.PRODUCTION_SERVERS
     max_retry_count: int = 0
 
 
@@ -321,10 +321,7 @@ class OverdriveCoreAPI(
         if not self._configuration.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
-        self._server_nickname = (
-            self._configuration.overdrive_server_nickname
-            or OverdriveConstants.PRODUCTION_SERVERS
-        )
+        self._server_nickname = self._configuration.overdrive_server_nickname
 
         self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import requests
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 from requests.auth import HTTPBasicAuth
 
 from api.lcp import utils
@@ -78,7 +79,7 @@ class LCPServerSettings(BaseSettings):
         )
     )
 
-    lcpserver_page_size: Optional[int] = FormField(
+    lcpserver_page_size: Optional[PositiveInt] = FormField(
         default=LCPServerConstants.DEFAULT_PAGE_SIZE,
         form=ConfigurationFormItem(
             label=_("LCP License Server's page size"),
@@ -118,7 +119,7 @@ class LCPServerSettings(BaseSettings):
         ),
     )
 
-    max_printable_pages: Optional[int] = FormField(
+    max_printable_pages: Optional[PositiveInt] = FormField(
         form=ConfigurationFormItem(
             label=_("Maximum number or printable pages"),
             description=_(
@@ -129,7 +130,7 @@ class LCPServerSettings(BaseSettings):
         ),
     )
 
-    max_copiable_pages: Optional[int] = FormField(
+    max_copiable_pages: Optional[PositiveInt] = FormField(
         form=ConfigurationFormItem(
             label=_("Maximum number or copiable characters"),
             description=_(

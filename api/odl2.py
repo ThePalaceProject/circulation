@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, List, Optional
 
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
@@ -39,7 +40,7 @@ class ODL2Settings(ODLSettings):
         ),
     )
 
-    loan_limit: Optional[int] = FormField(
+    loan_limit: Optional[PositiveInt] = FormField(
         default=None,
         alias="odl2_loan_limit",
         form=ConfigurationFormItem(
@@ -52,7 +53,7 @@ class ODL2Settings(ODLSettings):
         ),
     )
 
-    hold_limit: Optional[int] = FormField(
+    hold_limit: Optional[PositiveInt] = FormField(
         default=None,
         alias="odl2_hold_limit",
         form=ConfigurationFormItem(

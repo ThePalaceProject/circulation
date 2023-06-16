@@ -4,6 +4,7 @@ import logging
 from typing import List
 
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 
 from core.config import CannotLoadConfiguration
 from core.integration.settings import (
@@ -232,7 +233,7 @@ class BaseSharedCollectionSettings(BaseSettings):
             format="url",
         )
     )
-    ebook_loan_duration: Optional[int] = FormField(
+    ebook_loan_duration: Optional[PositiveInt] = FormField(
         default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
         form=ConfigurationFormItem(
             label=_(

@@ -38,6 +38,12 @@ class ExampleCollectionFixture:
         self.collection = collection
         self.database_fixture = database_transaction
 
+    def set_default_loan_period(self, medium, value, library=None):
+        config = self.collection.integration_configuration
+        if library is not None:
+            config = config.for_library(library.id)
+        config[self.collection.loan_period_key(medium)] = value
+
 
 @pytest.fixture()
 def example_collection_fixture(
@@ -311,14 +317,14 @@ class TestCollection:
         )
 
         # Set a value, and it's used.
-        test_collection.default_loan_period_setting(library, ebook, set_value=604)
+        example_collection_fixture.set_default_loan_period(ebook, 604, library=library)
         assert 604 == test_collection.default_loan_period(library)
         assert (
             Collection.STANDARD_DEFAULT_LOAN_PERIOD
             == test_collection.default_loan_period(library, audio)
         )
 
-        test_collection.default_loan_period_setting(library, audio, set_value=606)
+        example_collection_fixture.set_default_loan_period(audio, 606, library=library)
         assert 606 == test_collection.default_loan_period(library, audio)
 
         # Given an integration client rather than a library, use
@@ -338,14 +344,14 @@ class TestCollection:
         )
 
         # Set a value, and it's used.
-        test_collection.default_loan_period_setting(client, ebook, set_value=347)
+        example_collection_fixture.set_default_loan_period(ebook, 347)
         assert 347 == test_collection.default_loan_period(client)
         assert (
             Collection.STANDARD_DEFAULT_LOAN_PERIOD
             == test_collection.default_loan_period(client, audio)
         )
 
-        test_collection.default_loan_period_setting(client, audio, set_value=349)
+        example_collection_fixture.set_default_loan_period(audio, 349)
         assert 349 == test_collection.default_loan_period(client, audio)
 
         # The same value is used for other clients.
@@ -695,7 +701,9 @@ class TestCollection:
         collection.integration_configuration_id = None
         with pytest.raises(ValueError) as excinfo:
             collection.disassociate_library(other_library)
-        assert "No known integration configuration for collection" in str(excinfo.value)
+        assert "No known integration library configuration for collection" in str(
+            excinfo.value
+        )
 
         collection.external_integration_id = None
         with pytest.raises(ValueError) as excinfo:

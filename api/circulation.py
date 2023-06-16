@@ -10,6 +10,7 @@ from typing import Dict, Generic, Optional, Tuple, Type, TypeVar
 
 import flask
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 from sqlalchemy.orm import Session
 
 from core.analytics import Analytics
@@ -427,7 +428,7 @@ class HoldInfo(CirculationInfo):
 class BaseCirculationAPISettings:
     """Not an inheritable BaseSettings object, this just holds reusable settings"""
 
-    ebook_loan_duration: Optional[int] = FormField(
+    ebook_loan_duration: Optional[PositiveInt] = FormField(
         default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
         form=ConfigurationFormItem(
             label=_("Ebook Loan Duration (in Days)"),
@@ -441,7 +442,7 @@ class BaseCirculationAPISettings:
     # Add to LIBRARY_SETTINGS if your circulation API is for a
     # distributor which includes audiobooks and allows clients to
     # specify their own loan lengths.
-    audiobook_loan_duration: Optional[int] = FormField(
+    audiobook_loan_duration: Optional[PositiveInt] = FormField(
         default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
         form=ConfigurationFormItem(
             label=_("Audiobook Loan Duration (in Days)"),
@@ -456,7 +457,7 @@ class BaseCirculationAPISettings:
     # distributor with a default loan period negotiated out-of-band,
     # such that the circulation manager cannot _specify_ the length of
     # a loan.
-    default_loan_duration: Optional[int] = FormField(
+    default_loan_duration: Optional[PositiveInt] = FormField(
         default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
         form=ConfigurationFormItem(
             label=_("Default Loan Period (in Days)"),
