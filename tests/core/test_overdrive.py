@@ -32,6 +32,7 @@ from core.util.string_helpers import base64
 from tests.api.mockapi.overdrive import MockOverdriveCoreAPI
 from tests.core.mock import MockRequestsResponse
 from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveFixture, OverdriveWithAPIFixture
 
 
@@ -172,7 +173,7 @@ class TestOverdriveCoreAPI:
         # hostnames.
         def api_with_setting(x):
             config = fixture.overdrive.collection.integration_configuration
-            config["overdrive_server_nickname"] = x
+            DatabaseTransactionFixture.set_settings(config, overdrive_server_nickname=x)
             return c(session, fixture.overdrive.collection)
 
         testing = api_with_setting(OverdriveConstants.TESTING_SERVERS)
@@ -394,10 +395,18 @@ class TestOverdriveCoreAPI:
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="1",
         )
-        main.integration_configuration["overdrive_client_key"] = "user"
-        main.integration_configuration["overdrive_client_secret"] = "password"
-        main.integration_configuration["overdrive_website_id"] = "100"
-        main.integration_configuration["ils_name"] = "default"
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "overdrive_client_key", "user"
+        )
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "overdrive_client_secret", "password"
+        )
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "overdrive_website_id", "100"
+        )
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "ils_name", "default"
+        )
 
         # Here's an Overdrive API client for that collection.
         overdrive_main = MockOverdriveCoreAPI(session, main)

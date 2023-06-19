@@ -33,10 +33,11 @@ class LCPServerFixture:
         self.db = db
         self.lcp_collection = self.db.collection(protocol=ExternalIntegration.LCP)
         self.configuration = self.lcp_collection.integration_configuration
-        self.configuration["lcpserver_input_directory"] = "/tmp"
+        DatabaseTransactionFixture.set_settings(
+            self.configuration, "lcpserver_input_directory", "/tmp"
+        )
         self.hasher_factory = HasherFactory()
         self.credential_factory = LCPCredentialFactory()
-        print(self.lcp_collection.integration_configuration.settings)
         self.lcp_server = LCPServer(
             lambda: LCPServerSettings(**self.configuration.settings),
             self.hasher_factory,
@@ -82,15 +83,29 @@ class TestLCPServer:
         )
 
         configuration = lcp_server_fixture.configuration
-        configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
-        configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
-        configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
-        configuration["lcpserver_input_directory"] = input_directory
-        configuration["provider_name"] = lcp_strings.PROVIDER_NAME
-        configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
-        configuration[
-            "encryption_algorithm"
-        ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_input_directory", input_directory
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "provider_name", lcp_strings.PROVIDER_NAME
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration,
+            "encryption_algorithm",
+            LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+        )
 
         with requests_mock.Mocker() as request_mock:
             url = urllib.parse.urljoin(
@@ -203,16 +218,32 @@ class TestLCPServer:
         ).hash(expected_patron_passphrase.text)
 
         configuration = lcp_server_fixture.configuration
-        configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
-        configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
-        configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
-        configuration["provider_name"] = lcp_strings.PROVIDER_NAME
-        configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
-        configuration[
-            "encryption_algorithm"
-        ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
-        configuration["max_printable_pages"] = max_printable_pages
-        configuration["max_copiable_pages"] = max_copiable_pages
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "provider_name", lcp_strings.PROVIDER_NAME
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration,
+            "encryption_algorithm",
+            LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "max_printable_pages", max_printable_pages
+        )
+        DatabaseTransactionFixture.set_settings(
+            configuration, "max_copiable_pages", max_copiable_pages
+        )
 
         lcp_server_fixture.credential_factory.get_patron_id = MagicMock(  # type: ignore
             return_value=expected_patron_id

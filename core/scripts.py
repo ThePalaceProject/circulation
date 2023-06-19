@@ -1250,6 +1250,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     % name
                 )
         config = collection.integration_configuration
+        settings = config.settings.copy()
         integration = collection.external_integration
         if protocol:
             config.protocol = protocol
@@ -1258,16 +1259,17 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
             collection.external_account_id = args.external_account_id
 
         if args.url:
-            config["url"] = args.url
+            settings["url"] = args.url
         if args.username:
-            config["username"] = args.username
+            settings["username"] = args.username
         if args.password:
-            config["password"] = args.password
+            settings["password"] = args.password
         self.apply_settings(args.setting, integration)
         if args.setting:
             for setting in args.setting:
                 key, value = ConfigurationSettingScript._parse_setting(setting)
-                config[key] = value
+                settings[key] = value
+        config.settings = settings
 
         if hasattr(args, "library"):
             for name in args.library:

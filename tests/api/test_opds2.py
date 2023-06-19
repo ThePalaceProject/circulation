@@ -159,9 +159,11 @@ class TestTokenAuthenticationFulfillmentProcessor:
             protocol=ExternalIntegration.OPDS2_IMPORT
         )
         work = db.work(with_license_pool=True, collection=collection)
-        collection.integration_configuration[
-            ExternalIntegration.TOKEN_AUTH
-        ] = "http://example.org/token?userName={patron_id}"
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            ExternalIntegration.TOKEN_AUTH,
+            "http://example.org/token?userName={patron_id}",
+        )
 
         ff_info = FulfillmentInfo(
             collection,
@@ -229,7 +231,9 @@ class TestTokenAuthenticationFulfillmentProcessor:
         ff_info.content_link = (
             "http://example.org/11234/fulfill?authToken={authentication_token}"
         )
-        collection.integration_configuration[ExternalIntegration.TOKEN_AUTH] = None
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration, ExternalIntegration.TOKEN_AUTH, None
+        )
         ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
         assert ff_info.content_link_redirect == False
 

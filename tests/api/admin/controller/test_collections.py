@@ -19,6 +19,7 @@ from core.model.configuration import ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from tests.fixtures.api_admin import SettingsControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestCollectionSettings:
@@ -159,7 +160,6 @@ class TestCollectionSettings:
     def test_collections_get_collections_with_multiple_collections(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-
         old_prior_test_results = HasCollectionSelfTests.prior_test_results
         HasCollectionSelfTests.prior_test_results = (
             settings_ctrl_fixture.mock_prior_test_results
@@ -185,9 +185,12 @@ class TestCollectionSettings:
         )
 
         c2.external_account_id = "1234"
-        c2.integration_configuration["overdrive_client_secret"] = "b"
-        c2.integration_configuration["overdrive_client_key"] = "user"
-        c2.integration_configuration["overdrive_website_id"] = "100"
+        DatabaseTransactionFixture.set_settings(
+            c2.integration_configuration,
+            overdrive_client_secret="b",
+            overdrive_client_key="user",
+            overdrive_website_id="100",
+        )
 
         c3 = settings_ctrl_fixture.ctrl.db.collection(
             name="Collection 3",
@@ -199,7 +202,7 @@ class TestCollectionSettings:
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
         c3.libraries += [l1, settings_ctrl_fixture.ctrl.db.default_library()]
         l1_config = c3.integration_configuration.for_library(l1.id, create=True)
-        l1_config["ebook_loan_duration"] = "14"
+        DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
         # Commit the config changes
         session.commit()
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib
 import logging
 import os
@@ -108,7 +110,7 @@ class DatabaseFixture:
         importlib.reload(core.model)
 
     @staticmethod
-    def create() -> "DatabaseFixture":
+    def create() -> DatabaseFixture:
         DatabaseFixture._load_core_model_classes()
         engine, connection = DatabaseFixture._get_database_connection()
 
@@ -178,7 +180,7 @@ class DatabaseTransactionFixture:
         return library
 
     @staticmethod
-    def create(database: DatabaseFixture) -> "DatabaseTransactionFixture":
+    def create(database: DatabaseFixture) -> DatabaseTransactionFixture:
         # Create a new connection to the database.
         session = SessionManager.session_from_connection(database.connection)
 
@@ -275,9 +277,11 @@ class DatabaseTransactionFixture:
         integration.goal = ExternalIntegration.LICENSE_GOAL
         config = collection.create_integration_configuration(protocol)
         config.goal = Goals.LICENSE_GOAL
-        config["url"] = url
-        config["username"] = username
-        config["password"] = password
+        config.settings = {
+            "url": url,
+            "username": username,
+            "password": password,
+        }
 
         if data_source_name:
             collection.data_source = data_source_name
@@ -747,6 +751,25 @@ class DatabaseTransactionFixture:
         integration.settings = kwargs
         return integration
 
+    @classmethod
+    def set_settings(
+        cls,
+        config: IntegrationConfiguration | IntegrationLibraryConfiguration,
+        *keyvalues,
+        **kwargs,
+    ):
+        settings = config.settings.copy()
+
+        # Alternating key: value in the args
+        for ix, item in enumerate(keyvalues):
+            if ix % 2 == 0:
+                key = item
+            else:
+                settings[key] = item
+
+        settings.update(kwargs)
+        config.settings = settings
+
     def work_coverage_record(
         self, work, operation=None, status=CoverageRecord.SUCCESS
     ) -> WorkCoverageRecord:
@@ -911,7 +934,7 @@ class TemporaryDirectoryConfigurationFixture:
     _directory: str
 
     @classmethod
-    def create(cls) -> "TemporaryDirectoryConfigurationFixture":
+    def create(cls) -> TemporaryDirectoryConfigurationFixture:
         fix = TemporaryDirectoryConfigurationFixture()
         fix._directory = tempfile.mkdtemp(dir="/tmp")
         assert isinstance(fix._directory, str)

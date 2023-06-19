@@ -61,17 +61,31 @@ class TestLCPAPI:
         with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
             lcp_server_constructor.return_value = lcp_server_mock
 
-            configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
-            configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
-            configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
-            configuration[
-                "lcpserver_input_directory"
-            ] = lcp_strings.LCPSERVER_INPUT_DIRECTORY
-            configuration["provider_name"] = lcp_strings.PROVIDER_NAME
-            configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
-            configuration[
-                "encryption_algorithm"
-            ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "lcpserver_input_directory",
+                lcp_strings.LCPSERVER_INPUT_DIRECTORY,
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "provider_name", lcp_strings.PROVIDER_NAME
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "encryption_algorithm",
+                LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+            )
 
             # Act
             loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
@@ -128,17 +142,31 @@ class TestLCPAPI:
         with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
             lcp_server_constructor.return_value = lcp_server_mock
 
-            configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
-            configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
-            configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
-            configuration[
-                "lcpserver_input_directory"
-            ] = lcp_strings.LCPSERVER_INPUT_DIRECTORY
-            configuration["provider_name"] = lcp_strings.PROVIDER_NAME
-            configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
-            configuration[
-                "encryption_algorithm"
-            ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "lcpserver_input_directory",
+                lcp_strings.LCPSERVER_INPUT_DIRECTORY,
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "provider_name", lcp_strings.PROVIDER_NAME
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "encryption_algorithm",
+                LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+            )
 
             # Act
             loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
@@ -185,18 +213,32 @@ class TestLCPAPI:
         with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
             lcp_server_constructor.return_value = lcp_server_mock
 
-            configuration["lcpserver_url"] = lcp_strings.LCPSERVER_URL
-            configuration["lcpserver_user"] = lcp_strings.LCPSERVER_USER
-            configuration["lcpserver_password"] = lcp_strings.LCPSERVER_PASSWORD
-            configuration[
-                "lcpserver_input_directory"
-            ] = lcp_strings.LCPSERVER_INPUT_DIRECTORY
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "lcpserver_input_directory",
+                lcp_strings.LCPSERVER_INPUT_DIRECTORY,
+            )
 
-            configuration["provider_name"] = lcp_strings.PROVIDER_NAME
-            configuration["passphrase_hint"] = lcp_strings.TEXT_HINT
-            configuration[
-                "encryption_algorithm"
-            ] = LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM
+            DatabaseTransactionFixture.set_settings(
+                configuration, "provider_name", lcp_strings.PROVIDER_NAME
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "encryption_algorithm",
+                LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+            )
 
             # Act
             license_pool.loan_to(

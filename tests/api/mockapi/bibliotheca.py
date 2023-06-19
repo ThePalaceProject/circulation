@@ -28,8 +28,10 @@ class MockBibliothecaAPI(BibliothecaAPI):
         config = collection.create_integration_configuration(
             ExternalIntegration.BIBLIOTHECA
         )
-        config["username"] = "a"
-        config["password"] = "b"
+        config.settings = {
+            "username": "a",
+            "password": "b",
+        }
         config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection

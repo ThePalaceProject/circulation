@@ -7,6 +7,7 @@ from core.model.configuration import ExternalIntegration
 from core.overdrive import OverdriveConstants, OverdriveCoreAPI
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.db import make_default_library
 
 
@@ -38,11 +39,14 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         config = collection.create_integration_configuration(
             ExternalIntegration.OVERDRIVE
         )
-        config.set(OverdriveConstants.OVERDRIVE_CLIENT_KEY, client_key)
-        config.set(OverdriveConstants.OVERDRIVE_CLIENT_SECRET, client_secret)
-        config.set(OverdriveConstants.OVERDRIVE_WEBSITE_ID, website_id)
+        config.settings = {
+            OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
+            OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
+            OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
+        }
         library.collections.append(collection)
-        config.for_library(library.id, create=True)["ils_name"] = ils_name
+        db = DatabaseTransactionFixture
+        db.set_settings(config.for_library(library.id, create=True), ils_name=ils_name)
         _db.refresh(config)
         return collection
 

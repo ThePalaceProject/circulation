@@ -304,9 +304,12 @@ class Collection(Base, HasSessionCache):
     @primary_identifier_source.setter
     def primary_identifier_source(self, new_primary_identifier_source):
         """Modify the primary identifier source in use by this Collection."""
-        self.integration_configuration.set(
-            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE, new_primary_identifier_source
+        self.integration_configuration.settings = (
+            self.integration_configuration.settings.copy()
         )
+        self.integration_configuration.settings[
+            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
+        ] = new_primary_identifier_source
 
     # For collections that can control the duration of the loans they
     # create, the durations are stored in these settings and new loans are
@@ -356,6 +359,11 @@ class Collection(Base, HasSessionCache):
     DEFAULT_RESERVATION_PERIOD_KEY = "default_reservation_period"
     STANDARD_DEFAULT_RESERVATION_PERIOD = 3
 
+    def _set_settings(self, **kwargs):
+        settings = self.integration_configuration.settings.copy()
+        settings.update(kwargs)
+        self.integration_configuration.settings = settings
+
     @hybrid_property
     def default_reservation_period(self):
         """Until we hear otherwise from the license provider, we assume
@@ -370,9 +378,7 @@ class Collection(Base, HasSessionCache):
     @default_reservation_period.setter
     def default_reservation_period(self, new_value):
         new_value = int(new_value)
-        self.integration_configuration.set(
-            self.DEFAULT_RESERVATION_PERIOD_KEY, new_value
-        )
+        self._set_settings(**{self.DEFAULT_RESERVATION_PERIOD_KEY: new_value})
 
     # When you import an OPDS feed, you may know the intended audience of the works (e.g. children or researchers),
     # even though the OPDS feed may not contain that information.
@@ -394,7 +400,7 @@ class Collection(Base, HasSessionCache):
 
         :param new_value: New default audience
         """
-        self.integration_configuration.set(self.DEFAULT_AUDIENCE_KEY, str(new_value))
+        self._set_settings(**{self.DEFAULT_AUDIENCE_KEY: str(new_value)})
 
     def create_external_integration(self, protocol):
         """Create an ExternalIntegration for this Collection.
@@ -525,9 +531,7 @@ class Collection(Base, HasSessionCache):
         if self.protocol not in ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
             if new_value is not None:
                 new_value = str(new_value)
-            self.integration_configuration.set(
-                Collection.DATA_SOURCE_NAME_SETTING, new_value
-            )
+            self._set_settings(**{Collection.DATA_SOURCE_NAME_SETTING: new_value})
 
     @property
     def parents(self):

@@ -118,9 +118,11 @@ class TestLCPEncryptor:
         encryptor = LCPEncryptor(configuration)
         identifier = Identifier(identifier=lcp_strings.BOOK_IDENTIFIER)
 
-        configuration[
-            "lcpencrypt_location"
-        ] = LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION
+        DatabaseTransactionFixture.set_settings(
+            configuration,
+            "lcpencrypt_location",
+            LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION,
+        )
 
         with Patcher() as patcher:
             patcher.fs.create_file(LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION)

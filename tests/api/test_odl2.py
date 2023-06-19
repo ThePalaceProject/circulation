@@ -134,7 +134,9 @@ class TestODL2Importer(TestODLImporter):
 
         config = importer.collection.integration_configuration
         importer.set_ignored_identifier_types([IdentifierConstants.URI], config)
-        config["odl2_skipped_license_formats"] = ["text/html"]
+        DatabaseTransactionFixture.set_settings(
+            config, odl2_skipped_license_formats=["text/html"]
+        )
 
         # Act
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
@@ -276,9 +278,10 @@ class TestODL2Importer(TestODLImporter):
         feed = api_odl2_files_fixture.sample_text("feed-audiobook-streaming.json")
         mock_get.add(license)
 
-        importer.collection.integration_configuration[
-            "odl2_skipped_license_formats"
-        ] = ["text/html"]
+        DatabaseTransactionFixture.set_settings(
+            importer.collection.integration_configuration,
+            odl2_skipped_license_formats=["text/html"],
+        )
 
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
 

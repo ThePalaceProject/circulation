@@ -38,7 +38,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hold,
     Hyperlink,
     Loan,
@@ -836,8 +835,13 @@ class TestODLAPI:
         config = odl_api_test_fixture.collection.integration_configuration.for_library(
             library.id
         )
-        config.set(Collection.DEFAULT_RESERVATION_PERIOD_KEY, 3)
-        config.set(Collection.EBOOK_LOAN_DURATION_KEY, 6)
+        DatabaseTransactionFixture.set_settings(
+            config,
+            **{
+                Collection.DEFAULT_RESERVATION_PERIOD_KEY: 3,
+                Collection.EBOOK_LOAN_DURATION_KEY: 6,
+            },
+        )
         odl_api_test_fixture.db.session.commit()
 
         # A hold that's already reserved and has an end date doesn't change.
@@ -1067,8 +1071,9 @@ class TestODLAPI:
     ):
         licenses = [odl_api_test_fixture.license]
 
-        odl_api_test_fixture.collection.integration_configuration.set(
-            Collection.DEFAULT_RESERVATION_PERIOD_KEY, 3
+        DatabaseTransactionFixture.set_settings(
+            odl_api_test_fixture.collection.integration_configuration,
+            **{Collection.DEFAULT_RESERVATION_PERIOD_KEY: 3},
         )
 
         # If there's no holds queue when we try to update the queue, it
@@ -1723,8 +1728,9 @@ class TestODLImporter:
     ) -> DataSource:
         collection = odl_test_fixture.collection(odl_test_fixture.library())
         data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        collection.integration_configuration.set(
-            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},
         )
         return data_source
 
@@ -2304,8 +2310,9 @@ class TestODLHoldReaper:
         pool = odl_test_fixture.pool(license)
 
         data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        collection.integration_configuration.set(
-            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},
         )
         reaper = ODLHoldReaper(db.session, collection, api=api)
 
@@ -2351,8 +2358,9 @@ class SharedODLAPIFixture:
         self.db = db
         self.files = api_odl_files_fixture
         self.collection = MockSharedODLAPI.mock_collection(db.session)
-        self.collection.integration_configuration.set(
-            Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks"
+        DatabaseTransactionFixture.set_settings(
+            self.collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks"},
         )
         self.api = MockSharedODLAPI(db.session, self.collection)
         self.pool = db.licensepool(None, collection=self.collection)
@@ -2392,8 +2400,9 @@ class TestSharedODLAPI:
         # Once the library registers, it gets a shared secret that is included
         # in request headers.
         config = shared_odl.collection.integration_configuration
-        config.for_library(shared_odl.patron.library.id, create=True).set(
-            ExternalIntegration.PASSWORD, "secret"
+        DatabaseTransactionFixture.set_settings(
+            config.for_library(shared_odl.patron.library.id, create=True),
+            password="secret",
         )
 
         def do_get2(url, headers=None, allowed_response_codes=None):
@@ -2964,8 +2973,9 @@ class TestSharedODLImporter:
         feed = api_odl_files_fixture.sample_data("shared_collection_feed.opds")
         data_source = DataSource.lookup(db.session, "DPLA Exchange", autocreate=True)
         collection = MockSharedODLAPI.mock_collection(db.session)
-        collection.integration_configuration.set(
-            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},
         )
 
         class MockMetadataClient:

@@ -49,8 +49,9 @@ class SharedCollectionFixture:
             db.session, api_map={"Mock": MockAPI}
         )
         self.api = self.shared_collection.api(self.collection)
-        self.collection.integration_configuration.set(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, ["http://library.org"]
+        DatabaseTransactionFixture.set_settings(
+            self.collection.integration_configuration,
+            **{BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS: ["http://library.org"]}
         )
         self.client, ignore = IntegrationClient.register(
             db.session, "http://library.org"
@@ -160,8 +161,9 @@ class TestSharedCollectionAPI:
         auth_response = json.dumps(
             {"links": [{"href": "http://library.org", "rel": "start"}]}
         )
-        shared_collection_fixture.collection.integration_configuration.set(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, None
+        DatabaseTransactionFixture.set_settings(
+            shared_collection_fixture.collection.integration_configuration,
+            **{BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS: None}
         )
         pytest.raises(
             AuthorizationFailedException,
@@ -175,8 +177,9 @@ class TestSharedCollectionAPI:
         auth_response = json.dumps(
             {"links": [{"href": "http://differentlibrary.org", "rel": "start"}]}
         )
-        shared_collection_fixture.collection.integration_configuration.set(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, ["http://library.org"]
+        DatabaseTransactionFixture.set_settings(
+            shared_collection_fixture.collection.integration_configuration,
+            **{BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS: ["http://library.org"]}
         )
         pytest.raises(
             AuthorizationFailedException,

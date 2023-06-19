@@ -32,10 +32,12 @@ class ODLFixture:
         config = self.collection.create_integration_configuration(
             self.integration_protocol()
         )
-        config["username"] = "a"
-        config["password"] = "b"
-        config["url"] = "http://metadata"
-        config.set(Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks")
+        config.settings = {
+            "username": "a",
+            "password": "b",
+            "url": "http://metadata",
+            Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
+        }
         self.library.collections.append(self.collection)
         self.work = self.db.work(with_license_pool=True, collection=self.collection)
 

@@ -43,10 +43,11 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.api.mockapi.overdrive import MockOverdriveAPI
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 
+from ..fixtures.database import DatabaseTransactionFixture
+
 if TYPE_CHECKING:
     from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
     from ..fixtures.authenticator import AuthProviderFixture
-    from ..fixtures.database import DatabaseTransactionFixture
     from ..fixtures.time import Time
 
 
@@ -793,7 +794,6 @@ class TestOverdriveAPI:
         db = overdrive_api_fixture.db
 
         class Mock(MockOverdriveAPI):
-
             EARLY_RETURN_URL = "http://early-return/"
 
             def get_fulfillment_link(self, *args):
@@ -1646,14 +1646,13 @@ class TestOverdriveAPI:
         credential = db.credential(patron=patron)
         db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_CLIENT_KEY, "user"
-        )
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_CLIENT_SECRET, "password"
-        )
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_WEBSITE_ID, "100"
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            **{
+                OverdriveConstants.OVERDRIVE_CLIENT_KEY: "user",
+                OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
+                OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
+            },
         )
         db.default_collection().integration_configuration.for_library(
             patron.library.id, create=True
@@ -1692,16 +1691,14 @@ class TestOverdriveAPI:
         patron.authorization_identifier = "barcode"
         db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_CLIENT_KEY, "user"
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            **{
+                OverdriveConstants.OVERDRIVE_CLIENT_KEY: "user",
+                OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
+                OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
+            },
         )
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_CLIENT_SECRET, "password"
-        )
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_WEBSITE_ID, "100"
-        )
-
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
@@ -1729,14 +1726,13 @@ class TestOverdriveAPI:
         patron.authorization_identifier = "barcode"
         db.default_collection().integration_configuration.protocol = "Overdrive"
         db.default_collection().external_account_id = 1
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_CLIENT_KEY, "user"
-        )
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_CLIENT_SECRET, "password"
-        )
-        db.default_collection().integration_configuration.set(
-            OverdriveConstants.OVERDRIVE_WEBSITE_ID, "100"
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            **{
+                OverdriveConstants.OVERDRIVE_CLIENT_KEY: "user",
+                OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
+                OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
+            },
         )
         db.default_collection().integration_configuration.for_library(
             patron.library.id, create=True
@@ -2454,7 +2450,6 @@ class TestOverdriveCirculationMonitor:
                 self.events.append(args)
 
         class MockMonitor(OverdriveCirculationMonitor):
-
             recently_changed_ids_called_with = None
             should_stop_calls = []
 

@@ -27,11 +27,11 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.api.mockapi.enki import MockEnkiAPI
 from tests.core.mock import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.api_enki_files import EnkiFilesFixture
     from tests.fixtures.authenticator import AuthProviderFixture
-    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class EnkiTestFixure:
@@ -81,8 +81,9 @@ class TestEnkiAPI:
         assert other_library.id is not None
         config = enki_test_fixture.api.integration_configuration()
         assert config is not None
-        config.for_library(other_library.id, create=True).set(
-            enki_test_fixture.api.ENKI_LIBRARY_ID_KEY, "other library id"
+        DatabaseTransactionFixture.set_settings(
+            config.for_library(other_library.id, create=True),
+            **{enki_test_fixture.api.ENKI_LIBRARY_ID_KEY: "other library id"},
         )
         db.session.commit()
         assert "other library id" == m(other_library)
@@ -853,6 +854,7 @@ class TestEnkiImport:
 
     def test_update_circulation(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
+
         # update_circulation() makes two-hour slices out of time
         # between the previous run and now, and passes each slice into
         # _update_circulation, keeping track of the total number of

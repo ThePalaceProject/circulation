@@ -26,24 +26,6 @@ class TestSettingsModel:
         assert config.get("no-such-key", "n/a") == "n/a"
         assert pytest.raises(KeyError, lambda: config["no-such-key"]).value is not None
 
-    def test_set_items(self, db: DatabaseTransactionFixture):
-        config, _ = create(
-            db.session,
-            IntegrationConfiguration,
-            goal=Goals.LICENSE_GOAL,
-            protocol="protocol",
-            name="Config Name",
-        )
-
-        assert config.settings == {}
-
-        config["key"] = "key"
-        config.set("value", "value")
-        db.session.commit()
-        db.session.refresh(config)
-
-        assert config.settings == dict(key="key", value="value")
-
 
 class TestIntegrationConfigurations:
     def test_for_library(seslf, db: DatabaseTransactionFixture):

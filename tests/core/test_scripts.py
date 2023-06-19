@@ -1218,7 +1218,6 @@ class TestConfigureCollectionScript:
             name="Library 3",
             short_name="L3",
         )
-        db.session.commit()
 
         # Create a collection, set all its attributes, set a custom
         # setting, and associate it with two libraries.
@@ -1238,6 +1237,8 @@ class TestConfigureCollectionScript:
             ],
             output,
         )
+
+        db.session.commit()
 
         # The collection was created and configured properly.
         collection = get_one(db.session, Collection)
@@ -1582,9 +1583,11 @@ class MockOPDSImportScript(OPDSImportScript):
 
 class TestOPDSImportScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
-        db.default_collection().integration_configuration[
-            Collection.DATA_SOURCE_NAME_SETTING
-        ] = DataSource.OA_CONTENT_SERVER
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            Collection.DATA_SOURCE_NAME_SETTING,
+            DataSource.OA_CONTENT_SERVER,
+        )
 
         script = MockOPDSImportScript(db.session)
         script.do_run([])

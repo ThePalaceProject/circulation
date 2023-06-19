@@ -42,7 +42,9 @@ class ExampleCollectionFixture:
         config = self.collection.integration_configuration
         if library is not None:
             config = config.for_library(library.id)
-        config[self.collection.loan_period_key(medium)] = value
+        DatabaseTransactionFixture.set_settings(
+            config, **{self.collection.loan_period_key(medium): value}
+        )
 
 
 @pytest.fixture()
@@ -377,9 +379,11 @@ class TestCollection:
         assert 601 == test_collection.default_reservation_period
 
         # The underlying value is controlled by a ConfigurationSetting.
-        test_collection.integration_configuration[
-            Collection.DEFAULT_RESERVATION_PERIOD_KEY
-        ] = 954
+        DatabaseTransactionFixture.set_settings(
+            test_collection.integration_configuration,
+            Collection.DEFAULT_RESERVATION_PERIOD_KEY,
+            954,
+        )
         assert 954 == test_collection.default_reservation_period
 
     def test_pools_with_no_delivery_mechanisms(
@@ -423,10 +427,12 @@ class TestCollection:
         library.collections.append(test_collection)
 
         test_collection.external_account_id = "id"
-        test_collection.integration_configuration["url"] = "url"
-        test_collection.integration_configuration["username"] = "username"
-        test_collection.integration_configuration["password"] = "password"
-        test_collection.integration_configuration.set("setting", "value")
+        test_collection.integration_configuration.settings = {
+            "url": "url",
+            "username": "username",
+            "password": "password",
+            "setting": "value",
+        }
 
         data = test_collection.explain()
         assert [
@@ -663,11 +669,17 @@ class TestCollection:
 
         # It has an ExternalIntegration, which has some settings.
         integration = collection.integration_configuration
-        integration.set("integration setting", "value2")
+        DatabaseTransactionFixture.set_settings(
+            integration, **{"integration setting": "value2"}
+        )
         setting2 = integration.for_library(db.default_library().id)
-        setting2["default_library+integration setting"] = "value2"
+        DatabaseTransactionFixture.set_settings(
+            setting2, **{"default_library+integration setting": "value2"}
+        )
         setting3 = integration.for_library(other_library.id, create=True)
-        setting3["other_library+integration setting"] = "value3"
+        DatabaseTransactionFixture.set_settings(
+            setting3, **{"other_library+integration setting": "value3"}
+        )
 
         # Now, disassociate one of the libraries from the collection.
         collection.disassociate_library(db.default_library())

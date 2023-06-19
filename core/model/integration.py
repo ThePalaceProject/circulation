@@ -19,22 +19,11 @@ if TYPE_CHECKING:
 class SettingsModel:
     """A dict like interface for any item with a settings property"""
 
-    def set(self, key: str, value: Any) -> None:
-        """Setting any value in the settings dict can only
-        be signalled for a flush to the DB if the dict object has changed.
-        This is an SQLAlchemy idiosyncrasy."""
-        settings = self.settings.copy()
-        settings[key] = value
-        self.settings: Dict[str, Any] = settings
-
     def get(self, key: str, *args: Any) -> Any:
-        return self.settings.get(key, *args)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.set(key, value)
+        return self.settings.get(key, *args)  # type: ignore[attr-defined]
 
     def __getitem__(self, key: str) -> Any:
-        return self.settings[key]
+        return self.settings[key]  # type: ignore[attr-defined]
 
 
 class IntegrationConfiguration(Base, SettingsModel):

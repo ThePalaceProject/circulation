@@ -82,5 +82,7 @@ class IgnoredIdentifierImporterMixin:
                     "Argument 'value' must contain string or IdentifierType enumeration's items only"
                 )
 
-        configuration.set("ignored_identifier_types", ignored_identifier_types)
+        settings = configuration.settings.copy()
+        settings["ignored_identifier_types"] = ignored_identifier_types
+        configuration.settings = settings
         self._ignored_identifier_types = None

@@ -92,10 +92,12 @@ class ODLTestFixture:
             protocol=integration_protocol
         )
         config = collection.create_integration_configuration(integration_protocol)
-        config["username"] = "a"
-        config["password"] = "b"
-        config["url"] = "http://metadata"
-        config.set(Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks")
+        config.settings = {
+            "username": "a",
+            "password": "b",
+            "url": "http://metadata",
+            Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
+        }
         config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
