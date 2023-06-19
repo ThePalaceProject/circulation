@@ -137,7 +137,7 @@ class TestService:
         mappings.properties["x"] = LONG
         mappings.properties["y"] = LONG
 
-        # The format expected by the opensearch bulk helper is completely undocumented. This
+        # The format expected by the opensearch bulk helper is completely undocumented.
         # It does, however, appear to use mostly the same format as the Elasticsearch equivalent.
         # See: https://elasticsearch-py.readthedocs.io/en/v7.13.1/helpers.html#bulk-helpers
         documents: Iterable[dict] = [
@@ -166,8 +166,8 @@ class TestService:
         # Log the index so that the fixture cleans it up afterward.
         external_search_fixture.indexes.append("base-v23")
 
-        service.populate_index("base", revision, documents)
-        service.populate_index("base", revision, documents)
+        service.populate_index("base", revision, lambda: documents)
+        service.populate_index("base", revision, lambda: documents)
 
         indices = external_search_fixture.search.indices.client.indices  # type: ignore
         assert indices is not None

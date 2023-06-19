@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Callable, Iterable
 
 from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import SearchService
@@ -18,13 +18,16 @@ class SearchMigrator:
         self._revisions = revisions
         self._service = service
 
-    def migrate(self, base_name: str, version: int, documents: Iterable[dict]):
+    def migrate(
+        self, base_name: str, version: int, documents: Callable[[], Iterable[dict]]
+    ):
         """
         Migrate to the given version using the given base name (such as 'circulation-works').
 
         :arg base_name: The base name used for indices (such as 'circulation-works').
         :arg version: The version number to which we are migrating
-        :arg documents: A generator that returns documents to be indexed. This is used to populate an index when upgrading to a new version.
+        :arg documents: A function that returns documents to be indexed. This is used to populate an index when
+             upgrading to a new version.
         """
 
         target = self._revisions.available.get(version)

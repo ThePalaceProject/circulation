@@ -1,7 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 import opensearchpy.helpers
 from opensearchpy import NotFoundError, OpenSearch, RequestError
@@ -67,7 +67,10 @@ class SearchService(ABC):
 
     @abstractmethod
     def populate_index(
-        self, base_name: str, revision: SearchSchemaRevision, documents: Iterable[dict]
+        self,
+        base_name: str,
+        revision: SearchSchemaRevision,
+        documents: Callable[[], Iterable[dict]],
     ) -> None:
         pass
 
@@ -156,13 +159,17 @@ class SearchServiceOpensearch1(SearchService):
         )
 
     def populate_index(
-        self, base_name: str, revision: SearchSchemaRevision, documents: Iterable[dict]
+        self,
+        base_name: str,
+        revision: SearchSchemaRevision,
+        documents: Callable[[], Iterable[dict]],
     ) -> None:
         data = {"properties": revision.mapping_document().serialize_properties()}
         self._client.indices.put_mapping(
             index=revision.name_for_index(base_name), body=data
         )
-        opensearchpy.helpers.bulk(client=self._client, actions=documents)
+        document_list = documents()
+        opensearchpy.helpers.bulk(client=self._client, actions=document_list)
 
     def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
         alias_name = self._write_pointer(base_name)
