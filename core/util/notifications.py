@@ -39,7 +39,7 @@ class PushNotifications:
     def fcm_app(cls):
         if not cls._fcm_app:
             cls._fcm_app = firebase_admin.initialize_app(
-                credentials.Certificate(Configuration.fcm_credentials_file())
+                credentials.Certificate(Configuration.fcm_credentials())
             )
         return cls._fcm_app
 
@@ -117,7 +117,7 @@ class PushNotifications:
 
     @classmethod
     def send_holds_notifications(cls, holds: list[Hold]) -> list[str]:
-        """Send out notifcations to all patron devices that their hold is ready for checkout"""
+        """Send out notifications to all patron devices that their hold is ready for checkout."""
         if not holds:
             return []
 

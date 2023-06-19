@@ -153,15 +153,31 @@ grant all privileges on database circ to palace;
 
 #### Environment variables
 
-To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
-The `SIMPLIFIED_FCM_CREDENTIALS_FILE` env variable should hold the path to the JSON format GCP service account key
+##### Database
+
+To let the application know which database to use, set the `SIMPLIFIED_PRODUCTION_DATABASE` environment variable.
 
 ```sh
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
+```
+
+##### Firebase Cloud Messaging
+
+For Firebase Cloud Messaging (FCM) support (e.g., for notifications), `one` (and only one) of the following should be set:
+- `SIMPLIFIED_FCM_CREDENTIALS_JSON` - the JSON-format Google Cloud Platform (GCP) service account key  or
+- `SIMPLIFIED_FCM_CREDENTIALS_FILE` - the name of the file containing that key.
+
+```sh
+export SIMPLIFIED_FCM_CREDENTIALS_JSON='{"type":"service_account","project_id":"<id>", "private_key_id":"f8...d1", ...}'
+```
+
+...or...
+
+```sh
 export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 ```
 
-The FCM credentials file can be downloaded once a Google Service account is created
+The FCM credentials can be downloaded once a Google Service account has been created.
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
 ### Email sending
@@ -406,13 +422,15 @@ the search index and feed caches.
 
 #### hold_notifications
 
-Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
-and the sitewide `PUSH_NOTIFICATIONS_STATUS` setting to be either `unset` or `true`
+Requires one of [the Firebase Cloud Messaging credentials environment variables (described above)](#firebase-cloud-messaging)
+to be present and non-empty.
+In addition, the site-wide `PUSH_NOTIFICATIONS_STATUS` setting must be either `unset` or `true`.
 
 #### loan_notifications
 
-Requires the `SIMPLIFIED_FCM_CREDENTIALS_FILE` to be present
-and the sitewide `PUSH_NOTIFICATIONS_STATUS` setting to be either `unset` or `true`
+Requires one of [the Firebase Cloud Messaging credentials environment variables (described above](#firebase-cloud-messaging)
+to be present and non-empty.
+In addition, the site-wide `PUSH_NOTIFICATIONS_STATUS` setting must be either `unset` or `true`.
 
 ## Code Style
 
