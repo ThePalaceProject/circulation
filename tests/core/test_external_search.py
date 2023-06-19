@@ -4398,8 +4398,13 @@ class TestFilter:
         # an author about whom absolutely nothing is known, it's okay
         # to return no books.
 
-    def test_target_age_filter(self):
+    def test_target_age_filter(self, filter_fixture: FilterFixture):
         # Test an especially complex subfilter for target age.
+
+        transaction, session = (
+            filter_fixture.transaction,
+            filter_fixture.transaction.session,
+        )
 
         # We're going to test the construction of this subfilter using
         # a number of inputs.
@@ -4479,12 +4484,32 @@ class TestFilter:
         } == more_than_twelve.to_dict()
         assert_matches_nonexistent_field(no_upper_limit, "target_age.upper")
 
-        # Finally, test filters that put no restriction on target age.
+        # Test filters that put no restriction on target age.
         no_target_age = Filter()
         assert None == no_target_age.target_age_filter
 
         no_target_age = Filter(target_age=(None, None))
         assert None == no_target_age.target_age_filter
+
+        # Test that children lanes include only works with defined target age range
+        children_lane = transaction.lane("Children lane")
+        children_lane.target_age = (0, 3)
+        assert Classifier.AUDIENCE_CHILDREN in children_lane.audiences
+
+        children_filter = Filter.from_worklist(session, children_lane, None)
+
+        target_age_filter_that_only_includes_from_0_to_3 = {
+            "bool": {
+                "must": [
+                    {"range": {"target_age.lower": {"gte": 0}}},
+                    {"range": {"target_age.upper": {"lte": 3}}},
+                ]
+            }
+        }
+        assert (
+            target_age_filter_that_only_includes_from_0_to_3
+            == children_filter.target_age_filter.to_dict()
+        )
 
     def test__scrub(self):
         # Test the _scrub helper method, which transforms incoming strings
