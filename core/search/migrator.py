@@ -27,7 +27,8 @@ class SearchMigrator:
         :arg base_name: The base name used for indices (such as 'circulation-works').
         :arg version: The version number to which we are migrating
         :arg documents: A function that returns documents to be indexed. This is used to populate an index when
-             upgrading to a new version.
+             upgrading to a new version. The function will only be called if an index actually needs to be
+             populated with documents.
         """
 
         target = self._revisions.available.get(version)
