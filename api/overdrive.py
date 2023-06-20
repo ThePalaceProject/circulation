@@ -11,6 +11,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.exc import StaleDataError
 
 from core.analytics import Analytics
+from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.model import (
@@ -91,7 +92,11 @@ class OverdriveChildSettings(BaseSettings):
 
 
 class OverdriveAPI(
-    OverdriveCoreAPI, BaseCirculationAPI, HasCollectionSelfTests, OverdriveAPIConstants
+    OverdriveCoreAPI,
+    BaseCirculationAPI,
+    HasCollectionSelfTests,
+    HasChildIntegrationConfiguration,
+    OverdriveAPIConstants,
 ):
     NAME = ExternalIntegration.OVERDRIVE
     DESCRIPTION = _(

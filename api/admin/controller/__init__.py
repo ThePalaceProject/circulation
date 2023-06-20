@@ -72,6 +72,7 @@ from core.app_server import load_pagination_from_request
 from core.classifier import genres
 from core.external_search import ExternalSearchIndex
 from core.integration.base import (
+    HasChildIntegrationConfiguration,
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
 )
@@ -1812,11 +1813,12 @@ class SettingsController(AdminCirculationManagerController):
         api_class = registry.get(protocol_name)
         if not api_class:
             return None
-        if is_child:
-            if getattr(api_class, "child_settings_class", False):
-                return api_class.child_settings_class()
-            else:
-                return PROTOCOL_DOES_NOT_SUPPORT_PARENTS
+
+        if is_child and issubclass(api_class, HasChildIntegrationConfiguration):
+            return api_class.child_settings_class()
+        elif is_child:
+            return PROTOCOL_DOES_NOT_SUPPORT_PARENTS
+
         return api_class.settings_class()
 
     def _get_integration_protocols(
@@ -1849,9 +1851,10 @@ class SettingsController(AdminCirculationManagerController):
             if _db and issubclass(api, HasIntegrationConfiguration):
                 protocol["settings"] = api.settings_class().configuration_form(_db)
 
-            child_settings = getattr(api, "child_settings_class", None)
-            if child_settings != None:
-                protocol["child_settings"] = child_settings().configuration_form(_db)
+            if issubclass(api, HasChildIntegrationConfiguration):
+                protocol[
+                    "child_settings"
+                ] = api.child_settings_class().configuration_form(_db)
 
             library_settings = getattr(api, "LIBRARY_SETTINGS", None)
             if library_settings != None:
