@@ -39,9 +39,7 @@ class DSLParseError(BaseError):
 class DSLParser:
     """Parses expressions into AST objects."""
 
-    PARSE_ERROR_MESSAGE_REGEX = re.compile(
-        r"Expected\s+(\{.+\}),\s+found\s+('.+')\s+\(at\s+char\s+(\d+)\)"
-    )
+    PARSE_ERROR_MESSAGE_REGEX = re.compile(r"found\s+('.+')\s+\(at\s+char\s+(\d+)\)")
     DEFAULT_ERROR_MESSAGE = "Could not parse the expression"
 
     # Auxiliary tokens
@@ -170,13 +168,13 @@ class DSLParser:
         :return: Error message
         """
         error_message = str(parse_exception)
-        match = self.PARSE_ERROR_MESSAGE_REGEX.match(error_message)
+        match = self.PARSE_ERROR_MESSAGE_REGEX.search(error_message)
 
         if not match:
             return self.DEFAULT_ERROR_MESSAGE
 
-        found = match.group(2).strip("'")
-        position = match.group(3)
+        found = match.group(1).strip("'")
+        position = match.group(2)
 
         return f"Unexpected symbol '{found}' at position {position}"
 
