@@ -30,6 +30,7 @@ from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
+from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
@@ -3070,13 +3071,11 @@ class TestSettingsController:
     ):
         """Test the _get_integration_protocols helper method."""
 
-        class Protocol:
+        class Protocol(HasChildIntegrationConfiguration):
             __module__ = "my name"
             NAME = "my label"
             DESCRIPTION = "my description"
             SITEWIDE = True
-            SETTINGS = [1, 2, 3]
-            CHILD_SETTINGS = [4, 5]
             LIBRARY_SETTINGS = [6]
             CARDINALITY = 1
 
@@ -3087,13 +3086,17 @@ class TestSettingsController:
             def child_settings_class(cls):
                 return cls.ChildSettings
 
+            @classmethod
+            def settings_class(cls):
+                return BaseSettings
+
         [result] = SettingsController(
             admin_ctrl_fixture.manager
         )._get_integration_protocols([Protocol])
         expect = dict(
             sitewide=True,
             description="my description",
-            settings=[1, 2, 3],
+            settings=[],
             library_settings=[6],
             child_settings=[{"label": "key", "key": "key", "required": True}],
             label="my label",
@@ -3409,7 +3412,7 @@ class TestSettingsController:
         class P2ChildSettings(BaseSettings):
             pass
 
-        class Protocol2:
+        class Protocol2(HasChildIntegrationConfiguration):
             @classmethod
             def settings_class(cls):
                 return P2Settings
