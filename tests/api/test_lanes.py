@@ -181,7 +181,7 @@ class TestLaneCreation:
         # from all three languages mentioned in its children.
         top_level = db.session.query(Lane).filter(Lane.parent == None).one()
         assert "World Languages" == top_level.display_name
-        assert {"spa", "fre", "eng"} == top_level.languages
+        assert {"spa", "fre", "eng"} == set(top_level.languages)
 
         # It has two children -- one for the small English collection and
         # one for the tiny Spanish/French collection.,
@@ -190,7 +190,7 @@ class TestLaneCreation:
         assert ["eng"] == small.languages
 
         assert "espa\xf1ol/fran\xe7ais" == tiny.display_name
-        assert ["spa", "fre"] == tiny.languages
+        assert {"spa", "fre"} == set(tiny.languages)
 
         # The tiny collection has no sublanes, but the small one has
         # three.  These lanes are tested in more detail in
