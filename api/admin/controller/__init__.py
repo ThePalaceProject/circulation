@@ -25,7 +25,7 @@ import flask
 from flask import Request, Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -77,6 +77,7 @@ from core.integration.base import (
     HasLibraryIntegrationConfiguration,
 )
 from core.integration.registry import IntegrationRegistry
+from core.integration.settings import BaseSettings
 from core.lane import Lane, WorkList
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
@@ -1809,7 +1810,7 @@ class SettingsController(AdminCirculationManagerController):
 
     def _get_settings_class(
         self, registry: IntegrationRegistry, protocol_name: str, is_child=False
-    ) -> BaseSettings | ProblemDetail | None:
+    ) -> Type[BaseSettings] | ProblemDetail | None:
         api_class = registry.get(protocol_name)
         if not api_class:
             return None
