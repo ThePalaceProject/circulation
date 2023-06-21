@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from freezegun import freeze_time
+from werkzeug.datastructures import Authorization
 
 from api.authentication.base import PatronData
 from api.saml.auth import SAMLAuthenticationManager, SAMLAuthenticationManagerFactory
@@ -355,7 +356,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_string_literal",
                 SAMLSubject(
                     "http://idp.example.com",
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "12345"),
                     SAMLAttributeStatement([]),
                 ),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
@@ -367,7 +368,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "subject_has_unique_name_id_and_use_of_name_id_is_switched_on_using_string_literal_true",
                 SAMLSubject(
                     "http://idp.example.com",
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "12345"),
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "12345"),
                     SAMLAttributeStatement([]),
                 ),
                 PatronData(
@@ -728,5 +729,7 @@ class TestSAMLWebSSOAuthenticationProvider:
     ):
         # This provider doesn't support getting the credential from the header.
         # so this method should always return None.
+        auth = Authorization("")
+
         provider = create_saml_provider()
-        assert provider.get_credential_from_header({}) is None
+        assert provider.get_credential_from_header(auth) is None
