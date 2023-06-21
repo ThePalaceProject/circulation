@@ -66,7 +66,7 @@ from core.util.xmlparser import XMLParser
 
 from .circulation import (
     BaseCirculationAPI,
-    BaseCirculationAPISettings,
+    BaseCirculationLoanSettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -97,10 +97,7 @@ class BibliothecaSettings(BaseSettings):
     )
 
 
-class BibliothecaLibrarySettings(BaseSettings):
-    default_loan_duration: Optional[
-        int
-    ] = BaseCirculationAPISettings.default_loan_duration
+class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
 
     dont_display_reserves: Optional[str] = FormField(
         form=ConfigurationFormItem(

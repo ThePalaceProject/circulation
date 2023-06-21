@@ -40,7 +40,7 @@ from core.util.http import HTTP
 
 from .circulation import (
     BaseCirculationAPI,
-    BaseCirculationAPISettings,
+    BaseCirculationEbookLoanSettings,
     DeliveryMechanismInfo,
     FulfillmentInfo,
     HoldInfo,
@@ -68,7 +68,7 @@ class OverdriveAPIConstants:
     ]
 
 
-class OverdriveLibrarySettings(BaseSettings):
+class OverdriveLibrarySettings(BaseCirculationEbookLoanSettings):
     ils_name: str = FormField(
         default=OverdriveCoreAPI.ILS_NAME_DEFAULT,
         form=ConfigurationFormItem(
@@ -78,8 +78,6 @@ class OverdriveLibrarySettings(BaseSettings):
             ),
         ),
     )
-
-    ebook_loan_duration: Optional[int] = BaseCirculationAPISettings.ebook_loan_duration
 
 
 class OverdriveChildSettings(BaseSettings):

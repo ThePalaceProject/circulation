@@ -61,7 +61,7 @@ from core.util.xmlparser import XMLParser
 from .circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
-    BaseCirculationAPISettings,
+    BaseCirculationLoanSettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -128,10 +128,8 @@ class Axis360Settings(BaseSettings):
         return v
 
 
-class Axis360LibrarySettings(BaseSettings):
-    default_loan_duration: Optional[
-        int
-    ] = BaseCirculationAPISettings.default_loan_duration
+class Axis360LibrarySettings(BaseCirculationLoanSettings):
+    pass
 
 
 class Axis360API(

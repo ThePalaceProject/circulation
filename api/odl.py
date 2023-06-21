@@ -61,7 +61,7 @@ from core.util.string_helpers import base64
 
 from .circulation import (
     BaseCirculationAPI,
-    BaseCirculationAPISettings,
+    BaseCirculationEbookLoanSettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -164,8 +164,8 @@ class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
     )
 
 
-class ODLLibrarySettings(BaseSettings):
-    ebook_loan_duration: Optional[int] = BaseCirculationAPISettings.ebook_loan_duration
+class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
+    pass
 
 
 class ODLAPI(

@@ -425,7 +425,7 @@ class HoldInfo(CirculationInfo):
         )
 
 
-class BaseCirculationAPISettings:
+class BaseCirculationEbookLoanSettings(BaseSettings):
     """Not an inheritable BaseSettings object, this just holds reusable settings"""
 
     ebook_loan_duration: Optional[PositiveInt] = FormField(
@@ -439,20 +439,8 @@ class BaseCirculationAPISettings:
         ),
     )
 
-    # Add to LIBRARY_SETTINGS if your circulation API is for a
-    # distributor which includes audiobooks and allows clients to
-    # specify their own loan lengths.
-    audiobook_loan_duration: Optional[PositiveInt] = FormField(
-        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        form=ConfigurationFormItem(
-            label=_("Audiobook Loan Duration (in Days)"),
-            type=ConfigurationFormItemType.NUMBER,
-            description=_(
-                "When a patron uses SimplyE to borrow an audiobook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
-            ),
-        ),
-    )
 
+class BaseCirculationLoanSettings(BaseSettings):
     # Add to LIBRARY_SETTINGS if your circulation API is for a
     # distributor with a default loan period negotiated out-of-band,
     # such that the circulation manager cannot _specify_ the length of
