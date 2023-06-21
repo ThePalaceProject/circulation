@@ -4054,6 +4054,8 @@ class TestWorkListGroupsEndToEndData:
     mq_ro: Work
     mq_sf: Work
     nonfiction: Work
+    children_with_age: Work
+    children_without_age: Work
     staff_picks_list: CustomList
 
 
@@ -4089,6 +4091,18 @@ class TestWorkListGroupsEndToEnd:
         result.lq_litfic = _w(title="LQ LitFic", fiction=True, genre="Literary Fiction")
         result.lq_litfic.quality = 0
         result.hq_sf = _w(title="HQ SF", genre="Science Fiction", fiction=True)
+
+        # Create children works.
+        result.children_with_age = _w(
+            title="Children work with set target age",
+            audience=Classifier.AUDIENCE_CHILDREN,
+        )
+        result.children_with_age.target_age = (0, 3)
+
+        result.children_without_age = _w(
+            title="Children work without target age",
+            audience=Classifier.AUDIENCE_CHILDREN,
+        )
 
         # Add a lot of irrelevant genres to one of the works. This
         # won't affect the results.
@@ -4167,6 +4181,10 @@ class TestWorkListGroupsEndToEnd:
         )
         discredited_nonfiction.inherit_parent_restrictions = False
 
+        # "Children", which will contain one book, the one with audience children and defined target age.
+        children = db.lane("Children")
+        children.audience = Classifier.AUDIENCE_CHILDREN
+
         # Since we have a bunch of lanes and works, plus an
         # Opensearch index, let's take this opportunity to verify that
         # WorkList.works and DatabaseBackedWorkList.works_from_database
@@ -4184,6 +4202,7 @@ class TestWorkListGroupsEndToEnd:
             sf_lane,
             romance_lane,
             discredited_nonfiction,
+            children,
         ]:
             t1 = [x.id for x in lane.works(session, facets)]
             t2 = [x.id for x in lane.works_from_database(session, facets)]
@@ -4304,6 +4323,14 @@ class TestWorkListGroupsEndToEnd:
                 ),
                 [(data.nonfiction, discredited_nonfiction)],
             )
+
+        # When a lane's audience is "Children" we need work to have explicit target_age to be included in the lane
+        assert_contents(
+            make_groups(children),
+            [
+                (data.children_with_age, children),
+            ],
+        )
 
         # If we make the lanes thirstier for content, we see slightly
         # different behavior.

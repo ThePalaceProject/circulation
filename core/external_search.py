@@ -2527,6 +2527,7 @@ class Filter(SearchBase):
             excluded_audiobook_data_sources=excluded_audiobook_data_sources,
             allow_holds=allow_holds,
             license_datasource=license_datasource_id,
+            lane_building=True,
         )
 
     def __init__(
@@ -2678,6 +2679,8 @@ class Filter(SearchBase):
 
         identifiers = kwargs.pop("identifiers", [])
         self.identifiers = list(self._scrub_identifiers(identifiers))
+
+        self.lane_building = kwargs.pop("lane_building", False)
 
         # At this point there should be no keyword arguments -- you can't pass
         # whatever you want into this method.
@@ -3208,6 +3211,20 @@ class Filter(SearchBase):
             return Bool(should=[clause, does_not_exist(field)], minimum_should_match=1)
 
         clauses = []
+
+        both_limits = lower is not None and upper is not None
+
+        if (
+            self.lane_building
+            and self.audiences
+            and Classifier.AUDIENCE_CHILDREN in self.audiences
+            and both_limits
+        ):
+            # If children is audience we want only works with defined age range that matches lane's range
+            clauses.append(self._match_range("target_age.lower", "gte", lower))
+            clauses.append(self._match_range("target_age.upper", "lte", upper))
+
+            return Bool(must=clauses)
 
         if upper is not None:
             lower_does_not_exist = does_not_exist("target_age.lower")
