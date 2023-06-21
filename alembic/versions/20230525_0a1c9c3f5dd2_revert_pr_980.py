@@ -1,7 +1,7 @@
 """revert pr 980
 
 Revision ID: 0a1c9c3f5dd2
-Revises: a9ed3f76d649
+Revises: b883671b7bc5
 Create Date: 2023-05-25 19:07:04.474551+00:00
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0a1c9c3f5dd2"
-down_revision = "a9ed3f76d649"
+down_revision = "b883671b7bc5"
 branch_labels = None
 depends_on = None
 
@@ -90,6 +90,7 @@ def downgrade() -> None:
             postgresql.ENUM("RED", "GREEN", name="status"),
             autoincrement=False,
             nullable=False,
+            server_default=sa.text("'GREEN'::status"),
         ),
     )
     op.create_table(

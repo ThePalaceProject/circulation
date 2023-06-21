@@ -1,7 +1,7 @@
 """Migrate license integrations to configuration settings
 
 Revision ID: 0af587ff8595
-Revises: b883671b7bc5
+Revises: 0a1c9c3f5dd2
 Create Date: 2023-05-31 12:34:42.550703+00:00
 
 """
@@ -22,7 +22,7 @@ from core.migration.migrate_external_integration import (
 
 # revision identifiers, used by Alembic.
 revision = "0af587ff8595"
-down_revision = "b883671b7bc5"
+down_revision = "0a1c9c3f5dd2"
 branch_labels = None
 depends_on = None
 
