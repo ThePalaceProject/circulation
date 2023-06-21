@@ -8,7 +8,23 @@ from core.external_search import MockExternalSearchIndex
 from core.model import DataSource, Hold, Loan
 
 
-class MockRemoteAPI(BaseCirculationAPI):
+class MockBaseCirculationAPI(BaseCirculationAPI):
+    def label(self):
+        return ""
+
+    def description(self):
+        return ""
+
+    @classmethod
+    def settings_class(cls):
+        return BaseSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return BaseSettings
+
+
+class MockRemoteAPI(MockBaseCirculationAPI):
     def __init__(self, set_delivery_mechanism_at, can_revoke_hold_when_reserved):
         self.SET_DELIVERY_MECHANISM_AT = set_delivery_mechanism_at
         self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved

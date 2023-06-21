@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
+from core.configuration.ignored_identifier import IgnoredIdentifierSettings
 from core.model.hybrid import hybrid_property
 
 from ..config import CannotLoadConfiguration, Configuration
@@ -28,13 +29,10 @@ from .library import Library, externalintegrations_libraries
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.configuration.ignored_identifier import (  # noqa: autoflake
-        IgnoredIdentifierConfiguration,
-    )
     from core.model import Collection  # noqa: autoflake
 
 
-class ExternalIntegrationLink(Base, HasSessionCache):
+class ExternalIntegrationLink(Base):
 
     __tablename__ = "externalintegrationslinks"
 
@@ -1103,9 +1101,7 @@ class ConfigurationMetadata:
 
     def __get__(
         self,
-        owner_instance: HasConfigurationSettings
-        | IgnoredIdentifierConfiguration
-        | None,
+        owner_instance: HasConfigurationSettings | IgnoredIdentifierSettings | None,
         owner_type: type | None,
     ) -> Any:
         """Returns a value of the setting
@@ -1164,9 +1160,7 @@ class ConfigurationMetadata:
 
     def __set__(
         self,
-        owner_instance: HasConfigurationSettings
-        | IgnoredIdentifierConfiguration
-        | None,
+        owner_instance: HasConfigurationSettings | IgnoredIdentifierSettings | None,
         value: Any,
     ) -> Any:
         """Updates the setting's value

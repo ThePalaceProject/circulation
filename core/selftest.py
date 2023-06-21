@@ -372,6 +372,9 @@ class HasSelfTests(BaseHasSelfTests, ABC):
 
 
 class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, ABC):
+    # Typing specific
+    collection: Any
+
     def store_self_test_results(
         self, _db: Session, value: Dict[str, Any], results: List[SelfTestResult]
     ) -> None:
@@ -400,6 +403,23 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, ABC):
             return None
 
         return integration.self_test_results
+
+    @classmethod
+    def prior_test_results(
+        cls: Type[Self],
+        _db: Session,
+        constructor_method: Optional[Callable[..., Self]] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Union[Optional[Dict[str, Any]], str]:
+        """Retrieve the last set of test results from the database.
+
+        The arguments here are the same as the arguments to run_self_tests.
+        """
+        constructor_method = constructor_method or cls
+        instance = constructor_method(*args, **kwargs)
+        integration: Optional[IntegrationConfiguration] = instance.integration(_db)
+        return cls.load_self_test_results(integration) or "No results yet"
 
     @abstractmethod
     def integration(self, _db: Session) -> Optional[IntegrationConfiguration]:

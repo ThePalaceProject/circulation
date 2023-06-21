@@ -1,7 +1,7 @@
 from api.enki import EnkiAPI
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting
 from core.util.http import HTTP
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.db import make_default_library
 
 
@@ -21,9 +21,11 @@ class MockEnkiAPI(EnkiAPI):
 
         # Set the "Enki library ID" variable between the default library
         # and this Enki collection.
-        ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.ENKI_LIBRARY_ID_KEY, library, collection.external_integration
-        ).value = "c"
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration.for_library(library.id, create=True),
+            **{self.ENKI_LIBRARY_ID_KEY: "c"}
+        )
+        _db.commit()
 
         super().__init__(_db, collection, *args, **kwargs)
 

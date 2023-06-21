@@ -5,11 +5,11 @@ import pytest
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
+from api.selftest import HasCollectionSelfTests
 from core.model import (
     Admin,
     AdminRole,
     Collection,
-    ConfigurationSetting,
     ExternalIntegration,
     Library,
     create,
@@ -19,6 +19,7 @@ from core.model.configuration import ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from tests.fixtures.api_admin import SettingsControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestCollectionSettings:
@@ -159,9 +160,12 @@ class TestCollectionSettings:
     def test_collections_get_collections_with_multiple_collections(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
+        old_prior_test_results = HasCollectionSelfTests.prior_test_results
+        HasCollectionSelfTests.prior_test_results = (
+            settings_ctrl_fixture.mock_prior_test_results
+        )
 
-        old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
+        session = settings_ctrl_fixture.ctrl.db.session
 
         [c1] = settings_ctrl_fixture.ctrl.db.default_library().collections
 
@@ -181,9 +185,12 @@ class TestCollectionSettings:
         )
 
         c2.external_account_id = "1234"
-        c2.external_integration.setting("overdrive_client_secret").value = "b"
-        c2.external_integration.setting("overdrive_client_key").value = "user"
-        c2.external_integration.setting("overdrive_website_id").value = "100"
+        DatabaseTransactionFixture.set_settings(
+            c2.integration_configuration,
+            overdrive_client_secret="b",
+            overdrive_client_key="user",
+            overdrive_website_id="100",
+        )
 
         c3 = settings_ctrl_fixture.ctrl.db.collection(
             name="Collection 3",
@@ -194,13 +201,10 @@ class TestCollectionSettings:
 
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
         c3.libraries += [l1, settings_ctrl_fixture.ctrl.db.default_library()]
-        c3.external_integration.libraries += [l1]
-        ConfigurationSetting.for_library_and_externalintegration(
-            settings_ctrl_fixture.ctrl.db.session,
-            "ebook_loan_duration",
-            l1,
-            c3.external_integration,
-        ).value = "14"
+        l1_config = c3.integration_configuration.for_library(l1.id, create=True)
+        DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
+        # Commit the config changes
+        session.commit()
 
         l1_librarian, ignore = create(
             settings_ctrl_fixture.ctrl.db.session, Admin, email="admin@l1.org"
@@ -264,10 +268,9 @@ class TestCollectionSettings:
             assert c2.external_account_id == settings2.get("external_account_id")
             assert c3.external_account_id == settings3.get("external_account_id")
 
-            assert c1.external_integration.password == settings1.get("password")
-            assert c2.external_integration.setting(
+            assert c2.integration_configuration.settings[
                 "overdrive_client_secret"
-            ).value == settings2.get("overdrive_client_secret")
+            ] == settings2.get("overdrive_client_secret")
 
             assert c2.id == coll3.get("parent_id")
 
@@ -294,7 +297,7 @@ class TestCollectionSettings:
             assert "L1" == coll3_libraries[0].get("short_name")
             assert "14" == coll3_libraries[0].get("ebook_loan_duration")
 
-        HasSelfTests.prior_test_results = old_prior_test_results
+        HasCollectionSelfTests.prior_test_results = old_prior_test_results
 
     def test_collections_post_errors(
         self, settings_ctrl_fixture: SettingsControllerFixture
@@ -542,11 +545,11 @@ class TestCollectionSettings:
         assert "acctid" == collection.external_account_id
         assert (
             "username"
-            == collection.external_integration.setting("overdrive_client_key").value
+            == collection.integration_configuration.settings["overdrive_client_key"]
         )
         assert (
             "password"
-            == collection.external_integration.setting("overdrive_client_secret").value
+            == collection.integration_configuration.settings["overdrive_client_secret"]
         )
 
         # Two libraries now have access to the collection.
@@ -555,27 +558,22 @@ class TestCollectionSettings:
         assert [] == l3.collections
 
         # Additional settings were set on the collection.
-        setting = collection.external_integration.setting("overdrive_website_id")
-        assert "overdrive_website_id" == setting.key
-        assert "1234" == setting.value
+        assert (
+            "1234"
+            == collection.integration_configuration.settings["overdrive_website_id"]
+        )
 
         assert (
             "l1_ils"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                "ils_name",
-                l1,
-                collection.external_integration,
-            ).value
+            == collection.integration_configuration.for_library(l1.id).settings[
+                "ils_name"
+            ]
         )
         assert (
             "l2_ils"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                "ils_name",
-                l2,
-                collection.external_integration,
-            ).value
+            == collection.integration_configuration.for_library(l2.id).settings[
+                "ils_name"
+            ]
         )
 
         # This collection will be a child of the first collection.
@@ -606,22 +604,16 @@ class TestCollectionSettings:
         assert "child-acctid" == child.external_account_id
 
         # The settings that are inherited from the parent weren't set.
-        assert None == child.external_integration.username
-        assert None == child.external_integration.password
-        setting = child.external_integration.setting("website_id")
-        assert None == setting.value
+        assert "username" not in child.integration_configuration.settings
+        assert "password" not in child.integration_configuration.settings
+        assert "website_id" not in child.integration_configuration.settings
 
         # One library has access to the collection.
         assert [child] == l3.collections
 
         assert (
             "l3_ils"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                "ils_name",
-                l3,
-                child.external_integration,
-            ).value
+            == child.integration_configuration.for_library(l3.id).settings["ils_name"]
         )
 
     def test_collections_post_edit(
@@ -663,28 +655,21 @@ class TestCollectionSettings:
         assert collection.id == int(response.response[0])
 
         # The collection has been changed.
-        assert (
-            "user2"
-            == collection.external_integration.setting("overdrive_client_key").value
+        assert "user2" == collection.integration_configuration.settings.get(
+            "overdrive_client_key"
         )
 
         # A library now has access to the collection.
         assert [collection] == l1.collections
 
         # Additional settings were set on the collection.
-        setting = collection.external_integration.setting("overdrive_website_id")
-        assert "overdrive_website_id" == setting.key
-        assert "1234" == setting.value
-
-        assert (
-            "the_ils"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                "ils_name",
-                l1,
-                collection.external_integration,
-            ).value
+        assert "1234" == collection.integration_configuration.settings.get(
+            "overdrive_website_id"
         )
+
+        assert "the_ils" == collection.integration_configuration.for_library(
+            l1.id
+        ).settings.get("ils_name")
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
@@ -707,9 +692,8 @@ class TestCollectionSettings:
         assert collection.id == int(response.response[0])
 
         # The collection is the same.
-        assert (
-            "user2"
-            == collection.external_integration.setting("overdrive_client_key").value
+        assert "user2" == collection.integration_configuration.settings.get(
+            "overdrive_client_key"
         )
         assert ExternalIntegration.OVERDRIVE == collection.protocol
 
@@ -718,15 +702,7 @@ class TestCollectionSettings:
 
         # All ConfigurationSettings for that library and collection
         # have been deleted.
-        qu = (
-            settings_ctrl_fixture.ctrl.db.session.query(ConfigurationSetting)
-            .filter(ConfigurationSetting.library == l1)
-            .filter(
-                ConfigurationSetting.external_integration
-                == collection.external_integration
-            )
-        )
-        assert 0 == qu.count()
+        assert collection.integration_configuration.library_configurations == []
 
         parent = settings_ctrl_fixture.ctrl.db.collection(
             name="Parent", protocol=ExternalIntegration.OVERDRIVE
@@ -762,7 +738,7 @@ class TestCollectionSettings:
             ("external_account_id", "1234"),
             ("username", "user2"),
             ("password", "password"),
-            ("url", "http://axis/"),
+            ("url", "http://axis.test/"),
         ]
 
     def test_collections_post_edit_mirror_integration(
@@ -885,7 +861,7 @@ class TestCollectionSettings:
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
-                    ("url", "http://axis/"),
+                    ("url", "http://axis.test/"),
                     (
                         "libraries",
                         json.dumps([{"short_name": "L1", "ebook_loan_duration": "14"}]),
@@ -898,15 +874,9 @@ class TestCollectionSettings:
             assert response.status_code == 200
 
         # Additional settings were set on the collection+library.
-        assert (
-            "14"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                "ebook_loan_duration",
-                l1,
-                collection.external_integration,
-            ).value
-        )
+        assert "14" == collection.integration_configuration.for_library(
+            l1.id
+        ).settings.get("ebook_loan_duration")
 
         # Remove the connection between collection and library.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -918,7 +888,7 @@ class TestCollectionSettings:
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
-                    ("url", "http://axis/"),
+                    ("url", "http://axis.test/"),
                     ("libraries", json.dumps([])),
                 ]
             )
@@ -931,15 +901,7 @@ class TestCollectionSettings:
 
         # The settings associated with the collection+library were removed
         # when the connection between collection and library was deleted.
-        assert (
-            None
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                "ebook_loan_duration",
-                l1,
-                collection.external_integration,
-            ).value
-        )
+        assert None == collection.integration_configuration.for_library(l1.id)
         assert [] == collection.libraries
 
     def test_collection_delete(self, settings_ctrl_fixture: SettingsControllerFixture):

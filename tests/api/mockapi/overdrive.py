@@ -4,9 +4,10 @@ from api.overdrive import OverdriveAPI
 from core.model import get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
-from core.overdrive import OverdriveConfiguration, OverdriveCoreAPI
+from core.overdrive import OverdriveConstants, OverdriveCoreAPI
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.db import make_default_library
 
 
@@ -35,13 +36,18 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         integration = collection.create_external_integration(
             protocol=ExternalIntegration.OVERDRIVE
         )
-        integration.set_setting(OverdriveConfiguration.OVERDRIVE_CLIENT_KEY, client_key)
-        integration.set_setting(
-            OverdriveConfiguration.OVERDRIVE_CLIENT_SECRET, client_secret
+        config = collection.create_integration_configuration(
+            ExternalIntegration.OVERDRIVE
         )
-        integration.set_setting(OverdriveConfiguration.OVERDRIVE_WEBSITE_ID, website_id)
+        config.settings = {
+            OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
+            OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
+            OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
+        }
         library.collections.append(collection)
-        OverdriveCoreAPI.ils_name_setting(_db, collection, library).value = ils_name
+        db = DatabaseTransactionFixture
+        db.set_settings(config.for_library(library.id, create=True), ils_name=ils_name)
+        _db.refresh(config)
         return collection
 
     def __init__(self, _db, collection, *args, **kwargs):

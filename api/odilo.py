@@ -5,11 +5,14 @@ import logging
 
 import isbnlib
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -41,7 +44,7 @@ from core.util.personal_names import sort_name_to_display_name
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class OdiloRepresentationExtractor:
@@ -310,33 +313,44 @@ class OdiloRepresentationExtractor:
         return cls.odilo_medium_to_simplified_medium.get(format_received)
 
 
-class OdiloAPI(BaseCirculationAPI, HasSelfTests):
+class OdiloSettings(BaseSettings):
+    library_api_base_url: HttpUrl = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library API base URL"),
+            description=_(
+                "This might look like <code>https://[library].odilo.us/api/v2</code>."
+            ),
+            required=True,
+        )
+    )
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Key"),
+            required=True,
+        )
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Secret"),
+            required=True,
+        )
+    )
+
+
+class OdiloLibrarySettings(BaseSettings):
+    pass
+
+
+class OdiloAPI(
+    BaseCirculationAPI[OdiloSettings, OdiloLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
+):
     log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
 
     NAME = ExternalIntegration.ODILO
     DESCRIPTION = _("Integrate an Odilo library collection.")
-    SETTINGS = [
-        {
-            "key": LIBRARY_API_BASE_URL,
-            "label": _("Library API base URL"),
-            "description": _(
-                "This might look like <code>https://[library].odilo.us/api/v2</code>."
-            ),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Client Key"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Client Secret"),
-            "required": True,
-        },
-    ] + BaseCirculationAPI.SETTINGS
 
     # --- OAuth ---
     TOKEN_ENDPOINT = "/token"
@@ -378,6 +392,20 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
         "CHECKOUT_NOT_FOUND": NotCheckedOut,
     }
 
+    @classmethod
+    def settings_class(cls):
+        return OdiloSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OdiloLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
+
     def __init__(self, _db, collection):
         self.odilo_bibliographic_coverage_provider = OdiloBibliographicCoverageProvider(
             collection, api_class=self
@@ -387,17 +415,17 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
                 "Collection protocol is %s, but passed into OdiloAPI!"
                 % collection.protocol
             )
+        super().__init__(_db, collection)
 
         self._db = _db
         self.analytics = Analytics(self._db)
 
         self.collection_id = collection.id
         self.token = None
-        self.client_key = collection.external_integration.username
-        self.client_secret = collection.external_integration.password
-        self.library_api_base_url = collection.external_integration.setting(
-            self.LIBRARY_API_BASE_URL
-        ).value
+        config = self.configuration()
+        self.client_key = config.username
+        self.client_secret = config.password
+        self.library_api_base_url = config.library_api_base_url
 
         if (
             not self.client_key

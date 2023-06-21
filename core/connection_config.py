@@ -1,19 +1,26 @@
+from typing import Optional
+
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 
-from core.config import ConfigurationTrait
-from core.model.configuration import ConfigurationAttributeType, ConfigurationMetadata
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 
 
-class ConnectionConfigurationTrait(ConfigurationTrait):
-    """Configuration information for connections to external servers."""
-
-    max_retry_count = ConfigurationMetadata(
-        key="connection_max_retry_count",
-        label=_("Connection retry limit"),
-        description=_(
-            "The maximum number of times to retry a request for certain connection-related errors."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
+class ConnectionSetting(BaseSettings):
+    max_retry_count: Optional[PositiveInt] = FormField(
         default=3,
+        alias="connection_max_retry_count",
+        form=ConfigurationFormItem(
+            label=_("Connection retry limit"),
+            description=_(
+                "The maximum number of times to retry a request for certain connection-related errors."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
     )

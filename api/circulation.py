@@ -1,16 +1,27 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import sys
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, Generic, Optional, Tuple, Type, TypeVar
 
 import flask
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
+from sqlalchemy.orm import Session
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.mirror import MirrorUploader
 from core.model import (
     CirculationEvent,
@@ -29,7 +40,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.opds2_import import OPDS2Importer
+from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 
 from .circulation_exceptions import *
@@ -414,56 +425,136 @@ class HoldInfo(CirculationInfo):
         )
 
 
-class BaseCirculationAPI:
-    """Encapsulates logic common to all circulation APIs."""
+class BaseCirculationEbookLoanSettings(BaseSettings):
+    """Not an inheritable BaseSettings object, this just holds reusable settings"""
 
-    # Add to LIBRARY_SETTINGS if your circulation API is for a
-    # distributor which includes ebooks and allows clients to specify
-    # their own loan lengths.
-    EBOOK_LOAN_DURATION_SETTING = {
-        "key": Collection.EBOOK_LOAN_DURATION_KEY,
-        "label": _("Ebook Loan Duration (in Days)"),
-        "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        "type": "number",
-        "description": _(
-            "When a patron uses SimplyE to borrow an ebook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+    ebook_loan_duration: Optional[PositiveInt] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_("Ebook Loan Duration (in Days)"),
+            type=ConfigurationFormItemType.NUMBER,
+            description=_(
+                "When a patron uses SimplyE to borrow an ebook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+            ),
         ),
-    }
+    )
 
-    # Add to LIBRARY_SETTINGS if your circulation API is for a
-    # distributor which includes audiobooks and allows clients to
-    # specify their own loan lengths.
-    AUDIOBOOK_LOAN_DURATION_SETTING = {
-        "key": Collection.AUDIOBOOK_LOAN_DURATION_KEY,
-        "label": _("Audiobook Loan Duration (in Days)"),
-        "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        "type": "number",
-        "description": _(
-            "When a patron uses SimplyE to borrow an audiobook from this collection, SimplyE will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
-        ),
-    }
 
+class BaseCirculationLoanSettings(BaseSettings):
     # Add to LIBRARY_SETTINGS if your circulation API is for a
     # distributor with a default loan period negotiated out-of-band,
     # such that the circulation manager cannot _specify_ the length of
     # a loan.
-    DEFAULT_LOAN_DURATION_SETTING = {
-        "key": Collection.EBOOK_LOAN_DURATION_KEY,
-        "label": _("Default Loan Period (in Days)"),
-        "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-        "type": "number",
-        "description": _(
-            "Until it hears otherwise from the distributor, this server will assume that any given loan for this library from this collection will last this number of days. This number is usually a negotiated value between the library and the distributor. This only affects estimates&mdash;it cannot affect the actual length of loans."
+    default_loan_duration: Optional[PositiveInt] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_("Default Loan Period (in Days)"),
+            type=ConfigurationFormItemType.NUMBER,
+            description=_(
+                "Until it hears otherwise from the distributor, this server will assume that any given loan for this library from this collection will last this number of days. This number is usually a negotiated value between the library and the distributor. This only affects estimates&mdash;it cannot affect the actual length of loans."
+            ),
         ),
-    }
+    )
 
-    # These collection-specific settings should be inherited by all
-    # distributors.
-    SETTINGS: List[dict] = []
 
-    # These library- and collection-specific settings should be
-    # inherited by all distributors.
-    LIBRARY_SETTINGS: List[dict] = []
+class BaseCirculationAPIIntegrationProtocol:
+    _db: Session
+    _integration_configuration_id: Optional[int]
+
+    @classmethod
+    def settings_class(cls) -> Type[BaseSettings]:
+        raise NotImplementedError()
+
+    @classmethod
+    def library_settings_class(cls) -> Type[BaseSettings]:
+        raise NotImplementedError()
+
+
+SettingsType = TypeVar("SettingsType", bound=BaseSettings)
+LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings)
+
+
+class CirculationConfigurationMixin(
+    Generic[SettingsType, LibrarySettingsType], BaseCirculationAPIIntegrationProtocol
+):
+    """Any implementation that uses integration configuration settings"""
+
+    def integration_configuration(self) -> IntegrationConfiguration:
+        config = get_one(
+            self._db, IntegrationConfiguration, id=self._integration_configuration_id
+        )
+        if config is None:
+            raise ValueError(
+                f"No Configuration available for {self.__class__.__name__} (id={self._integration_configuration_id})"
+            )
+        return config
+
+    # We have to ignore the return values due to a known bug in mypy
+    # https://github.com/python/mypy/issues/10003
+    def library_configuration(self, library_id) -> LibrarySettingsType | None:
+        libconfig = self.integration_configuration().for_library(library_id=library_id)
+        if libconfig:
+            config = self.library_settings_class()(**libconfig.settings)
+            return config  # type: ignore [return-value]
+        return None
+
+    def configuration(self) -> SettingsType:
+        return self.settings_class()(**self.integration_configuration().settings)  # type: ignore [return-value]
+
+
+class BaseCirculationAPIProtocol(BaseCirculationAPIIntegrationProtocol):
+    """Placeholder protocol used only in the LicenseProviderRegistry"""
+
+    def internal_format(self, delivery_mechanism):
+        ...
+
+    @classmethod
+    def default_notification_email_address(self, library_or_patron, pin):
+        ...
+
+    def patron_email_address(self, patron, library_authenticator=None):
+        ...
+
+    def checkin(self, patron, pin, licensepool):
+        ...
+
+    def checkout(self, patron, pin, licensepool, internal_format):
+        ...
+
+    def can_fulfill_without_loan(self, patron, pool, lpdm):
+        ...
+
+    def fulfill(
+        self,
+        patron,
+        pin,
+        licensepool,
+        internal_format=None,
+        part=None,
+        fulfill_part_url=None,
+    ):
+        ...
+
+    def patron_activity(self, patron, pin):
+        ...
+
+    def place_hold(self, patron, pin, licensepool, notification_email_address):
+        ...
+
+    def release_hold(self, patron, pin, licensepool):
+        ...
+
+    def update_availability(self, licensepool):
+        ...
+
+
+class BaseCirculationAPI(
+    HasLibraryIntegrationConfiguration,
+    BaseCirculationAPIProtocol,
+    CirculationConfigurationMixin[SettingsType, LibrarySettingsType],
+    Generic[SettingsType, LibrarySettingsType],
+):
+    """Encapsulates logic common to all circulation APIs."""
 
     BORROW_STEP = "borrow"
     FULFILL_STEP = "fulfill"
@@ -491,7 +582,8 @@ class BaseCirculationAPI:
     ] = {}
 
     def __init__(self, _db, collection):
-        pass
+        self._db = _db
+        self._integration_configuration_id = collection.integration_configuration.id
 
     def internal_format(self, delivery_mechanism):
         """Look up the internal format for this delivery mechanism or
@@ -810,6 +902,7 @@ class CirculationAPI:
         :return: Mapping of protocols to fulfillment post-processors.
         """
         from api.opds2 import TokenAuthenticationFulfillmentProcessor
+        from core.opds2_import import OPDS2Importer
         from core.opds_import import OPDSImporter
 
         from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor

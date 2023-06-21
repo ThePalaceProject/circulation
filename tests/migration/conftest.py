@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import string
 from pathlib import Path
@@ -115,6 +116,39 @@ def create_library(random_name: RandomName) -> CreateLibrary:
     return fixture
 
 
+class CreateCollection(Protocol):
+    def __call__(
+        self,
+        connection: Connection,
+        name: Optional[str] = None,
+        external_integration_id: Optional[int] = None,
+        external_account_id: Optional[str] = None,
+    ) -> int:
+        ...
+
+
+@pytest.fixture
+def create_collection(random_name: RandomName) -> CreateCollection:
+    def fixture(
+        connection: Connection,
+        name: Optional[str] = None,
+        external_integration_id: Optional[int] = None,
+        external_account_id: Optional[str] = None,
+    ) -> int:
+        if name is None:
+            name = random_name()
+        collection = connection.execute(
+            "INSERT INTO collections (name, external_account_id, external_integration_id) VALUES"
+            + "(%s, %s, %s) returning id",
+            (name, external_account_id, external_integration_id),
+        ).fetchone()
+        assert collection is not None
+        assert isinstance(collection.id, int)
+        return collection.id
+
+    return fixture
+
+
 class CreateExternalIntegration(Protocol):
     def __call__(
         self,
@@ -155,6 +189,7 @@ class CreateConfigSetting(Protocol):
         value: Optional[str] = None,
         integration_id: Optional[int] = None,
         library_id: Optional[int] = None,
+        associate_library: bool = False,
     ) -> int:
         ...
 
@@ -167,13 +202,29 @@ def create_config_setting() -> CreateConfigSetting:
         value: Optional[str] = None,
         integration_id: Optional[int] = None,
         library_id: Optional[int] = None,
+        associate_library: bool = False,
     ) -> int:
+        if type(value) in (tuple, list, dict):
+            value = json.dumps(value)
         setting = connection.execute(
             "INSERT INTO configurationsettings (key, value, external_integration_id, library_id) VALUES (%s, %s, %s, %s) returning id",
             (key, value, integration_id, library_id),
         ).fetchone()
         assert setting is not None
         assert isinstance(setting.id, int)
+
+        # If a library is associated with the setting we must associate the integration as well
+        if library_id and associate_library:
+            relation = connection.execute(
+                "select * from externalintegrations_libraries where externalintegration_id=%s and library_id=%s",
+                (integration_id, library_id),
+            ).fetchone()
+            if not relation:
+                connection.execute(
+                    "INSERT INTO externalintegrations_libraries (externalintegration_id, library_id) VALUES (%s, %s)",
+                    (integration_id, library_id),
+                )
+
         return setting.id
 
     return fixture

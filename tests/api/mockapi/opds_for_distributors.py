@@ -28,8 +28,11 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
         integration = collection.create_external_integration(
             protocol=OPDSForDistributorsAPI.NAME
         )
-        integration.username = "a"
-        integration.password = "b"
+        config = collection.create_integration_configuration(
+            OPDSForDistributorsAPI.NAME
+        )
+        config.settings = dict(username="a", password="b", data_source="data_source")
+        config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
 

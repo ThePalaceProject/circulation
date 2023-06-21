@@ -38,6 +38,10 @@ class TestODL2Validation(OPDS2Test):
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
+        db.default_collection().integration_configuration.settings = {
+            "username": "username",
+            "password": "password",
+        }
         db.default_collection().protocol = ExternalIntegration.ODL2
         db.default_collection().data_source = DataSource.FEEDBOOKS
         validator = ODL2SchemaValidation(

@@ -1,27 +1,24 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from contextlib2 import contextmanager
 from flask_babel import lazy_gettext as _
+from pydantic import PositiveInt
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
-from api.odl import ODLAPI, ODLImporter
+from api.odl import ODLAPI, ODLImporter, ODLSettings
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationFactory,
-    ConfigurationMetadata,
-    ConfigurationStorage,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
+from core.model.configuration import ExternalIntegration, HasExternalIntegration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
-from core.opds_import import OPDSImporterConfiguration
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
@@ -29,53 +26,59 @@ if TYPE_CHECKING:
     from core.model.patron import Patron
 
 
-class ODL2APIConfiguration(OPDSImporterConfiguration):
-    skipped_license_formats = ConfigurationMetadata(
-        key="odl2_skipped_license_formats",
-        label=_("Skipped license formats"),
-        description=_(
-            "List of license formats that will NOT be imported into Circulation Manager."
-        ),
-        type=ConfigurationAttributeType.LIST,
-        required=False,
+class ODL2Settings(ODLSettings):
+    skipped_license_formats: Optional[List[str]] = FormField(
         default=["text/html"],
+        alias="odl2_skipped_license_formats",
+        form=ConfigurationFormItem(
+            label=_("Skipped license formats"),
+            description=_(
+                "List of license formats that will NOT be imported into Circulation Manager."
+            ),
+            type=ConfigurationFormItemType.LIST,
+            required=False,
+        ),
     )
 
-    loan_limit = ConfigurationMetadata(
-        key="odl2_loan_limit",
-        label=_("Loan limit per patron"),
-        description=_(
-            "The maximum number of books a patron can have loaned out at any given time."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
+    loan_limit: Optional[PositiveInt] = FormField(
         default=None,
+        alias="odl2_loan_limit",
+        form=ConfigurationFormItem(
+            label=_("Loan limit per patron"),
+            description=_(
+                "The maximum number of books a patron can have loaned out at any given time."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
     )
 
-    hold_limit = ConfigurationMetadata(
-        key="odl2_hold_limit",
-        label=_("Hold limit per patron"),
-        description=_(
-            "The maximum number of books a patron can have on hold at any given time."
-        ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
+    hold_limit: Optional[PositiveInt] = FormField(
         default=None,
+        alias="odl2_hold_limit",
+        form=ConfigurationFormItem(
+            label=_("Hold limit per patron"),
+            description=_(
+                "The maximum number of books a patron can have on hold at any given time."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
+        ),
     )
 
 
 class ODL2API(ODLAPI):
     NAME = ExternalIntegration.ODL2
-    SETTINGS = ODLAPI.SETTINGS + ODL2APIConfiguration.to_settings()
+
+    @classmethod
+    def settings_class(cls):
+        return ODL2Settings
 
     def __init__(self, _db, collection):
-        self.loan_limit = collection.external_integration.setting(
-            "odl2_loan_limit"
-        ).int_value
-        self.hold_limit = collection.external_integration.setting(
-            "odl2_hold_limit"
-        ).int_value
         super().__init__(_db, collection)
+        config = self.configuration()
+        self.loan_limit = config.loan_limit
+        self.hold_limit = config.hold_limit
 
     def _checkout(self, patron_or_client: Patron, licensepool, hold=None):
         # If the loan limit is not None or 0
@@ -112,6 +115,10 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     """
 
     NAME = ODL2API.NAME
+
+    @classmethod
+    def settings_class(cls):
+        return ODL2Settings
 
     def __init__(
         self,
@@ -169,26 +176,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             map_from_collection,
             mirrors,
         )
-
         self._logger = logging.getLogger(__name__)
-
-        self._configuration_storage = ConfigurationStorage(self)
-        self._configuration_factory = ConfigurationFactory()
-
-    @contextmanager
-    def _get_configuration(self, db):
-        """Return the configuration object.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: Configuration object
-        :rtype: ODL2APIConfiguration
-        """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, ODL2APIConfiguration
-        ) as configuration:
-            yield configuration
 
     def _extract_publication_metadata(self, feed, publication, data_source_name):
         """Extract a Metadata object from webpub-manifest-parser's publication.
@@ -212,11 +200,9 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         licenses = []
         medium = None
 
-        with self._get_configuration(self._db) as configuration:
-            skipped_license_formats = configuration.skipped_license_formats
-
-            if skipped_license_formats:
-                skipped_license_formats = set(skipped_license_formats)
+        skipped_license_formats = self.configuration().skipped_license_formats
+        if skipped_license_formats:
+            skipped_license_formats = set(skipped_license_formats)
 
         if publication.licenses:
             for odl_license in publication.licenses:

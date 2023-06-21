@@ -1,9 +1,13 @@
 import datetime
 import json
+from typing import Type
 
 import feedparser
 from flask_babel import lazy_gettext as _
 
+from api.selftest import HasCollectionSelfTests
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import FormatData, TimestampData
 from core.model import (
     Collection,
@@ -18,8 +22,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.selftest import HasSelfTests
+from core.opds_import import BaseOPDSImporterSettings, OPDSImporter, OPDSImportMonitor
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
@@ -28,25 +31,36 @@ from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
 
 
-class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
+class OPDSForDistributorsSettings(BaseOPDSImporterSettings):
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library's username or access key"),
+            required=True,
+        )
+    )
+
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library's password or secret key"),
+            required=True,
+        )
+    )
+
+
+class OPDSForDistributorsLibrarySettings(BaseSettings):
+    pass
+
+
+class OPDSForDistributorsAPI(
+    BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
+):
     NAME = "OPDS for Distributors"
     DESCRIPTION = _(
         "Import books from a distributor that requires authentication to get the OPDS feed and download books."
     )
     BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
-
-    SETTINGS = OPDSImporter.BASE_SETTINGS + [
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Library's username or access key"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Library's password or secret key"),
-            "required": True,
-        },
-    ]
 
     # In OPDS For Distributors, all items are gated through the
     # BEARER_TOKEN access control scheme.
@@ -66,16 +80,35 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
         (type, DeliveryMechanism.BEARER_TOKEN): type for type in SUPPORTED_MEDIA_TYPES
     }
 
+    @classmethod
+    def settings_class(cls) -> Type[BaseSettings]:
+        return OPDSForDistributorsSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OPDSForDistributorsLibrarySettings
+
+    def description(self):
+        return self.DESCRIPTION
+
+    def label(self):
+        return self.NAME
+
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
         self.collection_id = collection.id
         self.external_integration_id = collection.external_integration.id
-        self.data_source_name = collection.external_integration.setting(
-            Collection.DATA_SOURCE_NAME_SETTING
-        ).value
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
+
+        config = self.configuration()
+        self.data_source_name = config.data_source
+        self.username = config.username
+        self.password = config.password
         self.feed_url = collection.external_account_id
         self.auth_url = None
+
+    @property
+    def collection(self):
+        return Collection.by_id(self._db, id=self.collection_id)
 
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
@@ -296,6 +329,10 @@ class OPDSForDistributorsAPI(BaseCirculationAPI, HasSelfTests):
 
 class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.NAME
+
+    @classmethod
+    def settings_class(cls):
+        return OPDSForDistributorsSettings
 
     def update_work_for_edition(self, *args, **kwargs):
         """After importing a LicensePool, set its availability

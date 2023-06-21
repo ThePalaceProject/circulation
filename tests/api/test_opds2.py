@@ -18,7 +18,7 @@ from api.opds2 import (
 )
 from core.lane import Facets, Pagination
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
+from core.model.configuration import ExternalIntegration
 from core.model.datasource import DataSource
 from core.model.patron import Loan
 from core.model.resource import Hyperlink
@@ -159,13 +159,11 @@ class TestTokenAuthenticationFulfillmentProcessor:
             protocol=ExternalIntegration.OPDS2_IMPORT
         )
         work = db.work(with_license_pool=True, collection=collection)
-        integration: ExternalIntegration = collection.create_external_integration(
-            ExternalIntegration.OPDS2_IMPORT
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            ExternalIntegration.TOKEN_AUTH,
+            "http://example.org/token?userName={patron_id}",
         )
-        setting: ConfigurationSetting = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, integration
-        )
-        setting.value = "http://example.org/token?userName={patron_id}"
 
         ff_info = FulfillmentInfo(
             collection,
@@ -233,7 +231,9 @@ class TestTokenAuthenticationFulfillmentProcessor:
         ff_info.content_link = (
             "http://example.org/11234/fulfill?authToken={authentication_token}"
         )
-        setting.value = None
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration, ExternalIntegration.TOKEN_AUTH, None
+        )
         ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
         assert ff_info.content_link_redirect == False
 

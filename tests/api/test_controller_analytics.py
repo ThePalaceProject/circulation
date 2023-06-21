@@ -73,6 +73,7 @@ class TestAnalyticsController:
                     type="open_book",
                     license_pool=analytics_fixture.lp,
                 )
+                assert None is not circulation_event
                 assert None == circulation_event.location
                 db.session.delete(circulation_event)
 
@@ -96,5 +97,6 @@ class TestAnalyticsController:
                 type="open_book",
                 license_pool=analytics_fixture.lp,
             )
+            assert circulation_event is not None
             assert patron.neighborhood == circulation_event.location
             db.session.delete(circulation_event)
