@@ -4,16 +4,7 @@ import json
 import logging
 import os
 import warnings
-from typing import (
-    Any,
-    Dict,
-    List,
-    Literal,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import Any, Dict, List, Literal, Tuple, Type, TypeVar, Union
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange

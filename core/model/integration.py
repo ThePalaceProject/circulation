@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Type, overload
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, overload
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -9,8 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from core.integration.goals import Goals
-from core.model import Base, create, get_one_or_create
-from core.util.datetime_helpers import utc_now
+from core.model import Base, get_one_or_create
 
 if TYPE_CHECKING:
     from core.model import Collection, Library
@@ -157,16 +156,3 @@ class IntegrationLibraryConfiguration(Base):
                 IntegrationLibraryConfiguration.library_id == library.id,
             )
         )
-
-    # Settings model inheritance
-    # If the library configuration has no such value
-    # but the parent does, retrieve the parent value
-    def get(self, key: str, *args: Any) -> Any:
-        if key not in self.settings and self.parent:
-            return self.parent.get(key, *args)
-        return super().get(key, *args)
-
-    def __getitem__(self, key: str) -> Any:
-        if key not in self.settings and self.parent:
-            return self.parent.settings[key]
-        return super().__getitem__(key)
