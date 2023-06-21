@@ -80,8 +80,8 @@ def _migrate_external_integration(
     settings_obj = _validate_and_load_settings(settings_class, settings_dict)
     integration_configuration = connection.execute(
         "insert into integration_configurations "
-        "(protocol, goal, name, settings, self_test_results, status) "
-        "values (%s, %s, %s, %s, %s, 'GREEN')"
+        "(protocol, goal, name, settings, self_test_results) "
+        "values (%s, %s, %s, %s, %s)"
         "returning id",
         (
             integration.protocol,
