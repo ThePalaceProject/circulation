@@ -700,6 +700,7 @@ class AcquisitionFeed(OPDSFeed):
                 # We want to assign this work to a group derived
                 # from the sublane.
                 v = dict(lane=sublane)
+
             annotator.lanes_by_work[work].append(v)
             all_works.append(work)
 

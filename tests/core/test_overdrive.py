@@ -5,6 +5,7 @@ import pytest
 
 from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
+from core.integration.goals import Goals
 from core.metadata_layer import LinkData
 from core.model import (
     Contributor,
@@ -21,7 +22,7 @@ from core.model import (
 from core.overdrive import (
     OverdriveAdvantageAccount,
     OverdriveBibliographicCoverageProvider,
-    OverdriveConfiguration,
+    OverdriveConstants,
     OverdriveCoreAPI,
     OverdriveRepresentationExtractor,
 )
@@ -31,6 +32,7 @@ from core.util.string_helpers import base64
 from tests.api.mockapi.overdrive import MockOverdriveCoreAPI
 from tests.core.mock import MockRequestsResponse
 from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveFixture, OverdriveWithAPIFixture
 
 
@@ -165,22 +167,22 @@ class TestOverdriveCoreAPI:
 
         # By default, OverdriveCoreAPI is initialized with the production
         # set of hostnames.
-        assert fixture.api.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
+        assert fixture.api.hosts() == c.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
 
         # You can instead initialize it to use the testing set of
         # hostnames.
         def api_with_setting(x):
-            integration = fixture.overdrive.collection.external_integration
-            integration.setting("overdrive_server_nickname").value = x
+            config = fixture.overdrive.collection.integration_configuration
+            DatabaseTransactionFixture.set_settings(config, overdrive_server_nickname=x)
             return c(session, fixture.overdrive.collection)
 
-        testing = api_with_setting(OverdriveConfiguration.TESTING_SERVERS)
-        assert testing.hosts() == c.HOSTS[OverdriveConfiguration.TESTING_SERVERS]
+        testing = api_with_setting(OverdriveConstants.TESTING_SERVERS)
+        assert testing.hosts() == c.HOSTS[OverdriveConstants.TESTING_SERVERS]
 
         # If the setting doesn't make sense, we default to production
         # hostnames.
         bad = api_with_setting("nonsensical")
-        assert bad.hosts() == c.HOSTS[OverdriveConfiguration.PRODUCTION_SERVERS]
+        assert bad.hosts() == c.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
 
     def test_endpoint(self, overdrive_with_api_fixture: OverdriveWithAPIFixture):
         fixture = overdrive_with_api_fixture
@@ -393,10 +395,18 @@ class TestOverdriveCoreAPI:
             protocol=ExternalIntegration.OVERDRIVE,
             external_account_id="1",
         )
-        main.external_integration.setting("overdrive_client_key").value = "user"
-        main.external_integration.setting("overdrive_client_secret").value = "password"
-        main.external_integration.setting("overdrive_website_id").value = "100"
-        main.external_integration.setting("ils_name").value = "default"
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "overdrive_client_key", "user"
+        )
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "overdrive_client_secret", "password"
+        )
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "overdrive_website_id", "100"
+        )
+        DatabaseTransactionFixture.set_settings(
+            main.integration_configuration, "ils_name", "default"
+        )
 
         # Here's an Overdrive API client for that collection.
         overdrive_main = MockOverdriveCoreAPI(session, main)
@@ -987,6 +997,8 @@ class TestOverdriveAdvantageAccount:
         assert parent == collection.parent
         assert collection.external_account_id == account.library_id
         assert ExternalIntegration.LICENSE_GOAL == collection.external_integration.goal
+        assert ExternalIntegration.OVERDRIVE == collection.protocol
+        assert Goals.LICENSE_GOAL == collection.integration_configuration.goal
         assert ExternalIntegration.OVERDRIVE == collection.protocol
 
         # To ensure uniqueness, the collection was named after its

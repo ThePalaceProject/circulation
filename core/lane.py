@@ -2128,6 +2128,7 @@ class WorkList:
         # The simplest change would probably be to return a dictionary
         # mapping WorkList to Works and let the caller figure out the
         # ordering. In fact, we could start doing that now.
+
         queries = []
         for lane in lanes:
             overview_facets = lane.overview_facets(_db, facets)

@@ -5,10 +5,22 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.validator import Validator
 from api.config import Configuration
-from api.shared_collection import BaseSharedCollectionAPI
 from tests.api.admin.dummy_validator.dummy_validator import (
     DummyAuthenticationProviderValidator,
 )
+
+
+class MockValidations:
+    LIST_TEST_KEY = "list-test"
+    WITH_LIST = [
+        {
+            "key": LIST_TEST_KEY,
+            "label": "I am a list",
+            "type": "list",
+            "format": "url",
+            "required": True,
+        }
+    ]
 
 
 class TestValidator:
@@ -102,37 +114,31 @@ class TestValidator:
         # Two valid in a list
         form = MultiDict(
             [
-                (BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, "http://library1.com"),
-                (BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, "http://library2.com"),
+                (MockValidations.LIST_TEST_KEY, "http://library1.com"),
+                (MockValidations.LIST_TEST_KEY, "http://library2.com"),
             ]
         )
-        response = Validator().validate_url(
-            BaseSharedCollectionAPI.SETTINGS, {"form": form}
-        )
+        response = Validator().validate_url(MockValidations.WITH_LIST, {"form": form})
         assert response == None
 
         # One valid and one empty in a list
         form = MultiDict(
             [
-                (BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, "http://library1.com"),
-                (BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, ""),
+                (MockValidations.LIST_TEST_KEY, "http://library1.com"),
+                (MockValidations.LIST_TEST_KEY, ""),
             ]
         )
-        response = Validator().validate_url(
-            BaseSharedCollectionAPI.SETTINGS, {"form": form}
-        )
+        response = Validator().validate_url(MockValidations.WITH_LIST, {"form": form})
         assert response == None
 
         # One valid and one invalid in a list
         form = MultiDict(
             [
-                (BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, "http://library1.com"),
-                (BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, invalid),
+                (MockValidations.LIST_TEST_KEY, "http://library1.com"),
+                (MockValidations.LIST_TEST_KEY, invalid),
             ]
         )
-        response = Validator().validate_url(
-            BaseSharedCollectionAPI.SETTINGS, {"form": form}
-        )
+        response = Validator().validate_url(MockValidations.WITH_LIST, {"form": form})
         assert response.detail == '"invalid_url" is not a valid URL.'
         assert response.status_code == 400
 

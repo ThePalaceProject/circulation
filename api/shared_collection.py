@@ -1,11 +1,19 @@
 import base64
 import json
 import logging
+from typing import List
 
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl, PositiveInt
 
 from core.config import CannotLoadConfiguration
-from core.model import Collection, ConfigurationSetting, IntegrationClient, get_one
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+from core.model import Collection, IntegrationClient, get_one
 from core.util.http import HTTP
 
 from .circulation_exceptions import *
@@ -122,12 +130,14 @@ class SharedCollectionAPI:
                 _("Remote authentication document"),
             )
 
-        external_library_urls = ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            collection.external_integration,
-        ).json_value
+        external_library_urls = (
+            collection.integration_configuration.settings.get(
+                BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS
+            )
+            or []
+        )
 
-        if not external_library_urls or start_url not in external_library_urls:
+        if start_url not in external_library_urls:
             raise AuthorizationFailedException(
                 _(
                     "Your library's URL is not one of the allowed URLs for this collection. Ask the collection administrator to add %(library_url)s to the list of allowed URLs.",
@@ -163,10 +173,9 @@ class SharedCollectionAPI:
 
     def check_client_authorization(self, collection, client):
         """Verify that an IntegrationClient is whitelisted for access to the collection."""
-        external_library_urls = ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            collection.external_integration,
-        ).json_value
+        external_library_urls = collection.integration_configuration.settings.get(
+            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, []
+        )
         if client.url not in [
             IntegrationClient.normalize_url(url) for url in external_library_urls
         ]:
@@ -211,36 +220,37 @@ class SharedCollectionAPI:
         return api.release_hold_from_external_library(client, hold)
 
 
+class BaseSharedCollectionSettings(BaseSettings):
+    external_library_urls: Optional[List[HttpUrl]] = FormField(
+        form=ConfigurationFormItem(
+            label=_(
+                "URLs for libraries on other circulation managers that use this collection"
+            ),
+            description=_(
+                "A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."
+            ),
+            type=ConfigurationFormItemType.LIST,
+        )
+    )
+    ebook_loan_duration: Optional[PositiveInt] = FormField(
+        default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
+        form=ConfigurationFormItem(
+            label=_(
+                "Ebook Loan Duration for libraries on other circulation managers (in Days)"
+            ),
+            description=_(
+                "When a patron from another library borrows an ebook from this collection, the circulation manager will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+        ),
+    )
+
+
 class BaseSharedCollectionAPI:
     """APIs that permit external circulation managers to access their collections
     should extend this class."""
 
     EXTERNAL_LIBRARY_URLS = "external_library_urls"
-
-    SETTINGS = [
-        {
-            "key": EXTERNAL_LIBRARY_URLS,
-            "label": _(
-                "URLs for libraries on other circulation managers that use this collection"
-            ),
-            "description": _(
-                "A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."
-            ),
-            "type": "list",
-            "format": "url",
-        },
-        {
-            "key": Collection.EBOOK_LOAN_DURATION_KEY,
-            "label": _(
-                "Ebook Loan Duration for libraries on other circulation managers (in Days)"
-            ),
-            "default": Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-            "description": _(
-                "When a patron from another library borrows an ebook from this collection, the circulation manager will ask for a loan that lasts this number of days. This must be equal to or less than the maximum loan duration negotiated with the distributor."
-            ),
-            "type": "number",
-        },
-    ]
 
     def checkout_to_external_library(self, client, pool, hold=None):
         raise NotImplementedError()

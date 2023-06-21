@@ -5,7 +5,6 @@ import pytest
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from core.model import (
-    ConfigurationSetting,
     Contribution,
     Contributor,
     DataSource,
@@ -18,13 +17,8 @@ from core.model import (
     Work,
 )
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationFactory, ConfigurationStorage
 from core.model.constants import IdentifierType
-from core.opds2_import import (
-    OPDS2Importer,
-    OPDS2ImporterConfiguration,
-    RWPMManifestParser,
-)
+from core.opds2_import import OPDS2Importer, RWPMManifestParser
 
 from ..fixtures.database import DatabaseTransactionFixture
 from ..fixtures.opds2_files import OPDS2FilesFixture
@@ -85,8 +79,6 @@ class TestOPDS2ImporterFixture:
     collection: Collection
     data_source: DataSource
     importer: OPDS2Importer
-    configuration_storage: ConfigurationStorage
-    configuration_factory: ConfigurationFactory
 
 
 @pytest.fixture
@@ -103,8 +95,6 @@ def opds2_importer_fixture(
     data.importer = OPDS2Importer(
         db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
     )
-    data.configuration_storage = ConfigurationStorage(data.importer)
-    data.configuration_factory = ConfigurationFactory()
     return data
 
 
@@ -412,10 +402,9 @@ class TestOPDS2Importer(OPDS2Test):
         # Arrange
         # Update the list of supported identifier types in the collection's configuration settings
         # and set the identifier type passed as a parameter as the only supported identifier type.
-        with data.configuration_factory.create(
-            data.configuration_storage, session, OPDS2ImporterConfiguration
-        ) as configuration:
-            configuration.set_ignored_identifier_types(ignore_identifier_type)
+        data.importer.set_ignored_identifier_types(
+            ignore_identifier_type, data.importer.integration_configuration()
+        )
 
         content_server_feed = opds2_files_fixture.sample_text("feed.json")
 
@@ -452,9 +441,9 @@ class TestOPDS2Importer(OPDS2Test):
         imported_editions, pools, works, failures = data.importer.import_from_feed(
             content
         )
-        setting = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, data.collection.external_integration
+        setting = data.importer.integration_configuration().settings.get(
+            ExternalIntegration.TOKEN_AUTH
         )
 
         # Did the token endpoint get stored correctly?
-        assert setting.value == "http://example.org/auth?userName={patron_id}"
+        assert setting == "http://example.org/auth?userName={patron_id}"

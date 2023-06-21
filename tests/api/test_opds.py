@@ -46,6 +46,7 @@ from core.model import (
     get_one,
 )
 from core.model.formats import FormatPriorities
+from core.model.integration import IntegrationConfiguration
 from core.model.licensing import LicensePool
 from core.model.patron import Loan
 from core.opds import AcquisitionFeed, MockAnnotator, UnfulfillableWork
@@ -138,7 +139,6 @@ class TestCirculationManagerAnnotator:
     def test_visible_delivery_mechanisms(
         self, circulation_fixture: CirculationManagerAnnotatorFixture
     ):
-
         # By default, all delivery mechanisms are visible
         [pool] = circulation_fixture.work.license_pools
         [epub] = list(circulation_fixture.annotator.visible_delivery_mechanisms(pool))
@@ -195,16 +195,19 @@ class TestCirculationManagerAnnotator:
             None,
         )
 
-        external: ExternalIntegration = pool.collection.external_integration
-        prioritize_drm_setting = ConfigurationSetting.for_externalintegration(
-            FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY, external
+        config: IntegrationConfiguration = pool.collection.integration_configuration
+        DatabaseTransactionFixture.set_settings(
+            config,
+            **{
+                FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY: [
+                    f"{DeliveryMechanism.LCP_DRM}",
+                ],
+                FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY: [
+                    f"{MediaTypes.PDF_MEDIA_TYPE}"
+                ],
+            },
         )
-        prioritize_content_type_setting = ConfigurationSetting.for_externalintegration(
-            FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY, external
-        )
-
-        prioritize_drm_setting.value = f'["{DeliveryMechanism.LCP_DRM}"]'
-        prioritize_content_type_setting.value = f'["{MediaTypes.PDF_MEDIA_TYPE}"]'
+        circulation_fixture.db.session.commit()
 
         annotator = CirculationManagerAnnotator(
             circulation_fixture.lane,
@@ -254,7 +257,6 @@ class TestCirculationManagerAnnotator:
     def test_work_entry_includes_updated(
         self, circulation_fixture: CirculationManagerAnnotatorFixture
     ):
-
         # By default, the 'updated' date is the value of
         # Work.last_update_time.
         work = circulation_fixture.db.work(with_open_access_download=True)
@@ -543,7 +545,6 @@ class TestLibraryAnnotator:
     def test_fulfill_link_issues_only_open_access_links_when_library_does_not_identify_patrons(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):
-
         # This library doesn't identify patrons.
         annotator_fixture.annotator.identifies_patrons = False
 

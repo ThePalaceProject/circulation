@@ -9,12 +9,8 @@ from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.saml.credential import SAMLCredentialManager
 from core.exceptions import BaseError
 from core.model import Collection, get_one
-from core.model.configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    HasExternalIntegration,
-)
-from core.saml.wayfless import SAMLWAYFlessConfigurationTrait
+from core.model.configuration import ExternalIntegration, HasExternalIntegration
+from core.saml.wayfless import SAMLWAYFlessConstants
 
 
 class SAMLWAYFlessFulfillmentError(BaseError):
@@ -50,16 +46,11 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
             )
 
         external: ExternalIntegration = collection.external_integration
-        wayfless_url_template_setting: ConfigurationSetting = (
-            ConfigurationSetting.for_externalintegration(
-                SAMLWAYFlessConfigurationTrait.WAYFLESS_URL_TEMPLATE_KEY, external
-            )
+        self._wayfless_url_template: Optional[
+            str
+        ] = collection.integration_configuration.settings.get(
+            SAMLWAYFlessConstants.WAYFLESS_URL_TEMPLATE_KEY
         )
-
-        if wayfless_url_template_setting:
-            self._wayfless_url_template: Optional[
-                str
-            ] = wayfless_url_template_setting.value
 
         self._external_integration_id: Optional[
             int
@@ -75,7 +66,12 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
         :param db: SQLAlchemy session
         :return: ExternalIntegration object
         """
-        return get_one(db, ExternalIntegration, id=self._external_integration_id)
+        ext = get_one(db, ExternalIntegration, id=self._external_integration_id)
+        if ext is None:
+            raise ValueError(
+                f"External Integration not found: {self._external_integration_id}"
+            )
+        return ext
 
     def fulfill(
         self, patron, pin, licensepool, delivery_mechanism, fulfillment: FulfillmentInfo
@@ -110,11 +106,11 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
                 )
 
             acquisition_link = self._wayfless_url_template.replace(
-                SAMLWAYFlessConfigurationTrait.IDP_PLACEHOLDER,
+                SAMLWAYFlessConstants.IDP_PLACEHOLDER,
                 urllib.parse.quote(saml_subject.idp, safe=""),
             )
             acquisition_link = acquisition_link.replace(
-                SAMLWAYFlessConfigurationTrait.ACQUISITION_LINK_PLACEHOLDER,
+                SAMLWAYFlessConstants.ACQUISITION_LINK_PLACEHOLDER,
                 urllib.parse.quote(fulfillment.content_link, safe=""),
             )
 

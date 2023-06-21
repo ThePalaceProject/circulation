@@ -11,7 +11,6 @@ from api.circulation_exceptions import *
 from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
 from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
-    ConfigurationSetting,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -28,11 +27,11 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.api.mockapi.enki import MockEnkiAPI
 from tests.core.mock import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.api_enki_files import EnkiFilesFixture
     from tests.fixtures.authenticator import AuthProviderFixture
-    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class EnkiTestFixure:
@@ -54,7 +53,9 @@ class TestEnkiAPI:
     def test_constructor(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
         # The constructor must be given an Enki collection.
-        collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        collection = db.collection(
+            protocol=ExternalIntegration.OVERDRIVE, url="http://test.enki.url"
+        )
         with pytest.raises(ValueError) as excinfo:
             EnkiAPI(db.session, collection)
         assert "Collection protocol is Overdrive, but passed into EnkiAPI!" in str(
@@ -79,13 +80,14 @@ class TestEnkiAPI:
         # Associate another library with the mock Enki collection
         # and set its Enki library ID.
         other_library = db.library()
-        integration = enki_test_fixture.api.external_integration(db.session)
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            enki_test_fixture.api.ENKI_LIBRARY_ID_KEY,
-            other_library,
-            integration,
-        ).value = "other library id"
+        assert other_library.id is not None
+        config = enki_test_fixture.api.integration_configuration()
+        assert config is not None
+        DatabaseTransactionFixture.set_settings(
+            config.for_library(other_library.id, create=True),
+            **{enki_test_fixture.api.ENKI_LIBRARY_ID_KEY: "other library id"},
+        )
+        db.session.commit()
         assert "other library id" == m(other_library)
 
     def test_collection(self, enki_test_fixture: EnkiTestFixure):
@@ -854,6 +856,7 @@ class TestEnkiImport:
 
     def test_update_circulation(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
+
         # update_circulation() makes two-hour slices out of time
         # between the previous run and now, and passes each slice into
         # _update_circulation, keeping track of the total number of

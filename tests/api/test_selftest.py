@@ -10,15 +10,11 @@ import pytest
 
 from api.authentication.basic import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
-from api.selftest import (
-    HasCollectionSelfTests,
-    HasSelfTests,
-    RunSelfTestsScript,
-    SelfTestResult,
-)
+from api.selftest import HasCollectionSelfTests, HasSelfTests, SelfTestResult
 from core.exceptions import IntegrationException
 from core.model import ExternalIntegration, Patron
 from core.opds_import import OPDSImportMonitor
+from core.scripts import RunSelfTestsScript
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:

@@ -2,23 +2,34 @@ from __future__ import annotations
 
 import logging
 import traceback
-from contextlib import contextmanager
 from io import BytesIO
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import urljoin, urlparse
 
 import dateutil
 import feedparser
-import sqlalchemy
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import HttpUrl
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
+
+from api.circulation import BaseCirculationAPIProtocol, CirculationConfigurationMixin
+from api.selftest import HasCollectionSelfTests
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.goals import Goals
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+from core.model.integration import IntegrationConfiguration
 
 from .classifier import Classifier
 from .config import IntegrationException
 from .coverage import CoverageFailure
-from .importers import BaseImporterConfiguration
+from .importers import BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -47,15 +58,8 @@ from .model import (
     Subject,
     get_one,
 )
-from .model.configuration import (
-    ConfigurationFactory,
-    ConfigurationGrouping,
-    ConfigurationStorage,
-    ExternalIntegrationLink,
-    HasExternalIntegration,
-)
+from .model.configuration import ExternalIntegrationLink, HasExternalIntegration
 from .monitor import CollectionMonitor
-from .selftest import HasSelfTests
 from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.opds_writer import OPDSFeed, OPDSMessage
@@ -93,10 +97,6 @@ def parse_identifier(db, identifier):
     return parsed_identifier
 
 
-class OPDSImporterConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """The basic OPDS importer configuration"""
-
-
 class AccessNotAuthenticated(Exception):
     """No authentication is configured for this service"""
 
@@ -115,13 +115,13 @@ class SimplifiedOPDSLookup:
             )
 
     @classmethod
-    def from_protocol(
-        cls, _db, protocol, goal=ExternalIntegration.LICENSE_GOAL, library=None
-    ):
-        integration = ExternalIntegration.lookup(_db, protocol, goal, library=library)
-        if not integration or not integration.url:
+    def from_protocol(cls, _db, protocol, goal=Goals.LICENSE_GOAL, library=None):
+        config = get_one(_db, IntegrationConfiguration, protocol=protocol, goal=goal)
+        if config is not None and library is not None:
+            config = config.for_library(library.id)
+        if config is None:
             return None
-        return cls(integration.url)
+        return cls(config.settings["url"])
 
     def __init__(self, base_url):
         if not base_url.endswith("/"):
@@ -163,7 +163,104 @@ class OPDSXMLParser(XMLParser):
     }
 
 
-class OPDSImporter:
+class BaseOPDSImporterSettings(BaseSettings):
+    NO_DEFAULT_AUDIENCE = ""
+
+    external_account_id: Optional[HttpUrl] = FormField(
+        form=ConfigurationFormItem(
+            label=_("URL"),
+            required=True,
+        )
+    )
+
+    data_source: str = FormField(
+        form=ConfigurationFormItem(label=_("Data source name"), required=True)
+    )
+
+    default_audience: str = FormField(
+        default=NO_DEFAULT_AUDIENCE,
+        form=ConfigurationFormItem(
+            label=_("Default audience"),
+            description=_(
+                "If the vendor does not specify the target audience for their books, "
+                "assume the books have this target audience."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            format="narrow",
+            options={NO_DEFAULT_AUDIENCE: _("No default audience")}.update(
+                {audience: audience for audience in sorted(Classifier.AUDIENCES)}
+            ),
+            required=False,
+            # readOnly=True,
+        ),
+    )
+
+
+class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
+    username: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Username"),
+            description=_(
+                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
+            ),
+            weight=-1,
+        )
+    )
+
+    password: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Password"),
+            description=_(
+                "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
+            ),
+            weight=-1,
+        )
+    )
+
+    custom_accept_header: Optional[str] = FormField(
+        default=",".join(
+            [
+                OPDSFeed.ACQUISITION_FEED_TYPE,
+                "application/atom+xml;q=0.9",
+                "application/xml;q=0.8",
+                "*/*;q=0.1",
+            ]
+        ),
+        form=ConfigurationFormItem(
+            label=_("Custom accept header"),
+            required=False,
+            description=_(
+                "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
+            ),
+            weight=-1,
+        ),
+    )
+
+    primary_identifier_source: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Identifer"),
+            required=False,
+            description=_("Which book identifier to use as ID."),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "": _("(Default) Use <id>"),
+                ExternalIntegration.DCTERMS_IDENTIFIER: _(
+                    "Use <dcterms:identifier> first, if not exist use <id>"
+                ),
+            },
+        )
+    )
+
+
+class OPDSImporterLibrarySettings(BaseSettings):
+    pass
+
+
+class OPDSImporter(
+    HasLibraryIntegrationConfiguration,
+    BaseCirculationAPIProtocol,
+    CirculationConfigurationMixin,
+):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -182,94 +279,6 @@ class OPDSImporter:
 
     NO_DEFAULT_AUDIENCE = ""
 
-    # These settings are used by all OPDS-derived import methods.
-    BASE_SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("URL"),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": Collection.DATA_SOURCE_NAME_SETTING,
-            "label": _("Data source name"),
-            "required": True,
-        },
-        {
-            "key": Collection.DEFAULT_AUDIENCE_KEY,
-            "label": _("Default audience"),
-            "description": _(
-                "If the vendor does not specify the target audience for their books, "
-                "assume the books have this target audience."
-            ),
-            "type": "select",
-            "format": "narrow",
-            "options": [{"key": NO_DEFAULT_AUDIENCE, "label": _("No default audience")}]
-            + [
-                {"key": audience, "label": audience}
-                for audience in sorted(Classifier.AUDIENCES)
-            ],
-            "default": NO_DEFAULT_AUDIENCE,
-            "required": False,
-            "readOnly": True,
-        },
-    ]
-
-    # These settings are used by 'regular' OPDS but not by OPDS For
-    # Distributors, which has its own way of doing authentication.
-    SETTINGS = (
-        BASE_SETTINGS
-        + [
-            {
-                "key": ExternalIntegration.USERNAME,
-                "label": _("Username"),
-                "description": _(
-                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the username here."
-                ),
-            },
-            {
-                "key": ExternalIntegration.PASSWORD,
-                "label": _("Password"),
-                "description": _(
-                    "If HTTP Basic authentication is required to access the OPDS feed (it usually isn't), enter the password here."
-                ),
-            },
-            {
-                "key": ExternalIntegration.CUSTOM_ACCEPT_HEADER,
-                "label": _("Custom accept header"),
-                "required": False,
-                "description": _(
-                    "Some servers expect an accept header to decide which file to send. You can use */* if the server doesn't expect anything."
-                ),
-                "default": ",".join(
-                    [
-                        OPDSFeed.ACQUISITION_FEED_TYPE,
-                        "application/atom+xml;q=0.9",
-                        "application/xml;q=0.8",
-                        "*/*;q=0.1",
-                    ]
-                ),
-            },
-            {
-                "key": ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE,
-                "label": _("Identifer"),
-                "required": False,
-                "description": _("Which book identifier to use as ID."),
-                "type": "select",
-                "options": [
-                    {"key": "", "label": _("(Default) Use <id>")},
-                    {
-                        "key": ExternalIntegration.DCTERMS_IDENTIFIER,
-                        "label": _(
-                            "Use <dcterms:identifier> first, if not exist use <id>"
-                        ),
-                    },
-                ],
-            },
-        ]
-        + OPDSImporterConfiguration.to_settings()
-    )
-
     # Subclasses of OPDSImporter may define a different parser class that's
     # a subclass of OPDSXMLParser. For example, a subclass may want to use
     # tags from an additional namespace.
@@ -279,6 +288,20 @@ class OPDSImporter:
     # that should be treated as indicating success, rather than failure,
     # when they show up in <simplified:message> tags.
     SUCCESS_STATUS_CODES: list[int] | None = None
+
+    @classmethod
+    def settings_class(cls):
+        return OPDSImporterSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OPDSImporterLibrarySettings
+
+    def label(self):
+        return "OPDS Importer"
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(
         self,
@@ -320,6 +343,9 @@ class OPDSImporter:
         self._db = _db
         self.log = logging.getLogger("OPDS Importer")
         self._collection_id = collection.id if collection else None
+        self._integration_configuration_id = (
+            collection.integration_configuration.id if collection else None
+        )
         if self.collection and not data_source_name:
             # Use the Collection data_source for OPDS import.
             data_source = self.collection.data_source
@@ -478,7 +504,6 @@ class OPDSImporter:
         return parse_identifier(self._db, identifier)
 
     def import_from_feed(self, feed, feed_url=None):
-
         # Keep track of editions that were imported. Pools and works
         # for those editions may be looked up or created.
         imported_editions = {}
@@ -1148,7 +1173,6 @@ class OPDSImporter:
         """
         path = "/atom:feed/simplified:message"
         for message_tag in parser._xpath(feed_tag, path):
-
             # First thing to do is determine which Identifier we're
             # talking about.
             identifier_tag = parser._xpath1(message_tag, "atom:id")
@@ -1236,7 +1260,6 @@ class OPDSImporter:
     def detail_for_elementtree_entry(
         cls, parser, entry_tag, data_source, feed_url=None, do_get=None
     ):
-
         """Turn an <atom:entry> tag into a dictionary of metadata that can be
         used as keyword arguments to the Metadata contructor.
 
@@ -1507,7 +1530,6 @@ class OPDSImporter:
 
         next_link_already_handled = False
         for i, link in enumerate(links):
-
             if link.rel not in (Hyperlink.THUMBNAIL_IMAGE, Hyperlink.IMAGE):
                 # This is not any kind of image. Ignore it.
                 continue
@@ -1576,7 +1598,9 @@ class OPDSImporter:
         return series_name, series_position
 
 
-class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration):
+class OPDSImportMonitor(
+    CollectionMonitor, HasCollectionSelfTests, HasExternalIntegration
+):
     """Periodically monitor a Collection's OPDS archive feed and import
     every title it mentions.
     """
@@ -1592,7 +1616,12 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
     def __init__(
-        self, _db, collection, import_class, force_reimport=False, **import_class_kwargs
+        self,
+        _db,
+        collection: Collection,
+        import_class,
+        force_reimport=False,
+        **import_class_kwargs,
     ):
         if not collection:
             raise ValueError(
@@ -1614,38 +1643,25 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
         self.external_integration_id = collection.external_integration.id
         self.feed_url = self.opds_url(collection)
         self.force_reimport = force_reimport
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
-        self.custom_accept_header = collection.external_integration.custom_accept_header
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
+        config = self.importer.configuration()
+        self.username = config.username
+        self.password = config.password
 
-        self._configuration_storage: ConfigurationStorage = ConfigurationStorage(self)
-        self._configuration_factory: ConfigurationFactory = ConfigurationFactory()
-        self._max_retry_count: int | None = None
-
-        with self._get_configuration(_db) as configuration:
-            self._max_retry_count = (
-                int(configuration.max_retry_count)
-                if configuration.max_retry_count is not None
-                else None
-            )
+        # Not all inherited settings have these
+        # OPDSforDistributors does not use this setting
+        settings = self.importer.configuration()
+        try:
+            self.custom_accept_header = settings.custom_accept_header
+        except AttributeError:
+            self.custom_accept_header = None
+        try:
+            self._max_retry_count: int | None = settings.max_retry_count
+        except AttributeError:
+            self._max_retry_count = 0
 
         super().__init__(_db, collection)
-
-    @contextmanager
-    def _get_configuration(
-        self, db: sqlalchemy.orm.session.Session
-    ) -> Iterator[OPDSImporterConfiguration]:
-        """Return the configuration object.
-
-        :param db: Database session
-        :return: Configuration object
-        """
-        with self._configuration_factory.create(
-            self._configuration_storage, db, OPDSImporterConfiguration
-        ) as configuration:
-            yield configuration
 
     def external_integration(self, _db):
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
@@ -1754,7 +1770,6 @@ class OPDSImportMonitor(CollectionMonitor, HasSelfTests, HasExternalIntegration)
 
         new_data = False
         for raw_identifier, remote_updated in last_update_dates:
-
             identifier = self._parse_identifier(raw_identifier)
             if not identifier:
                 # Maybe this is new, maybe not, but we can't associate

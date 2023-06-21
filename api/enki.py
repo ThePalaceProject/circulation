@@ -4,8 +4,16 @@ import logging
 import time
 
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 
 from core.analytics import Analytics
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -19,15 +27,12 @@ from core.metadata_layer import (
 from core.model import (
     Classification,
     Collection,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     Representation,
-    Session,
     Subject,
 )
 from core.model.configuration import ConfigurationAttributeValue
@@ -37,41 +42,50 @@ from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
-class EnkiAPI(BaseCirculationAPI, HasSelfTests):
-
+class EnkiConstants:
     PRODUCTION_BASE_URL = "https://enkilibrary.org/API/"
 
-    ENKI_LIBRARY_ID_KEY = "enki_library_id"
-    DESCRIPTION = _("Integrate an Enki collection.")
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("URL"),
-            "default": PRODUCTION_BASE_URL,
-            "required": True,
-            "format": "url",
-        },
-    ] + BaseCirculationAPI.SETTINGS
 
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        {"key": ENKI_LIBRARY_ID_KEY, "label": _("Library ID"), "required": True},
-        {
-            "key": ExternalIntegration.DISPLAY_RESERVES,
-            "label": _("Show/Hide Titles with No Available Loans"),
-            "required": False,
-            "description": _(
+class EnkiSettings(BaseSettings):
+    url: HttpUrl = FormField(
+        default=EnkiConstants.PRODUCTION_BASE_URL,
+        form=ConfigurationFormItem(
+            label=_("URL"),
+        ),
+    )
+
+
+class EnkiLibrarySettings(BaseSettings):
+    enki_library_id: str = FormField(
+        form=ConfigurationFormItem(label=_("Library ID"), required=True)
+    )
+    dont_display_reserves: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Show/Hide Titles with No Available Loans"),
+            required=False,
+            description=_(
                 "Titles with no available loans will not be displayed in the Catalog view."
             ),
-            "type": "select",
-            "options": [
-                {"key": ConfigurationAttributeValue.YESVALUE.value, "label": "Show"},
-                {"key": ConfigurationAttributeValue.NOVALUE.value, "label": "Hide"},
-            ],
-        },
-    ]
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                ConfigurationAttributeValue.YESVALUE.value: "Show",
+                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+            },
+        )
+    )
+
+
+class EnkiAPI(
+    BaseCirculationAPI[EnkiSettings, EnkiLibrarySettings],
+    HasCollectionSelfTests,
+    EnkiConstants,
+    HasLibraryIntegrationConfiguration,
+):
+    ENKI_LIBRARY_ID_KEY = "enki_library_id"
+    DESCRIPTION = _("Integrate an Enki collection.")
 
     list_endpoint = "ListAPI"
     item_endpoint = "ItemAPI"
@@ -103,6 +117,20 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
     SERVICE_NAME = "Enki"
     log = logging.getLogger("Enki API")
 
+    @classmethod
+    def settings_class(cls):
+        return EnkiSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return EnkiLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
+
     def __init__(self, _db, collection):
         self._db = _db
         if collection.protocol != self.ENKI:
@@ -110,26 +138,24 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
                 "Collection protocol is %s, but passed into EnkiAPI!"
                 % collection.protocol
             )
+        super().__init__(_db, collection)
 
         self.collection_id = collection.id
-        self.base_url = collection.external_integration.url or self.PRODUCTION_BASE_URL
+        self.base_url = self.configuration().url or self.PRODUCTION_BASE_URL
 
     def external_integration(self, _db):
         return self.collection.external_integration
 
     def enki_library_id(self, library):
         """Find the Enki library ID for the given library."""
-        _db = Session.object_session(library)
-        return ConfigurationSetting.for_library_and_externalintegration(
-            _db, self.ENKI_LIBRARY_ID_KEY, library, self.external_integration(_db)
-        ).value
+        if config := self.library_configuration(library.id):
+            return config.enki_library_id
 
     @property
     def collection(self):
         return Collection.by_id(self._db, id=self.collection_id)
 
     def _run_self_tests(self, _db):
-
         now = utc_now()
 
         def count_recent_loans_and_holds():
@@ -180,7 +206,7 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
         data=None,
         params=None,
         retry_on_timeout=True,
-        **kwargs
+        **kwargs,
     ):
         """Make an HTTP request to the Enki API."""
         headers = dict(extra_headers)
@@ -200,7 +226,7 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
                 data,
                 params,
                 retry_on_timeout=False,
-                **kwargs
+                **kwargs,
             )
 
         # Look for the error indicator and raise
@@ -224,7 +250,7 @@ class EnkiAPI(BaseCirculationAPI, HasSelfTests):
             params=params,
             timeout=90,
             disallowed_response_codes=None,
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -805,7 +831,6 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
         return circulation_changes
 
     def process_book(self, bibliographic):
-
         """Make the local database reflect the state of the remote Enki
         collection for the given book.
 

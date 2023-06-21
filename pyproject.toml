@@ -3,9 +3,11 @@ build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
 [tool.coverage.report]
-exclude_lines = [
+exclude_also = [
     "if TYPE_CHECKING:",
-    "pragma: no cover",
+    '^\s*\.\.\.\s*$',
+    '^\s*pass\s*$',
+    '^\s*raise NotImplementedError\s*$',
 ]
 
 [tool.coverage.run]
@@ -45,9 +47,6 @@ exclude = [
     'tests/api/admin/controller/test_library\.py',
     'tests/api/admin/controller/test_work_editor\.py',
     'tests/api/admin/test_routes\.py',
-    'tests/api/saml/metadata',
-    'tests/api/saml/test_auth\.py',
-    'tests/api/saml/test_provider\.py',
     'tests/api/test_adobe_vendor_id\.py',
     'tests/api/test_announcements\.py',
     'tests/api/test_axis\.py',
@@ -248,7 +247,7 @@ PyJWT = "2.6.0"
 PyLD = "2.0.3"
 pymarc = "5.1.0"
 pyOpenSSL = "^23.1.0"
-pyparsing = "3.0.9"
+pyparsing = "3.1.0"
 pypostalcode = "0.4.1"
 pyspellchecker = "0.7.2"
 python = ">=3.8,<4"

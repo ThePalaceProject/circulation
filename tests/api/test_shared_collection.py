@@ -10,14 +10,7 @@ from api.circulation_exceptions import *
 from api.odl import ODLAPI
 from api.shared_collection import BaseSharedCollectionAPI, SharedCollectionAPI
 from core.config import CannotLoadConfiguration
-from core.model import (
-    ConfigurationSetting,
-    Hold,
-    IntegrationClient,
-    Loan,
-    create,
-    get_one,
-)
+from core.model import Hold, IntegrationClient, Loan, create, get_one
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -49,14 +42,17 @@ class SharedCollectionFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.collection = db.collection(protocol="Mock")
+        self.collection.integration_configuration.settings = dict(
+            username="username", password="password", data_source="data_source"
+        )
         self.shared_collection = SharedCollectionAPI(
             db.session, api_map={"Mock": MockAPI}
         )
         self.api = self.shared_collection.api(self.collection)
-        ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            self.collection.external_integration,
-        ).value = json.dumps(["http://library.org"])
+        DatabaseTransactionFixture.set_settings(
+            self.collection.integration_configuration,
+            **{BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS: ["http://library.org"]}
+        )
         self.client, ignore = IntegrationClient.register(
             db.session, "http://library.org"
         )
@@ -101,6 +97,9 @@ class TestSharedCollectionAPI:
         db = shared_collection_fixture.db
 
         collection = db.collection(protocol=ODLAPI.NAME)
+        collection.integration_configuration.settings = dict(
+            username="username", password="password", data_source="data_source"
+        )
         edition, pool = db.edition(with_license_pool=True, collection=collection)
         shared_collection = SharedCollectionAPI(db.session)
         assert isinstance(shared_collection.api_for_licensepool(pool), ODLAPI)
@@ -111,6 +110,9 @@ class TestSharedCollectionAPI:
         db = shared_collection_fixture.db
 
         collection = db.collection()
+        collection.integration_configuration.settings = dict(
+            username="username", password="password", data_source="data_source"
+        )
         shared_collection = SharedCollectionAPI(db.session)
         # The collection isn't a shared collection, so looking up its API
         # raises an exception.
@@ -159,10 +161,10 @@ class TestSharedCollectionAPI:
         auth_response = json.dumps(
             {"links": [{"href": "http://library.org", "rel": "start"}]}
         )
-        ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            shared_collection_fixture.collection.external_integration,
-        ).value = None
+        DatabaseTransactionFixture.set_settings(
+            shared_collection_fixture.collection.integration_configuration,
+            **{BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS: None}
+        )
         pytest.raises(
             AuthorizationFailedException,
             shared_collection_fixture.shared_collection.register,
@@ -175,10 +177,10 @@ class TestSharedCollectionAPI:
         auth_response = json.dumps(
             {"links": [{"href": "http://differentlibrary.org", "rel": "start"}]}
         )
-        ConfigurationSetting.for_externalintegration(
-            BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS,
-            shared_collection_fixture.collection.external_integration,
-        ).value = json.dumps(["http://library.org"])
+        DatabaseTransactionFixture.set_settings(
+            shared_collection_fixture.collection.integration_configuration,
+            **{BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS: ["http://library.org"]}
+        )
         pytest.raises(
             AuthorizationFailedException,
             shared_collection_fixture.shared_collection.register,
@@ -252,6 +254,7 @@ class TestSharedCollectionAPI:
         decrypted_secret = encryptor.decrypt(
             base64.b64decode(response.get("metadata", {}).get("shared_secret"))
         )
+        assert client is not None
         assert client.shared_secret == decrypted_secret.decode("utf-8")
 
     def test_borrow(self, shared_collection_fixture: SharedCollectionFixture):

@@ -90,6 +90,7 @@ def downgrade() -> None:
             postgresql.ENUM("RED", "GREEN", name="status"),
             autoincrement=False,
             nullable=False,
+            server_default=sa.text("'GREEN'::status"),
         ),
     )
     op.create_table(

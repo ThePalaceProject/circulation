@@ -1,4 +1,6 @@
-import sys
+from __future__ import annotations
+
+import logging
 from abc import ABC
 from typing import Iterable, Optional, Tuple, Union
 
@@ -6,18 +8,15 @@ from sqlalchemy.orm.session import Session
 
 from core.config import IntegrationException
 from core.exceptions import BaseError
-from core.model import Collection, ExternalIntegration, Library, LicensePool, Patron
-from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.scripts import LibraryInputScript
+from core.model import Collection, Library, LicensePool, Patron
+from core.model.integration import IntegrationConfiguration
+from core.selftest import BaseHasSelfTests
 from core.selftest import HasSelfTests as CoreHasSelfTests
-from core.selftest import SelfTestResult
+from core.selftest import HasSelfTestsIntegrationConfiguration, SelfTestResult
 from core.util.problem_detail import ProblemDetail
 
-from .authenticator import LibraryAuthenticator
-from .circulation import CirculationAPI
 
-
-class HasSelfTests(CoreHasSelfTests, ABC):
+class HasPatronSelfTests(BaseHasSelfTests, ABC):
     """Circulation-specific enhancements for HasSelfTests.
 
     Circulation self-tests frequently need to test the ability to act
@@ -85,6 +84,8 @@ class HasSelfTests(CoreHasSelfTests, ABC):
         :raise: _NoValidLibrarySelfTestPatron when a valid patron is not found.
         """
         _db = _db or Session.object_session(library)
+        from .authenticator import LibraryAuthenticator
+
         library_authenticator = LibraryAuthenticator.from_config(_db, library)
         auth = library_authenticator.basic_auth_provider
         if auth is None:
@@ -114,69 +115,24 @@ class HasSelfTests(CoreHasSelfTests, ABC):
         raise cls._NoValidLibrarySelfTestPatron(message, detail=detail)
 
 
-class RunSelfTestsScript(LibraryInputScript):
-    """Run the self-tests for every collection in the given library
-    where that's possible.
-    """
-
-    def __init__(self, _db=None, output=sys.stdout):
-        super().__init__(_db)
-        self.out = output
-
-    def do_run(self, *args, **kwargs):
-        parsed = self.parse_command_line(self._db, *args, **kwargs)
-        for library in parsed.libraries:
-            api_map = CirculationAPI(self._db, library).default_api_map
-            api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
-            self.out.write("Testing %s\n" % library.name)
-            for collection in library.collections:
-                try:
-                    self.test_collection(collection, api_map)
-                except Exception as e:
-                    self.out.write("  Exception while running self-test: '%s'\n" % e)
-
-    def test_collection(self, collection, api_map, extra_args=None):
-        tester = api_map.get(collection.protocol)
-        if not tester:
-            self.out.write(
-                " Cannot find a self-test for %s, ignoring.\n" % collection.name
-            )
-            return
-
-        self.out.write(" Running self-test for %s.\n" % collection.name)
-        # Some HasSelfTests classes require extra arguments to their
-        # constructors.
-        extra_args = extra_args or {
-            OPDSImportMonitor: [OPDSImporter],
-        }
-        extra = extra_args.get(tester, [])
-        constructor_args = [self._db, collection] + list(extra)
-        results_dict, results_list = tester.run_self_tests(
-            self._db, None, *constructor_args
-        )
-        for result in results_list:
-            self.process_result(result)
-
-    def process_result(self, result):
-        """Process a single TestResult object."""
-        if result.success:
-            success = "SUCCESS"
-        else:
-            success = "FAILURE"
-        self.out.write(f"  {success} {result.name} ({result.duration:.1f}sec)\n")
-        if isinstance(result.result, (bytes, str)):
-            self.out.write("   Result: %s\n" % result.result)
-        if result.exception:
-            self.out.write("   Exception: '%s'\n" % result.exception)
+class HasSelfTests(CoreHasSelfTests, HasPatronSelfTests):
+    """Circulation specific self-tests, with the external integration paradigm"""
 
 
-class HasCollectionSelfTests(HasSelfTests):
+class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelfTests):
     """Extra tests to verify the integrity of imported
     collections of books.
 
     This is a mixin method that requires that `self.collection`
     point to the Collection to be tested.
     """
+
+    def integration(self, _db: Session) -> IntegrationConfiguration | None:
+        return self.collection.integration_configuration
+
+    @classmethod
+    def logger(cls) -> logging.Logger:
+        return logging.Logger(cls.__name__)
 
     def _no_delivery_mechanisms_test(self):
         # Find works in the tested collection that have no delivery

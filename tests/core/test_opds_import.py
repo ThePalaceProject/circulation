@@ -1,6 +1,6 @@
 import random
 from io import StringIO
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import patch
 
 import pytest
 import requests_mock
@@ -36,18 +36,8 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import (
-    ConfigurationFactory,
-    ConfigurationStorage,
-    ExternalIntegrationLink,
-    HasExternalIntegration,
-)
-from core.opds_import import (
-    OPDSImporter,
-    OPDSImporterConfiguration,
-    OPDSImportMonitor,
-    OPDSXMLParser,
-)
+from core.model.configuration import ExternalIntegrationLink
+from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.s3 import MockS3Uploader, S3Uploader, S3UploaderConfiguration
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
@@ -107,9 +97,11 @@ def opds_importer_fixture(
     data.feed_with_id_and_dcterms_identifier = opds_files_fixture.sample_data(
         "feed_with_id_and_dcterms_identifier.opds"
     )
-    db.default_collection().external_integration.setting(
-        "data_source"
-    ).value = DataSource.OA_CONTENT_SERVER
+    DatabaseTransactionFixture.set_settings(
+        db.default_collection().integration_configuration,
+        "data_source",
+        DataSource.OA_CONTENT_SERVER,
+    )
 
     return data
 
@@ -1077,9 +1069,11 @@ class TestOPDSImporter:
         book is imported and both DataSources are created.
         """
         feed = opds_files_fixture.sample_data("unrecognized_distributor.opds")
-        transaction.default_collection().external_integration.setting(
-            "data_source"
-        ).value = "some new source"
+        DatabaseTransactionFixture.set_settings(
+            transaction.default_collection().integration_configuration,
+            "data_source",
+            "some new source",
+        )
         importer = OPDSImporter(
             session,
             collection=transaction.default_collection(),
@@ -1123,9 +1117,11 @@ class TestOPDSImporter:
 
         feed = feed.replace("{OVERDRIVE ID}", edition.primary_identifier.identifier)
 
-        transaction.default_collection().external_integration.setting(
-            "data_source"
-        ).value = DataSource.OVERDRIVE
+        DatabaseTransactionFixture.set_settings(
+            transaction.default_collection().integration_configuration,
+            "data_source",
+            DataSource.OVERDRIVE,
+        )
         imported_editions, imported_pools, imported_works, failures = OPDSImporter(
             session,
             collection=transaction.default_collection(),
@@ -1262,9 +1258,11 @@ class TestOPDSImporter:
         # imported edition generates a meaningful error message.
 
         feed = data.content_server_mini_feed
-        transaction.default_collection().external_integration.setting(
-            "data_source"
-        ).value = DataSource.OA_CONTENT_SERVER
+        DatabaseTransactionFixture.set_settings(
+            transaction.default_collection().integration_configuration,
+            "data_source",
+            DataSource.OA_CONTENT_SERVER,
+        )
         importer = DoomedWorkOPDSImporter(
             session, collection=transaction.default_collection()
         )
@@ -1780,21 +1778,11 @@ class TestOPDSImporter:
             )
             library.collections.append(collection)
 
-            external_integration_association = create_autospec(
-                spec=HasExternalIntegration
+            DatabaseTransactionFixture.set_settings(
+                collection.integration_configuration,
+                "saml_wayfless_url_template",
+                "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}",
             )
-            external_integration_association.external_integration = MagicMock(
-                return_value=collection.external_integration
-            )
-            configuration_storage = ConfigurationStorage(
-                external_integration_association
-            )
-            configuration_factory = ConfigurationFactory()
-
-            with configuration_factory.create(
-                configuration_storage, session, OPDSImporterConfiguration
-            ) as configuration:
-                configuration.wayfless_url_template = "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}"
 
             imported_editions, pools, works, failures = OPDSImporter(
                 session, collection=collection
@@ -2373,7 +2361,7 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        db.default_collection().external_integration.protocol = (
+        db.default_collection().integration_configuration.protocol = (
             ExternalIntegration.OVERDRIVE
         )
         with pytest.raises(ValueError) as excinfo:
@@ -2383,10 +2371,12 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        db.default_collection().external_integration.protocol = (
+        db.default_collection().integration_configuration.protocol = (
             ExternalIntegration.OPDS_IMPORT
         )
-        db.default_collection().external_integration.setting("data_source").value = None
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration, "data_source", None
+        )
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
         assert "Collection Default Collection has no associated data source." in str(
@@ -2823,21 +2813,13 @@ class TestOPDSImportMonitor:
         feed = data.content_server_mini_feed
         feed_url = "https://example.com/feed.opds"
 
-        # First, we need to override the default value of "Max retry count" configuration setting.
-        external_integration_association = create_autospec(spec=HasExternalIntegration)
-        external_integration_association.external_integration = MagicMock(
-            return_value=transaction.default_collection().external_integration
-        )
-        configuration_storage = ConfigurationStorage(external_integration_association)
-        configuration_factory = ConfigurationFactory()
-
-        with configuration_factory.create(
-            configuration_storage, session, OPDSImporterConfiguration
-        ) as configuration:
-            configuration.max_retry_count = retry_count
-
         # After we overrode the value of configuration setting we can instantiate OPDSImportMonitor.
         # It'll load new "Max retry count"'s value from the database.
+        DatabaseTransactionFixture.set_settings(
+            transaction.default_collection().integration_configuration,
+            "connection_max_retry_count",
+            retry_count,
+        )
         monitor = OPDSImportMonitor(
             session,
             collection=transaction.default_collection(),

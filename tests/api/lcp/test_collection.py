@@ -6,15 +6,9 @@ import pytest
 from freezegun import freeze_time
 
 from api.lcp.collection import LCPAPI, LCPFulfilmentInfo
-from api.lcp.encrypt import LCPEncryptionConfiguration
-from api.lcp.server import LCPServer, LCPServerConfiguration
+from api.lcp.server import LCPServer, LCPServerConstants
 from core.model import DataSource, ExternalIntegration
-from core.model.configuration import (
-    ConfigurationAttribute,
-    ConfigurationFactory,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from core.model.configuration import HasExternalIntegration
 from core.util.datetime_helpers import utc_now
 from tests.api.lcp import lcp_strings
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -30,8 +24,6 @@ class LCPAPIFixture:
         integration_association.external_integration = MagicMock(
             return_value=self.integration
         )
-        self.configuration_storage = ConfigurationStorage(integration_association)
-        self.configuration_factory = ConfigurationFactory()
 
 
 @pytest.fixture(scope="function")
@@ -40,337 +32,6 @@ def lcp_api_fixture(db: DatabaseTransactionFixture) -> LCPAPIFixture:
 
 
 class TestLCPAPI:
-    def test_settings(self):
-        # Assert
-        assert len(LCPAPI.SETTINGS) == 12
-
-        # lcpserver_url
-        assert (
-            LCPAPI.SETTINGS[0][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.lcpserver_url.key
-        )
-        assert (
-            LCPAPI.SETTINGS[0][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.lcpserver_url.label
-        )
-        assert (
-            LCPAPI.SETTINGS[0][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.lcpserver_url.description
-        )
-        assert LCPAPI.SETTINGS[0][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[0][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.lcpserver_url.required
-        )
-        assert (
-            LCPAPI.SETTINGS[0][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.lcpserver_url.default
-        )
-        assert (
-            LCPAPI.SETTINGS[0][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.lcpserver_url.category
-        )
-
-        # lcpserver_user
-        assert (
-            LCPAPI.SETTINGS[1][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.lcpserver_user.key
-        )
-        assert (
-            LCPAPI.SETTINGS[1][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.lcpserver_user.label
-        )
-        assert (
-            LCPAPI.SETTINGS[1][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.lcpserver_user.description
-        )
-        assert LCPAPI.SETTINGS[1][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[1][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.lcpserver_user.required
-        )
-        assert (
-            LCPAPI.SETTINGS[1][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.lcpserver_user.default
-        )
-        assert (
-            LCPAPI.SETTINGS[1][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.lcpserver_user.category
-        )
-
-        # lcpserver_password
-        assert (
-            LCPAPI.SETTINGS[2][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.lcpserver_password.key
-        )
-        assert (
-            LCPAPI.SETTINGS[2][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.lcpserver_password.label
-        )
-        assert (
-            LCPAPI.SETTINGS[2][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.lcpserver_password.description
-        )
-        assert LCPAPI.SETTINGS[2][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[2][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.lcpserver_password.required
-        )
-        assert (
-            LCPAPI.SETTINGS[2][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.lcpserver_password.default
-        )
-        assert (
-            LCPAPI.SETTINGS[2][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.lcpserver_password.category
-        )
-
-        # lcpserver_input_directory
-        assert (
-            LCPAPI.SETTINGS[3][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.lcpserver_input_directory.key
-        )
-        assert (
-            LCPAPI.SETTINGS[3][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.lcpserver_input_directory.label
-        )
-        assert (
-            LCPAPI.SETTINGS[3][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.lcpserver_input_directory.description
-        )
-        assert LCPAPI.SETTINGS[3][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[3][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.lcpserver_input_directory.required
-        )
-        assert (
-            LCPAPI.SETTINGS[3][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.lcpserver_input_directory.default
-        )
-        assert (
-            LCPAPI.SETTINGS[3][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.lcpserver_input_directory.category
-        )
-
-        # lcpserver_page_size
-        assert (
-            LCPAPI.SETTINGS[4][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.lcpserver_page_size.key
-        )
-        assert (
-            LCPAPI.SETTINGS[4][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.lcpserver_page_size.label
-        )
-        assert (
-            LCPAPI.SETTINGS[4][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.lcpserver_page_size.description
-        )
-        assert LCPAPI.SETTINGS[4][ConfigurationAttribute.TYPE.value] == "number"
-        assert (
-            LCPAPI.SETTINGS[4][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.lcpserver_page_size.required
-        )
-        assert (
-            LCPAPI.SETTINGS[4][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.lcpserver_page_size.default
-        )
-        assert (
-            LCPAPI.SETTINGS[4][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.lcpserver_page_size.category
-        )
-
-        # provider_name
-        assert (
-            LCPAPI.SETTINGS[5][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.provider_name.key
-        )
-        assert (
-            LCPAPI.SETTINGS[5][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.provider_name.label
-        )
-        assert (
-            LCPAPI.SETTINGS[5][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.provider_name.description
-        )
-        assert LCPAPI.SETTINGS[5][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[5][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.provider_name.required
-        )
-        assert (
-            LCPAPI.SETTINGS[5][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.provider_name.default
-        )
-        assert (
-            LCPAPI.SETTINGS[5][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.provider_name.category
-        )
-
-        # passphrase_hint
-        assert (
-            LCPAPI.SETTINGS[6][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.passphrase_hint.key
-        )
-        assert (
-            LCPAPI.SETTINGS[6][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.passphrase_hint.label
-        )
-        assert (
-            LCPAPI.SETTINGS[6][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.passphrase_hint.description
-        )
-        assert LCPAPI.SETTINGS[6][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[6][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.passphrase_hint.required
-        )
-        assert (
-            LCPAPI.SETTINGS[6][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.passphrase_hint.default
-        )
-        assert (
-            LCPAPI.SETTINGS[6][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.passphrase_hint.category
-        )
-
-        # encryption_algorithm
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.encryption_algorithm.key
-        )
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.encryption_algorithm.label
-        )
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.encryption_algorithm.description
-        )
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.TYPE.value]
-            == LCPServerConfiguration.encryption_algorithm.type.value
-        )
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.encryption_algorithm.required
-        )
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.encryption_algorithm.default
-        )
-        assert (
-            LCPAPI.SETTINGS[7][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.encryption_algorithm.category
-        )
-
-        # max_printable_pages
-        assert (
-            LCPAPI.SETTINGS[8][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.max_printable_pages.key
-        )
-        assert (
-            LCPAPI.SETTINGS[8][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.max_printable_pages.label
-        )
-        assert (
-            LCPAPI.SETTINGS[8][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.max_printable_pages.description
-        )
-        assert LCPAPI.SETTINGS[8][ConfigurationAttribute.TYPE.value] == "number"
-        assert (
-            LCPAPI.SETTINGS[8][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.max_printable_pages.required
-        )
-        assert (
-            LCPAPI.SETTINGS[8][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.max_printable_pages.default
-        )
-        assert (
-            LCPAPI.SETTINGS[8][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.max_printable_pages.category
-        )
-
-        # max_copiable_pages
-        assert (
-            LCPAPI.SETTINGS[9][ConfigurationAttribute.KEY.value]
-            == LCPServerConfiguration.max_copiable_pages.key
-        )
-        assert (
-            LCPAPI.SETTINGS[9][ConfigurationAttribute.LABEL.value]
-            == LCPServerConfiguration.max_copiable_pages.label
-        )
-        assert (
-            LCPAPI.SETTINGS[9][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPServerConfiguration.max_copiable_pages.description
-        )
-        assert LCPAPI.SETTINGS[9][ConfigurationAttribute.TYPE.value] == "number"
-        assert (
-            LCPAPI.SETTINGS[9][ConfigurationAttribute.REQUIRED.value]
-            == LCPServerConfiguration.max_copiable_pages.required
-        )
-        assert (
-            LCPAPI.SETTINGS[9][ConfigurationAttribute.DEFAULT.value]
-            == LCPServerConfiguration.max_copiable_pages.default
-        )
-        assert (
-            LCPAPI.SETTINGS[9][ConfigurationAttribute.CATEGORY.value]
-            == LCPServerConfiguration.max_copiable_pages.category
-        )
-
-        # lcpencrypt_location
-        assert (
-            LCPAPI.SETTINGS[10][ConfigurationAttribute.KEY.value]
-            == LCPEncryptionConfiguration.lcpencrypt_location.key
-        )
-        assert (
-            LCPAPI.SETTINGS[10][ConfigurationAttribute.LABEL.value]
-            == LCPEncryptionConfiguration.lcpencrypt_location.label
-        )
-        assert (
-            LCPAPI.SETTINGS[10][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPEncryptionConfiguration.lcpencrypt_location.description
-        )
-        assert LCPAPI.SETTINGS[10][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[10][ConfigurationAttribute.REQUIRED.value]
-            == LCPEncryptionConfiguration.lcpencrypt_location.required
-        )
-        assert (
-            LCPAPI.SETTINGS[10][ConfigurationAttribute.DEFAULT.value]
-            == LCPEncryptionConfiguration.lcpencrypt_location.default
-        )
-        assert (
-            LCPAPI.SETTINGS[10][ConfigurationAttribute.CATEGORY.value]
-            == LCPEncryptionConfiguration.lcpencrypt_location.category
-        )
-
-        # lcpencrypt_output_directory
-        assert (
-            LCPAPI.SETTINGS[11][ConfigurationAttribute.KEY.value]
-            == LCPEncryptionConfiguration.lcpencrypt_output_directory.key
-        )
-        assert (
-            LCPAPI.SETTINGS[11][ConfigurationAttribute.LABEL.value]
-            == LCPEncryptionConfiguration.lcpencrypt_output_directory.label
-        )
-        assert (
-            LCPAPI.SETTINGS[11][ConfigurationAttribute.DESCRIPTION.value]
-            == LCPEncryptionConfiguration.lcpencrypt_output_directory.description
-        )
-        assert LCPAPI.SETTINGS[11][ConfigurationAttribute.TYPE.value] == None
-        assert (
-            LCPAPI.SETTINGS[11][ConfigurationAttribute.REQUIRED.value]
-            == LCPEncryptionConfiguration.lcpencrypt_output_directory.required
-        )
-        assert (
-            LCPAPI.SETTINGS[11][ConfigurationAttribute.DEFAULT.value]
-            == LCPEncryptionConfiguration.lcpencrypt_output_directory.default
-        )
-        assert (
-            LCPAPI.SETTINGS[11][ConfigurationAttribute.CATEGORY.value]
-            == LCPEncryptionConfiguration.lcpencrypt_output_directory.category
-        )
-
     @freeze_time("2020-01-01 00:00:00")
     def test_checkout_without_existing_loan(self, lcp_api_fixture):
         # Arrange
@@ -395,50 +56,60 @@ class TestLCPAPI:
         lcp_server_mock = create_autospec(spec=LCPServer)
         lcp_server_mock.generate_license = MagicMock(return_value=lcp_license)
 
-        with lcp_api_fixture.configuration_factory.create(
-            lcp_api_fixture.configuration_storage,
-            lcp_api_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
+        configuration = lcp_api_fixture.lcp_collection.integration_configuration
 
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
-                lcp_server_constructor.return_value = lcp_server_mock
+        with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            lcp_server_constructor.return_value = lcp_server_mock
 
-                configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-                configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-                configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-                configuration.lcpserver_input_directory = (
-                    lcp_strings.LCPSERVER_INPUT_DIRECTORY
-                )
-                configuration.provider_name = lcp_strings.PROVIDER_NAME
-                configuration.passphrase_hint = lcp_strings.TEXT_HINT
-                configuration.encryption_algorithm = (
-                    LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-                )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "lcpserver_input_directory",
+                lcp_strings.LCPSERVER_INPUT_DIRECTORY,
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "provider_name", lcp_strings.PROVIDER_NAME
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "encryption_algorithm",
+                LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+            )
 
-                # Act
-                loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
+            # Act
+            loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
 
-                # Assert
-                assert loan.collection_id == lcp_api_fixture.lcp_collection.id
-                assert (
-                    loan.collection(lcp_api_fixture.db.session)
-                    == lcp_api_fixture.lcp_collection
-                )
-                assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
-                assert loan.data_source_name == data_source_name
-                assert loan.identifier_type == license_pool.identifier.type
-                assert loan.external_identifier == lcp_license["id"]
-                assert loan.start_date == start_date
-                assert loan.end_date == end_date
+            # Assert
+            assert loan.collection_id == lcp_api_fixture.lcp_collection.id
+            assert (
+                loan.collection(lcp_api_fixture.db.session)
+                == lcp_api_fixture.lcp_collection
+            )
+            assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
+            assert loan.data_source_name == data_source_name
+            assert loan.identifier_type == license_pool.identifier.type
+            assert loan.external_identifier == lcp_license["id"]
+            assert loan.start_date == start_date
+            assert loan.end_date == end_date
 
-                lcp_server_mock.generate_license.assert_called_once_with(
-                    lcp_api_fixture.db.session,
-                    lcp_strings.CONTENT_ID,
-                    patron,
-                    start_date,
-                    end_date,
-                )
+            lcp_server_mock.generate_license.assert_called_once_with(
+                lcp_api_fixture.db.session,
+                lcp_strings.CONTENT_ID,
+                patron,
+                start_date,
+                end_date,
+            )
 
     @freeze_time("2020-01-01 00:00:00")
     def test_checkout_with_existing_loan(self, lcp_api_fixture):
@@ -467,45 +138,55 @@ class TestLCPAPI:
 
         license_pool.loan_to(patron, external_identifier=loan_identifier)
 
-        with lcp_api_fixture.configuration_factory.create(
-            lcp_api_fixture.configuration_storage,
-            lcp_api_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
-                lcp_server_constructor.return_value = lcp_server_mock
+        configuration = lcp_api_fixture.lcp_collection.integration_configuration
+        with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            lcp_server_constructor.return_value = lcp_server_mock
 
-                configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-                configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-                configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-                configuration.lcpserver_input_directory = (
-                    lcp_strings.LCPSERVER_INPUT_DIRECTORY
-                )
-                configuration.provider_name = lcp_strings.PROVIDER_NAME
-                configuration.passphrase_hint = lcp_strings.TEXT_HINT
-                configuration.encryption_algorithm = (
-                    LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-                )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "lcpserver_input_directory",
+                lcp_strings.LCPSERVER_INPUT_DIRECTORY,
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "provider_name", lcp_strings.PROVIDER_NAME
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "encryption_algorithm",
+                LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+            )
 
-                # Act
-                loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
+            # Act
+            loan = lcp_api.checkout(patron, "pin", license_pool, "internal format")
 
-                # Assert
-                assert loan.collection_id == lcp_api_fixture.lcp_collection.id
-                assert (
-                    loan.collection(lcp_api_fixture.db.session)
-                    == lcp_api_fixture.lcp_collection
-                )
-                assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
-                assert loan.data_source_name == data_source_name
-                assert loan.identifier_type == license_pool.identifier.type
-                assert loan.external_identifier == loan_identifier
-                assert loan.start_date == start_date
-                assert loan.end_date == end_date
+            # Assert
+            assert loan.collection_id == lcp_api_fixture.lcp_collection.id
+            assert (
+                loan.collection(lcp_api_fixture.db.session)
+                == lcp_api_fixture.lcp_collection
+            )
+            assert loan.license_pool(lcp_api_fixture.db.session) == license_pool
+            assert loan.data_source_name == data_source_name
+            assert loan.identifier_type == license_pool.identifier.type
+            assert loan.external_identifier == loan_identifier
+            assert loan.start_date == start_date
+            assert loan.end_date == end_date
 
-                lcp_server_mock.get_license.assert_called_once_with(
-                    lcp_api_fixture.db.session, loan_identifier, patron
-                )
+            lcp_server_mock.get_license.assert_called_once_with(
+                lcp_api_fixture.db.session, loan_identifier, patron
+            )
 
     @freeze_time("2020-01-01 00:00:00")
     def test_fulfil(self, lcp_api_fixture):
@@ -528,57 +209,64 @@ class TestLCPAPI:
         lcp_server_mock = create_autospec(spec=LCPServer)
         lcp_server_mock.get_license = MagicMock(return_value=lcp_license)
 
-        with lcp_api_fixture.configuration_factory.create(
-            lcp_api_fixture.configuration_storage,
-            lcp_api_fixture.db.session,
-            LCPServerConfiguration,
-        ) as configuration:
-            with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
-                lcp_server_constructor.return_value = lcp_server_mock
+        configuration = lcp_api_fixture.lcp_collection.integration_configuration
+        with patch("api.lcp.collection.LCPServer") as lcp_server_constructor:
+            lcp_server_constructor.return_value = lcp_server_mock
 
-                configuration.lcpserver_url = lcp_strings.LCPSERVER_URL
-                configuration.lcpserver_user = lcp_strings.LCPSERVER_USER
-                configuration.lcpserver_password = lcp_strings.LCPSERVER_PASSWORD
-                configuration.lcpserver_input_directory = (
-                    lcp_strings.LCPSERVER_INPUT_DIRECTORY
-                )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_url", lcp_strings.LCPSERVER_URL
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_user", lcp_strings.LCPSERVER_USER
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "lcpserver_password", lcp_strings.LCPSERVER_PASSWORD
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "lcpserver_input_directory",
+                lcp_strings.LCPSERVER_INPUT_DIRECTORY,
+            )
 
-                configuration.provider_name = lcp_strings.PROVIDER_NAME
-                configuration.passphrase_hint = lcp_strings.TEXT_HINT
-                configuration.encryption_algorithm = (
-                    LCPServerConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
-                )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "provider_name", lcp_strings.PROVIDER_NAME
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration, "passphrase_hint", lcp_strings.TEXT_HINT
+            )
+            DatabaseTransactionFixture.set_settings(
+                configuration,
+                "encryption_algorithm",
+                LCPServerConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+            )
 
-                # Act
-                license_pool.loan_to(
-                    patron,
-                    start=today,
-                    end=expires,
-                    external_identifier=lcp_license["id"],
-                )
-                fulfilment_info = lcp_api.fulfill(
-                    patron, "pin", license_pool, "internal format"
-                )
+            # Act
+            license_pool.loan_to(
+                patron,
+                start=today,
+                end=expires,
+                external_identifier=lcp_license["id"],
+            )
+            fulfilment_info = lcp_api.fulfill(
+                patron, "pin", license_pool, "internal format"
+            )
 
-                # Assert
-                assert isinstance(fulfilment_info, LCPFulfilmentInfo) == True
-                assert (
-                    fulfilment_info.collection_id == lcp_api_fixture.lcp_collection.id
-                )
-                assert (
-                    fulfilment_info.collection(lcp_api_fixture.db.session)
-                    == lcp_api_fixture.lcp_collection
-                )
-                assert (
-                    fulfilment_info.license_pool(lcp_api_fixture.db.session)
-                    == license_pool
-                )
-                assert fulfilment_info.data_source_name == data_source_name
-                assert fulfilment_info.identifier_type == license_pool.identifier.type
+            # Assert
+            assert isinstance(fulfilment_info, LCPFulfilmentInfo) == True
+            assert fulfilment_info.collection_id == lcp_api_fixture.lcp_collection.id
+            assert (
+                fulfilment_info.collection(lcp_api_fixture.db.session)
+                == lcp_api_fixture.lcp_collection
+            )
+            assert (
+                fulfilment_info.license_pool(lcp_api_fixture.db.session) == license_pool
+            )
+            assert fulfilment_info.data_source_name == data_source_name
+            assert fulfilment_info.identifier_type == license_pool.identifier.type
 
-                lcp_server_mock.get_license.assert_called_once_with(
-                    lcp_api_fixture.db.session, lcp_license["id"], patron
-                )
+            lcp_server_mock.get_license.assert_called_once_with(
+                lcp_api_fixture.db.session, lcp_license["id"], patron
+            )
 
     def test_patron_activity_returns_correct_result(self, lcp_api_fixture):
         # Arrange

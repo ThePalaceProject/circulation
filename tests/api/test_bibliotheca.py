@@ -187,11 +187,11 @@ class TestBibliothecaAPI:
     def test_full_url(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         id = bibliotheca_fixture.api.library_id
         assert (
-            "http://bibliotheca.test/cirrus/library/%s/foo" % id
+            "https://partner.yourcloudlibrary.com/cirrus/library/%s/foo" % id
             == bibliotheca_fixture.api.full_url("foo")
         )
         assert (
-            "http://bibliotheca.test/cirrus/library/%s/foo" % id
+            "https://partner.yourcloudlibrary.com/cirrus/library/%s/foo" % id
             == bibliotheca_fixture.api.full_url("/foo")
         )
 
