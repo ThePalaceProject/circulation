@@ -297,7 +297,7 @@ class Collection(Base, HasSessionCache):
     @hybrid_property
     def primary_identifier_source(self):
         """Identify if should try to use another identifier than <id>"""
-        return self.integration_configuration.get(
+        return self.integration_configuration.settings.get(
             ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
         )
 
@@ -354,7 +354,7 @@ class Collection(Base, HasSessionCache):
             config = self.integration_configuration
 
         if config:
-            return config.get(key)
+            return config.settings.get(key)
 
     DEFAULT_RESERVATION_PERIOD_KEY = "default_reservation_period"
     STANDARD_DEFAULT_RESERVATION_PERIOD = 3
@@ -371,7 +371,9 @@ class Collection(Base, HasSessionCache):
         check it out before it goes to the next person in line.
         """
         return (
-            self.integration_configuration.get(self.DEFAULT_RESERVATION_PERIOD_KEY)
+            self.integration_configuration.settings.get(
+                self.DEFAULT_RESERVATION_PERIOD_KEY
+            )
             or self.STANDARD_DEFAULT_RESERVATION_PERIOD
         )
 
@@ -392,7 +394,9 @@ class Collection(Base, HasSessionCache):
 
         :return: Default audience
         """
-        return self.integration_configuration.get(self.DEFAULT_AUDIENCE_KEY)
+        return (
+            self.integration_configuration.settings.get(self.DEFAULT_AUDIENCE_KEY) or ""
+        )
 
     @default_audience.setter
     def default_audience(self, new_value: str) -> None:
@@ -511,7 +515,7 @@ class Collection(Base, HasSessionCache):
         data_source = None
         name = ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL.get(self.protocol)
         if not name:
-            name = self.integration_configuration.get(
+            name = self.integration_configuration.settings.get(
                 Collection.DATA_SOURCE_NAME_SETTING
             )
         _db = Session.object_session(self)
@@ -693,7 +697,7 @@ class Collection(Base, HasSessionCache):
         if self.external_account_id:
             lines.append('External account ID: "%s"' % self.external_account_id)
         for name in sorted(integration.settings):
-            value = integration[name]
+            value = integration.settings[name]
             if (
                 include_secrets or not ConfigurationSetting._is_secret(name)
             ) and value is not None:

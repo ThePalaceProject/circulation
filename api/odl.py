@@ -1359,7 +1359,6 @@ class SharedODLLibrarySettings(BaseSettings):
 
 class SharedODLAPI(
     BaseCirculationAPI[SharedODLSettings, SharedODLLibrarySettings],
-    HasLibraryIntegrationConfiguration,
 ):
     """An API for circulation managers to use to connect to an ODL collection that's shared
     by another circulation manager.
@@ -1447,7 +1446,7 @@ class SharedODLAPI(
         _db = Session.object_session(patron)
         collection = self.collection(_db)
         config = collection.integration_configuration
-        shared_secret = config.for_library(patron.library.id).get(
+        shared_secret = config.for_library(patron.library.id).settings.get(
             ExternalIntegration.PASSWORD
         )
         if not shared_secret:

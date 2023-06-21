@@ -121,7 +121,7 @@ class SimplifiedOPDSLookup:
             config = config.for_library(library.id)
         if config is None:
             return None
-        return cls(config["url"])
+        return cls(config.settings["url"])
 
     def __init__(self, base_url):
         if not base_url.endswith("/"):
@@ -177,7 +177,7 @@ class BaseOPDSImporterSettings(BaseSettings):
         form=ConfigurationFormItem(label=_("Data source name"), required=True)
     )
 
-    default_audience: Optional[str] = FormField(
+    default_audience: str = FormField(
         default=NO_DEFAULT_AUDIENCE,
         form=ConfigurationFormItem(
             label=_("Default audience"),

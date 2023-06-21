@@ -16,17 +16,7 @@ if TYPE_CHECKING:
     from core.model import Collection, Library
 
 
-class SettingsModel:
-    """A dict like interface for any item with a settings property"""
-
-    def get(self, key: str, *args: Any) -> Any:
-        return self.settings.get(key, *args)  # type: ignore[attr-defined]
-
-    def __getitem__(self, key: str) -> Any:
-        return self.settings[key]  # type: ignore[attr-defined]
-
-
-class IntegrationConfiguration(Base, SettingsModel):
+class IntegrationConfiguration(Base):
     """
     Integration Configuration
 
@@ -108,7 +98,7 @@ class IntegrationConfiguration(Base, SettingsModel):
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
 
 
-class IntegrationLibraryConfiguration(Base, SettingsModel):
+class IntegrationLibraryConfiguration(Base):
     """
     Integration Library Configuration
 

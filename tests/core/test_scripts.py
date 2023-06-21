@@ -1243,10 +1243,10 @@ class TestConfigureCollectionScript:
         # The collection was created and configured properly.
         collection = get_one(db.session, Collection)
         assert "New Collection" == collection.name
-        assert "url" == collection.integration_configuration["url"]
+        assert "url" == collection.integration_configuration.settings["url"]
         assert "acctid" == collection.external_account_id
-        assert "username" == collection.integration_configuration["username"]
-        assert "password" == collection.integration_configuration["password"]
+        assert "username" == collection.integration_configuration.settings["username"]
+        assert "password" == collection.integration_configuration.settings["password"]
 
         # Two libraries now have access to the collection.
         assert [collection] == l1.collections
@@ -1255,7 +1255,7 @@ class TestConfigureCollectionScript:
 
         # One CollectionSetting was set on the collection, in addition
         # to url, username, and password.
-        setting = collection.integration_configuration.get("library_id")
+        setting = collection.integration_configuration.settings.get("library_id")
         assert "1234" == setting
 
         # The output explains the collection settings.
@@ -1285,7 +1285,7 @@ class TestConfigureCollectionScript:
 
         # The collection has been changed.
         db.session.refresh(collection.integration_configuration)
-        assert "foo" == collection.integration_configuration.get("url")
+        assert "foo" == collection.integration_configuration.settings.get("url")
         assert ExternalIntegration.BIBLIOTHECA == collection.protocol
 
         expect = (

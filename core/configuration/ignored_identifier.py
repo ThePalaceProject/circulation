@@ -44,20 +44,20 @@ class IgnoredIdentifierImporterMixin:
 
     def __init__(self, *args, **kargs) -> None:
         super().__init__(*args, **kargs)
-        self._ignored_identifier_types: Optional[Union[Set[str], tuple]] = None
+        self._ignored_identifier_types: Optional[Union[Set[str], list]] = None
 
     def _get_ignored_identifier_types(
         self, configuration: IntegrationConfiguration
-    ) -> Union[Set[str], tuple]:
+    ) -> Union[Set[str], list]:
         """Return a set of ignored identifier types.
         :return: Set of ignored identifier types
         """
         if self._ignored_identifier_types is None:
-            self._ignored_identifier_types = configuration.get(
+            self._ignored_identifier_types = configuration.settings.get(
                 "ignored_identifier_types", []
             )
 
-        return self._ignored_identifier_types
+        return self._ignored_identifier_types  # type: ignore[return-value]
 
     def set_ignored_identifier_types(
         self,

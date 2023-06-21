@@ -298,8 +298,9 @@ class OverdriveCoreAPI(
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
             parent_integration = collection.parent.integration_configuration
+            parent_config = self.settings_class()(**parent_integration.settings)
             for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
-                parent_value = parent_integration.get(key)
+                parent_value = getattr(parent_config, key, None)
                 setattr(self._configuration, key, parent_value)
         else:
             self.parent_library_id = None
@@ -400,7 +401,7 @@ class OverdriveCoreAPI(
         config = self.integration_configuration().for_library(library.id)
         if not config:
             return self.ILS_NAME_DEFAULT
-        return config.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
+        return config.settings.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
 
     @property
     def advantage_library_id(self):

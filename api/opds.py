@@ -191,11 +191,11 @@ class CirculationManagerAnnotator(Annotator):
         # information _might_ contain a set of prioritized DRM schemes and
         # content types.
         prioritized_drm_schemes: list[str] = (
-            config.get(FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY) or []
+            config.settings.get(FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY) or []
         )
 
         content_setting: List[str] = (
-            config.get(FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY) or []
+            config.settings.get(FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY) or []
         )
         return prioritized_drm_schemes, content_setting
 
@@ -212,7 +212,7 @@ class CirculationManagerAnnotator(Annotator):
         # LCP content. By default, if no configuration value is specified, then
         # the priority of LCP content will be left completely unchanged.
 
-        _prioritize: bool = config.get(
+        _prioritize: bool = config.settings.get(
             FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, False
         )
         return _prioritize

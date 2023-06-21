@@ -1,30 +1,7 @@
-import pytest
-
 from core.integration.goals import Goals
 from core.model import create
 from core.model.integration import IntegrationConfiguration
 from tests.fixtures.database import DatabaseTransactionFixture
-
-
-class TestSettingsModel:
-    def test_get_items(self, db: DatabaseTransactionFixture):
-        config, _ = create(
-            db.session,
-            IntegrationConfiguration,
-            goal=Goals.LICENSE_GOAL,
-            protocol="protocol",
-            name="Config Name",
-        )
-        config.settings = dict(key="key", value="value")
-        db.session.commit()
-
-        # Basic retrieval
-        assert config.get("key") == "key"
-        assert config["value"] == "value"
-        # Non existant keys
-        assert config.get("no-such-key") == None
-        assert config.get("no-such-key", "n/a") == "n/a"
-        assert pytest.raises(KeyError, lambda: config["no-such-key"]).value is not None
 
 
 class TestIntegrationConfigurations:
