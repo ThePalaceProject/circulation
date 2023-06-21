@@ -4,6 +4,7 @@ import logging
 import time
 
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 
 from core.analytics import Analytics
 from core.integration.base import HasLibraryIntegrationConfiguration
@@ -49,12 +50,10 @@ class EnkiConstants:
 
 
 class EnkiSettings(BaseSettings):
-    url: Optional[str] = FormField(
+    url: HttpUrl = FormField(
         default=EnkiConstants.PRODUCTION_BASE_URL,
         form=ConfigurationFormItem(
             label=_("URL"),
-            required=True,
-            format="url",
         ),
     )
 

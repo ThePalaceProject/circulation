@@ -53,7 +53,9 @@ class TestEnkiAPI:
     def test_constructor(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
         # The constructor must be given an Enki collection.
-        collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        collection = db.collection(
+            protocol=ExternalIntegration.OVERDRIVE, url="http://test.enki.url"
+        )
         with pytest.raises(ValueError) as excinfo:
             EnkiAPI(db.session, collection)
         assert "Collection protocol is Overdrive, but passed into EnkiAPI!" in str(

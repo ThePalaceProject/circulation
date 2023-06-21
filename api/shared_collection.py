@@ -4,7 +4,7 @@ import logging
 from typing import List
 
 from flask_babel import lazy_gettext as _
-from pydantic import PositiveInt
+from pydantic import HttpUrl, PositiveInt
 
 from core.config import CannotLoadConfiguration
 from core.integration.settings import (
@@ -221,7 +221,7 @@ class SharedCollectionAPI:
 
 
 class BaseSharedCollectionSettings(BaseSettings):
-    external_library_urls: Optional[List[str]] = FormField(
+    external_library_urls: Optional[List[HttpUrl]] = FormField(
         form=ConfigurationFormItem(
             label=_(
                 "URLs for libraries on other circulation managers that use this collection"
@@ -230,7 +230,6 @@ class BaseSharedCollectionSettings(BaseSettings):
                 "A URL should include the library's short name (e.g. https://circulation.librarysimplified.org/NYNYPL/), even if it is the only library on the circulation manager."
             ),
             type=ConfigurationFormItemType.LIST,
-            format="url",
         )
     )
     ebook_loan_duration: Optional[PositiveInt] = FormField(

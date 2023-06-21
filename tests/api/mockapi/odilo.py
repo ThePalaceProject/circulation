@@ -40,7 +40,7 @@ class MockOdiloAPI(OdiloAPI):
         config.settings = {
             "username": "a",
             "password": "b",
-            OdiloAPI.LIBRARY_API_BASE_URL: "http://library_api_base_url/api/v2",
+            OdiloAPI.LIBRARY_API_BASE_URL: "http://library_api_base_url.test/api/v2",
         }
         config.for_library(library.id, create=True)
         library.collections.append(collection)

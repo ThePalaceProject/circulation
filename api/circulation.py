@@ -562,6 +562,7 @@ class BaseCirculationAPIProtocol(BaseCirculationAPIIntegrationProtocol):
 
 class BaseCirculationAPI(
     HasLibraryIntegrationConfiguration,
+    BaseCirculationAPIProtocol,
     CirculationConfigurationMixin[SettingsType, LibrarySettingsType],
     Generic[SettingsType, LibrarySettingsType],
 ):

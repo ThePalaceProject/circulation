@@ -13,7 +13,7 @@ import sqlalchemy
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from pydantic import PositiveInt
+from pydantic import HttpUrl, PositiveInt
 from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
 
@@ -78,14 +78,13 @@ class ODLAPIConstants:
 
 
 class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
-    external_account_id: Optional[str] = FormField(
+    external_account_id: Optional[HttpUrl] = FormField(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         form=ConfigurationFormItem(
             label=_("ODL feed URL"),
             description="",
             type=ConfigurationFormItemType.TEXT,
             required=True,
-            format="url",
         ),
     )
 
@@ -141,7 +140,7 @@ class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
         ),
     )
 
-    passphrase_hint_url: str = FormField(
+    passphrase_hint_url: HttpUrl = FormField(
         default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT_URL,
         form=ConfigurationFormItem(
             label=_("Passphrase hint URL"),
@@ -149,7 +148,6 @@ class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
                 "Hint URL available to the user when opening an LCP protected publication."
             ),
             type=ConfigurationFormItemType.TEXT,
-            format="url",
             required=True,
         ),
     )

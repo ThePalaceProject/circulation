@@ -51,10 +51,6 @@ def upgrade() -> None:
             connection, integration
         )
 
-        if "IGNORED_IDENTIFIER_TYPE" in settings_dict.keys():
-            value = settings_dict.pop("IGNORED_IDENTIFIER_TYPE")
-            settings_dict["ignored_identifier_types"] = value
-
         # License type integrations take their external_account_id data from the collection.
         # The configurationsetting for it seems to be unused, so we take the value from the collection
         collection = connection.execute(

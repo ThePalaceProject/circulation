@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Type, cast
+from typing import Dict, Type
 
 from api.circulation import BaseCirculationAPIProtocol
 from core.integration.goals import Goals
@@ -24,7 +24,7 @@ class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
         from core.opds2_import import OPDS2Importer
         from core.opds_import import OPDSImporter
 
-        apis = {
+        apis: Dict[str, Type[BaseCirculationAPIProtocol]] = {
             ExternalIntegration.OVERDRIVE: OverdriveAPI,
             ExternalIntegration.ODILO: OdiloAPI,
             ExternalIntegration.BIBLIOTHECA: BibliothecaAPI,
@@ -40,4 +40,4 @@ class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
         }
 
         for name, api in apis.items():
-            self.register(cast(Type[BaseCirculationAPIProtocol], api), canonical=name)
+            self.register(api, canonical=name)

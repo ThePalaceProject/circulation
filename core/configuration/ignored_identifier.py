@@ -18,6 +18,7 @@ ALL_IGNORED_IDENTIFIER_TYPES = {
 
 class IgnoredIdentifierSettings(BaseSettings):
     ignored_identifier_types: Optional[List[IdentifierType]] = FormField(
+        alias="IGNORED_IDENTIFIER_TYPE",
         default=[],
         form=ConfigurationFormItem(
             label=_("List of identifiers that will be skipped"),

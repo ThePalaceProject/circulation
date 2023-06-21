@@ -29,7 +29,7 @@ class LCPEncryptionConstants:
 
 
 class LCPEncryptionSettings(BaseSettings):
-    lcpencrypt_location: Optional[str] = FormField(
+    lcpencrypt_location: str = FormField(
         default=LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION,
         form=ConfigurationFormItem(
             label=_("lcpencrypt's location"),

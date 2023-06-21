@@ -5,6 +5,7 @@ import logging
 
 import isbnlib
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
 from core.analytics import Analytics
@@ -313,14 +314,13 @@ class OdiloRepresentationExtractor:
 
 
 class OdiloSettings(BaseSettings):
-    library_api_base_url: str = FormField(
+    library_api_base_url: HttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("Library API base URL"),
             description=_(
                 "This might look like <code>https://[library].odilo.us/api/v2</code>."
             ),
             required=True,
-            format="url",
         )
     )
     username: str = FormField(

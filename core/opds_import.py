@@ -10,10 +10,11 @@ import dateutil
 import feedparser
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import HttpUrl
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
-from api.circulation import CirculationConfigurationMixin
+from api.circulation import BaseCirculationAPIProtocol, CirculationConfigurationMixin
 from api.selftest import HasCollectionSelfTests
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.goals import Goals
@@ -165,11 +166,10 @@ class OPDSXMLParser(XMLParser):
 class BaseOPDSImporterSettings(BaseSettings):
     NO_DEFAULT_AUDIENCE = ""
 
-    external_account_id: Optional[str] = FormField(
+    external_account_id: Optional[HttpUrl] = FormField(
         form=ConfigurationFormItem(
             label=_("URL"),
             required=True,
-            format="url",
         )
     )
 
@@ -256,7 +256,11 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
-class OPDSImporter(HasLibraryIntegrationConfiguration, CirculationConfigurationMixin):
+class OPDSImporter(
+    HasLibraryIntegrationConfiguration,
+    BaseCirculationAPIProtocol,
+    CirculationConfigurationMixin,
+):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
