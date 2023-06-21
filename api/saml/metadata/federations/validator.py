@@ -1,11 +1,12 @@
 import datetime
 import logging
 from abc import ABCMeta
+from typing import Union
 
-import six
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
+from api.saml.metadata.federations.model import SAMLFederation
 from core.exceptions import BaseError
 from core.util.datetime_helpers import from_timestamp, utc_now
 
@@ -14,8 +15,7 @@ class SAMLFederatedMetadataValidationError(BaseError):
     """Raised in the case of any errors happened during SAML metadata validation."""
 
 
-@six.add_metaclass(ABCMeta)
-class SAMLFederatedMetadataValidator(object):
+class SAMLFederatedMetadataValidator(metaclass=ABCMeta):
     """Base class for all validators checking correctness of SAML federated metadata."""
 
     def validate(self, federation, metadata):
@@ -45,7 +45,7 @@ class SAMLFederatedMetadataValidatorChain(SAMLFederatedMetadataValidator):
         for validator in validators:
             if not isinstance(validator, SAMLFederatedMetadataValidator):
                 raise ValueError(
-                    "Argument 'validators' must contain only instances of {0} class".format(
+                    "Argument 'validators' must contain only instances of {} class".format(
                         SAMLFederatedMetadataValidator
                     )
                 )
@@ -92,28 +92,29 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
 
         return parsed_date_time
 
-    def validate(self, federation, metadata):
+    def validate(self, federation: SAMLFederation, metadata: Union[str, bytes]) -> None:
         """Verify that federated SAML metadata has not expired.
 
         :param federation: SAML federation
-        :type federation: api.saml.metadata.federations.model.SAMLFederation
 
         :param metadata: SAML federation's aggregated metadata
-        :type metadata: str
 
         :raises SAMLFederatedMetadataValidationError: in the case of validation errors
         """
         self._logger.info(
-            "Started validating the expiration time of the metadata belonging to {0}".format(
+            "Started validating the expiration time of the metadata belonging to {}".format(
                 federation
             )
         )
 
+        if isinstance(metadata, str):
+            metadata = metadata.encode()
+
         try:
-            root = fromstring(metadata.encode("utf-8"))
+            root = fromstring(metadata)
         except Exception as exception:
             raise SAMLFederatedMetadataValidationError(
-                "Metadata's XML is not valid", str(exception)
+                "Metadata's XML is not valid", exception
             )
 
         if "EntitiesDescriptor" not in root.tag:
@@ -133,7 +134,7 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
         if valid_until < now and (now - valid_until) > self.MAX_CLOCK_SKEW:
             raise SAMLFederatedMetadataValidationError(
                 "Metadata has already expired. "
-                '"validUntil" is {0} while the current time is {1}'.format(
+                '"validUntil" is {} while the current time is {}'.format(
                     valid_until, now
                 )
             )
@@ -141,13 +142,13 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
         if valid_until > now and (valid_until - now) > self.MAX_VALID_TIME:
             raise SAMLFederatedMetadataValidationError(
                 "Expiration time is unexpectedly far into the future. "
-                '"validUntil" is {0} while the current time is {1}'.format(
+                '"validUntil" is {} while the current time is {}'.format(
                     valid_until, now
                 )
             )
 
         self._logger.info(
-            "Finished validating the expiration time of the metadata belonging to {0}".format(
+            "Finished validating the expiration time of the metadata belonging to {}".format(
                 federation
             )
         )
@@ -172,7 +173,7 @@ class SAMLMetadataSignatureValidator(SAMLFederatedMetadataValidator):
         :raises SAMLFederatedMetadataValidationError: in the case of validation errors
         """
         self._logger.info(
-            "Started verifying the validity of the metadata's signature belonging to {0}".format(
+            "Started verifying the validity of the metadata's signature belonging to {}".format(
                 federation
             )
         )
@@ -182,12 +183,10 @@ class SAMLMetadataSignatureValidator(SAMLFederatedMetadataValidator):
                 metadata, federation.certificate, raise_exceptions=True
             )
         except Exception as exception:
-            raise SAMLFederatedMetadataValidationError(
-                six.ensure_text(str(exception)), exception
-            )
+            raise SAMLFederatedMetadataValidationError(str(exception), exception)
 
         self._logger.info(
-            "Finished verifying the validity of the metadata's signature belonging to {0}".format(
+            "Finished verifying the validity of the metadata's signature belonging to {}".format(
                 federation
             )
         )

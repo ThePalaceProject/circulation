@@ -2,24 +2,21 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
+from api.admin.controller import SettingsController
 from api.admin.problem_details import *
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import ExternalIntegration, get_one
-from core.opds_import import MetadataWranglerOPDSLookup
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 
-from . import SitewideRegistrationController
 
-
-class MetadataServicesController(SitewideRegistrationController):
+class MetadataServicesController(SettingsController):
     def __init__(self, manager):
-        super(MetadataServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.provider_apis = [
             NYTBestSellerAPI,
             NoveListAPI,
-            MetadataWranglerOPDSLookup,
         ]
 
         self.protocols = self._get_integration_protocols(
@@ -55,12 +52,7 @@ class MetadataServicesController(SitewideRegistrationController):
         )
 
     def find_protocol_class(self, integration):
-        if integration.protocol == ExternalIntegration.METADATA_WRANGLER:
-            return (
-                MetadataWranglerOPDSLookup,
-                (MetadataWranglerOPDSLookup.from_config, self._db),
-            )
-        elif integration.protocol == ExternalIntegration.NYT:
+        if integration.protocol == ExternalIntegration.NYT:
             return (NYTBestSellerAPI, (NYTBestSellerAPI.from_config, self._db))
         elif integration.protocol == ExternalIntegration.NOVELIST:
             return (NoveListAPI, (NoveListAPI.from_config, self._db))
@@ -101,13 +93,6 @@ class MetadataServicesController(SitewideRegistrationController):
             self._db.rollback()
             return protocol_error
 
-        wrangler_error = self.register_with_metadata_wrangler(
-            do_get, do_post, is_new, service
-        )
-        if isinstance(wrangler_error, ProblemDetail):
-            self._db.rollback()
-            return wrangler_error
-
         service.name = name
 
         if is_new:
@@ -134,17 +119,6 @@ class MetadataServicesController(SitewideRegistrationController):
         wrong_format = self.validate_formats()
         if wrong_format:
             return wrong_format
-
-    def register_with_metadata_wrangler(self, do_get, do_post, is_new, service):
-        """Register this site with the Metadata Wrangler."""
-
-        if (
-            is_new or not service.password
-        ) and service.protocol == ExternalIntegration.METADATA_WRANGLER:
-
-            return self.process_sitewide_registration(
-                integration=service, do_get=do_get, do_post=do_post
-            )
 
     def process_delete(self, service_id):
         return self._delete_integration(service_id, self.goal)

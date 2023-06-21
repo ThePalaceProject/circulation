@@ -1,7 +1,12 @@
+from typing import Optional
+
+
 class BaseError(Exception):
     """Base class for all errors"""
 
-    def __init__(self, message=None, inner_exception=None):
+    def __init__(
+        self, message: Optional[str] = None, inner_exception: Optional[Exception] = None
+    ):
         """Initializes a new instance of BaseError class
 
         :param message: String containing description of the error occurred
@@ -10,7 +15,7 @@ class BaseError(Exception):
         if inner_exception and not message:
             message = str(inner_exception)
 
-        super(BaseError, self).__init__(message)
+        super().__init__(message)
 
         self._inner_exception = str(inner_exception) if inner_exception else None
 
@@ -18,22 +23,18 @@ class BaseError(Exception):
         return hash(str(self))
 
     @property
-    def inner_exception(self):
+    def inner_exception(self) -> Optional[str]:
         """Returns an inner exception
 
         :return: Inner exception
-        :rtype: Exception
         """
         return self._inner_exception
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """Compares two BaseError objects
 
         :param other: BaseError object
-        :type other: BaseError
-
         :return: Boolean value indicating whether two items are equal
-        :rtype: bool
         """
         if not isinstance(other, BaseError):
             return False
@@ -41,6 +42,34 @@ class BaseError(Exception):
         return str(self) == str(other)
 
     def __repr__(self):
-        return "<BaseError(message={0}, inner_exception={1})>".format(
+        return "<BaseError(message={}, inner_exception={})>".format(
             (self), self.inner_exception
         )
+
+
+class IntegrationException(Exception):
+    """An exception that happens when the site's connection to a
+    third-party service is broken.
+
+    This may be because communication failed
+    (RemoteIntegrationException), or because local configuration is
+    missing or obviously wrong (CannotLoadConfiguration).
+    """
+
+    def __init__(self, message, debug_message=None):
+        """Constructor.
+
+        :param message: The normal message passed to any Exception
+        constructor.
+
+        :param debug_message: An extra human-readable explanation of the
+        problem, shown to admins but not to patrons. This may include
+        instructions on what bits of the integration configuration might need
+        to be changed.
+
+        For example, an API key might be wrong, or the API key might
+        be correct but the API provider might not have granted that
+        key enough permissions.
+        """
+        super().__init__(message)
+        self.debug_message = debug_message

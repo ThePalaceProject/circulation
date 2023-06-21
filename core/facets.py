@@ -1,7 +1,7 @@
 from flask_babel import lazy_gettext as _
 
 
-class FacetConstants(object):
+class FacetConstants:
 
     # A special constant, basically an additional rel, indicating that
     # an OPDS facet group represents different entry points into a
@@ -112,7 +112,7 @@ class FacetConstants(object):
         COLLECTION_FACET_GROUP_NAME: COLLECTION_FULL,
     }
 
-    SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME = {
+    SORT_ORDER_TO_OPENSEARCH_FIELD_NAME = {
         ORDER_TITLE: "sort_title",
         ORDER_AUTHOR: "sort_author",
         ORDER_LAST_UPDATE: "last_update_time",

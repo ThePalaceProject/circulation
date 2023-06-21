@@ -6,7 +6,7 @@ from textblob.exceptions import MissingCorpusError
 from core.util.summary import SummaryEvaluator
 
 
-class TestSummaryEvaluator(object):
+class TestSummaryEvaluator:
     def _best(self, *summaries):
         e = SummaryEvaluator()
         for s in summaries:

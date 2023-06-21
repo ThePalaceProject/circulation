@@ -1,12 +1,13 @@
 import datetime
 import json
-import os
+from typing import Callable
+from unittest.mock import patch
 
 import pytest
 
+import core.opds_import
 from api.circulation_exceptions import *
 from api.opds_for_distributors import (
-    MockOPDSForDistributorsAPI,
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
     OPDSForDistributorsReaperMonitor,
@@ -25,33 +26,79 @@ from core.model import (
     Representation,
     RightsStatus,
 )
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
+from tests.api.mockapi.opds_for_distributors import MockOPDSForDistributorsAPI
+from tests.fixtures.api_opds_dist_files import OPDSForDistributorsFilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class BaseOPDSForDistributorsTest(object):
-    base_path = os.path.split(__file__)[0]
-    resource_path = os.path.join(base_path, "files", "opds_for_distributors")
+@pytest.fixture()
+def authentication_document() -> Callable[[str], str]:
+    """Returns a method that computes an authentication document."""
 
-    @classmethod
-    def get_data(cls, filename):
-        path = os.path.join(cls.resource_path, filename)
-        return open(path).read()
+    def _auth_doc(without_links=False) -> str:
+        """Returns an authentication document.
+
+        :param without_links: Whether or not to include an authenticate link.
+        """
+        links = (
+            {
+                "links": [
+                    {
+                        "rel": "authenticate",
+                        "href": "http://authenticate",
+                    }
+                ],
+            }
+            if not without_links
+            else {}
+        )
+        doc = {
+            "authentication": [
+                {
+                    **{"type": "http://opds-spec.org/auth/oauth/client_credentials"},
+                    **links,  # type: ignore
+                },
+            ]
+        }
+        return json.dumps(doc)
+
+    return _auth_doc
 
 
-class TestOPDSForDistributorsAPI(DatabaseTest):
-    def setup_method(self):
-        super(TestOPDSForDistributorsAPI, self).setup_method()
-        self.collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
-        self.api = MockOPDSForDistributorsAPI(self._db, self.collection)
+class OPDSForDistributorsAPIFixture:
+    def __init__(
+        self, db: DatabaseTransactionFixture, files: OPDSForDistributorsFilesFixture
+    ):
+        self.db = db
+        self.collection = MockOPDSForDistributorsAPI.mock_collection(db.session)
+        self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
+        self.files = files
 
-    def test_external_integration(self):
-        assert self.collection.external_integration == self.api.external_integration(
-            self._db
+
+@pytest.fixture(scope="function")
+def opds_dist_api_fixture(
+    db: DatabaseTransactionFixture,
+    api_opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
+) -> OPDSForDistributorsAPIFixture:
+    return OPDSForDistributorsAPIFixture(db, api_opds_dist_files_fixture)
+
+
+class TestOPDSForDistributorsAPI:
+    def test_external_integration(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
+        assert (
+            opds_dist_api_fixture.collection.external_integration
+            == opds_dist_api_fixture.api.external_integration(
+                opds_dist_api_fixture.db.session
+            )
         )
 
-    def test__run_self_tests(self):
+    def test__run_self_tests(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
         """The self-test for OPDSForDistributorsAPI just tries to negotiate
         a fulfillment token.
         """
@@ -65,17 +112,19 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
                 return "a token"
 
         api = Mock()
-        [result] = api._run_self_tests(self._db)
-        assert self._db == api.called_with
+        [result] = api._run_self_tests(opds_dist_api_fixture.db.session)
+        assert opds_dist_api_fixture.db.session == api.called_with
         assert "Negotiate a fulfillment token" == result.name
         assert True == result.success
         assert "a token" == result.result
 
-    def test_supported_media_types(self):
+    def test_supported_media_types(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
         # If the default client supports media type X with the
         # BEARER_TOKEN access control scheme, then X is a supported
         # media type for an OPDS For Distributors collection.
-        supported = self.api.SUPPORTED_MEDIA_TYPES
+        supported = opds_dist_api_fixture.api.SUPPORTED_MEDIA_TYPES
         for (format, drm) in DeliveryMechanism.default_client_can_fulfill_lookup:
             if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None:
                 assert format in supported
@@ -85,16 +134,20 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         # items with this media type will _not_ be imported.
         assert MediaTypes.JPEG_MEDIA_TYPE not in supported
 
-    def test_can_fulfill_without_loan(self):
+    def test_can_fulfill_without_loan(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
         """A book made available through OPDS For Distributors can be
         fulfilled with no underlying loan, if its delivery mechanism
         uses bearer token fulfillment.
         """
         patron = object()
-        pool = self._licensepool(edition=None, collection=self.collection)
+        pool = opds_dist_api_fixture.db.licensepool(
+            edition=None, collection=opds_dist_api_fixture.collection
+        )
         [lpdm] = pool.delivery_mechanisms
 
-        m = self.api.can_fulfill_without_loan
+        m = opds_dist_api_fixture.api.can_fulfill_without_loan
 
         # No LicensePoolDeliveryMechanism -> False
         assert False == m(patron, pool, None)
@@ -120,152 +173,193 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         lpdm.delivery_mechanism.drm_scheme = DeliveryMechanism.BEARER_TOKEN
         assert True == m(patron, pool, lpdm)
 
-    def test_get_token_success(self):
+    def test_get_token_success(
+        self,
+        authentication_document,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+    ):
         # The API hasn't been used yet, so it will need to find the auth
         # document and authenticate url.
         feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
-        self.api.queue_response(200, content=feed)
-        auth_doc = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                        "links": [
-                            {
-                                "rel": "authenticate",
-                                "href": "http://authenticate",
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        self.api.queue_response(200, content=auth_doc)
-        token = self._str
-        token_response = json.dumps({"access_token": token, "expires_in": 60})
-        self.api.queue_response(200, content=token_response)
 
-        assert token == self.api._get_token(self._db).credential
+        opds_dist_api_fixture.api.queue_response(200, content=feed)
+        opds_dist_api_fixture.api.queue_response(200, content=authentication_document())
+        token = opds_dist_api_fixture.db.fresh_str()
+        token_response = json.dumps({"access_token": token, "expires_in": 60})
+        opds_dist_api_fixture.api.queue_response(200, content=token_response)
+
+        assert (
+            token
+            == opds_dist_api_fixture.api._get_token(
+                opds_dist_api_fixture.db.session
+            ).credential
+        )
 
         # Now that the API has the authenticate url, it only needs
         # to get the token.
-        self.api.queue_response(200, content=token_response)
-        assert token == self.api._get_token(self._db).credential
+        opds_dist_api_fixture.api.queue_response(200, content=token_response)
+        assert (
+            token
+            == opds_dist_api_fixture.api._get_token(
+                opds_dist_api_fixture.db.session
+            ).credential
+        )
 
         # A credential was created.
-        [credential] = self._db.query(Credential).all()
+        [credential] = opds_dist_api_fixture.db.session.query(Credential).all()
         assert token == credential.credential
 
         # If we call _get_token again, it uses the existing credential.
-        assert token == self.api._get_token(self._db).credential
+        assert (
+            token
+            == opds_dist_api_fixture.api._get_token(
+                opds_dist_api_fixture.db.session
+            ).credential
+        )
 
-        self._db.delete(credential)
+        opds_dist_api_fixture.db.session.delete(credential)
 
         # Create a new API that doesn't have an auth url yet.
-        self.api = MockOPDSForDistributorsAPI(self._db, self.collection)
+        opds_dist_api_fixture.api = MockOPDSForDistributorsAPI(
+            opds_dist_api_fixture.db.session, opds_dist_api_fixture.collection
+        )
 
         # This feed requires authentication and returns the auth document.
-        auth_doc = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                        "links": [
-                            {
-                                "rel": "authenticate",
-                                "href": "http://authenticate",
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        self.api.queue_response(401, content=auth_doc)
-        token = self._str
+        opds_dist_api_fixture.api.queue_response(401, content=authentication_document())
+        token = opds_dist_api_fixture.db.fresh_str()
         token_response = json.dumps({"access_token": token, "expires_in": 60})
-        self.api.queue_response(200, content=token_response)
+        opds_dist_api_fixture.api.queue_response(200, content=token_response)
 
-        assert token == self.api._get_token(self._db).credential
+        assert (
+            token
+            == opds_dist_api_fixture.api._get_token(
+                opds_dist_api_fixture.db.session
+            ).credential
+        )
 
-    def test_get_token_errors(self):
+    def test_credentials_for_multiple_collections(
+        self,
+        authentication_document,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+    ):
+        # We should end up with distinct credentials for each collection.
+        # We have an existing credential from the collection
+        # [credential1] = opds_dist_api_fixture.db.session.query(Credential).all()
+        # assert credential1.collection_id is not None
+
+        feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
+
+        # Getting a token for a collection should result in a cached credential.
+        collection1 = MockOPDSForDistributorsAPI.mock_collection(
+            opds_dist_api_fixture.db.session, name="Collection 1"
+        )
+        api1 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection1)
+        token1 = opds_dist_api_fixture.db.fresh_str()
+        token1_response = json.dumps({"access_token": token1, "expires_in": 60})
+        api1.queue_response(200, content=feed)
+        api1.queue_response(200, content=authentication_document())
+        api1.queue_response(200, content=token1_response)
+        credential1 = api1._get_token(opds_dist_api_fixture.db.session)
+        all_credentials = opds_dist_api_fixture.db.session.query(Credential).all()
+
+        assert token1 == credential1.credential
+        assert credential1.collection_id == collection1.id
+        assert 1 == len(all_credentials)
+
+        # Getting a token for a second collection should result in an
+        # additional cached credential.
+        collection2 = MockOPDSForDistributorsAPI.mock_collection(
+            opds_dist_api_fixture.db.session, name="Collection 2"
+        )
+        api2 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection2)
+        token2 = opds_dist_api_fixture.db.fresh_str()
+        token2_response = json.dumps({"access_token": token2, "expires_in": 60})
+        api2.queue_response(200, content=feed)
+        api2.queue_response(200, content=authentication_document())
+        api2.queue_response(200, content=token2_response)
+
+        credential2 = api2._get_token(opds_dist_api_fixture.db.session)
+        all_credentials = opds_dist_api_fixture.db.session.query(Credential).all()
+
+        assert token2 == credential2.credential
+        assert credential2.collection_id == collection2.id
+
+        # Both credentials should now be present.
+        assert 2 == len(all_credentials)
+        assert credential1 != credential2
+        assert credential1 in all_credentials
+        assert credential2 in all_credentials
+        assert token1 != token2
+
+    def test_get_token_errors(
+        self,
+        authentication_document,
+        opds_dist_api_fixture: OPDSForDistributorsAPIFixture,
+    ):
         no_auth_document = "<feed></feed>"
-        self.api.queue_response(200, content=no_auth_document)
+        opds_dist_api_fixture.api.queue_response(200, content=no_auth_document)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            self.api._get_token(self._db)
+            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert "No authentication document link found in http://opds" in str(
             excinfo.value
         )
 
         feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
-        self.api.queue_response(200, content=feed)
+        opds_dist_api_fixture.api.queue_response(200, content=feed)
         auth_doc_without_client_credentials = json.dumps({"authentication": []})
-        self.api.queue_response(200, content=auth_doc_without_client_credentials)
+        opds_dist_api_fixture.api.queue_response(
+            200, content=auth_doc_without_client_credentials
+        )
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            self.api._get_token(self._db)
+            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert (
             "Could not find any credential-based authentication mechanisms in http://authdoc"
             in str(excinfo.value)
         )
 
-        self.api.queue_response(200, content=feed)
-        auth_doc_without_links = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                    }
-                ]
-            }
+        # If our authentication document doesn't have a `rel="authenticate"` link
+        # then we will not be able to fetch a token, so should raise and exception.
+        opds_dist_api_fixture.api.queue_response(200, content=feed)
+        opds_dist_api_fixture.api.queue_response(
+            200, content=authentication_document(without_links=True)
         )
-        self.api.queue_response(200, content=auth_doc_without_links)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            self.api._get_token(self._db)
+            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert "Could not find any authentication links in http://authdoc" in str(
             excinfo.value
         )
 
-        self.api.queue_response(200, content=feed)
-        auth_doc = json.dumps(
-            {
-                "authentication": [
-                    {
-                        "type": "http://opds-spec.org/auth/oauth/client_credentials",
-                        "links": [
-                            {
-                                "rel": "authenticate",
-                                "href": "http://authenticate",
-                            }
-                        ],
-                    }
-                ]
-            }
-        )
-        self.api.queue_response(200, content=auth_doc)
+        opds_dist_api_fixture.api.queue_response(200, content=feed)
+        opds_dist_api_fixture.api.queue_response(200, content=authentication_document())
         token_response = json.dumps({"error": "unexpected error"})
-        self.api.queue_response(200, content=token_response)
+        opds_dist_api_fixture.api.queue_response(200, content=token_response)
         with pytest.raises(LibraryAuthorizationFailedException) as excinfo:
-            self.api._get_token(self._db)
+            opds_dist_api_fixture.api._get_token(opds_dist_api_fixture.db.session)
         assert (
             'Document retrieved from http://authenticate is not a bearer token: {"error": "unexpected error"}'
             in str(excinfo.value)
         )
 
-    def test_checkin(self):
+    def test_checkin(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
         # The patron has two loans, one from this API's collection and
         # one from a different collection.
-        patron = self._patron()
+        patron = opds_dist_api_fixture.db.patron()
 
-        data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
-        edition, pool = self._edition(
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        edition, pool = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             data_source_name=data_source.name,
             with_license_pool=True,
-            collection=self.collection,
+            collection=opds_dist_api_fixture.collection,
         )
         pool.loan_to(patron)
 
-        other_collection = self._collection(protocol=ExternalIntegration.OVERDRIVE)
-        other_edition, other_pool = self._edition(
+        other_collection = opds_dist_api_fixture.db.collection(
+            protocol=ExternalIntegration.OVERDRIVE
+        )
+        other_edition, other_pool = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
@@ -273,31 +367,33 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         )
         other_pool.loan_to(patron)
 
-        assert 2 == self._db.query(Loan).count()
+        assert 2 == opds_dist_api_fixture.db.session.query(Loan).count()
 
-        self.api.checkin(patron, "1234", pool)
+        opds_dist_api_fixture.api.checkin(patron, "1234", pool)
 
         # The loan from this API's collection has been deleted.
         # The loan from the other collection wasn't touched.
-        assert 1 == self._db.query(Loan).count()
-        [loan] = self._db.query(Loan).all()
+        assert 1 == opds_dist_api_fixture.db.session.query(Loan).count()
+        [loan] = opds_dist_api_fixture.db.session.query(Loan).all()
         assert other_pool == loan.license_pool
 
-    def test_checkout(self):
-        patron = self._patron()
+    def test_checkout(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
+        patron = opds_dist_api_fixture.db.patron()
 
-        data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
-        edition, pool = self._edition(
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        edition, pool = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             data_source_name=data_source.name,
             with_license_pool=True,
-            collection=self.collection,
+            collection=opds_dist_api_fixture.collection,
         )
 
-        loan_info = self.api.checkout(
+        loan_info = opds_dist_api_fixture.api.checkout(
             patron, "1234", pool, Representation.EPUB_MEDIA_TYPE
         )
-        assert self.collection.id == loan_info.collection_id
+        assert opds_dist_api_fixture.collection.id == loan_info.collection_id
         assert data_source.name == loan_info.data_source_name
         assert Identifier.URI == loan_info.identifier_type
         assert pool.identifier.identifier == loan_info.identifier
@@ -309,21 +405,23 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         # The loan is of indefinite duration.
         assert None == loan_info.end_date
 
-    def test_fulfill(self):
-        patron = self._patron()
+    def test_fulfill(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
+        patron = opds_dist_api_fixture.db.patron()
 
-        data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
-        edition, pool = self._edition(
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        edition, pool = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             data_source_name=data_source.name,
             with_license_pool=True,
-            collection=self.collection,
+            collection=opds_dist_api_fixture.collection,
         )
         # This pool doesn't have an acquisition link, so
         # we can't fulfill it yet.
         pytest.raises(
             CannotFulfill,
-            self.api.fulfill,
+            opds_dist_api_fixture.api.fulfill,
             patron,
             "1234",
             pool,
@@ -331,7 +429,7 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         )
 
         # Set up an epub acquisition link for the pool.
-        url = self._url
+        url = opds_dist_api_fixture.db.fresh_url()
         link, ignore = pool.identifier.add_link(
             Hyperlink.GENERIC_OPDS_ACQUISITION,
             url,
@@ -347,16 +445,16 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
 
         # Set the API's auth url so it doesn't have to get it -
         # that's tested in test_get_token.
-        self.api.auth_url = "http://auth"
+        opds_dist_api_fixture.api.auth_url = "http://auth"
 
         token_response = json.dumps({"access_token": "token", "expires_in": 60})
-        self.api.queue_response(200, content=token_response)
+        opds_dist_api_fixture.api.queue_response(200, content=token_response)
 
         fulfillment_time = utc_now()
-        fulfillment_info = self.api.fulfill(
+        fulfillment_info = opds_dist_api_fixture.api.fulfill(
             patron, "1234", pool, Representation.EPUB_MEDIA_TYPE
         )
-        assert self.collection.id == fulfillment_info.collection_id
+        assert opds_dist_api_fixture.collection.id == fulfillment_info.collection_id
         assert data_source.name == fulfillment_info.data_source_name
         assert Identifier.URI == fulfillment_info.identifier_type
         assert pool.identifier.identifier == fulfillment_info.identifier
@@ -380,30 +478,36 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
             < 5
         )
 
-    def test_patron_activity(self):
+    def test_patron_activity(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
         # The patron has two loans from this API's collection and
         # one from a different collection.
-        patron = self._patron()
+        patron = opds_dist_api_fixture.db.patron()
 
-        data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
-        e1, p1 = self._edition(
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        e1, p1 = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             data_source_name=data_source.name,
             with_license_pool=True,
-            collection=self.collection,
+            collection=opds_dist_api_fixture.collection,
         )
         p1.loan_to(patron)
 
-        e2, p2 = self._edition(
+        e2, p2 = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             data_source_name=data_source.name,
             with_license_pool=True,
-            collection=self.collection,
+            collection=opds_dist_api_fixture.collection,
         )
         p2.loan_to(patron)
 
-        other_collection = self._collection(protocol=ExternalIntegration.OVERDRIVE)
-        e3, p3 = self._edition(
+        other_collection = opds_dist_api_fixture.db.collection(
+            protocol=ExternalIntegration.OVERDRIVE
+        )
+        e3, p3 = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
@@ -411,35 +515,35 @@ class TestOPDSForDistributorsAPI(DatabaseTest):
         )
         p3.loan_to(patron)
 
-        activity = self.api.patron_activity(patron, "1234")
+        activity = opds_dist_api_fixture.api.patron_activity(patron, "1234")
         assert 2 == len(activity)
         [l1, l2] = activity
-        assert l1.collection_id == self.collection.id
-        assert l2.collection_id == self.collection.id
-        assert set([l1.identifier, l2.identifier]) == set(
-            [p1.identifier.identifier, p2.identifier.identifier]
+        assert l1.collection_id == opds_dist_api_fixture.collection.id
+        assert l2.collection_id == opds_dist_api_fixture.collection.id
+        assert {l1.identifier, l2.identifier} == {
+            p1.identifier.identifier,
+            p2.identifier.identifier,
+        }
+
+
+class TestOPDSForDistributorsImporter:
+    def test_import(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
+        feed = opds_dist_api_fixture.files.sample_data("biblioboard_mini_feed.opds")
+
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        collection = MockOPDSForDistributorsAPI.mock_collection(
+            opds_dist_api_fixture.db.session
+        )
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
         )
 
-
-class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest):
-    def test_import(self):
-        feed = self.get_data("biblioboard_mini_feed.opds")
-
-        data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
-        collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
-        collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
-        )
-
-        class MockMetadataClient(object):
-            def canonicalize_author_name(self, identifier, working_display_name):
-                return working_display_name
-
-        metadata_client = MockMetadataClient()
         importer = OPDSForDistributorsImporter(
-            self._db,
+            opds_dist_api_fixture.db.session,
             collection=collection,
-            metadata_client=metadata_client,
         )
 
         (
@@ -504,7 +608,9 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
             == southern_acquisition_url
         )
 
-    def test__add_format_data(self):
+    def test__add_format_data(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
 
         # Mock SUPPORTED_MEDIA_TYPES for purposes of test.
         api = OPDSForDistributorsAPI
@@ -545,10 +651,77 @@ class TestOPDSForDistributorsImporter(DatabaseTest, BaseOPDSForDistributorsTest)
         # Undo the mock of SUPPORTED_MEDIA_TYPES.
         api.SUPPORTED_MEDIA_TYPES = old_value
 
+    def test_update_work_for_edition_returns_correct_license_pool(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
+        # If there are two or more collections, `update_work_for_edition`
+        # should return the license pool for the right one.
+        data_source_name = "BiblioBoard"
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, data_source_name, autocreate=True
+        )
 
-class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributorsTest):
-    def test_reaper(self):
-        feed = self.get_data("biblioboard_mini_feed.opds")
+        def setup_collection(*, name: str, datasource: DataSource) -> Collection:
+            collection = MockOPDSForDistributorsAPI.mock_collection(
+                opds_dist_api_fixture.db.session, name=name
+            )
+            DatabaseTransactionFixture.set_settings(
+                collection.integration_configuration,
+                **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
+            )
+            return collection
+
+        collection1 = setup_collection(name="Test Collection 1", datasource=data_source)
+        collection2 = setup_collection(name="Test Collection 2", datasource=data_source)
+
+        work = opds_dist_api_fixture.db.work(
+            with_license_pool=False,
+            collection=collection1,
+            data_source_name=data_source_name,
+        )
+        edition = work.presentation_edition
+
+        collection1_lp = opds_dist_api_fixture.db.licensepool(
+            edition=edition, collection=collection1, set_edition_as_presentation=True
+        )
+        collection2_lp = opds_dist_api_fixture.db.licensepool(
+            edition=edition, collection=collection2, set_edition_as_presentation=True
+        )
+        importer1 = OPDSForDistributorsImporter(
+            opds_dist_api_fixture.db.session,
+            collection=collection1,
+        )
+        importer2 = OPDSForDistributorsImporter(
+            opds_dist_api_fixture.db.session,
+            collection=collection2,
+        )
+
+        with patch(
+            "core.opds_import.get_one", wraps=core.opds_import.get_one
+        ) as get_one_mock:
+            importer1_lp, _ = importer1.update_work_for_edition(edition)
+            importer2_lp, _ = importer2.update_work_for_edition(edition)
+
+        # Ensure distinct collections.
+        assert collection1_lp != collection2_lp
+        assert collection1_lp.collection.name == "Test Collection 1"
+        assert collection2_lp.collection.name == "Test Collection 2"
+
+        # The license pool returned to the importer should be the
+        # same one originally created for a given collection.
+        assert collection1_lp == importer1_lp
+        assert collection2_lp == importer2_lp
+
+        # With OPDS for Distributors imports, `update_work_for_edition`
+        # should include `collection` in the license pool lookup criteria.
+        assert 2 == len(get_one_mock.call_args_list)
+        for call_args in get_one_mock.call_args_list:
+            assert "collection" in call_args.kwargs
+
+
+class TestOPDSForDistributorsReaperMonitor:
+    def test_reaper(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
+        feed = opds_dist_api_fixture.files.sample_data("biblioboard_mini_feed.opds")
 
         class MockOPDSForDistributorsReaperMonitor(OPDSForDistributorsReaperMonitor):
             """An OPDSForDistributorsReaperMonitor that overrides _get."""
@@ -556,17 +729,24 @@ class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributors
             def _get(self, url, headers):
                 return (200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, feed)
 
-        data_source = DataSource.lookup(self._db, "Biblioboard", autocreate=True)
-        collection = MockOPDSForDistributorsAPI.mock_collection(self._db)
-        collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, data_source.name
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        collection = MockOPDSForDistributorsAPI.mock_collection(
+            opds_dist_api_fixture.db.session
+        )
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
         )
         monitor = MockOPDSForDistributorsReaperMonitor(
-            self._db, collection, OPDSForDistributorsImporter, metadata_client=object()
+            opds_dist_api_fixture.db.session,
+            collection,
+            OPDSForDistributorsImporter,
         )
 
         # There's a license pool in the database that isn't in the feed anymore.
-        edition, now_gone = self._edition(
+        edition, now_gone = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             data_source_name=data_source.name,
             with_license_pool=True,
@@ -575,7 +755,7 @@ class TestOPDSForDistributorsReaperMonitor(DatabaseTest, BaseOPDSForDistributors
         now_gone.licenses_owned = 1
         now_gone.licenses_available = 1
 
-        edition, still_there = self._edition(
+        edition, still_there = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             identifier_id="urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952",
             data_source_name=data_source.name,

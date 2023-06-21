@@ -1,22 +1,16 @@
+from __future__ import annotations
+
 import datetime
 import json
-import os
+from typing import TYPE_CHECKING, Callable
 
 import pytest
 
-from api.authenticator import BasicAuthenticationProvider
 from api.circulation import FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import *
-from api.enki import (
-    BibliographicParser,
-    EnkiAPI,
-    EnkiCollectionReaper,
-    EnkiImport,
-    MockEnkiAPI,
-)
+from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
 from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
-    ConfigurationSetting,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -29,63 +23,83 @@ from core.model import (
     Subject,
     Work,
 )
-from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import RemoteIntegrationException, RequestTimedOut
+from tests.api.mockapi.enki import MockEnkiAPI
+from tests.core.mock import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.api_enki_files import EnkiFilesFixture
+    from tests.fixtures.authenticator import AuthProviderFixture
 
 
-class BaseEnkiTest(DatabaseTest):
-
-    base_path = os.path.split(__file__)[0]
-    resource_path = os.path.join(base_path, "files", "enki")
-
-    @classmethod
-    def get_data(cls, filename):
-        path = os.path.join(cls.resource_path, filename)
-        return open(path).read()
-
-    def setup_method(self):
-        super(BaseEnkiTest, self).setup_method()
-        self.api = MockEnkiAPI(self._db)
+class EnkiTestFixure:
+    def __init__(self, db: DatabaseTransactionFixture, files: EnkiFilesFixture):
+        self.db = db
+        self.files = files
+        self.api = MockEnkiAPI(db.session)
         self.collection = self.api.collection
 
 
-class TestEnkiAPI(BaseEnkiTest):
-    def test_constructor(self):
+@pytest.fixture(scope="function")
+def enki_test_fixture(
+    db: DatabaseTransactionFixture, api_enki_files_fixture: EnkiFilesFixture
+) -> EnkiTestFixure:
+    return EnkiTestFixure(db, api_enki_files_fixture)
+
+
+class TestEnkiAPI:
+    def test_constructor(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # The constructor must be given an Enki collection.
-        collection = self._collection(protocol=ExternalIntegration.OVERDRIVE)
+        collection = db.collection(
+            protocol=ExternalIntegration.OVERDRIVE, url="http://test.enki.url"
+        )
         with pytest.raises(ValueError) as excinfo:
-            EnkiAPI(self._db, collection)
+            EnkiAPI(db.session, collection)
         assert "Collection protocol is Overdrive, but passed into EnkiAPI!" in str(
             excinfo.value
         )
 
         collection.protocol = ExternalIntegration.ENKI
-        EnkiAPI(self._db, collection)
+        EnkiAPI(db.session, collection)
 
-    def test_external_integration(self):
-        integration = self.api.external_integration(self._db)
+    def test_external_integration(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+        integration = enki_test_fixture.api.external_integration(db.session)
         assert ExternalIntegration.ENKI == integration.protocol
 
-    def test_enki_library_id(self):
+    def test_enki_library_id(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # The default library has already had this value set on its
         # association with the mock Enki collection.
-        m = self.api.enki_library_id
-        assert "c" == m(self._default_library)
+        m = enki_test_fixture.api.enki_library_id
+        assert "c" == m(db.default_library())
 
         # Associate another library with the mock Enki collection
         # and set its Enki library ID.
-        other_library = self._library()
-        integration = self.api.external_integration(self._db)
-        ConfigurationSetting.for_library_and_externalintegration(
-            self._db, self.api.ENKI_LIBRARY_ID_KEY, other_library, integration
-        ).value = "other library id"
+        other_library = db.library()
+        assert other_library.id is not None
+        config = enki_test_fixture.api.integration_configuration()
+        assert config is not None
+        DatabaseTransactionFixture.set_settings(
+            config.for_library(other_library.id, create=True),
+            **{enki_test_fixture.api.ENKI_LIBRARY_ID_KEY: "other library id"},
+        )
+        db.session.commit()
         assert "other library id" == m(other_library)
 
-    def test_collection(self):
-        assert self.collection == self.api.collection
+    def test_collection(self, enki_test_fixture: EnkiTestFixure):
+        assert enki_test_fixture.collection == enki_test_fixture.api.collection
 
-    def test__run_self_tests(self):
+    def test__run_self_tests(
+        self,
+        enki_test_fixture: EnkiTestFixure,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
+        db = enki_test_fixture.db
+
         # Mock every method that will be called by the self-test.
         class Mock(MockEnkiAPI):
             def recent_activity(self, start, end):
@@ -105,23 +119,16 @@ class TestEnkiAPI(BaseEnkiTest):
                 self.patron_activity_called_with.append((patron, pin))
                 yield 1
 
-        api = Mock(self._db)
+        api = Mock(db.session)
 
         # Now let's make sure two Libraries have access to the
         # Collection used in the API -- one library with a default
         # patron and one without.
-        no_default_patron = self._library()
+        no_default_patron = db.library()
         api.collection.libraries.append(no_default_patron)
 
-        with_default_patron = self._default_library
-        integration = self._external_integration(
-            "api.simple_authentication",
-            ExternalIntegration.PATRON_AUTH_GOAL,
-            libraries=[with_default_patron],
-        )
-        p = BasicAuthenticationProvider
-        integration.setting(p.TEST_IDENTIFIER).value = "username1"
-        integration.setting(p.TEST_PASSWORD).value = "password1"
+        with_default_patron = db.default_library()
+        create_simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         (
@@ -129,7 +136,7 @@ class TestEnkiAPI(BaseEnkiTest):
             default_patron_activity,
             circulation_changes,
             collection_changes,
-        ) = sorted(api._run_self_tests(self._db), key=lambda x: x.name)
+        ) = sorted(api._run_self_tests(db.session), key=lambda x: x.name)
 
         # Verify that each test method was called and returned the
         # expected SelfTestResult object.
@@ -163,8 +170,10 @@ class TestEnkiAPI(BaseEnkiTest):
         assert True == default_patron_activity.success
         assert "Total loans and holds: 1" == default_patron_activity.result
 
-    def test_request_retried_once(self):
+    def test_request_retried_once(self, enki_test_fixture: EnkiTestFixure):
         """A request that times out is retried."""
+
+        db = enki_test_fixture.db
 
         class TimesOutOnce(EnkiAPI):
             timeout = True
@@ -178,7 +187,7 @@ class TestEnkiAPI(BaseEnkiTest):
                 else:
                     return MockRequestsResponse(200, content="content")
 
-        api = TimesOutOnce(self._db, self.collection)
+        api = TimesOutOnce(db.session, enki_test_fixture.collection)
         response = api.request("url")
 
         # Two identical requests were made.
@@ -189,8 +198,10 @@ class TestEnkiAPI(BaseEnkiTest):
         assert 200 == response.status_code
         assert b"content" == response.content
 
-    def test_request_retried_only_once(self):
+    def test_request_retried_only_once(self, enki_test_fixture: EnkiTestFixure):
         """A request that times out twice is not retried."""
+
+        db = enki_test_fixture.db
 
         class TimesOut(EnkiAPI):
             calls = 0
@@ -199,13 +210,15 @@ class TestEnkiAPI(BaseEnkiTest):
                 self.calls += 1
                 raise RequestTimedOut("url", "timeout")
 
-        api = TimesOut(self._db, self.collection)
+        api = TimesOut(db.session, enki_test_fixture.collection)
         pytest.raises(RequestTimedOut, api.request, "url")
 
         # Only two requests were made.
         assert 2 == api.calls
 
-    def test_request_error_indicator(self):
+    def test_request_error_indicator(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+
         # A response that looks like Enki's HTML error message is
         # turned into a RemoteIntegrationException.
         class Oops(EnkiAPI):
@@ -220,27 +233,37 @@ class TestEnkiAPI(BaseEnkiTest):
                     % (EnkiAPI.ERROR_INDICATOR),
                 )
 
-        api = Oops(self._db, self.collection)
+        api = Oops(db.session, enki_test_fixture.collection)
         with pytest.raises(RemoteIntegrationException) as excinfo:
             api.request("url")
         assert "An unknown error occured" in str(excinfo.value)
 
-    def test__minutes_since(self):
+    def test__minutes_since(self, enki_test_fixture: EnkiTestFixure):
         """Test the _minutes_since helper method."""
         an_hour_ago = utc_now() - datetime.timedelta(minutes=60)
         assert 60 == EnkiAPI._minutes_since(an_hour_ago)
 
-    def test_recent_activity(self):
+    def test_recent_activity(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         now = utc_now()
         epoch = datetime_utc(1970, 1, 1)
         epoch_plus_one_hour = epoch + datetime.timedelta(hours=1)
-        data = self.get_data("get_recent_activity.json")
-        self.api.queue_response(200, content=data)
-        activity = list(self.api.recent_activity(epoch, epoch_plus_one_hour))
+        data = enki_test_fixture.files.sample_data("get_recent_activity.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        activity = list(
+            enki_test_fixture.api.recent_activity(epoch, epoch_plus_one_hour)
+        )
         assert 43 == len(activity)
         for i in activity:
             assert isinstance(i, CirculationData)
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
         assert "https://enkilibrary.org/API/ItemAPI" == url
         assert "getRecentActivityTime" == params["method"]
@@ -250,11 +273,12 @@ class TestEnkiAPI(BaseEnkiTest):
         # Unlike some API calls, it's not necessary to pass 'lib' in here.
         assert "lib" not in params
 
-    def test_updated_titles(self):
+    def test_updated_titles(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         one_minute_ago = utc_now() - datetime.timedelta(minutes=1)
-        data = self.get_data("get_update_titles.json")
-        self.api.queue_response(200, content=data)
-        activity = list(self.api.updated_titles(since=one_minute_ago))
+        data = enki_test_fixture.files.sample_data("get_update_titles.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        activity = list(enki_test_fixture.api.updated_titles(since=one_minute_ago))
 
         assert 6 == len(activity)
         for i in activity:
@@ -263,7 +287,14 @@ class TestEnkiAPI(BaseEnkiTest):
         assert "Nervous System" == activity[0].title
         assert 1 == activity[0].circulation.licenses_owned
 
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
         assert "https://enkilibrary.org/API/ListAPI" == url
         assert "getUpdateTitles" == params["method"]
@@ -273,17 +304,25 @@ class TestEnkiAPI(BaseEnkiTest):
         # in the context of any particular library here.
         assert "0" == params["lib"]
 
-    def test_get_item(self):
-        data = self.get_data("get_item_french_title.json")
-        self.api.queue_response(200, content=data)
-        metadata = self.api.get_item("an id")
+    def test_get_item(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+        data = enki_test_fixture.files.sample_data("get_item_french_title.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        metadata = enki_test_fixture.api.get_item("an id")
 
         # We get a Metadata with associated CirculationData.
         assert isinstance(metadata, Metadata)
         assert "Le But est le Seul Choix" == metadata.title
         assert 1 == metadata.circulation.licenses_owned
 
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
         assert "https://enkilibrary.org/API/ItemAPI" == url
         assert "an id" == params["recordid"]
@@ -297,25 +336,33 @@ class TestEnkiAPI(BaseEnkiTest):
         # to be used to form a local picture of the book's metadata.
         assert "large" == params["size"]
 
-    def test_get_item_not_found(self):
-        self.api.queue_response(200, content="<html>No such book</html>")
-        metadata = self.api.get_item("an id")
+    def test_get_item_not_found(self, enki_test_fixture: EnkiTestFixure):
+        enki_test_fixture.api.queue_response(200, content="<html>No such book</html>")
+        metadata = enki_test_fixture.api.get_item("an id")
         assert None == metadata
 
-    def test_get_all_titles(self):
+    def test_get_all_titles(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # get_all_titles and get_update_titles return data in the same
         # format, so we can use one to mock the other.
-        data = self.get_data("get_update_titles.json")
-        self.api.queue_response(200, content=data)
+        data = enki_test_fixture.files.sample_data("get_update_titles.json")
+        enki_test_fixture.api.queue_response(200, content=data)
 
-        results = list(self.api.get_all_titles())
+        results = list(enki_test_fixture.api.get_all_titles())
         assert 6 == len(results)
         metadata = results[0]
         assert isinstance(metadata, Metadata)
         assert "Nervous System" == metadata.title
         assert 1 == metadata.circulation.licenses_owned
 
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
         assert "https://enkilibrary.org/API/ListAPI" == url
         assert "getAllTitles" == params["method"]
@@ -324,46 +371,58 @@ class TestEnkiAPI(BaseEnkiTest):
         # Unlike some API calls, it's not necessary to pass 'lib' in here.
         assert "lib" not in params
 
-    def test__epoch_to_struct(self):
+    def test__epoch_to_struct(self, enki_test_fixture: EnkiTestFixure):
         """Test the _epoch_to_struct helper method."""
         assert datetime_utc(1970, 1, 1) == EnkiAPI._epoch_to_struct("0")
 
-    def test_checkout_open_access_parser(self):
+    def test_checkout_open_access_parser(self, enki_test_fixture: EnkiTestFixure):
         """Test that checkout info for non-ACS Enki books is parsed correctly."""
-        data = self.get_data("checked_out_direct.json")
+        data = enki_test_fixture.files.sample_data("checked_out_direct.json")
         result = json.loads(data)
-        loan = self.api.parse_patron_loans(result["result"]["checkedOutItems"][0])
+        loan = enki_test_fixture.api.parse_patron_loans(
+            result["result"]["checkedOutItems"][0]
+        )
         assert loan.data_source_name == DataSource.ENKI
         assert loan.identifier_type == Identifier.ENKI_ID
         assert loan.identifier == "2"
         assert loan.start_date == datetime_utc(2017, 8, 23, 19, 31, 58, 0)
         assert loan.end_date == datetime_utc(2017, 9, 13, 19, 31, 58, 0)
 
-    def test_checkout_acs_parser(self):
+    def test_checkout_acs_parser(self, enki_test_fixture: EnkiTestFixure):
         """Test that checkout info for ACS Enki books is parsed correctly."""
-        data = self.get_data("checked_out_acs.json")
+        data = enki_test_fixture.files.sample_data("checked_out_acs.json")
         result = json.loads(data)
-        loan = self.api.parse_patron_loans(result["result"]["checkedOutItems"][0])
+        loan = enki_test_fixture.api.parse_patron_loans(
+            result["result"]["checkedOutItems"][0]
+        )
         assert loan.data_source_name == DataSource.ENKI
         assert loan.identifier_type == Identifier.ENKI_ID
         assert loan.identifier == "3334"
         assert loan.start_date == datetime_utc(2017, 8, 23, 19, 42, 35, 0)
         assert loan.end_date == datetime_utc(2017, 9, 13, 19, 42, 35, 0)
 
-    def test_checkout_success(self):
+    def test_checkout_success(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # Test the checkout() method.
-        patron = self._patron()
+        patron = db.patron()
         patron.authorization_identifier = "123"
-        pool = self._licensepool(None)
+        pool = db.licensepool(None)
 
-        data = self.get_data("checked_out_acs.json")
-        self.api.queue_response(200, content=data)
-        loan = self.api.checkout(patron, "pin", pool, "internal format")
+        data = enki_test_fixture.files.sample_data("checked_out_acs.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        loan = enki_test_fixture.api.checkout(patron, "pin", pool, "internal format")
 
         # An appropriate request to the "getSELink" endpoint was made.,
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
-        assert self.api.base_url + "UserAPI" == url
+        assert enki_test_fixture.api.base_url + "UserAPI" == url
         assert "getSELink" == params["method"]
         assert "123" == params["username"]
         assert "pin" == params["password"]
@@ -379,77 +438,89 @@ class TestEnkiAPI(BaseEnkiTest):
         assert loan.start_date == None
         assert loan.end_date == datetime_utc(2017, 9, 13, 19, 42, 35, 0)
 
-    def test_checkout_bad_authorization(self):
+    def test_checkout_bad_authorization(self, enki_test_fixture: EnkiTestFixure):
         """Test that the correct exception is thrown upon an unsuccessful login."""
+        db = enki_test_fixture.db
         with pytest.raises(AuthorizationFailedException):
-            data = self.get_data("login_unsuccessful.json")
-            self.api.queue_response(200, content=data)
+            data = enki_test_fixture.files.sample_data("login_unsuccessful.json")
+            enki_test_fixture.api.queue_response(200, content=data)
             result = json.loads(data)
 
-            edition, pool = self._edition(
+            edition, pool = db.edition(
                 identifier_type=Identifier.ENKI_ID,
                 data_source_name=DataSource.ENKI,
                 with_license_pool=True,
             )
             pool.identifier.identifier = "notanid"
 
-            patron = self._patron(external_identifier="notabarcode")
+            patron = db.patron(external_identifier="notabarcode")
 
-            loan = self.api.checkout(patron, "notapin", pool, None)
+            loan = enki_test_fixture.api.checkout(patron, "notapin", pool, None)
 
-    def test_checkout_not_available(self):
+    def test_checkout_not_available(self, enki_test_fixture: EnkiTestFixure):
         """Test that the correct exception is thrown upon an unsuccessful login."""
+        db = enki_test_fixture.db
         with pytest.raises(NoAvailableCopies):
-            data = self.get_data("no_copies.json")
-            self.api.queue_response(200, content=data)
+            data = enki_test_fixture.files.sample_data("no_copies.json")
+            enki_test_fixture.api.queue_response(200, content=data)
             result = json.loads(data)
 
-            edition, pool = self._edition(
+            edition, pool = db.edition(
                 identifier_type=Identifier.ENKI_ID,
                 data_source_name=DataSource.ENKI,
                 with_license_pool=True,
             )
             pool.identifier.identifier = "econtentRecord1"
-            patron = self._patron(external_identifier="12345678901234")
+            patron = db.patron(external_identifier="12345678901234")
 
-            loan = self.api.checkout(patron, "1234", pool, None)
+            loan = enki_test_fixture.api.checkout(patron, "1234", pool, None)
 
-    def test_fulfillment_open_access_parser(self):
+    def test_fulfillment_open_access_parser(self, enki_test_fixture: EnkiTestFixure):
         """Test that fulfillment info for non-ACS Enki books is parsed correctly."""
-        data = self.get_data("checked_out_direct.json")
+        data = enki_test_fixture.files.sample_data("checked_out_direct.json")
         result = json.loads(data)
-        fulfill_data = self.api.parse_fulfill_result(result["result"])
+        fulfill_data = enki_test_fixture.api.parse_fulfill_result(result["result"])
         assert (
             fulfill_data[0]
             == """http://cccl.enkilibrary.org/API/UserAPI?method=downloadEContentFile&username=21901000008080&password=deng&lib=1&recordId=2"""
         )
         assert fulfill_data[1] == "epub"
 
-    def test_fulfillment_acs_parser(self):
+    def test_fulfillment_acs_parser(self, enki_test_fixture: EnkiTestFixure):
         """Test that fulfillment info for ACS Enki books is parsed correctly."""
-        data = self.get_data("checked_out_acs.json")
+        data = enki_test_fixture.files.sample_data("checked_out_acs.json")
         result = json.loads(data)
-        fulfill_data = self.api.parse_fulfill_result(result["result"])
+        fulfill_data = enki_test_fixture.api.parse_fulfill_result(result["result"])
         assert (
             fulfill_data[0]
             == """http://afs.enkilibrary.org/fulfillment/URLLink.acsm?action=enterloan&ordersource=Califa&orderid=ACS4-9243146841581187248119581&resid=urn%3Auuid%3Ad5f54da9-8177-43de-a53d-ef521bc113b4&gbauthdate=Wed%2C+23+Aug+2017+19%3A42%3A35+%2B0000&dateval=1503517355&rights=%24lat%231505331755%24&gblver=4&auth=8604f0fc3f014365ea8d3c4198c721ed7ed2c16d"""
         )
         assert fulfill_data[1] == "epub"
 
-    def test_fulfill_success(self):
+    def test_fulfill_success(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # Test the fulfill() method.
-        patron = self._patron()
+        patron = db.patron()
         patron.authorization_identifier = "123"
-        pool = self._licensepool(None)
+        pool = db.licensepool(None)
 
-        data = self.get_data("checked_out_acs.json")
-        self.api.queue_response(200, content=data)
-        fulfillment = self.api.fulfill(patron, "pin", pool, "internal format")
+        data = enki_test_fixture.files.sample_data("checked_out_acs.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        fulfillment = enki_test_fixture.api.fulfill(
+            patron, "pin", pool, "internal format"
+        )
 
         # An appropriate request to the "getSELink" endpoint was made.,
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
-        assert self.api.base_url + "UserAPI" == url
+        assert enki_test_fixture.api.base_url + "UserAPI" == url
         assert "getSELink" == params["method"]
         assert "123" == params["username"]
         assert "pin" == params["password"]
@@ -468,17 +539,25 @@ class TestEnkiAPI(BaseEnkiTest):
         )
         assert fulfillment.content_expires == datetime_utc(2017, 9, 13, 19, 42, 35, 0)
 
-    def test_patron_activity(self):
-        data = self.get_data("patron_response.json")
-        self.api.queue_response(200, content=data)
-        patron = self._patron()
+    def test_patron_activity(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+        data = enki_test_fixture.files.sample_data("patron_response.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        patron = db.patron()
         patron.authorization_identifier = "123"
-        [loan] = self.api.patron_activity(patron, "pin")
+        [loan] = enki_test_fixture.api.patron_activity(patron, "pin")
 
         # An appropriate Enki API call was issued.
-        [method, url, headers, data, params, kwargs] = self.api.requests.pop()
+        [
+            method,
+            url,
+            headers,
+            data,
+            params,
+            kwargs,
+        ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
-        assert self.api.base_url + "UserAPI" == url
+        assert enki_test_fixture.api.base_url + "UserAPI" == url
         assert "getSEPatronData" == params["method"]
         assert "123" == params["username"]
         assert "pin" == params["password"]
@@ -492,27 +571,28 @@ class TestEnkiAPI(BaseEnkiTest):
         assert Identifier.ENKI_ID == loan.identifier_type
         assert DataSource.ENKI == loan.data_source_name
         assert "231" == loan.identifier
-        assert self.collection == loan.collection(self._db)
+        assert enki_test_fixture.collection == loan.collection(db.session)
         assert datetime_utc(2017, 8, 15, 14, 56, 51) == loan.start_date
         assert datetime_utc(2017, 9, 5, 14, 56, 51) == loan.end_date
 
-    def test_patron_activity_failure(self):
-        patron = self._patron()
-        self.api.queue_response(404, "No such patron")
-        collect = lambda: list(self.api.patron_activity(patron, "pin"))
+    def test_patron_activity_failure(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+        patron = db.patron()
+        enki_test_fixture.api.queue_response(404, "No such patron")
+        collect = lambda: list(enki_test_fixture.api.patron_activity(patron, "pin"))
         pytest.raises(PatronNotFoundOnRemote, collect)
 
         msg = dict(result=dict(message="Login unsuccessful."))
-        self.api.queue_response(200, content=json.dumps(msg))
+        enki_test_fixture.api.queue_response(200, content=json.dumps(msg))
         pytest.raises(AuthorizationFailedException, collect)
 
         msg = dict(result=dict(message="Some other error."))
-        self.api.queue_response(200, content=json.dumps(msg))
+        enki_test_fixture.api.queue_response(200, content=json.dumps(msg))
         pytest.raises(CirculationException, collect)
 
 
-class TestBibliographicParser(BaseEnkiTest):
-    def test_process_all(self):
+class TestBibliographicParser:
+    def test_process_all(self, enki_test_fixture: EnkiTestFixure):
         class Mock(BibliographicParser):
             inputs = []
 
@@ -538,15 +618,17 @@ class TestBibliographicParser(BaseEnkiTest):
 
         # Now try a list of books that is split up and each book
         # processed separately.
-        data = self.get_data("get_update_titles.json")
+        data = enki_test_fixture.files.sample_data("get_update_titles.json")
         consume(data)
         assert 6 == len(parser.inputs)
 
-    def test_extract_bibliographic(self):
+    def test_extract_bibliographic(self, enki_test_fixture: EnkiTestFixure):
         """Test the ability to turn an individual book data blob
         into a Metadata.
         """
-        data = json.loads(self.get_data("get_item_french_title.json"))
+        data = json.loads(
+            enki_test_fixture.files.sample_data("get_item_french_title.json")
+        )
         parser = BibliographicParser()
         m = parser.extract_bibliographic(data["result"])
         assert isinstance(m, Metadata)
@@ -613,9 +695,11 @@ class TestBibliographicParser(BaseEnkiTest):
         assert Representation.EPUB_MEDIA_TYPE == format.content_type
         assert DeliveryMechanism.ADOBE_DRM == format.drm_scheme
 
-    def test_extract_bibliographic_pdf(self):
+    def test_extract_bibliographic_pdf(self, enki_test_fixture: EnkiTestFixure):
         """Test the ability to distingush between PDF and EPUB results"""
-        data = json.loads(self.get_data("pdf_document_entry.json"))
+        data = json.loads(
+            enki_test_fixture.files.sample_data("pdf_document_entry.json")
+        )
         parser = BibliographicParser()
         m = parser.extract_bibliographic(data["result"])
         assert isinstance(m, Metadata)
@@ -628,14 +712,18 @@ class TestBibliographicParser(BaseEnkiTest):
         assert DeliveryMechanism.NO_DRM == format.drm_scheme
 
 
-class TestEnkiImport(BaseEnkiTest):
-    def test_import_instantiation(self):
+class TestEnkiImport:
+    def test_import_instantiation(self, enki_test_fixture: EnkiTestFixure):
         """Test that EnkiImport can be instantiated"""
-        importer = EnkiImport(self._db, self.collection, api_class=self.api)
-        assert self.api == importer.api
-        assert self.collection == importer.collection
+        db = enki_test_fixture.db
+        importer = EnkiImport(
+            db.session, enki_test_fixture.collection, api_class=enki_test_fixture.api
+        )
+        assert enki_test_fixture.api == importer.api
+        assert enki_test_fixture.collection == importer.collection
 
-    def test_run_once(self):
+    def test_run_once(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         dummy_value = object()
 
         class Mock(EnkiImport):
@@ -649,7 +737,9 @@ class TestEnkiImport(BaseEnkiTest):
                 self.incremental_import_called_with = since
                 return 4, 7
 
-        importer = Mock(self._db, self.collection, api_class=self.api)
+        importer = Mock(
+            db.session, enki_test_fixture.collection, api_class=enki_test_fixture.api
+        )
 
         # If the incoming TimestampData makes it look like the process
         # has never successfully completed, full_import() is called.
@@ -691,12 +781,13 @@ class TestEnkiImport(BaseEnkiTest):
             == new_timestamp.achievements
         )
 
-    def test_full_import(self):
+    def test_full_import(self, enki_test_fixture: EnkiTestFixure):
         """full_import calls get_all_titles over and over again until
         it returns nothing, and processes every book it receives.
         """
+        db = enki_test_fixture.db
 
-        class MockAPI(object):
+        class MockAPI:
             def __init__(self, pages):
                 """Act like an Enki API with predefined pages of results."""
                 self.pages = pages
@@ -719,7 +810,7 @@ class TestEnkiImport(BaseEnkiTest):
         api = MockAPI(pages)
 
         # Do the 'import'.
-        importer = Mock(self._db, self.collection, api_class=api)
+        importer = Mock(db.session, enki_test_fixture.collection, api_class=api)
         importer.full_import()
 
         # get_all_titles was called three times, once for the first two
@@ -729,12 +820,13 @@ class TestEnkiImport(BaseEnkiTest):
         # Every item on every 'page' of results was processed.
         assert [1, 2, 3] == importer.processed
 
-    def test_incremental_import(self):
+    def test_incremental_import(self, enki_test_fixture: EnkiTestFixure):
         """incremental_import calls process_book() on the output of
         EnkiAPI.updated_titles(), and then calls update_circulation().
         """
+        db = enki_test_fixture.db
 
-        class MockAPI(object):
+        class MockAPI:
             def updated_titles(self, since):
                 self.updated_titles_called_with = since
                 yield 1
@@ -750,7 +842,7 @@ class TestEnkiImport(BaseEnkiTest):
                 self.update_circulation_called_with = since
 
         api = MockAPI()
-        importer = Mock(self._db, self.collection, api_class=api)
+        importer = Mock(db.session, enki_test_fixture.collection, api_class=api)
         since = object()
         importer.incremental_import(since)
 
@@ -762,14 +854,16 @@ class TestEnkiImport(BaseEnkiTest):
         # through process_book().
         assert [1, 2] == importer.processed
 
-    def test_update_circulation(self):
+    def test_update_circulation(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+
         # update_circulation() makes two-hour slices out of time
         # between the previous run and now, and passes each slice into
         # _update_circulation, keeping track of the total number of
         # circulation events encountered.
         class Mock(EnkiImport):
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self._update_circulation_called_with = []
                 self.sizes = [1, 2]
 
@@ -785,7 +879,7 @@ class TestEnkiImport(BaseEnkiTest):
         now = utc_now()
         one_hour_ago = now - datetime.timedelta(hours=1)
         three_hours_ago = now - datetime.timedelta(hours=3)
-        monitor = Mock(self._db, self.collection, api_class=MockEnkiAPI)
+        monitor = Mock(db.session, enki_test_fixture.collection, api_class=MockEnkiAPI)
         assert 3 == monitor.update_circulation(three_hours_ago)
 
         # slice_timespan() sliced up the timeline into two-hour
@@ -802,8 +896,8 @@ class TestEnkiImport(BaseEnkiTest):
         # our mocked 'sizes' list is now empty.
         assert [] == monitor.sizes
 
-    def test__update_circulation(self):
-
+    def test__update_circulation(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # Here's information about a book we didn't know about before.
         circ_data = {
             "result": {
@@ -844,7 +938,7 @@ class TestEnkiImport(BaseEnkiTest):
             }
         }
 
-        api = MockEnkiAPI(self._db)
+        api = MockEnkiAPI(db.session)
         api.queue_response(200, content=json.dumps(circ_data))
         api.queue_response(200, content=json.dumps(bib_data))
 
@@ -852,7 +946,7 @@ class TestEnkiImport(BaseEnkiTest):
 
         analytics = MockAnalyticsProvider()
         monitor = EnkiImport(
-            self._db, self.collection, api_class=api, analytics=analytics
+            db.session, enki_test_fixture.collection, api_class=api, analytics=analytics
         )
         end = utc_now()
 
@@ -881,9 +975,9 @@ class TestEnkiImport(BaseEnkiTest):
         assert "34278" == params["recordid"]
 
         # We ended up with one Work, one LicensePool, and one Edition.
-        work = self._db.query(Work).one()
-        licensepool = self._db.query(LicensePool).one()
-        edition = self._db.query(Edition).one()
+        work = db.session.query(Work).one()
+        licensepool = db.session.query(LicensePool).one()
+        edition = db.session.query(Edition).one()
         assert [licensepool] == work.license_pools
         assert edition == licensepool.presentation_edition
 
@@ -898,11 +992,12 @@ class TestEnkiImport(BaseEnkiTest):
         assert 0 == licensepool.licenses_available
 
         # An analytics event was sent out for the newly discovered book.
-        assert 1 == analytics.count
+        # No more DISTRIBUTOR events
+        assert 0 == analytics.count
 
         # Now let's see what update_circulation does when the work
         # already exists.
-        circ_data["result"]["recentactivity"][0]["availability"]["totalCopies"] = 10
+        circ_data["result"]["recentactivity"][0]["availability"]["totalCopies"] = 10  # type: ignore
         api.queue_response(200, content=json.dumps(circ_data))
         # We're not queuing up more bib data, but that's no problem --
         # EnkiImport won't ask for it.
@@ -917,7 +1012,7 @@ class TestEnkiImport(BaseEnkiTest):
         # The LicensePool was updated, but no new objects were created.
         assert 10 == licensepool.licenses_owned
         for c in (LicensePool, Edition, Work):
-            assert 1 == self._db.query(c).count()
+            assert 1 == db.session.query(c).count()
 
     def test_process_book(self):
         """This functionality is tested as part of
@@ -925,15 +1020,18 @@ class TestEnkiImport(BaseEnkiTest):
         """
 
 
-class TestEnkiCollectionReaper(BaseEnkiTest):
-    def test_book_that_doesnt_need_reaping_is_left_alone(self):
+class TestEnkiCollectionReaper:
+    def test_book_that_doesnt_need_reaping_is_left_alone(
+        self, enki_test_fixture: EnkiTestFixure
+    ):
+        db = enki_test_fixture.db
         # We're happy with this book.
-        edition, pool = self._edition(
+        edition, pool = db.edition(
             identifier_type=Identifier.ENKI_ID,
             identifier_id="21135",
             data_source_name=DataSource.ENKI,
             with_license_pool=True,
-            collection=self.collection,
+            collection=enki_test_fixture.collection,
         )
         pool.licenses_owned = 10
         pool.licenses_available = 9
@@ -941,10 +1039,12 @@ class TestEnkiCollectionReaper(BaseEnkiTest):
 
         # Enki still considers this book to be in the library's
         # collection.
-        data = self.get_data("get_item_french_title.json")
-        self.api.queue_response(200, content=data)
+        data = enki_test_fixture.files.sample_data("get_item_french_title.json")
+        enki_test_fixture.api.queue_response(200, content=data)
 
-        reaper = EnkiCollectionReaper(self._db, self.collection, api_class=self.api)
+        reaper = EnkiCollectionReaper(
+            db.session, enki_test_fixture.collection, api_class=enki_test_fixture.api
+        )
 
         # Run the identifier through the reaper.
         reaper.process_item(pool.identifier)
@@ -954,13 +1054,14 @@ class TestEnkiCollectionReaper(BaseEnkiTest):
         assert 9 == pool.licenses_available
         assert 5 == pool.patrons_in_hold_queue
 
-    def test_reaped_book_has_zero_licenses(self):
+    def test_reaped_book_has_zero_licenses(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
         # Create a LicensePool that needs updating.
-        edition, pool = self._edition(
+        edition, pool = db.edition(
             identifier_type=Identifier.ENKI_ID,
             data_source_name=DataSource.ENKI,
             with_license_pool=True,
-            collection=self.collection,
+            collection=enki_test_fixture.collection,
         )
 
         # This is a specific record ID that should never exist
@@ -978,9 +1079,11 @@ class TestEnkiCollectionReaper(BaseEnkiTest):
         # Enki will claim it doesn't know about this book
         # by sending an HTML error instead of JSON data.
         data = "<html></html>"
-        self.api.queue_response(200, content=data)
+        enki_test_fixture.api.queue_response(200, content=data)
 
-        reaper = EnkiCollectionReaper(self._db, self.collection, api_class=self.api)
+        reaper = EnkiCollectionReaper(
+            db.session, enki_test_fixture.collection, api_class=enki_test_fixture.api
+        )
 
         # Run the identifier through the reaper.
         reaper.process_item(pool.identifier)

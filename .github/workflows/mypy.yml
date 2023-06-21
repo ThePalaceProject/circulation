@@ -1,0 +1,32 @@
+name: Mypy (Type check)
+on: [push, pull_request]
+env:
+  PYTHON_VERSION: 3.9
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 🐍
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry 🎸
+        uses: ./.github/actions/poetry
+
+      - name: Install OS Packages 🧰
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
+
+      - name: Install Python Packages 📦
+        run: poetry install --without ci
+
+      - name: Run MyPy 🪄
+        run: poetry run mypy

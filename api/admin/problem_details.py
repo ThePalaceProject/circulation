@@ -33,13 +33,6 @@ ADMIN_NOT_AUTHORIZED = pd(
     _("Your admin account is not authorized to make this request."),
 )
 
-GOOGLE_OAUTH_FAILURE = pd(
-    "http://librarysimplified.org/terms/problem/google-oauth-failure",
-    400,
-    _("Google OAuth Error"),
-    _("There was an error connecting with Google OAuth."),
-)
-
 INVALID_CSRF_TOKEN = pd(
     "http://librarysimplified.org/terms/problem/invalid-csrf-token",
     400,
@@ -66,20 +59,6 @@ METADATA_REFRESH_FAILURE = pd(
     400,
     _("Metadata could not be refreshed."),
     _("Metadata could not be refreshed."),
-)
-
-UNRECOGNIZED_COMPLAINT = pd(
-    "http://librarysimplified.org/terms/problem/unrecognized-complaint",
-    status_code=404,
-    title=_("Unrecognized complaint."),
-    detail=_("The complaint you are attempting to resolve could not be found."),
-)
-
-COMPLAINT_ALREADY_RESOLVED = pd(
-    "http://librarysimplified.org/terms/problem/complaint-already-resolved",
-    status_code=409,
-    title=_("Complaint already resolved."),
-    detail=_("You can't resolve a complaint that is already resolved."),
 )
 
 GENRE_NOT_FOUND = pd(
@@ -235,6 +214,13 @@ CANNOT_CHANGE_PROTOCOL = pd(
     status_code=400,
     title=_("Cannot change protocol"),
     detail=_("A protocol can't be changed once it has been set."),
+)
+
+MISSING_PATRON_AUTH_NAME = pd(
+    "http://librarysimplified.org/terms/problem/missing-patron-auth-name",
+    status_code=400,
+    title=_("Missing patron auth service name."),
+    detail=_("You must identify the patron auth service by its name."),
 )
 
 PROTOCOL_DOES_NOT_SUPPORT_PARENTS = pd(
@@ -442,6 +428,13 @@ CUSTOM_LIST_NAME_ALREADY_IN_USE = pd(
     detail=_("The library already has a custom list with that name."),
 )
 
+AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES = pd(
+    "http://librarysimplified.org/terms/problem/auto-update-custom-list-cannot-have-entries",
+    status_code=400,
+    title=_("An auto update custom list cannot have entries"),
+    detail=_("Entries are automatically managed for auto update custom lists"),
+)
+
 COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY = pd(
     "http://librarysimplified.org/terms/problem/collection-not-associated-with-library",
     status_code=400,
@@ -516,4 +509,27 @@ MISSING_IDENTIFIER = pd(
     status_code=400,
     title=_("Missing identifier"),
     detail=_("No identifier was used."),
+)
+
+CUSTOMLIST_SOURCE_COLLECTION_MISSING = pd(
+    "http://librarysimplified.org/terms/problem/customlist-source-collection-missing",
+    status_code=400,
+    title=_("Source collection missing"),
+    detail=_("A source collection is not present in the library."),
+)
+
+CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY = pd(
+    "http://librarysimplified.org/terms/problem/customlist-entry-not-valid-for-library",
+    status_code=400,
+    title=_("Entry not valid for library"),
+    detail=_(
+        "An entry in the customlist was not valid for the library being shared with."
+    ),
+)
+
+CUSTOMLIST_CANNOT_DELETE_SHARE = pd(
+    "http://librarysimplified.org/terms/problem/customlist-cannot-delete-share",
+    status_code=409,
+    title=_("Cannot delete the Custom List share"),
+    detail=_("Unable to delete the shared status of the given list"),
 )

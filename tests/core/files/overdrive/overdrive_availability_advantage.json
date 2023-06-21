@@ -7,6 +7,12 @@
             "shared": false
         },
         {
+            "copiesAvailable": 8,
+            "copiesOwned": 8,
+            "id": 63,
+            "shared": true
+        },
+        {
             "copiesAvailable": 2,
             "copiesOwned": 2,
             "id": -1
@@ -14,8 +20,8 @@
     ],
     "availabilityType": "Normal",
     "available": true,
-    "copiesAvailable": 3,
-    "copiesOwned": 3,
+    "copiesAvailable": 11,
+    "copiesOwned": 11,
     "links": {
         "self": {
             "href": "https://api.overdrive.com/v2/collections/v1L1B4QwAAA2O/products/776ec0c1-582f-4f7a-8d80-bdf5834de7ce/availability",

@@ -11,6 +11,7 @@ import jwt
 from flask import Response
 from flask_babel import lazy_gettext as _
 from jwt.algorithms import HMACAlgorithm
+from jwt.exceptions import InvalidIssuedAtError
 from sqlalchemy.orm.session import Session
 
 from api.base_controller import BaseCirculationManagerController
@@ -36,7 +37,7 @@ from .config import CannotLoadConfiguration, Configuration
 from .problem_details import *
 
 
-class AdobeVendorIDController(object):
+class AdobeVendorIDController:
 
     """Flask controllers that implement the Account Service and
     Authorization Service portions of the Adobe Vendor ID protocol.
@@ -164,7 +165,7 @@ class DeviceManagementProtocolController(BaseCirculationManagerController):
         return Response(output, 200, self.PLAIN_TEXT_HEADERS)
 
 
-class AdobeVendorIDRequestHandler(object):
+class AdobeVendorIDRequestHandler:
 
     """Standalone class that can be tested without bringing in Flask or
     the database schema.
@@ -248,7 +249,7 @@ class AdobeVendorIDRequestHandler(object):
         )
 
 
-class DeviceManagementRequestHandler(object):
+class DeviceManagementRequestHandler:
     """Handle incoming requests for the DRM Device Management Protocol."""
 
     def __init__(self, credential):
@@ -334,7 +335,7 @@ class AdobeAccountInfoRequestParser(AdobeRequestParser):
         return data
 
 
-class AdobeVendorIDModel(object):
+class AdobeVendorIDModel:
 
     """Implement Adobe Vendor ID within the Simplified database
     model.
@@ -603,7 +604,7 @@ class AdobeVendorIDModel(object):
         return patron_identifier_credential
 
 
-class AuthdataUtility(object):
+class AuthdataUtility:
 
     """Generate authdata JWTs as per the Vendor ID Service spec:
     https://docs.google.com/document/d/1j8nWPVmy95pJ_iU4UTC-QgHK2QhDUSdQ0OQTFR2NE_0
@@ -816,7 +817,10 @@ class AuthdataUtility(object):
         """
         if not patron_identifier:
             raise ValueError("No patron identifier specified")
-        now = utc_now()
+
+        # pyjwt >2.6.0 does not validate tokens created in the same second
+        # so we create a token from 1 second in the past
+        now = utc_now() - datetime.timedelta(seconds=1)
         expires = now + datetime.timedelta(minutes=60)
         authdata = self._encode(self.library_uri, patron_identifier, now, expires)
         return self.vendor_id, authdata
@@ -831,7 +835,10 @@ class AuthdataUtility(object):
         if exp:
             payload["exp"] = self.numericdate(exp)  # Expiration Time
         return base64.encodebytes(
-            jwt.encode(payload, self.secret, algorithm=self.ALGORITHM)
+            bytes(
+                jwt.encode(payload, self.secret, algorithm=self.ALGORITHM),
+                encoding="utf-8",
+            )
         )
 
     @classmethod
@@ -892,8 +899,14 @@ class AuthdataUtility(object):
     def _decode(self, authdata):
         # First, decode the authdata without checking the signature.
         decoded = jwt.decode(
-            authdata, algorithm=self.ALGORITHM, options=dict(verify_signature=False)
+            authdata,
+            algorithms=[self.ALGORITHM],
+            options=dict(verify_signature=False, verify_exp=True),
         )
+
+        # Fail future JWTs as per requirements, pyJWT stopped doing this, so doing it manually
+        if "iat" in decoded and decoded["iat"] > self.numericdate(utc_now()):
+            raise InvalidIssuedAtError("Issued At claim (iat) cannot be in the future")
 
         # This lets us get the library URI, which lets us get the secret.
         library_uri = decoded.get("iss")
@@ -903,9 +916,9 @@ class AuthdataUtility(object):
             raise jwt.exceptions.DecodeError("Unknown library: %s" % library_uri)
 
         # We know the secret for this library, so we can re-decode the
-        # secret and require signature valudation this time.
+        # secret and require signature validation this time.
         secret = self.secrets_by_library_uri[library_uri]
-        decoded = jwt.decode(authdata, secret, algorithm=self.ALGORITHM)
+        decoded = jwt.decode(authdata, secret, algorithms=[self.ALGORITHM])
         if not "sub" in decoded:
             raise jwt.exceptions.DecodeError("No subject specified.")
         return library_uri, decoded["sub"]
@@ -1037,9 +1050,7 @@ class AuthdataUtility(object):
         now = utc_now()
         expiration = self.EPOCH + datetime.timedelta(seconds=expiration)
         if expiration < now:
-            raise ValueError(
-                "Token %s expired at %s (now is %s)." % (token, expiration, now)
-            )
+            raise ValueError(f"Token {token} expired at {expiration} (now is {now}).")
 
         # Sign the token and check against the provided signature.
         key = self.short_token_signer.prepare_key(secret)

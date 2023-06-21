@@ -2,7 +2,8 @@ import re
 from io import BytesIO
 
 from flask_babel import lazy_gettext as _
-from pymarc import Field, Record
+from pymarc import Field, Record, Subfield
+from sqlalchemy.orm.session import Session
 
 from .classifier import Classifier
 from .config import CannotLoadConfiguration
@@ -16,15 +17,19 @@ from .model import (
     ExternalIntegration,
     Identifier,
     Representation,
-    Session,
     Work,
     get_one_or_create,
 )
+
+# this is necessary to ensure these implementations are registered
+from .s3 import MinIOUploader, S3Uploader  # noqa: autoflake
+
+# registered
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
 
 
-class Annotator(object):
+class Annotator:
     """The Annotator knows how to add information about a Work to
     a MARC record."""
 
@@ -169,8 +174,7 @@ class Annotator(object):
                     tag="020",
                     indicators=[" ", " "],
                     subfields=[
-                        "a",
-                        isbn.identifier,
+                        Subfield(code="a", value=isbn.identifier),
                     ],
                 )
             )
@@ -189,11 +193,11 @@ class Annotator(object):
         if non_filing_characters > 9:
             non_filing_characters = 0
 
-        subfields = ["a", str(edition.title or "")]
+        subfields = [Subfield("a", str(edition.title or ""))]
         if edition.subtitle:
-            subfields += ["b", str(edition.subtitle)]
+            subfields += [Subfield("b", str(edition.subtitle))]
         if edition.author:
-            subfields += ["c", str(edition.author)]
+            subfields += [Subfield("c", str(edition.author))]
         record.add_field(
             Field(
                 tag="245",
@@ -217,8 +221,7 @@ class Annotator(object):
                     tag="100",
                     indicators=["1", " "],
                     subfields=[
-                        "a",
-                        str(edition.sort_author),
+                        Subfield("a", str(edition.sort_author)),
                     ],
                 )
             )
@@ -231,10 +234,8 @@ class Annotator(object):
                         tag="700",
                         indicators=["1", " "],
                         subfields=[
-                            "a",
-                            str(contributor.sort_name),
-                            "e",
-                            contribution.role,
+                            Subfield("a", str(contributor.sort_name)),
+                            Subfield("e", contribution.role),
                         ],
                     )
                 )
@@ -251,12 +252,9 @@ class Annotator(object):
                     tag="264",
                     indicators=[" ", "1"],
                     subfields=[
-                        "a",
-                        "[Place of publication not identified]",
-                        "b",
-                        str(edition.publisher or ""),
-                        "c",
-                        year,
+                        Subfield("a", "[Place of publication not identified]"),
+                        Subfield("b", str(edition.publisher or "")),
+                        Subfield("c", year),
                     ],
                 )
             )
@@ -268,10 +266,7 @@ class Annotator(object):
             Field(
                 tag="264",
                 indicators=[" ", "2"],
-                subfields=[
-                    "b",
-                    str(pool.data_source.name),
-                ],
+                subfields=[Subfield("b", str(pool.data_source.name))],
             )
         )
 
@@ -284,8 +279,7 @@ class Annotator(object):
                     tag="300",
                     indicators=[" ", " "],
                     subfields=[
-                        "a",
-                        "1 online resource",
+                        Subfield("a", "1 online resource"),
                     ],
                 )
             )
@@ -294,7 +288,11 @@ class Annotator(object):
                 Field(
                     tag="336",
                     indicators=[" ", " "],
-                    subfields=["a", "text", "b", "txt", "2", "rdacontent"],
+                    subfields=[
+                        Subfield("a", "text"),
+                        Subfield("b", "txt"),
+                        Subfield("2", "rdacontent"),
+                    ],
                 )
             )
         elif edition.medium == Edition.AUDIO_MEDIUM:
@@ -303,10 +301,8 @@ class Annotator(object):
                     tag="300",
                     indicators=[" ", " "],
                     subfields=[
-                        "a",
-                        "1 sound file",
-                        "b",
-                        "digital",
+                        Subfield("a", "1 sound file"),
+                        Subfield("b", "digital"),
                     ],
                 )
             )
@@ -315,7 +311,11 @@ class Annotator(object):
                 Field(
                     tag="336",
                     indicators=[" ", " "],
-                    subfields=["a", "spoken word", "b", "spw", "2", "rdacontent"],
+                    subfields=[
+                        Subfield("a", "spoken word"),
+                        Subfield("b", "spw"),
+                        Subfield("2", "rdacontent"),
+                    ],
                 )
             )
 
@@ -323,7 +323,11 @@ class Annotator(object):
             Field(
                 tag="337",
                 indicators=[" ", " "],
-                subfields=["a", "computer", "b", "c", "2", "rdamedia"],
+                subfields=[
+                    Subfield("a", "computer"),
+                    Subfield("b", "c"),
+                    Subfield("2", "rdamedia"),
+                ],
             )
         )
 
@@ -332,12 +336,9 @@ class Annotator(object):
                 tag="338",
                 indicators=[" ", " "],
                 subfields=[
-                    "a",
-                    "online resource",
-                    "b",
-                    "cr",
-                    "2",
-                    "rdacarrier",
+                    Subfield("a", "online resource"),
+                    Subfield("b", "cr"),
+                    Subfield("2", "rdacarrier"),
                 ],
             )
         )
@@ -353,10 +354,8 @@ class Annotator(object):
                     tag="347",
                     indicators=[" ", " "],
                     subfields=[
-                        "a",
-                        file_type,
-                        "2",
-                        "rda",
+                        Subfield("a", file_type),
+                        Subfield("2", "rda"),
                     ],
                 )
             )
@@ -374,10 +373,8 @@ class Annotator(object):
                     tag="380",
                     indicators=[" ", " "],
                     subfields=[
-                        "a",
-                        "eBook",
-                        "2",
-                        "tlcgt",
+                        Subfield("a", "eBook"),
+                        Subfield("2", "tlcgt"),
                     ],
                 )
             )
@@ -390,10 +387,8 @@ class Annotator(object):
                 tag="385",
                 indicators=[" ", " "],
                 subfields=[
-                    "a",
-                    audience,
-                    "2",
-                    "tlctarget",
+                    Subfield("a", audience),
+                    Subfield("2", "tlctarget"),
                 ],
             )
         )
@@ -401,9 +396,9 @@ class Annotator(object):
     @classmethod
     def add_series(cls, record, edition):
         if edition.series:
-            subfields = ["a", str(edition.series)]
+            subfields = [Subfield("a", str(edition.series))]
             if edition.series_position:
-                subfields.extend(["v", str(edition.series_position)])
+                subfields.extend([Subfield("v", str(edition.series_position))])
             record.add_field(
                 Field(
                     tag="490",
@@ -418,7 +413,7 @@ class Annotator(object):
             Field(
                 tag="538",
                 indicators=[" ", " "],
-                subfields=["a", "Mode of access: World Wide Web."],
+                subfields=[Subfield("a", "Mode of access: World Wide Web.")],
             )
         )
 
@@ -435,8 +430,7 @@ class Annotator(object):
                         tag="538",
                         indicators=[" ", " "],
                         subfields=[
-                            "a",
-                            format,
+                            Subfield("a", format),
                         ],
                     )
                 )
@@ -450,10 +444,7 @@ class Annotator(object):
                 Field(
                     tag="520",
                     indicators=[" ", " "],
-                    subfields=[
-                        "a",
-                        stripped.encode("ascii", "ignore"),
-                    ],
+                    subfields=[Subfield("a", stripped)],
                 )
             )
 
@@ -469,10 +460,8 @@ class Annotator(object):
                     tag="650",
                     indicators=["0", "7"],
                     subfields=[
-                        "a",
-                        genre.name,
-                        "2",
-                        "Library Simplified",
+                        Subfield("a", genre.name),
+                        Subfield("2", "Library Simplified"),
                     ],
                 )
             )
@@ -485,8 +474,7 @@ class Annotator(object):
                 tag="655",
                 indicators=[" ", "0"],
                 subfields=[
-                    "a",
-                    "Electronic books.",
+                    Subfield("a", "Electronic books."),
                 ],
             )
         )
@@ -501,14 +489,12 @@ class MARCExporterFacets(BaseFacets):
         self.start_time = start_time
 
     def modify_search_filter(self, filter):
-        filter.order = self.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME[
-            self.ORDER_LAST_UPDATE
-        ]
+        filter.order = self.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME[self.ORDER_LAST_UPDATE]
         filter.order_ascending = True
         filter.updated_after = self.start_time
 
 
-class MARCExporter(object):
+class MARCExporter:
     """Turn a work into a record for a MARC file."""
 
     NAME = ExternalIntegration.MARC_EXPORT
@@ -572,15 +558,15 @@ class MARCExporter(object):
         {
             "key": INCLUDE_SIMPLIFIED_GENRES,
             "label": _(
-                "Include Library Simplified genres in MARC records (650 fields)"
+                "Include Palace Collection Manager genres in MARC records (650 fields)"
             ),
             "type": "select",
             "options": [
                 {
                     "key": "false",
-                    "label": _("Do not include Library Simplified genres"),
+                    "label": _("Do not include Palace Collection Manager genres"),
                 },
-                {"key": "true", "label": _("Include Library Simplified genres")},
+                {"key": "true", "label": _("Include Palace Collection Manager genres")},
             ],
             "default": "false",
         },
@@ -709,7 +695,7 @@ class MARCExporter(object):
         :param start_time: Only include records that were created or modified after this time.
         :param force_refresh: Create new records even when cached records are available.
         :param mirror: Optional mirror to use instead of loading one from configuration.
-        :param query_batch_size: Number of works to retrieve with a single Elasticsearch query.
+        :param query_batch_size: Number of works to retrieve with a single Opensearch query.
         :param upload_batch_size: Number of records to mirror at a time. This is different
           from query_batch_size because S3 enforces a minimum size of 5MB for all parts
           of a multipart upload except the last, but 5MB of records would be too many

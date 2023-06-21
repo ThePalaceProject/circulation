@@ -1,83 +1,125 @@
-import json
+from functools import partial
+from typing import Callable
 
 import pytest
 
-from api.authenticator import PatronData
-from api.config import CannotLoadConfiguration
-from api.simple_authentication import SimpleAuthenticationProvider
-from core.testing import DatabaseTest
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings, Keyboards
+from api.simple_authentication import SimpleAuthenticationProvider, SimpleAuthSettings
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestSimpleAuth(DatabaseTest):
-    def test_simple(self):
-        p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
+@pytest.fixture
+def mock_library_id() -> int:
+    return 20
 
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            p(self._default_library, integration)
-        assert "Test identifier and password not set." in str(excinfo.value)
 
-        integration.setting(p.TEST_IDENTIFIER).value = "barcode"
-        integration.setting(p.TEST_PASSWORD).value = "pass"
-        provider = p(self._default_library, integration)
+@pytest.fixture
+def mock_integration_id() -> int:
+    return 20
 
-        assert None == provider.remote_authenticate("user", "wrongpass")
-        assert None == provider.remote_authenticate("user", None)
-        assert None == provider.remote_authenticate(None, "pass")
+
+@pytest.fixture
+def create_library_settings() -> Callable[..., BasicAuthProviderLibrarySettings]:
+    return partial(BasicAuthProviderLibrarySettings)
+
+
+@pytest.fixture
+def create_settings() -> Callable[..., SimpleAuthSettings]:
+    return partial(
+        SimpleAuthSettings,
+        test_identifier="barcode",
+        test_password="pass",
+    )
+
+
+@pytest.fixture
+def create_provider(
+    mock_library_id: int,
+    mock_integration_id: int,
+    create_settings: Callable[..., SimpleAuthSettings],
+    create_library_settings: Callable[..., BasicAuthProviderLibrarySettings],
+) -> Callable[..., SimpleAuthenticationProvider]:
+    return partial(
+        SimpleAuthenticationProvider,
+        library_id=mock_library_id,
+        integration_id=mock_integration_id,
+        settings=create_settings(),
+        library_settings=create_library_settings(),
+    )
+
+
+class TestSimpleAuth:
+    def test_simple(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_provider: Callable[..., SimpleAuthenticationProvider],
+    ):
+        settings = create_settings()
+        provider = create_provider(settings=settings)
+
+        assert provider.remote_authenticate("user", "wrongpass") is None
+        assert provider.remote_authenticate("user", None) is None
+        assert provider.remote_authenticate(None, "pass") is None
         user = provider.remote_authenticate("barcode", "pass")
         assert isinstance(user, PatronData)
         assert "barcode" == user.authorization_identifier
         assert "barcode_id" == user.permanent_id
         assert "barcode_username" == user.username
-        assert None == user.neighborhood
+        assert user.neighborhood is None
 
-        # For the next test, set the test neighborhood.
-        integration.setting(p.TEST_NEIGHBORHOOD).value = "neighborhood"
-        provider = p(self._default_library, integration)
+    def test_neighborhood(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_provider: Callable[..., SimpleAuthenticationProvider],
+    ):
+        settings = create_settings(
+            neighborhood="neighborhood",
+        )
+        provider = create_provider(settings=settings)
 
         # User can also authenticate by their 'username'
-        user2 = provider.remote_authenticate("barcode_username", "pass")
-        assert "barcode" == user2.authorization_identifier
-        assert "neighborhood" == user2.neighborhood
+        user = provider.remote_authenticate("barcode_username", "pass")
+        assert isinstance(user, PatronData)
+        assert "barcode" == user.authorization_identifier
+        assert "neighborhood" == user.neighborhood
 
-    def test_no_password_authentication(self):
+    def test_no_password_authentication(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_provider: Callable[..., SimpleAuthenticationProvider],
+    ):
         """The SimpleAuthenticationProvider can be made even
         simpler by having it authenticate solely based on username.
         """
-        p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
-        integration.setting(p.TEST_IDENTIFIER).value = "barcode"
-        integration.setting(p.TEST_PASSWORD).value = "pass"
-        integration.setting(p.PASSWORD_KEYBOARD).value = p.NULL_KEYBOARD
-        provider = p(self._default_library, integration)
+        settings = create_settings(
+            password_keyboard=Keyboards.NULL,
+        )
+        provider = create_provider(settings=settings)
 
         # If you don't provide a password, you're in.
         user = provider.remote_authenticate("barcode", None)
         assert isinstance(user, PatronData)
 
         user2 = provider.remote_authenticate("barcode", "")
+        assert isinstance(user2, PatronData)
         assert user2.authorization_identifier == user.authorization_identifier
 
         # If you provide any password, you're out.
-        assert None == provider.remote_authenticate("barcode", "pass")
+        assert provider.remote_authenticate("barcode", "pass") is None
 
-    def test_additional_identifiers(self):
-        p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
-
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            p(self._default_library, integration)
-        assert "Test identifier and password not set." in str(excinfo.value)
-
-        integration.setting(p.TEST_IDENTIFIER).value = "barcode"
-        integration.setting(p.TEST_PASSWORD).value = "pass"
-        integration.setting(p.ADDITIONAL_TEST_IDENTIFIERS).value = json.dumps(
-            ["a", "b", "c"]
+    def test_additional_identifiers(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_provider: Callable[..., SimpleAuthenticationProvider],
+    ):
+        settings = create_settings(
+            additional_test_identifiers=["a", "b", "c"],
         )
-        provider = p(self._default_library, integration)
+        provider = create_provider(settings=settings)
 
-        assert None == provider.remote_authenticate("a", None)
-        assert None == provider.remote_authenticate(None, "pass")
+        assert provider.remote_authenticate("a", None) is None
+        assert provider.remote_authenticate(None, "pass") is None
 
         user = provider.remote_authenticate("a", "pass")
         assert isinstance(user, PatronData)
@@ -86,24 +128,26 @@ class TestSimpleAuth(DatabaseTest):
         assert "a_username" == user.username
 
         user2 = provider.remote_authenticate("b", "pass")
-        assert isinstance(user, PatronData)
+        assert isinstance(user2, PatronData)
         assert "b" == user2.authorization_identifier
         assert "b_id" == user2.permanent_id
         assert "b_username" == user2.username
 
         # Users can also authenticate by their 'username'
         user3 = provider.remote_authenticate("a_username", "pass")
+        assert isinstance(user3, PatronData)
         assert "a" == user3.authorization_identifier
 
         user4 = provider.remote_authenticate("b_username", "pass")
+        assert isinstance(user4, PatronData)
         assert "b" == user4.authorization_identifier
 
         # The main user can still authenticate too.
         user5 = provider.remote_authenticate("barcode", "pass")
+        assert isinstance(user5, PatronData)
         assert "barcode" == user5.authorization_identifier
 
     def test_generate_patrondata(self):
-
         m = SimpleAuthenticationProvider.generate_patrondata
 
         # Pass in numeric barcode as identifier
@@ -126,29 +170,33 @@ class TestSimpleAuth(DatabaseTest):
         result = m("1234", "Echo Park")
         assert result.neighborhood == "Echo Park"
 
-    def test__remote_patron_lookup(self):
-        p = SimpleAuthenticationProvider
-        integration = self._external_integration(self._str)
-        integration.setting(p.TEST_IDENTIFIER).value = "barcode"
-        integration.setting(p.TEST_PASSWORD).value = "pass"
-        integration.setting(p.PASSWORD_KEYBOARD).value = p.NULL_KEYBOARD
-        provider = p(self._default_library, integration)
+    def test_remote_patron_lookup(
+        self,
+        create_settings: Callable[..., SimpleAuthSettings],
+        create_provider: Callable[..., SimpleAuthenticationProvider],
+        db: DatabaseTransactionFixture,
+    ):
+        settings = create_settings(password_keyboard=Keyboards.NULL)
+        provider = create_provider(settings=settings)
+
         patron_data = PatronData(authorization_identifier="barcode")
-        patron = self._patron()
+        patron = db.patron()
         patron.authorization_identifier = "barcode"
 
         # Returns None if nothing is passed in
-        assert provider._remote_patron_lookup(None) == None
+        assert provider.remote_patron_lookup(None) is None  # type: ignore[arg-type]
 
         # Returns a patron if a patron is passed in and something is found
-        result = provider._remote_patron_lookup(patron)
+        result = provider.remote_patron_lookup(patron)
+        assert isinstance(result, PatronData)
         assert result.permanent_id == "barcode_id"
 
         # Returns None if no patron is found
         patron.authorization_identifier = "wrong barcode"
-        result = provider._remote_patron_lookup(patron)
-        assert result == None
+        result = provider.remote_patron_lookup(patron)
+        assert result is None
 
         # Returns a patron if a PatronData object is passed in and something is found
-        result = provider._remote_patron_lookup(patron_data)
+        result = provider.remote_patron_lookup(patron_data)
+        assert isinstance(result, PatronData)
         assert result.permanent_id == "barcode_id"

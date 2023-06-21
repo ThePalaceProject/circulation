@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 # If the genre classification does not match the fiction classification, throw
 # away the genre classifications.
 #
@@ -30,7 +28,7 @@ NO_VALUE = "NONE"
 NO_NUMBER = -1
 
 
-class ClassifierConstants(object):
+class ClassifierConstants:
     DDC = "DDC"
     LCC = "LCC"
     LCSH = "LCSH"
@@ -80,16 +78,14 @@ class ClassifierConstants(object):
     AUDIENCES_YOUNG_CHILDREN = [AUDIENCE_CHILDREN, AUDIENCE_ALL_AGES]
     AUDIENCES_JUVENILE = AUDIENCES_YOUNG_CHILDREN + [AUDIENCE_YOUNG_ADULT]
     AUDIENCES_ADULT = [AUDIENCE_ADULT, AUDIENCE_ADULTS_ONLY, AUDIENCE_ALL_AGES]
-    AUDIENCES = set(
-        [
-            AUDIENCE_ADULT,
-            AUDIENCE_ADULTS_ONLY,
-            AUDIENCE_YOUNG_ADULT,
-            AUDIENCE_CHILDREN,
-            AUDIENCE_ALL_AGES,
-            AUDIENCE_RESEARCH,
-        ]
-    )
+    AUDIENCES = {
+        AUDIENCE_ADULT,
+        AUDIENCE_ADULTS_ONLY,
+        AUDIENCE_YOUNG_ADULT,
+        AUDIENCE_CHILDREN,
+        AUDIENCE_ALL_AGES,
+        AUDIENCE_RESEARCH,
+    }
 
     SIMPLIFIED_GENRE = "http://librarysimplified.org/terms/genres/Simplified/"
     SIMPLIFIED_FICTION_STATUS = "http://librarysimplified.org/terms/fiction/"
@@ -329,7 +325,7 @@ class GradeLevelClassifier(Classifier):
         "pre-school": 3,
         "p": 3,
         "pk": 4,
-        # Easy readers
+        # Early readers
         "kindergarten": 5,
         "k": 5,
         "0": 5,
@@ -785,7 +781,7 @@ nonfiction_genres = [
 ]
 
 
-class GenreData(object):
+class GenreData:
     def __init__(self, name, is_fiction, parent=None, audience_restriction=None):
         self.name = name
         self.parent = parent
@@ -801,14 +797,12 @@ class GenreData(object):
     @property
     def self_and_subgenres(self):
         yield self
-        for child in self.all_subgenres:
-            yield child
+        yield from self.all_subgenres
 
     @property
     def all_subgenres(self):
         for child in self.subgenres:
-            for subgenre in child.self_and_subgenres:
-                yield subgenre
+            yield from child.self_and_subgenres
 
     @property
     def parents(self):
@@ -923,7 +917,7 @@ class Lowercased(str):
         new_value = value.lower()
         if new_value.endswith("."):
             new_value = new_value[:-1]
-        o = super(Lowercased, cls).__new__(cls, new_value)
+        o = super().__new__(cls, new_value)
         o.original = value
         return o
 
@@ -1006,7 +1000,7 @@ class FreeformAudienceClassifier(AgeOrGradeClassifier):
         return AgeClassifier.target_age(identifier, name, False)
 
 
-class WorkClassifier(object):
+class WorkClassifier:
     """Boil down a bunch of Classification objects into a few values."""
 
     # TODO: This needs a lot of additions.
@@ -1034,39 +1028,35 @@ class WorkClassifier(object):
         "Rosen Young Adult": Classifier.AUDIENCE_YOUNG_ADULT,
     }
 
-    not_adult_publishers = set(
-        [
-            "Scholastic Inc.",
-            "Random House Children's Books",
-            "Little, Brown Books for Young Readers",
-            "Penguin Young Readers Group",
-            "Hachette Children's Books",
-            "Nickelodeon Publishing",
-        ]
-    )
+    not_adult_publishers = {
+        "Scholastic Inc.",
+        "Random House Children's Books",
+        "Little, Brown Books for Young Readers",
+        "Penguin Young Readers Group",
+        "Hachette Children's Books",
+        "Nickelodeon Publishing",
+    }
 
-    not_adult_imprints = set(
-        [
-            "Scholastic",
-            "Scholastic Paperbacks",
-            "Random House Books for Young Readers",
-            "HMH Books for Young Readers",
-            "Knopf Books for Young Readers",
-            "Delacorte Books for Young Readers",
-            "Open Road Media Young Readers",
-            "Macmillan Young Listeners",
-            "Bloomsbury Childrens",
-            "NYR Children's Collection",
-            "Bloomsbury USA Childrens",
-            "National Geographic Children's Books",
-        ]
-    )
+    not_adult_imprints = {
+        "Scholastic",
+        "Scholastic Paperbacks",
+        "Random House Books for Young Readers",
+        "HMH Books for Young Readers",
+        "Knopf Books for Young Readers",
+        "Delacorte Books for Young Readers",
+        "Open Road Media Young Readers",
+        "Macmillan Young Listeners",
+        "Bloomsbury Childrens",
+        "NYR Children's Collection",
+        "Bloomsbury USA Childrens",
+        "National Geographic Children's Books",
+    }
 
-    fiction_imprints = set(["Del Rey"])
-    nonfiction_imprints = set(["Harlequin Nonfiction"])
+    fiction_imprints = {"Del Rey"}
+    nonfiction_imprints = {"Harlequin Nonfiction"}
 
-    nonfiction_publishers = set(["Wiley"])
-    fiction_publishers = set([])
+    nonfiction_publishers = {"Wiley"}
+    fiction_publishers = set()
 
     def __init__(self, work, test_session=None, debug=False):
         self._db = Session.object_session(work)
@@ -1281,12 +1271,10 @@ class WorkClassifier(object):
             Classifier.AUDIENCE_YOUNG_ADULT,
             Classifier.AUDIENCE_ADULTS_ONLY,
         )
-        audiences_from_license_source = set(
-            [
-                classification.subject.audience
-                for classification in self.direct_from_license_source
-            ]
-        )
+        audiences_from_license_source = {
+            classification.subject.audience
+            for classification in self.direct_from_license_source
+        }
         if (
             self.direct_from_license_source
             and not self.using_staff_audience

@@ -1,11 +1,11 @@
 import threading
 
 from core.model import Identifier, SessionManager
-from core.testing import DatabaseTest
 from core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestPool(object):
+class TestPool:
     def test_initializes_with_active_workers(self):
         original_thread_count = threading.active_count()
         with Pool(3) as pool:
@@ -66,9 +66,9 @@ class TestPool(object):
         assert 1 / 3.0 == pool.success_rate
 
 
-class TestDatabasePool(DatabaseTest):
-    def test_workers_are_created_with_sessions(self):
-        session_factory = SessionManager.sessionmaker(session=self._db)
+class TestDatabasePool:
+    def test_workers_are_created_with_sessions(self, db: DatabaseTransactionFixture):
+        session_factory = SessionManager.sessionmaker(session=db.session)
         bind = session_factory.kw["bind"]
         pool = DatabasePool(2, session_factory)
         try:
@@ -86,7 +86,7 @@ class MockQueue(Queue):
         self.error_count += 1
 
 
-class TestWorker(object):
+class TestWorker:
     def test_factory(self):
         mock_queue = object()
         result = Worker.factory(mock_queue)
@@ -116,7 +116,7 @@ class TestWorker(object):
 
         original = ["Who Can I * To", "* To You", "Water *s Dry", "* The World"]
 
-        class MockJob(object):
+        class MockJob:
             def __init__(self, idx):
                 self.idx = idx
 
@@ -135,7 +135,7 @@ class TestWorker(object):
         assert sorted(original) == sorted(results)
 
 
-class TestDatabaseJob(DatabaseTest):
+class TestDatabaseJob:
     class WorkingJob(DatabaseJob):
         def do_run(self, _db):
             identifier = Identifier(type="Keep It", identifier="100")
@@ -147,13 +147,16 @@ class TestDatabaseJob(DatabaseTest):
             _db.add(identifier)
             raise RuntimeError
 
-    def test_manages_database_for_job_success_and_failure(self):
-        self.WorkingJob().run(self._db)
+    def test_manages_database_for_job_success_and_failure(
+        self, db: DatabaseTransactionFixture
+    ):
+        session = db.session
+        self.WorkingJob().run(session)
         try:
-            self.BrokenJob().run(self._db)
+            self.BrokenJob().run(session)
         except RuntimeError:
             pass
 
-        [identifier] = self._db.query(Identifier).all()
+        [identifier] = session.query(Identifier).all()
         assert "Keep It" == identifier.type
         assert "100" == identifier.identifier

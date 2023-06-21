@@ -6,14 +6,12 @@ from api.admin.exceptions import *
 from api.config import Configuration
 from core.model import AdminRole, ConfigurationSetting
 
-from .test_controller import SettingsControllerTest
 
-
-class TestSitewideSettings(SettingsControllerTest):
-    def test_sitewide_settings_get(self):
-        with self.request_context_with_admin("/"):
+class TestSitewideSettings:
+    def test_sitewide_settings_get(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_sitewide_configuration_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_get()
             )
             settings = response.get("settings")
             all_settings = response.get("all_settings")
@@ -25,16 +23,16 @@ class TestSitewideSettings(SettingsControllerTest):
             assert Configuration.SECRET_KEY in keys
 
         ConfigurationSetting.sitewide(
-            self._db, Configuration.DATABASE_LOG_LEVEL
+            settings_ctrl_fixture.ctrl.db.session, Configuration.DATABASE_LOG_LEVEL
         ).value = "INFO"
         ConfigurationSetting.sitewide(
-            self._db, Configuration.SECRET_KEY
+            settings_ctrl_fixture.ctrl.db.session, Configuration.SECRET_KEY
         ).value = "secret"
-        self._db.flush()
+        settings_ctrl_fixture.ctrl.db.session.flush()
 
-        with self.request_context_with_admin("/"):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
-                self.manager.admin_sitewide_configuration_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_get()
             )
             settings = response.get("settings")
             all_settings = response.get("all_settings")
@@ -48,32 +46,32 @@ class TestSitewideSettings(SettingsControllerTest):
             assert Configuration.DATABASE_LOG_LEVEL in keys
             assert Configuration.SECRET_KEY in keys
 
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            self._db.flush()
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+            settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_sitewide_configuration_settings_controller.process_get,
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_get,
             )
 
-    def test_sitewide_settings_post_errors(self):
-        with self.request_context_with_admin("/", method="POST"):
+    def test_sitewide_settings_post_errors(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([("key", None)])
             response = (
-                self.manager.admin_sitewide_configuration_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_post()
             )
             assert response == MISSING_SITEWIDE_SETTING_KEY
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [("key", Configuration.SECRET_KEY), ("value", None)]
             )
             response = (
-                self.manager.admin_sitewide_configuration_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_post()
             )
             assert response == MISSING_SITEWIDE_SETTING_VALUE
 
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        with self.request_context_with_admin("/", method="POST"):
+        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("key", Configuration.SECRET_KEY),
@@ -82,11 +80,11 @@ class TestSitewideSettings(SettingsControllerTest):
             )
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_sitewide_configuration_settings_controller.process_post,
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_post,
             )
 
-    def test_sitewide_settings_post_create(self):
-        with self.request_context_with_admin("/", method="POST"):
+    def test_sitewide_settings_post_create(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("key", Configuration.DATABASE_LOG_LEVEL),
@@ -94,24 +92,24 @@ class TestSitewideSettings(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_sitewide_configuration_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_post()
             )
             assert response.status_code == 200
 
         # The setting was created.
         setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.DATABASE_LOG_LEVEL
+            settings_ctrl_fixture.ctrl.db.session, Configuration.DATABASE_LOG_LEVEL
         )
         assert setting.key == response.get_data(as_text=True)
         assert "10" == setting.value
 
-    def test_sitewide_settings_post_edit(self):
+    def test_sitewide_settings_post_edit(self, settings_ctrl_fixture):
         setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.DATABASE_LOG_LEVEL
+            settings_ctrl_fixture.ctrl.db.session, Configuration.DATABASE_LOG_LEVEL
         )
         setting.value = "WARN"
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("key", Configuration.DATABASE_LOG_LEVEL),
@@ -119,7 +117,7 @@ class TestSitewideSettings(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_sitewide_configuration_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_post()
             )
             assert response.status_code == 200
 
@@ -127,22 +125,22 @@ class TestSitewideSettings(SettingsControllerTest):
         assert setting.key == response.get_data(as_text=True)
         assert "ERROR" == setting.value
 
-    def test_sitewide_setting_delete(self):
+    def test_sitewide_setting_delete(self, settings_ctrl_fixture):
         setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.DATABASE_LOG_LEVEL
+            settings_ctrl_fixture.ctrl.db.session, Configuration.DATABASE_LOG_LEVEL
         )
         setting.value = "WARN"
 
-        with self.request_context_with_admin("/", method="DELETE"):
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_sitewide_configuration_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_delete,
                 setting.key,
             )
 
-            self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = self.manager.admin_sitewide_configuration_settings_controller.process_delete(
+            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            response = settings_ctrl_fixture.manager.admin_sitewide_configuration_settings_controller.process_delete(
                 setting.key
             )
             assert response.status_code == 200

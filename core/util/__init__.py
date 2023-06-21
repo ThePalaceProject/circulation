@@ -1,15 +1,18 @@
-# encoding: utf-8
 """Miscellaneous utilities"""
+
+from __future__ import annotations
 
 import re
 import string
 from collections import Counter
+from typing import Any, Iterable, Optional
 
-import flask_sqlalchemy_session
 import sqlalchemy
 from money import Money
-from sqlalchemy import distinct
+from sqlalchemy import distinct, select
 from sqlalchemy.sql.functions import func
+
+import core.flask_sqlalchemy_session
 
 # For backwards compatibility, import items that were moved to
 # languages.py
@@ -27,22 +30,20 @@ def batch(iterable, size=1):
 def fast_query_count(query):
     """Counts the results of a query without using super-slow subquery"""
 
-    statement = query.enable_eagerloads(False).with_labels().statement
-    distinct_columns = statement._distinct
+    statement = query.selectable
+    table = statement.froms[0]
+    distinct_columns = statement._distinct_on
     new_columns = [func.count()]
-    if isinstance(distinct_columns, list):
+    if statement._distinct and isinstance(distinct_columns, (list, tuple)):
         # When using distinct to select from the db, the distinct
         # columns need to be incorporated into the count itself.
         new_columns = [func.count(distinct(func.concat(*distinct_columns)))]
 
-        # Then we can remove the distinct criteria from the statement
-        # itself by setting it to its default value, False.
-        statement._distinct = False
-    count_q = statement.with_only_columns(new_columns).order_by(None)
+    count_q = select().with_only_columns(new_columns).select_from(table).order_by(None)
     count = query.session.execute(count_q).scalar()
 
-    if query._limit and query._limit < count:
-        return query._limit
+    if query._limit_clause is not None and query._limit_clause.value < count:
+        return query._limit_clause.value
 
     return count
 
@@ -72,7 +73,7 @@ def slugify(text, length_limit=None):
     return str(slug)
 
 
-class MetadataSimilarity(object):
+class MetadataSimilarity:
     """Estimate how similar two bits of metadata are."""
 
     SEPARATOR = re.compile(r"\W")
@@ -128,7 +129,7 @@ class MetadataSimilarity(object):
 
         """
         if not stopwords:
-            stopwords = set(["the", "a", "an"])
+            stopwords = {"the", "a", "an"}
 
         histogram_1 = cls.histogram(strings_1, stopwords=stopwords)
         histogram_2 = cls.histogram(strings_2, stopwords=stopwords)
@@ -203,7 +204,7 @@ class MetadataSimilarity(object):
         if title1 == None or title2 == None:
             return 0
         b1, b2, proportion = cls._word_match_proportion(
-            title1, title2, set(["a", "the", "an"])
+            title1, title2, {"a", "the", "an"}
         )
         if not b1.union(b2) in (b1, b2):
             # Penalize titles where one title is not a subset of the
@@ -226,11 +227,11 @@ class MetadataSimilarity(object):
         are present in both sets?
         """
         return cls._proportion(
-            set([x.sort_name for x in authors1]), set([x.sort_name for x in authors2])
+            {x.sort_name for x in authors1}, {x.sort_name for x in authors2}
         )
 
 
-class TitleProcessor(object):
+class TitleProcessor:
 
     title_stopwords = ["The ", "A ", "An "]
 
@@ -262,7 +263,7 @@ class TitleProcessor(object):
         return subtitle
 
 
-class Bigrams(object):
+class Bigrams:
 
     all_letters = re.compile("^[a-z]+$")
 
@@ -521,46 +522,49 @@ english_bigrams = Bigrams(Counter())
 english_bigrams.proportional = Counter(english_bigram_frequencies)
 
 
-class MoneyUtility(object):
+class MoneyUtility:
 
     DEFAULT_CURRENCY = "USD"
 
     @classmethod
-    def parse(cls, amount):
+    def parse(cls, amount: str | float | int | None) -> Money:
         """Attempt to turn a string into a Money object."""
         currency = cls.DEFAULT_CURRENCY
         if not amount:
             amount = "0"
         amount = str(amount)
+
         if amount[0] == "$":
             currency = "USD"
             amount = amount[1:]
+
+        # `Money` does not properly handle commas in the amount, so we strip
+        # them out of US dollar amounts, since it won't change the "value."
+        if currency == "USD":
+            amount = "".join(amount.split(","))
         return Money(amount, currency)
 
 
-def is_session(value):
+def is_session(value: object) -> bool:
     """Return a boolean value indicating whether the value is a valid SQLAlchemy session.
 
     :param value: Value
-    :type value: Any
-
     :return: Boolean value indicating whether the value is a valid SQLAlchemy session or not
-    :rtype: bool
     """
     return isinstance(
         value,
-        (sqlalchemy.orm.session.Session, flask_sqlalchemy_session.flask_scoped_session),
+        (
+            sqlalchemy.orm.session.Session,
+            core.flask_sqlalchemy_session.flask_scoped_session,
+        ),
     )
 
 
-def first_or_default(collection, default=None):
+def first_or_default(collection: Iterable, default: Any | None = None) -> Any:
     """Return first element of the specified collection or the default value if the collection is empty.
 
     :param collection: Collection
-    :type collection: Iterable
-
     :param default: Default value
-    :type default: Any
     """
     element = next(iter(collection), None)
 
@@ -576,3 +580,26 @@ def chunks(lst, chunk_size, start_index=0):
 
     for i in range(start_index, length, chunk_size):
         yield lst[i : i + chunk_size]
+
+
+class ValuesMeta(type):
+    """Metaclass to allow operators on simple constants defining classes"""
+
+    def __contains__(cls, value):
+        """Does the values exist in the constants of this class"""
+        return value in cls.values()
+
+    def values(cls):
+        """Fetch the values of constants defined in the class"""
+        values = set()
+        for key in dir(cls):
+            val = getattr(cls, key)
+            if not key.startswith("_") and not callable(val):
+                values.add(val)
+        return values
+
+
+class Values(metaclass=ValuesMeta):
+    """Like an enum class but a little more nuanced
+    Use this to define classes that define only constants
+    Operators can be defined in the metaclass"""

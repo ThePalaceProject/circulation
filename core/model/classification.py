@@ -1,8 +1,8 @@
-# encoding: utf-8
 # Subject, Classification, Genre
-
+from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
@@ -15,12 +15,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from .. import classifier
-from ..classifier import COMICS_AND_GRAPHIC_NOVELS, Classifier, Erotica, GenreData
+from ..classifier import (  # type: ignore[attr-defined]
+    COMICS_AND_GRAPHIC_NOVELS,
+    Classifier,
+    Erotica,
+    GenreData,
+)
 from . import (
     Base,
     get_one,
@@ -31,6 +36,11 @@ from . import (
 )
 from .constants import DataSourceConstants
 from .hassessioncache import HasSessionCache
+
+if TYPE_CHECKING:
+    # This is needed during type checking so we have the
+    # types of related models.
+    from core.model import WorkGenre  # noqa: autoflake
 
 
 class Subject(Base):
@@ -134,7 +144,9 @@ class Subject(Base):
     checked = Column(Boolean, default=False, index=True)
 
     # One Subject may participate in many Classifications.
-    classifications = relationship("Classification", backref="subject")
+    classifications: Mapped[List[Classification]] = relationship(
+        "Classification", back_populates="subject"
+    )
 
     # Type + identifier must be unique.
     __table_args__ = (UniqueConstraint("type", "identifier"),)
@@ -164,7 +176,7 @@ class Subject(Base):
             age_range = " " + self.target_age_string
         else:
             age_range = ""
-        a = "[%s:%s%s%s%s%s%s]" % (
+        a = "[{}:{}{}{}{}{}{}]".format(
             self.type,
             self.identifier,
             name,
@@ -337,6 +349,7 @@ class Classification(Base):
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
+    subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
 
     # How much weight the data source gives to this classification.
@@ -366,7 +379,7 @@ class Classification(Base):
     # This goes into Classification rather than Subject because it's
     # possible that one particular data source could use a certain
     # subject type in an unreliable way.
-    _juvenile_subject_types = set([Subject.LCC])
+    _juvenile_subject_types = {Subject.LCC}
 
     _quality_as_indicator_of_target_age = {
         # Not all classifications are equally reliable as indicators
@@ -468,12 +481,12 @@ class Genre(Base, HasSessionCache):
     name = Column(Unicode, unique=True, index=True)
 
     # One Genre may have affinity with many Subjects.
-    subjects = relationship("Subject", backref="genre")
+    subjects: Mapped[List[Subject]] = relationship("Subject", backref="genre")
 
     # One Genre may participate in many WorkGenre assignments.
     works = association_proxy("work_genres", "work")
 
-    work_genres = relationship(
+    work_genres: Mapped[List[WorkGenre]] = relationship(
         "WorkGenre", backref="genre", cascade="all, delete-orphan"
     )
 

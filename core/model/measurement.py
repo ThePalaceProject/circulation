@@ -1,4 +1,3 @@
-# encoding: utf-8
 # Measurement
 
 
@@ -720,7 +719,7 @@ class Measurement(Base):
     value = Column(Float)
 
     # The measurement normalized to a 0...1 scale.
-    _normalized_value = Column(Float, name="normalized_value")
+    _normalized_value = Column("normalized_value", Float)
 
     # How much weight should be assigned this measurement, relative to
     # other measurements of the same quantity from the same source.
@@ -735,7 +734,7 @@ class Measurement(Base):
     is_most_recent = Column(Boolean, index=True)
 
     def __repr__(self):
-        return "%s(%r)=%s (norm=%.2f)" % (
+        return "{}({!r})={} (norm={:.2f})".format(
             self.quantity_measured,
             self.identifier,
             self.value,
@@ -802,7 +801,7 @@ class Measurement(Base):
                 final,
             )
         if quality:
-            logging.debug("Popularity+Rating: %.2f, Quality: %.2f" % (final, quality))
+            logging.debug(f"Popularity+Rating: {final:.2f}, Quality: {quality:.2f}")
             final = (final / 2) + (quality / 2)
             logging.debug("Final value: %.2f" % final)
         return final

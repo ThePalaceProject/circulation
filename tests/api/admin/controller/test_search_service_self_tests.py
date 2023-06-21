@@ -2,40 +2,40 @@ from api.admin.problem_details import *
 from core.model import ExternalIntegration, create
 from core.selftest import HasSelfTests
 
-from .test_controller import SettingsControllerTest
 
-
-class TestSearchServiceSelfTests(SettingsControllerTest):
-    def test_search_service_self_tests_with_no_identifier(self):
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
+class TestSearchServiceSelfTests:
+    def test_search_service_self_tests_with_no_identifier(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
                 None
             )
             assert response.title == MISSING_IDENTIFIER.title
             assert response.detail == MISSING_IDENTIFIER.detail
             assert response.status_code == 400
 
-    def test_search_service_self_tests_with_no_search_service_found(self):
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
+    def test_search_service_self_tests_with_no_search_service_found(
+        self, settings_ctrl_fixture
+    ):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
                 -1
             )
             assert response == MISSING_SERVICE
             assert response.status_code == 404
 
-    def test_search_service_self_tests_test_get(self):
+    def test_search_service_self_tests_test_get(self, settings_ctrl_fixture):
         old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = self.mock_prior_test_results
+        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
         search_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
                 search_service.id
             )
             response_search_service = response.get("self_test_results")
@@ -54,25 +54,25 @@ class TestSearchServiceSelfTests(SettingsControllerTest):
 
         HasSelfTests.prior_test_results = old_prior_test_results
 
-    def test_search_service_self_tests_post(self):
+    def test_search_service_self_tests_post(self, settings_ctrl_fixture):
         old_run_self_tests = HasSelfTests.run_self_tests
-        HasSelfTests.run_self_tests = self.mock_run_self_tests
+        HasSelfTests.run_self_tests = settings_ctrl_fixture.mock_run_self_tests
 
         search_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.ELASTICSEARCH,
+            protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
         m = (
-            self.manager.admin_search_service_self_tests_controller.self_tests_process_post
+            settings_ctrl_fixture.manager.admin_search_service_self_tests_controller.self_tests_process_post
         )
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             response = m(search_service.id)
             assert response._status == "200 OK"
             assert "Successfully ran new self tests" == response.get_data(as_text=True)
 
-        positional, keyword = self.run_self_tests_called_with
+        positional, keyword = settings_ctrl_fixture.run_self_tests_called_with
         # run_self_tests was called with positional arguments:
         # * The database connection
         # * The method to call to instantiate a HasSelfTests implementation
@@ -80,7 +80,11 @@ class TestSearchServiceSelfTests(SettingsControllerTest):
         #   constructor.)
         # * The database connection again (to be passed into
         #   the ExternalSearchIndex constructor).
-        assert (self._db, None, self._db) == positional
+        assert (
+            settings_ctrl_fixture.ctrl.db.session,
+            None,
+            settings_ctrl_fixture.ctrl.db.session,
+        ) == positional
 
         # run_self_tests was not called with any keyword arguments.
         assert {} == keyword

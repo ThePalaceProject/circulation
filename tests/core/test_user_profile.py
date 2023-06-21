@@ -3,7 +3,7 @@ import json
 from core.user_profile import MockProfileStorage, ProfileController
 
 
-class TestProfileController(object):
+class TestProfileController:
     def setup_method(self):
         self.read_only_settings = dict(key="value")
         self.writable_settings = dict(writable_key="old_value")
@@ -81,11 +81,11 @@ class TestProfileController(object):
         problem = self.controller.get()
         assert 500 == problem.status_code
         assert (
-            "Profile profile_document is not a JSON object: 'Here it is!'."
+            "Profile document is not a JSON object: 'Here it is!'."
             == problem.debug_message
         )
 
-    def test_get_non_dictionary_profile_document(self):
+    def test_get_non_dictionary_profile_document_json(self):
         """Test what happens if the profile_document cannot be converted to JSON."""
 
         class BadStorage(MockProfileStorage):

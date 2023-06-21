@@ -1,16 +1,20 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # Identifier, Equivalency
 import logging
 import random
+import re
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
+from typing import TYPE_CHECKING, List
 from urllib.parse import quote, unquote
 
 import isbnlib
 from sqlalchemy import (
     Boolean,
     Column,
+    Computed,
     Float,
     ForeignKey,
     Integer,
@@ -18,8 +22,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import joinedload, relationship
-from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.orm import Mapped, joinedload, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
@@ -34,22 +38,193 @@ from .datasource import DataSource
 from .licensing import LicensePoolDeliveryMechanism, RightsStatus
 from .measurement import Measurement
 
+if TYPE_CHECKING:
+    from core.model import (  # noqa: autoflake
+        Annotation,
+        Edition,
+        Hyperlink,
+        LicensePool,
+    )
+
 
 class IdentifierParser(metaclass=ABCMeta):
     """Interface for identifier parsers."""
 
     @abstractmethod
-    def parse(self, identifier_string):
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
         """Parse a string containing an identifier, extract it and determine its type.
 
         :param identifier_string: String containing an identifier
-        :type identifier_string: str
-
         :return: 2-tuple containing the identifier's type and identifier itself or None
             if the string contains an incorrect identifier
-        :rtype: Optional[Tuple[str, str]]
         """
         raise NotImplementedError()
+
+
+class ISBNURNIdentifierParser(IdentifierParser):
+    """Parser for ISBN URN IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.lower().startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
+            identifier_string = identifier_string[
+                len(Identifier.ISBN_URN_SCHEME_PREFIX) :
+            ]
+            identifier_string = unquote(identifier_string)
+            # Make sure this is a valid ISBN, and convert it to an ISBN-13.
+            if not (
+                isbnlib.is_isbn10(identifier_string)
+                or isbnlib.is_isbn13(identifier_string)
+            ):
+                raise ValueError("%s is not a valid ISBN." % identifier_string)
+            if isbnlib.is_isbn10(identifier_string):
+                identifier_string = isbnlib.to_isbn13(identifier_string)
+
+            return (Identifier.ISBN, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "ISBN URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class URNIdentifierParser(IdentifierParser):
+    """Parser for URN IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.startswith(Identifier.URN_SCHEME_PREFIX):
+            identifier_string = identifier_string[len(Identifier.URN_SCHEME_PREFIX) :]
+            type, identifier_string = list(
+                map(unquote, identifier_string.split("/", 1))
+            )
+            return (type, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class GenericURNIdentifierParser(IdentifierParser):
+    """Parser for Generic URN IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.startswith(Identifier.OTHER_URN_SCHEME_PREFIX):
+            return (Identifier.URI, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "Generic URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class URIIdentifierParser(IdentifierParser):
+    """Parser for URI IDs."""
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.startswith("http:") or identifier_string.startswith(
+            "https:"
+        ):
+            return (Identifier.URI, identifier_string)
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "URI ID".format(identifier_string)
+        )
+
+        return None
+
+
+class GutenbergIdentifierParser(IdentifierParser):
+    """Parser for Gutenberg Doc IDs."""
+
+    ID_REGEX = IdentifierConstants.GUTENBERG_URN_SCHEME_RE
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        match = self.ID_REGEX.match(identifier_string)
+
+        if match:
+            document_id = match.groups()[0]
+            result = (Identifier.GUTENBERG_ID, document_id)
+
+            self._logger.debug(
+                'Finished parsing identifier string "{}". Result: {}'.format(
+                    document_id, result
+                )
+            )
+
+            return result
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a ProQuest Doc ID'.format(
+                identifier_string
+            )
+        )
+
+        return None
+
+
+class ProQuestIdentifierParser(IdentifierParser):
+    """Parser for ProQuest Doc IDs."""
+
+    ID_REGEX = re.compile(r"urn:proquest.com/document-id/(\d+)")
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self._logger.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        match = self.ID_REGEX.match(identifier_string)
+
+        if match:
+            document_id = match.groups()[0]
+            result = (Identifier.PROQUEST_ID, document_id)
+
+            self._logger.debug(
+                'Finished parsing identifier string "{}". Result={}'
+                "".format(identifier_string, result)
+            )
+
+            return result
+
+        self._logger.debug(
+            'Finished parsing identifier string "{}". It does not contain a ProQuest Doc ID'.format(
+                identifier_string
+            )
+        )
+
+        return None
 
 
 @total_ordering
@@ -61,22 +236,26 @@ class Identifier(Base, IdentifierConstants):
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
 
-    equivalencies = relationship(
+    equivalencies: Mapped[List[Equivalency]] = relationship(
         "Equivalency",
-        primaryjoin=("Identifier.id==Equivalency.input_id"),
-        backref="input_identifiers",
+        foreign_keys="Equivalency.input_id",
+        back_populates="input",
         cascade="all, delete-orphan",
+        uselist=True,
     )
 
-    inbound_equivalencies = relationship(
+    inbound_equivalencies: Mapped[List[Equivalency]] = relationship(
         "Equivalency",
-        primaryjoin=("Identifier.id==Equivalency.output_id"),
-        backref="output_identifiers",
+        foreign_keys="Equivalency.output_id",
+        back_populates="output",
         cascade="all, delete-orphan",
+        uselist=True,
     )
 
     # One Identifier may have many associated CoverageRecords.
-    coverage_records = relationship("CoverageRecord", backref="identifier")
+    coverage_records: Mapped[List[CoverageRecord]] = relationship(
+        "CoverageRecord", backref="identifier"
+    )
 
     def __repr__(self):
         records = self.primarily_identifies
@@ -84,34 +263,45 @@ class Identifier(Base, IdentifierConstants):
             title = ' prim_ed=%d ("%s")' % (records[0].id, records[0].title)
         else:
             title = ""
-        return "%s/%s ID=%s%s" % (self.type, self.identifier, self.id, title)
+        return f"{self.type}/{self.identifier} ID={self.id}{title}"
 
     # One Identifier may serve as the primary identifier for
     # several Editions.
-    primarily_identifies = relationship("Edition", backref="primary_identifier")
+    primarily_identifies: Mapped[List[Edition]] = relationship(
+        "Edition", backref="primary_identifier"
+    )
 
     # One Identifier may serve as the identifier for many
     # LicensePools, through different Collections.
-    licensed_through = relationship(
+    licensed_through: Mapped[List[LicensePool]] = relationship(
         "LicensePool",
-        backref="identifier",
+        back_populates="identifier",
         lazy="joined",
+        overlaps="delivery_mechanisms",
     )
 
     # One Identifier may have many Links.
-    links = relationship("Hyperlink", backref="identifier")
+    links: Mapped[List[Hyperlink]] = relationship(
+        "Hyperlink", backref="identifier", uselist=True
+    )
 
     # One Identifier may be the subject of many Measurements.
-    measurements = relationship("Measurement", backref="identifier")
+    measurements: Mapped[List[Measurement]] = relationship(
+        "Measurement", backref="identifier"
+    )
 
     # One Identifier may participate in many Classifications.
-    classifications = relationship("Classification", backref="identifier")
+    classifications: Mapped[List[Classification]] = relationship(
+        "Classification", backref="identifier"
+    )
 
     # One identifier may participate in many Annotations.
-    annotations = relationship("Annotation", backref="identifier")
+    annotations: Mapped[List[Annotation]] = relationship(
+        "Annotation", backref="identifier"
+    )
 
-    # One Identifier can have have many LicensePoolDeliveryMechanisms.
-    delivery_mechanisms = relationship(
+    # One Identifier can have many LicensePoolDeliveryMechanisms.
+    delivery_mechanisms: Mapped[List[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
         backref="identifier",
         foreign_keys=lambda: [LicensePoolDeliveryMechanism.identifier_id],
@@ -171,9 +361,7 @@ class Identifier(Base, IdentifierConstants):
             foreign_identifier = foreign_identifier.lower()
 
         if not cls.valid_as_foreign_identifier(foreign_type, foreign_identifier):
-            raise ValueError(
-                '"%s" is not a valid %s.' % (foreign_identifier, foreign_type)
-            )
+            raise ValueError(f'"{foreign_identifier}" is not a valid {foreign_type}.')
 
         return (foreign_type, foreign_identifier)
 
@@ -213,7 +401,9 @@ class Identifier(Base, IdentifierConstants):
             return self.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
         else:
             identifier_type = quote(self.type)
-            return self.URN_SCHEME_PREFIX + "%s/%s" % (identifier_type, identifier_text)
+            return self.URN_SCHEME_PREFIX + "{}/{}".format(
+                identifier_type, identifier_text
+            )
 
     @property
     def work(self):
@@ -230,44 +420,27 @@ class Identifier(Base, IdentifierConstants):
         # is provided in a context that requires a resolvable identifier
         pass
 
+    PARSERS: list[IdentifierParser] = [
+        GutenbergIdentifierParser(),
+        URIIdentifierParser(),
+        ISBNURNIdentifierParser(),
+        URNIdentifierParser(),
+        ProQuestIdentifierParser(),
+        GenericURNIdentifierParser(),
+    ]
+
     @classmethod
-    def type_and_identifier_for_urn(cls, identifier_string):
-        if not identifier_string:
-            return None, None
-        m = cls.GUTENBERG_URN_SCHEME_RE.match(identifier_string)
-        if m:
-            type = Identifier.GUTENBERG_ID
-            identifier_string = m.groups()[0]
-        elif identifier_string.startswith("http:") or identifier_string.startswith(
-            "https:"
-        ):
-            type = Identifier.URI
-        elif identifier_string.startswith(Identifier.URN_SCHEME_PREFIX):
-            identifier_string = identifier_string[len(Identifier.URN_SCHEME_PREFIX) :]
-            type, identifier_string = list(
-                map(unquote, identifier_string.split("/", 1))
-            )
-        elif identifier_string.lower().startswith(Identifier.ISBN_URN_SCHEME_PREFIX):
-            type = Identifier.ISBN
-            identifier_string = identifier_string[
-                len(Identifier.ISBN_URN_SCHEME_PREFIX) :
-            ]
-            identifier_string = unquote(identifier_string)
-            # Make sure this is a valid ISBN, and convert it to an ISBN-13.
-            if not (
-                isbnlib.is_isbn10(identifier_string)
-                or isbnlib.is_isbn13(identifier_string)
-            ):
-                raise ValueError("%s is not a valid ISBN." % identifier_string)
-            if isbnlib.is_isbn10(identifier_string):
-                identifier_string = isbnlib.to_isbn13(identifier_string)
-        elif identifier_string.startswith(Identifier.OTHER_URN_SCHEME_PREFIX):
-            type = Identifier.URI
-        else:
-            raise ValueError(
-                "Could not turn %s into a recognized identifier." % identifier_string
-            )
-        return (type, identifier_string)
+    def type_and_identifier_for_urn(cls, identifier_string: str) -> tuple[str, str]:
+
+        for parser in Identifier.PARSERS:
+            result = parser.parse(identifier_string)
+            if result:
+                identifier_type, identifier = result
+                return identifier_type, identifier
+
+        raise ValueError(
+            "Could not turn %s into a recognized identifier." % identifier_string
+        )
 
     @classmethod
     def parse_urns(cls, _db, identifier_strings, autocreate=True, allowed_types=None):
@@ -342,7 +515,7 @@ class Identifier(Base, IdentifierConstants):
         # Find any identifier details that don't correspond to an existing
         # identifier. Try to create them.
         new_identifiers = list()
-        new_identifiers_details = set([])
+        new_identifiers_details = set()
         for urn, details in list(identifier_details.items()):
             if details in new_identifiers_details:
                 # For some reason, this identifier is here twice.
@@ -362,25 +535,20 @@ class Identifier(Base, IdentifierConstants):
 
     @classmethod
     def _parse_urn(
-        cls, _db, identifier_string, identifier_type, must_support_license_pools=False
-    ):
+        cls,
+        _db: Session,
+        identifier_string: str,
+        identifier_type: str,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param identifier_string: Identifier itself
-        :type identifier_string: str
-
         :param identifier_type: Identifier's type
-        :type identifier_type: str
-
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
-        :type must_support_license_pools: bool
-
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
-        :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
         if must_support_license_pools:
             try:
@@ -394,22 +562,28 @@ class Identifier(Base, IdentifierConstants):
         return cls.for_foreign_id(_db, identifier_type, identifier_string)
 
     @classmethod
-    def parse_urn(cls, _db, identifier_string, must_support_license_pools=False):
+    def parse_urn(
+        cls,
+        _db: Session,
+        identifier_string: str | None,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier | None, bool | None]:
         """Parse identifier string.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param identifier_string: String containing an identifier
-        :type identifier_string: str
-
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
-        :type must_support_license_pools: bool
-
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
-        :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
+        # I added this in here in my refactoring because there is a test
+        # that tests for this case. I'm not sure that it is necessary, but
+        # I've assumed there was a reason that the test_identifier.test_parse_urn
+        # tests for this case and thus ensure that it remains valid here.
+        # test
+        if identifier_string is None:
+            return None, None
+
         identifier_type, identifier_string = cls.type_and_identifier_for_urn(
             identifier_string
         )
@@ -419,26 +593,26 @@ class Identifier(Base, IdentifierConstants):
         )
 
     @classmethod
-    def parse(cls, _db, identifier_string, parser, must_support_license_pools=False):
+    def parse(
+        cls,
+        _db: Session,
+        identifier_string: str,
+        parser: IdentifierParser,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier, bool]:
         """Parse identifier string.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param identifier_string: String containing an identifier
-        :type identifier_string: str
-
         :param parser: Identifier parser
-        :type parser: IdentifierParser
-
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
-        :type must_support_license_pools: bool
-
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
-        :rtype: Tuple[core.model.identifier.Identifier, bool]
         """
-        identifier_type, identifier_string = parser.parse(identifier_string)
+        identifier = parser.parse(identifier_string)
+        if identifier is None:
+            raise ValueError(f"Unable to parse identifier {identifier_string}.")
+        identifier_type, identifier_string = identifier
 
         return cls._parse_urn(
             _db, identifier_string, identifier_type, must_support_license_pools
@@ -557,7 +731,6 @@ class Identifier(Base, IdentifierConstants):
         from .resource import Hyperlink, Representation, Resource
 
         _db = Session.object_session(self)
-
         # Find or create the Resource.
         if not href:
             href = Hyperlink.generic_uri(data_source, self, rel, content)
@@ -594,6 +767,24 @@ class Identifier(Base, IdentifierConstants):
             resource.representation, is_new = get_one_or_create(
                 _db, Representation, url=resource.url, media_type=media_type
             )
+        elif (
+            media_type
+            and resource.representation
+            and resource.representation.media_type != media_type
+        ):
+            # Ensure we do not violate unique constraints
+            representation_exists = (
+                _db.query(Representation)
+                .filter(
+                    Representation.url == resource.url,
+                    Representation.media_type == media_type,
+                )
+                .count()
+            )
+            if not representation_exists:
+                # We have a representation that is not the same media type we previously knew of
+                resource.representation.media_type = media_type
+                resource.representation.url = resource.url
 
         if original_resource:
             original_resource.add_derivative(link.resource, transformation_settings)
@@ -946,9 +1137,13 @@ class Equivalency(Base):
     # 'output' is the output
     id = Column(Integer, primary_key=True)
     input_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    input = relationship("Identifier", foreign_keys=input_id)
+    input: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=input_id, back_populates="equivalencies"
+    )
     output_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    output = relationship("Identifier", foreign_keys=output_id)
+    output: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=output_id, back_populates="inbound_equivalencies"
+    )
 
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
@@ -971,9 +1166,9 @@ class Equivalency(Base):
 
     def __repr__(self):
         r = "[%s ->\n %s\n source=%s strength=%.2f votes=%d)]" % (
-            repr(self.input).decode("utf8"),
-            repr(self.output).decode("utf8"),
-            self.data_source.name,
+            repr(self.input),
+            repr(self.output),
+            self.data_source_id and self.data_source.name,
             self.strength,
             self.votes,
         )
@@ -999,3 +1194,37 @@ class Equivalency(Base):
         if exclude_ids:
             q = q.filter(~Equivalency.id.in_(exclude_ids))
         return q
+
+
+class RecursiveEquivalencyCache(Base):
+    """A chain of identifiers linked to a starting "parent" identifier
+    From equivalents if there exists (10,12),(12,19)
+    then for parent 10 there should exist rows
+    (10,12,order_no=1), (10,19,order_no=2)
+    This allows for simple querying during different jobs
+    rather than doing on-the-go dynamic recursive_equivalents
+    """
+
+    __tablename__ = "recursiveequivalentscache"
+
+    id = Column(Integer, primary_key=True)
+
+    # The "parent" or the start of the chain
+    parent_identifier_id = Column(
+        Integer, ForeignKey("identifiers.id", ondelete="CASCADE")
+    )
+    parent_identifier: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=parent_identifier_id
+    )
+
+    # The identifier chained to the parent
+    identifier_id = Column(Integer, ForeignKey("identifiers.id", ondelete="CASCADE"))
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", foreign_keys=identifier_id
+    )
+
+    # Its always important to query for the parent id chain to self first
+    # this can be easily accomplished by ORDER BY parent_identifier,is_parent DESC
+    is_parent = Column(Boolean, Computed("parent_identifier_id = identifier_id"))
+
+    __table_args__ = (UniqueConstraint(parent_identifier_id, identifier_id),)

@@ -26,9 +26,11 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
-node_modules/
-admin/package.json
-admin/package-lock.json
+
+# Caches
+.*_cache
+.tox
+.pyre
 
 # Installer logs
 pip-log.txt
@@ -37,10 +39,11 @@ pip-delete-this-directory.txt
 # Unit test / coverage reports
 htmlcov/
 .tox/
-.coverage
+.coverage*
 .cache
 nosetests.xml
 coverage.xml
+coverage.json
 
 # Translations
 *.mo
@@ -59,9 +62,9 @@ coverage.xml
 
 *~
 .env
-
-# Special Elasticsearch 6 environment
-es6
+.docker
+.git
+.pyre
 
 # Sphinx documentation
 # Only need to have three files to build the documentation.
@@ -71,6 +74,7 @@ docs/source/*
 !docs/source/conf.py
 !docs/source/index.rst
 
-
 # Mac OS
 .DS_Store
+
+core/_version.py

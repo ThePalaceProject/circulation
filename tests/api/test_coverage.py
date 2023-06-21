@@ -1,41 +1,29 @@
 import pytest
 
-from api.coverage import (
-    MockOPDSImportCoverageProvider,
-    OPDSImportCoverageProvider,
-    ReaperImporter,
-    RegistrarImporter,
-)
+from api.coverage import MockOPDSImportCoverageProvider, OPDSImportCoverageProvider
 from core.coverage import CoverageFailure
-from core.model import Collection, DataSource, ExternalIntegration, LicensePool
-from core.opds_import import MockSimplifiedOPDSLookup, OPDSImporter
-from core.testing import DatabaseTest, MockRequestsResponse
+from core.model import Collection, DataSource, LicensePool
+from core.opds_import import OPDSImporter
 from core.util.http import BadResponseException
 from core.util.opds_writer import OPDSFeed
+from tests.api.mockapi.opds import MockSimplifiedOPDSLookup
+from tests.core.mock import MockRequestsResponse
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestImporterSubclasses(DatabaseTest):
-    """Test the subclasses of OPDSImporter."""
-
-    def test_success_status_codes(self):
-        """Validate the status codes that different importers
-        will treat as successes.
-        """
-        assert [200, 201, 202] == RegistrarImporter.SUCCESS_STATUS_CODES
-        assert [200, 404] == ReaperImporter.SUCCESS_STATUS_CODES
-
-
-class TestOPDSImportCoverageProvider(DatabaseTest):
-    def _provider(self):
+class TestOPDSImportCoverageProvider:
+    def _provider(self, db: DatabaseTransactionFixture):
         """Create a generic MockOPDSImportCoverageProvider for testing purposes."""
-        return MockOPDSImportCoverageProvider(self._default_collection)
+        return MockOPDSImportCoverageProvider(db.default_collection())
 
-    def test_badresponseexception_on_non_opds_feed(self):
+    def test_badresponseexception_on_non_opds_feed(
+        self, db: DatabaseTransactionFixture
+    ):
         """If the lookup protocol sends something that's not an OPDS
         feed, refuse to go any further.
         """
-        provider = self._provider()
-        provider.lookup_client = MockSimplifiedOPDSLookup(self._url)
+        provider = self._provider(db)
+        provider.lookup_client = MockSimplifiedOPDSLookup(db.fresh_url())
 
         response = MockRequestsResponse(
             200, {"content-type": "text/plain"}, "Some data"
@@ -45,7 +33,9 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
             provider.import_feed_response(response, None)
         assert "Wrong media type: text/plain" in str(excinfo.value)
 
-    def test_process_batch_with_identifier_mapping(self):
+    def test_process_batch_with_identifier_mapping(
+        self, db: DatabaseTransactionFixture
+    ):
         """Test that internal identifiers are mapped to and from the form used
         by the external service.
         """
@@ -61,24 +51,18 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
                 return self.mapping
 
         # This means we need to mock the lookup client instead.
-        lookup = MockSimplifiedOPDSLookup(self._url)
+        lookup = MockSimplifiedOPDSLookup(db.fresh_url())
 
-        # And create an ExternalIntegration for the metadata_client object.
-        self._external_integration(
-            ExternalIntegration.METADATA_WRANGLER,
-            goal=ExternalIntegration.METADATA_GOAL,
-            url=self._url,
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: DataSource.OA_CONTENT_SERVER}
         )
-
-        self._default_collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, DataSource.OA_CONTENT_SERVER
-        )
-        provider = TestProvider(self._default_collection, lookup)
+        provider = TestProvider(db.default_collection(), lookup)
 
         # Create a hard-coded mapping. We use id1 internally, but the
         # foreign data source knows the book as id2.
-        id1 = self._identifier()
-        id2 = self._identifier()
+        id1 = db.identifier()
+        id2 = db.identifier()
         provider.mapping = {id2: id1}
 
         feed = (
@@ -97,36 +81,36 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         [edition] = id1.primarily_identifies
         assert "Here's your title!" == edition.title
 
-    def test_process_batch(self):
-        provider = self._provider()
+    def test_process_batch(self, db: DatabaseTransactionFixture):
+        provider = self._provider(db)
 
         # Here are an Edition and a LicensePool for the same identifier but
         # from different data sources. We would expect this to happen
         # when talking to the open-access content server.
-        edition = self._edition(data_source_name=DataSource.OA_CONTENT_SERVER)
+        edition = db.edition(data_source_name=DataSource.OA_CONTENT_SERVER)
         identifier = edition.primary_identifier
 
-        license_source = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        license_source = DataSource.lookup(db.session, DataSource.GUTENBERG)
         pool, is_new = LicensePool.for_foreign_id(
-            self._db,
+            db.session,
             license_source,
             identifier.type,
             identifier.identifier,
-            collection=self._default_collection,
+            collection=db.default_collection(),
         )
         assert None == pool.work
 
         # Here's a second Edition/LicensePool that's going to cause a
         # problem: the LicensePool will show up in the results, but
         # the corresponding Edition will not.
-        edition2, pool2 = self._edition(with_license_pool=True)
+        edition2, pool2 = db.edition(with_license_pool=True)
 
         # Here's an identifier that can't be looked up at all,
         # and an identifier that shows up in messages_by_id because
         # its simplified:message was determined to indicate success
         # rather than failure.
-        error_identifier = self._identifier()
-        not_an_error_identifier = self._identifier()
+        error_identifier = db.identifier()
+        not_an_error_identifier = db.identifier()
         messages_by_id = {
             error_identifier.urn: CoverageFailure(
                 error_identifier, "500: internal error"
@@ -180,14 +164,16 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         # as-is.
         assert not_an_error_identifier == success_message
 
-    def test_process_batch_success_even_if_no_licensepool_exists(self):
+    def test_process_batch_success_even_if_no_licensepool_exists(
+        self, db: DatabaseTransactionFixture
+    ):
         """This shouldn't happen since CollectionCoverageProvider
         only operates on Identifiers that are licensed through a Collection.
         But if a lookup should return an Edition but no LicensePool,
         that counts as a success.
         """
-        provider = self._provider()
-        edition, pool = self._edition(with_license_pool=True)
+        provider = self._provider(db)
+        edition, pool = db.edition(with_license_pool=True)
         provider.queue_import_results([edition], [], [], {})
         fake_batch = [object()]
         [success] = provider.process_batch(fake_batch)
@@ -199,19 +185,19 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         # However, since there is no LicensePool, nothing was finalized.
         assert [] == provider.finalized
 
-    def test_process_item(self):
+    def test_process_item(self, db: DatabaseTransactionFixture):
         """To process a single item we process a batch containing
         only that item.
         """
-        provider = self._provider()
-        edition = self._edition()
+        provider = self._provider(db)
+        edition = db.edition()
         provider.queue_import_results([edition], [], [], {})
         item = object()
         result = provider.process_item(item)
         assert edition.primary_identifier == result
         assert [[item]] == provider.batches
 
-    def test_import_feed_response(self):
+    def test_import_feed_response(self, db: DatabaseTransactionFixture):
         """Verify that import_feed_response instantiates the
         OPDS_IMPORTER_CLASS subclass and calls import_from_feed
         on it.
@@ -233,8 +219,8 @@ class TestOPDSImportCoverageProvider(DatabaseTest):
         class MockProvider(MockOPDSImportCoverageProvider):
             OPDS_IMPORTER_CLASS = MockOPDSImporter
 
-        provider = MockProvider(self._default_collection)
-        provider.lookup_client = MockSimplifiedOPDSLookup(self._url)
+        provider = MockProvider(db.default_collection())
+        provider.lookup_client = MockSimplifiedOPDSLookup(db.fresh_url())
 
         response = MockRequestsResponse(
             200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, "some data"

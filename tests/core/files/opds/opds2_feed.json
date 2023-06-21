@@ -1,0 +1,130 @@
+{
+    "links": [
+        {
+            "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=1&limit=100",
+            "rel": "self",
+            "type": "application/opds+json"
+        },
+        {
+            "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=1&limit=100",
+            "rel": "first",
+            "type": "application/opds+json"
+        },
+        {
+            "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=130&limit=100",
+            "rel": "last",
+            "type": "application/opds+json"
+        },
+        {
+            "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100",
+            "rel": "next",
+            "type": "application/opds+json"
+        }
+    ],
+    "metadata": {
+        "currentPage": 1,
+        "itemsPerPage": 100,
+        "numberOfItems": 12957,
+        "title": "CLOSED BETA BOOKSHELF"
+    },
+    "publications": [
+        {
+            "images": [
+                {
+                    "href": "https://palace-bookshelf-downloads.dp.la/d85dc431-a0d3-45cf-a62f-29cd949a32be.png",
+                    "type": "image/png"
+                }
+            ],
+            "links": [
+                {
+                    "href": "https://palace-bookshelf-downloads.dp.la/03999f44-6750-4a8c-ab51-9da076d1ef75.epub",
+                    "rel": "http://opds-spec.org/acquisition/open-access",
+                    "type": "application/epub+zip"
+                },
+                {
+                    "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications/5d7d7820-1a47-49d2-b9fc-dcd09935c0ea",
+                    "rel": "self",
+                    "type": "application/opds+json"
+                }
+            ],
+            "metadata": {
+                "@type": "https://schema.org/EBook",
+                "description": "Iyi ni inkuru y'umwana muto w'umuhungu wishoraga ahantu hose,  kandi akagira umuryango udasanzwe.",
+                "identifier": "urn:uuid:5d7d7820-1a47-49d2-b9fc-dcd09935c0ea",
+                "language": "rw",
+                "modified": "2021-09-10T20:55:45Z",
+                "published": "2017-12-07",
+                "publisher": "African Storybook Initiative",
+                "title": "Ngewe n'umuryango wange",
+                "author": [
+                    "Cornelius Wambi Gulere, Waako Joshua"
+                ]
+            }
+        },
+        {
+            "images": [
+                {
+                    "href": "https://palace-bookshelf-downloads.dp.la/f67bf5b3-f17b-4b8d-bfc0-1f7053adbba4.png",
+                    "type": "image/png"
+                }
+            ],
+            "links": [
+                {
+                    "href": "https://palace-bookshelf-downloads.dp.la/f3cfde8c-bb7e-4360-8efc-80f2f5e6140c.epub",
+                    "rel": "http://opds-spec.org/acquisition/open-access",
+                    "type": "application/epub+zip"
+                },
+                {
+                    "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications/1efd6eb1-4f0b-47d1-922c-7d68c9960596",
+                    "rel": "self",
+                    "type": "application/opds+json"
+                }
+            ],
+            "metadata": {
+                "@type": "https://schema.org/EBook",
+                "description": "Plantez une graine de haricot et voyez ce qui se passe quand vous l'arrosez et en prenez soin.",
+                "identifier": "urn:uuid:1efd6eb1-4f0b-47d1-922c-7d68c9960596",
+                "language": "fr",
+                "modified": "2021-09-10T20:55:43Z",
+                "published": "2015-08-14",
+                "publisher": "African Storybook Initiative",
+                "title": "Le Haricot Qui Germe",
+                "author": [
+                    "Clare Verbeek, Thembani Dladla, Zanele Buthelezi"
+                ]
+            }
+        },
+        {
+            "images": [
+                {
+                    "href": "https://palace-bookshelf-downloads.dp.la/98de999b-154c-4b84-af34-f2e98ed7a42c.jpeg",
+                    "type": "image/jpeg"
+                }
+            ],
+            "links": [
+                {
+                    "href": "https://palace-bookshelf-downloads.dp.la/5f419309-e2fe-4461-b064-907aad064dc3.epub",
+                    "rel": "http://opds-spec.org/acquisition/open-access",
+                    "type": "application/epub+zip"
+                },
+                {
+                    "href": "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications/c66bd95a-18cd-49be-8e0f-1f2a85a0a94b",
+                    "rel": "self",
+                    "type": "application/opds+json"
+                }
+            ],
+            "metadata": {
+                "@type": "https://schema.org/EBook",
+                "description": "<p>Recopilación de cuentos infantiles en verso y prosa:</p>  <p>Mi hogar</p>  <p>La mariposa</p>  <p>Don Narices</p>  <p>El zapatero remendón</p>  <p>El gorrión</p>  <p>La vuelta al mundo</p>  <p>Un día de libertad</p>  <p>La muñeca</p>  <p>El mosquito</p>  <p>La perla</p>  <p>Las cerezas</p>  <p>Las castañas</p>  <p>Las golondrinas</p>  <p>Antonieta</p>  <p>La hiedra</p>  <p>Los rosales</p>  <p>La conciencia</p>  <p>El viento</p>",
+                "identifier": "urn:uuid:c66bd95a-18cd-49be-8e0f-1f2a85a0a94b",
+                "language": "es",
+                "modified": "2021-09-10T20:55:49Z",
+                "published": "1912-01-01",
+                "title": "Cuentos del Hogar",
+                "author": [
+                    "Teodoro Baró"
+                ]
+            }
+        }
+    ]
+}

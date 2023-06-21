@@ -14,7 +14,7 @@ from . import SettingsController
 
 class CatalogServicesController(SettingsController):
     def __init__(self, manager):
-        super(CatalogServicesController, self).__init__(manager)
+        super().__init__(manager)
         service_apis = [MARCExporter]
         self.protocols = self._get_integration_protocols(
             service_apis, protocol_name_attr="NAME"

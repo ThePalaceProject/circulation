@@ -17,7 +17,7 @@ class SAMLMetadataMonitor(Monitor):
         :param loader: IdP loader
         :type loader: api.saml.loader.SAMLFederatedIdPLoader
         """
-        super(SAMLMetadataMonitor, self).__init__(db)
+        super().__init__(db)
 
         self._loader = loader
         self._logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class SAMLMetadataMonitor(Monitor):
         :param saml_federation: SAML federation
         :type saml_federation: api.saml.metadata.federations.model.SAMLFederation
         """
-        self._logger.info("Started processing {0}".format(saml_federation))
+        self._logger.info(f"Started processing {saml_federation}")
 
         for existing_identity_provider in saml_federation.identity_providers:
             self._db.delete(existing_identity_provider)
@@ -40,7 +40,7 @@ class SAMLMetadataMonitor(Monitor):
 
         saml_federation.last_updated_at = utc_now()
 
-        self._logger.info("Finished processing {0}".format(saml_federation))
+        self._logger.info(f"Finished processing {saml_federation}")
 
     def run_once(self, progress):
         self._logger.info("Started running the SAML metadata monitor")
@@ -48,9 +48,7 @@ class SAMLMetadataMonitor(Monitor):
         with self._db.begin(subtransactions=True):
             saml_federations = self._db.query(SAMLFederation).all()
 
-            self._logger.info(
-                "Found {0} SAML federations".format(len(saml_federations))
-            )
+            self._logger.info(f"Found {len(saml_federations)} SAML federations")
 
             for outdated_saml_federation in saml_federations:
                 self._update_saml_federation_idps_metadata(outdated_saml_federation)

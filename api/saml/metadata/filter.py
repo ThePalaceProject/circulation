@@ -19,12 +19,12 @@ class SAMLSubjectFilterError(BaseError):
         :param inner_exception: Inner exception
         :type inner_exception: Exception
         """
-        message = "Incorrect filter expression: {0}".format(str(inner_exception))
+        message = f"Incorrect filter expression: {str(inner_exception)}"
 
-        super(SAMLSubjectFilterError, self).__init__(message, inner_exception)
+        super().__init__(message, inner_exception)
 
 
-class SAMLSubjectFilter(object):
+class SAMLSubjectFilter:
     """Executes filter expressions."""
 
     def __init__(self, dsl_evaluator):
@@ -35,7 +35,7 @@ class SAMLSubjectFilter(object):
         """
         if not isinstance(dsl_evaluator, DSLEvaluator):
             raise ValueError(
-                "Argument 'dsl_evaluator' must be an instance of {0} class".format(
+                "Argument 'dsl_evaluator' must be an instance of {} class".format(
                     DSLEvaluator
                 )
             )
@@ -62,9 +62,7 @@ class SAMLSubjectFilter(object):
         if not isinstance(subject, SAMLSubject):
             raise ValueError("Argument 'subject' must an instance of Subject class")
 
-        self._logger.info(
-            "Started applying expression '{0}' to {1}".format(expression, subject)
-        )
+        self._logger.info(f"Started applying expression '{expression}' to {subject}")
 
         try:
             result = self._dsl_evaluator.evaluate(
@@ -81,7 +79,7 @@ class SAMLSubjectFilter(object):
             raise SAMLSubjectFilterError(exception)
 
         self._logger.info(
-            "Finished applying expression '{0}' to {1}: {2}".format(
+            "Finished applying expression '{}' to {}: {}".format(
                 expression, subject, result
             )
         )

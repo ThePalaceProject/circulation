@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 from . import *
 
 
@@ -64,19 +62,17 @@ class OverdriveClassifier(Classifier):
 
     # Any classification that includes the string "Fiction" will be
     # counted as fiction. This is just the leftovers.
-    FICTION = set(
-        [
-            "Fantasy",
-            "Horror",
-            "Literary Anthologies",
-            "Mystery",
-            "Romance",
-            "Short Stories",
-            "Suspense",
-            "Thriller",
-            "Western",
-        ]
-    )
+    FICTION = {
+        "Fantasy",
+        "Horror",
+        "Literary Anthologies",
+        "Mystery",
+        "Romance",
+        "Short Stories",
+        "Suspense",
+        "Thriller",
+        "Western",
+    }
 
     NEITHER_FICTION_NOR_NONFICTION = (
         [

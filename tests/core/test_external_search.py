@@ -1,13 +1,14 @@
-# encoding: utf-8
 import json
 import re
 import time
+import uuid
+from datetime import datetime
+from typing import Callable, Collection, List
 
 import pytest
-from elasticsearch.exceptions import ElasticsearchException
-from elasticsearch_dsl import Q
-from elasticsearch_dsl.function import RandomScore, ScriptScore
-from elasticsearch_dsl.query import (
+from opensearch_dsl import Q
+from opensearch_dsl.function import RandomScore, ScriptScore
+from opensearch_dsl.query import (
     Bool,
     DisMax,
     Match,
@@ -17,8 +18,9 @@ from elasticsearch_dsl.query import (
     MultiMatch,
     Nested,
 )
-from elasticsearch_dsl.query import Query as elasticsearch_dsl_query
-from elasticsearch_dsl.query import Range, Term, Terms
+from opensearch_dsl.query import Query as opensearch_dsl_query
+from opensearch_dsl.query import Range, Term, Terms
+from opensearchpy.exceptions import OpenSearchException
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier
@@ -27,9 +29,11 @@ from core.external_search import (
     CurrentMapping,
     ExternalSearchIndex,
     Filter,
+    JSONQuery,
     MockExternalSearchIndex,
     MockSearchResult,
     Query,
+    QueryParseException,
     QueryParser,
     SearchBase,
     SearchIndexCoverageProvider,
@@ -43,33 +47,47 @@ from core.model import (
     ConfigurationSetting,
     Contribution,
     Contributor,
+    CustomList,
     DataSource,
     Edition,
     Genre,
+    LicensePool,
     WorkCoverageRecord,
     get_one_or_create,
 )
+from core.model.classification import Subject
+from core.model.work import Work
 from core.problem_details import INVALID_INPUT
-from core.testing import DatabaseTest, EndToEndSearchTest, ExternalSearchTest
+from core.util.cache import CachedData
 from core.util.datetime_helpers import datetime_utc, from_timestamp
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    DBStatementCounter,
+    PerfTimer,
+)
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
 
-class TestExternalSearch(ExternalSearchTest):
-    def test_load(self):
+class TestExternalSearch:
+    def test_load(self, external_search_fixture: ExternalSearchFixture):
+        session = external_search_fixture.db.session
+
         # Normally, load() returns a brand new ExternalSearchIndex
         # object.
-        loaded = ExternalSearchIndex.load(self._db, in_testing=True)
+        loaded = ExternalSearchIndex.load(session, in_testing=True)
         assert isinstance(loaded, ExternalSearchIndex)
 
         # However, inside the mock_search_index context manager,
         # load() returns whatever object was mocked.
         mock = object()
         with mock_search_index(mock):
-            assert mock == ExternalSearchIndex.load(self._db, in_testing=True)
+            assert mock == ExternalSearchIndex.load(session, in_testing=True)
 
-    def test_constructor(self):
+    def test_constructor(self, external_search_fixture: ExternalSearchFixture):
+        session = external_search_fixture.db.session
+
         # The configuration of the search ExternalIntegration becomes the
         # configuration of the ExternalSearchIndex.
         #
@@ -79,149 +97,172 @@ class TestExternalSearch(ExternalSearchTest):
             def set_works_index_and_alias(self, _db):
                 self.set_works_index_and_alias_called_with = _db
 
-        index = MockIndex(self._db)
-        assert self._db == index.set_works_index_and_alias_called_with
+        index = MockIndex(session)
+        assert session == index.set_works_index_and_alias_called_with
         assert "test_search_term" == index.test_search_term
 
     # TODO: would be good to check the put_script calls, but the
     # current constructor makes put_script difficult to mock.
 
-    def test_elasticsearch_error_in_constructor_becomes_cannotloadconfiguration(self):
-        """If we're unable to establish a connection to the Elasticsearch
+    def test_opensearch_error_in_constructor_becomes_cannotloadconfiguration(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        session = external_search_fixture.db.session
+
+        """If we're unable to establish a connection to the Opensearch
         server, CannotLoadConfiguration (which the circulation manager can
-        understand) is raised instead of an Elasticsearch-specific exception.
+        understand) is raised instead of an Opensearch-specific exception.
         """
 
         # Unlike other tests in this module, this one runs even if no
-        # ElasticSearch server is running, since it's testing what
+        # OpenSearch server is running, since it's testing what
         # happens if there's a problem communicating with that server.
         class Mock(ExternalSearchIndex):
             def set_works_index_and_alias(self, _db):
-                raise ElasticsearchException("very bad")
+                raise OpenSearchException("very bad")
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            Mock(self._db)
-        assert "Exception communicating with Elasticsearch server: " in str(
-            excinfo.value
-        )
+            Mock(session)
+        assert "Exception communicating with Search server: " in str(excinfo.value)
         assert "very bad" in str(excinfo.value)
 
-    def test_works_index_name(self):
+    def test_works_index_name(self, external_search_fixture: ExternalSearchFixture):
+        session = external_search_fixture.db.session
+
         """The name of the search index is the prefix (defined in
         ExternalSearchTest.setup) plus a version number associated
         with this version of the core code.
         """
-        assert "test_index-v4" == self.search.works_index_name(self._db)
+        version = external_search_fixture.search.mapping.VERSION_NAME
+        assert (
+            f"test_index-{version}"
+            == external_search_fixture.search.works_index_name(session)
+        )
 
-    def test_setup_index_creates_new_index(self):
-        current_index = self.search.works_index
+    def test_setup_index_creates_new_index(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        current_index = external_search_fixture.search.works_index
         # This calls self.search.setup_index (which is what we're testing)
         # and also registers the index to be torn down at the end of the test.
-        self.setup_index("the_other_index")
+        external_search_fixture.setup_index("the_other_index")
 
         # Both indices exist.
-        assert True == self.search.indices.exists(current_index)
-        assert True == self.search.indices.exists("the_other_index")
+        assert True == external_search_fixture.search.indices.exists(current_index)
+        assert True == external_search_fixture.search.indices.exists("the_other_index")
 
         # The index for the app's search is still the original index.
-        assert current_index == self.search.works_index
+        assert current_index == external_search_fixture.search.works_index
 
         # The alias hasn't been passed over to the new index.
-        alias = "test_index-" + self.search.CURRENT_ALIAS_SUFFIX
-        assert alias == self.search.works_alias
-        assert True == self.search.indices.exists_alias(current_index, alias)
-        assert False == self.search.indices.exists_alias("the_other_index", alias)
+        alias = "test_index-" + external_search_fixture.search.CURRENT_ALIAS_SUFFIX
+        assert alias == external_search_fixture.search.works_alias
+        assert True == external_search_fixture.search.indices.exists_alias(
+            alias, index=current_index
+        )
+        assert False == external_search_fixture.search.indices.exists_alias(
+            alias, index="the_other_index"
+        )
 
-    def test_set_works_index_and_alias(self):
+    def test_set_works_index_and_alias(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        session = external_search_fixture.db.session
+        search = external_search_fixture.search
+
         # If the index or alias don't exist, set_works_index_and_alias
         # will create them.
-        self.integration.set_setting(
+        external_search_fixture.integration.set_setting(
             ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "banana"
         )
-        self.search.set_works_index_and_alias(self._db)
+        search.set_works_index_and_alias(session)
 
         expected_index = "banana-" + CurrentMapping.version_name()
-        expected_alias = "banana-" + self.search.CURRENT_ALIAS_SUFFIX
-        assert expected_index == self.search.works_index
-        assert expected_alias == self.search.works_alias
+        expected_alias = "banana-" + search.CURRENT_ALIAS_SUFFIX
+        assert expected_index == search.works_index
+        assert expected_alias == search.works_alias
 
         # If the index and alias already exist, set_works_index_and_alias
         # does nothing.
-        self.search.set_works_index_and_alias(self._db)
-        assert expected_index == self.search.works_index
-        assert expected_alias == self.search.works_alias
+        search.set_works_index_and_alias(session)
+        assert expected_index == search.works_index
+        assert expected_alias == search.works_alias
 
-    def test_setup_current_alias(self):
+    def test_setup_current_alias(self, external_search_fixture: ExternalSearchFixture):
+        session = external_search_fixture.db.session
+        search = external_search_fixture.search
+
         # The index was generated from the string in configuration.
         version = CurrentMapping.version_name()
         index_name = "test_index-" + version
-        assert index_name == self.search.works_index
-        assert True == self.search.indices.exists(index_name)
+        assert index_name == search.works_index
+        assert True == search.indices.exists(index_name)
 
         # The alias is also created from the configuration.
-        alias = "test_index-" + self.search.CURRENT_ALIAS_SUFFIX
-        assert alias == self.search.works_alias
-        assert True == self.search.indices.exists_alias(index_name, alias)
+        alias = "test_index-" + search.CURRENT_ALIAS_SUFFIX
+        assert alias == search.works_alias
+        assert True == search.indices.exists_alias(alias, index_name)
 
         # If the -current alias is already set on a different index, it
         # won't be reassigned. Instead, search will occur against the
         # index itself.
         ExternalSearchIndex.reset()
-        self.integration.set_setting(
+        external_search_fixture.integration.set_setting(
             ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "my-app"
         )
-        self.search = ExternalSearchIndex(self._db)
+        self.search = ExternalSearchIndex(session)
 
         assert "my-app-%s" % version == self.search.works_index
         assert "my-app-" + self.search.CURRENT_ALIAS_SUFFIX == self.search.works_alias
 
-    def test_transfer_current_alias(self):
+    def test_transfer_current_alias(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        session = external_search_fixture.db.session
+        search = external_search_fixture.search
+
         # An error is raised if you try to set the alias to point to
         # an index that doesn't already exist.
         pytest.raises(
-            ValueError, self.search.transfer_current_alias, self._db, "no-such-index"
+            ValueError, search.transfer_current_alias, session, "no-such-index"
         )
 
-        original_index = self.search.works_index
+        original_index = search.works_index
 
         # If the -current alias doesn't exist, it's created
         # and everything is updated accordingly.
-        self.search.indices.delete_alias(
+        search.indices.delete_alias(
             index=original_index, name="test_index-current", ignore=[404]
         )
-        self.setup_index(new_index="test_index-v9999")
-        self.search.transfer_current_alias(self._db, "test_index-v9999")
-        assert "test_index-v9999" == self.search.works_index
-        assert "test_index-current" == self.search.works_alias
+        search.setup_index(new_index="test_index-v9999")
+        search.transfer_current_alias(session, "test_index-v9999")
+        assert "test_index-v9999" == search.works_index
+        assert "test_index-current" == search.works_alias
 
         # If the -current alias already exists on the index,
         # it's used without a problem.
-        self.search.transfer_current_alias(self._db, "test_index-v9999")
-        assert "test_index-v9999" == self.search.works_index
-        assert "test_index-current" == self.search.works_alias
+        search.transfer_current_alias(session, "test_index-v9999")
+        assert "test_index-v9999" == search.works_index
+        assert "test_index-current" == search.works_alias
 
         # If the -current alias is being used on a different version of the
         # index, it's deleted from that index and placed on the new one.
-        self.setup_index(original_index)
-        self.search.transfer_current_alias(self._db, original_index)
-        assert original_index == self.search.works_index
-        assert "test_index-current" == self.search.works_alias
+        search.setup_index(original_index)
+        search.transfer_current_alias(session, original_index)
+        assert original_index == search.works_index
+        assert "test_index-current" == search.works_alias
 
         # It has been removed from other index.
-        assert False == self.search.indices.exists_alias(
+        assert False == search.indices.exists_alias(
             index="test_index-v9999", name="test_index-current"
         )
 
         # And only exists on the new index.
-        alias_indices = list(
-            self.search.indices.get_alias(name="test_index-current").keys()
-        )
+        alias_indices = list(search.indices.get_alias(name="test_index-current").keys())
         assert [original_index] == alias_indices
 
         # If the index doesn't have the same base name, an error is raised.
-        pytest.raises(
-            ValueError, self.search.transfer_current_alias, self._db, "banana-v10"
-        )
+        pytest.raises(ValueError, search.transfer_current_alias, session, "banana-v10")
 
     def test_query_works(self):
         # Verify that query_works operates by calling query_works_multi.
@@ -273,11 +314,13 @@ class TestExternalSearch(ExternalSearchTest):
         assert pagination.offset == default.offset
         assert pagination.size == default.size
 
-    def test__run_self_tests(self):
+    def test__run_self_tests(self, external_search_fixture: ExternalSearchFixture):
+        transaction = external_search_fixture.db
+        session = transaction.session
         index = MockExternalSearchIndex()
 
         # First, see what happens when the search returns no results.
-        test_results = [x for x in index._run_self_tests(self._db, in_testing=True)]
+        test_results = [x for x in index._run_self_tests(session, in_testing=True)]
 
         assert "Search results for 'a search term':" == test_results[0].name
         assert True == test_results[0].success
@@ -307,11 +350,11 @@ class TestExternalSearch(ExternalSearchTest):
         assert "{}" == test_results[5].result
 
         # Set up the search index so it will return a result.
-        collection = self._collection()
+        collection = transaction.collection()
 
         search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
-        index.index("index", "doc type", "id", search_result)
-        test_results = [x for x in index._run_self_tests(self._db, in_testing=True)]
+        index.index("index", "id", search_result)
+        test_results = [x for x in index._run_self_tests(session, in_testing=True)]
 
         assert "Search results for 'a search term':" == test_results[0].name
         assert True == test_results[0].success
@@ -349,11 +392,26 @@ class TestExternalSearch(ExternalSearchTest):
         result = json.loads(test_results[5].result)
         assert {collection.name: 1} == result
 
+    def test_update_mapping(self, external_search_fixture: ExternalSearchFixture):
+        search = external_search_fixture.search
 
-class TestCurrentMapping(object):
+        search.mapping.add_properties({"long": ["new_long_property"]})
+        put_mapping = search._update_index_mapping(dry_run=True)
+        assert "new_long_property" in put_mapping
+        put_mapping = search._update_index_mapping(dry_run=False)
+        assert "new_long_property" in put_mapping
+        put_mapping = search._update_index_mapping(dry_run=True)
+        assert "new_long_property" not in put_mapping
+
+        new_mapping = search.indices.get_mapping(search.works_index)
+        new_mapping = new_mapping[search.works_index]["mappings"]
+        assert "new_long_property" in new_mapping["properties"]
+
+
+class TestCurrentMapping:
     def test_character_filters(self):
         # Verify the functionality of the regular expressions we tell
-        # Elasticsearch to use when normalizing fields that will be used
+        # Opensearch to use when normalizing fields that will be used
         # for searching.
         filters = []
         for filter_name in CurrentMapping.AUTHOR_CHAR_FILTER_NAMES:
@@ -398,194 +456,257 @@ class TestCurrentMapping(object):
         filters_to("Wells, H. G. (Herbert George)", "Wells, HG")
 
 
-class TestExternalSearchWithWorks(EndToEndSearchTest):
+class TestExternalSearchWithWorksData:
+    adult_work: Work
+    age_2_10: Work
+    age_4_5: Work
+    age_5_6: Work
+    age_9_10: Work
+    all_ages_work: Work
+    children_work: Work
+    dodger: Work
+    les_mis: Work
+    lincoln: Work
+    lincoln_vampire: Work
+    moby_dick: Work
+    moby_duck: Work
+    modern_romance: Work
+    no_age: Work
+    no_copies: Work
+    not_presentation_ready: Work
+    obama: Work
+    presidential: CustomList
+    pride: Work
+    pride_audio: Work
+    publisher_match: Work
+    research_work: Work
+    sherlock: Work
+    sherlock_pool_2: LicensePool
+    sherlock_spanish: Work
+    subtitle_match: Work
+    summary_match: Work
+    suppressed: Work
+    tess: Work
+    tiffany: Work
+    tiny_book: Work
+    tiny_collection: Collection
+    title_match: Work
+    washington: Work
+    ya_romance: Work
+    ya_work: Work
+
+
+class TestExternalSearchWithWorks:
     """These tests run against a real search index with works in it.
     The setup is very slow, so all the tests are in the same method.
     Don't add new methods to this class - add more tests into test_query_works,
     or add a new test class.
     """
 
-    def populate_works(self):
-        _work = self.default_work
+    @staticmethod
+    def _populate_works(
+        fixture: EndToEndSearchFixture,
+    ) -> TestExternalSearchWithWorksData:
+        transaction = fixture.external_search.db
+        _work: Callable = fixture.external_search.default_work
 
-        self.moby_dick = _work(
+        result = TestExternalSearchWithWorksData()
+        result.moby_dick = _work(
             title="Moby Dick",
             authors="Herman Melville",
             fiction=True,
         )
-        self.moby_dick.presentation_edition.subtitle = "Or, the Whale"
-        self.moby_dick.presentation_edition.series = "Classics"
-        self.moby_dick.summary_text = "Ishmael"
-        self.moby_dick.presentation_edition.publisher = "Project Gutenberg"
-        self.moby_dick.last_update_time = datetime_utc(2019, 1, 1)
+        result.moby_dick.presentation_edition.subtitle = "Or, the Whale"
+        result.moby_dick.presentation_edition.series = "Classics"
+        result.moby_dick.summary_text = "Ishmael"
+        result.moby_dick.presentation_edition.publisher = "Project Gutenberg"
+        result.moby_dick.last_update_time = datetime_utc(2019, 1, 1)
 
-        self.moby_duck = _work(title="Moby Duck", authors="Donovan Hohn", fiction=False)
-        self.moby_duck.presentation_edition.subtitle = (
+        result.moby_duck = _work(
+            title="Moby Duck", authors="Donovan Hohn", fiction=False
+        )
+        result.moby_duck.presentation_edition.subtitle = (
             "The True Story of 28,800 Bath Toys Lost at Sea"
         )
-        self.moby_duck.summary_text = "A compulsively readable narrative"
-        self.moby_duck.presentation_edition.publisher = "Penguin"
-        self.moby_duck.last_update_time = datetime_utc(2019, 1, 2)
+        result.moby_duck.summary_text = "A compulsively readable narrative"
+        result.moby_duck.presentation_edition.publisher = "Penguin"
+        result.moby_duck.last_update_time = datetime_utc(2019, 1, 2)
         # This book is not currently loanable. It will still show up
         # in search results unless the library's settings disable it.
-        self.moby_duck.license_pools[0].licenses_available = 0
+        result.moby_duck.license_pools[0].licenses_available = 0
 
-        self.title_match = _work(title="Match")
+        result.title_match = _work(title="Match")
 
-        self.subtitle_match = _work(title="SubtitleM")
-        self.subtitle_match.presentation_edition.subtitle = "Match"
+        result.subtitle_match = _work(title="SubtitleM")
+        result.subtitle_match.presentation_edition.subtitle = "Match"
 
-        self.summary_match = _work(title="SummaryM")
-        self.summary_match.summary_text = "It's a Match! The story of a work whose summary contained an important keyword."
+        result.summary_match = _work(title="SummaryM")
+        result.summary_match.summary_text = "It's a Match! The story of a work whose summary contained an important keyword."
 
-        self.publisher_match = _work(title="PublisherM")
-        self.publisher_match.presentation_edition.publisher = "Match"
+        result.publisher_match = _work(title="PublisherM")
+        result.publisher_match.presentation_edition.publisher = "Match"
 
-        self.tess = _work(title="Tess of the d'Urbervilles")
+        result.tess = _work(title="Tess of the d'Urbervilles")
 
-        self.tiffany = _work(title="Breakfast at Tiffany's")
+        result.tiffany = _work(title="Breakfast at Tiffany's")
 
-        self.les_mis = _work()
-        self.les_mis.presentation_edition.title = "Les Mis\u00E9rables"
+        result.les_mis = _work()
+        result.les_mis.presentation_edition.title = "Les Mis\u00E9rables"
 
-        self.modern_romance = _work(title="Modern Romance")
+        result.modern_romance = _work(title="Modern Romance")
 
-        self.lincoln = _work(genre="Biography & Memoir", title="Abraham Lincoln")
+        result.lincoln = _work(genre="Biography & Memoir", title="Abraham Lincoln")
 
-        self.washington = _work(genre="Biography", title="George Washington")
+        result.washington = _work(genre="Biography", title="George Washington")
 
-        self.lincoln_vampire = _work(
+        result.lincoln_vampire = _work(
             title="Abraham Lincoln: Vampire Hunter", genre="Fantasy"
         )
 
-        self.children_work = _work(
+        result.children_work = _work(
             title="Alice in Wonderland", audience=Classifier.AUDIENCE_CHILDREN
         )
 
-        self.all_ages_work = _work(
+        result.all_ages_work = _work(
             title="The Annotated Alice", audience=Classifier.AUDIENCE_ALL_AGES
         )
 
-        self.ya_work = _work(
+        result.ya_work = _work(
             title="Go Ask Alice", audience=Classifier.AUDIENCE_YOUNG_ADULT
         )
 
-        self.adult_work = _work(title="Still Alice", audience=Classifier.AUDIENCE_ADULT)
+        result.adult_work = _work(
+            title="Still Alice", audience=Classifier.AUDIENCE_ADULT
+        )
 
-        self.research_work = _work(
+        result.research_work = _work(
             title="Curiouser and Curiouser: Surrealism and Repression in 'Alice in Wonderland'",
             audience=Classifier.AUDIENCE_RESEARCH,
         )
 
-        self.ya_romance = _work(
+        result.ya_romance = _work(
             title="Gumby In Love",
             audience=Classifier.AUDIENCE_YOUNG_ADULT,
             genre="Romance",
         )
-        self.ya_romance.presentation_edition.subtitle = (
+        result.ya_romance.presentation_edition.subtitle = (
             "Modern Fairytale Series, Volume 7"
         )
-        self.ya_romance.presentation_edition.series = "Modern Fairytales"
+        result.ya_romance.presentation_edition.series = "Modern Fairytales"
 
-        self.no_age = _work()
-        self.no_age.summary_text = (
+        result.no_age = _work()
+        result.no_age.summary_text = (
             "President Barack Obama's election in 2008 energized the United States"
         )
 
         # Set the series to the empty string rather than None -- this isn't counted
         # as the book belonging to a series.
-        self.no_age.presentation_edition.series = ""
+        result.no_age.presentation_edition.series = ""
 
-        self.age_4_5 = _work()
-        self.age_4_5.target_age = NumericRange(4, 5, "[]")
-        self.age_4_5.summary_text = (
+        result.age_4_5 = _work()
+        result.age_4_5.target_age = NumericRange(4, 5, "[]")
+        result.age_4_5.summary_text = (
             "President Barack Obama's election in 2008 energized the United States"
         )
 
-        self.age_5_6 = _work(fiction=False)
-        self.age_5_6.target_age = NumericRange(5, 6, "[]")
+        result.age_5_6 = _work(fiction=False)
+        result.age_5_6.target_age = NumericRange(5, 6, "[]")
 
-        self.obama = _work(title="Barack Obama", genre="Biography & Memoir")
-        self.obama.target_age = NumericRange(8, 8, "[]")
-        self.obama.summary_text = (
+        result.obama = _work(title="Barack Obama", genre="Biography & Memoir")
+        result.obama.target_age = NumericRange(8, 8, "[]")
+        result.obama.summary_text = (
             "President Barack Obama's election in 2008 energized the United States"
         )
 
-        self.dodger = _work()
-        self.dodger.target_age = NumericRange(8, 8, "[]")
-        self.dodger.summary_text = (
+        result.dodger = _work()
+        result.dodger.target_age = NumericRange(8, 8, "[]")
+        result.dodger.summary_text = (
             "Willie finds himself running for student council president"
         )
 
-        self.age_9_10 = _work()
-        self.age_9_10.target_age = NumericRange(9, 10, "[]")
-        self.age_9_10.summary_text = (
+        result.age_9_10 = _work()
+        result.age_9_10.target_age = NumericRange(9, 10, "[]")
+        result.age_9_10.summary_text = (
             "President Barack Obama's election in 2008 energized the United States"
         )
 
-        self.age_2_10 = _work()
-        self.age_2_10.target_age = NumericRange(2, 10, "[]")
+        result.age_2_10 = _work()
+        result.age_2_10.target_age = NumericRange(2, 10, "[]")
 
-        self.pride = _work(title="Pride and Prejudice (E)")
-        self.pride.presentation_edition.medium = Edition.BOOK_MEDIUM
+        result.pride = _work(title="Pride and Prejudice (E)")
+        result.pride.presentation_edition.medium = Edition.BOOK_MEDIUM
 
-        self.pride_audio = _work(title="Pride and Prejudice (A)")
-        self.pride_audio.presentation_edition.medium = Edition.AUDIO_MEDIUM
+        result.pride_audio = _work(title="Pride and Prejudice (A)")
+        result.pride_audio.presentation_edition.medium = Edition.AUDIO_MEDIUM
 
-        self.sherlock = _work(
+        result.sherlock = _work(
             title="The Adventures of Sherlock Holmes", with_open_access_download=True
         )
-        self.sherlock.presentation_edition.language = "eng"
+        result.sherlock.presentation_edition.language = "eng"
 
-        self.sherlock_spanish = _work(title="Las Aventuras de Sherlock Holmes")
-        self.sherlock_spanish.presentation_edition.language = "spa"
+        result.sherlock_spanish = _work(title="Las Aventuras de Sherlock Holmes")
+        result.sherlock_spanish.presentation_edition.language = "spa"
 
         # Create a custom list that contains a few books.
-        self.presidential, ignore = self._customlist(
+        result.presidential, ignore = transaction.customlist(
             name="Nonfiction about US Presidents", num_entries=0
         )
-        for work in [self.washington, self.lincoln, self.obama]:
-            self.presidential.add_entry(work)
+        for work in [result.washington, result.lincoln, result.obama]:
+            result.presidential.add_entry(work)
 
         # Create a second collection that only contains a few books.
-        self.tiny_collection = self._collection("A Tiny Collection")
-        self.tiny_book = self._work(
-            title="A Tiny Book", with_license_pool=True, collection=self.tiny_collection
+        result.tiny_collection = transaction.collection("A Tiny Collection")
+        result.tiny_book = transaction.work(
+            title="A Tiny Book",
+            with_license_pool=True,
+            collection=result.tiny_collection,
         )
-        self.tiny_book.license_pools[0].self_hosted = True
+        result.tiny_book.license_pools[0].self_hosted = True
 
         # Both collections contain 'The Adventures of Sherlock
         # Holmes", but each collection licenses the book through a
         # different mechanism.
-        self.sherlock_pool_2 = self._licensepool(
-            edition=self.sherlock.presentation_edition, collection=self.tiny_collection
+        result.sherlock_pool_2 = transaction.licensepool(
+            edition=result.sherlock.presentation_edition,
+            collection=result.tiny_collection,
         )
 
-        sherlock_2, is_new = self.sherlock_pool_2.calculate_work()
-        assert self.sherlock == sherlock_2
-        assert 2 == len(self.sherlock.license_pools)
+        sherlock_2, is_new = result.sherlock_pool_2.calculate_work()
+        assert result.sherlock == sherlock_2
+        assert 2 == len(result.sherlock.license_pools)
 
         # These books look good for some search results, but they
         # will be filtered out by the universal filters, and will
         # never show up in results.
 
         # We own no copies of this book.
-        self.no_copies = _work(title="Moby Dick 2")
-        self.no_copies.license_pools[0].licenses_owned = 0
+        result.no_copies = _work(title="Moby Dick 2")
+        result.no_copies.license_pools[0].licenses_owned = 0
 
         # This book's only license pool has been suppressed.
-        self.suppressed = _work(title="Moby Dick 2")
-        self.suppressed.license_pools[0].suppressed = True
+        result.suppressed = _work(title="Moby Dick 2")
+        result.suppressed.license_pools[0].suppressed = True
 
         # This book is not presentation_ready.
-        self.not_presentation_ready = _work(title="Moby Dick 2")
-        self.not_presentation_ready.presentation_ready = False
+        result.not_presentation_ready = _work(title="Moby Dick 2")
+        result.not_presentation_ready.presentation_ready = False
+        return result
 
-    def test_query_works(self):
+    def test_query_works(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        fixture = end_to_end_search_fixture
+        transaction = fixture.external_search.db
+        session = transaction.session
+
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
         # An end-to-end test of the search functionality.
         #
         # Works created during setup are added to a real search index.
-        # We then run actual Elasticsearch queries against the
+        # We then run actual Opensearch queries against the
         # search index and verify that the work IDs returned
         # are the ones we expect.
 
@@ -593,26 +714,31 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # document query doesn't contain over-zealous joins. This test
         # class is the main place where we make a large number of
         # works and generate search documents for them.
-        assert 1 == len(self.moby_dick.to_search_document()["licensepools"])
+        assert 1 == len(data.moby_dick.to_search_document()["licensepools"])
         assert (
             "Audio"
-            == self.pride_audio.to_search_document()["licensepools"][0]["medium"]
+            == data.pride_audio.to_search_document()["licensepools"][0]["medium"]
         )
 
         # Set up convenient aliases for methods we'll be calling a
         # lot.
-        query = self.search.query_works
-        expect = self._expect_results
+        query = fixture.external_search.search.query_works
+        expect = fixture.expect_results
 
         # First, test pagination.
         first_item = Pagination(size=1, offset=0)
-        expect(self.moby_dick, "moby dick", None, first_item)
+        expect(data.moby_dick, "moby dick", None, first_item)
 
         second_item = first_item.next_page
-        expect(self.moby_duck, "moby dick", None, second_item)
+        expect(data.moby_duck, "moby dick", None, second_item)
 
         two_per_page = Pagination(size=2, offset=0)
-        expect([self.moby_dick, self.moby_duck], "moby dick", None, two_per_page)
+        expect(
+            [data.moby_dick, data.moby_duck],
+            "moby dick",
+            None,
+            two_per_page,
+        )
 
         # Now try some different search queries.
 
@@ -620,48 +746,48 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         assert 2 == len(query("moby"))
 
         # Search in author name
-        expect(self.moby_dick, "melville")
+        expect(data.moby_dick, "melville")
 
         # Search in subtitle
-        expect(self.moby_dick, "whale")
+        expect(data.moby_dick, "whale")
 
         # Search in series.
-        expect(self.moby_dick, "classics")
+        expect(data.moby_dick, "classics")
 
         # Search in summary.
-        expect(self.moby_dick, "ishmael")
+        expect(data.moby_dick, "ishmael")
 
         # Search in publisher name.
-        expect(self.moby_dick, "gutenberg")
+        expect(data.moby_dick, "gutenberg")
 
         # Title > subtitle > word found in summary > publisher
         order = [
-            self.title_match,
-            self.subtitle_match,
-            self.summary_match,
-            self.publisher_match,
+            data.title_match,
+            data.subtitle_match,
+            data.summary_match,
+            data.publisher_match,
         ]
         expect(order, "match")
 
         # A search for a partial title match + a partial author match
         # considers only books that match both fields.
-        expect([self.moby_dick], "moby melville")
+        expect([data.moby_dick], "moby melville")
 
         # Match a quoted phrase
         # 'Moby-Dick' is the first result because it's an exact title
         # match. 'Moby Duck' is the second result because it's a fuzzy
         # match,
-        expect([self.moby_dick, self.moby_duck], '"moby dick"')
+        expect([data.moby_dick, data.moby_duck], '"moby dick"')
 
         # Match a stemmed word: 'running' is stemmed to 'run', and
         # so is 'runs'.
-        expect(self.dodger, "runs")
+        expect(data.dodger, "runs")
 
         # Match a misspelled phrase: 'movy' -> 'moby'.
-        expect([self.moby_dick, self.moby_duck], "movy", ordered=False)
+        expect([data.moby_dick, data.moby_duck], "movy", ordered=False)
 
         # Match a misspelled author: 'mleville' -> 'melville'
-        expect(self.moby_dick, "mleville")
+        expect(data.moby_dick, "mleville")
 
         # TODO: This is clearly trying to match "Moby Dick", but it
         # matches nothing. This is because at least two of the strings
@@ -673,80 +799,96 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # Here, "dic" is close enough to "dick" that the fuzzy match
         # kicks in. With both "moby" and "dic" matching, it's okay
         # that "k" was a dud.
-        expect([self.moby_dick], "moby dic k")
+        expect([data.moby_dick], "moby dic k")
 
         # A query without an apostrophe matches a word that contains
         # one.  (this is a feature of the stemmer.)
-        expect(self.tess, "durbervilles")
-        expect(self.tiffany, "tiffanys")
+        expect(data.tess, "durbervilles")
+        expect(data.tiffany, "tiffanys")
 
         # A query with an 'e' matches a word that contains an
         # e-with-acute. (this is managed by the 'asciifolding' filter in
         # the analyzers)
-        expect(self.les_mis, "les miserables")
+        expect(data.les_mis, "les miserables")
 
         # Find results based on fiction status.
         #
         # Here, Moby-Dick (fiction) is privileged over Moby Duck
         # (nonfiction)
-        expect([self.moby_dick], "fiction moby")
+        expect([data.moby_dick], "fiction moby")
 
         # Here, Moby Duck is privileged over Moby-Dick.
-        expect([self.moby_duck], "nonfiction moby")
+        expect([data.moby_duck], "nonfiction moby")
 
         # Find results based on series.
         classics = Filter(series="Classics")
-        expect(self.moby_dick, "moby", classics)
+        expect(data.moby_dick, "moby", classics)
 
         # This finds books that belong to _some_ series.
         some_series = Filter(series=True)
-        expect([self.moby_dick, self.ya_romance], "", some_series, ordered=False)
+        expect(
+            [data.moby_dick, data.ya_romance],
+            "",
+            some_series,
+            ordered=False,
+        )
 
         # Find results based on genre.
 
         # If the entire search query is converted into a filter, every
         # book matching that filter is boosted above books that match
         # the search string as a query.
-        expect([self.ya_romance, self.modern_romance], "romance")
+        expect([data.ya_romance, data.modern_romance], "romance")
 
         # Find results based on audience.
-        expect(self.children_work, "children's")
+        expect(data.children_work, "children's")
 
-        expect([self.ya_work, self.ya_romance], "young adult", ordered=False)
+        expect(
+            [data.ya_work, data.ya_romance],
+            "young adult",
+            ordered=False,
+        )
 
         # Find results based on grade level or target age.
         for q in ("grade 4", "grade 4-6", "age 9"):
             # ages 9-10 is a better result because a book targeted
             # toward a narrow range is a better match than a book
             # targeted toward a wide range.
-            expect([self.age_9_10, self.age_2_10], q)
+            expect([data.age_9_10, data.age_2_10], q)
 
         # TODO: The target age query only scores how big the overlap
         # is, it doesn't look at how large the non-overlapping part of
         # the range is. So the 2-10 book can show up before the 9-10
         # book. This could be improved.
-        expect([self.age_9_10, self.age_2_10], "age 10-12", ordered=False)
+        expect(
+            [data.age_9_10, data.age_2_10],
+            "age 10-12",
+            ordered=False,
+        )
 
         # Books whose target age are closer to the requested range
         # are ranked higher.
-        expect([self.age_4_5, self.age_5_6, self.age_2_10], "age 3-5")
+        expect(
+            [data.age_4_5, data.age_5_6, data.age_2_10],
+            "age 3-5",
+        )
 
         # Search by a combination of genre and audience.
 
         # The book with 'Romance' in the title does not show up because
         # it's not a YA book.
-        expect([self.ya_romance], "young adult romance")
+        expect([data.ya_romance], "young adult romance")
 
         # Search by a combination of target age and fiction
         #
         # Two books match the age range, but the one with a
         # tighter age range comes first.
-        expect([self.age_4_5, self.age_2_10], "age 5 fiction")
+        expect([data.age_4_5, data.age_2_10], "age 5 fiction")
 
         # Search by a combination of genre and title
 
         # Two books match 'lincoln', but only the biography is returned
-        expect([self.lincoln], "lincoln biography")
+        expect([data.lincoln], "lincoln biography")
 
         # Search by age + genre + summary
         results = query("age 8 president biography")
@@ -754,7 +896,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # There are a number of results, but the top one is a presidential
         # biography for 8-year-olds.
         assert 5 == len(results)
-        assert self.obama.id == results[0].work_id
+        assert data.obama.id == results[0].work_id
 
         # Now we'll test filters.
 
@@ -763,30 +905,35 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # consideration.
         book_filter = Filter(media=Edition.BOOK_MEDIUM)
         audio_filter = Filter(media=Edition.AUDIO_MEDIUM)
-        expect(self.pride, "pride and prejudice", book_filter)
-        expect(self.pride_audio, "pride and prejudice", audio_filter)
+        expect(data.pride, "pride and prejudice", book_filter)
+        expect(data.pride_audio, "pride and prejudice", audio_filter)
 
         # Filters on languages
         english = Filter(languages="eng")
         spanish = Filter(languages="spa")
         both = Filter(languages=["eng", "spa"])
 
-        expect(self.sherlock, "sherlock", english)
-        expect(self.sherlock_spanish, "sherlock", spanish)
-        expect([self.sherlock, self.sherlock_spanish], "sherlock", both, ordered=False)
+        expect(data.sherlock, "sherlock", english)
+        expect(data.sherlock_spanish, "sherlock", spanish)
+        expect(
+            [data.sherlock, data.sherlock_spanish],
+            "sherlock",
+            both,
+            ordered=False,
+        )
 
         # Filters on fiction status
         fiction = Filter(fiction=True)
         nonfiction = Filter(fiction=False)
         both = Filter()
 
-        expect(self.moby_dick, "moby dick", fiction)
-        expect(self.moby_duck, "moby dick", nonfiction)
-        expect([self.moby_dick, self.moby_duck], "moby dick", both)
+        expect(data.moby_dick, "moby dick", fiction)
+        expect(data.moby_duck, "moby dick", nonfiction)
+        expect([data.moby_dick, data.moby_duck], "moby dick", both)
 
         # Filters on series
         classics = Filter(series="classics")
-        expect(self.moby_dick, "moby", classics)
+        expect(data.moby_dick, "moby", classics)
 
         # Filters on audience
         adult = Filter(audiences=Classifier.AUDIENCE_ADULT)
@@ -800,22 +947,27 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         def expect_alice(expect_works, filter):
             return expect(expect_works, "alice", filter, ordered=False)
 
-        expect_alice([self.adult_work, self.all_ages_work], adult)
-        expect_alice([self.ya_work, self.all_ages_work], ya)
-        expect_alice([self.children_work, self.all_ages_work], children)
+        expect_alice([data.adult_work, data.all_ages_work], adult)
+        expect_alice([data.ya_work, data.all_ages_work], ya)
+        expect_alice([data.children_work, data.all_ages_work], children)
         expect_alice(
-            [self.children_work, self.ya_work, self.all_ages_work], ya_and_children
+            [
+                data.children_work,
+                data.ya_work,
+                data.all_ages_work,
+            ],
+            ya_and_children,
         )
 
         # The 'all ages' work appears except when the audience would make
         # that inappropriate...
-        expect_alice([self.research_work], research)
+        expect_alice([data.research_work], research)
         expect_alice([], Filter(audiences=Classifier.AUDIENCE_ADULTS_ONLY))
 
         # ...or when the target age does not include children expected
         # to have the necessary reading fluency.
         expect_alice(
-            [self.children_work],
+            [data.children_work],
             Filter(audiences=Classifier.AUDIENCE_CHILDREN, target_age=(2, 3)),
         )
 
@@ -823,7 +975,12 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # default, but everything else is included.
         default_filter = Filter()
         expect_alice(
-            [self.children_work, self.ya_work, self.adult_work, self.all_ages_work],
+            [
+                data.children_work,
+                data.ya_work,
+                data.adult_work,
+                data.all_ages_work,
+            ],
             default_filter,
         )
 
@@ -837,36 +994,60 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # disappear. no_age is always present since it has no age
         # restrictions.
         expect(
-            [self.no_age, self.obama, self.dodger], "president", age_8, ordered=False
+            [data.no_age, data.obama, data.dodger],
+            "president",
+            age_8,
+            ordered=False,
         )
 
         expect(
-            [self.no_age, self.age_4_5, self.obama, self.dodger],
+            [
+                data.no_age,
+                data.age_4_5,
+                data.obama,
+                data.dodger,
+            ],
             "president",
             age_5_8,
             ordered=False,
         )
 
         expect(
-            [self.no_age, self.age_4_5, self.obama, self.dodger, self.age_9_10],
+            [
+                data.no_age,
+                data.age_4_5,
+                data.obama,
+                data.dodger,
+                data.age_9_10,
+            ],
             "president",
             age_5_10,
             ordered=False,
         )
 
         expect(
-            [self.no_age, self.obama, self.dodger, self.age_9_10],
+            [
+                data.no_age,
+                data.obama,
+                data.dodger,
+                data.age_9_10,
+            ],
             "president",
             age_8_10,
             ordered=False,
         )
 
         # Filters on license source.
-        gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(session, DataSource.GUTENBERG)
         gutenberg_only = Filter(license_datasource=gutenberg)
-        expect([self.moby_dick, self.moby_duck], "moby", gutenberg_only, ordered=False)
+        expect(
+            [data.moby_dick, data.moby_duck],
+            "moby",
+            gutenberg_only,
+            ordered=False,
+        )
 
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
         overdrive_only = Filter(license_datasource=overdrive)
         expect([], "moby", overdrive_only, ordered=False)
 
@@ -876,27 +1057,32 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # filtered out because its last update time is before the
         # `updated_after`. "Moby Duck" shows up because its last update
         # time is right on the edge.
-        after_moby_duck = Filter(updated_after=self.moby_duck.last_update_time)
-        expect([self.moby_duck], "moby dick", after_moby_duck)
+        after_moby_duck = Filter(updated_after=data.moby_duck.last_update_time)
+        expect([data.moby_duck], "moby dick", after_moby_duck)
 
         # Filters on genre
 
-        biography, ignore = Genre.lookup(self._db, "Biography & Memoir")
-        fantasy, ignore = Genre.lookup(self._db, "Fantasy")
+        biography, ignore = Genre.lookup(session, "Biography & Memoir")
+        fantasy, ignore = Genre.lookup(session, "Fantasy")
         biography_filter = Filter(genre_restriction_sets=[[biography]])
         fantasy_filter = Filter(genre_restriction_sets=[[fantasy]])
         both = Filter(genre_restriction_sets=[[fantasy, biography]])
 
-        expect(self.lincoln, "lincoln", biography_filter)
-        expect(self.lincoln_vampire, "lincoln", fantasy_filter)
-        expect([self.lincoln, self.lincoln_vampire], "lincoln", both, ordered=False)
+        expect(data.lincoln, "lincoln", biography_filter)
+        expect(data.lincoln_vampire, "lincoln", fantasy_filter)
+        expect(
+            [data.lincoln, data.lincoln_vampire],
+            "lincoln",
+            both,
+            ordered=False,
+        )
 
         # Filters on list membership.
 
         # This ignores 'Abraham Lincoln, Vampire Hunter' because that
         # book isn't on the self.presidential list.
-        on_presidential_list = Filter(customlist_restriction_sets=[[self.presidential]])
-        expect(self.lincoln, "lincoln", on_presidential_list)
+        on_presidential_list = Filter(customlist_restriction_sets=[[data.presidential]])
+        expect(data.lincoln, "lincoln", on_presidential_list)
 
         # This filters everything, since the query is restricted to
         # an empty set of lists.
@@ -905,23 +1091,29 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # Filter based on collection ID.
 
         # "A Tiny Book" isn't in the default collection.
-        default_collection_only = Filter(collections=self._default_collection)
+        default_collection_only = Filter(collections=transaction.default_collection())
         expect([], "a tiny book", default_collection_only)
 
         # It is in the tiny_collection.
-        other_collection_only = Filter(collections=self.tiny_collection)
-        expect(self.tiny_book, "a tiny book", other_collection_only)
+        other_collection_only = Filter(collections=data.tiny_collection)
+        expect(data.tiny_book, "a tiny book", other_collection_only)
 
         # If a book is present in two different collections which are
         # being searched, it only shows up in search results once.
         f = Filter(
-            collections=[self._default_collection, self.tiny_collection],
+            collections=[
+                transaction.default_collection(),
+                data.tiny_collection,
+            ],
             languages="eng",
         )
-        expect(self.sherlock, "sherlock holmes", f)
+        expect(data.sherlock, "sherlock holmes", f)
 
         # Filter on identifier -- one or many.
-        for results in [[self.lincoln], [self.sherlock, self.pride_audio]]:
+        for results in [
+            [data.lincoln],
+            [data.sherlock, data.pride_audio],
+        ]:
             identifiers = [w.license_pools[0].identifier for w in results]
             f = Filter(identifiers=identifiers)
             expect(results, None, f, ordered=False)
@@ -937,23 +1129,28 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # excluded, so it won't show up in search results.
         f = Filter(
             excluded_audiobook_data_sources=[
-                self.pride_audio.license_pools[0].data_source
+                data.pride_audio.license_pools[0].data_source
             ]
         )
-        expect([self.pride], "pride and prejudice", f)
+        expect([data.pride], "pride and prejudice", f)
 
         # Here, a different data source is excluded, and it shows up.
         f = Filter(
             excluded_audiobook_data_sources=[
-                DataSource.lookup(self._db, DataSource.BIBLIOTHECA)
+                DataSource.lookup(session, DataSource.BIBLIOTHECA)
             ]
         )
-        expect([self.pride, self.pride_audio], "pride and prejudice", f, ordered=False)
+        expect(
+            [data.pride, data.pride_audio],
+            "pride and prejudice",
+            f,
+            ordered=False,
+        )
 
         # "Moby Duck" is not currently available, so it won't show up in
         # search results if allow_holds is False.
         f = Filter(allow_holds=False)
-        expect([self.moby_dick], "moby duck", f)
+        expect([data.moby_dick], "moby duck", f)
 
         # Finally, let's do some end-to-end tests of
         # WorkList.works()
@@ -965,10 +1162,16 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
             pages.
             """
             pagination = SortKeyPagination(size=2)
-            facets = Facets(self._default_library, None, None, order=Facets.ORDER_TITLE)
+            facets = Facets(
+                transaction.default_library(), None, None, order=Facets.ORDER_TITLE
+            )
             pages = []
             while pagination:
-                pages.append(worklist.works(self._db, facets, pagination, self.search))
+                pages.append(
+                    worklist.works(
+                        session, facets, pagination, fixture.external_search.search
+                    )
+                )
                 pagination = pagination.next_page
 
             # The last page should always be empty -- that's how we
@@ -980,26 +1183,28 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
 
         # Test a WorkList based on a custom list.
         presidential = WorkList()
-        presidential.initialize(self._default_library, customlists=[self.presidential])
+        presidential.initialize(
+            transaction.default_library(), customlists=[data.presidential]
+        )
         p1, p2 = pages(presidential)
-        assert [self.lincoln, self.obama] == p1
-        assert [self.washington] == p2
+        assert [data.lincoln, data.obama] == p1
+        assert [data.washington] == p2
 
         # Test a WorkList based on a language.
         spanish = WorkList()
-        spanish.initialize(self._default_library, languages=["spa"])
-        assert [[self.sherlock_spanish]] == pages(spanish)
+        spanish.initialize(transaction.default_library(), languages=["spa"])
+        assert [[data.sherlock_spanish]] == pages(spanish)
 
         # Test a WorkList based on a genre.
         biography_wl = WorkList()
-        biography_wl.initialize(self._default_library, genres=[biography])
-        assert [[self.lincoln, self.obama]] == pages(biography_wl)
+        biography_wl.initialize(transaction.default_library(), genres=[biography])
+        assert [[data.lincoln, data.obama]] == pages(biography_wl)
 
         # Search results may be sorted by some field other than search
         # quality.
         f = SearchFacets
         by_author = f(
-            library=self._default_library,
+            library=transaction.default_library(),
             collection=f.COLLECTION_FULL,
             availability=f.AVAILABLE_ALL,
             order=f.ORDER_AUTHOR,
@@ -1007,7 +1212,7 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         by_author = Filter(facets=by_author)
 
         by_title = f(
-            library=self._default_library,
+            library=transaction.default_library(),
             collection=f.COLLECTION_FULL,
             availability=f.AVAILABLE_ALL,
             order=f.ORDER_TITLE,
@@ -1019,8 +1224,8 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # real collection the default filter level works well, but it
         # makes it difficult to test the feature in this limited test
         # collection.
-        expect([self.moby_dick], "moby dick", by_author)
-        expect([self.ya_romance], "romance", by_author)
+        expect([data.moby_dick], "moby dick", by_author)
+        expect([data.ya_romance], "romance", by_author)
         expect([], "moby", by_author)
         expect([], "president", by_author)
 
@@ -1028,16 +1233,30 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         by_title.min_score = 50
         by_author.min_score = 50
 
-        expect([self.moby_dick, self.moby_duck], "moby", by_title)
-        expect([self.moby_duck, self.moby_dick], "moby", by_author)
-        expect([self.ya_romance, self.modern_romance], "romance", by_title)
-        expect([self.modern_romance, self.ya_romance], "romance", by_author)
+        expect([data.moby_dick, data.moby_duck], "moby", by_title)
+        expect([data.moby_duck, data.moby_dick], "moby", by_author)
+        expect(
+            [data.ya_romance, data.modern_romance],
+            "romance",
+            by_title,
+        )
+        expect(
+            [data.modern_romance, data.ya_romance],
+            "romance",
+            by_author,
+        )
 
         # Lower it even more and we can start picking up search results
         # that only match because of words in the description.
         by_title.min_score = 10
         by_author.min_score = 10
-        results = [self.no_age, self.age_4_5, self.dodger, self.age_9_10, self.obama]
+        results = [
+            data.no_age,
+            data.age_4_5,
+            data.dodger,
+            data.age_9_10,
+            data.obama,
+        ]
         expect(results, "president", by_title)
 
         # Reverse the sort order to demonstrate that these works are being
@@ -1049,14 +1268,14 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # simultaneously.
 
         # Different query strings.
-        self._expect_results_multi(
-            [[self.moby_dick], [self.moby_duck]],
+        fixture.expect_results_multi(
+            [[data.moby_dick], [data.moby_duck]],
             [("moby dick", None, first_item), ("moby duck", None, first_item)],
         )
 
         # Same query string, different pagination settings.
-        self._expect_results_multi(
-            [[self.moby_dick], [self.moby_duck]],
+        fixture.expect_results_multi(
+            [[data.moby_dick], [data.moby_duck]],
             [("moby dick", None, first_item), ("moby dick", None, second_item)],
         )
 
@@ -1066,43 +1285,77 @@ class TestExternalSearchWithWorks(EndToEndSearchTest):
         # even run.  Here the query must be run, even though one
         # branch will return no results.
         match_nothing = Filter(match_nothing=True)
-        self._expect_results_multi(
-            [[self.moby_duck], []],
+        fixture.expect_results_multi(
+            [[data.moby_duck], []],
             [
                 ("moby dick", Filter(fiction=False), first_item),
                 (None, match_nothing, first_item),
             ],
         )
 
+        # Case-insensitive genre search, genre is saved as 'Fantasy'
+        expect([data.lincoln_vampire], "fantasy")
 
-class TestFacetFilters(EndToEndSearchTest):
-    def populate_works(self):
-        _work = self.default_work
+    def test_remove_work(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        search = end_to_end_search_fixture.external_search.search
+        data = self._populate_works(end_to_end_search_fixture)
+        end_to_end_search_fixture.populate_search_index()
+        search.remove_work(data.moby_dick)
+        search.remove_work(data.moby_duck)
 
+        # Immediately querying never works, the search index needs to refresh its cache/index/data
+        search.indices.refresh()
+
+        end_to_end_search_fixture.expect_results([], "Moby")
+
+
+class TestFacetFiltersData:
+    becoming: Work
+    duck: Work
+    horse: Work
+    moby: Work
+
+
+class TestFacetFilters:
+    @staticmethod
+    def _populate_works(
+        data: EndToEndSearchFixture,
+    ) -> TestFacetFiltersData:
+        _work: Callable = data.external_search.default_work
+
+        result = TestFacetFiltersData()
         # A low-quality open-access work.
-        self.horse = _work(
+        result.horse = _work(
             title="Diseases of the Horse", with_open_access_download=True
         )
-        self.horse.quality = 0.2
+        result.horse.quality = 0.2
 
         # A high-quality open-access work.
-        self.moby = _work(title="Moby Dick", with_open_access_download=True)
-        self.moby.quality = 0.8
+        result.moby = _work(title="Moby Dick", with_open_access_download=True)
+        result.moby.quality = 0.8
 
         # A currently available commercially-licensed work.
-        self.duck = _work(title="Moby Duck")
-        self.duck.license_pools[0].licenses_available = 1
-        self.duck.quality = 0.5
+        result.duck = _work(title="Moby Duck")
+        result.duck.license_pools[0].licenses_available = 1
+        result.duck.quality = 0.5
 
         # A currently unavailable commercially-licensed work.
-        self.becoming = _work(title="Becoming")
-        self.becoming.license_pools[0].licenses_available = 0
-        self.becoming.quality = 0.9
+        result.becoming = _work(title="Becoming")
+        result.becoming.license_pools[0].licenses_available = 0
+        result.becoming.quality = 0.9
+        return result
 
-    def test_facet_filtering(self):
+    def test_facet_filtering(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        transaction = fixture.external_search.db
+        session = transaction.session
+
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
-            self._db, search_index_client=self.search
+            session, search_index_client=fixture.external_search.search
         ).run_once_and_update_timestamp()
 
         # Sleep to give the index time to catch up.
@@ -1110,47 +1363,85 @@ class TestFacetFilters(EndToEndSearchTest):
 
         def expect(availability, collection, works):
             facets = Facets(
-                self._default_library,
+                transaction.default_library(),
                 availability,
                 collection,
                 order=Facets.ORDER_TITLE,
             )
-            self._expect_results(works, None, Filter(facets=facets), ordered=False)
+            fixture.expect_results(works, None, Filter(facets=facets), ordered=False)
 
         # Get all the books in alphabetical order by title.
         expect(
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
-            [self.becoming, self.horse, self.moby, self.duck],
+            [
+                data.becoming,
+                data.horse,
+                data.moby,
+                data.duck,
+            ],
         )
 
         # Show only works that can be borrowed right now.
         expect(
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_NOW,
-            [self.horse, self.moby, self.duck],
+            [data.horse, data.moby, data.duck],
         )
 
         # Show only works that can *not* be borrowed right now.
-        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, [self.becoming])
+        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, [data.becoming])
 
         # Show only open-access works.
         expect(
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_OPEN_ACCESS,
-            [self.horse, self.moby],
+            [data.horse, data.moby],
         )
 
         # Show only featured-quality works.
         expect(
-            Facets.COLLECTION_FEATURED, Facets.AVAILABLE_ALL, [self.becoming, self.moby]
+            Facets.COLLECTION_FEATURED,
+            Facets.AVAILABLE_ALL,
+            [data.becoming, data.moby],
         )
 
 
-class TestSearchOrder(EndToEndSearchTest):
-    def populate_works(self):
-        _work = self.default_work
+class TestSearchOrderData:
+    a1: Work
+    a2: LicensePool
+    a: Work
+    b1: Work
+    b2: LicensePool
+    b: Work
+    by_publication_date: CustomList
+    c1: Work
+    c2: LicensePool
+    c: Work
+    collection1: Collection
+    collection2: Collection
+    collection3: Collection
+    d: Work
+    e: Work
+    extra_list: CustomList
+    list1: CustomList
+    list2: CustomList
+    list3: CustomList
+    moby_dick: Work
+    moby_duck: Work
+    staff_picks: CustomList
+    untitled: Work
 
+
+class TestSearchOrder:
+    @staticmethod
+    def _populate_works(
+        fixture: EndToEndSearchFixture,
+    ) -> TestSearchOrderData:
+        transaction = fixture.external_search.db
+        _work: Callable = fixture.external_search.default_work
+
+        result = TestSearchOrderData()
         # We're going to create three works:
         # a: "Moby Dick"
         # b: "Moby Duck"
@@ -1186,112 +1477,120 @@ class TestSearchOrder(EndToEndSearchTest):
         #           the Filter.
         # c, a - when two sets of custom list restrictions [1], [3]
         #        are associated with the filter.
-        self.moby_dick = _work(
+        result.moby_dick = _work(
             title="moby dick", authors="Herman Melville", fiction=True
         )
-        self.moby_dick.presentation_edition.subtitle = "Or, the Whale"
-        self.moby_dick.presentation_edition.series = "Classics"
-        self.moby_dick.presentation_edition.series_position = 10
-        self.moby_dick.summary_text = "Ishmael"
-        self.moby_dick.presentation_edition.publisher = "Project Gutenberg"
-        self.moby_dick.random = 0.1
+        result.moby_dick.presentation_edition.subtitle = "Or, the Whale"
+        result.moby_dick.presentation_edition.series = "Classics"
+        result.moby_dick.presentation_edition.series_position = 10
+        result.moby_dick.summary_text = "Ishmael"
+        result.moby_dick.presentation_edition.publisher = "Project Gutenberg"
+        result.moby_dick.random = 0.1
 
-        self.moby_duck = _work(title="Moby Duck", authors="donovan hohn", fiction=False)
-        self.moby_duck.presentation_edition.subtitle = (
+        result.moby_duck = _work(
+            title="Moby Duck", authors="donovan hohn", fiction=False
+        )
+        result.moby_duck.presentation_edition.subtitle = (
             "The True Story of 28,800 Bath Toys Lost at Sea"
         )
-        self.moby_duck.summary_text = "A compulsively readable narrative"
-        self.moby_duck.presentation_edition.series_position = 1
-        self.moby_duck.presentation_edition.publisher = "Penguin"
-        self.moby_duck.random = 0.9
+        result.moby_duck.summary_text = "A compulsively readable narrative"
+        result.moby_duck.presentation_edition.series_position = 1
+        result.moby_duck.presentation_edition.publisher = "Penguin"
+        result.moby_duck.random = 0.9
 
-        self.untitled = _work(title="[Untitled]", authors="[Unknown]")
-        self.untitled.random = 0.99
-        self.untitled.presentation_edition.series_position = 5
+        result.untitled = _work(title="[Untitled]", authors="[Unknown]")
+        result.untitled.random = 0.99
+        result.untitled.presentation_edition.series_position = 5
 
         # It's easier to refer to the books as a, b, and c when not
-        # testing sorts that rely on the metadata.
-        self.a = self.moby_dick
-        self.b = self.moby_duck
-        self.c = self.untitled
+        # testing sorts that rely on the metaresult.
+        result.a = result.moby_dick
+        result.b = result.moby_duck
+        result.c = result.untitled
 
-        self.a.last_update_time = datetime_utc(2000, 1, 1)
-        self.b.last_update_time = datetime_utc(2001, 1, 1)
-        self.c.last_update_time = datetime_utc(2002, 1, 1)
+        result.a.last_update_time = datetime_utc(2000, 1, 1)
+        result.b.last_update_time = datetime_utc(2001, 1, 1)
+        result.c.last_update_time = datetime_utc(2002, 1, 1)
 
         # Each work has one LicensePool associated with the default
         # collection.
-        self.collection1 = self._default_collection
-        self.collection1.name = "Collection 1 - ACB"
-        [self.a1] = self.a.license_pools
-        [self.b1] = self.b.license_pools
-        [self.c1] = self.c.license_pools
-        self.a1.availability_time = datetime_utc(2010, 1, 1)
-        self.c1.availability_time = datetime_utc(2011, 1, 1)
-        self.b1.availability_time = datetime_utc(2012, 1, 1)
+        result.collection1 = transaction.default_collection()
+        result.collection1.name = "Collection 1 - ACB"
+        [result.a1] = result.a.license_pools
+        [result.b1] = result.b.license_pools
+        [result.c1] = result.c.license_pools
+        result.a1.availability_time = datetime_utc(2010, 1, 1)
+        result.c1.availability_time = datetime_utc(2011, 1, 1)
+        result.b1.availability_time = datetime_utc(2012, 1, 1)
 
         # Here's a second collection with the same books in a different
         # order.
-        self.collection2 = self._collection(name="Collection 2 - BAC")
-        self.a2 = self._licensepool(
-            edition=self.a.presentation_edition,
-            collection=self.collection2,
+        result.collection2 = transaction.collection(name="Collection 2 - BAC")
+        result.a2 = transaction.licensepool(
+            edition=result.a.presentation_edition,
+            collection=result.collection2,
             with_open_access_download=True,
         )
-        self.a.license_pools.append(self.a2)
-        self.b2 = self._licensepool(
-            edition=self.b.presentation_edition,
-            collection=self.collection2,
+        result.a.license_pools.append(result.a2)
+        result.b2 = transaction.licensepool(
+            edition=result.b.presentation_edition,
+            collection=result.collection2,
             with_open_access_download=True,
         )
-        self.b.license_pools.append(self.b2)
-        self.c2 = self._licensepool(
-            edition=self.c.presentation_edition,
-            collection=self.collection2,
+        result.b.license_pools.append(result.b2)
+        result.c2 = transaction.licensepool(
+            edition=result.c.presentation_edition,
+            collection=result.collection2,
             with_open_access_download=True,
         )
-        self.c.license_pools.append(self.c2)
-        self.b2.availability_time = datetime_utc(2020, 1, 1)
-        self.a2.availability_time = datetime_utc(2021, 1, 1)
-        self.c2.availability_time = datetime_utc(2022, 1, 1)
+        result.c.license_pools.append(result.c2)
+        result.b2.availability_time = datetime_utc(2020, 1, 1)
+        result.a2.availability_time = datetime_utc(2021, 1, 1)
+        result.c2.availability_time = datetime_utc(2022, 1, 1)
 
         # Here are three custom lists which contain the same books but
         # with different first appearances.
-        self.list1, ignore = self._customlist(name="Custom list 1 - BCA", num_entries=0)
-        self.list1.add_entry(self.b, first_appearance=datetime_utc(2030, 1, 1))
-        self.list1.add_entry(self.c, first_appearance=datetime_utc(2031, 1, 1))
-        self.list1.add_entry(self.a, first_appearance=datetime_utc(2032, 1, 1))
+        result.list1, ignore = transaction.customlist(
+            name="Custom list 1 - BCA", num_entries=0
+        )
+        result.list1.add_entry(result.b, first_appearance=datetime_utc(2030, 1, 1))
+        result.list1.add_entry(result.c, first_appearance=datetime_utc(2031, 1, 1))
+        result.list1.add_entry(result.a, first_appearance=datetime_utc(2032, 1, 1))
 
-        self.list2, ignore = self._customlist(name="Custom list 2 - CAB", num_entries=0)
-        self.list2.add_entry(self.c, first_appearance=datetime_utc(2001, 1, 1))
-        self.list2.add_entry(self.a, first_appearance=datetime_utc(2014, 1, 1))
-        self.list2.add_entry(self.b, first_appearance=datetime_utc(2015, 1, 1))
+        result.list2, ignore = transaction.customlist(
+            name="Custom list 2 - CAB", num_entries=0
+        )
+        result.list2.add_entry(result.c, first_appearance=datetime_utc(2001, 1, 1))
+        result.list2.add_entry(result.a, first_appearance=datetime_utc(2014, 1, 1))
+        result.list2.add_entry(result.b, first_appearance=datetime_utc(2015, 1, 1))
 
-        self.list3, ignore = self._customlist(name="Custom list 3 -- CA", num_entries=0)
-        self.list3.add_entry(self.a, first_appearance=datetime_utc(2032, 1, 1))
-        self.list3.add_entry(self.c, first_appearance=datetime_utc(1999, 1, 1))
+        result.list3, ignore = transaction.customlist(
+            name="Custom list 3 -- CA", num_entries=0
+        )
+        result.list3.add_entry(result.a, first_appearance=datetime_utc(2032, 1, 1))
+        result.list3.add_entry(result.c, first_appearance=datetime_utc(1999, 1, 1))
 
         # Create two custom lists which contain some of the same books,
         # but with different first appearances.
 
-        self.by_publication_date, ignore = self._customlist(
+        result.by_publication_date, ignore = transaction.customlist(
             name="First appearance on list is publication date", num_entries=0
         )
-        self.by_publication_date.add_entry(
-            self.moby_duck, first_appearance=datetime_utc(2011, 3, 1)
+        result.by_publication_date.add_entry(
+            result.moby_duck, first_appearance=datetime_utc(2011, 3, 1)
         )
-        self.by_publication_date.add_entry(
-            self.untitled, first_appearance=datetime_utc(2018, 1, 1)
+        result.by_publication_date.add_entry(
+            result.untitled, first_appearance=datetime_utc(2018, 1, 1)
         )
 
-        self.staff_picks, ignore = self._customlist(
+        result.staff_picks, ignore = transaction.customlist(
             name="First appearance is date book was made a staff pick", num_entries=0
         )
-        self.staff_picks.add_entry(
-            self.moby_dick, first_appearance=datetime_utc(2015, 5, 2)
+        result.staff_picks.add_entry(
+            result.moby_dick, first_appearance=datetime_utc(2015, 5, 2)
         )
-        self.staff_picks.add_entry(
-            self.moby_duck, first_appearance=datetime_utc(2012, 8, 30)
+        result.staff_picks.add_entry(
+            result.moby_duck, first_appearance=datetime_utc(2012, 8, 30)
         )
 
         # Create two extra works, d and e, which are only used to
@@ -1299,20 +1598,30 @@ class TestSearchOrder(EndToEndSearchTest):
         #
         # The custom list and the collection both put d earlier than e, but the
         # last_update_time wins out, and it puts e before d.
-        self.collection3 = self._collection()
-        self.d = self._work(collection=self.collection3, with_license_pool=True)
-        self.e = self._work(collection=self.collection3, with_license_pool=True)
-        self.d.license_pools[0].availability_time = datetime_utc(2010, 1, 1)
-        self.e.license_pools[0].availability_time = datetime_utc(2011, 1, 1)
+        result.collection3 = transaction.collection()
+        result.d = transaction.work(
+            collection=result.collection3, with_license_pool=True
+        )
+        result.e = transaction.work(
+            collection=result.collection3, with_license_pool=True
+        )
+        result.d.license_pools[0].availability_time = datetime_utc(2010, 1, 1)
+        result.e.license_pools[0].availability_time = datetime_utc(2011, 1, 1)
 
-        self.extra_list, ignore = self._customlist(num_entries=0)
-        self.extra_list.add_entry(self.d, first_appearance=datetime_utc(2020, 1, 1))
-        self.extra_list.add_entry(self.e, first_appearance=datetime_utc(2021, 1, 1))
+        result.extra_list, ignore = transaction.customlist(num_entries=0)
+        result.extra_list.add_entry(result.d, first_appearance=datetime_utc(2020, 1, 1))
+        result.extra_list.add_entry(result.e, first_appearance=datetime_utc(2021, 1, 1))
 
-        self.e.last_update_time = datetime_utc(2090, 1, 1)
-        self.d.last_update_time = datetime_utc(2091, 1, 1)
+        result.e.last_update_time = datetime_utc(2090, 1, 1)
+        result.d.last_update_time = datetime_utc(2091, 1, 1)
+        return result
 
-    def test_ordering(self):
+    def test_ordering(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        transaction = fixture.external_search.db
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
         def assert_order(sort_field, order, **filter_kwargs):
             """Verify that when the books created during test setup are ordered by
             the given `sort_field`, they show up in the given `order`.
@@ -1327,9 +1636,9 @@ class TestSearchOrder(EndToEndSearchTest):
             :param filter_kwargs: Extra keyword arguments to be passed
                into the `Filter` constructor.
             """
-            expect = self._expect_results
+            expect = fixture.expect_results
             facets = Facets(
-                self._default_library,
+                transaction.default_library(),
                 Facets.COLLECTION_FULL,
                 Facets.AVAILABLE_ALL,
                 order=sort_field,
@@ -1376,16 +1685,24 @@ class TestSearchOrder(EndToEndSearchTest):
         # We can sort by title.
         assert_order(
             Facets.ORDER_TITLE,
-            [self.untitled, self.moby_dick, self.moby_duck],
-            collections=[self._default_collection],
+            [
+                data.untitled,
+                data.moby_dick,
+                data.moby_duck,
+            ],
+            collections=[transaction.default_collection()],
         )
 
         # We can sort by author; 'Hohn' sorts before 'Melville' sorts
         # before "[Unknown]"
         assert_order(
             Facets.ORDER_AUTHOR,
-            [self.moby_duck, self.moby_dick, self.untitled],
-            collections=[self._default_collection],
+            [
+                data.moby_duck,
+                data.moby_dick,
+                data.untitled,
+            ],
+            collections=[transaction.default_collection()],
         )
 
         # We can sort by series position. Here, the books aren't in
@@ -1393,15 +1710,23 @@ class TestSearchOrder(EndToEndSearchTest):
         # the value of 'series'.
         assert_order(
             Facets.ORDER_SERIES_POSITION,
-            [self.moby_duck, self.untitled, self.moby_dick],
-            collections=[self._default_collection],
+            [
+                data.moby_duck,
+                data.untitled,
+                data.moby_dick,
+            ],
+            collections=[transaction.default_collection()],
         )
 
         # We can sort by internal work ID, which isn't very useful.
         assert_order(
             Facets.ORDER_WORK_ID,
-            [self.moby_dick, self.moby_duck, self.untitled],
-            collections=[self._default_collection],
+            [
+                data.moby_dick,
+                data.moby_duck,
+                data.untitled,
+            ],
+            collections=[transaction.default_collection()],
         )
 
         # We can sort by the time the Work's LicensePools were first
@@ -1412,14 +1737,14 @@ class TestSearchOrder(EndToEndSearchTest):
         # results.
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [self.a, self.c, self.b],
-            collections=[self.collection1],
+            [data.a, data.c, data.b],
+            collections=[data.collection1],
         )
 
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [self.b, self.a, self.c],
-            collections=[self.collection2],
+            [data.b, data.a, data.c],
+            collections=[data.collection2],
         )
 
         # If a work shows up with multiple availability times through
@@ -1429,132 +1754,181 @@ class TestSearchOrder(EndToEndSearchTest):
         # here.
         assert_order(
             Facets.ORDER_ADDED_TO_COLLECTION,
-            [self.a, self.c, self.b],
-            collections=[self.collection1, self.collection2],
+            [data.a, data.c, data.b],
+            collections=[data.collection1, data.collection2],
         )
 
         # Finally, here are the tests of ORDER_LAST_UPDATE, as described
         # above in setup().
-        assert_order(Facets.ORDER_LAST_UPDATE, [self.a, self.b, self.c, self.e, self.d])
-
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [self.a, self.c, self.b],
-            collections=[self.collection1],
+            [
+                data.a,
+                data.b,
+                data.c,
+                data.e,
+                data.d,
+            ],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [self.b, self.a, self.c],
-            collections=[self.collection1, self.collection2],
+            [data.a, data.c, data.b],
+            collections=[data.collection1],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [self.b, self.c, self.a],
-            customlist_restriction_sets=[[self.list1]],
+            [data.b, data.a, data.c],
+            collections=[data.collection1, data.collection2],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [self.c, self.a, self.b],
-            collections=[self.collection1],
-            customlist_restriction_sets=[[self.list2]],
+            [data.b, data.c, data.a],
+            customlist_restriction_sets=[[data.list1]],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [self.c, self.a],
-            customlist_restriction_sets=[[self.list1], [self.list3]],
+            [data.c, data.a, data.b],
+            collections=[data.collection1],
+            customlist_restriction_sets=[[data.list2]],
         )
 
         assert_order(
             Facets.ORDER_LAST_UPDATE,
-            [self.e, self.d],
-            collections=[self.collection3],
-            customlist_restriction_sets=[[self.extra_list]],
+            [data.c, data.a],
+            customlist_restriction_sets=[
+                [data.list1],
+                [data.list3],
+            ],
+        )
+
+        assert_order(
+            Facets.ORDER_LAST_UPDATE,
+            [data.e, data.d],
+            collections=[data.collection3],
+            customlist_restriction_sets=[[data.extra_list]],
         )
 
 
-class TestAuthorFilter(EndToEndSearchTest):
+class TestAuthorFilterData:
+    full: Contributor
+    display_name: Contributor
+    sort_name: Contributor
+    viaf: Contributor
+    lc: Contributor
+    works: List[Work]
+    literary_wonderlands: Work
+    ubik: Work
+    justice: Work
+    sword: Work
+    mercy: Work
+    provenance: Work
+    raven: Work
+
+
+class TestAuthorFilter:
     # Test the various techniques used to find books where a certain
     # person had an authorship role.
 
-    def populate_works(self):
-        _work = self.default_work
+    @staticmethod
+    def _populate_works(
+        data: EndToEndSearchFixture,
+    ) -> TestAuthorFilterData:
+        transaction, session = (
+            data.external_search.db,
+            data.external_search.db.session,
+        )
+        _work = data.external_search.default_work
 
         # Create a number of Contributor objects--some fragmentary--
         # representing the same person.
-        self.full = Contributor(
+        result = TestAuthorFilterData()
+        result.full = Contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
             viaf="73520345",
             lc="n2013008575",
         )
-        self.display_name = Contributor(
+        result.display_name = Contributor(
             sort_name=Edition.UNKNOWN_AUTHOR, display_name="ann leckie"
         )
-        self.sort_name = Contributor(sort_name="LECKIE, ANN")
-        self.viaf = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, viaf="73520345")
-        self.lc = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, lc="n2013008575")
+        result.sort_name = Contributor(sort_name="LECKIE, ANN")
+        result.viaf = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, viaf="73520345")
+        result.lc = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, lc="n2013008575")
 
         # Create a different Work for every Contributor object.
         # Alternate among the various 'author match' roles.
-        self.works = []
+        result.works = []
         roles = list(Filter.AUTHOR_MATCH_ROLES)
         for i, (contributor, title, attribute) in enumerate(
             [
-                (self.full, "Ancillary Justice", "justice"),
-                (self.display_name, "Ancillary Sword", "sword"),
-                (self.sort_name, "Ancillary Mercy", "mercy"),
-                (self.viaf, "Provenance", "provenance"),
-                (self.lc, "Raven Tower", "raven"),
+                (result.full, "Ancillary Justice", "justice"),
+                (result.display_name, "Ancillary Sword", "sword"),
+                (result.sort_name, "Ancillary Mercy", "mercy"),
+                (result.viaf, "Provenance", "provenance"),
+                (result.lc, "Raven Tower", "raven"),
             ]
         ):
-            self._db.add(contributor)
-            edition, ignore = self._edition(
+            session.add(contributor)
+            edition, ignore = transaction.edition(
                 title=title, authors=[], with_license_pool=True
             )
             contribution, was_new = get_one_or_create(
-                self._db,
+                session,
                 Contribution,
                 edition=edition,
                 contributor=contributor,
                 role=roles[i % len(roles)],
             )
-            work = self.default_work(
+            work = data.external_search.default_work(
                 presentation_edition=edition,
             )
-            self.works.append(work)
-            setattr(self, attribute, work)
+            result.works.append(work)
+            setattr(result, attribute, work)
 
         # This work is a decoy. The author we're looking for
         # contributed to the work in an ineligible role, so it will
         # always be filtered out.
-        edition, ignore = self._edition(
+        edition, ignore = transaction.edition(
             title="Science Fiction: The Best of the Year (2007 Edition)",
             authors=[],
             with_license_pool=True,
         )
         contribution, is_new = get_one_or_create(
-            self._db,
+            session,
             Contribution,
             edition=edition,
-            contributor=self.full,
+            contributor=result.full,
             role=Contributor.CONTRIBUTOR_ROLE,
         )
-        self.literary_wonderlands = self.default_work(presentation_edition=edition)
+        result.literary_wonderlands = data.external_search.default_work(
+            presentation_edition=edition
+        )
 
         # Another decoy. This work is by a different person and will
         # always be filtered out.
-        self.ubik = self.default_work(title="Ubik", authors=["Phillip K. Dick"])
+        result.ubik = data.external_search.default_work(
+            title="Ubik", authors=["Phillip K. Dick"]
+        )
+        return result
 
-    def test_author_match(self):
+    def test_author_match(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
 
         # By providing a Contributor object with all the identifiers,
         # we get every work with an author-type contribution from
         # someone who can be identified with that Contributor.
-        self._expect_results(self.works, None, Filter(author=self.full), ordered=False)
+        fixture.expect_results(
+            data.works,
+            None,
+            Filter(author=data.full),
+            ordered=False,
+        )
 
         # If we provide a Contributor object with partial information,
         # we can only get works that are identifiable with that
@@ -1566,12 +1940,12 @@ class TestAuthorFilter(EndToEndSearchTest):
         # work -- the one associated with the Contributor whose
         # data overlaps what we're passing in.
         for filter, extra in [
-            (Filter(author=self.display_name), self.sword),
-            (Filter(author=self.sort_name), self.mercy),
-            (Filter(author=self.viaf), self.provenance),
-            (Filter(author=self.lc), self.raven),
+            (Filter(author=data.display_name), data.sword),
+            (Filter(author=data.sort_name), data.mercy),
+            (Filter(author=data.viaf), data.provenance),
+            (Filter(author=data.lc), data.raven),
         ]:
-            self._expect_results([self.justice, extra], None, filter, ordered=False)
+            fixture.expect_results([data.justice, extra], None, filter, ordered=False)
 
         # ContributorData also works here.
 
@@ -1580,8 +1954,8 @@ class TestAuthorFilter(EndToEndSearchTest):
         # the one that knows its author's VIAF number, and the one
         # that knows both.
         author = ContributorData(sort_name="Leckie, Ann", viaf="73520345")
-        self._expect_results(
-            [self.justice, self.mercy, self.provenance],
+        fixture.expect_results(
+            [data.justice, data.mercy, data.provenance],
             None,
             Filter(author=author),
             ordered=False,
@@ -1592,87 +1966,101 @@ class TestAuthorFilter(EndToEndSearchTest):
         # accented characters.
         for variant in ("ann leckie", "Àñn Léckiê"):
             author = ContributorData(display_name=variant)
-            self._expect_results(
-                [self.justice, self.sword], None, Filter(author=author), ordered=False
+            fixture.expect_results(
+                [data.justice, data.sword],
+                None,
+                Filter(author=author),
+                ordered=False,
             )
 
         # It cannot accommodate misspellings, no matter how minor.
         author = ContributorData(display_name="Anne Leckie")
-        self._expect_results([], None, Filter(author=author))
+        fixture.expect_results([], None, Filter(author=author))
 
         # If the information in the ContributorData is inconsistent,
         # the results may also be inconsistent.
         author = ContributorData(sort_name="Dick, Phillip K.", lc="n2013008575")
-        self._expect_results(
-            [self.justice, self.raven, self.ubik],
+        fixture.expect_results(
+            [data.justice, data.raven, data.ubik],
             None,
             Filter(author=author),
             ordered=False,
         )
 
 
-class TestExactMatches(EndToEndSearchTest):
+class TestExactMatchesData:
+    modern_romance: Work
+    ya_romance: Work
+    parent_book: Work
+    behind_the_scenes: Work
+    biography_of_peter_graves: Work
+    book_by_peter_graves: Work
+    book_by_someone_else: Work
+
+
+class TestExactMatches:
     """Verify that exact or near-exact title and author matches are
     privileged over matches that span fields.
     """
 
-    def populate_works(self):
-        _work = self.default_work
+    @staticmethod
+    def _populate_works(
+        data: EndToEndSearchFixture,
+    ) -> TestExactMatchesData:
+        _work = data.external_search.default_work
 
         # Here the title is 'Modern Romance'
-        self.modern_romance = _work(
+        result = TestExactMatchesData()
+        result.modern_romance = _work(
             title="Modern Romance",
             authors=["Aziz Ansari", "Eric Klinenberg"],
         )
-
         # Here 'Modern' is in the subtitle and 'Romance' is the genre.
-        self.ya_romance = _work(
+        result.ya_romance = _work(
             title="Gumby In Love",
             authors="Pokey",
             audience=Classifier.AUDIENCE_YOUNG_ADULT,
             genre="Romance",
         )
-        self.ya_romance.presentation_edition.subtitle = (
+        result.ya_romance.presentation_edition.subtitle = (
             "Modern Fairytale Series, Book 3"
         )
-
-        self.parent_book = _work(
+        result.parent_book = _work(
             title="Our Son Aziz",
             authors=["Fatima Ansari", "Shoukath Ansari"],
             genre="Biography & Memoir",
         )
-
-        self.behind_the_scenes = _work(
+        result.behind_the_scenes = _work(
             title="The Making of Biography With Peter Graves",
             genre="Entertainment",
         )
-
-        self.biography_of_peter_graves = _work(
+        result.biography_of_peter_graves = _work(
             "He Is Peter Graves",
             authors="Kelly Ghostwriter",
             genre="Biography & Memoir",
         )
-
-        self.book_by_peter_graves = _work(
+        result.book_by_peter_graves = _work(
             title="My Experience At The University of Minnesota",
             authors="Peter Graves",
             genre="Entertainment",
         )
-
-        self.book_by_someone_else = _work(
+        result.book_by_someone_else = _work(
             title="The Deadly Graves", authors="Peter Ansari", genre="Mystery"
         )
+        return result
 
-    def test_exact_matches(self):
-
-        expect = self._expect_results
+    def test_exact_matches(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+        expect = fixture.expect_results
 
         # A full title match takes precedence over a match that's
         # split across genre and subtitle.
         expect(
             [
-                self.modern_romance,  # "modern romance" in title
-                self.ya_romance,  # "modern" in subtitle, genre "romance"
+                data.modern_romance,  # "modern romance" in title
+                data.ya_romance,  # "modern" in subtitle, genre "romance"
             ],
             "modern romance",
         )
@@ -1682,8 +2070,8 @@ class TestExactMatches(EndToEndSearchTest):
         # all all because it can't match two words.
         expect(
             [
-                self.modern_romance,  # "Aziz Ansari" in author
-                self.parent_book,  # "Aziz" in title, "Ansari" in author
+                data.modern_romance,  # "Aziz Ansari" in author
+                data.parent_book,  # "Aziz" in title, "Ansari" in author
             ],
             "aziz ansari",
         )
@@ -1698,10 +2086,10 @@ class TestExactMatches(EndToEndSearchTest):
         # across fields ("peter" in author, "graves" in title) is the
         # last result.
         order = [
-            self.book_by_peter_graves,
-            self.biography_of_peter_graves,
-            self.behind_the_scenes,
-            self.book_by_someone_else,
+            data.book_by_peter_graves,
+            data.biography_of_peter_graves,
+            data.behind_the_scenes,
+            data.book_by_someone_else,
         ]
         expect(order, "peter graves")
 
@@ -1716,46 +2104,68 @@ class TestExactMatches(EndToEndSearchTest):
         #    if there are more than two search terms, only two must match.
 
         order = [
-            self.behind_the_scenes,  # all words match in title
-            self.biography_of_peter_graves,  # title + genre 'biography'
-            self.book_by_peter_graves,  # author (no 'biography')
+            data.behind_the_scenes,  # all words match in title
+            data.biography_of_peter_graves,  # title + genre 'biography'
+            data.book_by_peter_graves,  # author (no 'biography')
         ]
 
         expect(order, "peter graves biography")
 
 
-class TestFeaturedFacets(EndToEndSearchTest):
+class TestFeaturedFacetsData:
+    hq_not_available: Work
+    hq_available: Work
+    hq_available_2: Work
+    not_featured_on_list: Work
+    featured_on_list: Work
+    best_seller_list: Work
+
+
+class TestFeaturedFacets:
     """Test how a FeaturedFacets object affects search ordering."""
 
-    def populate_works(self):
-        _work = self.default_work
+    @staticmethod
+    def _populate_works(
+        data: EndToEndSearchFixture,
+    ) -> TestFeaturedFacetsData:
+        transaction, session = (
+            data.external_search.db,
+            data.external_search.db.session,
+        )
+        _work = data.external_search.default_work
 
-        self.hq_not_available = _work(title="HQ but not available")
-        self.hq_not_available.quality = 1
-        self.hq_not_available.license_pools[0].licenses_available = 0
+        result = TestFeaturedFacetsData()
+        result.hq_not_available = _work(title="HQ but not available")
+        result.hq_not_available.quality = 1
+        result.hq_not_available.license_pools[0].licenses_available = 0
 
-        self.hq_available = _work(title="HQ and available")
-        self.hq_available.quality = 1
+        result.hq_available = _work(title="HQ and available")
+        result.hq_available.quality = 1
 
-        self.hq_available_2 = _work(title="Also HQ and available")
-        self.hq_available_2.quality = 1
+        result.hq_available_2 = _work(title="Also HQ and available")
+        result.hq_available_2.quality = 1
 
-        self.not_featured_on_list = _work(title="On a list but not featured")
-        self.not_featured_on_list.quality = 0.19
+        result.not_featured_on_list = _work(title="On a list but not featured")
+        result.not_featured_on_list.quality = 0.19
 
         # This work has nothing going for it other than the fact
         # that it's been featured on a custom list.
-        self.featured_on_list = _work(title="Featured on a list")
-        self.featured_on_list.quality = 0.18
-        self.featured_on_list.license_pools[0].licenses_available = 0
+        result.featured_on_list = _work(title="Featured on a list")
+        result.featured_on_list.quality = 0.18
+        result.featured_on_list.license_pools[0].licenses_available = 0
 
-        self.best_seller_list, ignore = self._customlist(num_entries=0)
-        self.best_seller_list.add_entry(self.featured_on_list, featured=True)
-        self.best_seller_list.add_entry(self.not_featured_on_list)
+        result.best_seller_list, ignore = transaction.customlist(num_entries=0)
+        result.best_seller_list.add_entry(result.featured_on_list, featured=True)
+        result.best_seller_list.add_entry(result.not_featured_on_list)
+        return result
 
-    def test_scoring_functions(self):
+    def test_scoring_functions(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
         # Verify that FeaturedFacets sets appropriate scoring functions
-        # for ElasticSearch queries.
+        # for OpenSearch queries.
         f = FeaturedFacets(minimum_featured_quality=0.55, random_seed=42)
         filter = Filter()
         f.modify_search_filter(filter)
@@ -1766,7 +2176,7 @@ class TestFeaturedFacets(EndToEndSearchTest):
         # It can be high-quality enough to be featured.
         assert isinstance(featurable, ScriptScore)
         source = filter.FEATURABLE_SCRIPT % dict(
-            cutoff=f.minimum_featured_quality ** 2, exponent=2
+            cutoff=f.minimum_featured_quality**2, exponent=2
         )
         assert source == featurable.script["source"]
 
@@ -1823,34 +2233,44 @@ class TestFeaturedFacets(EndToEndSearchTest):
         )
         assert 11 == featured_on_list["weight"]
 
-    def test_run(self):
+    def test_run(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        fixture = end_to_end_search_fixture
+        transaction, session = (
+            fixture.external_search.db,
+            fixture.external_search.db.session,
+        )
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
         def works(worklist, facets):
-            return worklist.works(self._db, facets, None, self.search, debug=True)
+            return worklist.works(
+                session, facets, None, fixture.external_search.search, debug=True
+            )
 
         def assert_featured(description, worklist, facets, expect):
             # Generate a list of featured works for the given `worklist`
             # and compare that list against `expect`.
             actual = works(worklist, facets)
-            self._assert_works(description, expect, actual)
+            fixture.assert_works(description, expect, actual)
 
         worklist = WorkList()
-        worklist.initialize(self._default_library)
+        worklist.initialize(transaction.default_library())
         facets = FeaturedFacets(1, random_seed=Filter.DETERMINISTIC)
 
         # Even though hq_not_available is higher-quality than
         # not_featured_on_list, not_featured_on_list shows up first because
         # it's available right now.
         w = works(worklist, facets)
-        assert w.index(self.not_featured_on_list) < w.index(self.hq_not_available)
+        assert w.index(data.not_featured_on_list) < w.index(data.hq_not_available)
 
         # not_featured_on_list shows up before featured_on_list because
         # it's higher-quality and list membership isn't relevant.
-        assert w.index(self.not_featured_on_list) < w.index(self.featured_on_list)
+        assert w.index(data.not_featured_on_list) < w.index(data.featured_on_list)
 
         # Create a WorkList that's restricted to best-sellers.
         best_sellers = WorkList()
         best_sellers.initialize(
-            self._default_library, customlists=[self.best_seller_list]
+            transaction.default_library(), customlists=[data.best_seller_list]
         )
         # The featured work appears above the non-featured work,
         # even though it's lower quality and is not available.
@@ -1858,7 +2278,7 @@ class TestFeaturedFacets(EndToEndSearchTest):
             "Works from WorkList based on CustomList",
             best_sellers,
             facets,
-            [self.featured_on_list, self.not_featured_on_list],
+            [data.featured_on_list, data.not_featured_on_list],
         )
 
         # By changing the minimum_featured_quality you can control
@@ -1871,17 +2291,17 @@ class TestFeaturedFacets(EndToEndSearchTest):
         # is availability.
         all_featured_facets = FeaturedFacets(0, random_seed=Filter.DETERMINISTIC)
         # We don't know exactly what order the books will be in,
-        # because even without the random element Elasticsearch is
+        # because even without the random element Opensearch is
         # slightly nondeterministic, but we do expect that all of the
         # available books will show up before all of the unavailable
         # books.
         only_availability_matters = worklist.works(
-            self._db, facets, None, self.search, debug=True
+            session, facets, None, fixture.external_search.search, debug=True
         )
         assert 5 == len(only_availability_matters)
         last_two = only_availability_matters[-2:]
-        assert self.hq_not_available in last_two
-        assert self.featured_on_list in last_two
+        assert data.hq_not_available in last_two
+        assert data.featured_on_list in last_two
 
         # Up to this point we've been avoiding the random element,
         # but we can introduce that now by passing in a numeric seed.
@@ -1889,22 +2309,32 @@ class TestFeaturedFacets(EndToEndSearchTest):
         #
         # The random element is relatively small, so it mainly acts
         # to rearrange works whose scores were similar before.
+        #
+        # The order of the works when using random depends on 4 things:
+        # - The seed
+        # - The id (work_id)
+        # - The index name
+        # - The shard id
+        # If any of those change the order of works in this result may change,
+        # and hence the order of works in this assert must also change
+        # E.g. If the index version changes from v5 to v6, this may affect the order of works queried
+        # Keeping everything else the same, the order of works will remain reproducible across test runs
         random_facets = FeaturedFacets(1, random_seed=43)
         assert_featured(
             "Works permuted by a random seed",
             worklist,
             random_facets,
             [
-                self.hq_available_2,
-                self.hq_available,
-                self.not_featured_on_list,
-                self.hq_not_available,
-                self.featured_on_list,
+                data.hq_available_2,
+                data.hq_available,
+                data.hq_not_available,
+                data.not_featured_on_list,
+                data.featured_on_list,
             ],
         )
 
 
-class TestSearchBase(object):
+class TestSearchBase:
     def test__boost(self):
         # Verify that _boost() converts a regular query (or list of queries)
         # into a boosted query.
@@ -1957,7 +2387,7 @@ class TestSearchBase(object):
         assert Nested(path="contributors", query=subdocument_query) == nested
 
     def test__match_term(self):
-        # _match_term creates a Match Elasticsearch object which does a
+        # _match_term creates a Match Opensearch object which does a
         # match against a specific field.
         m = SearchBase._match_term
         qu = m("author", "flannery o'connor")
@@ -1972,7 +2402,7 @@ class TestSearchBase(object):
 
     def test__match_range(self):
         # Test the _match_range helper method.
-        # This is used to create an Elasticsearch query term
+        # This is used to create an Opensearch query term
         # that only matches if a value is in a given range.
 
         # This only matches if field.name has a value >= 5.
@@ -1995,7 +2425,6 @@ class TestSearchBase(object):
         assert MatchAll() == m([])
 
     def test_make_target_age_query(self):
-
         # Search for material suitable for children between the
         # ages of 5 and 10.
         #
@@ -2020,7 +2449,7 @@ class TestSearchBase(object):
         assert Bool(boost=1.1, must=filter_clauses, should=query_clauses) == as_query
 
 
-class TestQuery(DatabaseTest):
+class TestQuery:
     def test_constructor(self):
         # Verify that the Query constructor sets members with
         # no processing.
@@ -2048,14 +2477,14 @@ class TestQuery(DatabaseTest):
         assert None == query.contains_stopwords
         assert 0 == query.fuzzy_coefficient
 
-    def test_build(self):
+    def test_build(self, db: DatabaseTransactionFixture):
         # Verify that the build() method combines the 'query' part of
         # a Query and the 'filter' part to create a single
-        # Elasticsearch Search object, complete with (if necessary)
+        # Opensearch Search object, complete with (if necessary)
         # subqueries, sort ordering, and script fields.
 
-        class MockSearch(object):
-            """A mock of the Elasticsearch-DSL `Search` object.
+        class MockSearch:
+            """A mock of the Opensearch-DSL `Search` object.
 
             Calls to Search methods tend to create a new Search object
             based on the old one. This mock simulates that behavior.
@@ -2089,8 +2518,8 @@ class TestQuery(DatabaseTest):
                 )
 
             def query(self, query):
-                """Simulate the creation of an Elasticsearch-DSL `Search`
-                object from an Elasticsearch-DSL `Query` object.
+                """Simulate the creation of an Opensearch-DSL `Search`
+                object from an Opensearch-DSL `Query` object.
 
                 :return: A New MockSearch object.
                 """
@@ -2120,12 +2549,12 @@ class TestQuery(DatabaseTest):
 
         class MockQuery(Query):
             # A Mock of the Query object from external_search
-            # (not the one from Elasticsearch-DSL).
+            # (not the one from Opensearch-DSL).
             @property
-            def elasticsearch_query(self):
+            def search_query(self):
                 return Q("simple_query_string", query=self.query_string)
 
-        class MockPagination(object):
+        class MockPagination:
             def modify_search_query(self, search):
                 return search.filter(name_or_query="pagination modified")
 
@@ -2134,8 +2563,7 @@ class TestQuery(DatabaseTest):
         # universal_nested_filters() methods. These methods queue up
         # all kinds of modifications to queries, so it's better to
         # replace them with simpler versions.
-        class MockFilter(object):
-
+        class MockFilter:
             universal_base_term = Q("term", universal_base_called=True)
             universal_nested_term = Q("term", universal_nested_called=True)
             universal_nested_filter = dict(nested_called=[universal_nested_term])
@@ -2208,9 +2636,9 @@ class TestQuery(DatabaseTest):
             == universal_nested
         )
 
-        # The result of Query.elasticsearch_query is used as the basis
+        # The result of Query.search_query is used as the basis
         # for the Search object.
-        assert Bool(must=qu.elasticsearch_query) == built._query
+        assert Bool(must=qu.search_query) == built._query
 
         # Now test some cases where the query has a filter.
 
@@ -2229,7 +2657,7 @@ class TestQuery(DatabaseTest):
         underlying_query = built._query
 
         # The query we passed in is used as the 'must' part of the
-        assert underlying_query.must == [qu.elasticsearch_query]
+        assert underlying_query.must == [qu.search_query]
         main_filter, nested_filters = filter.build()
 
         # The filter we passed in was combined with the universal
@@ -2256,7 +2684,7 @@ class TestQuery(DatabaseTest):
         MockFilter.universal_nested_filter = None
 
         # Now let's try a combination of regular filters and nested filters.
-        filter = Filter(fiction=True, collections=[self._default_collection])
+        filter = Filter(fiction=True, collections=[db.default_collection()])
         qu = MockQuery("query string", filter=filter)
         built = qu.build(search)
         underlying_query = built._query
@@ -2286,7 +2714,7 @@ class TestQuery(DatabaseTest):
             """Build a Query object from a set of facets, then call
             build() on it.
             """
-            facets = Facets(self._default_library, *args, **kwargs)
+            facets = Facets(db.default_library(), *args, **kwargs)
             filter = Filter(facets=facets)
             qu = MockQuery("query string", filter=filter)
             built = qu.build(search)
@@ -2303,7 +2731,9 @@ class TestQuery(DatabaseTest):
         # A non-nested filter is applied on the 'quality' field.
         [quality_filter] = built._query.filter
         quality_range = Filter._match_range(
-            "quality", "gte", self._default_library.minimum_featured_quality
+            "quality",
+            "gte",
+            db.default_library().minimum_featured_quality,
         )
         assert Q("bool", must=[quality_range], must_not=[RESEARCH]) == quality_filter
 
@@ -2376,7 +2806,7 @@ class TestQuery(DatabaseTest):
         assert script_fields == built._script_fields
 
         # If the Filter specifies a sort order, Filter.sort_order is
-        # used to convert it to appropriate Elasticsearch syntax, and
+        # used to convert it to appropriate Opensearch syntax, and
         # the MockSearch object is modified appropriately.
         built = from_facets(
             None, None, order=Facets.ORDER_AUTHOR, order_ascending=False
@@ -2397,19 +2827,21 @@ class TestQuery(DatabaseTest):
         Filter.universal_base_filter = original_base
         Filter.universal_nested_filters = original_nested
 
-    def test_build_match_nothing(self):
+    def test_build_match_nothing(self, db: DatabaseTransactionFixture):
         # No matter what the Filter looks like, if its .match_nothing
         # is set, it gets built into a simple filter that matches
         # nothing, with no nested subfilters.
         filter = Filter(
-            fiction=True, collections=[self._default_collection], match_nothing=True
+            fiction=True,
+            collections=[db.default_collection()],
+            match_nothing=True,
         )
         main, nested = filter.build()
         assert MatchNone() == main
         assert {} == nested
 
-    def test_elasticsearch_query(self):
-        # The elasticsearch_query property calls a number of other methods
+    def test_search_query(self):
+        # The search_query property calls a number of other methods
         # to generate hypotheses, then creates a dis_max query
         # to find the most likely hypothesis for any given book.
 
@@ -2452,7 +2884,7 @@ class TestQuery(DatabaseTest):
                 new_hypothesis,
                 boost="default",
                 filters=None,
-                **kwargs
+                **kwargs,
             ):
                 self._boosts[new_hypothesis] = boost
                 if kwargs:
@@ -2469,13 +2901,13 @@ class TestQuery(DatabaseTest):
         # Before we get started, try an easy case. If there is no query
         # string we get a match_all query that returns everything.
         query = Mock(None)
-        result = query.elasticsearch_query
+        result = query.search_query
         assert dict(match_all=dict()) == result.to_dict()
 
         # Now try a real query string.
         q = "query string"
         query = Mock(q)
-        result = query.elasticsearch_query
+        result = query.search_query
 
         # The final result is the result of calling _combine_hypotheses
         # on a number of hypotheses. Our mock class just returns
@@ -2560,7 +2992,7 @@ class TestQuery(DatabaseTest):
             STEMMABLE_FIELDS = ["stemmable_field"]
 
             def __init__(self, *args, **kwargs):
-                super(Mock, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
                 self.fuzzy_calls = {}
 
             def _fuzzy_matches(self, field_name, **kwargs):
@@ -2672,7 +3104,7 @@ class TestQuery(DatabaseTest):
         # where most of the work happens.
         class Mock(Query):
             def _author_field_must_match(self, base_field, query_string=None):
-                yield "%s must match %s" % (base_field, query_string)
+                yield f"{base_field} must match {query_string}"
 
         query = Mock("ursula le guin")
         hypotheses = list(query.match_author_hypotheses)
@@ -2699,7 +3131,7 @@ class TestQuery(DatabaseTest):
     def test__author_field_must_match(self):
         class Mock(Query):
             def match_one_field_hypotheses(self, field_name, query_string):
-                hypothesis = "maybe %s matches %s" % (field_name, query_string)
+                hypothesis = f"maybe {field_name} matches {query_string}"
                 yield hypothesis, 6
 
             def _role_must_also_match(self, hypothesis):
@@ -2861,7 +3293,7 @@ class TestQuery(DatabaseTest):
         assert [("some filters", dict(extra="extra kwarg"))] == Mock.boost_extras
 
 
-class TestQueryParser(DatabaseTest):
+class TestQueryParser:
     """Test the class that tries to derive structure from freeform
     text search requests.
     """
@@ -2889,7 +3321,7 @@ class TestQueryParser(DatabaseTest):
                 )
 
             @property
-            def elasticsearch_query(self):
+            def search_query(self):
                 # Mock the creation of an extremely complicated DisMax
                 # query -- we just want to verify that such a query
                 # was created.
@@ -2916,7 +3348,7 @@ class TestQueryParser(DatabaseTest):
 
         # parser.match_queries contains the result of putting the rest
         # of the query string into a Query object (or, here, our
-        # MockQuery) and looking at its .elasticsearch_query. In a
+        # MockQuery) and looking at its .search_query. In a
         # real scenario, this will result in a huge DisMax query
         # that tries to consider all the things someone might be
         # searching for, _in addition to_ applying a filter.
@@ -2936,7 +3368,7 @@ class TestQueryParser(DatabaseTest):
             assert filters == parser.filters
 
             if remainder:
-                queries.append(MockQuery(remainder).elasticsearch_query)
+                queries.append(MockQuery(remainder).search_query)
             assert queries == parser.match_queries
 
         # Here's the same test from before, using the new
@@ -3006,7 +3438,7 @@ class TestQueryParser(DatabaseTest):
         [nonfiction] = query.filters
         [asteroids] = query.match_queries
 
-        # It creates real Elasticsearch-DSL query objects.
+        # It creates real Opensearch-DSL query objects.
 
         # The filter is a very simple Term query.
         assert Term(fiction="nonfiction") == nonfiction
@@ -3015,7 +3447,7 @@ class TestQueryParser(DatabaseTest):
         # I won't test the whole thing, but it's what you would get if
         # you just tried a search for "asteroids".
         assert isinstance(asteroids, DisMax)
-        assert asteroids == Query("asteroids").elasticsearch_query
+        assert asteroids == Query("asteroids").search_query
 
     def test_add_match_term_filter(self):
         # TODO: this method could use a standalone test, but it's
@@ -3061,23 +3493,49 @@ class TestQueryParser(DatabaseTest):
         assert "" == m("adulting", "adult")
 
 
-class TestFilter(DatabaseTest):
-    def setup_method(self):
-        super(TestFilter, self).setup_method()
+class FilterFixture:
+    """A fixture preconfigured with data for testing filters."""
 
+    transaction: DatabaseTransactionFixture
+    literary_fiction: Genre
+    fantasy: Genre
+    horror: Genre
+    best_sellers: CustomList
+    staff_picks: CustomList
+
+    @classmethod
+    def create(cls, transaction: DatabaseTransactionFixture) -> "FilterFixture":
+        data = FilterFixture()
+        data.transaction = transaction
+        session = transaction.session
         # Look up three Genre objects which can be used to make filters.
-        self.literary_fiction, ignore = Genre.lookup(self._db, "Literary Fiction")
-        self.fantasy, ignore = Genre.lookup(self._db, "Fantasy")
-        self.horror, ignore = Genre.lookup(self._db, "Horror")
+        data.literary_fiction, ignore = Genre.lookup(session, "Literary Fiction")
+        data.fantasy, ignore = Genre.lookup(session, "Fantasy")
+        data.horror, ignore = Genre.lookup(session, "Horror")
 
         # Create two empty CustomLists which can be used to make filters.
-        self.best_sellers, ignore = self._customlist(num_entries=0)
-        self.staff_picks, ignore = self._customlist(num_entries=0)
+        data.best_sellers, ignore = transaction.customlist(num_entries=0)
+        data.staff_picks, ignore = transaction.customlist(num_entries=0)
+        return data
 
-    def test_constructor(self):
+
+@pytest.fixture()
+def filter_fixture(db) -> FilterFixture:
+    """A fixture preconfigured with data for testing filters."""
+    return FilterFixture.create(db)
+
+
+class TestFilter:
+    def test_constructor(self, filter_fixture: FilterFixture):
+        data, transaction, session = (
+            filter_fixture,
+            filter_fixture.transaction,
+            filter_fixture.transaction.session,
+        )
+
         # Verify that the Filter constructor sets members with
         # minimal processing.
-        collection = self._default_collection
+        collection = transaction.default_collection()
 
         media = object()
         languages = object()
@@ -3110,20 +3568,20 @@ class TestFilter(DatabaseTest):
         # Test the `collections` argument.
 
         # If you pass in a library, you get all of its collections.
-        library_filter = Filter(collections=self._default_library)
-        assert [self._default_collection.id] == library_filter.collection_ids
+        library_filter = Filter(collections=transaction.default_library())
+        assert [transaction.default_collection().id] == library_filter.collection_ids
 
         # If the library has no collections, the collection filter
         # will filter everything out.
-        self._default_library.collections = []
-        library_filter = Filter(collections=self._default_library)
+        transaction.default_library().collections = []
+        library_filter = Filter(collections=transaction.default_library())
         assert [] == library_filter.collection_ids
 
         # If you pass in Collection objects, you get their IDs.
-        collection_filter = Filter(collections=self._default_collection)
-        assert [self._default_collection.id] == collection_filter.collection_ids
-        collection_filter = Filter(collections=[self._default_collection])
-        assert [self._default_collection.id] == collection_filter.collection_ids
+        collection_filter = Filter(collections=transaction.default_collection())
+        assert [transaction.default_collection().id] == collection_filter.collection_ids
+        collection_filter = Filter(collections=[transaction.default_collection()])
+        assert [transaction.default_collection().id] == collection_filter.collection_ids
 
         # If you pass in IDs, they're left alone.
         ids = [10, 11, 22]
@@ -3159,13 +3617,13 @@ class TestFilter(DatabaseTest):
         # fantasy).
         restricted = Filter(
             genre_restriction_sets=[
-                [self.horror, self.fantasy],
-                [self.literary_fiction],
+                [data.horror, data.fantasy],
+                [data.literary_fiction],
             ]
         )
         assert [
-            [self.horror.id, self.fantasy.id],
-            [self.literary_fiction.id],
+            [data.horror.id, data.fantasy.id],
+            [data.literary_fiction.id],
         ] == restricted.genre_restriction_sets
 
         # This is a restriction: 'only books that have no genre'
@@ -3184,13 +3642,13 @@ class TestFilter(DatabaseTest):
         # staff picks list.
         restricted = Filter(
             customlist_restriction_sets=[
-                [self.best_sellers],
-                [self.staff_picks],
+                [data.best_sellers],
+                [data.staff_picks],
             ]
         )
         assert [
-            [self.best_sellers.id],
-            [self.staff_picks.id],
+            [data.best_sellers.id],
+            [data.staff_picks.id],
         ] == restricted.customlist_restriction_sets
 
         # This is a restriction -- 'only books that are not on any lists'.
@@ -3199,7 +3657,7 @@ class TestFilter(DatabaseTest):
         ).customlist_restriction_sets
 
         # Test the license_datasource argument
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
         overdrive_only = Filter(license_datasource=overdrive)
         assert [overdrive.id] == overdrive_only.license_datasources
 
@@ -3208,7 +3666,7 @@ class TestFilter(DatabaseTest):
 
         # If you pass in a Facets object, its modify_search_filter()
         # and scoring_functions() methods are called.
-        class Mock(object):
+        class Mock:
             def modify_search_filter(self, filter):
                 self.modify_search_filter_called_with = filter
 
@@ -3228,7 +3686,13 @@ class TestFilter(DatabaseTest):
             Filter(no_such_keyword="nope")
         assert "Unknown keyword arguments" in str(excinfo.value)
 
-    def test_from_worklist(self):
+    def test_from_worklist(self, filter_fixture: FilterFixture):
+        data, transaction, session = (
+            filter_fixture,
+            filter_fixture.transaction,
+            filter_fixture.transaction.session,
+        )
+
         # Any WorkList can be converted into a Filter.
         #
         # WorkList.inherited_value() and WorkList.inherited_values()
@@ -3237,29 +3701,29 @@ class TestFilter(DatabaseTest):
         # Disable any excluded audiobook data sources -- they will
         # introduce unwanted extra clauses into our filters.
         excluded_audio_sources = ConfigurationSetting.sitewide(
-            self._db, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
+            session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
         )
         excluded_audio_sources.value = json.dumps([])
 
-        library = self._default_library
+        library = transaction.default_library()
         assert True == library.allow_holds
 
-        parent = self._lane(display_name="Parent Lane", library=library)
+        parent = transaction.lane(display_name="Parent Lane", library=library)
         parent.media = Edition.AUDIO_MEDIUM
         parent.languages = ["eng", "fra"]
         parent.fiction = True
-        parent.audiences = set([Classifier.AUDIENCE_CHILDREN])
+        parent.audiences = {Classifier.AUDIENCE_CHILDREN}
         parent.target_age = NumericRange(10, 11, "[]")
-        parent.genres = [self.horror, self.fantasy]
-        parent.customlists = [self.best_sellers]
-        parent.license_datasource = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        parent.genres = [data.horror, data.fantasy]
+        parent.customlists = [data.best_sellers]
+        parent.license_datasource = DataSource.lookup(session, DataSource.GUTENBERG)
 
         # This lane inherits most of its configuration from its parent.
-        inherits = self._lane(display_name="Child who inherits", parent=parent)
-        inherits.genres = [self.literary_fiction]
-        inherits.customlists = [self.staff_picks]
+        inherits = transaction.lane(display_name="Child who inherits", parent=parent)
+        inherits.genres = [data.literary_fiction]
+        inherits.customlists = [data.staff_picks]
 
-        class Mock(object):
+        class Mock:
             def modify_search_filter(self, filter):
                 self.called_with = filter
 
@@ -3268,8 +3732,8 @@ class TestFilter(DatabaseTest):
 
         facets = Mock()
 
-        filter = Filter.from_worklist(self._db, inherits, facets)
-        assert [self._default_collection.id] == filter.collection_ids
+        filter = Filter.from_worklist(session, inherits, facets)
+        assert [transaction.default_collection().id] == filter.collection_ids
         assert parent.media == filter.media
         assert parent.languages == filter.languages
         assert parent.fiction == filter.fiction
@@ -3297,11 +3761,11 @@ class TestFilter(DatabaseTest):
         # If any other value is set on the child lane, the parent value
         # is overridden.
         inherits.media = Edition.BOOK_MEDIUM
-        filter = Filter.from_worklist(self._db, inherits, facets)
+        filter = Filter.from_worklist(session, inherits, facets)
         assert inherits.media == filter.media
 
         # This lane doesn't inherit anything from its parent.
-        does_not_inherit = self._lane(
+        does_not_inherit = transaction.lane(
             display_name="Child who does not inherit", parent=parent
         )
         does_not_inherit.inherit_parent_restrictions = False
@@ -3310,7 +3774,7 @@ class TestFilter(DatabaseTest):
         # nearly empty. The only restriction here is the collection
         # restriction imposed by the fact that `does_not_inherit`
         # is, itself, associated with a specific library.
-        filter = Filter.from_worklist(self._db, does_not_inherit, facets)
+        filter = Filter.from_worklist(session, does_not_inherit, facets)
 
         built_filters, subfilters = self.assert_filter_builds_to([], filter)
 
@@ -3320,7 +3784,9 @@ class TestFilter(DatabaseTest):
 
         [subfilter] = subfilters.pop("licensepools")
         assert {
-            "terms": {"licensepools.collection_id": [self._default_collection.id]}
+            "terms": {
+                "licensepools.collection_id": [transaction.default_collection().id]
+            }
         } == subfilter.to_dict()
 
         # No other subfilters were specified.
@@ -3329,14 +3795,14 @@ class TestFilter(DatabaseTest):
         # If the library does not allow holds, this information is
         # propagated to its Filter.
         library.setting(library.ALLOW_HOLDS).value = False
-        filter = Filter.from_worklist(self._db, parent, facets)
+        filter = Filter.from_worklist(session, parent, facets)
         assert False == library.allow_holds
 
         # Any excluded audio sources in the sitewide settings
         # will be propagated to all Filters.
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
         excluded_audio_sources.value = json.dumps([overdrive.name])
-        filter = Filter.from_worklist(self._db, parent, facets)
+        filter = Filter.from_worklist(session, parent, facets)
         assert [overdrive.id] == filter.excluded_audiobook_data_sources
 
         # A bit of setup to test how WorkList.collection_ids affects
@@ -3344,36 +3810,36 @@ class TestFilter(DatabaseTest):
 
         # Here's a collection associated with the default library.
         for_default_library = WorkList()
-        for_default_library.initialize(self._default_library)
+        for_default_library.initialize(transaction.default_library())
 
         # Its filter uses all the collections associated with that library.
-        filter = Filter.from_worklist(self._db, for_default_library, None)
-        assert [self._default_collection.id] == filter.collection_ids
+        filter = Filter.from_worklist(session, for_default_library, None)
+        assert [transaction.default_collection().id] == filter.collection_ids
 
         # Here's a child of that WorkList associated with a different
         # library.
-        library2 = self._library()
-        collection2 = self._collection()
+        library2 = transaction.library()
+        collection2 = transaction.collection()
         library2.collections.append(collection2)
         for_other_library = WorkList()
         for_other_library.initialize(library2)
         for_default_library.append_child(for_other_library)
 
         # Its filter uses the collection from the second library.
-        filter = Filter.from_worklist(self._db, for_other_library, None)
+        filter = Filter.from_worklist(session, for_other_library, None)
         assert [collection2.id] == filter.collection_ids
 
         # If for whatever reason, collection_ids on the child is not set,
         # all collections associated with the WorkList's library will be used.
         for_other_library.collection_ids = None
-        filter = Filter.from_worklist(self._db, for_other_library, None)
+        filter = Filter.from_worklist(session, for_other_library, None)
         assert [collection2.id] == filter.collection_ids
 
         # If no library is associated with a WorkList, we assume that
         # holds are allowed. (Usually this is controleld by a library
         # setting.)
         for_other_library.library_id = None
-        filter = Filter.from_worklist(self._db, for_other_library, None)
+        filter = Filter.from_worklist(session, for_other_library, None)
         assert True == filter.allow_holds
 
     def assert_filter_builds_to(self, expect, filter, _chain_filters=None):
@@ -3446,8 +3912,14 @@ class TestFilter(DatabaseTest):
                 Classifier.AUDIENCE_ALL_AGES,
             ]
 
-    def test_build(self):
-        # Test the ability to turn a Filter into an ElasticSearch
+    def test_build(self, filter_fixture: FilterFixture):
+        data, transaction, session = (
+            filter_fixture,
+            filter_fixture.transaction,
+            filter_fixture.transaction.session,
+        )
+
+        # Test the ability to turn a Filter into an OpenSearch
         # filter object.
 
         # build() takes the information in the Filter object, scrubs
@@ -3483,16 +3955,16 @@ class TestFilter(DatabaseTest):
 
         chain = self._mock_chain
 
-        filter.collection_ids = [self._default_collection]
+        filter.collection_ids = [transaction.default_collection()]
         filter.fiction = True
         filter._audiences = "CHILDREN"
         filter.target_age = (2, 3)
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
         filter.excluded_audiobook_data_sources = [overdrive.id]
         filter.allow_holds = False
         last_update_time = datetime_utc(2019, 1, 1)
-        i1 = self._identifier()
-        i2 = self._identifier()
+        i1 = transaction.identifier()
+        i2 = transaction.identifier()
         filter.identifiers = [i1, i2]
         filter.updated_after = last_update_time
 
@@ -3505,12 +3977,12 @@ class TestFilter(DatabaseTest):
         # We want books that are literary fiction, *and* either
         # fantasy or horror.
         filter.genre_restriction_sets = [
-            [self.literary_fiction],
-            [self.fantasy, self.horror],
+            [data.literary_fiction],
+            [data.fantasy, data.horror],
         ]
 
         # We want books that are on _both_ of the custom lists.
-        filter.customlist_restriction_sets = [[self.best_sellers], [self.staff_picks]]
+        filter.customlist_restriction_sets = [[data.best_sellers], [data.staff_picks]]
 
         # At this point every item on this Filter that can be set, has been
         # set. When we run build, we'll end up with the output of our mocked
@@ -3532,7 +4004,9 @@ class TestFilter(DatabaseTest):
 
         # The 'current collection' filter.
         assert {
-            "terms": {"licensepools.collection_id": [self._default_collection.id]}
+            "terms": {
+                "licensepools.collection_id": [transaction.default_collection().id]
+            }
         } == licensepool_filter.to_dict()
 
         # The 'only certain data sources' filter.
@@ -3559,10 +4033,10 @@ class TestFilter(DatabaseTest):
         # expressed as nested filters.
         [best_sellers_filter, staff_picks_filter] = nested.pop("customlists")
         assert {
-            "terms": {"customlists.list_id": [self.best_sellers.id]}
+            "terms": {"customlists.list_id": [data.best_sellers.id]}
         } == best_sellers_filter.to_dict()
         assert {
-            "terms": {"customlists.list_id": [self.staff_picks.id]}
+            "terms": {"customlists.list_id": [data.staff_picks.id]}
         } == staff_picks_filter.to_dict()
 
         # The author restriction is also expressed as a nested filter.
@@ -3579,10 +4053,10 @@ class TestFilter(DatabaseTest):
         # There are two different restrictions on genre, because
         # genre_restriction_sets was set to two lists of genres.
         assert {
-            "terms": {"genres.term": [self.literary_fiction.id]}
+            "terms": {"genres.term": [data.literary_fiction.id]}
         } == literary_fiction_filter.to_dict()
         assert {
-            "terms": {"genres.term": [self.fantasy.id, self.horror.id]}
+            "terms": {"genres.term": [data.fantasy.id, data.horror.id]}
         } == fantasy_or_horror_filter.to_dict()
 
         # There's a restriction on the identifier.
@@ -3607,7 +4081,7 @@ class TestFilter(DatabaseTest):
         assert {} == nested
 
         # Every other restriction imposed on the Filter object becomes an
-        # Elasticsearch filter object in this list.
+        # Opensearch filter object in this list.
         (medium, language, fiction, audience, target_age, updated_after) = built
 
         # Test them one at a time.
@@ -3673,7 +4147,13 @@ class TestFilter(DatabaseTest):
         # But the 'series' that got indexed must not be the empty string.
         assert {"term": {"series.keyword": ""}} in built.to_dict()["bool"]["must_not"]
 
-    def test_sort_order(self):
+    def test_sort_order(self, filter_fixture: FilterFixture):
+        data, transaction, session = (
+            filter_fixture,
+            filter_fixture.transaction,
+            filter_fixture.transaction.session,
+        )
+
         # Test the Filter.sort_order property.
 
         # No sort order.
@@ -3734,8 +4214,8 @@ class TestFilter(DatabaseTest):
         assert "I don't know how to sort by subdocument.field" in str(excinfo.value)
 
         # It's possible to sort by every field in
-        # Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME.
-        used_orders = Facets.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME
+        # Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME.
+        used_orders = Facets.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME
         added_to_collection = used_orders[Facets.ORDER_ADDED_TO_COLLECTION]
         series_position = used_orders[Facets.ORDER_SERIES_POSITION]
         last_update = used_orders[Facets.ORDER_LAST_UPDATE]
@@ -3771,7 +4251,7 @@ class TestFilter(DatabaseTest):
         assert simple_nested_configuration == first_field
 
         # Setting a collection ID restriction will add a nested filter.
-        f.collection_ids = [self._default_collection]
+        f.collection_ids = [transaction.default_collection()]
         first_field = validate_sort_order(f, "licensepools.availability_time")
 
         # The nested filter ensures that when sorting the results, we
@@ -3788,7 +4268,9 @@ class TestFilter(DatabaseTest):
         assert {
             "path": "licensepools",
             "filter": {
-                "terms": {"licensepools.collection_id": [self._default_collection.id]}
+                "terms": {
+                    "licensepools.collection_id": [transaction.default_collection().id]
+                }
             },
         } == nested_filter
 
@@ -3806,12 +4288,12 @@ class TestFilter(DatabaseTest):
         # Or it can be *incredibly complicated*, if there _are_
         # collections or lists associated with the filter. Which,
         # unfortunately, is almost all the time.
-        f.collection_ids = [self._default_collection.id]
+        f.collection_ids = [transaction.default_collection().id]
         f.customlist_restriction_sets = [[1], [1, 2]]
         first_field = validate_sort_order(f, last_update)
 
         # Here, the ordering is done by a script that runs on the
-        # ElasticSearch server.
+        # OpenSearch server.
         sort = first_field.pop("_script")
         assert {} == first_field
 
@@ -3833,7 +4315,7 @@ class TestFilter(DatabaseTest):
         params = script.pop("params")
         assert {} == script
 
-        assert [self._default_collection.id] == params.pop("collection_ids")
+        assert [transaction.default_collection().id] == params.pop("collection_ids")
         assert [1, 2] == params.pop("list_ids")
         assert {} == params
 
@@ -3916,8 +4398,13 @@ class TestFilter(DatabaseTest):
         # an author about whom absolutely nothing is known, it's okay
         # to return no books.
 
-    def test_target_age_filter(self):
+    def test_target_age_filter(self, filter_fixture: FilterFixture):
         # Test an especially complex subfilter for target age.
+
+        transaction, session = (
+            filter_fixture.transaction,
+            filter_fixture.transaction.session,
+        )
 
         # We're going to test the construction of this subfilter using
         # a number of inputs.
@@ -3997,16 +4484,36 @@ class TestFilter(DatabaseTest):
         } == more_than_twelve.to_dict()
         assert_matches_nonexistent_field(no_upper_limit, "target_age.upper")
 
-        # Finally, test filters that put no restriction on target age.
+        # Test filters that put no restriction on target age.
         no_target_age = Filter()
         assert None == no_target_age.target_age_filter
 
         no_target_age = Filter(target_age=(None, None))
         assert None == no_target_age.target_age_filter
 
+        # Test that children lanes include only works with defined target age range
+        children_lane = transaction.lane("Children lane")
+        children_lane.target_age = (0, 3)
+        assert Classifier.AUDIENCE_CHILDREN in children_lane.audiences
+
+        children_filter = Filter.from_worklist(session, children_lane, None)
+
+        target_age_filter_that_only_includes_from_0_to_3 = {
+            "bool": {
+                "must": [
+                    {"range": {"target_age.lower": {"gte": 0}}},
+                    {"range": {"target_age.upper": {"lte": 3}}},
+                ]
+            }
+        }
+        assert (
+            target_age_filter_that_only_includes_from_0_to_3
+            == children_filter.target_age_filter.to_dict()
+        )
+
     def test__scrub(self):
         # Test the _scrub helper method, which transforms incoming strings
-        # to the type of strings Elasticsearch uses.
+        # to the type of strings Opensearch uses.
         m = Filter._scrub
         assert None == m(None)
         assert "foo" == m("foo")
@@ -4021,7 +4528,7 @@ class TestFilter(DatabaseTest):
         assert ["foo"] == m("foo")
         assert ["youngadult", "adult"] == m(["Young Adult", "Adult"])
 
-    def test__filter_ids(self):
+    def test__filter_ids(self, db: DatabaseTransactionFixture):
         # Test the _filter_ids helper method, which converts database
         # objects to their IDs.
         m = Filter._filter_ids
@@ -4029,14 +4536,14 @@ class TestFilter(DatabaseTest):
         assert [] == m([])
         assert [1, 2, 3] == m([1, 2, 3])
 
-        library = self._default_library
+        library = db.default_library()
         assert [library.id] == m([library])
 
-    def test__scrub_identifiers(self):
+    def test__scrub_identifiers(self, db: DatabaseTransactionFixture):
         # Test the _scrub_identifiers helper method, which converts
         # Identifier objects to IdentifierData.
-        i1 = self._identifier()
-        i2 = self._identifier()
+        i1 = db.identifier()
+        i2 = db.identifier()
         si1, si2 = Filter._scrub_identifiers([i1, i2])
         for before, after in ((i1, si1), (i2, si2)):
             assert isinstance(si1, IdentifierData)
@@ -4048,7 +4555,7 @@ class TestFilter(DatabaseTest):
 
     def test__chain_filters(self):
         # Test the _chain_filters method, which combines
-        # two Elasticsearch filter objects.
+        # two Opensearch filter objects.
         f1 = Q("term", key="value")
         f2 = Q("term", key2="value2")
 
@@ -4097,7 +4604,7 @@ class TestFilter(DatabaseTest):
 
     def _mock_chain(self, filters, new_filter):
         """A mock of _chain_filters so we don't have to check
-        test results against super-complicated Elasticsearch
+        test results against super-complicated Opensearch
         filter objects.
 
         Instead, we'll get a list of smaller filter objects.
@@ -4105,15 +4612,15 @@ class TestFilter(DatabaseTest):
         if filters is None:
             # There are no active filters.
             filters = []
-        if isinstance(filters, elasticsearch_dsl_query):
+        if isinstance(filters, opensearch_dsl_query):
             # An initial filter was passed in. Convert it to a list.
             filters = [filters]
         filters.append(new_filter)
         return filters
 
 
-class TestSortKeyPagination(DatabaseTest):
-    """Test the Elasticsearch-implementation of Pagination that does
+class TestSortKeyPagination:
+    """Test the Opensearch-implementation of Pagination that does
     pagination by tracking the last item on the previous page,
     rather than by tracking the number of items seen so far.
     """
@@ -4207,7 +4714,7 @@ class TestSortKeyPagination(DatabaseTest):
         )
 
     def test_modify_search_query(self):
-        class MockSearch(object):
+        class MockSearch:
             update_from_dict_called_with = "not called"
             getitem_called_with = "not called"
 
@@ -4245,14 +4752,14 @@ class TestSortKeyPagination(DatabaseTest):
         search.getitem_called_with = "not called"
 
         # With .last_item_on_previous_page set, modify_search_query()
-        # calls update_from_dict() on our mock ElasticSearch `Search`
+        # calls update_from_dict() on our mock OpenSearch `Search`
         # object, passing in the last item on the previous page.
 
         # The return value of modify_search_query() becomes the active
         # Search object.
         assert "modified search object" == pagination.modify_search_query(search)
 
-        # Now we can see that the Elasticsearch object was modified to
+        # Now we can see that the Opensearch object was modified to
         # use the 'search_after' feature.
         assert dict(search_after=last_item) == search.update_from_dict_called_with
 
@@ -4265,13 +4772,13 @@ class TestSortKeyPagination(DatabaseTest):
         # results is loaded.
         this_page = SortKeyPagination()
 
-        # Mock an Elasticsearch 'hit' object -- we'll be accessing
+        # Mock an Opensearch 'hit' object -- we'll be accessing
         # hit.meta.sort.
-        class MockMeta(object):
+        class MockMeta:
             def __init__(self, sort_key):
                 self.sort = sort_key
 
-        class MockItem(object):
+        class MockItem:
             def __init__(self, sort_key):
                 self.meta = MockMeta(sort_key)
 
@@ -4302,7 +4809,6 @@ class TestSortKeyPagination(DatabaseTest):
         assert last_hit.meta.sort == next_page.last_item_on_previous_page
 
     def test_next_page(self):
-
         # To start off, we can't say anything about the next page,
         # because we don't know anything about _this_ page.
         first_page = SortKeyPagination()
@@ -4329,39 +4835,46 @@ class TestSortKeyPagination(DatabaseTest):
         assert None == first_page.next_page
 
 
-class TestBulkUpdate(DatabaseTest):
-    def test_works_not_presentation_ready_kept_in_index(self):
-        w1 = self._work()
+class TestBulkUpdate:
+    def test_works_not_presentation_ready_kept_in_index(
+        self, db: DatabaseTransactionFixture
+    ):
+        w1 = db.work()
         w1.set_presentation_ready()
-        w2 = self._work()
+        w2 = db.work()
         w2.set_presentation_ready()
-        w3 = self._work()
+        w3 = db.work()
         index = MockExternalSearchIndex()
         successes, failures = index.bulk_update([w1, w2, w3])
 
         # All three works are regarded as successes, because their
         # state was successfully mirrored to the index.
-        assert set([w1, w2, w3]) == set(successes)
+        assert {w1, w2, w3} == set(successes)
         assert [] == failures
 
         # All three works were inserted into the index, even the one
         # that's not presentation-ready.
-        ids = set(x[-1] for x in list(index.docs.keys()))
-        assert set([w1.id, w2.id, w3.id]) == ids
+        ids = {x[-1] for x in list(index.docs.keys())}
+        assert {w1.id, w2.id, w3.id} == ids
 
         # If a work stops being presentation-ready, it is kept in the
         # index.
         w2.presentation_ready = False
         successes, failures = index.bulk_update([w1, w2, w3])
-        assert set([w1.id, w2.id, w3.id]) == set(
-            [x[-1] for x in list(index.docs.keys())]
-        )
-        assert set([w1, w2, w3]) == set(successes)
+        assert {w1.id, w2.id, w3.id} == {x[-1] for x in list(index.docs.keys())}
+        assert {w1, w2, w3} == set(successes)
         assert [] == failures
 
 
-class TestSearchErrors(ExternalSearchTest):
-    def test_search_connection_timeout(self):
+class TestSearchErrors:
+    def test_search_connection_timeout(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        search, transaction = (
+            external_search_fixture,
+            external_search_fixture.db,
+        )
+
         attempts = []
 
         def bulk_with_timeout(docs, raise_on_error=False, raise_on_exception=False):
@@ -4381,11 +4894,11 @@ class TestSearchErrors(ExternalSearchTest):
             errors = list(map(error, docs))
             return 0, errors
 
-        self.search.bulk = bulk_with_timeout
+        search.search.bulk = bulk_with_timeout
 
-        work = self._work()
+        work = transaction.work()
         work.set_presentation_ready()
-        successes, failures = self.search.bulk_update([work])
+        successes, failures = search.search.bulk_update([work])
         assert [] == successes
         assert 1 == len(failures)
         assert work == failures[0][0]
@@ -4394,10 +4907,17 @@ class TestSearchErrors(ExternalSearchTest):
         # When all the documents fail, it tries again once with the same arguments.
         assert [work.id, work.id] == [docs[0]["_id"] for docs in attempts]
 
-    def test_search_single_document_error(self):
-        successful_work = self._work()
+    def test_search_single_document_error(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        search, transaction = (
+            external_search_fixture,
+            external_search_fixture.db,
+        )
+
+        successful_work = transaction.work()
         successful_work.set_presentation_ready()
-        failing_work = self._work()
+        failing_work = transaction.work()
         failing_work.set_presentation_ready()
 
         def bulk_with_error(docs, raise_on_error=False, raise_on_exception=False):
@@ -4411,46 +4931,146 @@ class TestSearchErrors(ExternalSearchTest):
             success_count = 1
             return success_count, failures
 
-        self.search.bulk = bulk_with_error
+        search.search.bulk = bulk_with_error
 
-        successes, failures = self.search.bulk_update([successful_work, failing_work])
+        successes, failures = search.search.bulk_update([successful_work, failing_work])
         assert [successful_work] == successes
         assert 1 == len(failures)
         assert failing_work == failures[0][0]
         assert "There was an error!" == failures[0][1]
 
 
-class TestWorkSearchResult(DatabaseTest):
+class TestWorkSearchResult:
     # Test the WorkSearchResult class, which wraps together a data
-    # model Work and an ElasticSearch Hit into something that looks
+    # model Work and an OpenSearch Hit into something that looks
     # like a Work.
 
-    def test_constructor(self):
-        work = self._work()
+    def test_constructor(self, db: DatabaseTransactionFixture):
+        work = db.work()
         hit = object()
         result = WorkSearchResult(work, hit)
 
         # The original Work object is available as ._work
         assert work == result._work
 
-        # The Elasticsearch Hit object is available as ._hit
+        # The Opensearch Hit object is available as ._hit
         assert hit == result._hit
 
         # Any other attributes are delegated to the Work.
         assert work.sort_title == result.sort_title
 
 
-class TestSearchIndexCoverageProvider(DatabaseTest):
-    def test_operation(self):
+class TestSearchIndexCoverageProvider:
+    def test_operation(self, db: DatabaseTransactionFixture):
         index = MockExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
+        provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
-    def test_success(self):
-        work = self._work()
+    def test_to_search_document(self, db: DatabaseTransactionFixture):
+        """Compare the new and old to_search_document functions
+        TODO: classifications
+        """
+        customlist, editions = db.customlist()
+        works = [
+            db.work(
+                authors=[db.contributor()],
+                with_license_pool=True,
+                genre="history",
+            ),
+            editions[0].work,
+        ]
+
+        work1: Work = works[0]
+        work2: Work = works[1]
+
+        work1.target_age = NumericRange(lower=18, upper=22, bounds="()")
+        work2.target_age = NumericRange(lower=18, upper=99, bounds="[]")
+
+        genre1, is_new = Genre.lookup(db.session, "Psychology")
+        genre2, is_new = Genre.lookup(db.session, "Cooking")
+        subject1 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject1")
+        subject1.genre = genre1
+        subject2 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject2")
+        subject2.genre = genre2
+        source = DataSource.lookup(db.session, DataSource.AXIS_360)
+
+        # works.extend([transaction.work() for i in range(500)])
+
+        result = Work.to_search_documents__DONOTUSE(works)
+        inapp = Work.to_search_documents(works)
+
+        # Top level keys should be the same
+        assert len(result) == len(inapp)
+
+        inapp_work1 = list(filter(lambda x: x["work_id"] == work1.id, inapp))[0]
+        inapp_work2 = list(filter(lambda x: x["work_id"] == work2.id, inapp))[0]
+
+        # target ages
+        assert inapp_work1["target_age"]["lower"] == 19
+        assert inapp_work1["target_age"]["upper"] == 21
+        assert inapp_work2["target_age"]["lower"] == 18
+        assert inapp_work2["target_age"]["upper"] == 99
+
+        assert len(inapp_work1["genres"]) == 1
+        assert inapp_work2["genres"] == None
+
+        assert len(inapp_work1["licensepools"]) == 1
+        assert len(inapp_work2["licensepools"]) == 1  # customlist adds a pool
+
+        assert len(inapp_work2["customlists"]) == 1
+        assert inapp_work1["customlists"] == None
+
+        result_work1 = list(filter(lambda x: x["work_id"] == work1.id, result))[0]
+        result_work2 = list(filter(lambda x: x["work_id"] == work2.id, result))[0]
+
+        # Every item must be equivalent
+        for result_item, inapp_item in [
+            (result_work1, inapp_work1),
+            (result_work2, inapp_work2),
+        ]:
+            for key in result_item.keys():
+                assert result_item[key] == inapp_item[key]
+
+    def test_to_search_documents_performance(self, db: DatabaseTransactionFixture):
+        works = [db.work(with_license_pool=True, genre="history") for i in range(20)]
+
+        connection = db.database.connection
+        with DBStatementCounter(connection) as old_counter:
+            with PerfTimer() as t1:
+                result = Work.to_search_documents(works)
+
+        with DBStatementCounter(connection) as new_counter:
+            with PerfTimer() as t2:
+                inapp = Work.to_search_documents(works)
+
+        # Do not be 100x performance
+        assert t2.execution_time < t1.execution_time * 5
+
+        # 4 queries per batch only
+        assert new_counter.get_count() <= 4
+
+    def test_to_search_documents_with_missing_data(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Missing edition relationship
+        work: Work = db.work(with_license_pool=True)
+        work.presentation_edition_id = None
+        [result] = Work.to_search_documents([work])
+        assert result["identifiers"] == None
+
+        # Missing just some attributes
+        work: Work = db.work(with_license_pool=True)
+        work.presentation_edition.title = None
+        work.target_age = None
+        [result] = Work.to_search_documents([work])
+        assert result["title"] == None
+        assert result["target_age"]["lower"] == None
+
+    def test_success(self, db: DatabaseTransactionFixture):
+        work = db.work()
         work.set_presentation_ready()
         index = MockExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
+        provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
 
         # We got one success and no failures.
@@ -4459,7 +5079,7 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         # The work was added to the search index.
         assert 1 == len(index.docs)
 
-    def test_failure(self):
+    def test_failure(self, db: DatabaseTransactionFixture):
         class DoomedExternalSearchIndex(MockExternalSearchIndex):
             """All documents sent to this index will fail."""
 
@@ -4473,10 +5093,10 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
                     for failing_work in docs
                 ]
 
-        work = self._work()
+        work = db.work()
         work.set_presentation_ready()
         index = DoomedExternalSearchIndex()
-        provider = SearchIndexCoverageProvider(self._db, search_index_client=index)
+        provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
 
         # We have one transient failure.
@@ -4484,3 +5104,496 @@ class TestSearchIndexCoverageProvider(DatabaseTest):
         assert work == record.obj
         assert True == record.transient
         assert "There was an error!" == record.exception
+
+
+class TestJSONQuery:
+    @staticmethod
+    def _leaf(key, value, op="eq"):
+        return dict(key=key, value=value, op=op)
+
+    @staticmethod
+    def _jq(query):
+        return JSONQuery(dict(query=query))
+
+    match_args = JSONQuery.MATCH_ARGS
+
+    def test_search_query(self, external_search_fixture: ExternalSearchFixture):
+        q = {"key": "medium", "value": "Book"}
+        q = self._jq(q)
+        q.search_query.to_dict() == {
+            "match": {"medium.keyword": {"query": "Book", **self.match_args}}
+        }
+
+        q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
+        q = self._jq(q)
+        q.search_query.to_dict() == {
+            "bool": {
+                "should": [
+                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
+                    {
+                        "match": {
+                            "medium.keyword": {"query": "Audio", **self.match_args}
+                        }
+                    },
+                ]
+            }
+        }
+
+        q = {"and": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
+        q = self._jq(q)
+        q.search_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
+                    {
+                        "match": {
+                            "medium.keyword": {"query": "Audio", **self.match_args}
+                        }
+                    },
+                ]
+            }
+        }
+
+        q = {
+            "and": [
+                self._leaf("title", "Title"),
+                {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]},
+            ]
+        }
+        q = self._jq(q)
+        q.search_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {
+                        "bool": {
+                            "should": [
+                                {
+                                    "match": {
+                                        "medium.keyword": {
+                                            "query": "Book",
+                                            **self.match_args,
+                                        }
+                                    }
+                                },
+                                {
+                                    "match": {
+                                        "medium.keyword": {
+                                            "query": "Audio",
+                                            **self.match_args,
+                                        }
+                                    }
+                                },
+                            ]
+                        }
+                    },
+                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
+                ]
+            }
+        }
+
+        q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio", "neq")]}
+        q = self._jq(q)
+        assert q.search_query.to_dict() == {
+            "bool": {
+                "should": [
+                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
+                    {
+                        "bool": {
+                            "must_not": [
+                                {
+                                    "match": {
+                                        "medium.keyword": {
+                                            "query": "Audio",
+                                            **self.match_args,
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                ]
+            }
+        }
+
+        q = {
+            "and": [
+                self._leaf("title", "Title"),
+                {"not": [self._leaf("author", "Geoffrey")]},
+            ]
+        }
+        q = self._jq(q)
+        assert q.search_query.to_dict() == {
+            "bool": {
+                "must": [
+                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
+                    {
+                        "bool": {
+                            "must_not": [
+                                {
+                                    "match": {
+                                        "author.keyword": {
+                                            "query": "Geoffrey",
+                                            **self.match_args,
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                ]
+            }
+        }
+
+    @pytest.mark.parametrize(
+        "key,value,op",
+        [
+            ("target_age", 18, "lte"),
+            ("target_age", 18, "lt"),
+            ("target_age", 18, "gt"),
+            ("target_age", 18, "gte"),
+        ],
+    )
+    def test_search_query_range(self, key, value, op):
+        q = self._leaf(key, value, op)
+        q = self._jq(q)
+        assert q.search_query.to_dict() == {"range": {f"{key}": {op: value}}}
+
+    @pytest.mark.parametrize(
+        "key,value,is_keyword",
+        [
+            ("contributors.display_name", "name", True),
+            ("contributors.lc", "name", False),
+            ("genres.name", "name", False),
+            ("licensepools.medium", "Book", False),
+        ],
+    )
+    def test_search_query_nested(self, key, value, is_keyword):
+        q = self._jq(self._leaf(key, value))
+        term = key if not is_keyword else f"{key}.keyword"
+        root = key.split(".")[0]
+        assert q.search_query.to_dict() == {
+            "nested": {
+                "path": root,
+                "query": {"match": {term: {"query": value, **self.match_args}}},
+            }
+        }
+
+    @pytest.mark.parametrize(
+        "query,error_match",
+        [
+            (dict(key="author", op="eg", value="name"), "Unrecognized operator: eg"),
+            (dict(key="arthur", op="eq", value="name"), "Unrecognized key: arthur"),
+            (
+                dict(kew="author", op="eq", value="name"),
+                "Could not make sense of the query",
+            ),
+            ({"and": [], "or": []}, "A conjuction cannot have multiple parts"),
+        ],
+    )
+    def test_errors(self, query, error_match):
+        q = self._jq(query)
+
+        with pytest.raises(QueryParseException, match=error_match):
+            q.search_query  # fetch the property
+
+    def test_regex_query(self):
+        q = self._jq(self._leaf("title", "book", op="regex"))
+        assert q.search_query.to_dict() == {
+            "regexp": {
+                "title.keyword": {
+                    "flags": "ALL",
+                    "value": "book",
+                }
+            }
+        }
+
+    def test_field_transforms(self):
+        q = self._jq(self._leaf("classification", "cls"))
+        assert q.search_query.to_dict() == {
+            "match": {
+                "classifications.term.keyword": {"query": "cls", **self.match_args}
+            }
+        }
+        q = self._jq(self._leaf("open_access", True))
+        assert q.search_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.open_access": True}},
+            }
+        }
+
+    def test_value_transforms(self, db: DatabaseTransactionFixture):
+        # If we're running this unit test alone, we must intialize the data first
+        CachedData.initialize(db.session)
+
+        gutenberg = (
+            db.session.query(DataSource)
+            .filter(DataSource.name == DataSource.GUTENBERG)
+            .first()
+        )
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
+        assert q.search_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
+
+        # Test case-insensitivity for data sources
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG.upper()))
+        assert q.search_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
+
+        dt = datetime(1990, 1, 1)
+        q = self._jq(self._leaf("published", "1990-01-01"))
+        assert q.search_query.to_dict() == {"term": {"published": dt.timestamp()}}
+
+        with pytest.raises(QueryParseException) as exc:
+            q = self._jq(self._leaf("published", "1990-01-x1"))
+            q.search_query
+            assert (
+                "Could not parse 'published' value '1990-01-x1'. Only use 'YYYY-MM-DD'"
+            )
+
+        # Test language code transformations
+        q = self._jq(self._leaf("language", "EngliSH"))
+        assert q.search_query.to_dict() == {"term": {"language": "eng"}}
+
+        # Nothing found, stay the same
+        q = self._jq(self._leaf("language", "NoLanguage"))
+        assert q.search_query.to_dict() == {"term": {"language": "NoLanguage"}}
+
+        # Already a language code
+        q = self._jq(self._leaf("language", "eng"))
+        assert q.search_query.to_dict() == {"term": {"language": "eng"}}
+
+    def test_operator_restrictions(self):
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
+        with pytest.raises(QueryParseException) as exc:
+            q.search_query
+        assert "Operator 'gt' is not allowed for 'data_source'. Only use ['eq']" == str(
+            exc.value
+        )
+
+    @pytest.mark.parametrize(
+        "key,value,is_text",
+        [
+            ("title", "value", True),
+            ("licensepools.open_access", True, False),
+            ("published", "1990-01-01", False),
+        ],
+    )
+    def test_type_queries(self, key, value, is_text):
+        """Bool and long types are term queries, whereas text is a match query"""
+        q = self._jq(self._leaf(key, value))
+        q.search_query.to_dict().keys() == ["match" if is_text else "term"]
+
+    @pytest.mark.parametrize(
+        "value,escaped,contains",
+        [
+            ("&search##", r"\&search\#\#", True),
+            ("sea+@~r\\ch", "sea\\+\\@\\~r\\\\ch", True),
+            ("sea+@~r\\ch", "sea+@~r\\ch", False),
+        ],
+    )
+    def test_special_chars(self, value, escaped, contains):
+        q = self._jq(self._leaf("title", value, "contains" if contains else "eq"))
+        if contains:
+            assert (
+                q.search_query.to_dict()["regexp"]["title.keyword"]["value"]
+                == f".*{escaped}.*"
+            )
+        else:
+            assert (
+                q.search_query.to_dict()["match"]["title.keyword"]["query"] == escaped
+            )
+
+
+class TestExternalSearchJSONQueryData:
+    audio_work: Work
+    book_work: Work
+    facets: SearchFacets
+    filter: Filter
+    random_works: List[Work]
+
+
+class TestExternalSearchJSONQuery:
+    @staticmethod
+    def _leaf(key, value, op="eq"):
+        return dict(key=key, value=value, op=op)
+
+    @staticmethod
+    def _jq(query):
+        return JSONQuery(dict(query=query))
+
+    @staticmethod
+    def _populate_works(
+        data: EndToEndSearchFixture,
+    ) -> TestExternalSearchJSONQueryData:
+        transaction, session = (
+            data.external_search.db,
+            data.external_search.db.session,
+        )
+        _work: Callable = data.external_search.default_work
+
+        result = TestExternalSearchJSONQueryData()
+        result.book_work = transaction.work(with_open_access_download=True)
+        result.book_work.presentation_edition.medium = "Book"
+
+        result.audio_work = transaction.work(with_open_access_download=True)
+        result.audio_work.presentation_edition.medium = "Audio"
+
+        result.random_works = []
+        specifics = [
+            dict(language="spa", authors=["charlie"]),
+            dict(language="spa", authors=["alpha"]),
+            dict(language="ger", authors=["beta"]),
+            dict(
+                with_open_access_download=False,
+                with_license_pool=True,
+                authors=["delta"],
+            ),
+        ]
+        for i in range(4):
+            new_data = dict(
+                title=uuid.uuid4(),
+                with_open_access_download=True,
+            )
+            new_data.update(**specifics[i])
+            w = transaction.work(**new_data)
+            result.random_works.append(w)
+
+        session.commit()
+
+        result.facets = facets = SearchFacets(search_type="json")
+        result.filter = Filter(facets=facets)
+        return result
+
+    @staticmethod
+    def expect(
+        fixture: EndToEndSearchFixture,
+        data: TestExternalSearchJSONQueryData,
+        partial_query,
+        works,
+    ):
+        query = dict(query=partial_query)
+        resp = fixture.external_search.search.query_works(query, data.filter)
+
+        assert len(resp.hits) == len(works)
+
+        respids = {h.work_id for h in resp.hits}
+        expectedids = {w.id for w in works}
+        assert respids == expectedids
+        return resp
+
+    def test_search_basic(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
+        self.expect(fixture, data, self._leaf("medium", "Audio"), [data.audio_work])
+
+        w1: Work = data.random_works[0]
+        self.expect(fixture, data, self._leaf("title", w1.title), [w1])
+        self.expect(
+            fixture,
+            data,
+            self._leaf(
+                "contributors.display_name",
+                w1.presentation_edition.contributions[0].contributor.display_name,
+            ),
+            [w1],
+        )
+
+        w2: Work = data.random_works[1]
+        self.expect(
+            fixture,
+            data,
+            {"or": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
+            [w1, w2],
+        )
+        self.expect(
+            fixture,
+            data,
+            {"and": [self._leaf("title", w1.title), self._leaf("title", w2.title)]},
+            [],
+        )
+
+        self.expect(
+            fixture,
+            data,
+            {"and": [self._leaf("language", "German")]},
+            [data.random_works[2]],
+        )
+
+    def test_field_transform(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
+        """Fields transforms should apply and criterias should match"""
+        self.expect(
+            fixture, data, self._leaf("open_access", False), [data.random_works[3]]
+        )
+
+    def test_search_not(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
+        self.expect(
+            fixture,
+            data,
+            {
+                "and": [
+                    self._leaf("medium", "Book"),
+                    {"not": [self._leaf("language", "Spanish")]},
+                ]
+            },
+            [
+                data.book_work,
+                data.random_works[2],
+                data.random_works[3],
+            ],
+        )
+
+    def test_search_with_facets_ordering(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        fixture = end_to_end_search_fixture
+        data = self._populate_works(fixture)
+        fixture.populate_search_index()
+
+        data.facets = SearchFacets(order="author", search_type="json")
+        data.filter = Filter(facets=data.facets)
+        assert data.filter.min_score == None
+
+        w = data.random_works
+        expected = [w[1], w[2], w[0]]
+        response = self.expect(
+            fixture,
+            data,
+            {
+                "or": [
+                    self._leaf("language", "Spanish"),
+                    self._leaf("language", "German"),
+                ]
+            },
+            expected,
+        )
+        # assert the ordering is as expected
+        assert [h.work_id for h in response.hits] == [e.id for e in expected]

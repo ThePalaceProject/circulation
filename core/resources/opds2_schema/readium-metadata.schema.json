@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://readium.org/webpub-manifest/schema/metadata.schema.json",
+  "title": "Metadata",
+  "type": "object",
+  "properties": {
+    "identifier": {
+      "type": "string",
+      "format": "uri"
+    },
+    "@type": {
+      "type": "string",
+      "format": "uri"
+    },
+    "conformsTo": {
+      "type": [
+        "string",
+        "array"
+      ],
+      "format": "uri",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "title": {
+      "$ref": "https://readium.org/webpub-manifest/schema/language-map.schema.json"
+    },
+    "subtitle": {
+      "$ref": "https://readium.org/webpub-manifest/schema/language-map.schema.json"
+    },
+    "modified": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "published": {
+      "type": "string",
+      "anyOf": [
+        {
+          "format": "date"
+        },
+        {
+          "format": "date-time"
+        }
+      ]
+    },
+    "language": {
+      "description": "The language must be a valid BCP 47 tag.",
+      "type": [
+        "string",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "sortAs": {
+      "$ref": "https://readium.org/webpub-manifest/schema/language-map.schema.json"
+    },
+    "author": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "translator": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "editor": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "artist": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "illustrator": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "letterer": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "penciler": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "colorist": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "inker": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "narrator": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "contributor": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "publisher": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "imprint": {
+      "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+    },
+    "subject": {
+      "$ref": "https://readium.org/webpub-manifest/schema/subject.schema.json"
+    },
+    "readingProgression": {
+      "type": "string",
+      "enum": [
+        "rtl",
+        "ltr",
+        "ttb",
+        "btt",
+        "auto"
+      ],
+      "default": "auto"
+    },
+    "description": {
+      "type": "string"
+    },
+    "duration": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "numberOfPages": {
+      "type": "integer",
+      "exclusiveMinimum": 0
+    },
+    "belongsTo": {
+      "type": "object",
+      "properties": {
+        "collection": {
+          "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+        },
+        "series": {
+          "$ref": "https://readium.org/webpub-manifest/schema/contributor.schema.json"
+        }
+      }
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "allOf": [
+    {
+      "$ref": "https://readium.org/webpub-manifest/schema/extensions/epub/metadata.schema.json"
+    },
+    {
+      "$ref": "https://readium.org/webpub-manifest/schema/extensions/presentation/metadata.schema.json"
+    }
+  ]
+}

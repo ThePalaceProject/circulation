@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from .config import CannotLoadConfiguration
 from .util.datetime_helpers import utc_now
+
+if TYPE_CHECKING:
+    from .model import Collection, ExternalIntegration, Representation
 
 
 class MirrorUploader(metaclass=ABCMeta):
@@ -17,7 +23,7 @@ class MirrorUploader(metaclass=ABCMeta):
     # sitewide() or for_collection(). A subclass that wants to take
     # advantage of this should add a mapping here from its .protocol
     # to itself.
-    IMPLEMENTATION_REGISTRY = {}
+    IMPLEMENTATION_REGISTRY: dict[str, type[MirrorUploader]] = {}
 
     @classmethod
     def mirror(cls, _db, storage_name=None, integration=None):
@@ -88,15 +94,12 @@ class MirrorUploader(metaclass=ABCMeta):
         )
         return implementation_class(integration)
 
-    def __init__(self, integration, host):
+    def __init__(self, integration: ExternalIntegration, host: str):
         """Instantiate a MirrorUploader from an ExternalIntegration.
 
         :param integration: An ExternalIntegration configuring the credentials
            used to upload things.
-        :type integration: ExternalIntegration
-
         :param host: Base host used by the mirror
-        :type host: string
         """
         if integration.goal != self.STORAGE_GOAL:
             # This collection's 'mirror integration' isn't intended to
@@ -114,17 +117,17 @@ class MirrorUploader(metaclass=ABCMeta):
     def do_upload(self, representation):
         raise NotImplementedError()
 
-    def mirror_one(self, representation, mirror_to, collection=None):
+    def mirror_one(
+        self,
+        representation: Representation,
+        mirror_to: str,
+        collection: Collection | None = None,
+    ):
         """Mirror a single Representation.
 
         :param representation: Book's representation
-        :type representation: Representation
-
         :param mirror_to: Mirror URL
-        :type mirror_to: string
-
         :param collection: Collection
-        :type collection: Optional[Collection]
         """
         now = utc_now()
         exception = self.do_upload(representation)
@@ -165,29 +168,21 @@ class MirrorUploader(metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def sign_url(self, url, expiration=None):
+    def sign_url(self, url: str, expiration: int | None = None) -> str:
         """Signs a URL and make it expirable
 
         :param url: URL
-        :type url: string
-
         :param expiration: (Optional) Time in seconds for the presigned URL to remain valid.
             Default value depends on a specific implementation
-        :type expiration: int
-
         :return: Signed expirable link
-        :rtype: string
         """
         raise NotImplementedError()
 
-    def is_self_url(self, url):
+    def is_self_url(self, url: str) -> bool:
         """Determines whether the URL has the mirror's host or a custom domain
 
         :param url: The URL
-        :type url: string
-
         :return: Boolean value indicating whether the URL has the mirror's host or a custom domain
-        :rtype: bool
         """
         scheme, netloc, path, query, fragment = urlsplit(url)
 
@@ -197,16 +192,11 @@ class MirrorUploader(metaclass=ABCMeta):
             return False
 
     @abstractmethod
-    def split_url(self, url, unquote=True):
+    def split_url(self, url: str, unquote: bool = True) -> tuple[str, str]:
         """Splits the URL into the components: container (bucket) and file path
 
         :param url: URL
-        :type url: string
-
         :param unquote: Boolean value indicating whether it's required to unquote URL elements
-        :type unquote: bool
-
         :return: Tuple (bucket, file path)
-        :rtype: Tuple[string, string]
         """
         raise NotImplementedError()

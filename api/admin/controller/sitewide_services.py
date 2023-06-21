@@ -4,7 +4,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
 from core.external_search import ExternalSearchIndex
-from core.log import CloudwatchLogs, Loggly, SysLogger
+from core.log import CloudwatchLogs, SysLogger
 from core.model import ExternalIntegration, get_one_or_create
 from core.util.problem_detail import ProblemDetail
 
@@ -111,7 +111,7 @@ class LoggingServicesController(SitewideServicesController):
         )
         return self._manage_sitewide_service(
             ExternalIntegration.LOGGING_GOAL,
-            [Loggly, SysLogger, CloudwatchLogs],
+            [SysLogger, CloudwatchLogs],
             "logging_services",
             detail,
         )
@@ -122,7 +122,7 @@ class LoggingServicesController(SitewideServicesController):
 
 class SearchServicesController(SitewideServicesController):
     def __init__(self, manager):
-        super(SearchServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("search service")
 
     def process_services(self):

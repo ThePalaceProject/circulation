@@ -1,4 +1,7 @@
-class EntryPoint(object):
+from __future__ import annotations
+
+
+class EntryPoint:
 
     """A EntryPoint is a top-level entry point into a library's Lane structure
     that may apply additional filters to the Lane structure.
@@ -21,14 +24,15 @@ class EntryPoint(object):
     # enabled.
     ENABLED_SETTING = "enabled_entry_points"
 
-    ENTRY_POINTS = []
-    DEFAULT_ENABLED = []
-    DISPLAY_TITLES = {}
-    BY_INTERNAL_NAME = {}
+    ENTRY_POINTS: list[type[EntryPoint]] = []
+    DEFAULT_ENABLED: list[type[EntryPoint]] = []
+    DISPLAY_TITLES: dict[type[EntryPoint], str] = {}
+    BY_INTERNAL_NAME: dict[str, type[EntryPoint]] = {}
 
     # A distinctive URI designating the sort of thing found through this
     # EntryPoint.
-    URI = None
+    URI: str | None = None
+    INTERNAL_NAME: str
 
     @classmethod
     def register(cls, entrypoint_class, display_title, default_enabled=False):
@@ -72,7 +76,7 @@ class EntryPoint(object):
 
     @classmethod
     def modify_search_filter(cls, filter):
-        """If necessary, modify an ElasticSearch Filter object so that it
+        """If necessary, modify an OpenSearch Filter object so that it
         restricts results to items shown through this entry point.
 
         The default behavior is not to change the Filter object at all.

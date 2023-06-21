@@ -1,10 +1,10 @@
 import json
+from unittest import mock
 
 import pytest
 import requests
 
 from core.problem_details import INVALID_INPUT
-from core.testing import MockRequestsResponse
 from core.util.http import (
     HTTP,
     INTEGRATION_ERROR,
@@ -14,37 +14,74 @@ from core.util.http import (
     RequestTimedOut,
 )
 from core.util.problem_detail import ProblemDetail
+from tests.core.mock import MockRequestsResponse
 
 
-class TestHTTP(object):
+class TestHTTP:
+    @pytest.fixture
+    def mock_request(self):
+        class FakeRequest:
+            def __init__(self, response=None):
+                self.agent = None
+                self.args = None
+                self.kwargs = None
+                self.response = response or MockRequestsResponse(201)
+
+            def fake_request(self, *args, **kwargs):
+                self.agent = kwargs["headers"][b"User-Agent"]
+                self.args = args
+                self.kwargs = kwargs
+                return self.response
+
+        return FakeRequest
+
     def test_series(self):
         m = HTTP.series
         assert "2xx" == m(201)
         assert "3xx" == m(399)
         assert "5xx" == m(500)
 
-    def test_request_with_timeout_success(self):
-
-        called_with = None
-
-        def fake_200_response(*args, **kwargs):
-            # The HTTP method and URL are passed in the order
-            # requests.request would expect.
-            assert ("GET", "http://url/") == args
-
-            # Keyword arguments to _request_with_timeout are passed in
-            # as-is.
-            assert "value" == kwargs["kwarg"]
-
-            # A default timeout is added.
-            assert 20 == kwargs["timeout"]
-            return MockRequestsResponse(200, content="Success!")
-
+    @mock.patch("core.util.http.core.__version__", "<VERSION>")
+    def test_request_with_timeout_success(self, mock_request):
+        request = mock_request(MockRequestsResponse(200, content="Success!"))
         response = HTTP._request_with_timeout(
-            "http://url/", fake_200_response, "GET", kwarg="value"
+            "http://url/", request.fake_request, "GET", kwarg="value"
         )
         assert 200 == response.status_code
         assert b"Success!" == response.content
+
+        # User agent header should be set
+        assert b"Palace Manager/<VERSION>" == request.agent
+
+        # The HTTP method and URL are passed in the order
+        # requests.request would expect.
+        assert ("GET", "http://url/") == request.args
+
+        # Keyword arguments to _request_with_timeout are passed in
+        # as-is.
+        assert "value" == request.kwargs["kwarg"]
+
+        # A default timeout is added.
+        assert 20 == request.kwargs["timeout"]
+
+    def test_request_with_timeout_with_ua(self, mock_request):
+        request = mock_request()
+        assert (
+            HTTP._request_with_timeout(
+                "http://url",
+                request.fake_request,
+                "GET",
+                headers={"User-Agent": "Fake Agent"},
+            ).status_code
+            == 201
+        )
+        assert request.agent == b"Fake Agent"
+
+    @mock.patch("core.util.http.core.__version__", None)
+    def test_default_user_agent(self, mock_request):
+        request = mock_request()
+        assert HTTP._request_with_timeout("/", request.fake_request).status_code == 201
+        assert request.agent == b"Palace Manager/1.x.x"
 
     def test_request_with_timeout_failure(self):
         def immediately_timeout(*args, **kwargs):
@@ -168,7 +205,7 @@ class TestHTTP(object):
         converted to UTF-8.
         """
 
-        class ResponseGenerator(object):
+        class ResponseGenerator:
             def __init__(self):
                 self.requests = []
 
@@ -251,7 +288,7 @@ class TestHTTP(object):
         assert error == m("url", error, allowed_response_codes=["4xx"])
 
 
-class TestRemoteIntegrationException(object):
+class TestRemoteIntegrationException:
     def test_with_service_name(self):
         """You don't have to provide a URL when creating a
         RemoteIntegrationException; you can just provide the service
@@ -273,7 +310,7 @@ class TestRemoteIntegrationException(object):
         )
 
 
-class TestBadResponseException(object):
+class TestBadResponseException:
     def test_helper_constructor(self):
         response = MockRequestsResponse(102, content="nonsense")
         exc = BadResponseException.from_response(
@@ -327,7 +364,7 @@ class TestBadResponseException(object):
         )
 
 
-class TestRequestTimedOut(object):
+class TestRequestTimedOut:
     def test_as_problem_detail_document(self):
         exception = RequestTimedOut("http://url/", "I give up")
 
@@ -351,7 +388,7 @@ class TestRequestTimedOut(object):
         assert 502 == status_code
 
 
-class TestRequestNetworkException(object):
+class TestRequestNetworkException:
     def test_as_problem_detail_document(self):
         exception = RequestNetworkException("http://url/", "Colossal failure")
 

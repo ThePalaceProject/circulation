@@ -1,4 +1,4 @@
-class LCPImporter(object):
+class LCPImporter:
     """Class implementing LCP import workflow"""
 
     def __init__(self, lcp_encryptor, lcp_server):

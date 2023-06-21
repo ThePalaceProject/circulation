@@ -32,7 +32,7 @@ class TestFeed(CirculationIntegrationTest):
             path = os.environ["TEST_FEED_PATH"]
         else:
             path = "eng/Romance"
-        feed_url = "%sfeed/%s" % (self.url, path)
+        feed_url = f"{self.url}feed/{path}"
         feed = urlopen(feed_url).read()
         feed = feedparser.parse(str(feed))
         entries = feed["entries"]

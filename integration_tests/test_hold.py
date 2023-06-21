@@ -15,7 +15,7 @@ class TestHold(CirculationIntegrationTest):
             # Yes Please has a large hold queue
             overdrive_id = "0abe1ed3-f117-4b7c-a6b0-857a2e7d227b"
 
-        borrow_url = "%sworks/Overdrive/%s/borrow" % (self.url, overdrive_id)
+        borrow_url = f"{self.url}works/Overdrive/{overdrive_id}/borrow"
         borrow_response = requests.get(
             borrow_url, auth=HTTPBasicAuth(self.test_username, self.test_password)
         )

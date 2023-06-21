@@ -8,7 +8,7 @@ from textblob.exceptions import MissingCorpusError
 from . import Bigrams, english_bigrams
 
 
-class SummaryEvaluator(object):
+class SummaryEvaluator:
 
     """Evaluate summaries of a book to find a usable summary.
 
@@ -25,38 +25,34 @@ class SummaryEvaluator(object):
 
     # These phrases are indicative of a description we can't use for
     # whatever reason.
-    default_bad_phrases = set(
-        [
-            "version of",
-            "retelling of",
-            "abridged",
-            "retelling",
-            "condensed",
-            "adaptation of",
-            "look for",
-            "new edition",
-            "excerpts",
-            "version",
-            "edition",
-            "selections",
-            "complete texts",
-            "in one volume",
-            "contains",
-            "--container",
-            "--original container",
-            "playaway",
-            "complete novels",
-            "all rights reserved",
-        ]
-    )
+    default_bad_phrases = {
+        "version of",
+        "retelling of",
+        "abridged",
+        "retelling",
+        "condensed",
+        "adaptation of",
+        "look for",
+        "new edition",
+        "excerpts",
+        "version",
+        "edition",
+        "selections",
+        "complete texts",
+        "in one volume",
+        "contains",
+        "--container",
+        "--original container",
+        "playaway",
+        "complete novels",
+        "all rights reserved",
+    }
 
-    bad_res = set(
-        [
-            re.compile("the [^ ]+ Collection"),
-            re.compile("Includes"),
-            re.compile("This is"),
-        ]
-    )
+    bad_res = {
+        re.compile("the [^ ]+ Collection"),
+        re.compile("Includes"),
+        re.compile("This is"),
+    }
 
     _nltk_installed = True
     log = logging.getLogger("Summary Evaluator")
@@ -100,14 +96,12 @@ class SummaryEvaluator(object):
 
     def ready(self):
         """We are done adding to the corpus and ready to start evaluating."""
-        self.top_noun_phrases = set(
-            [
-                k
-                for k, v in self.noun_phrases.most_common(
-                    int(self.noun_phrases_to_consider)
-                )
-            ]
-        )
+        self.top_noun_phrases = {
+            k
+            for k, v in self.noun_phrases.most_common(
+                int(self.noun_phrases_to_consider)
+            )
+        }
 
     def best_choice(self):
         c = self.best_choices(1)
@@ -152,7 +146,7 @@ class SummaryEvaluator(object):
             off_from_optimal = 1.5
         if off_from_optimal:
             # This summary is too long or too short.
-            score /= off_from_optimal ** 1.5
+            score /= off_from_optimal**1.5
 
         bad_phrases = 0
         l = summary.lower()
@@ -167,7 +161,7 @@ class SummaryEvaluator(object):
         if l.count(" -- ") > 3:
             bad_phrases += l.count(" -- ") - 3
 
-        score *= 0.5 ** bad_phrases
+        score *= 0.5**bad_phrases
 
         if apply_language_penalty:
             language_difference = english_bigrams.difference_from(

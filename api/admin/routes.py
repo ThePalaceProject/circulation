@@ -2,18 +2,23 @@ from datetime import timedelta
 from functools import wraps
 
 import flask
-from flask import Response, make_response, redirect
+from flask import Response, make_response, redirect, url_for
+from flask_pydantic_spec import FileResponse as SpecFileResponse
+from flask_pydantic_spec import Request as SpecRequest
+from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
-from api.app import app
+from api.admin.dashboard_stats import generate_statistics
+from api.admin.model.dashboard_statistics import StatisticsResponse
+from api.app import api_spec, app
 from api.config import Configuration
 from api.routes import allows_library, has_library, library_route
-from core.app_server import returns_problem_detail
+from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import ConfigurationSetting
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemDetailModel
 
-from .controller import setup_admin_controllers
+from .controller import CustomListsController, setup_admin_controllers
 from .templates import admin_sign_in_again as sign_in_again_template
 
 # An admin's session will expire after this amount of time and
@@ -89,6 +94,8 @@ def requires_csrf_token(f):
 
 
 def returns_json_or_response_or_problem_detail(f):
+    ensure_pydantic_after_problem_detail(f)
+
     @wraps(f)
     def decorated(*args, **kwargs):
         v = f(*args, **kwargs)
@@ -99,12 +106,6 @@ def returns_json_or_response_or_problem_detail(f):
         return flask.jsonify(**v)
 
     return decorated
-
-
-@app.route("/admin/GoogleAuth/callback")
-@returns_problem_detail
-def google_auth_callback():
-    return app.manager.admin_sign_in_controller.redirect_after_google_sign_in()
 
 
 @app.route("/admin/sign_in_with_password", methods=["POST"])
@@ -131,6 +132,22 @@ def admin_sign_out():
 @requires_admin
 def admin_change_password():
     return app.manager.admin_sign_in_controller.change_password()
+
+
+@app.route("/admin/forgot_password", methods=["GET", "POST"])
+@returns_problem_detail
+def admin_forgot_password():
+    return app.manager.admin_reset_password_controller.forgot_password()
+
+
+@app.route(
+    "/admin/reset_password/<reset_password_token>/<admin_id>", methods=["GET", "POST"]
+)
+@returns_problem_detail
+def admin_reset_password(reset_password_token, admin_id):
+    return app.manager.admin_reset_password_controller.reset_password(
+        reset_password_token, admin_id
+    )
 
 
 @library_route("/admin/works/<identifier_type>/<path:identifier>", methods=["GET"])
@@ -177,16 +194,6 @@ def work_change_book_cover(identifier_type, identifier):
     return app.manager.admin_work_controller.change_book_cover(
         identifier_type, identifier
     )
-
-
-@library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/complaints", methods=["GET"]
-)
-@has_library
-@returns_json_or_response_or_problem_detail
-@requires_admin
-def work_complaints(identifier_type, identifier):
-    return app.manager.admin_work_controller.complaints(identifier_type, identifier)
 
 
 @library_route(
@@ -245,20 +252,6 @@ def refresh(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/resolve_complaints",
-    methods=["POST"],
-)
-@has_library
-@returns_problem_detail
-@requires_admin
-@requires_csrf_token
-def resolve_complaints(identifier_type, identifier):
-    return app.manager.admin_work_controller.resolve_complaints(
-        identifier_type, identifier
-    )
-
-
-@library_route(
     "/admin/works/<identifier_type>/<path:identifier>/edit_classifications",
     methods=["POST"],
 )
@@ -294,14 +287,6 @@ def media():
 @returns_json_or_response_or_problem_detail
 def rights_status():
     return app.manager.admin_work_controller.rights_status()
-
-
-@library_route("/admin/complaints")
-@has_library
-@returns_problem_detail
-@requires_admin
-def complaints():
-    return app.manager.admin_feed_controller.complaints()
 
 
 @library_route("/admin/suppressed")
@@ -360,10 +345,14 @@ def circulation_events():
 
 
 @app.route("/admin/stats")
+@api_spec.validate(resp=SpecResponse(HTTP_200=StatisticsResponse), tags=["admin.stats"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
 def stats():
-    return app.manager.admin_dashboard_controller.stats()
+    statistics_response: StatisticsResponse = (
+        app.manager.admin_dashboard_controller.stats(stats_function=generate_statistics)
+    )
+    return statistics_response.api_dict()
 
 
 @app.route("/admin/libraries", methods=["GET", "POST"])
@@ -418,22 +407,6 @@ def collection_library_registrations():
     return (
         app.manager.admin_collection_library_registrations_controller.process_collection_library_registrations()
     )
-
-
-@app.route("/admin/admin_auth_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_services():
-    return app.manager.admin_auth_services_controller.process_admin_auth_services()
-
-
-@app.route("/admin/admin_auth_service/<protocol>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def admin_auth_service(protocol):
-    return app.manager.admin_auth_services_controller.process_delete(protocol)
 
 
 @app.route("/admin/individual_admins", methods=["GET", "POST"])
@@ -545,22 +518,6 @@ def analytics_service(service_id):
     return app.manager.admin_analytics_services_controller.process_delete(service_id)
 
 
-@app.route("/admin/cdn_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def cdn_services():
-    return app.manager.admin_cdn_services_controller.process_cdn_services()
-
-
-@app.route("/admin/cdn_service/<service_id>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def cdn_service(service_id):
-    return app.manager.admin_cdn_services_controller.process_delete(service_id)
-
-
 @app.route("/admin/search_services", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
@@ -655,6 +612,14 @@ def sitewide_setting(key):
     )
 
 
+@app.route("/admin/announcements", methods=["GET", "POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def announcements_for_all():
+    return app.manager.admin_announcement_service.process_many()
+
+
 @app.route("/admin/logging_services", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
@@ -681,22 +646,95 @@ def discovery_service_library_registrations():
     )
 
 
-@library_route("/admin/custom_lists", methods=["GET", "POST"])
+@library_route("/admin/custom_lists", methods=["POST"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    body=SpecRequest(CustomListsController.CustomListPostRequest),
+    tags=["admin.customlists"],
+)
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_lists():
+def custom_lists_post():
     return app.manager.admin_custom_lists_controller.custom_lists()
 
 
-@library_route("/admin/custom_list/<list_id>", methods=["GET", "POST", "DELETE"])
+@library_route("/admin/custom_lists", methods=["GET"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    tags=["admin.customlists"],
+)
 @has_library
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
-def custom_list(list_id):
+def custom_lists_get():
+    return app.manager.admin_custom_lists_controller.custom_lists()
+
+
+@library_route("/admin/custom_list/<list_id>", methods=["GET"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    tags=["admin.customlists"],
+)
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_get(list_id: int):
     return app.manager.admin_custom_lists_controller.custom_list(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>", methods=["POST"])
+@api_spec.validate(
+    resp=SpecFileResponse(content_type="application/atom+xml"),
+    body=SpecRequest(CustomListsController.CustomListPostRequest),
+    tags=["admin.customlists"],
+)
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_post(list_id):
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>", methods=["DELETE"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_delete(list_id):
+    return app.manager.admin_custom_lists_controller.custom_list(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>/share", methods=["POST"])
+@api_spec.validate(
+    resp=SpecResponse(
+        HTTP_200=CustomListsController.CustomListSharePostResponse,
+        HTTP_403=ProblemDetailModel,
+    ),
+    tags=["admin.customlists"],
+)
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_share(list_id: int):
+    """Share a custom list with all libraries in the CM that share the collections of this library and works of this list"""
+    return app.manager.admin_custom_lists_controller.share_locally(list_id)
+
+
+@library_route("/admin/custom_list/<list_id>/share", methods=["DELETE"])
+@api_spec.validate(resp=SpecResponse(HTTP_204=None), tags=["admin.customlists"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+@requires_csrf_token
+def custom_list_unshare(list_id: int):
+    """Unshare the list from all libraries, as long as no other library is using the list in its lanes"""
+    return app.manager.admin_custom_lists_controller.share_locally(list_id)
 
 
 @library_route("/admin/lanes", methods=["GET", "POST"])
@@ -753,6 +791,14 @@ def change_lane_order():
     return app.manager.admin_lanes_controller.change_order()
 
 
+@library_route("/admin/search_field_values", methods=["GET"])
+@has_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def search_field_values():
+    return app.manager.admin_search_controller.search_field_values()
+
+
 @app.route("/admin/diagnostics")
 @requires_admin
 @returns_json_or_response_or_problem_detail
@@ -773,7 +819,7 @@ def admin_sign_in_again():
         or isinstance(csrf_token, ProblemDetail)
     ):
         redirect_url = flask.request.url
-        return redirect(app.manager.url_for("admin_sign_in", redirect=redirect_url))
+        return redirect(url_for("admin_sign_in", redirect=redirect_url, _external=True))
     return flask.render_template_string(sign_in_again_template)
 
 
@@ -788,7 +834,7 @@ def admin_view(collection=None, book=None, etc=None, **kwargs):
 
 @app.route("/admin/", strict_slashes=False)
 def admin_base(**kwargs):
-    return redirect(app.manager.url_for("admin_view"))
+    return redirect(url_for("admin_view", _external=True))
 
 
 # This path is used only in debug mode to serve frontend assets.

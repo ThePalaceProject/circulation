@@ -1,119 +1,268 @@
 import os
+import time
+import urllib.parse
+from functools import partial
+from typing import Callable
 
 import jwt
 import pytest
+import requests
 
+from api.authentication.base import PatronData
+from api.authentication.basic import BasicAuthProviderLibrarySettings
 from api.circulation_exceptions import RemoteInitiatedServerError
-from api.firstbook2 import FirstBookAuthenticationAPI, MockFirstBookAuthenticationAPI
-from core.model import ExternalIntegration
-from core.testing import DatabaseTest
+from api.firstbook2 import FirstBookAuthenticationAPI, FirstBookAuthSettings
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestFirstBook(DatabaseTest):
-    def setup_method(self):
-        super(TestFirstBook, self).setup_method()
-        self.integration = self._external_integration(
-            ExternalIntegration.PATRON_AUTH_GOAL
+class MockFirstBookResponse:
+    def __init__(self, status_code, content):
+        self.status_code = status_code
+        # Guarantee that the response content is always a bytestring,
+        # as it would be in real life.
+        if isinstance(content, str):
+            content = content.encode("utf8")
+        self.content = content
+
+
+class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
+
+    SUCCESS = '"Valid Code Pin Pair"'
+    FAILURE = '{"code":404,"message":"Access Code Pin Pair not found"}'
+
+    def __init__(
+        self,
+        library_id,
+        integration_id,
+        settings,
+        library_settings,
+        valid=None,
+        bad_connection=False,
+        failure_status_code=None,
+    ):
+        super().__init__(library_id, integration_id, settings, library_settings, None)
+
+        if valid is None:
+            valid = {}
+        self.valid = valid
+        self.bad_connection = bad_connection
+        self.failure_status_code = failure_status_code
+
+        self.request_urls = []
+
+    def request(self, url):
+        self.request_urls.append(url)
+        if self.bad_connection:
+            # Simulate a bad connection.
+            raise requests.exceptions.ConnectionError("Could not connect!")
+        elif self.failure_status_code:
+            # Simulate a server returning an unexpected error code.
+            return MockFirstBookResponse(
+                self.failure_status_code, "Error %s" % self.failure_status_code
+            )
+        parsed = urllib.parse.urlparse(url)
+        token = parsed.path.split("/")[-1]
+        barcode, pin = self._decode(token)
+
+        # The barcode and pin must be present in self.valid.
+        if barcode in self.valid and self.valid[barcode] == pin:
+            return MockFirstBookResponse(200, self.SUCCESS)
+        else:
+            return MockFirstBookResponse(200, self.FAILURE)
+
+    def _decode(self, token):
+        # Decode a JWT. Only used in tests -- in production, this is
+        # First Book's job.
+
+        # The JWT must be signed with the shared secret.
+        payload = jwt.decode(token, self.secret, algorithms=self.ALGORITHM)
+
+        # The 'iat' field in the payload must be a recent timestamp.
+        assert (time.time() - int(payload["iat"])) < 2
+
+        return payload["barcode"], payload["pin"]
+
+
+@pytest.fixture
+def mock_library_id() -> int:
+    return 20
+
+
+@pytest.fixture
+def mock_integration_id() -> int:
+    return 20
+
+
+@pytest.fixture
+def create_settings() -> Callable[..., FirstBookAuthSettings]:
+    return partial(
+        FirstBookAuthSettings,
+        url="http://example.com/",
+        password="secret",
+    )
+
+
+@pytest.fixture
+def create_provider(
+    mock_library_id: int,
+    mock_integration_id: int,
+    create_settings: Callable[..., FirstBookAuthSettings],
+) -> Callable[..., MockFirstBookAuthenticationAPI]:
+    return partial(
+        MockFirstBookAuthenticationAPI,
+        library_id=mock_library_id,
+        integration_id=mock_integration_id,
+        settings=create_settings(),
+        library_settings=BasicAuthProviderLibrarySettings(),
+        valid={"ABCD": "1234"},
+    )
+
+
+class TestFirstBook:
+    def test_from_config(
+        self,
+        create_settings: Callable[..., FirstBookAuthSettings],
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        settings = create_settings(
+            password="the_key",
         )
-        self.api = self.mock_api(dict(ABCD="1234"))
-
-    def mock_api(self, *args, **kwargs):
-        "Create a MockFirstBookAuthenticationAPI."
-        return MockFirstBookAuthenticationAPI(
-            self._default_library, self.integration, *args, **kwargs
-        )
-
-    def test_from_config(self):
-        api = None
-        integration = self._external_integration(self._str)
-        integration.url = "http://example.com/"
-        integration.password = "the_key"
-        api = FirstBookAuthenticationAPI(self._default_library, integration)
+        provider = create_provider(settings=settings)
 
         # Verify that the configuration details were stored properly.
-        assert "http://example.com/" == api.root
-        assert "the_key" == api.secret
+        assert "http://example.com/" == provider.root
+        assert "the_key" == provider.secret
 
         # Test the default server-side authentication regular expressions.
-        assert False == api.server_side_validation("foo' or 1=1 --;", "1234")
-        assert False == api.server_side_validation("foo", "12 34")
-        assert True == api.server_side_validation("foo", "1234")
-        assert True == api.server_side_validation("foo@bar", "1234")
+        assert provider.server_side_validation("foo' or 1=1 --;", "1234") is False
+        assert provider.server_side_validation("foo", "12 34") is False
+        assert provider.server_side_validation("foo", "1234") is True
+        assert provider.server_side_validation("foo@bar", "1234") is True
 
-    def test_authentication_success(self):
+    def test_authentication_success(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        provider = create_provider()
 
         # The mock API successfully decodes the JWT and verifies that
         # the given barcode and pin authenticate a specific patron.
-        assert True == self.api.remote_pin_test("ABCD", "1234")
+        assert provider.remote_pin_test("ABCD", "1234") is True
 
         # Let's see what the mock API had to work with.
-        requested = self.api.request_urls.pop()
-        assert requested.startswith(self.api.root)
-        token = requested[len(self.api.root) :]
+        requested = provider.request_urls.pop()
+        assert requested.startswith(provider.root)
+        token = requested[len(provider.root) :]
 
         # It's a JWT, with the provided barcode and PIN in the
         # payload.
-        barcode, pin = self.api._decode(token)
+        barcode, pin = provider._decode(token)
         assert "ABCD" == barcode
         assert "1234" == pin
 
-    def test_authentication_failure(self):
-        assert False == self.api.remote_pin_test("ABCD", "9999")
-        assert False == self.api.remote_pin_test("nosuchkey", "9999")
+    def test_authentication_failure(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        provider = create_provider()
+
+        assert provider.remote_pin_test("ABCD", "9999") is False
+        assert provider.remote_pin_test("nosuchkey", "9999") is False
 
         # credentials are uppercased in remote_authenticate;
         # remote_pin_test just passes on whatever it's sent.
-        assert False == self.api.remote_pin_test("abcd", "9999")
+        assert provider.remote_pin_test("abcd", "9999") is False
 
-    def test_remote_authenticate(self):
-        patrondata = self.api.remote_authenticate("abcd", "1234")
+    def test_remote_authenticate(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        provider = create_provider()
+
+        patrondata = provider.remote_authenticate("abcd", "1234")
+        assert isinstance(patrondata, PatronData)
         assert "ABCD" == patrondata.permanent_id
         assert "ABCD" == patrondata.authorization_identifier
-        assert None == patrondata.username
+        assert patrondata.username is None
 
-        patrondata = self.api.remote_authenticate("ABCD", "1234")
+        patrondata = provider.remote_authenticate("ABCD", "1234")
+        assert isinstance(patrondata, PatronData)
         assert "ABCD" == patrondata.permanent_id
         assert "ABCD" == patrondata.authorization_identifier
-        assert None == patrondata.username
+        assert patrondata.username is None
 
-    def test_broken_service_remote_pin_test(self):
-        api = self.mock_api(failure_status_code=502)
+        # When username is none, the patrondata object should be None
+        patrondata = provider.remote_authenticate(None, "1234")
+        assert patrondata is None
+
+    def test_broken_service_remote_pin_test(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        provider = create_provider(failure_status_code=502)
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            api.remote_pin_test("key", "pin")
+            provider.remote_pin_test("key", "pin")
         assert "Got unexpected response code 502. Content: Error 502" in str(
             excinfo.value
         )
 
-    def test_bad_connection_remote_pin_test(self):
-        api = self.mock_api(bad_connection=True)
+    def test_bad_connection_remote_pin_test(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        provider = create_provider(bad_connection=True)
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            api.remote_pin_test("key", "pin")
+            provider.remote_pin_test("key", "pin")
         assert "Could not connect!" in str(excinfo.value)
 
-    def test_authentication_flow_document(self):
+    def test_authentication_flow_document(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+        db: DatabaseTransactionFixture,
+    ):
         # We're about to call url_for, so we must create an
         # application context.
+        provider = create_provider()
         os.environ["AUTOINITIALIZE"] = "False"
         from api.app import app
 
-        self.app = app
         del os.environ["AUTOINITIALIZE"]
-        with self.app.test_request_context("/"):
-            doc = self.api.authentication_flow_document(self._db)
-            assert self.api.DISPLAY_NAME == doc["description"]
-            assert self.api.FLOW_TYPE == doc["type"]
+        with app.test_request_context("/"):
+            doc = provider.authentication_flow_document(db.session)
+            assert provider.label() == doc["description"]
+            assert provider.flow_type == doc["type"]
 
-    def test_jwt(self):
+    def test_jwt(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+    ):
+        provider = create_provider()
         # Test the code that generates and signs JWTs.
-        token = self.api.jwt("a barcode", "a pin")
+        token = provider.jwt("a barcode", "a pin")
 
         # The JWT was signed with the shared secret. Decode it (this
         # validates it as a side effect) and we can see the payload.
-        barcode, pin = self.api._decode(token)
+        barcode, pin = provider._decode(token)
 
         assert "a barcode" == barcode
         assert "a pin" == pin
 
         # If the secrets don't match, decoding won't work.
-        self.api.secret = "bad secret"
-        pytest.raises(jwt.DecodeError, self.api._decode, token)
+        provider.secret = "bad secret"
+        pytest.raises(jwt.DecodeError, provider._decode, token)
+
+    def test_remote_patron_lookup(
+        self,
+        create_provider: Callable[..., MockFirstBookAuthenticationAPI],
+        db: DatabaseTransactionFixture,
+    ):
+        provider = create_provider()
+        # Remote patron lookup is not supported. It always returns
+        # the same PatronData object passed into it.
+        input_patrondata = PatronData()
+        output_patrondata = provider.remote_patron_lookup(input_patrondata)
+        assert input_patrondata == output_patrondata
+
+        # if anything else is passed in, it returns None
+        output_patrondata = provider.remote_patron_lookup(db.patron())
+        assert output_patrondata is None

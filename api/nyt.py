@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-import dateutil
+from dateutil import tz
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
@@ -18,13 +18,12 @@ from core.model import (
     Representation,
     get_one_or_create,
 )
-from core.opds_import import MetadataWranglerOPDSLookup
 from core.selftest import HasSelfTests
 
 from .config import CannotLoadConfiguration, IntegrationException
 
 
-class NYTAPI(object):
+class NYTAPI:
 
     DATE_FORMAT = "%Y-%m-%d"
 
@@ -36,7 +35,7 @@ class NYTAPI(object):
     # NOTE: entries fetched before we made the datetimes
     # timezone-aware will have their time zones set to UTC, but the
     # difference is negligible.
-    TIME_ZONE = dateutil.tz.gettz("America/New York")
+    TIME_ZONE = tz.gettz("America/New York")
 
     @classmethod
     def parse_datetime(cls, d):
@@ -93,21 +92,13 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
 
         return cls(_db, api_key=integration.password, **kwargs)
 
-    def __init__(self, _db, api_key=None, do_get=None, metadata_client=None):
+    def __init__(self, _db, api_key=None, do_get=None):
         self.log = logging.getLogger("NYT API")
         self._db = _db
         if not api_key:
             raise CannotLoadConfiguration("No NYT API key is specified")
         self.api_key = api_key
         self.do_get = do_get or Representation.simple_http_get
-        if not metadata_client:
-            try:
-                metadata_client = MetadataWranglerOPDSLookup.from_config(self._db)
-            except CannotLoadConfiguration as e:
-                self.log.error(
-                    "Metadata wrangler integration is not configured, proceeding without one."
-                )
-        self.metadata_client = metadata_client
 
     @classmethod
     def external_integration(cls, _db):
@@ -147,7 +138,7 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
             content = json.loads(representation.content)
             return content
 
-        diagnostic = "Response from %s was: %r" % (
+        diagnostic = "Response from {} was: {!r}".format(
             url,
             representation.content.decode("utf-8") if representation.content else "",
         )
@@ -178,7 +169,7 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
         """Create (but don't update) a NYTBestSellerList object."""
         if isinstance(list_info, str):
             list_info = self.list_info(list_info)
-        return NYTBestSellerList(list_info, self.metadata_client)
+        return NYTBestSellerList(list_info)
 
     def update(self, list, date=None, max_age=LIST_MAX_AGE):
         """Update the given list with data from the given date."""
@@ -198,7 +189,7 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
 
 
 class NYTBestSellerList(list):
-    def __init__(self, list_info, metadata_client):
+    def __init__(self, list_info):
         self.name = list_info["display_name"]
         self.created = NYTAPI.parse_datetime(list_info["oldest_published_date"])
         self.updated = NYTAPI.parse_datetime(list_info["newest_published_date"])
@@ -209,7 +200,6 @@ class NYTBestSellerList(list):
             frequency = 30
         self.frequency = timedelta(frequency)
         self.items_by_isbn = dict()
-        self.metadata_client = metadata_client
         self.log = logging.getLogger("NYT Best-seller list %s" % self.name)
 
     @property
@@ -300,9 +290,7 @@ class NYTBestSellerList(list):
 
         # Add new items to the list.
         for i in self:
-            list_item, was_new = i.to_custom_list_entry(
-                custom_list, self.metadata_client
-            )
+            list_item, was_new = i.to_custom_list_entry(custom_list)
             # If possible, associate the item with a Work.
             list_item.set_work()
 
@@ -368,6 +356,4 @@ class NYTBestSellerListTitle(TitleFromExternalList):
             identifiers=other_isbns,
         )
 
-        super(NYTBestSellerListTitle, self).__init__(
-            metadata, first_appearance, most_recent_appearance, annotation
-        )
+        super().__init__(metadata, first_appearance, most_recent_appearance, annotation)

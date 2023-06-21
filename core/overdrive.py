@@ -1,15 +1,30 @@
+from __future__ import annotations
+
 import datetime
 import json
 import logging
 from threading import RLock
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, cast
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
+from flask_babel import lazy_gettext as _
+from requests.adapters import CaseInsensitiveDict, Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
-from .config import CannotLoadConfiguration
+from api.circulation import CirculationConfigurationMixin
+from api.circulation_exceptions import CannotFulfill
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+
+from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
+from .importers import BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -23,7 +38,6 @@ from .metadata_layer import (
 from .model import (
     Classification,
     Collection,
-    ConfigurationSetting,
     Contributor,
     Credential,
     DataSource,
@@ -38,13 +52,100 @@ from .model import (
     Subject,
     get_one_or_create,
 )
-from .testing import DatabaseTest, MockRequestsResponse
+from .model.configuration import HasExternalIntegration
 from .util.datetime_helpers import strptime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
 
+if TYPE_CHECKING:
+    pass
 
-class OverdriveAPI(object):
+
+class OverdriveConstants:
+    OVERDRIVE_CLIENT_KEY = "overdrive_client_key"
+    OVERDRIVE_CLIENT_SECRET = "overdrive_client_secret"
+    OVERDRIVE_SERVER_NICKNAME = "overdrive_server_nickname"
+    OVERDRIVE_WEBSITE_ID = "overdrive_website_id"
+
+    # Note that the library ID is not included here because it is not Overdrive-specific
+    OVERDRIVE_CONFIGURATION_KEYS = {
+        OVERDRIVE_CLIENT_KEY,
+        OVERDRIVE_CLIENT_SECRET,
+        OVERDRIVE_SERVER_NICKNAME,
+        OVERDRIVE_WEBSITE_ID,
+    }
+
+    PRODUCTION_SERVERS = "production"
+    TESTING_SERVERS = "testing"
+
+
+class OverdriveSettings(BaseImporterSettings):
+    """The basic Overdrive configuration"""
+
+    external_account_id: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The library identifier.",
+            required=True,
+        ),
+    )
+    overdrive_website_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Website ID"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The web site identifier.",
+            required=True,
+        )
+    )
+    overdrive_client_key: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Key"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The Overdrive client key.",
+            required=True,
+        )
+    )
+    overdrive_client_secret: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Secret"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The Overdrive client secret.",
+            required=True,
+        )
+    )
+
+    overdrive_server_nickname: str = FormField(
+        default=OverdriveConstants.PRODUCTION_SERVERS,
+        form=ConfigurationFormItem(
+            label=_("Server family"),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            description="Unless you hear otherwise from Overdrive, your integration should use their production servers.",
+            options={
+                OverdriveConstants.PRODUCTION_SERVERS: ("Production"),
+                OverdriveConstants.TESTING_SERVERS: _("Testing"),
+            },
+        ),
+    )
+
+
+class OverdriveData:
+    overdrive_client_key: str
+    overdrive_client_secret: str
+    overdrive_website_id: str
+    overdrive_server_nickname: str = OverdriveConstants.PRODUCTION_SERVERS
+    max_retry_count: int = 0
+
+
+class OverdriveCoreAPI(
+    HasExternalIntegration,
+    HasLibraryIntegrationConfiguration,
+    CirculationConfigurationMixin,
+):
+    # An OverDrive defined constant indicating the "main" or parent account
+    # associated with an OverDrive collection.
+    OVERDRIVE_MAIN_ACCOUNT_ID = -1
 
     log = logging.getLogger("Overdrive API")
 
@@ -53,15 +154,12 @@ class OverdriveAPI(object):
 
     # Production and testing have different host names for some of the
     # API endpoints. This is configurable on the collection level.
-    SERVER_NICKNAME = "server_nickname"
-    PRODUCTION_SERVERS = "production"
-    TESTING_SERVERS = "testing"
     HOSTS = {
-        PRODUCTION_SERVERS: dict(
+        OverdriveConstants.PRODUCTION_SERVERS: dict(
             host="https://api.overdrive.com",
             patron_host="https://patron.api.overdrive.com",
         ),
-        TESTING_SERVERS: dict(
+        OverdriveConstants.TESTING_SERVERS: dict(
             host="https://integration.api.overdrive.com",
             patron_host="https://integration-patron.api.overdrive.com",
         ),
@@ -119,20 +217,21 @@ class OverdriveAPI(object):
     )
 
     # The formats that can be read by the default Library Simplified reader.
-    DEFAULT_READABLE_FORMATS = set(
-        ["ebook-epub-open", "ebook-epub-adobe", "ebook-pdf-open", "audiobook-overdrive"]
-    )
+    DEFAULT_READABLE_FORMATS = {
+        "ebook-epub-open",
+        "ebook-epub-adobe",
+        "ebook-pdf-open",
+        "audiobook-overdrive",
+    }
 
     # The formats that indicate the book has been fulfilled on an
     # incompatible platform and just can't be fulfilled on Simplified
     # in any format.
-    INCOMPATIBLE_PLATFORM_FORMATS = set(["ebook-kindle"])
+    INCOMPATIBLE_PLATFORM_FORMATS = {"ebook-kindle"}
 
     OVERDRIVE_READ_FORMAT = "ebook-overdrive"
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-
-    WEBSITE_ID = "website_id"
 
     # When associating an Overdrive account with a library, it's
     # necessary to also specify an "ILS name" obtained from
@@ -141,15 +240,56 @@ class OverdriveAPI(object):
     ILS_NAME_KEY = "ils_name"
     ILS_NAME_DEFAULT = "default"
 
-    def __init__(self, _db, collection):
+    _external_integration: ExternalIntegration
+    _db: Session
+    _hosts: Dict[str, str]
+    _library_id: str
+    _collection_id: int
+
+    def label(self):
+        return "Overdrive Core API"
+
+    def description(self):
+        return ""
+
+    @classmethod
+    def library_settings_class(cls):
+        raise NotImplementedError()
+
+    @classmethod
+    def settings_class(cls):
+        return OverdriveSettings
+
+    def __init__(self, _db: Session, collection: Collection):
         if collection.protocol != ExternalIntegration.OVERDRIVE:
             raise ValueError(
                 "Collection protocol is %s, but passed into OverdriveAPI!"
                 % collection.protocol
             )
+
+        _library_id = collection.external_account_id
+        if not _library_id:
+            raise ValueError(
+                "Collection %s must have an external account ID" % collection.id
+            )
+        else:
+            self._library_id = _library_id
+
         self._db = _db
-        self.library_id = collection.external_account_id
-        self.collection_id = collection.id
+        self._external_integration = collection.external_integration
+        if collection.id is None:
+            raise ValueError(
+                "Collection passed into OverdriveAPI must have an ID, but %s does not"
+                % collection.name
+            )
+        self._collection_id = collection.id
+
+        # Initialize configuration information.
+        self._integration_configuration_id = cast(
+            int, collection.integration_configuration.id
+        )
+        self._configuration = OverdriveData()
+
         if collection.parent:
             # This is an Overdrive Advantage account.
             self.parent_library_id = collection.parent.external_account_id
@@ -157,39 +297,34 @@ class OverdriveAPI(object):
             # We're going to inherit all of the Overdrive credentials
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
-            collection = collection.parent
+            parent_integration = collection.parent.integration_configuration
+            parent_config = self.settings_class()(**parent_integration.settings)
+            for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
+                parent_value = getattr(parent_config, key, None)
+                setattr(self._configuration, key, parent_value)
         else:
             self.parent_library_id = None
 
-        integration = collection.external_integration
-        self.client_key = integration.username
-        self.client_secret = integration.password
-        self.website_id = integration.setting(self.WEBSITE_ID).value
-        if (
-            not self.client_key
-            or not self.client_secret
-            or not self.website_id
-            or not self.library_id
-        ):
-            raise CannotLoadConfiguration("Overdrive configuration is incomplete.")
+        # Self settings should override parent settings where available
+        settings = collection.integration_configuration.settings
+        for name, schema in self.settings_class().schema()["properties"].items():
+            if name in settings or not hasattr(self._configuration, name):
+                setattr(
+                    self._configuration, name, settings.get(name, schema.get("default"))
+                )
 
-        # Figure out which hostnames we'll be using when constructing
-        # endpoint URLs.
-        server_nickname = (
-            integration.setting(self.SERVER_NICKNAME).value or self.PRODUCTION_SERVERS
-        )
-        if server_nickname not in self.HOSTS:
-            server_nickname = self.PRODUCTION_SERVERS
+        if not self._configuration.overdrive_client_key:
+            raise CannotLoadConfiguration("Overdrive client key is not configured")
+        if not self._configuration.overdrive_client_secret:
+            raise CannotLoadConfiguration(
+                "Overdrive client password/secret is not configured"
+            )
+        if not self._configuration.overdrive_website_id:
+            raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
-        # Set the hostnames we'll be using. Make a new dictionary just
-        # to be safe.
-        self.hosts = dict(self.HOSTS[server_nickname])
+        self._server_nickname = self._configuration.overdrive_server_nickname
 
-        # Use utf8 instead of unicode encoding
-        settings = [self.client_key, self.client_secret, self.website_id]
-        self.client_key, self.client_secret, self.website_id = (
-            setting.encode("utf8") for setting in settings
-        )
+        self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 
         # This is set by an access to .token, or by a call to
         # check_creds() or refresh_creds().
@@ -198,7 +333,22 @@ class OverdriveAPI(object):
         # This is set by an access to .collection_token
         self._collection_token = None
 
-    def endpoint(self, url, **kwargs):
+    def configuration(self):
+        """Overdrive has a different implementation for configuration"""
+        return self._configuration
+
+    def _determine_hosts(self, *, server_nickname: str) -> Dict[str, str]:
+        # Figure out which hostnames we'll be using when constructing
+        # endpoint URLs.
+        if server_nickname not in self.HOSTS:
+            server_nickname = OverdriveConstants.PRODUCTION_SERVERS
+
+        return dict(self.HOSTS[server_nickname])
+
+    def external_integration(self, db: Session) -> ExternalIntegration:
+        return self._external_integration
+
+    def endpoint(self, url: str, **kwargs) -> str:
         """Create the URL to an Overdrive API endpoint.
 
         :param url: A template for the URL.
@@ -209,7 +359,7 @@ class OverdriveAPI(object):
         if not "%(" in url:
             # Nothing to interpolate.
             return url
-        kwargs.update(self.hosts)
+        kwargs.update(self._hosts)
         return url % kwargs
 
     @property
@@ -239,8 +389,8 @@ class OverdriveAPI(object):
         return self._collection_token
 
     @property
-    def collection(self):
-        return Collection.by_id(self._db, id=self.collection_id)
+    def collection(self) -> Optional[Collection]:
+        return Collection.by_id(self._db, id=self._collection_id)
 
     @property
     def source(self):
@@ -248,26 +398,19 @@ class OverdriveAPI(object):
 
     def ils_name(self, library):
         """Determine the ILS name to use for the given Library."""
-        return self.ils_name_setting(
-            self._db, self.collection, library
-        ).value_or_default(self.ILS_NAME_DEFAULT)
-
-    @classmethod
-    def ils_name_setting(cls, _db, collection, library):
-        """Find the ConfigurationSetting controlling the ILS name
-        for the given collection and library.
-        """
-        return ConfigurationSetting.for_library_and_externalintegration(
-            _db, cls.ILS_NAME_KEY, library, collection.external_integration
-        )
+        config = self.integration_configuration().for_library(library.id)
+        if not config:
+            return self.ILS_NAME_DEFAULT
+        return config.settings.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
 
     @property
     def advantage_library_id(self):
         """The library ID for this library, as we should look for it in
         certain API documents served by Overdrive.
 
-        For ordinary collections, and for consortial collections
-        shared among libraries, this will be -1.
+        For ordinary collections (ie non-Advantage) with or without associated
+        Advantage (ie child) collections shared among libraries, this will be
+        equal to the OVERDRIVE_MAIN_ACCOUNT_ID.
 
         For Overdrive Advantage accounts, this will be the numeric
         value of the Overdrive library ID.
@@ -276,9 +419,9 @@ class OverdriveAPI(object):
             # This is not an Overdrive Advantage collection.
             #
             # Instead of looking for the library ID itself in these
-            # documents, we should look for the constant -1.
-            return -1
-        return int(self.library_id)
+            # documents, we should look for the constant main account id.
+            return self.OVERDRIVE_MAIN_ACCOUNT_ID
+        return int(self._library_id)
 
     def check_creds(self, force_refresh=False):
         """If the Bearer Token has expired, update it."""
@@ -316,11 +459,20 @@ class OverdriveAPI(object):
         self._update_credential(credential, data)
         self._token = credential.credential
 
-    def get(self, url, extra_headers, exception_on_401=False):
+    def get(
+        self, url: str, extra_headers={}, exception_on_401=False
+    ) -> Tuple[int, CaseInsensitiveDict, bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
-        headers = dict(Authorization="Bearer %s" % self.token)
-        headers.update(extra_headers)
-        status_code, headers, content = self._do_get(url, headers)
+        request_headers = dict(Authorization="Bearer %s" % self.token)
+        request_headers.update(extra_headers)
+
+        response: Response = self._do_get(
+            url, request_headers, allowed_response_codes=["2xx", "3xx", "401", "404"]
+        )
+        status_code: int = response.status_code
+        headers: CaseInsensitiveDict = response.headers
+        content: bytes = response.content
+
         if status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
@@ -337,24 +489,56 @@ class OverdriveAPI(object):
             return status_code, headers, content
 
     @property
-    def token_authorization_header(self):
-        s = b"%s:%s" % (self.client_key, self.client_secret)
+    def token_authorization_header(self) -> str:
+        s = b"%s:%s" % (self.client_key(), self.client_secret())
         return "Basic " + base64.standard_b64encode(s).strip()
 
-    def token_post(self, url, payload, headers={}, **kwargs):
+    @property
+    def fulfillment_authorization_header(self) -> str:
+        is_test_mode = (
+            True
+            if self._server_nickname == OverdriveConstants.TESTING_SERVERS
+            else False
+        )
+        try:
+            client_credentials = Configuration.overdrive_fulfillment_keys(
+                testing=is_test_mode
+            )
+        except CannotLoadConfiguration as e:
+            raise CannotFulfill(*e.args)
+
+        s = b"%s:%s" % (
+            client_credentials["key"].encode(),
+            client_credentials["secret"].encode(),
+        )
+        return "Basic " + base64.standard_b64encode(s).strip()
+
+    def token_post(
+        self,
+        url: str,
+        payload: Dict[str, str],
+        is_fulfillment=False,
+        headers={},
+        **kwargs,
+    ) -> Response:
         """Make an HTTP POST request for purposes of getting an OAuth token."""
         headers = dict(headers)
-        headers["Authorization"] = self.token_authorization_header
+        headers["Authorization"] = (
+            self.token_authorization_header
+            if not is_fulfillment
+            else self.fulfillment_authorization_header
+        )
         return self._do_post(url, payload, headers, **kwargs)
 
-    def _update_credential(self, credential, overdrive_data):
+    @staticmethod
+    def _update_credential(credential, overdrive_data):
         """Copy Overdrive OAuth data into a Credential object."""
         credential.credential = overdrive_data["access_token"]
         expires_in = overdrive_data["expires_in"] * 0.9
         credential.expires = utc_now() + datetime.timedelta(seconds=expires_in)
 
     @property
-    def _library_endpoint(self):
+    def _library_endpoint(self) -> str:
         """Which URL should we go to to get information about this collection?
 
         If this is an ordinary Overdrive account, we get information
@@ -363,7 +547,7 @@ class OverdriveAPI(object):
         If this is an Overdrive Advantage account, we get information
         from LIBRARY_ADVANTAGE_ENDPOINT.
         """
-        args = dict(library_id=self.library_id)
+        args = dict(library_id=self._library_id)
         if self.parent_library_id:
             # This is an Overdrive advantage account.
             args["parent_library_id"] = self.parent_library_id
@@ -418,11 +602,10 @@ class OverdriveAPI(object):
         while next_link:
             page_inventory, next_link = self._get_book_list_page(next_link, "next")
 
-            for i in page_inventory:
-                yield i
+            yield from page_inventory
 
     @property
-    def _all_products_link(self):
+    def _all_products_link(self) -> str:
         url = self.endpoint(
             self.ALL_PRODUCTS_ENDPOINT,
             collection_token=self.collection_token,
@@ -478,8 +661,7 @@ class OverdriveAPI(object):
             # because we don't know if anything changed, but we will
             # be putting them on the list of inventory items to
             # refresh. At that point we will send out events.
-            for i in page_inventory:
-                yield i
+            yield from page_inventory
 
     def metadata_lookup(self, identifier):
         """Look up metadata for an Overdrive identifier."""
@@ -505,7 +687,7 @@ class OverdriveAPI(object):
         return OverdriveRepresentationExtractor.book_info_to_metadata(content)
 
     @classmethod
-    def make_link_safe(self, url):
+    def make_link_safe(cls, url: str) -> str:
         """Turn a server-provided link into a link the server will accept!
 
         The {} part is completely obnoxious and I have complained about it to
@@ -529,113 +711,37 @@ class OverdriveAPI(object):
         parts[3] = query_string
         return urlunsplit(tuple(parts))
 
-    def _do_get(self, url, headers):
+    def _do_get(self, url: str, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        return Representation.simple_http_get(url, headers)
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
+        kwargs["timeout"] = 120
+        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
-    def _do_post(self, url, payload, headers, **kwargs):
+    def _do_post(self, url: str, payload, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
+        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
+        kwargs["timeout"] = 120
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
+    def website_id(self) -> bytes:
+        return self._configuration.overdrive_website_id.encode("utf-8")
 
-class MockOverdriveAPI(OverdriveAPI):
-    @classmethod
-    def mock_collection(
-        self,
-        _db,
-        library=None,
-        name="Test Overdrive Collection",
-        client_key="a",
-        client_secret="b",
-        library_id="c",
-        website_id="d",
-        ils_name="e",
-    ):
-        """Create a mock Overdrive collection for use in tests."""
-        if library is None:
-            library = DatabaseTest.make_default_library(_db)
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(external_account_id=library_id),
-        )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.OVERDRIVE
-        )
-        integration.username = client_key
-        integration.password = client_secret
-        integration.set_setting("website_id", website_id)
-        library.collections.append(collection)
-        OverdriveAPI.ils_name_setting(_db, collection, library).value = ils_name
-        return collection
+    def client_key(self) -> bytes:
+        return self._configuration.overdrive_client_key.encode("utf-8")
 
-    def __init__(self, _db, collection, *args, **kwargs):
-        self.access_token_requests = []
-        self.requests = []
-        self.responses = []
+    def client_secret(self) -> bytes:
+        return self._configuration.overdrive_client_secret.encode("utf-8")
 
-        # Almost all tests will try to request the access token, so
-        # set the response that will be returned if an attempt is
-        # made.
-        self.access_token_response = self.mock_access_token_response("bearer token")
-        super(MockOverdriveAPI, self).__init__(_db, collection, *args, **kwargs)
+    def library_id(self) -> str:
+        return self._library_id
 
-    def queue_collection_token(self):
-        # Many tests immediately try to access the
-        # collection token. This is a helper method to make it easy to
-        # queue up the response.
-        self.queue_response(200, content=self.mock_collection_token("collection token"))
-
-    def token_post(self, url, payload, headers={}, **kwargs):
-        """Mock the request for an OAuth token.
-
-        We mock the method by looking at the access_token_response
-        property, rather than inserting a mock response in the queue,
-        because only the first MockOverdriveAPI instantiation in a
-        given test actually makes this call. By mocking the response
-        to this method separately we remove the need to figure out
-        whether to queue a response in a given test.
-        """
-        url = self.endpoint(url)
-        self.access_token_requests.append((url, payload, headers, kwargs))
-        response = self.access_token_response
-        return HTTP._process_response(url, response, **kwargs)
-
-    def mock_access_token_response(self, credential):
-        token = dict(access_token=credential, expires_in=3600)
-        return MockRequestsResponse(200, {}, json.dumps(token))
-
-    def mock_collection_token(self, token):
-        return json.dumps(dict(collectionToken=token))
-
-    def queue_response(self, status_code, headers={}, content=None):
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _do_get(self, url, *args, **kwargs):
-        """Simulate Representation.simple_http_get."""
-        response = self._make_request(url, *args, **kwargs)
-        return response.status_code, response.headers, response.content
-
-    def _do_post(self, url, *args, **kwargs):
-        return self._make_request(url, *args, **kwargs)
-
-    def _make_request(self, url, *args, **kwargs):
-        url = self.endpoint(url)
-        response = self.responses.pop()
-        self.requests.append((url, args, kwargs))
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
+    def hosts(self) -> Dict[str, str]:
+        return dict(self._hosts)
 
 
-class OverdriveRepresentationExtractor(object):
-
+class OverdriveRepresentationExtractor:
     """Extract useful information from Overdrive's JSON representations."""
 
     log = logging.getLogger("Overdrive representation extractor")
@@ -675,7 +781,7 @@ class OverdriveRepresentationExtractor(object):
             links = product.get("links", [])
             if "availability" in links:
                 link = links["availability"]["href"]
-                data["availability_link"] = OverdriveAPI.make_link_safe(link)
+                data["availability_link"] = OverdriveCoreAPI.make_link_safe(link)
             else:
                 logging.getLogger("Overdrive API").warning(
                     "No availability link for %s", book_id
@@ -687,7 +793,7 @@ class OverdriveRepresentationExtractor(object):
     def link(self, page, rel):
         if "links" in page and rel in page["links"]:
             raw_link = page["links"][rel]["href"]
-            link = OverdriveAPI.make_link_safe(raw_link)
+            link = OverdriveCoreAPI.make_link_safe(raw_link)
         else:
             link = None
         return link
@@ -736,6 +842,18 @@ class OverdriveRepresentationExtractor(object):
         ),
     }
 
+    # A mapping of the overdrive format name to end sample content type
+    # Overdrive samples are not DRM protected so the links should be
+    # stored as the end sample content type
+    sample_format_to_content_type = {
+        "ebook-overdrive": "text/html",
+        "audiobook-wma": "audio/x-ms-wma",
+        "audiobook-mp3": "audio/mpeg",
+        "audiobook-overdrive": "text/html",
+        "ebook-epub-adobe": "application/epub+zip",
+        "magazine-overdrive": "text/html",
+    }
+
     @classmethod
     def internal_formats(cls, overdrive_format):
         """Yield all internal formats for the given Overdrive format.
@@ -748,12 +866,11 @@ class OverdriveRepresentationExtractor(object):
         if not result:
             return
         if isinstance(result, list):
-            for i in result:
-                yield i
+            yield from result
         else:
             yield result
 
-    ignorable_overdrive_formats = set([])
+    ignorable_overdrive_formats: Set[str] = set()
 
     overdrive_role_to_simplified_role = {
         "actor": Contributor.ACTOR_ROLE,
@@ -864,24 +981,18 @@ class OverdriveRepresentationExtractor(object):
             patrons_in_hold_queue = 0
         elif book.get("isOwnedByCollections") is not False:
             # We own this book.
-            for account in book.get("accounts", []):
-                # Only keep track of copies owned by the collection
-                # we're tracking.
-                if account.get("id") != self.library_id:
-                    continue
+            licenses_owned = 0
+            licenses_available = 0
 
-                if "copiesOwned" in account:
-                    if licenses_owned is None:
-                        licenses_owned = 0
-                    licenses_owned += int(account["copiesOwned"])
-                if "copiesAvailable" in account:
-                    if licenses_available is None:
-                        licenses_available = 0
-                    licenses_available += int(account["copiesAvailable"])
+            for account in self._get_applicable_accounts(book.get("accounts", [])):
+                licenses_owned += int(account.get("copiesOwned", 0))
+                licenses_available += int(account.get("copiesAvailable", 0))
+
             if "numberOfHolds" in book:
                 if patrons_in_hold_queue is None:
                     patrons_in_hold_queue = 0
                 patrons_in_hold_queue += book["numberOfHolds"]
+
         return CirculationData(
             data_source=DataSource.OVERDRIVE,
             primary_identifier=primary_identifier,
@@ -890,6 +1001,41 @@ class OverdriveRepresentationExtractor(object):
             licenses_reserved=licenses_reserved,
             patrons_in_hold_queue=patrons_in_hold_queue,
         )
+
+    def _get_applicable_accounts(
+        self, accounts: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns those accounts from the accounts array that apply the
+        current overdrive collection context.
+
+        If this is an overdrive parent collection, we want to return accounts
+        associated with the main OverDrive "library" and any non-main account
+        with sharing enabled.
+
+        If this is a child OverDrive collection, then we return only the
+        account associated with that child's OverDrive Advantage "library".
+        Additionally, we want to exclude the account if it is "shared" since
+        we will be counting it with the parent collection.
+        """
+
+        if self.library_id == OverdriveCoreAPI.OVERDRIVE_MAIN_ACCOUNT_ID:
+            # this is a parent collection
+            filtered_result = filter(
+                lambda account: account.get("id")
+                == OverdriveCoreAPI.OVERDRIVE_MAIN_ACCOUNT_ID
+                or account.get("shared", False),
+                accounts,
+            )
+        else:
+            # this is child collection
+            filtered_result = filter(
+                lambda account: account.get("id") == self.library_id
+                and not account.get("shared", False),
+                accounts,
+            )
+
+        return list(filtered_result)
 
     @classmethod
     def image_link_to_linkdata(cls, link, rel):
@@ -901,7 +1047,7 @@ class OverdriveRepresentationExtractor(object):
             # to have a cover at all -- we might be able to get one
             # later, or from another source.
             return None
-        href = OverdriveAPI.make_link_safe(href)
+        href = OverdriveCoreAPI.make_link_safe(href)
         media_type = link.get("type", None)
         return LinkData(rel=rel, href=href, media_type=media_type)
 
@@ -1041,6 +1187,7 @@ class OverdriveRepresentationExtractor(object):
 
             identifiers = []
             links = []
+            sample_hrefs = set()
             for format in book.get("formats", []):
                 for new_id in format.get("identifiers", []):
                     t = new_id["type"]
@@ -1073,22 +1220,36 @@ class OverdriveRepresentationExtractor(object):
 
                 # Samples become links.
                 if "samples" in format:
-                    overdrive_name = format["id"]
-                    internal_names = list(cls.internal_formats(overdrive_name))
-                    if not internal_names:
-                        # Useless to us.
-                        continue
-                    for content_type, drm_scheme in internal_names:
+                    for sample_info in format["samples"]:
+                        href = sample_info["url"]
+                        # Have we already parsed this sample? Overdrive repeats samples per format
+                        if href in sample_hrefs:
+                            continue
+
+                        # Every sample has its own format type
+                        overdrive_format_name = sample_info.get("formatType")
+                        if not overdrive_format_name:
+                            # Malformed sample
+                            continue
+                        content_type = cls.sample_format_to_content_type.get(
+                            overdrive_format_name
+                        )
+                        if not content_type:
+                            # Unusable by us.
+                            cls.log.warning(
+                                f"Did not find a sample format mapping for '{overdrive_format_name}': {href}"
+                            )
+                            continue
+
                         if Representation.is_media_type(content_type):
-                            for sample_info in format["samples"]:
-                                href = sample_info["url"]
-                                links.append(
-                                    LinkData(
-                                        rel=Hyperlink.SAMPLE,
-                                        href=href,
-                                        media_type=content_type,
-                                    )
+                            links.append(
+                                LinkData(
+                                    rel=Hyperlink.SAMPLE,
+                                    href=href,
+                                    media_type=content_type,
                                 )
+                            )
+                            sample_hrefs.add(href)
 
             # A cover and its thumbnail become a single LinkData.
             if "images" in book:
@@ -1201,20 +1362,22 @@ class OverdriveRepresentationExtractor(object):
         return metadata
 
 
-class OverdriveAdvantageAccount(object):
+class OverdriveAdvantageAccount:
     """Holder and parser for data associated with Overdrive Advantage."""
 
-    def __init__(self, parent_library_id, library_id, name):
+    def __init__(self, parent_library_id: int, library_id: int, name: str, token: str):
         """Constructor.
 
         :param parent_library_id: The library ID of the parent Overdrive
             account.
         :param library_id: The library ID of the Overdrive Advantage account.
         :param name: The name of the library whose Advantage account this is.
+        :param token: The collection token for this Advantage account
         """
         self.parent_library_id = parent_library_id
         self.library_id = library_id
         self.name = name
+        self.token = token
 
     @classmethod
     def from_representation(cls, content):
@@ -1233,7 +1396,13 @@ class OverdriveAdvantageAccount(object):
             products_link = account["links"]["products"]["href"]
             library_id = str(account.get("id"))
             name = account.get("name")
-            yield cls(parent_library_id=parent_id, library_id=library_id, name=name)
+            token = account.get("collectionToken")
+            yield cls(
+                parent_library_id=parent_id,
+                library_id=library_id,
+                name=name,
+                token=token,
+            )
 
     def to_collection(self, _db):
         """Find or create a Collection object for this Overdrive Advantage
@@ -1267,6 +1436,9 @@ class OverdriveAdvantageAccount(object):
             integration = child.create_external_integration(
                 ExternalIntegration.OVERDRIVE
             )
+            configuration = child.create_integration_configuration(
+                ExternalIntegration.OVERDRIVE
+            )
 
         # Set or update the name of the collection to reflect the name of
         # the library, just in case that name has changed.
@@ -1287,7 +1459,7 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
     PROTOCOL = ExternalIntegration.OVERDRIVE
     INPUT_IDENTIFIER_TYPES = Identifier.OVERDRIVE_ID
 
-    def __init__(self, collection, api_class=OverdriveAPI, **kwargs):
+    def __init__(self, collection, api_class=OverdriveCoreAPI, **kwargs):
         """Constructor.
 
         :param collection: Provide bibliographic coverage to all
@@ -1295,10 +1467,8 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
         :param api_class: Instantiate this class with the given Collection,
             rather than instantiating OverdriveAPI.
         """
-        super(OverdriveBibliographicCoverageProvider, self).__init__(
-            collection, **kwargs
-        )
-        if isinstance(api_class, OverdriveAPI):
+        super().__init__(collection, **kwargs)
+        if isinstance(api_class, OverdriveCoreAPI):
             # Use a previously instantiated OverdriveAPI instance
             # rather than creating a new one.
             self.api = api_class

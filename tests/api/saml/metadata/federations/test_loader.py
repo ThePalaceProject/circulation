@@ -11,15 +11,15 @@ from api.saml.metadata.federations.loader import (
 from api.saml.metadata.federations.model import SAMLFederation
 from api.saml.metadata.federations.validator import SAMLFederatedMetadataValidator
 from api.saml.metadata.parser import SAMLMetadataParser
-from tests.api.saml import fixtures
+from tests.api.saml import saml_strings
 
 
-class TestSAMLMetadataLoader(object):
+class TestSAMLMetadataLoader:
     @patch("urllib.request.urlopen")
     def test_load_idp_metadata_raises_error_when_xml_is_incorrect(self, urlopen_mock):
         # Arrange
         url = "http://md.incommon.org/InCommon/metadata.xml"
-        incorrect_xml = fixtures.INCORRECT_XML
+        incorrect_xml = saml_strings.INCORRECT_XML
         urlopen_response_mock = MagicMock()
         urlopen_response_mock.read = MagicMock(return_value=incorrect_xml)
         urlopen_mock.return_value = urlopen_response_mock
@@ -33,7 +33,7 @@ class TestSAMLMetadataLoader(object):
     def test_load_idp_metadata_correctly_loads_one_descriptor(self, urlopen_mock):
         # Arrange
         url = "http://md.incommon.org/InCommon/metadata.xml"
-        incorrect_xml = fixtures.CORRECT_XML_WITH_IDP_1
+        incorrect_xml = saml_strings.CORRECT_XML_WITH_IDP_1
         urlopen_response_mock = MagicMock()
         urlopen_response_mock.read = MagicMock(return_value=incorrect_xml)
         urlopen_mock.return_value = urlopen_response_mock
@@ -44,13 +44,13 @@ class TestSAMLMetadataLoader(object):
 
         # Assert
         urlopen_mock.assert_called_with(url, timeout=None)
-        assert fixtures.CORRECT_XML_WITH_IDP_1 == xml_metadata
+        assert saml_strings.CORRECT_XML_WITH_IDP_1 == xml_metadata
 
     @patch("urllib.request.urlopen")
     def test_load_idp_metadata_correctly_loads_multiple_descriptors(self, urlopen_mock):
         # Arrange
         url = "http://md.incommon.org/InCommon/metadata.xml"
-        incorrect_xml = fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS
+        incorrect_xml = saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
         urlopen_response_mock = MagicMock()
         urlopen_response_mock.read = MagicMock(return_value=incorrect_xml)
         urlopen_mock.return_value = urlopen_response_mock
@@ -61,15 +61,15 @@ class TestSAMLMetadataLoader(object):
 
         # Assert
         urlopen_mock.assert_called_with(url, timeout=None)
-        assert fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS == xml_metadata
+        assert saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS == xml_metadata
 
 
-class TestSAMLFederatedIdentityProviderLoader(object):
+class TestSAMLFederatedIdentityProviderLoader:
     def test_load(self):
         # Arrange
         federation_type = incommon.FEDERATION_TYPE
         federation_idp_metadata_service_url = incommon.IDP_METADATA_SERVICE_URL
-        xml_metadata = fixtures.CORRECT_XML_WITH_MULTIPLE_IDPS
+        xml_metadata = saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
 
         metadata_loader = create_autospec(spec=SAMLMetadataLoader)
         metadata_validator = create_autospec(spec=SAMLFederatedMetadataValidator)
@@ -90,12 +90,12 @@ class TestSAMLFederatedIdentityProviderLoader(object):
         # Assert
         assert 2 == len(idps)
 
-        assert fixtures.IDP_1_ENTITY_ID == idps[0].entity_id
-        assert fixtures.IDP_1_UI_INFO_EN_DISPLAY_NAME == idps[0].display_name
+        assert saml_strings.IDP_1_ENTITY_ID == idps[0].entity_id
+        assert saml_strings.IDP_1_UI_INFO_EN_DISPLAY_NAME == idps[0].display_name
         assert saml_federation == idps[0].federation
 
-        assert fixtures.IDP_2_ENTITY_ID == idps[1].entity_id
-        assert fixtures.IDP_2_UI_INFO_EN_DISPLAY_NAME == idps[1].display_name
+        assert saml_strings.IDP_2_ENTITY_ID == idps[1].entity_id
+        assert saml_strings.IDP_2_UI_INFO_EN_DISPLAY_NAME == idps[1].display_name
         assert saml_federation == idps[1].federation
 
         metadata_loader.load_idp_metadata.assert_called_once_with(

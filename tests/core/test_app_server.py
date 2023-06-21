@@ -1,17 +1,19 @@
 import gzip
 import json
-import os
 from io import BytesIO
+from typing import Iterable
 
 import flask
-from flask import Flask
+import pytest
+from flask import Flask, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
+import core
+from api.admin.config import Configuration as AdminUiConfig
 from core.app_server import (
-    ComplaintController,
+    ApplicationVersionController,
     ErrorHandler,
-    HeartbeatController,
     URNLookupController,
     URNLookupHandler,
     compressible,
@@ -25,144 +27,242 @@ from core.log import LogConfiguration
 from core.model import ConfigurationSetting, Identifier
 from core.opds import MockAnnotator
 from core.problem_details import INVALID_INPUT, INVALID_URN
-from core.testing import DatabaseTest
 from core.util.opds_writer import OPDSFeed, OPDSMessage
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestHeartbeatController(object):
-    def test_heartbeat(self):
+class TestApplicationVersionController:
+    @pytest.mark.parametrize(
+        "version,commit,branch,ui_version,ui_package",
+        [("123", "xyz", "abc", "def", "ghi"), (None, None, None, None, None)],
+    )
+    def test_version(
+        self, version, commit, branch, ui_version, ui_package, monkeypatch
+    ):
         app = Flask(__name__)
-        controller = HeartbeatController()
 
+        # Mock the cm version strings
+        monkeypatch.setattr(core, "__version__", version)
+        monkeypatch.setattr(core, "__commit__", commit)
+        monkeypatch.setattr(core, "__branch__", branch)
+
+        # Mock the admin ui version strings
+        if ui_package is not None:
+            monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, ui_package)
+        else:
+            monkeypatch.delenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_NAME, raising=False)
+
+        if ui_version is not None:
+            monkeypatch.setenv(AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, ui_version)
+        else:
+            monkeypatch.delenv(
+                AdminUiConfig.ENV_ADMIN_UI_PACKAGE_VERSION, raising=False
+            )
+
+        controller = ApplicationVersionController()
         with app.test_request_context("/"):
-            response = controller.heartbeat()
-        assert 200 == response.status_code
-        assert controller.HEALTH_CHECK_TYPE == response.headers.get("Content-Type")
-        data = json.loads(response.data.decode("utf8"))
-        assert "pass" == data["status"]
+            response = make_response(controller.version())
 
-        # Create a .version file.
-        root_dir = os.path.join(os.path.split(__file__)[0], "..", "..")
-        version_filename = os.path.join(root_dir, controller.VERSION_FILENAME)
-        with open(version_filename, "w") as f:
-            f.write("ba.na.na-10-ssssssssss")
+        assert response.status_code == 200
+        assert response.headers.get("Content-Type") == "application/json"
 
-        # Create a mock configuration object to test with.
-        class MockConfiguration(Configuration):
-            instance = dict()
+        assert response.json["version"] == version
+        assert response.json["commit"] == commit
+        assert response.json["branch"] == branch
 
-        with app.test_request_context("/"):
-            response = controller.heartbeat(conf_class=MockConfiguration)
-        if os.path.exists(version_filename):
-            os.remove(version_filename)
-
-        assert 200 == response.status_code
-        content_type = response.headers.get("Content-Type")
-        assert controller.HEALTH_CHECK_TYPE == content_type
-
-        data = json.loads(response.data.decode("utf8"))
-        assert "pass" == data["status"]
-        assert "ba.na.na" == data["version"]
-        assert "ba.na.na-10-ssssssssss" == data["releaseID"]
+        # When the env are not set (None) we use defaults
+        assert (
+            response.json["admin_ui"]["package"] == ui_package
+            if ui_package
+            else AdminUiConfig.PACKAGE_NAME
+        )
+        assert (
+            response.json["admin_ui"]["version"] == ui_version
+            if ui_version
+            else AdminUiConfig.PACKAGE_VERSION
+        )
 
 
-class TestURNLookupHandler(DatabaseTest):
-    def setup_method(self):
-        super(TestURNLookupHandler, self).setup_method()
-        self.handler = URNLookupHandler(self._db)
+class URNLookupHandlerFixture:
+    transaction: DatabaseTransactionFixture
+    handler: URNLookupHandler
 
-    def assert_one_message(self, urn, code, message):
+
+@pytest.fixture()
+def urn_lookup_handler_fixture(
+    db: DatabaseTransactionFixture,
+) -> URNLookupHandlerFixture:
+    data = URNLookupHandlerFixture()
+    data.transaction = db
+    data.handler = URNLookupHandler(db.session)
+    return data
+
+
+class TestURNLookupHandler:
+    @staticmethod
+    def assert_one_message(urn, code, message, fix: URNLookupHandlerFixture):
         """Assert that the given message is the only thing
         in the feed.
         """
-        [obj] = self.handler.precomposed_entries
+        [obj] = fix.handler.precomposed_entries
         expect = OPDSMessage(urn, code, message)
         assert isinstance(obj, OPDSMessage)
         assert urn == obj.urn
         assert code == obj.status_code
         assert message == obj.message
-        assert [] == self.handler.works
+        assert [] == fix.handler.works
 
-    def test_process_urns_hook_method(self):
+    def test_process_urns_hook_method(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
+
         # Verify that process_urns() calls post_lookup_hook() once
         # it's done.
         class Mock(URNLookupHandler):
             def post_lookup_hook(self):
                 self.called = True
 
-        handler = Mock(self._db)
+        handler = Mock(session)
         handler.process_urns([])
         assert True == handler.called
 
-    def test_process_urns_invalid_urn(self):
-        urn = "not even a URN"
-        self.handler.process_urns([urn])
-        self.assert_one_message(urn, 400, INVALID_URN.detail)
+    def test_process_urns_invalid_urn(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
 
-    def test_process_urns_unrecognized_identifier(self):
+        urn = "not even a URN"
+        data.handler.process_urns([urn])
+        self.assert_one_message(urn, 400, INVALID_URN.detail, data)
+
+    def test_process_urns_unrecognized_identifier(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
+
         # Give the handler a URN that, although valid, doesn't
         # correspond to any Identifier in the database.
         urn = Identifier.GUTENBERG_URN_SCHEME_PREFIX + "Gutenberg%20ID/000"
-        self.handler.process_urns([urn])
+        data.handler.process_urns([urn])
 
         # The result is a 404 message.
-        self.assert_one_message(urn, 404, self.handler.UNRECOGNIZED_IDENTIFIER)
+        self.assert_one_message(urn, 404, data.handler.UNRECOGNIZED_IDENTIFIER, data)
 
-    def test_process_identifier_no_license_pool(self):
+    def test_process_identifier_no_license_pool(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
+
         # Give the handler a URN that corresponds to an Identifier
         # which has no LicensePool.
-        identifier = self._identifier()
-        self.handler.process_identifier(identifier, identifier.urn)
+        identifier = data.transaction.identifier()
+        data.handler.process_identifier(identifier, identifier.urn)
 
         # The result is a 404 message.
         self.assert_one_message(
-            identifier.urn, 404, self.handler.UNRECOGNIZED_IDENTIFIER
+            identifier.urn, 404, data.handler.UNRECOGNIZED_IDENTIFIER, data
         )
 
-    def test_process_identifier_license_pool_but_no_work(self):
-        edition, pool = self._edition(with_license_pool=True)
-        identifier = edition.primary_identifier
-        self.handler.process_identifier(identifier, identifier.urn)
-        self.assert_one_message(identifier.urn, 202, self.handler.WORK_NOT_CREATED)
+    def test_process_identifier_license_pool_but_no_work(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
 
-    def test_process_identifier_work_not_presentation_ready(self):
-        work = self._work(with_license_pool=True)
+        edition, pool = data.transaction.edition(with_license_pool=True)
+        identifier = edition.primary_identifier
+        data.handler.process_identifier(identifier, identifier.urn)
+        self.assert_one_message(
+            identifier.urn, 202, data.handler.WORK_NOT_CREATED, data
+        )
+
+    def test_process_identifier_work_not_presentation_ready(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
+
+        work = data.transaction.work(with_license_pool=True)
         work.presentation_ready = False
         identifier = work.license_pools[0].identifier
-        self.handler.process_identifier(identifier, identifier.urn)
+        data.handler.process_identifier(identifier, identifier.urn)
 
         self.assert_one_message(
-            identifier.urn, 202, self.handler.WORK_NOT_PRESENTATION_READY
+            identifier.urn, 202, data.handler.WORK_NOT_PRESENTATION_READY, data
         )
 
-    def test_process_identifier_work_is_presentation_ready(self):
-        work = self._work(with_license_pool=True)
+    def test_process_identifier_work_is_presentation_ready(
+        self, urn_lookup_handler_fixture: URNLookupHandlerFixture
+    ):
+        data, session = (
+            urn_lookup_handler_fixture,
+            urn_lookup_handler_fixture.transaction.session,
+        )
+
+        work = data.transaction.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
-        self.handler.process_identifier(identifier, identifier.urn)
-        assert [] == self.handler.precomposed_entries
+        data.handler.process_identifier(identifier, identifier.urn)
+        assert [] == data.handler.precomposed_entries
         assert [
             (work.presentation_edition.primary_identifier, work)
-        ] == self.handler.works
+        ] == data.handler.works
 
 
-class TestURNLookupController(DatabaseTest):
-    def setup_method(self):
-        super(TestURNLookupController, self).setup_method()
-        self.controller = URNLookupController(self._db)
+class URNLookupControllerFixture:
+    transaction: DatabaseTransactionFixture
+    controller: URNLookupController
+    app: Flask
 
-    # Set up a mock Flask app for testing the controller methods.
-    app = Flask(__name__)
-
-    @app.route("/lookup")
     def lookup(self, urn):
         pass
 
-    @app.route("/work")
     def work(self, urn):
         pass
 
-    def test_work_lookup(self):
-        work = self._work(with_license_pool=True)
+
+@pytest.fixture()
+def urn_lookup_controller_fixture(
+    db,
+) -> Iterable[URNLookupControllerFixture]:
+    data = URNLookupControllerFixture()
+    data.transaction = db
+    data.controller = URNLookupController(db.session)
+    data.app = Flask(URNLookupControllerFixture.__name__)
+
+    # Register endpoints manually, because using decorators seems to
+    # have scope-related issues when used in fixtures.
+    data.app.add_url_rule(rule="/lookup", endpoint="lookup", view_func=data.lookup)
+    data.app.add_url_rule(rule="/work", endpoint="work", view_func=data.work)
+    yield data
+
+
+class TestURNLookupController:
+    def test_work_lookup(
+        self, urn_lookup_controller_fixture: URNLookupControllerFixture
+    ):
+        data, session = (
+            urn_lookup_controller_fixture,
+            urn_lookup_controller_fixture.transaction.session,
+        )
+
+        work = data.transaction.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
         annotator = MockAnnotator()
         # NOTE: We run this test twice to verify that the controller
@@ -170,8 +270,8 @@ class TestURNLookupController(DatabaseTest):
         # was a bug which would have caused a book to show up twice on
         # the second request.
         for i in range(2):
-            with self.app.test_request_context("/?urn=%s" % identifier.urn):
-                response = self.controller.work_lookup(annotator=annotator)
+            with data.app.test_request_context("/?urn=%s" % identifier.urn):
+                response = data.controller.work_lookup(annotator=annotator)
 
                 # We got an OPDS feed that includes an entry for the work.
                 assert 200 == response.status_code
@@ -182,25 +282,37 @@ class TestURNLookupController(DatabaseTest):
                 assert identifier.urn in response_data
                 assert 1 == response_data.count(work.title)
 
-    def test_process_urns_problem_detail(self):
+    def test_process_urns_problem_detail(
+        self, urn_lookup_controller_fixture: URNLookupControllerFixture
+    ):
+        data, session = (
+            urn_lookup_controller_fixture,
+            urn_lookup_controller_fixture.transaction.session,
+        )
+
         # Verify the behavior of work_lookup in the case where
         # process_urns returns a problem detail.
         class Mock(URNLookupController):
             def process_urns(self, urns, **kwargs):
                 return INVALID_INPUT
 
-        controller = Mock(self._db)
-        with self.app.test_request_context("/?urn=foobar"):
+        controller = Mock(session)
+        with data.app.test_request_context("/?urn=foobar"):
             response = controller.work_lookup(annotator=object())
             assert INVALID_INPUT == response
 
-    def test_permalink(self):
-        work = self._work(with_license_pool=True)
+    def test_permalink(self, urn_lookup_controller_fixture: URNLookupControllerFixture):
+        data, session = (
+            urn_lookup_controller_fixture,
+            urn_lookup_controller_fixture.transaction.session,
+        )
+
+        work = data.transaction.work(with_license_pool=True)
         work.license_pools[0].open_access = False
         identifier = work.license_pools[0].identifier
         annotator = MockAnnotator()
-        with self.app.test_request_context("/?urn=%s" % identifier.urn):
-            response = self.controller.permalink(identifier.urn, annotator)
+        with data.app.test_request_context("/?urn=%s" % identifier.urn):
+            response = data.controller.permalink(identifier.urn, annotator)
 
             # We got an OPDS feed that includes an entry for the work.
             assert 200 == response.status_code
@@ -210,76 +322,41 @@ class TestURNLookupController(DatabaseTest):
             assert work.title in response_data
 
 
-class TestComplaintController(DatabaseTest):
-    def setup_method(self):
-        super(TestComplaintController, self).setup_method()
-        self.controller = ComplaintController()
-        self.edition, self.pool = self._edition(with_license_pool=True)
-        self.app = Flask(__name__)
-        Babel(self.app)
-
-    def test_no_license_pool(self):
-        with self.app.test_request_context("/"):
-            response = self.controller.register(None, "{}")
-        assert response.status.startswith("400")
-        body = json.loads(response.data.decode("utf8"))
-        assert "No license pool specified" == body["title"]
-
-    def test_invalid_document(self):
-        with self.app.test_request_context("/"):
-            response = self.controller.register(self.pool, "not {a} valid document")
-        assert response.status.startswith("400")
-        body = json.loads(response.data.decode("utf8"))
-        assert "Invalid problem detail document" == body["title"]
-
-    def test_invalid_type(self):
-        data = json.dumps({"type": "http://not-a-recognized-type/"})
-        with self.app.test_request_context("/"):
-            response = self.controller.register(self.pool, data)
-        assert response.status.startswith("400")
-        body = json.loads(response.data.decode("utf8"))
-        assert (
-            "Unrecognized problem type: http://not-a-recognized-type/" == body["title"]
-        )
-
-    def test_success(self):
-        data = json.dumps(
-            {
-                "type": "http://librarysimplified.org/terms/problem/wrong-genre",
-                "source": "foo",
-                "detail": "bar",
-            }
-        )
-        with self.app.test_request_context("/"):
-            response = self.controller.register(self.pool, data)
-        assert response.status.startswith("201")
-        [complaint] = self.pool.complaints
-        assert "foo" == complaint.source
-        assert "bar" == complaint.detail
+class LoadMethodsFixture:
+    transaction: DatabaseTransactionFixture
+    app: Flask
 
 
-class TestLoadMethods(DatabaseTest):
-    def setup_method(self):
-        super(TestLoadMethods, self).setup_method()
-        self.app = Flask(__name__)
-        Babel(self.app)
+@pytest.fixture()
+def load_methods_fixture(
+    db,
+) -> LoadMethodsFixture:
+    data = LoadMethodsFixture()
+    data.transaction = db
+    data.app = Flask(LoadMethodsFixture.__name__)
+    Babel(data.app)
+    return data
 
-    def test_load_facets_from_request(self):
+
+class TestLoadMethods:
+    def test_load_facets_from_request(self, load_methods_fixture: LoadMethodsFixture):
+        fixture, data = load_methods_fixture, load_methods_fixture.transaction
+
         # The library has two EntryPoints enabled.
-        self._default_library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
+        data.default_library().setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
             [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
         )
 
-        with self.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
-            flask.request.library = self._default_library
+        with fixture.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
+            flask.request.library = data.default_library()
             facets = load_facets_from_request()
             assert Facets.ORDER_TITLE == facets.order
             # Enabled facets are passed in to the newly created Facets,
             # in case the load method received a custom config.
             assert facets.facets_enabled_at_init != None
 
-        with self.app.test_request_context("/?order=bad_facet"):
-            flask.request.library = self._default_library
+        with fixture.app.test_request_context("/?order=bad_facet"):
+            flask.request.library = data.default_library()
             problemdetail = load_facets_from_request()
             assert INVALID_INPUT.uri == problemdetail.uri
 
@@ -287,17 +364,17 @@ class TestLoadMethods(DatabaseTest):
         # into the Facets object, assuming the EntryPoint is
         # configured on the present library.
         worklist = WorkList()
-        worklist.initialize(self._default_library)
-        with self.app.test_request_context("/?entrypoint=Audio"):
-            flask.request.library = self._default_library
+        worklist.initialize(data.default_library())
+        with fixture.app.test_request_context("/?entrypoint=Audio"):
+            flask.request.library = data.default_library()
             facets = load_facets_from_request(worklist=worklist)
             assert AudiobooksEntryPoint == facets.entrypoint
             assert False == facets.entrypoint_is_default
 
         # If the requested EntryPoint not configured, the default
         # EntryPoint is used.
-        with self.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
-            flask.request.library = self._default_library
+        with fixture.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
+            flask.request.library = data.default_library()
             default_entrypoint = object()
             facets = load_facets_from_request(
                 worklist=worklist, default_entrypoint=default_entrypoint
@@ -307,17 +384,21 @@ class TestLoadMethods(DatabaseTest):
 
         # Load a SearchFacets object that pulls information from an
         # HTTP header.
-        with self.app.test_request_context("/", headers={"Accept-Language": "ja"}):
-            flask.request.library = self._default_library
+        with fixture.app.test_request_context("/", headers={"Accept-Language": "ja"}):
+            flask.request.library = data.default_library()
             facets = load_facets_from_request(base_class=SearchFacets)
             assert ["jpn"] == facets.languages
 
-    def test_load_facets_from_request_class_instantiation(self):
+    def test_load_facets_from_request_class_instantiation(
+        self, load_methods_fixture: LoadMethodsFixture
+    ):
         """The caller of load_facets_from_request() can specify a class other
         than Facets to call from_request() on.
         """
 
-        class MockFacets(object):
+        fixture, data = load_methods_fixture, load_methods_fixture.transaction
+
+        class MockFacets:
             @classmethod
             def from_request(*args, **kwargs):
                 facets = MockFacets()
@@ -325,19 +406,23 @@ class TestLoadMethods(DatabaseTest):
                 return facets
 
         kwargs = dict(some_arg="some value")
-        with self.app.test_request_context(""):
-            flask.request.library = self._default_library
+        with fixture.app.test_request_context(""):
+            flask.request.library = data.default_library()
             facets = load_facets_from_request(
                 None, None, base_class=MockFacets, base_class_constructor_kwargs=kwargs
             )
         assert isinstance(facets, MockFacets)
         assert "some value" == facets.called_with["some_arg"]
 
-    def test_load_pagination_from_request(self):
-        # Verify that load_pagination_from_request insantiates a
+    def test_load_pagination_from_request(
+        self, load_methods_fixture: LoadMethodsFixture
+    ):
+        fixture = load_methods_fixture
+
+        # Verify that load_pagination_from_request instantiates a
         # pagination object of the specified class (Pagination, by
         # default.)
-        class Mock(object):
+        class Mock:
             DEFAULT_SIZE = 22
 
             @classmethod
@@ -345,7 +430,7 @@ class TestLoadMethods(DatabaseTest):
                 cls.called_with = (get_arg, default_size, kwargs)
                 return "I'm a pagination object!"
 
-        with self.app.test_request_context("/"):
+        with fixture.app.test_request_context("/"):
             # Call load_pagination_from_request and verify that
             # Mock.from_request was called with the arguments we expect.
             extra_kwargs = dict(extra="kwarg")
@@ -359,13 +444,13 @@ class TestLoadMethods(DatabaseTest):
 
         # If no default size is specified, we trust from_request to
         # use the class default.
-        with self.app.test_request_context("/"):
+        with fixture.app.test_request_context("/"):
             pagination = load_pagination_from_request(base_class=Mock)
             assert (flask.request.args.get, None, {}) == Mock.called_with
 
         # Now try a real case using the default pagination class,
         # Pagination
-        with self.app.test_request_context("/?size=50&after=10"):
+        with fixture.app.test_request_context("/?size=50&after=10"):
             pagination = load_pagination_from_request()
             assert isinstance(pagination, Pagination)
             assert 50 == pagination.size
@@ -387,38 +472,50 @@ class CanBeProblemDetailDocument(Exception):
         )
 
 
-class TestErrorHandler(DatabaseTest):
-    def setup_method(self):
-        super(TestErrorHandler, self).setup_method()
+class ErrorHandlerFixture:
+    transaction: DatabaseTransactionFixture
+    app: Flask
 
-        class MockManager(object):
-            """Simulate an application manager object such as
-            the circulation manager's CirculationManager.
 
-            This gives ErrorHandler access to a database connection.
-            """
+@pytest.fixture()
+def error_handler_fixture(
+    db,
+) -> ErrorHandlerFixture:
+    session = db.session
 
-            _db = self._db
+    class MockManager:
+        """Simulate an application manager object such as
+        the circulation manager's CirculationManager.
 
-        self.app = Flask(__name__)
-        self.app.manager = MockManager()
-        Babel(self.app)
+        This gives ErrorHandler access to a database connection.
+        """
 
-    def activate_debug_mode(self):
+        _db = session
+
+    data = ErrorHandlerFixture()
+    data.transaction = db
+    data.app = Flask(ErrorHandlerFixture.__name__)
+    data.app.manager = MockManager()
+    Babel(data.app)
+    return data
+
+
+class TestErrorHandler:
+    def activate_debug_mode(self, session):
         """Set a site-wide setting that controls whether
         detailed exception information is provided.
         """
         ConfigurationSetting.sitewide(
-            self._db, Configuration.DATABASE_LOG_LEVEL
+            session, Configuration.DATABASE_LOG_LEVEL
         ).value = LogConfiguration.DEBUG
 
     def raise_exception(self, cls=Exception):
         """Simulate an exception that happens deep within the stack."""
         raise cls()
 
-    def test_unhandled_error(self):
-        handler = ErrorHandler(self.app)
-        with self.app.test_request_context("/"):
+    def test_unhandled_error(self, error_handler_fixture: ErrorHandlerFixture):
+        handler = ErrorHandler(error_handler_fixture.app)
+        with error_handler_fixture.app.test_request_context("/"):
             response = None
             try:
                 self.raise_exception()
@@ -427,13 +524,13 @@ class TestErrorHandler(DatabaseTest):
             assert 500 == response.status_code
             assert "An internal error occured" == response.data.decode("utf8")
 
-    def test_unhandled_error_debug(self):
+    def test_unhandled_error_debug(self, error_handler_fixture: ErrorHandlerFixture):
         # Set the sitewide log level to DEBUG to get a stack trace
         # instead of a generic error message.
-        handler = ErrorHandler(self.app)
-        self.activate_debug_mode()
+        handler = ErrorHandler(error_handler_fixture.app)
+        self.activate_debug_mode(error_handler_fixture.transaction.session)
 
-        with self.app.test_request_context("/"):
+        with error_handler_fixture.app.test_request_context("/"):
             response = None
             try:
                 self.raise_exception()
@@ -442,9 +539,11 @@ class TestErrorHandler(DatabaseTest):
             assert 500 == response.status_code
             assert response.data.startswith(b"Traceback (most recent call last)")
 
-    def test_handle_error_as_problem_detail_document(self):
-        handler = ErrorHandler(self.app)
-        with self.app.test_request_context("/"):
+    def test_handle_error_as_problem_detail_document(
+        self, error_handler_fixture: ErrorHandlerFixture
+    ):
+        handler = ErrorHandler(error_handler_fixture.app)
+        with error_handler_fixture.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)
             except Exception as exception:
@@ -458,12 +557,14 @@ class TestErrorHandler(DatabaseTest):
             # destroyed.
             assert "debug_message" not in data
 
-    def test_handle_error_as_problem_detail_document_debug(self):
+    def test_handle_error_as_problem_detail_document_debug(
+        self, error_handler_fixture: ErrorHandlerFixture
+    ):
         # When in debug mode, the debug_message is preserved and a
         # stack trace is appended to it.
-        handler = ErrorHandler(self.app)
-        self.activate_debug_mode()
-        with self.app.test_request_context("/"):
+        handler = ErrorHandler(error_handler_fixture.app)
+        self.activate_debug_mode(error_handler_fixture.transaction.session)
+        with error_handler_fixture.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)
             except Exception as exception:
@@ -478,14 +579,12 @@ class TestErrorHandler(DatabaseTest):
             )
 
 
-class TestCompressibleAnnotator(object):
+class TestCompressibleAnnotator:
     """Test the @compressible annotator."""
-
-    def setup_class(self):
-        self.app = Flask(__name__)
 
     def test_compressible(self):
         # Test the @compressible annotator.
+        app = Flask(__name__)
 
         # Prepare a value and a gzipped version of the value.
         value = b"Compress me! (Or not.)"
@@ -516,9 +615,9 @@ class TestCompressibleAnnotator(object):
             headers = {}
             if compression:
                 headers[header] = compression
-            with self.app.test_request_context(headers=headers):
+            with app.test_request_context(headers=headers):
                 response = flask.Response(function())
-                self.app.process_response(response)
+                app.process_response(response)
                 return response
 
         # If the client asks for gzip through Accept-Encoding, the

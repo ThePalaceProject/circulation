@@ -1,18 +1,26 @@
-# encoding: utf-8
 """Test functionality of util/flask_util.py."""
 
 import datetime
 import time
 from wsgiref.handlers import format_date_time
 
+import pytest
 from flask import Response as FlaskResponse
+from flask_pydantic_spec.flask_backend import Context
+from flask_pydantic_spec.utils import parse_multi_dict
 
 from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
+from core.util.flask_util import (
+    OPDSEntryResponse,
+    OPDSFeedResponse,
+    Response,
+    _snake_to_camel_case,
+    boolean_value,
+)
 from core.util.opds_writer import OPDSFeed
 
 
-class TestResponse(object):
+class TestResponse:
     def test_constructor(self):
         response = Response(
             "content",
@@ -97,7 +105,7 @@ class TestResponse(object):
         assert "some data" == str(obj)
 
 
-class TestOPDSFeedResponse(object):
+class TestOPDSFeedResponse:
     """Test the OPDS feed-specific specialization of Response."""
 
     def test_defaults(self):
@@ -129,7 +137,7 @@ class TestOPDSFeedResponse(object):
         assert 0 == do_not_cache.max_age
 
 
-class TestOPDSEntryResponse(object):
+class TestOPDSEntryResponse:
     """Test the OPDS entry-specific specialization of Response."""
 
     def test_defaults(self):
@@ -148,3 +156,53 @@ class TestOPDSEntryResponse(object):
         override_defaults = c("an entry", content_type="content/type")
         assert "content/type" == override_defaults.content_type
         assert "content/type" == override_defaults.mimetype
+
+
+class TestMethods:
+    @pytest.mark.parametrize(
+        "value,result",
+        [
+            ("true", True),
+            ("True", True),
+            (True, True),
+            ("1", True),
+            ("false", False),
+            ("False", False),
+            ("0", False),
+            ("t", False),
+            (None, False),
+        ],
+    )
+    def test_boolean_value(self, value, result):
+        assert boolean_value(value) == result
+
+
+def add_request_context(request, model, form=None) -> None:
+    """Add a flask pydantic model into the request context
+    :param model: The pydantic model
+    :param form: A form multidict
+    TODO:
+    - query params
+    - json post requests
+    """
+    body = None
+    query = None
+    if form is not None:
+        request.form = form
+        body = model.parse_obj(parse_multi_dict(form))
+
+    request.context = Context(query, body, None, None)
+
+
+def test_snake_to_camel_case():
+    assert _snake_to_camel_case("a_snake_case_word") == "aSnakeCaseWord"  # liar
+    assert _snake_to_camel_case("double__scores") == "doubleScores"
+    assert _snake_to_camel_case("__magic") == "magic"
+    assert (
+        _snake_to_camel_case("SnakesAreInnocent_snokes_are_not")
+        == "snakesareinnocentSnokesAreNot"
+    )
+
+    # Error case
+    with pytest.raises(ValueError):
+        _snake_to_camel_case("_")

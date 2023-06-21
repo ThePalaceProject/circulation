@@ -6,16 +6,19 @@ from sqlalchemy.sql.expression import and_, case, join, literal_column, or_
 
 from core.model import (
     CirculationEvent,
+    Collection,
+    DataSource,
     Edition,
     Genre,
     Identifier,
+    Library,
     LicensePool,
     Work,
     WorkGenre,
 )
 
 
-class LocalAnalyticsExporter(object):
+class LocalAnalyticsExporter:
     """Export large numbers of analytics events in CSV format."""
 
     def export(self, _db, start, end, locations=None, library=None):
@@ -40,6 +43,12 @@ class LocalAnalyticsExporter(object):
             "target_age",
             "genres",
             "location",
+            "collection_name",
+            "library_short_name",
+            "library_name",
+            "medium",
+            "distributor",
+            "open_access",
         ]
         output = BytesIO()
         writer = csv.writer(output, encoding="utf-8")
@@ -104,6 +113,12 @@ class LocalAnalyticsExporter(object):
                     Edition.imprint,
                     Edition.language,
                     CirculationEvent.location,
+                    Collection.name.label("collection_name"),
+                    Library.short_name.label("library_short_name"),
+                    Library.name.label("library_name"),
+                    Edition.medium,
+                    DataSource.name.label("distributor"),
+                    LicensePool.open_access,
                 ],
             )
             .select_from(
@@ -115,6 +130,9 @@ class LocalAnalyticsExporter(object):
                 .join(Identifier, LicensePool.identifier_id == Identifier.id)
                 .join(Work, Work.id == LicensePool.work_id)
                 .join(Edition, Work.presentation_edition_id == Edition.id)
+                .join(Collection, LicensePool.collection_id == Collection.id)
+                .join(DataSource, LicensePool.data_source_id == DataSource.id)
+                .outerjoin(Library, CirculationEvent.library_id == Library.id)
             )
             .where(and_(*clauses))
             .order_by(CirculationEvent.start.asc())
@@ -194,6 +212,12 @@ class LocalAnalyticsExporter(object):
                 target_age_string.label("target_age"),
                 genres.label("genres"),
                 events.location,
+                events.collection_name,
+                events.library_short_name,
+                events.library_name,
+                events.medium,
+                events.distributor,
+                case({True: "true", False: "false"}, value=events.open_access),
             ]
         ).select_from(events_alias)
         return query

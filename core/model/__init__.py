@@ -1,15 +1,19 @@
-# encoding: utf-8
+from __future__ import annotations
 
+import json
 import logging
 import os
 import warnings
+from typing import Any, Dict, List, Literal, Tuple, Type, TypeVar, Union
 
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
+from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError, SAWarning
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlalchemy.sql import compiler, select
 from sqlalchemy.sql.expression import literal_column, table
@@ -41,7 +45,12 @@ def flush(db):
         db.flush()
 
 
-def create(db, model, create_method="", create_method_kwargs=None, **kwargs):
+T = TypeVar("T")
+
+
+def create(
+    db: Session, model: Type[T], create_method="", create_method_kwargs=None, **kwargs
+) -> Tuple[T, Literal[True]]:
     kwargs.update(create_method_kwargs or {})
     created = getattr(model, create_method, model)(**kwargs)
     db.add(created)
@@ -49,7 +58,9 @@ def create(db, model, create_method="", create_method_kwargs=None, **kwargs):
     return created, True
 
 
-def get_one(db, model, on_multiple="error", constraint=None, **kwargs):
+def get_one(
+    db: Session, model: Type[T], on_multiple="error", constraint=None, **kwargs
+) -> T | None:
     """Gets an object from the database based on its attributes.
 
     :param constraint: A single clause that can be passed into
@@ -80,9 +91,12 @@ def get_one(db, model, on_multiple="error", constraint=None, **kwargs):
             return q.one()
     except NoResultFound:
         return None
+    return None
 
 
-def get_one_or_create(db, model, create_method="", create_method_kwargs=None, **kwargs):
+def get_one_or_create(
+    db: Session, model: Type[T], create_method="", create_method_kwargs=None, **kwargs
+) -> Tuple[T, bool]:
     one = get_one(db, model, **kwargs)
     if one:
         return one, False
@@ -127,7 +141,7 @@ def numericrange_to_string(r):
         lower += 1
     if upper == lower:
         return str(lower)
-    return "%s-%s" % (lower, upper)
+    return f"{lower}-{upper}"
 
 
 def numericrange_to_tuple(r):
@@ -150,7 +164,7 @@ def tuple_to_numericrange(t):
     return NumericRange(t[0], t[1], "[]")
 
 
-class PresentationCalculationPolicy(object):
+class PresentationCalculationPolicy:
     """Which parts of the Work or Edition's presentation
     are we actually looking to update?
     """
@@ -275,7 +289,6 @@ def dump_query(query):
     dialect = query.session.bind.dialect
     statement = query.statement
     comp = compiler.SQLCompiler(dialect, statement)
-    comp.compile()
     enc = dialect.encoding
     params = {}
     for k, v in list(comp.params.items()):
@@ -288,18 +301,38 @@ def dump_query(query):
 DEBUG = False
 
 
-class SessionManager(object):
+def json_encoder(obj: Any) -> Any:
+    # Handle Flask Babel LazyString objects.
+    if hasattr(obj, "__html__"):
+        return str(obj.__html__())
+
+    # Pass everything else off to Pydantic JSON encoder.
+    return pydantic_encoder(obj)
+
+
+def json_serializer(*args, **kwargs) -> str:
+    return json.dumps(*args, default=json_encoder, **kwargs)
+
+
+class SessionManager:
 
     # A function that calculates recursively equivalent identifiers
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
-    engine_for_url = {}
+    engine_for_url: Dict[str, Engine] = {}
 
     @classmethod
     def engine(cls, url=None):
         url = url or Configuration.database_url()
-        return create_engine(url, echo=DEBUG)
+        return create_engine(url, echo=DEBUG, json_serializer=json_serializer)
+
+    @classmethod
+    def setup_event_listener(
+        cls, session: Union[Session, sessionmaker]
+    ) -> Union[Session, sessionmaker]:
+        event.listen(session, "before_flush", Listener.before_flush_event_listener)
+        return session
 
     @classmethod
     def sessionmaker(cls, url=None, session=None):
@@ -314,7 +347,9 @@ class SessionManager(object):
                 # use the same Connection for all of the tests so objects can
                 # be accessed. Otherwise, bind against an Engine object.
                 bind_obj = bind_obj.engine
-        return sessionmaker(bind=bind_obj)
+        session_factory = sessionmaker(bind=bind_obj)
+        cls.setup_event_listener(session_factory)
+        return session_factory
 
     @classmethod
     def resource_directory(cls):
@@ -353,7 +388,7 @@ class SessionManager(object):
                 cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
             )
             if not os.path.exists(resource_file):
-                raise IOError(
+                raise OSError(
                     "Could not load recursive equivalents function from %s: file does not exist."
                     % resource_file
                 )
@@ -361,8 +396,8 @@ class SessionManager(object):
             connection.execute(sql)
 
         if initialize_data:
-            session = Session(connection)
-            cls.initialize_data(session)
+            with cls.session_from_connection(connection) as session:
+                cls.initialize_data(session)
 
         if connection:
             connection.close()
@@ -402,9 +437,12 @@ class SessionManager(object):
                 initialize_data=initialize_data,
                 initialize_schema=initialize_schema,
             )
+        return cls.session_from_connection(connection)
+
+    @classmethod
+    def session_from_connection(cls, connection: Connection) -> Session:
         session = Session(connection)
-        if initialize_data:
-            session = cls.initialize_data(session)
+        cls.setup_event_listener(session)
         return session
 
     @classmethod
@@ -454,7 +492,7 @@ class SessionManager(object):
         return session
 
 
-def production_session(initialize_data=True):
+def production_session(initialize_data=True) -> Session:
     url = Configuration.database_url()
     if url.startswith('"'):
         url = url[1:]
@@ -474,6 +512,52 @@ def production_session(initialize_data=True):
     return _db
 
 
+class SessionBulkOperation:
+    """Bulk insert/update/operate on a session"""
+
+    def __init__(
+        self,
+        session,
+        batch_size,
+        bulk_method: str = "bulk_save_objects",
+        bulk_method_kwargs=None,
+    ) -> None:
+        self.session = session
+        self.bulk_method = bulk_method
+        self.bulk_method_kwargs = bulk_method_kwargs or {}
+        self.batch_size = batch_size
+        self._objects: List[Base] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self._bulk_operation()
+
+    def add(self, object):
+        self._objects.append(object)
+        if len(self._objects) == self.batch_size:
+            self._bulk_operation()
+
+    def _bulk_operation(self):
+        self.bulk_method, getattr(
+            self.session,
+            self.bulk_method,
+        )(self._objects, **self.bulk_method_kwargs)
+        self.session.commit()
+        self._objects = []
+
+
+# We rely on all of our sqlalchemy models being imported here, so that they are
+# registered with the declarative base. This is necessary to make sure that all
+# of our models are properly reflected in the database when we run migrations or
+# create a new database.
+
+from api.saml.metadata.federations.model import (
+    SAMLFederatedIdentityProvider,
+    SAMLFederation,
+)
+
 from .admin import Admin, AdminRole
 from .cachedfeed import CachedFeed, CachedMARCFile, WillNotGenerateExpensiveFeed
 from .circulationevent import CirculationEvent
@@ -484,7 +568,6 @@ from .collection import (
     CollectionMissing,
     collections_identifiers,
 )
-from .complaint import Complaint
 from .configuration import (
     ConfigurationSetting,
     ExternalIntegration,
@@ -495,9 +578,11 @@ from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverag
 from .credential import Credential, DelegatedPatronIdentifier, DRMDeviceIdentifier
 from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
+from .devicetokens import DeviceToken
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier
+from .integration import IntegrationConfiguration, IntegrationLibraryConfiguration
 from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import (

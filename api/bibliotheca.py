@@ -9,6 +9,7 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
+from typing import Dict
 
 import dateutil.parser
 from flask_babel import lazy_gettext as _
@@ -18,6 +19,13 @@ from pymarc import parse_xml_to_array
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -47,24 +55,71 @@ from core.model import (
     Subject,
     Timestamp,
     get_one,
-    get_one_or_create,
 )
+from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import RunCollectionMonitorScript
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
 
-from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from .circulation import (
+    BaseCirculationAPI,
+    BaseCirculationLoanSettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 from .web_publication_manifest import FindawayManifest, SpineItem
 
 
-class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
+class BibliothecaSettings(BaseSettings):
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Account ID"),
+            required=True,
+        )
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Account Key"),
+            required=True,
+        )
+    )
+    external_account_id: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            required=True,
+        )
+    )
 
+
+class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
+
+    dont_display_reserves: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Show/Hide Titles with No Available Loans"),
+            required=False,
+            description=_(
+                "Titles with no available loans will not be displayed in the Catalog view."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                ConfigurationAttributeValue.YESVALUE.value: "Show",
+                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+            },
+        )
+    )
+
+
+class BibliothecaAPI(
+    BaseCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
+):
     NAME = ExternalIntegration.BIBLIOTHECA
     AUTH_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S GMT"
     ARGUMENT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -78,28 +133,6 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
 
     DEFAULT_VERSION = "2.0"
     DEFAULT_BASE_URL = "https://partner.yourcloudlibrary.com/"
-
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Account ID"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Account Key"),
-            "required": True,
-        },
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Library ID"),
-            "required": True,
-        },
-    ] + BaseCirculationAPI.SETTINGS
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING
-    ]
 
     MAX_AGE = timedelta(days=730).seconds
     CAN_REVOKE_HOLD_WHEN_RESERVED = False
@@ -116,27 +149,40 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         (Representation.PDF_MEDIA_TYPE, adobe_drm): "PDF",
         (None, findaway_drm): "MP3",
     }
-    internal_format_to_delivery_mechanism = dict(
-        [v, k] for k, v in list(delivery_mechanism_to_internal_format.items())
-    )
+    internal_format_to_delivery_mechanism = {
+        v: k for k, v in list(delivery_mechanism_to_internal_format.items())
+    }
+
+    @classmethod
+    def settings_class(cls):
+        return BibliothecaSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return BibliothecaLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return ""
 
     def __init__(self, _db, collection):
-
         if collection.protocol != ExternalIntegration.BIBLIOTHECA:
             raise ValueError(
                 "Collection protocol is %s, but passed into BibliothecaAPI!"
                 % collection.protocol
             )
 
+        super().__init__(_db, collection)
+
         self._db = _db
-        self.version = (
-            collection.external_integration.setting("version").value
-            or self.DEFAULT_VERSION
-        )
-        self.account_id = collection.external_integration.username
-        self.account_key = collection.external_integration.password
+        config = self.configuration()
+        self.version = self.DEFAULT_VERSION
+        self.account_id = config.username
+        self.account_key = config.password
         self.library_id = collection.external_account_id
-        self.base_url = collection.external_integration.url or self.DEFAULT_BASE_URL
+        self.base_url = self.DEFAULT_BASE_URL
 
         if not self.account_id or not self.account_key or not self.library_id:
             raise CannotLoadConfiguration("Bibliotheca configuration is incomplete.")
@@ -189,7 +235,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         if not path.startswith("/"):
             path = "/" + path
         if not path.startswith("/cirrus"):
-            path = "/cirrus/library/%s%s" % (self.library_id, path)
+            path = f"/cirrus/library/{self.library_id}{path}"
         return path
 
     @classmethod
@@ -263,8 +309,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         response = self.request(url)
         if response.status_code != 200:
             raise ErrorParser().process_all(response.content)
-        for record in parse_xml_to_array(BytesIO(response.content)):
-            yield record
+        yield from parse_xml_to_array(BytesIO(response.content))
 
     def bibliographic_lookup_request(self, identifiers):
         """Make an HTTP request to look up current bibliographic and
@@ -337,7 +382,7 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         """Return event objects for events between the given times."""
         start = start.strftime(self.ARGUMENT_TIME_FORMAT)
         end = end.strftime(self.ARGUMENT_TIME_FORMAT)
-        url = "data/cloudevents?startdate=%s&enddate=%s" % (start, end)
+        url = f"data/cloudevents?startdate={start}&enddate={end}"
         if cache_result:
             max_age = self.MAX_AGE
         else:
@@ -376,7 +421,6 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
     TEMPLATE = "<%(request_type)s><ItemId>%(item_id)s</ItemId><PatronId>%(patron_id)s</PatronId></%(request_type)s>"
 
     def checkout(self, patron_obj, patron_password, licensepool, delivery_mechanism):
-
         """Check out a book on behalf of a patron.
 
         :param patron_obj: a Patron object for the patron who wants
@@ -601,80 +645,25 @@ class BibliothecaAPI(BaseCirculationAPI, HasSelfTests):
         return DeliveryMechanism.FINDAWAY_DRM, str(manifest)
 
 
-class DummyBibliothecaAPIResponse(object):
+class DummyBibliothecaAPIResponse:
     def __init__(self, response_code, headers, content):
         self.status_code = response_code
         self.headers = headers
         self.content = content
 
 
-class MockBibliothecaAPI(BibliothecaAPI):
-    @classmethod
-    def mock_collection(self, _db, name="Test Bibliotheca Collection"):
-        """Create a mock Bibliotheca collection for use in tests."""
-        library = DatabaseTest.make_default_library(_db)
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(
-                external_account_id="c",
-            ),
-        )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.BIBLIOTHECA
-        )
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://bibliotheca.test"
-        library.collections.append(collection)
-        return collection
-
-    def __init__(self, _db, collection, *args, **kwargs):
-        self.responses = []
-        self.requests = []
-        super(MockBibliothecaAPI, self).__init__(_db, collection, *args, **kwargs)
-
-    def now(self):
-        """Return an unvarying time in the format Bibliotheca expects."""
-        return datetime.strftime(datetime(2016, 1, 1), self.AUTH_TIME_FORMAT)
-
-    def queue_response(self, status_code, headers={}, content=None):
-        from core.testing import MockRequestsResponse
-
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _request_with_timeout(self, method, url, *args, **kwargs):
-        """Simulate HTTP.request_with_timeout."""
-        self.requests.append([method, url, args, kwargs])
-        response = self.responses.pop()
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
-
-    def _simple_http_get(self, url, headers, *args, **kwargs):
-        """Simulate Representation.simple_http_get."""
-        response = self._request_with_timeout("GET", url, *args, **kwargs)
-        return response.status_code, response.headers, response.content
-
-
 class ItemListParser(XMLParser):
-
     DATE_FORMAT = "%Y-%m-%d"
     YEAR_FORMAT = "%Y"
 
-    NAMESPACES = {}
+    NAMESPACES: Dict[str, str] = {}
 
     unescape_entity_references = html.unescape
 
     def parse(self, xml):
-        for i in self.process_all(xml, "//Item"):
-            yield i
+        yield from self.process_all(xml, "//Item")
 
-    parenthetical = re.compile(" \([^)]+\)$")
+    parenthetical = re.compile(r" \([^)]+\)$")
 
     format_data_for_bibliotheca_format = {
         "EPUB": (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
@@ -889,7 +878,6 @@ class ItemListParser(XMLParser):
 
 
 class BibliothecaParser(XMLParser):
-
     INPUT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
     def parse_date(self, value):
@@ -927,7 +915,7 @@ class WorkflowException(BibliothecaException):
         self.statuses_that_would_work = statuses_that_would_work
 
     def __str__(self):
-        return "Book status is %s, must be: %s" % (
+        return "Book status is {}, must be: {}".format(
             self.actual_status,
             ", ".join(self.statuses_that_would_work),
         )
@@ -951,7 +939,7 @@ class ErrorParser(BibliothecaParser):
 
     def process_all(self, string):
         try:
-            for i in super(ErrorParser, self).process_all(string, "//Error"):
+            for i in super().process_all(string, "//Error"):
                 return i
         except Exception as e:
             # The server sent us an error with an incorrect or
@@ -1037,7 +1025,7 @@ class PatronCirculationParser(BibliothecaParser):
     id_type = Identifier.BIBLIOTHECA_ID
 
     def __init__(self, collection, *args, **kwargs):
-        super(PatronCirculationParser, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.collection = collection
 
     def process_all(self, string):
@@ -1047,7 +1035,7 @@ class PatronCirculationParser(BibliothecaParser):
         if isinstance(string, bytes):
             string = string.decode("utf-8")
         root = etree.parse(StringIO(string), parser)
-        sup = super(PatronCirculationParser, self)
+        sup = super()
         loans = sup.process_all(root, "//Checkouts/Item", handler=self.process_one_loan)
         holds = sup.process_all(root, "//Holds/Item", handler=self.process_one_hold)
         reserves = sup.process_all(
@@ -1101,8 +1089,8 @@ class PatronCirculationParser(BibliothecaParser):
 class DateResponseParser(BibliothecaParser):
     """Extract a date from a response."""
 
-    RESULT_TAG_NAME = None
-    DATE_TAG_NAME = None
+    RESULT_TAG_NAME: Optional[str] = None
+    DATE_TAG_NAME: Optional[str] = None
 
     def process_all(self, string):
         parser = etree.XMLParser()
@@ -1111,7 +1099,7 @@ class DateResponseParser(BibliothecaParser):
         if isinstance(string, bytes):
             string = string.decode("utf-8")
         root = etree.parse(StringIO(string), parser)
-        m = root.xpath("/%s/%s" % (self.RESULT_TAG_NAME, self.DATE_TAG_NAME))
+        m = root.xpath(f"/{self.RESULT_TAG_NAME}/{self.DATE_TAG_NAME}")
         if not m:
             return None
         due_date = m[0].text
@@ -1156,7 +1144,7 @@ class EventParser(BibliothecaParser):
 
     def process_all(self, string, no_events_error=False):
         has_events = False
-        for i in super(EventParser, self).process_all(string, "//CloudLibraryEvent"):
+        for i in super().process_all(string, "//CloudLibraryEvent"):
             yield i
             has_events = True
 
@@ -1219,7 +1207,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
 
     def __init__(self, _db, collection, api_class=BibliothecaAPI, **kwargs):
         _db = Session.object_session(collection)
-        super(BibliothecaCirculationSweep, self).__init__(_db, collection, **kwargs)
+        super().__init__(_db, collection, **kwargs)
         if isinstance(api_class, BibliothecaAPI):
             self.api = api_class
         else:
@@ -1278,17 +1266,9 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             # this list so we know the title is still in the collection.
             identifiers_not_mentioned_by_bibliotheca.remove(identifier)
 
-        edition, is_new = metadata.edition(self._db)
-        pool, is_new = metadata.circulation.license_pool(self._db, self.collection)
-        if is_new:
-            # We didn't have a license pool for this work. That
-            # shouldn't happen--how did we know about the
-            # identifier?--but now we do.
-            for library in self.collection.libraries:
-                self.analytics.collect_event(
-                    library, pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, utc_now()
-                )
-        edition, ignore = metadata.apply(
+        edition, _ = metadata.edition(self._db)
+
+        metadata.apply(
             edition, collection=self.collection, replace=self.replacement_policy
         )
 
@@ -1313,7 +1293,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
         :type analytics: Optional[Analytics]
         """
         self.analytics = analytics or Analytics(_db)
-        super(BibliothecaTimelineMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         if isinstance(api_class, BibliothecaAPI):
             # We were given an actual API object. Just use it.
             self.api = api_class
@@ -1375,7 +1355,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
             for an already initialized monitor.
         :type override_timestamp: bool
         """
-        super(BibliothecaPurchaseMonitor, self).__init__(
+        super().__init__(
             _db=_db, collection=collection, api_class=api_class, analytics=analytics
         )
 
@@ -1451,7 +1431,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         and setting`timestamp.finish` to None will cause the default to
         be used.
         """
-        timestamp = super(BibliothecaPurchaseMonitor, self).timestamp()
+        timestamp = super().timestamp()
         if self.override_timestamp:
             self.log.info(
                 "Overriding timestamp and starting at %s.",
@@ -1544,8 +1524,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         records = None
         while records is None or len(records) >= page_size:
             records = [x for x in self.api.marc_request(start, end, offset, page_size)]
-            for record in records:
-                yield record
+            yield from records
             offset += page_size
 
     def process_record(self, record, purchase_time):
@@ -1601,17 +1580,6 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
                 license_pool.identifier, force=True
             )
 
-        # Record the addition of this title to the collection. Do this
-        # even if we've heard about the book before, through some
-        # other monitor. That's because this is the only Bibliotheca
-        # monitor that issues TITLE_ADD events.
-        #
-        # We know approximately when the license was purchased --
-        # potentially a long time ago -- since `start_time` is
-        # provided.
-        license_pool.collect_analytics_event(
-            self.analytics, CirculationEvent.DISTRIBUTOR_TITLE_ADD, purchase_time, 0, 1
-        )
         return license_pool
 
 
@@ -1741,7 +1709,7 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
 
     @classmethod
     def arg_parser(cls):
-        parser = super(RunBibliothecaPurchaseMonitorScript, cls).arg_parser()
+        parser = super().arg_parser()
         parser.add_argument(
             "--default-start",
             metavar="DATETIME",
@@ -1761,9 +1729,7 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
 
     @classmethod
     def parse_command_line(cls, _db=None, cmd_args=None, *args, **kwargs):
-        parsed = super(RunBibliothecaPurchaseMonitorScript, cls).parse_command_line(
-            _db=_db, cmd_args=cmd_args, *args, **kwargs
-        )
+        parsed = super().parse_command_line(_db=_db, cmd_args=cmd_args, *args, **kwargs)
         if parsed.override_timestamp and not parsed.default_start:
             cls.arg_parser().error(
                 '"--override-timestamp" is valid only when "--default-start" is also specified.'
@@ -1798,9 +1764,7 @@ class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):
         :param input_identifiers: Passed in by RunCoverageProviderScript.
             A list of specific identifiers to get coverage for.
         """
-        super(BibliothecaBibliographicCoverageProvider, self).__init__(
-            collection, **kwargs
-        )
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, BibliothecaAPI):
             # This is an already instantiated API object. Use it
             # instead of creating a new one.

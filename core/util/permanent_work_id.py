@@ -3,7 +3,7 @@ import unicodedata
 from hashlib import md5
 
 
-class WorkIDCalculator(object):
+class WorkIDCalculator:
     @classmethod
     def permanent_id(self, normalized_title, normalized_author, grouping_category):
         digest = md5()

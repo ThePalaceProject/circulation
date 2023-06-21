@@ -10,7 +10,7 @@ from core.util.datetime_helpers import utc_now
 from .problem_details import *
 
 
-def load_document(url):
+def load_document(url, *args, **kargs):
     """Retrieves JSON-LD for the given URL from a local
     file if available, and falls back to the network.
     """
@@ -22,16 +22,21 @@ def load_document(url):
         base_path = os.path.join(os.path.split(__file__)[0], "jsonld")
         jsonld_file = os.path.join(base_path, files[url])
         data = open(jsonld_file).read()
-        doc = {"contextUrl": None, "documentUrl": url, "document": data}
+        doc = {
+            "contextUrl": None,
+            "documentUrl": url,
+            "document": data,
+            "contentType": "application/ld+json",
+        }
         return doc
     else:
-        return jsonld.load_document(url)
+        return jsonld.load_document(url, *args, **kargs)
 
 
 jsonld.set_document_loader(load_document)
 
 
-class AnnotationWriter(object):
+class AnnotationWriter:
 
     CONTENT_TYPE = 'application/ld+json; profile="http://www.w3.org/ns/anno.jsonld"'
 
@@ -143,7 +148,7 @@ class AnnotationWriter(object):
         return item
 
 
-class AnnotationParser(object):
+class AnnotationParser:
     @classmethod
     def parse(cls, _db, data, patron):
         if patron.synchronize_annotations != True:

@@ -1,7 +1,7 @@
 import datetime
-import os
+from typing import List, Union
 
-from parameterized import parameterized
+import pytest
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from core.model import (
@@ -11,16 +11,20 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     EditionConstants,
+    ExternalIntegration,
     LicensePool,
     MediaTypes,
     Work,
 )
+from core.model.collection import Collection
+from core.model.constants import IdentifierType
 from core.opds2_import import OPDS2Importer, RWPMManifestParser
 
-from .test_opds_import import OPDSTest
+from ..fixtures.database import DatabaseTransactionFixture
+from ..fixtures.opds2_files import OPDS2FilesFixture
 
 
-class OPDS2Test(OPDSTest):
+class OPDS2Test:
     @staticmethod
     def _get_edition_by_identifier(editions, identifier):
         """Find an edition in the list by its identifier.
@@ -70,37 +74,70 @@ class OPDS2Test(OPDSTest):
         return None
 
 
-class TestOPDS2Importer(OPDS2Test):
-    def sample_opds(self, filename, file_type="r"):
-        base_path = os.path.split(__file__)[0]
-        resource_path = os.path.join(base_path, "files", "opds2")
-        return open(os.path.join(resource_path, filename)).read()
+class TestOPDS2ImporterFixture:
+    transaction: DatabaseTransactionFixture
+    collection: Collection
+    data_source: DataSource
+    importer: OPDS2Importer
 
-    @parameterized.expand(
+
+@pytest.fixture
+def opds2_importer_fixture(
+    db: DatabaseTransactionFixture,
+) -> TestOPDS2ImporterFixture:
+    data = TestOPDS2ImporterFixture()
+    data.transaction = db
+    data.collection = db.default_collection()
+    data.data_source = DataSource.lookup(
+        db.session, "OPDS 2.0 Data Source", autocreate=True
+    )
+    data.collection.data_source = data.data_source
+    data.importer = OPDS2Importer(
+        db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
+    )
+    return data
+
+
+class TestOPDS2Importer(OPDS2Test):
+    MOBY_DICK_ISBN_IDENTIFIER = "urn:isbn:978-3-16-148410-0"
+    HUCKLEBERRY_FINN_URI_IDENTIFIER = "http://example.org/huckleberry-finn"
+    POSTMODERNISM_PROQUEST_IDENTIFIER = (
+        "urn:librarysimplified.org/terms/id/ProQuest%20Doc%20ID/181639"
+    )
+
+    @pytest.mark.parametrize(
+        "name,manifest_type",
         [
             ("manifest encoded as a string", "string"),
             ("manifest encoded as a byte-string", "bytes"),
-        ]
+        ],
     )
-    def test(self, _, manifest_type):
+    def test_opds2_importer_correctly_imports_valid_opds2_feed(
+        self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+        name: str,
+        manifest_type: str,
+    ):
+        """Ensure that OPDS2Importer correctly imports valid OPDS 2.x feeds.
+        :param manifest_type: Manifest's type: string or binary
+        """
         # Arrange
-        collection = self._default_collection
-        data_source = DataSource.lookup(
-            self._db, "OPDS 2.0 Data Source", autocreate=True
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
         )
-
-        collection.data_source = data_source
-
-        importer = OPDS2Importer(
-            self._db, collection, RWPMManifestParser(OPDS2FeedParserFactory())
-        )
-        content_server_feed = self.sample_opds("feed.json")
+        content_server_feed_text = opds2_files_fixture.sample_text("feed.json")
+        content_server_feed: Union[str, bytes]
 
         if manifest_type == "bytes":
-            content_server_feed = content_server_feed.encode()
+            content_server_feed = content_server_feed_text.encode()
+        else:
+            content_server_feed = content_server_feed_text
 
         # Act
-        imported_editions, pools, works, failures = importer.import_from_feed(
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
             content_server_feed
         )
 
@@ -108,11 +145,11 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 1. Make sure that editions contain all required metadata
         assert isinstance(imported_editions, list)
-        assert 2 == len(imported_editions)
+        assert 3 == len(imported_editions)
 
         # 1.1. Edition with open-access links (Moby-Dick)
         moby_dick_edition = self._get_edition_by_identifier(
-            imported_editions, "urn:isbn:978-3-16-148410-0"
+            imported_editions, self.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_edition, Edition)
 
@@ -135,7 +172,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert moby_dick_edition == moby_dick_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == moby_dick_author_contribution.role
 
-        assert data_source == moby_dick_edition.data_source
+        assert data.data_source == moby_dick_edition.data_source
 
         assert "Test Publisher" == moby_dick_edition.publisher
         assert datetime.date(2015, 9, 29) == moby_dick_edition.published
@@ -148,7 +185,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 1.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
         huckleberry_finn_edition = self._get_edition_by_identifier(
-            imported_editions, "urn:isbn:9781234567897"
+            imported_editions, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_edition, Edition)
 
@@ -192,7 +229,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert huckleberry_finn_edition == huckleberry_finn_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == huckleberry_finn_author_contribution.role
 
-        assert data_source == huckleberry_finn_edition.data_source
+        assert data.data_source == huckleberry_finn_edition.data_source
 
         assert "Test Publisher" == huckleberry_finn_edition.publisher
         assert datetime.date(2014, 9, 28) == huckleberry_finn_edition.published
@@ -201,11 +238,11 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 2. Make sure that license pools have correct configuration
         assert isinstance(pools, list)
-        assert 2 == len(pools)
+        assert 3 == len(pools)
 
         # 2.1. Edition with open-access links (Moby-Dick)
         moby_dick_license_pool = self._get_license_pool_by_identifier(
-            pools, "urn:isbn:978-3-16-148410-0"
+            pools, self.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_license_pool, LicensePool)
         assert moby_dick_license_pool.open_access
@@ -225,7 +262,7 @@ class TestOPDS2Importer(OPDS2Test):
 
         # 2.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
         huckleberry_finn_license_pool = self._get_license_pool_by_identifier(
-            pools, "urn:isbn:9781234567897"
+            pools, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert True == isinstance(huckleberry_finn_license_pool, LicensePool)
         assert False == huckleberry_finn_license_pool.open_access
@@ -260,22 +297,57 @@ class TestOPDS2Importer(OPDS2Test):
             == huckleberry_finn_delivery_mechanisms[1].delivery_mechanism.content_type
         )
 
+        # 2.3 Edition with non open-access acquisition links (The Politics of Postmodernism)
+        postmodernism_license_pool = self._get_license_pool_by_identifier(
+            pools, self.POSTMODERNISM_PROQUEST_IDENTIFIER
+        )
+        assert True == isinstance(postmodernism_license_pool, LicensePool)
+        assert False == postmodernism_license_pool.open_access
+        assert LicensePool.UNLIMITED_ACCESS == postmodernism_license_pool.licenses_owned
+        assert (
+            LicensePool.UNLIMITED_ACCESS
+            == postmodernism_license_pool.licenses_available
+        )
+
+        assert 2 == len(postmodernism_license_pool.delivery_mechanisms)
+        postmodernism_delivery_mechanisms = (
+            postmodernism_license_pool.delivery_mechanisms
+        )
+
+        assert (
+            DeliveryMechanism.ADOBE_DRM
+            == postmodernism_delivery_mechanisms[0].delivery_mechanism.drm_scheme
+        )
+        assert (
+            MediaTypes.EPUB_MEDIA_TYPE
+            == postmodernism_delivery_mechanisms[0].delivery_mechanism.content_type
+        )
+
+        assert (
+            DeliveryMechanism.ADOBE_DRM
+            == postmodernism_delivery_mechanisms[1].delivery_mechanism.drm_scheme
+        )
+        assert (
+            MediaTypes.PDF_MEDIA_TYPE
+            == postmodernism_delivery_mechanisms[1].delivery_mechanism.content_type
+        )
+
         # 3. Make sure that work objects contain all the required metadata
         assert isinstance(works, list)
-        assert 2 == len(works)
+        assert 3 == len(works)
 
-        # 3.1. Edition with open-access links (Moby-Dick)
+        # 3.1. Work (Moby-Dick)
         moby_dick_work = self._get_work_by_identifier(
-            works, "urn:isbn:978-3-16-148410-0"
+            works, self.MOBY_DICK_ISBN_IDENTIFIER
         )
         assert isinstance(moby_dick_work, Work)
         assert moby_dick_edition == moby_dick_work.presentation_edition
         assert 1 == len(moby_dick_work.license_pools)
         assert moby_dick_license_pool == moby_dick_work.license_pools[0]
 
-        # 3.2. Edition with open-access links (Moby-Dick)
+        # 3.2. Work (Adventures of Huckleberry Finn)
         huckleberry_finn_work = self._get_work_by_identifier(
-            works, "urn:isbn:9781234567897"
+            works, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
         )
         assert isinstance(huckleberry_finn_work, Work)
         assert huckleberry_finn_edition == huckleberry_finn_work.presentation_edition
@@ -286,3 +358,92 @@ class TestOPDS2Importer(OPDS2Test):
             "December 1884 and in the United States in February 1885."
             == huckleberry_finn_work.summary_text
         )
+
+    @pytest.mark.parametrize(
+        "this_identifier_type,ignore_identifier_type,identifier",
+        [
+            (
+                IdentifierType.ISBN,
+                [IdentifierType.URI, IdentifierType.PROQUEST_ID],
+                MOBY_DICK_ISBN_IDENTIFIER,
+            ),
+            (
+                IdentifierType.URI,
+                [IdentifierType.ISBN, IdentifierType.PROQUEST_ID],
+                HUCKLEBERRY_FINN_URI_IDENTIFIER,
+            ),
+            (
+                IdentifierType.PROQUEST_ID,
+                [IdentifierType.ISBN, IdentifierType.URI],
+                POSTMODERNISM_PROQUEST_IDENTIFIER,
+            ),
+        ],
+    )
+    def test_opds2_importer_skips_publications_with_unsupported_identifier_types(
+        self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+        this_identifier_type,
+        ignore_identifier_type: List[IdentifierType],
+        identifier: str,
+    ) -> None:
+        """Ensure that OPDS2Importer imports only publications having supported identifier types.
+        This test imports the feed consisting of two publications,
+        each having a different identifier type: ISBN and URI.
+        First, it tries to import the feed marking ISBN as the only supported identifier type. Secondly, it uses URI.
+        Each time it checks that CM imported only the publication having the selected identifier type.
+        """
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
+        )
+
+        # Arrange
+        # Update the list of supported identifier types in the collection's configuration settings
+        # and set the identifier type passed as a parameter as the only supported identifier type.
+        data.importer.set_ignored_identifier_types(
+            ignore_identifier_type, data.importer.integration_configuration()
+        )
+
+        content_server_feed = opds2_files_fixture.sample_text("feed.json")
+
+        # Act
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            content_server_feed
+        )
+
+        # Assert
+
+        # Ensure that that CM imported only the edition having the selected identifier type.
+        assert isinstance(imported_editions, list)
+        assert 1 == len(imported_editions)
+        assert (
+            imported_editions[0].primary_identifier.type == this_identifier_type.value
+        )
+
+        # Ensure that it was parsed correctly and available by its identifier.
+        edition = self._get_edition_by_identifier(imported_editions, identifier)
+        assert edition is not None
+
+    def test_auth_token_feed(
+        self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
+        )
+
+        content = opds2_files_fixture.sample_text("auth_token_feed.json")
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            content
+        )
+        setting = data.importer.integration_configuration().settings.get(
+            ExternalIntegration.TOKEN_AUTH
+        )
+
+        # Did the token endpoint get stored correctly?
+        assert setting == "http://example.org/auth?userName={patron_id}"

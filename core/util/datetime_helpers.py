@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 
 import pytz
 
@@ -32,11 +33,10 @@ def utc_now():
     return datetime.datetime.now(tz=pytz.UTC)
 
 
-def to_utc(dt):
+def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
     """This converts a naive datetime object that represents UTC into
     an aware datetime object.
 
-    :type dt: datetime.datetime
     :return: datetime object, or None if `dt` was None.
     """
     if dt is None:
@@ -57,7 +57,5 @@ def strptime_utc(date_string, format):
         present in `date_string`.
     """
     if "%Z" in format or "%z" in format:
-        raise ValueError(
-            "Cannot use strptime_utc with timezone-aware format {}".format(format)
-        )
+        raise ValueError(f"Cannot use strptime_utc with timezone-aware format {format}")
     return to_utc(datetime.datetime.strptime(date_string, format))

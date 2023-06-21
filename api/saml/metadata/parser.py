@@ -1,10 +1,12 @@
 import logging
+from typing import Union
 
 from flask_babel import lazy_gettext as _
 from lxml.etree import XMLSyntaxError
+from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.utils import OneLogin_Saml2_XML
-from onelogin.saml2.xmlparser import fromstring
+from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -28,7 +30,7 @@ class SAMLMetadataParsingError(BaseError):
     """Raised in the case of any errors occurred during parsing of SAML metadata"""
 
 
-class SAMLMetadataParsingResult(object):
+class SAMLMetadataParsingResult:
     def __init__(self, provider, xml_node):
         """Initialize a new instance of SAMLMetadataParsingResult class.
 
@@ -60,7 +62,7 @@ class SAMLMetadataParsingResult(object):
         return self._xml_node
 
 
-class SAMLMetadataParser(object):
+class SAMLMetadataParser:
     """Parses SAML metadata"""
 
     def __init__(self, skip_incorrect_providers=False):
@@ -87,14 +89,14 @@ class SAMLMetadataParser(object):
             OneLogin_Saml2_Constants.NS_PREFIX_ALG
         ] = OneLogin_Saml2_Constants.NS_ALG
 
-    def _convert_xml_string_to_dom(self, xml_metadata):
+    def _convert_xml_string_to_dom(
+        self, xml_metadata: Union[str, bytes]
+    ) -> RestrictedElement:
         """Converts an XML string containing SAML metadata into XML DOM
 
         :param xml_metadata: XML string containing SAML metadata
-        :type xml_metadata: string
 
         :return: XML DOM tree containing SAML metadata
-        :rtype: onelogin.saml2.xmlparser.RestrictedElement
 
         :raise: MetadataParsingError
         """
@@ -102,8 +104,11 @@ class SAMLMetadataParser(object):
             "Started converting XML string containing SAML metadata into XML DOM"
         )
 
+        if isinstance(xml_metadata, str):
+            xml_metadata = xml_metadata.encode()
+
         try:
-            metadata_dom = fromstring(xml_metadata.encode("utf-8"), forbid_dtd=True)
+            metadata_dom = fromstring(xml_metadata, forbid_dtd=True)
         except (
             ValueError,
             XMLSyntaxError,
@@ -133,9 +138,7 @@ class SAMLMetadataParser(object):
         """
         certificates = []
 
-        self._logger.debug(
-            "Started parsing {0} certificates".format(len(certificate_nodes))
-        )
+        self._logger.debug(f"Started parsing {len(certificate_nodes)} certificates")
 
         try:
             for certificate_node in certificate_nodes:
@@ -143,16 +146,14 @@ class SAMLMetadataParser(object):
                     OneLogin_Saml2_XML.element_text(certificate_node).split()
                 )
 
-                self._logger.debug(
-                    "Found the following certificate: {0}".format(certificate)
-                )
+                self._logger.debug(f"Found the following certificate: {certificate}")
 
                 certificates.append(certificate)
         except XMLSyntaxError as exception:
             raise SAMLMetadataParsingError(inner_exception=exception)
 
         self._logger.debug(
-            "Finished parsing {0} certificates: {1}".format(
+            "Finished parsing {} certificates: {}".format(
                 len(certificate_nodes), certificates
             )
         )
@@ -227,7 +228,7 @@ class SAMLMetadataParser(object):
             localizable_metadata_tag_name = xpath[last_slash_index + 1 :]
 
             raise SAMLMetadataParsingError(
-                _("{0} tag is missing".format(localizable_metadata_tag_name))
+                _(f"{localizable_metadata_tag_name} tag is missing")
             )
 
         localizable_items = None
@@ -381,7 +382,7 @@ class SAMLMetadataParser(object):
         else:
             raise SAMLMetadataParsingError(
                 _(
-                    "Missing {0} SingleSignOnService service declaration".format(
+                    "Missing {} SingleSignOnService service declaration".format(
                         required_sso_binding.value
                     )
                 )
@@ -473,7 +474,7 @@ class SAMLMetadataParser(object):
         else:
             raise SAMLMetadataParsingError(
                 _(
-                    "Missing {0} AssertionConsumerService".format(
+                    "Missing {} AssertionConsumerService".format(
                         required_acs_binding.value
                     )
                 )
@@ -486,13 +487,7 @@ class SAMLMetadataParser(object):
         certificates = self._parse_certificates(certificate_nodes)
 
         if len(certificates) > 1:
-            raise SAMLMetadataParsingError(
-                _(
-                    "There are more than 1 SP certificates".format(
-                        required_acs_binding.value
-                    )
-                )
-            )
+            raise SAMLMetadataParsingError(_("There are more than 1 SP certificates"))
 
         certificate = next(iter(certificates)) if certificates else None
 
@@ -618,7 +613,7 @@ class SAMLMetadataParser(object):
         return parsing_results
 
 
-class SAMLSubjectParser(object):
+class SAMLSubjectParser:
     """Parses SAML response into Subject object"""
 
     def _parse_name_id(self, name_id_attributes):
@@ -697,7 +692,7 @@ class SAMLSubjectParser(object):
 
         return name_id, attribute_statement
 
-    def parse(self, auth):
+    def parse(self, auth: OneLogin_Saml2_Auth) -> SAMLSubject:
         """Parses OneLogin_Saml2_Auth object containing SAML response data into Subject
 
         :param auth: OneLogin_Saml2_Auth object containing SAML response
@@ -712,6 +707,7 @@ class SAMLSubjectParser(object):
             auth.get_nameid_spnq(),
             auth.get_nameid(),
         )
+        idp = auth.get_settings().get_idp_data()["entityId"]
         raw_attributes = auth.get_attributes()
         attribute_name_id, attribute_statement = self._parse_attributes(raw_attributes)
         valid_till = auth.get_session_expiration()
@@ -722,6 +718,6 @@ class SAMLSubjectParser(object):
         if not valid_till:
             valid_till = auth.get_last_assertion_not_on_or_after()
 
-        subject = SAMLSubject(name_id, attribute_statement, valid_till)
+        subject = SAMLSubject(idp, name_id, attribute_statement, valid_till)
 
         return subject

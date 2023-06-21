@@ -1,0 +1,231 @@
+{
+  "$id": "https://schemas.thepalaceproject.io/customlists/1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+
+    "document": {
+      "$comment": "The top-level container of custom lists.",
+      "type": "object",
+      "properties": {
+        "%id": {
+          "type": "string",
+          "const": "https://schemas.thepalaceproject.io/customlists/1.0"
+        },
+        "customlists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/customlist"
+          }
+        },
+        "problematic-customlists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/problematic-customlist"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%id",
+        "customlists",
+        "problematic-customlists"
+      ]
+    },
+
+    "book": {
+      "$comment": "A book within a custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "book"
+        },
+        "id-value": {
+          "$comment": "The value part of an identifier (such as 614ed125-d7e5-4cff-b3de-6b6c90ff853c, in urn:librarysimplified.org/terms/id/Overdrive ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c)",
+          "type": "string"
+        },
+        "id-type": {
+          "$comment": "The type of the primary identifier",
+          "type": "string"
+        },
+        "id-full": {
+          "$comment": "The full, raw primary identifier for the book as it appeared on the exporting CM",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id-value",
+        "id-type",
+        "id-full",
+        "title",
+        "author"
+      ]
+    },
+
+    "collection": {
+      "$comment": "A reference to a collection from a list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "collection"
+        },
+        "id": {
+          "$comment": "The primary identifier used for the collection",
+          "type": "number"
+        },
+        "name": {
+          "$comment": "The collection name",
+          "type": "string"
+        },
+        "protocol": {
+          "$comment": "The collection protocol",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "protocol"
+      ]
+    },
+
+    "problematic-book": {
+      "$comment": "A broken/problematic book within a custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problematic-book"
+        },
+        "id-value": {
+          "$comment": "The value part of an identifier (such as 614ed125-d7e5-4cff-b3de-6b6c90ff853c, in urn:librarysimplified.org/terms/id/Overdrive ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c)",
+          "type": "string"
+        },
+        "id-type": {
+          "$comment": "The type of the primary identifier",
+          "type": "string"
+        },
+        "id-full": {
+          "$comment": "The full, raw primary identifier for the book as it appeared on the exporting CM",
+          "type": "string"
+        },
+        "title": {
+          "$comment": "The book title",
+          "type": "string"
+        },
+        "message": {
+          "$comment": "The error message",
+          "type": "string"
+        },
+        "author": {
+          "$comment": "The book (primary) author",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "author",
+        "id-value",
+        "id-type",
+        "id-full",
+        "message",
+        "title"
+      ]
+    },
+
+    "customlist": {
+      "$comment": "A custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "customlist"
+        },
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "library-id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "books": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/book"
+          }
+        },
+        "collections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/collection"
+          }
+        },
+        "problematic-books": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/problematic-book"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "books",
+        "collections",
+        "id",
+        "library-id",
+        "name",
+        "problematic-books"
+      ]
+    },
+
+    "problematic-customlist": {
+      "$comment": "A problematic custom list.",
+      "type": "object",
+      "properties": {
+        "%type": {
+          "type": "string",
+          "const": "problematic-customlist"
+        },
+        "id": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "%type",
+        "id",
+        "name",
+        "error"
+      ]
+    }
+  },
+
+  "$ref": "#/$defs/document"
+}

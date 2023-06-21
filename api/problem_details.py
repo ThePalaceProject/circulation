@@ -189,6 +189,13 @@ NO_SUCH_LIST = pd(
     _("You asked for a nonexistent list."),
 )
 
+CANNOT_DELETE_SHARED_LIST = pd(
+    "http://librarysimplified.org/terms/problem/cannot-delete-shared-list",
+    409,
+    _("Cannot delete list."),
+    _("It is not possible to delete a shared list."),
+)
+
 NO_SUCH_COLLECTION = pd(
     "http://librarysimplified.org/terms/problem/unknown-collection",
     404,
@@ -234,29 +241,6 @@ CANNOT_RELEASE_HOLD = pd(
     400,
     _("Could not release hold."),
     _("Could not release hold."),
-)
-
-INVALID_OAUTH_CALLBACK_PARAMETERS = pd(
-    "http://librarysimplified.org/terms/problem/invalid-oauth-callback-parameters",
-    status_code=400,
-    title=_("Invalid OAuth callback parameters."),
-    detail=_(
-        "The OAuth callback must contain a code and a state parameter with the OAuth provider name."
-    ),
-)
-
-UNKNOWN_OAUTH_PROVIDER = pd(
-    "http://librarysimplified.org/terms/problem/unknown-oauth-provider",
-    status_code=400,
-    title=_("Unknown OAuth provider."),
-    detail=_("The specified OAuth provider name isn't one of the known providers."),
-)
-
-INVALID_OAUTH_BEARER_TOKEN = pd(
-    "http://librarysimplified.org/terms/problem/credentials-invalid",
-    status_code=400,
-    title=_("Invalid OAuth bearer token."),
-    detail=_("The provided OAuth bearer token couldn't be verified."),
 )
 
 UNKNOWN_SAML_PROVIDER = pd(
@@ -355,4 +339,48 @@ SHARED_SECRET_DECRYPTION_ERROR = pd(
     status_code=502,
     title=_("Decryption error"),
     detail=_("Failed to decrypt a shared secret retrieved from another computer."),
+)
+
+DEVICE_TOKEN_NOT_FOUND = pd(
+    "http://librarysimplified.org/terms/problem/device-token-not-found",
+    status_code=404,
+    title=_("Device token not found"),
+    detail=_("Patron does not have a device registered with this token."),
+)
+
+DEVICE_TOKEN_ALREADY_EXISTS = pd(
+    "http://librarysimplified.org/terms/problem/device-token-already-exists",
+    status_code=409,
+    title=_("Device token already exists"),
+    detail=_("A device token with the same token already exists."),
+)
+
+DEVICE_TOKEN_TYPE_INVALID = pd(
+    "http://librarysimplified.org/terms/problem/device-token-type-invalid",
+    status_code=400,
+    title=_("Device token type invalid"),
+    detail=_("The token type provided is not valid."),
+)
+
+PATRON_AUTH_ACCESS_TOKEN_EXPIRED = pd(
+    "http://librarysimplified.org/terms/problem/patron-auth-access-token-expired",
+    status_code=401,
+    title=_("Access token expired"),
+    detail=_("The patron authentication access token has expired."),
+)
+
+PATRON_AUTH_ACCESS_TOKEN_INVALID = pd(
+    "http://librarysimplified.org/terms/problem/patron-auth-access-token-invalid",
+    status_code=401,
+    title=_("Access token invalid"),
+    detail=_("The patron authentication access token is invalid."),
+)
+
+PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE = pd(
+    "http://librarysimplified.org/terms/problem/patron-auth-access-not-possible",
+    status_code=400,
+    title=_("Access token not possible"),
+    detail=_(
+        "The patron authentication access token is not possible for this type of authentication."
+    ),
 )

@@ -1,11 +1,11 @@
 import functools
 import time
 from contextlib import contextmanager
-from typing import Callable
+from typing import Callable, Optional
 
 
 def log_elapsed_time(
-    *, log_method: Callable, message_prefix: str = None, skip_start=False
+    *, log_method: Callable, message_prefix: Optional[str] = None, skip_start=False
 ):
     """Decorator for logging elapsed time.
 
@@ -36,7 +36,7 @@ def log_elapsed_time(
 
 @contextmanager
 def elapsed_time_logging(
-    *, log_method: Callable, message_prefix: str = None, skip_start=False
+    *, log_method: Callable, message_prefix: Optional[str] = None, skip_start=False
 ):
     """Context manager for logging elapsed time.
 

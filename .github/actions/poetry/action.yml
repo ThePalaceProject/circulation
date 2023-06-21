@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version of poetry to install"
     required: false
-    default: "1.1.12"
+    default: "1.5.1"
 
 outputs:
   version:
@@ -21,5 +21,5 @@ runs:
       shell: bash
 
     - id: poetry-version
-      run: echo "::set-output name=version::$(poetry --version)"
+      run: echo "version=$(poetry --version)" >> $GITHUB_OUTPUT
       shell: bash

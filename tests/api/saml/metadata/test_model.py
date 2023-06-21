@@ -1,5 +1,4 @@
-# coding=utf-8
-from parameterized import parameterized
+import pytest
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -10,10 +9,10 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLSubjectPatronIDExtractor,
 )
-from tests.api.saml import fixtures
+from tests.api.saml import saml_strings
 
 
-class TestAttributeStatement(object):
+class TestAttributeStatement:
     def test_init_accepts_list_of_attributes(self):
         # Arrange
         attributes = [
@@ -42,14 +41,23 @@ class TestAttributeStatement(object):
         )
 
 
-class TestSAMLSubjectPatronIDExtractor(object):
-    @parameterized.expand(
+class TestSAMLSubjectPatronIDExtractor:
+    @pytest.mark.parametrize(
+        "_,subject,expected_patron_id,use_name_id,patron_id_attributes,patron_id_regular_expression",
         [
-            ("subject_without_patron_id", SAMLSubject(None, None), None),
+            (
+                "subject_without_patron_id",
+                SAMLSubject("http://idp.example.com", None, None),
+                None,
+                True,
+                None,
+                None,
+            ),
             (
                 "subject_with_eduPersonTargetedID_attribute",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -67,11 +75,15 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     ),
                 ),
                 "3",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_eduPersonUniqueId_attribute",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -85,21 +97,29 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     ),
                 ),
                 "2",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_uid_attribute",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [SAMLAttribute(name=SAMLAttributeType.uid.name, values=["2"])]
                     ),
                 ),
                 "2",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_name_id",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -110,11 +130,15 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     ),
                 ),
                 "1",
+                True,
+                None,
+                None,
             ),
             (
                 "subject_with_switched_off_use_of_name_id",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -126,11 +150,14 @@ class TestSAMLSubjectPatronIDExtractor(object):
                 ),
                 None,
                 False,
+                None,
+                None,
             ),
             (
                 "patron_id_attributes_matching_attributes_in_subject",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -150,11 +177,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                 "4",
                 False,
                 [SAMLAttributeType.uid.name],
+                None,
             ),
             (
                 "patron_id_attributes_matching_second_saml_attribute",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -177,11 +206,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     SAMLAttributeType.eduPersonTargetedID.name,
                     SAMLAttributeType.uid.name,
                 ],
+                None,
             ),
             (
                 "patron_id_attributes_not_matching_attributes_in_subject",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -201,11 +232,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                 None,
                 False,
                 [SAMLAttributeType.givenName.name],
+                None,
             ),
             (
                 "patron_id_attributes_not_matching_attributes_in_subject_and_using_name_id_instead",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -225,11 +258,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                 "1",
                 True,
                 [SAMLAttributeType.givenName.name],
+                None,
             ),
             (
                 "patron_id_regular_expression_matching_saml_subject",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -252,12 +287,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "patron_id_regular_expression_matching_second_saml_attribute",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -281,12 +317,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "unicode_patron_id_regular_expression_matching_saml_subject",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -309,12 +346,13 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
             ),
             (
                 "patron_id_regular_expression_not_matching_saml_subject",
                 SAMLSubject(
-                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED, "", "", "1"),
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
                     SAMLAttributeStatement(
                         [
                             SAMLAttribute(
@@ -337,13 +375,17 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_COM,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
             ),
             (
                 "patron_id_regular_expression_not_matching_saml_attributes_but_matching_name_id",
                 SAMLSubject(
+                    "http://idp.example.com",
                     SAMLNameID(
-                        SAMLNameIDFormat.UNSPECIFIED, "", "", "patron@university.com"
+                        SAMLNameIDFormat.UNSPECIFIED.value,
+                        "",
+                        "",
+                        "patron@university.com",
                     ),
                     SAMLAttributeStatement(
                         [
@@ -367,18 +409,18 @@ class TestSAMLSubjectPatronIDExtractor(object):
                     SAMLAttributeType.eduPersonPrincipalName.name,
                     SAMLAttributeType.mail.name,
                 ],
-                fixtures.PATRON_ID_REGULAR_EXPRESSION_COM,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
             ),
-        ]
+        ],
     )
     def test(
         self,
         _,
         subject,
         expected_patron_id,
-        use_name_id=True,
-        patron_id_attributes=None,
-        patron_id_regular_expression=None,
+        use_name_id,
+        patron_id_attributes,
+        patron_id_regular_expression,
     ):
         """Make sure that SAMLSubjectUIDExtractor correctly extracts a unique patron ID from the SAML subject.
 

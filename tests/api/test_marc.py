@@ -9,11 +9,11 @@ from api.registration.registry import Registration
 from core.config import Configuration
 from core.marc import MARCExporter
 from core.model import ConfigurationSetting, ExternalIntegration
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestLibraryAnnotator(DatabaseTest):
-    def test_annotate_work_record(self):
+class TestLibraryAnnotator:
+    def test_annotate_work_record(self, db: DatabaseTransactionFixture):
         # Mock class to verify that the correct methods
         # are called by annotate_work_record.
         class MockAnnotator(LibraryAnnotator):
@@ -43,17 +43,17 @@ class TestLibraryAnnotator(DatabaseTest):
             def add_formats(self, record, pool):
                 self.called_with["add_formats"] = [record, pool]
 
-        annotator = MockAnnotator(self._default_library)
+        annotator = MockAnnotator(db.default_library())
         record = Record()
-        work = self._work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
         edition = pool.presentation_edition
         identifier = pool.identifier
 
-        integration = self._external_integration(
+        integration = db.external_integration(
             ExternalIntegration.MARC_EXPORT,
             ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
 
         annotator.annotate_work_record(
@@ -67,7 +67,7 @@ class TestLibraryAnnotator(DatabaseTest):
         assert "add_simplified_genres" not in annotator.called_with
         assert [
             record,
-            self._default_library,
+            db.default_library(),
             identifier,
             integration,
         ] == annotator.called_with.get("add_web_client_urls")
@@ -76,17 +76,17 @@ class TestLibraryAnnotator(DatabaseTest):
 
         # If settings are false, the methods still won't be called.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.INCLUDE_SUMMARY, self._default_library, integration
+            db.session, MARCExporter.INCLUDE_SUMMARY, db.default_library(), integration
         ).value = "false"
 
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             MARCExporter.INCLUDE_SIMPLIFIED_GENRES,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "false"
 
-        annotator = MockAnnotator(self._default_library)
+        annotator = MockAnnotator(db.default_library())
         annotator.annotate_work_record(
             work, pool, edition, identifier, record, integration
         )
@@ -96,7 +96,7 @@ class TestLibraryAnnotator(DatabaseTest):
         assert "add_simplified_genres" not in annotator.called_with
         assert [
             record,
-            self._default_library,
+            db.default_library(),
             identifier,
             integration,
         ] == annotator.called_with.get("add_web_client_urls")
@@ -106,24 +106,24 @@ class TestLibraryAnnotator(DatabaseTest):
         # Once the include settings are true and the marc organization code is set,
         # all methods are called.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.INCLUDE_SUMMARY, self._default_library, integration
+            db.session, MARCExporter.INCLUDE_SUMMARY, db.default_library(), integration
         ).value = "true"
 
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             MARCExporter.INCLUDE_SIMPLIFIED_GENRES,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "true"
 
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             MARCExporter.MARC_ORGANIZATION_CODE,
-            self._default_library,
+            db.default_library(),
             integration,
         ).value = "marc org"
 
-        annotator = MockAnnotator(self._default_library)
+        annotator = MockAnnotator(db.default_library())
         annotator.annotate_work_record(
             work, pool, edition, identifier, record, integration
         )
@@ -135,19 +135,19 @@ class TestLibraryAnnotator(DatabaseTest):
         assert [record, work] == annotator.called_with.get("add_simplified_genres")
         assert [
             record,
-            self._default_library,
+            db.default_library(),
             identifier,
             integration,
         ] == annotator.called_with.get("add_web_client_urls")
         assert [record, pool] == annotator.called_with.get("add_distributor")
         assert [record, pool] == annotator.called_with.get("add_formats")
 
-    def test_add_web_client_urls(self):
+    def test_add_web_client_urls(self, db: DatabaseTransactionFixture):
         # Web client URLs can come from either the MARC export integration or
         # a library registry integration.
 
-        identifier = self._identifier(foreign_id="identifier")
-        lib_short_name = self._default_library.short_name
+        identifier = db.identifier(foreign_id="identifier")
+        lib_short_name = db.default_library().short_name
 
         # The URL for a work is constructed as:
         # - <cm-base>/<lib-short-name>/works/<qualified-identifier>
@@ -176,6 +176,7 @@ class TestLibraryAnnotator(DatabaseTest):
         )
 
         # A few checks to ensure that our setup is useful.
+        assert lib_short_name is not None
         assert len(lib_short_name) > 0
         assert client_base_1 != client_base_2
         assert expected_client_url_1 != expected_client_url_2
@@ -183,49 +184,49 @@ class TestLibraryAnnotator(DatabaseTest):
         assert expected_client_url_2.startswith(client_base_2)
 
         ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
+            db.session, Configuration.BASE_URL_KEY
         ).value = cm_base_url
 
-        annotator = LibraryAnnotator(self._default_library)
+        annotator = LibraryAnnotator(db.default_library())
 
         # If no web catalog URLs are set for the library, nothing will be changed.
         record = Record()
-        annotator.add_web_client_urls(record, self._default_library, identifier)
+        annotator.add_web_client_urls(record, db.default_library(), identifier)
         assert [] == record.get_fields("856")
 
         # Add a URL from a library registry.
-        registry = self._external_integration(
+        registry = db.external_integration(
             ExternalIntegration.OPDS_REGISTRATION,
             ExternalIntegration.DISCOVERY_GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db,
+            db.session,
             Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-            self._default_library,
+            db.default_library(),
             registry,
         ).value = client_base_1
 
         record = Record()
-        annotator.add_web_client_urls(record, self._default_library, identifier)
+        annotator.add_web_client_urls(record, db.default_library(), identifier)
         [field] = record.get_fields("856")
         assert ["4", "0"] == field.indicators
         assert expected_client_url_1 == field.get_subfields("u")[0]
 
         # Add a manually configured URL on a MARC export integration.
-        integration = self._external_integration(
+        integration = db.external_integration(
             ExternalIntegration.MARC_EXPORT,
             ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
 
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.WEB_CLIENT_URL, self._default_library, integration
+            db.session, MARCExporter.WEB_CLIENT_URL, db.default_library(), integration
         ).value = client_base_2
 
         record = Record()
         annotator.add_web_client_urls(
-            record, self._default_library, identifier, integration
+            record, db.default_library(), identifier, integration
         )
         [field1, field2] = record.get_fields("856")
         assert ["4", "0"] == field1.indicators

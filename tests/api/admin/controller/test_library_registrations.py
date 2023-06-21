@@ -2,6 +2,7 @@ import json
 
 import flask
 import pytest
+from flask import url_for
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
@@ -13,19 +14,19 @@ from core.model import (
     Library,
     create,
 )
-from core.testing import DummyHTTPClient
 from core.util.http import HTTP
+from tests.core.mock import DummyHTTPClient
 
-from .test_controller import SettingsControllerTest
 
-
-class TestLibraryRegistration(SettingsControllerTest):
+class TestLibraryRegistration:
     """Test the process of registering a library with a RemoteRegistry."""
 
-    def test_discovery_service_library_registrations_get(self):
+    def test_discovery_service_library_registrations_get(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
+
         # Here's a discovery service.
         discovery_service, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.OPDS_REGISTRATION,
             goal=ExternalIntegration.DISCOVERY_GOAL,
@@ -36,35 +37,35 @@ class TestLibraryRegistration(SettingsControllerTest):
 
         # We successfully registered this library with the service.
         succeeded, ignore = create(
-            self._db,
+            db.session,
             Library,
             name="Library 1",
             short_name="L1",
         )
         config = ConfigurationSetting.for_library_and_externalintegration
         config(
-            self._db, "library-registration-status", succeeded, discovery_service
+            db.session, "library-registration-status", succeeded, discovery_service
         ).value = "success"
 
         # We tried to register this library with the service but were
         # unsuccessful.
         config(
-            self._db, "library-registration-stage", succeeded, discovery_service
+            db.session, "library-registration-stage", succeeded, discovery_service
         ).value = "production"
         failed, ignore = create(
-            self._db,
+            db.session,
             Library,
             name="Library 2",
             short_name="L2",
         )
         config(
-            self._db,
+            db.session,
             "library-registration-status",
             failed,
             discovery_service,
         ).value = "failure"
         config(
-            self._db,
+            db.session,
             "library-registration-stage",
             failed,
             discovery_service,
@@ -72,7 +73,7 @@ class TestLibraryRegistration(SettingsControllerTest):
 
         # We've never tried to register this library with the service.
         unregistered, ignore = create(
-            self._db,
+            db.session,
             Library,
             name="Library 3",
             short_name="L3",
@@ -114,10 +115,10 @@ class TestLibraryRegistration(SettingsControllerTest):
         )
 
         controller = (
-            self.manager.admin_discovery_service_library_registrations_controller
+            settings_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
         )
         m = controller.process_discovery_service_library_registrations
-        with self.request_context_with_admin("/", method="GET"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="GET"):
             response = m(do_get=client.do_get)
             # The document we get back from the controller is a
             # dictionary with useful information on all known
@@ -186,32 +187,35 @@ class TestLibraryRegistration(SettingsControllerTest):
             # When the user lacks the SYSTEM_ADMIN role, the
             # controller won't even start processing their GET
             # request.
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            self._db.flush()
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+            db.session.flush()
             pytest.raises(AdminNotAuthorized, m)
 
-    def test_discovery_service_library_registrations_post(self):
+    def test_discovery_service_library_registrations_post(self, settings_ctrl_fixture):
         """Test what might happen when you POST to
         discovery_service_library_registrations.
         """
 
         controller = (
-            self.manager.admin_discovery_service_library_registrations_controller
+            settings_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
         )
         m = controller.process_discovery_service_library_registrations
 
         # Here, the user doesn't have permission to start the
         # registration process.
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        with self.request_context_with_admin("/", method="POST"):
+        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             pytest.raises(
-                AdminNotAuthorized, m, do_get=self.do_request, do_post=self.do_request
+                AdminNotAuthorized,
+                m,
+                do_get=settings_ctrl_fixture.do_request,
+                do_post=settings_ctrl_fixture.do_request,
             )
-        self.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
 
         # The integration ID might not correspond to a valid
         # ExternalIntegration.
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("integration_id", "1234"),
@@ -223,7 +227,7 @@ class TestLibraryRegistration(SettingsControllerTest):
         # Create an ExternalIntegration to avoid that problem in future
         # tests.
         discovery_service, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.OPDS_REGISTRATION,
             goal=ExternalIntegration.DISCOVERY_GOAL,
@@ -231,7 +235,7 @@ class TestLibraryRegistration(SettingsControllerTest):
         discovery_service.url = "registry url"
 
         # The library name might not correspond to a real library.
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("integration_id", discovery_service.id),
@@ -242,7 +246,7 @@ class TestLibraryRegistration(SettingsControllerTest):
             assert NO_SUCH_LIBRARY == response
 
         # Take care of that problem.
-        library = self._default_library
+        library = settings_ctrl_fixture.ctrl.db.default_library()
         form = MultiDict(
             [
                 ("integration_id", discovery_service.id),
@@ -260,7 +264,7 @@ class TestLibraryRegistration(SettingsControllerTest):
             def push(self, stage, url_for, catalog_url=None, do_get=None, do_post=None):
                 return REMOTE_INTEGRATION_FAILED
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = form
             response = m(registration_class=Mock)
             assert REMOTE_INTEGRATION_FAILED == response
@@ -277,7 +281,7 @@ class TestLibraryRegistration(SettingsControllerTest):
                 Mock.called_with = (args, kwargs)
                 return True
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = form
             response = controller.process_discovery_service_library_registrations(
                 registration_class=Mock
@@ -286,7 +290,7 @@ class TestLibraryRegistration(SettingsControllerTest):
 
             # push() was called with the arguments we would expect.
             args, kwargs = Mock.called_with
-            assert (Registration.TESTING_STAGE, self.manager.url_for) == args
+            assert (Registration.TESTING_STAGE, url_for) == args
 
             # We would have made real HTTP requests.
             assert HTTP.debuggable_post == kwargs.pop("do_post")

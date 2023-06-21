@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 from . import *
 
 
@@ -7,19 +5,17 @@ class GutenbergBookshelfClassifier(Classifier):
 
     # Any classification that includes the string "Fiction" will be
     # counted as fiction. This is just the leftovers.
-    FICTION = set(
-        [
-            "Bestsellers, American, 1895-1923",
-            "Adventure",
-            "Fantasy",
-            "Horror",
-            "Mystery",
-            "Western",
-            "Suspense",
-            "Thriller",
-            "Children's Anthologies",
-        ]
-    )
+    FICTION = {
+        "Bestsellers, American, 1895-1923",
+        "Adventure",
+        "Fantasy",
+        "Horror",
+        "Mystery",
+        "Western",
+        "Suspense",
+        "Thriller",
+        "Children's Anthologies",
+    }
 
     GENRES = {
         Adventure: [

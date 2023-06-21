@@ -1,8 +1,11 @@
+from typing import Optional
+
 from flask_babel import lazy_gettext as _
 
 from api.config import Configuration
 from core.config import IntegrationException
 from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
+from core.util.problem_detail import ProblemDetail
 
 from .problem_details import *
 
@@ -17,7 +20,7 @@ class CirculationException(IntegrationException):
 
     def __init__(self, message=None, debug_info=None):
         message = message or self.__class__.__name__
-        super(CirculationException, self).__init__(message, debug_info)
+        super().__init__(message, debug_info)
 
 
 class InternalServerError(IntegrationException):
@@ -34,7 +37,7 @@ class RemoteInitiatedServerError(InternalServerError):
     status_code = 502
 
     def __init__(self, message, service_name):
-        super(RemoteInitiatedServerError, self).__init__(message)
+        super().__init__(message)
         self.service_name = service_name
 
     def as_problem_detail_document(self, debug=False):
@@ -144,14 +147,16 @@ class LimitReached(CirculationException):
     """
 
     status_code = 403
-    BASE_DOC = None
-    SETTING_NAME = None
+    BASE_DOC: Optional[ProblemDetail] = None
+    SETTING_NAME: Optional[str] = None
     MESSAGE_WITH_LIMIT = None
 
-    def __init__(self, message=None, debug_info=None, library=None):
-        super(LimitReached, self).__init__(message=message, debug_info=debug_info)
+    def __init__(self, message=None, debug_info=None, library=None, limit=None):
+        super().__init__(message=message, debug_info=debug_info)
         if library:
             self.limit = library.setting(self.SETTING_NAME).int_value
+        elif limit:
+            self.limit = limit
         else:
             self.limit = None
 

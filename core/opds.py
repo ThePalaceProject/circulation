@@ -1,12 +1,18 @@
+from __future__ import annotations
+
 import datetime
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from lxml import etree
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
-from .cdn import cdnify
+from core.external_search import QueryParseException
+from core.problem_details import INVALID_INPUT
+
 from .classifier import Classifier
 from .entrypoint import EntryPoint
 from .facets import FacetConstants
@@ -34,6 +40,10 @@ from .util.datetime_helpers import utc_now
 from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
+# Import related models when doing type checking
+if TYPE_CHECKING:
+    from core.model import Library, LicensePool  # noqa: autoflake
+
 
 class UnfulfillableWork(Exception):
     """Raise this exception when it turns out a Work currently cannot be
@@ -46,23 +56,20 @@ class UnfulfillableWork(Exception):
     """
 
 
-class Annotator(object):
+class Annotator:
     """The Annotator knows how to present an OPDS feed in a specific
     application context.
     """
 
     opds_cache_field = Work.simple_opds_entry.name
 
-    def is_work_entry_solo(self, work):
+    def is_work_entry_solo(self, work: Work) -> bool:
         """Return a boolean value indicating whether the work's OPDS catalog entry is served by itself,
             rather than as a part of the feed.
 
         :param work: Work object
-        :type work: core.model.work.Work
-
         :return: Boolean value indicating whether the work's OPDS catalog entry is served by itself,
             rather than as a part of the feed
-        :rtype: bool
         """
         return False
 
@@ -151,7 +158,7 @@ class Annotator(object):
 
         if not updated and work.last_update_time:
             # NOTE: This is a default that works in most cases. When
-            # ordering ElasticSearch results by last update time,
+            # ordering Opensearch results by last update time,
             # `work` is a WorkSearchResult object containing a more
             # reliable value that you can use if you want.
             updated = work.last_update_time
@@ -188,6 +195,22 @@ class Annotator(object):
         return rating_tag
 
     @classmethod
+    def samples(cls, edition: Edition) -> list[Hyperlink]:
+        if not edition:
+            return []
+        _db = Session.object_session(edition)
+        links = (
+            _db.query(Hyperlink)
+            .filter(
+                Hyperlink.rel == Hyperlink.SAMPLE,
+                Hyperlink.identifier_id == edition.primary_identifier_id,
+            )
+            .options(joinedload(Hyperlink.resource))
+            .all()
+        )
+        return links
+
+    @classmethod
     def cover_links(cls, work):
         """Return all links to be used as cover links for this work.
 
@@ -202,10 +225,10 @@ class Annotator(object):
         if work:
             _db = Session.object_session(work)
             if work.cover_thumbnail_url:
-                thumbnails = [cdnify(work.cover_thumbnail_url)]
+                thumbnails = [work.cover_thumbnail_url]
 
             if work.cover_full_url:
-                full = [cdnify(work.cover_full_url)]
+                full = [work.cover_full_url]
         return thumbnails, full
 
     @classmethod
@@ -434,14 +457,16 @@ class Annotator(object):
         raise NotImplementedError()
 
     @classmethod
-    def active_licensepool_for(cls, work):
+    def active_licensepool_for(
+        cls, work: Work, library: Library | None = None
+    ) -> LicensePool | None:
         """Which license pool would be/has been used to issue a license for
         this work?
         """
         if not work:
             return None
 
-        return work.active_license_pool()
+        return work.active_license_pool(library=library)
 
     def sort_works_for_groups_feed(self, works, **kwargs):
         return works
@@ -459,7 +484,7 @@ class VerboseAnnotator(Annotator):
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry
     ):
-        super(VerboseAnnotator, self).annotate_work_entry(
+        super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )
         self.add_ratings(work, entry)
@@ -514,7 +539,7 @@ class VerboseAnnotator(Annotator):
         by_scheme = defaultdict(list)
         for (scheme, term), value in list(by_scheme_and_term.items()):
             by_scheme[scheme].append(value)
-        by_scheme.update(super(VerboseAnnotator, cls).categories(work))
+        by_scheme.update(super().categories(work))
         return by_scheme
 
     @classmethod
@@ -574,7 +599,7 @@ class AcquisitionFeed(OPDSFeed):
         max_age=None,
         search_engine=None,
         search_debug=False,
-        **response_kwargs
+        **response_kwargs,
     ):
         """The acquisition feed for 'featured' items from a given lane's
         sublanes, organized into per-lane groups.
@@ -615,7 +640,7 @@ class AcquisitionFeed(OPDSFeed):
             facets=facets,
             refresher_method=refresh,
             max_age=max_age,
-            **response_kwargs
+            **response_kwargs,
         )
 
     @classmethod
@@ -675,6 +700,7 @@ class AcquisitionFeed(OPDSFeed):
                 # We want to assign this work to a group derived
                 # from the sublane.
                 v = dict(lane=sublane)
+
             annotator.lanes_by_work[work].append(v)
             all_works.append(work)
 
@@ -718,7 +744,7 @@ class AcquisitionFeed(OPDSFeed):
         max_age=None,
         search_engine=None,
         search_debug=False,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Create a feed representing one page of works from a given lane.
 
@@ -752,7 +778,7 @@ class AcquisitionFeed(OPDSFeed):
             pagination=pagination,
             facets=facets,
             refresher_method=refresh,
-            **response_kwargs
+            **response_kwargs,
         )
 
     @classmethod
@@ -1026,7 +1052,7 @@ class AcquisitionFeed(OPDSFeed):
         pagination=None,
         facets=None,
         annotator=None,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Run a search against the given search engine and return
         the results as a Flask Response.
@@ -1045,9 +1071,13 @@ class AcquisitionFeed(OPDSFeed):
         """
         facets = facets or SearchFacets()
         pagination = pagination or Pagination.default()
-        results = lane.search(
-            _db, query, search_engine, pagination=pagination, facets=facets
-        )
+        try:
+            results = lane.search(
+                _db, query, search_engine, pagination=pagination, facets=facets
+            )
+        except QueryParseException as e:
+            return INVALID_INPUT.detailed(e.detail)
+
         opds_feed = AcquisitionFeed(_db, title, url, results, annotator=annotator)
         AcquisitionFeed.add_link_to_feed(
             feed=opds_feed.feed,
@@ -1115,7 +1145,7 @@ class AcquisitionFeed(OPDSFeed):
         force_create=False,
         raw=False,
         use_cache=True,
-        **response_kwargs
+        **response_kwargs,
     ):
         """Create a single-entry OPDS document for one specific work.
 
@@ -1217,7 +1247,7 @@ class AcquisitionFeed(OPDSFeed):
             annotator = annotator()
         self.annotator = annotator
 
-        super(AcquisitionFeed, self).__init__(title, url)
+        super().__init__(title, url)
 
         for work in works:
             self.add_entry(work)
@@ -1241,8 +1271,12 @@ class AcquisitionFeed(OPDSFeed):
         return entry
 
     def create_entry(
-        self, work, even_if_no_license_pool=False, force_create=False, use_cache=True
-    ):
+        self,
+        work: Work | Edition | None,
+        even_if_no_license_pool=False,
+        force_create=False,
+        use_cache=True,
+    ) -> etree.Element | OPDSMessage:
         """Turn a work into an entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):
@@ -1407,6 +1441,16 @@ class AcquisitionFeed(OPDSFeed):
                 elif url.endswith(".gif"):
                     image_type = "image/gif"
                 links.append(AtomFeed.link(rel=rel, href=url, type=image_type))
+
+        sample_links = self.annotator.samples(edition)
+        for link in sample_links:
+            links.append(
+                AtomFeed.link(
+                    rel=Hyperlink.CLIENT_SAMPLE,
+                    href=link.resource.url,
+                    type=link.resource.representation.media_type,
+                )
+            )
 
         content = self.annotator.content(work)
         if isinstance(content, bytes):
@@ -1904,7 +1948,7 @@ class NavigationFeed(OPDSFeed):
         annotator,
         facets=None,
         max_age=None,
-        **response_kwargs
+        **response_kwargs,
     ):
         """The navigation feed with links to a given lane's sublanes.
 
@@ -1928,7 +1972,7 @@ class NavigationFeed(OPDSFeed):
             facets=facets,
             refresher_method=refresh,
             max_age=max_age,
-            **response_kwargs
+            **response_kwargs,
         )
 
     @classmethod
@@ -2021,7 +2065,7 @@ class MockAnnotator(Annotator):
         else:
             facet_string = ""
 
-        return "http://groups/%s%s" % (identifier, facet_string)
+        return f"http://groups/{identifier}{facet_string}"
 
     @classmethod
     def default_lane_url(cls):
@@ -2030,7 +2074,7 @@ class MockAnnotator(Annotator):
     @classmethod
     def facet_url(cls, facets):
         return "http://facet/" + "&".join(
-            ["%s=%s" % (k, v) for k, v in sorted(facets.items())]
+            [f"{k}={v}" for k, v in sorted(facets.items())]
         )
 
     @classmethod

@@ -3,7 +3,7 @@
 # Local environment variables are not passed into cron, so variables set at
 # runtime need to be stored.
 
-set -ex
+set -e
 
 SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 
@@ -13,10 +13,10 @@ touch $SIMPLIFIED_ENVIRONMENT
 # Move all of the environment variables with Library Simplified prefixes
 # into an environment file. This will allow the environment to be loaded when
 # cron tasks are run, since crontab doesn't load them automatically.
-printenv | \
-  grep -e SIMPLIFIED -e LIBSIMPLE | \
-  sed 's/^\(.*\)$/export \1/g' | \
-  cat > $SIMPLIFIED_ENVIRONMENT
+# The values of the variables are escaped as needed for the shell.
+for var in $(printenv | grep -e SIMPLIFIED -e LIBSIMPLE | sed -e 's/^\([^=]*\)=.*$/\1/g'); do {
+  printf "export ${var}=%q\n" $(printenv "${var}")
+} done > $SIMPLIFIED_ENVIRONMENT
 
 # Give it to the appropriate user.
 chown simplified:simplified $SIMPLIFIED_ENVIRONMENT

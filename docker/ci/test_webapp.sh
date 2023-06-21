@@ -2,18 +2,25 @@
 
 set -ex
 
-# Wait for the container to start services before running tests
-sleep 30;
+# Container is passed as arg
+container="$1"
 
+# Source check command
 dir=$(dirname "${BASH_SOURCE[0]}")
 source "${dir}/check_service_status.sh"
 
+# Wait for container to start
+wait_for_runit "$container"
+
 # In a webapp container, check that nginx and uwsgi are running.
-check_service_status /etc/service/nginx
-check_service_status /home/simplified/service/uwsgi
+check_service_status "$container" /etc/service/nginx
+check_service_status "$container" /etc/service/uwsgi
+
+# Wait for UWSGI to be ready to accept connections.
+timeout 120s grep -q 'WSGI app .* ready in [0-9]* seconds' <(docker logs "$container" -f 2>&1)
 
 # Make sure the web server is running.
-healthcheck=$(curl --write-out "%{http_code}" --silent --output /dev/null http://localhost:8000/healthcheck.html)
+healthcheck=$(docker exec "$container" curl --write-out "%{http_code}" --silent --output /dev/null http://localhost/healthcheck.html)
 if ! [[ ${healthcheck} == "200" ]]; then
   exit 1
 else
@@ -21,8 +28,8 @@ else
 fi
 
 # Also make sure the app server is running.
-feed_type=$(curl --write-out "%{content_type}" --silent --output /dev/null http://localhost:8000/heartbeat)
-if ! [[ ${feed_type} == "application/vnd.health+json" ]]; then
+feed_type=$(docker exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/version.json)
+if ! [[ ${feed_type} == "application/json" ]]; then
   exit 1
 else
   echo "  OK"

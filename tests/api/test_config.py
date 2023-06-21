@@ -1,20 +1,31 @@
 import json
+import os
 from collections import Counter
+from unittest.mock import patch
 
+import pytest
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 
 from api.config import Configuration
+from core.config import CannotLoadConfiguration
 from core.config import Configuration as CoreConfiguration
 from core.model import ConfigurationSetting
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import FilesFixture
 
 
-class TestConfiguration(DatabaseTest):
-    def test_key_pair(self):
+@pytest.fixture()
+def notifications_files_fixture() -> FilesFixture:
+    """Provides access to notifications test files."""
+    return FilesFixture("util/notifications")
+
+
+class TestConfiguration:
+    def test_key_pair(self, db: DatabaseTransactionFixture):
         # Test the ability to create, replace, or look up a
         # public/private key pair in a ConfigurationSetting.
-        setting = ConfigurationSetting.sitewide(self._db, Configuration.KEY_PAIR)
+        setting = ConfigurationSetting.sitewide(db.session, Configuration.KEY_PAIR)
         setting.value = "nonsense"
 
         # If you pass in a ConfigurationSetting that is missing its
@@ -37,7 +48,7 @@ class TestConfiguration(DatabaseTest):
         assert new_public == public_key
         assert new_private == private_key
 
-    def test_cipher(self):
+    def test_cipher(self, db: DatabaseTransactionFixture):
         # Test the cipher() helper method.
 
         # Generate a public/private key pair.
@@ -57,9 +68,11 @@ class TestConfiguration(DatabaseTest):
         decrypted = decryptor.decrypt(encrypted)
         assert b"some text" == decrypted
 
-    def test_collection_language_method_performs_estimate(self):
+    def test_collection_language_method_performs_estimate(
+        self, db: DatabaseTransactionFixture
+    ):
         C = Configuration
-        library = self._default_library
+        library = db.default_library()
 
         # We haven't set any of these values.
         for key in [
@@ -107,9 +120,10 @@ class TestConfiguration(DatabaseTest):
         large_setting.value = '"this is json but it\'s not a list"'
         assert ["eng"] == C.large_collection_languages(library)
 
-    def test_estimate_language_collection_for_library(self):
-
-        library = self._default_library
+    def test_estimate_language_collection_for_library(
+        self, db: DatabaseTransactionFixture
+    ):
+        library = db.default_library()
 
         # We thought we'd have big collections.
         old_settings = {
@@ -144,8 +158,7 @@ class TestConfiguration(DatabaseTest):
             ).json_value
         )
 
-    def test_classify_holdings(self):
-
+    def test_classify_holdings(self, db: DatabaseTransactionFixture):
         m = Configuration.classify_holdings
 
         # If there are no titles in the collection at all, we assume
@@ -165,26 +178,26 @@ class TestConfiguration(DatabaseTest):
         )
         assert [["fre", "jpn"], ["spa", "ukr", "ira"], ["nav"]] == m(different_sizes)
 
-    def test_max_outstanding_fines(self):
+    def test_max_outstanding_fines(self, db: DatabaseTransactionFixture):
         m = Configuration.max_outstanding_fines
 
         # By default, fines are not enforced.
-        assert None == m(self._default_library)
+        assert None == m(db.default_library())
 
         # The maximum fine value is determined by this
         # ConfigurationSetting.
         setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, self._default_library
+            Configuration.MAX_OUTSTANDING_FINES, db.default_library()
         )
 
         # Any amount of fines is too much.
         setting.value = "$0"
-        max_fines = m(self._default_library)
+        max_fines = m(db.default_library())
         assert 0 == max_fines.amount
 
         # A more lenient approach.
         setting.value = "100"
-        max_fines = m(self._default_library)
+        max_fines = m(db.default_library())
         assert 100 == max_fines.amount
 
     def test_default_opds_format(self):
@@ -193,3 +206,58 @@ class TestConfiguration(DatabaseTest):
         assert (
             Configuration.DEFAULT_OPDS_FORMAT == CoreConfiguration.DEFAULT_OPDS_FORMAT
         )
+
+    @patch.object(os, "environ", new=dict())
+    def test_fcm_credentials(self, notifications_files_fixture):
+        invalid_json = "{ this is invalid JSON }"
+        valid_credentials_json = notifications_files_fixture.sample_text(
+            "fcm-credentials-valid-json.json"
+        )
+        valid_credentials_object = json.loads(valid_credentials_json)
+
+        # No FCM credentials environment variable present.
+        with pytest.raises(
+            CannotLoadConfiguration,
+            match=r"FCM Credentials configuration environment variable not defined.",
+        ):
+            Configuration.fcm_credentials()
+
+        # Non-existent file.
+        os.environ[
+            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = "filedoesnotexist.deleteifitdoes"
+        with pytest.raises(
+            FileNotFoundError,
+            match=r"The FCM credentials file .* does not exist.",
+        ):
+            Configuration.fcm_credentials()
+
+        # Valid JSON file.
+        os.environ[
+            Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE
+        ] = notifications_files_fixture.sample_path("fcm-credentials-valid-json.json")
+        assert valid_credentials_object == Configuration.fcm_credentials()
+
+        # Setting more than one FCM credentials environment variable is not valid.
+        os.environ[
+            Configuration.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE
+        ] = valid_credentials_json
+        with pytest.raises(
+            CannotLoadConfiguration,
+            match=r"Both JSON .* and file-based .* FCM Credential environment variables are defined, but only one is allowed.",
+        ):
+            Configuration.fcm_credentials()
+
+        # Down to just the JSON FCM credentials environment variable.
+        del os.environ[Configuration.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE]
+        assert valid_credentials_object == Configuration.fcm_credentials()
+
+        # But we should get an exception if the JSON is invalid.
+        os.environ[
+            Configuration.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE
+        ] = invalid_json
+        with pytest.raises(
+            CannotLoadConfiguration,
+            match=r"Cannot parse value of FCM credential environment variable .* as JSON.",
+        ):
+            Configuration.fcm_credentials()

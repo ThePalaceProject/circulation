@@ -8,7 +8,7 @@ from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 from aws_xray_sdk.ext.httplib import add_ignored as httplib_add_ignored
 from flask import Flask, Response, request, session
 
-from core.config import Configuration
+import core
 
 
 class PalaceXrayMiddleware(XRayMiddleware):
@@ -17,9 +17,7 @@ class PalaceXrayMiddleware(XRayMiddleware):
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
 
     @classmethod
-    def put_annotations(
-        cls, segment: Optional[Segment], seg_type: Optional[str] = None
-    ):
+    def put_annotations(cls, segment: Segment, seg_type: Optional[str] = None):
         if seg_type is not None:
             segment.put_annotation("type", seg_type)
 
@@ -28,8 +26,8 @@ class PalaceXrayMiddleware(XRayMiddleware):
                 name = env.replace(cls.XRAY_ENV_ANNOTATE, "").lower()
                 segment.put_annotation(name, value)
 
-        if Configuration.app_version() != Configuration.NO_APP_VERSION_FOUND:
-            segment.put_annotation("version", Configuration.app_version())
+        if core.__version__:
+            segment.put_annotation("version", core.__version__)
 
     @classmethod
     def setup_xray(cls, xray_recorder):

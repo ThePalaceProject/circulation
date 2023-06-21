@@ -1,0 +1,127 @@
+openapi: "3.0.0"
+info:
+  version: "0.1"
+  title: Circulation API
+paths:
+  /{library}/admin/custom_list/{list_id}:
+    summary: Edit/Delete a custom list as required
+    post:
+      summary: Edit a custom list
+      requestBody:
+        $ref: "#/components/requestBodies/custom_list"
+      responses:
+        '200':
+          description: Custom list was edited successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: 5
+        '400':
+          description: Bad input was provided
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: auto_update_query is required when auto_update is enabled
+      tags:
+        - admin
+
+  /admin/announcements:
+    summary: >
+      Create/Edit/Read global announcements meant for every library. \
+      The announcements will show up in the authentication documents.
+    get:
+      summary: Fetch all global announcements
+      tags:
+        - admin
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    type: object
+                  announcements:
+                    type: object
+    post:
+      summary: Edit the list of global announcements in its entirety.
+      tags:
+        - admin
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                announcements:
+                  type: string
+                  description: JSON stringified list of announcements
+                  example: [{"id": "xxxx-xxx-xxxxx", "content": "An announcement for all to see", start: "1990-01-01"}, {"content": "This is a new announcement without an id yet"}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        '400':
+          description: Bad Input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/invalid_input"
+
+
+
+
+components:
+  requestBodies:
+    custom_list:
+      content:
+        multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                entries:
+                  type: object
+                collections:
+                  type: array
+                  items:
+                    type: number
+                deletedEntries:
+                  type: array
+                  items:
+                    type: number
+                auto_update:
+                  type: boolean
+                auto_update_query:
+                  type: object
+                auto_update_facets:
+                  type: object
+  schemas:
+    invalid_input:
+      type: object
+      properties:
+        message:
+          type: string
+          example: You provided invalid or unrecognized input
+        type:
+          type: string
+          example: http://librarysimplified.org/terms/problem/invalid-input
+        title:
+          type: string
+          example: Invalid input.

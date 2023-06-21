@@ -22,6 +22,7 @@ import logging
 import re
 from collections import namedtuple
 from operator import attrgetter
+from typing import Optional
 
 VALIDATE_LANG_REGEX = re.compile("^[a-z]+$", flags=re.IGNORECASE)
 QUALITY_VAL_SUB_REGEX = re.compile("^q=", flags=re.IGNORECASE)
@@ -32,16 +33,15 @@ Lang = namedtuple("Lang", ("language", "locale", "quality"))
 logger = logging.getLogger(__name__)
 
 
-def parse_accept_language(accept_language_str, default_quality=None):
+def parse_accept_language(
+    accept_language_str: str, default_quality: Optional[float] = None
+) -> list:
     """
     Parse a RFC 2616 Accept-Language string.
     https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14
 
     :param accept_language_str: A string in RFC 2616 format.
-    :type accept_language_str: str
     :returns: List of `Lang` namedtuples.
-    :rtype: list
-
     :Example:
 
         >>> parse_accept_language('en-US,el;q=0.8')
@@ -62,8 +62,8 @@ def parse_accept_language(accept_language_str, default_quality=None):
         quality_value = default_quality or DEFAULT_QUALITY_VALUE
         lang_code = accept_lang_segment.strip()
         if ";" in accept_lang_segment:
-            lang_code, quality_value = accept_lang_segment.split(";")
-            quality_value = float(QUALITY_VAL_SUB_REGEX.sub("", quality_value))
+            lang_code, quality_value_string = accept_lang_segment.split(";")
+            quality_value = float(QUALITY_VAL_SUB_REGEX.sub("", quality_value_string))
 
         lang_code_components = re.split("-|_", lang_code)
 

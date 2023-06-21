@@ -1,48 +1,46 @@
-# encoding: utf-8
-
 import pytest
 
 from core.model import get_one_or_create
 from core.model.coverage import WorkCoverageRecord
-from core.model.customlist import CustomList, CustomListEntry
+from core.model.customlist import CustomList, CustomListEntry, customlist_sharedlibrary
 from core.model.datasource import DataSource
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestCustomList(DatabaseTest):
-    def test_find(self):
-        source = DataSource.lookup(self._db, DataSource.NYT)
+class TestCustomList:
+    def test_find(self, db: DatabaseTransactionFixture):
+        source = DataSource.lookup(db.session, DataSource.NYT)
         # When there's no CustomList to find, nothing is returned.
-        result = CustomList.find(self._db, "my-list", source)
+        result = CustomList.find(db.session, "my-list", source)
         assert None == result
 
-        custom_list = self._customlist(
+        custom_list = db.customlist(
             foreign_identifier="a-list", name="My List", num_entries=0
         )[0]
         # A CustomList can be found by its foreign_identifier.
-        result = CustomList.find(self._db, "a-list", source)
+        result = CustomList.find(db.session, "a-list", source)
         assert custom_list == result
 
         # Or its name.
-        result = CustomList.find(self._db, "My List", source.name)
+        result = CustomList.find(db.session, "My List", source.name)
         assert custom_list == result
 
         # The list can also be found by name without a data source.
-        result = CustomList.find(self._db, "My List")
+        result = CustomList.find(db.session, "My List")
         assert custom_list == result
 
         # By default, we only find lists with no associated Library.
         # If we look for a list from a library, there isn't one.
         result = CustomList.find(
-            self._db, "My List", source, library=self._default_library
+            db.session, "My List", source, library=db.default_library()
         )
         assert None == result
 
         # If we add the Library to the list, it's returned.
-        custom_list.library = self._default_library
+        custom_list.library = db.default_library()
         result = CustomList.find(
-            self._db, "My List", source, library=self._default_library
+            db.session, "My List", source, library=db.default_library()
         )
         assert custom_list == result
 
@@ -56,12 +54,12 @@ class TestCustomList(DatabaseTest):
         )
         assert WorkCoverageRecord.REGISTERED == needs_reindex.status
 
-    def test_add_entry(self):
-        custom_list = self._customlist(num_entries=0)[0]
+    def test_add_entry(self, db: DatabaseTransactionFixture):
+        custom_list = db.customlist(num_entries=0)[0]
         now = utc_now()
 
         # An edition without a work can create an entry.
-        workless_edition = self._edition()
+        workless_edition = db.edition()
         workless_entry, is_new = custom_list.add_entry(workless_edition)
         assert True == is_new
         assert True == isinstance(workless_entry, CustomListEntry)
@@ -73,7 +71,7 @@ class TestCustomList(DatabaseTest):
         assert 1 == custom_list.size
 
         # An edition with a work can create an entry.
-        work = self._work()
+        work = db.work()
         work.coverage_records = []
         worked_entry, is_new = custom_list.add_entry(work.presentation_edition)
         assert True == is_new
@@ -86,7 +84,7 @@ class TestCustomList(DatabaseTest):
         self.assert_reindexing_scheduled(work)
 
         # A work can create an entry.
-        work = self._work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         work.coverage_records = []
         work_entry, is_new = custom_list.add_entry(work)
         assert True == is_new
@@ -99,7 +97,7 @@ class TestCustomList(DatabaseTest):
         self.assert_reindexing_scheduled(work)
 
         # Annotations can be passed to the entry.
-        annotated_edition = self._edition()
+        annotated_edition = db.edition()
         annotated_entry = custom_list.add_entry(
             annotated_edition, annotation="Sure, this is a good book."
         )[0]
@@ -107,7 +105,7 @@ class TestCustomList(DatabaseTest):
         assert 4 == custom_list.size
 
         # A first_appearance time can be passed to an entry.
-        timed_edition = self._edition()
+        timed_edition = db.edition()
         timed_entry = custom_list.add_entry(timed_edition, first_appearance=now)[0]
         assert now == timed_entry.first_appearance
         assert now == timed_entry.most_recent_appearance
@@ -142,22 +140,22 @@ class TestCustomList(DatabaseTest):
         assert True == (entry.most_recent_appearance >= now)
         assert 5 == custom_list.size
 
-    def test_add_entry_edition_duplicate_check(self):
+    def test_add_entry_edition_duplicate_check(self, db: DatabaseTransactionFixture):
         # When adding an Edition to a CustomList, a duplicate check is run
         # so we don't end up adding the same book to the list twice.
 
         # This edition has no Work.
-        workless_edition = self._edition()
+        workless_edition = db.edition()
 
         # This edition is equivalent to the first one, and it has an
         # associated Work.
-        work = self._work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         equivalent_edition = work.presentation_edition
         workless_edition.primary_identifier.equivalent_to(
             equivalent_edition.data_source, equivalent_edition.primary_identifier, 1
         )
 
-        custom_list, ignore = self._customlist(num_entries=0)
+        custom_list, ignore = db.customlist(num_entries=0)
 
         # Add the edition with no associated Work.
         e1, is_new = custom_list.add_entry(workless_edition)
@@ -185,7 +183,7 @@ class TestCustomList(DatabaseTest):
 
         # The duplicate check also handles the case where a Work has multiple Editions, and both Editions
         # get added to the same list.
-        not_equivalent, lp = self._edition(with_open_access_download=True)
+        not_equivalent, lp = db.edition(with_open_access_download=True)
         not_equivalent.work = equivalent_edition.work
         not_equivalent_entry, is_new = custom_list.add_entry(not_equivalent)
         assert not_equivalent_entry == e1
@@ -201,7 +199,7 @@ class TestCustomList(DatabaseTest):
         # Finally, test the case where the duplicate check passes,
         # because a totally different Edition is being added to the
         # list.
-        workless_edition_2 = self._edition()
+        workless_edition_2 = db.edition()
         e2, is_new = custom_list.add_entry(workless_edition_2)
 
         # A brand new CustomListEntry is created.
@@ -213,14 +211,16 @@ class TestCustomList(DatabaseTest):
         assert custom_list.updated > previous_list_update_time
         assert 2 == custom_list.size
 
-    def test_add_entry_work_same_presentation_edition(self):
+    def test_add_entry_work_same_presentation_edition(
+        self, db: DatabaseTransactionFixture
+    ):
         # Verify that two Works can be added to a CustomList even if they have the
         # same presentation edition.
-        w1 = self._work()
-        w2 = self._work(presentation_edition=w1.presentation_edition)
+        w1 = db.work()
+        w2 = db.work(presentation_edition=w1.presentation_edition)
         assert w1.presentation_edition == w2.presentation_edition
 
-        custom_list, ignore = self._customlist(num_entries=0)
+        custom_list, ignore = db.customlist(num_entries=0)
         entry1, is_new1 = custom_list.add_entry(w1)
         assert True == is_new1
         assert w1 == entry1.work
@@ -232,25 +232,25 @@ class TestCustomList(DatabaseTest):
         assert w2.presentation_edition == entry2.edition
 
         assert entry1 != entry2
-        assert set([entry1, entry2]) == set(custom_list.entries)
+        assert {entry1, entry2} == set(custom_list.entries)
 
         # Adding the exact same work again won't result in a third entry.
         entry3, is_new3 = custom_list.add_entry(w1)
         assert entry3 == entry1
         assert False == is_new3
 
-    def test_add_entry_work_equivalent_identifier(self):
+    def test_add_entry_work_equivalent_identifier(self, db: DatabaseTransactionFixture):
         # Verify that two Works can be added to a CustomList even if their identifiers
         # are exact equivalents.
-        w1 = self._work()
-        w2 = self._work()
+        w1 = db.work()
+        w2 = db.work()
         w1.presentation_edition.primary_identifier.equivalent_to(
             w1.presentation_edition.data_source,
             w2.presentation_edition.primary_identifier,
             1,
         )
 
-        custom_list, ignore = self._customlist(num_entries=0)
+        custom_list, ignore = db.customlist(num_entries=0)
         entry1, is_new1 = custom_list.add_entry(w1)
         assert True == is_new1
         assert w1 == entry1.work
@@ -262,15 +262,15 @@ class TestCustomList(DatabaseTest):
         assert w2.presentation_edition == entry2.edition
 
         assert entry1 != entry2
-        assert set([entry1, entry2]) == set(custom_list.entries)
+        assert {entry1, entry2} == set(custom_list.entries)
 
         # Adding the exact same work again won't result in a third entry.
         entry3, is_new3 = custom_list.add_entry(w1)
         assert entry3 == entry1
         assert False == is_new3
 
-    def test_remove_entry(self):
-        custom_list, editions = self._customlist(num_entries=3)
+    def test_remove_entry(self, db: DatabaseTransactionFixture):
+        custom_list, editions = db.customlist(num_entries=3)
         [first, second, third] = editions
         now = utc_now()
 
@@ -278,9 +278,7 @@ class TestCustomList(DatabaseTest):
         first.work.coverage_records = []
         custom_list.remove_entry(first)
         assert 2 == len(custom_list.entries)
-        assert set([second, third]) == set(
-            [entry.edition for entry in custom_list.entries]
-        )
+        assert {second, third} == {entry.edition for entry in custom_list.entries}
         # And CustomList.updated and size are changed.
         assert True == (custom_list.updated > now)
         assert 2 == custom_list.size
@@ -292,7 +290,7 @@ class TestCustomList(DatabaseTest):
         # An entry is also removed if any of its equivalent editions
         # are passed in.
         previous_list_update_time = custom_list.updated
-        equivalent = self._edition(with_open_access_download=True)[0]
+        equivalent = db.edition(with_open_access_download=True)[0]
         second.primary_identifier.equivalent_to(
             equivalent.data_source, equivalent.primary_identifier, 1
         )
@@ -321,8 +319,8 @@ class TestCustomList(DatabaseTest):
         # because it wasn't on the list to begin with.
         assert [] == first.work.coverage_records
 
-    def test_entries_for_work(self):
-        custom_list, editions = self._customlist(num_entries=2)
+    def test_entries_for_work(self, db: DatabaseTransactionFixture):
+        custom_list, editions = db.customlist(num_entries=2)
         edition = editions[0]
         [entry] = [e for e in custom_list.entries if e.edition == edition]
 
@@ -333,7 +331,7 @@ class TestCustomList(DatabaseTest):
         assert [entry] == list(custom_list.entries_for_work(edition.work))
 
         # Or when you search with an equivalent Edition
-        equivalent = self._edition()
+        equivalent = db.edition()
         edition.primary_identifier.equivalent_to(
             equivalent.data_source, equivalent.primary_identifier, 1
         )
@@ -342,34 +340,61 @@ class TestCustomList(DatabaseTest):
         # Multiple equivalent entries may be returned, too, if they
         # were added manually or before the editions were set as
         # equivalent.
-        not_yet_equivalent = self._edition()
+        not_yet_equivalent = db.edition()
         other_entry = custom_list.add_entry(not_yet_equivalent)[0]
         edition.primary_identifier.equivalent_to(
             not_yet_equivalent.data_source, not_yet_equivalent.primary_identifier, 1
         )
-        assert set([entry, other_entry]) == set(
+        assert {entry, other_entry} == set(
             custom_list.entries_for_work(not_yet_equivalent)
         )
 
-    def test_update_size(self):
-        list, ignore = self._customlist(num_entries=4)
+    def test_update_size(self, db: DatabaseTransactionFixture):
+        list, ignore = db.customlist(num_entries=4)
         # This list has an incorrect cached size.
         list.size = 44
-        list.update_size()
+        list.update_size(db.session)
         assert 4 == list.size
 
 
-class TestCustomListEntry(DatabaseTest):
-    def test_set_work(self):
+class TestCustomListSharedLibrary:
+    def test_cascade(self, db: DatabaseTransactionFixture):
+        c1, _ = db.customlist()
+        l1 = db.library()
 
+        c1.shared_locally_with_libraries = [l1]
+        db.session.commit()
+
+        shared = (
+            db.session.query(customlist_sharedlibrary)
+            .filter(customlist_sharedlibrary.c.library_id == l1.id)
+            .all()
+        )
+        assert len(shared) == 1
+        assert shared[0].customlist_id == c1.id
+
+        db.session.delete(c1)
+        db.session.commit()
+
+        # should be deleted on cascade
+        shared = (
+            db.session.query(customlist_sharedlibrary)
+            .filter(customlist_sharedlibrary.c.library_id == l1.id)
+            .all()
+        )
+        assert len(shared) == 0
+
+
+class TestCustomListEntry:
+    def test_set_work(self, db: DatabaseTransactionFixture):
         # Start with a custom list with no entries
-        list, ignore = self._customlist(num_entries=0)
+        list, ignore = db.customlist(num_entries=0)
 
         # Now create an entry with an edition but no license pool.
-        edition = self._edition()
+        edition = db.edition()
 
         entry, ignore = get_one_or_create(
-            self._db,
+            db.session,
             CustomListEntry,
             list_id=list.id,
             edition_id=edition.id,
@@ -379,10 +404,10 @@ class TestCustomListEntry(DatabaseTest):
         assert None == entry.work
 
         # Here's another edition, with a license pool.
-        other_edition, lp = self._edition(with_open_access_download=True)
+        other_edition, lp = db.edition(with_open_access_download=True)
 
         # And its identifier is equivalent to the entry's edition's identifier.
-        data_source = DataSource.lookup(self._db, DataSource.OCLC)
+        data_source = DataSource.lookup(db.session, DataSource.OCLC)
         lp.identifier.equivalent_to(data_source, edition.primary_identifier, 1)
 
         # If we call set_work, it does nothing, because there is no work
@@ -403,36 +428,39 @@ class TestCustomListEntry(DatabaseTest):
         # associated with the Work.
         assert None == edition.work
 
-    def test_update(self):
-        custom_list, [edition] = self._customlist(entries_exist_as_works=False)
+    def test_update(self, db: DatabaseTransactionFixture):
+        custom_list, [edition] = db.customlist(entries_exist_as_works=False)
         identifier = edition.primary_identifier
         [entry] = custom_list.entries
         entry_attributes = list(vars(entry).values())
         created = entry.first_appearance
 
         # Running update without entries or forcing doesn't change the entry.
-        entry.update(self._db)
+        entry.update(db.session)
         assert entry_attributes == list(vars(entry).values())
 
         # Trying to update an entry with entries from a different
         # CustomList is a no-go.
-        other_custom_list = self._customlist()[0]
+        other_custom_list = db.customlist()[0]
         [external_entry] = other_custom_list.entries
         pytest.raises(
-            ValueError, entry.update, self._db, equivalent_entries=[external_entry]
+            ValueError, entry.update, db.session, equivalent_entries=[external_entry]
         )
 
         # So is attempting to update an entry with other entries that
         # don't represent the same work.
-        external_work = self._work(with_license_pool=True)
+        external_work = db.work(with_license_pool=True)
         external_work_edition = external_work.presentation_edition
         external_work_entry = custom_list.add_entry(external_work_edition)[0]
         pytest.raises(
-            ValueError, entry.update, self._db, equivalent_entries=[external_work_entry]
+            ValueError,
+            entry.update,
+            db.session,
+            equivalent_entries=[external_work_entry],
         )
 
         # Okay, but with an actual equivalent entry...
-        work = self._work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         equivalent = work.presentation_edition
         equivalent_entry = custom_list.add_entry(
             equivalent, annotation="Whoo, go books!"
@@ -442,7 +470,7 @@ class TestCustomListEntry(DatabaseTest):
         )
 
         # ...updating changes the original entry as expected.
-        entry.update(self._db, equivalent_entries=[equivalent_entry])
+        entry.update(db.session, equivalent_entries=[equivalent_entry])
         # The first_appearance hasn't changed because the entry was created first.
         assert created == entry.first_appearance
         # But the most recent appearance is of the entry created last.
@@ -455,14 +483,14 @@ class TestCustomListEntry(DatabaseTest):
         # The equivalent entry has been deleted.
         assert (
             []
-            == self._db.query(CustomListEntry)
+            == db.session.query(CustomListEntry)
             .filter(CustomListEntry.id == equivalent_entry.id)
             .all()
         )
 
         # The entry with the longest annotation wins the annotation awards.
         long_annotation = "Wow books are so great especially when they're annotated."
-        longwinded = self._edition()
+        longwinded = db.edition()
         longwinded_entry = custom_list.add_entry(
             longwinded, annotation=long_annotation
         )[0]
@@ -470,6 +498,6 @@ class TestCustomListEntry(DatabaseTest):
         identifier.equivalent_to(
             longwinded.data_source, longwinded.primary_identifier, 1
         )
-        entry.update(self._db, equivalent_entries=[longwinded_entry])
+        entry.update(db.session, equivalent_entries=[longwinded_entry])
         assert long_annotation == entry.annotation
         assert longwinded_entry.most_recent_appearance == entry.most_recent_appearance

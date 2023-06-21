@@ -2,7 +2,7 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.0.1
+    rev: v4.4.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -16,20 +16,16 @@ repos:
       - id: check-added-large-files
       - id: mixed-line-ending
 
-  - repo: https://github.com/psf/black
-    rev: 21.12b0
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.3.2
     hooks:
-      - id: black
-        name: Run black
-
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.10.1
-    hooks:
-      - id: isort
-        name: Run isort
+      - id: pyupgrade
+        args:
+          - --py38-plus
+          - --keep-runtime-typing
 
   - repo: https://github.com/myint/autoflake
-    rev: v1.4
+    rev: v2.1.1
     hooks:
       - id: autoflake
         args:
@@ -37,23 +33,39 @@ repos:
           - --remove-all-unused-imports
           - --ignore-init-module-imports
 
+  - repo: https://github.com/psf/black
+    rev: 22.10.0
+    hooks:
+      - id: black
+        name: Run black
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        name: Run isort
+
   - repo: https://github.com/sirosen/check-jsonschema
-    rev: 0.9.0
+    rev: 0.22.0
     hooks:
       - id: check-github-workflows
       - id: check-github-actions
 
   - repo: https://github.com/pappasam/toml-sort
-    rev: v0.19.0
+    rev: v0.23.0
     hooks:
       - id: toml-sort
-        args: [-aiI]
+        args: []
+        files: pyproject.toml
 
   - repo: https://github.com/jackdewinter/pymarkdown
-    rev: v0.9.3
+    rev: v0.9.9
     hooks:
       - id: pymarkdown
-        args: [--disable-version, -c, .pymarkdown.config.json, scan]
+        args:
+          - --config
+          - .pymarkdown.config.json
+          - scan
 
 # Exclude test files, since they may be intentionally malformed
 exclude: ^tests/(core|api)/files/

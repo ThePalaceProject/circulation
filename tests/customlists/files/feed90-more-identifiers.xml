@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:schema="http://schema.org/">
+
+    <id>http://localhost:6500/HAZELNUT/admin/custom_list/90?list_name=Something+Else</id>
+    <title>Something Else</title>
+    <updated>2022-04-25T19:31:37+00:00</updated>
+    <link href="http://localhost:6500/HAZELNUT/admin/custom_list/90?list_name=Something+Else" rel="self"/>
+
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>Chameleon</title>
+        <author>
+            <name>Someone Else</name>
+        </author>
+        <summary type="html">Summary</summary>
+        <id>urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6</id>
+        <link rel="alternate"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+    </entry>
+
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>Chameleon</title>
+        <author>
+            <name>Someone New</name>
+        </author>
+        <summary type="html">Summary</summary>
+        <id>urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03</id>
+        <link rel="alternate"
+              href="http://localhost:6500/HAZELNUT/works/URI/urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+    </entry>
+
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>Suspect</title>
+        <author>
+            <name>Robert Crais</name>
+        </author>
+        <summary type="html">Summary</summary>
+        <id>urn:librarysimplified.org/terms/id/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c</id>
+        <link rel="alternate"
+              href="http://localhost:6500/WALNUT/works/Overdrive%20ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+    </entry>
+
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>The Time Traders</title>
+        <author>
+            <name>Andre Alice Norton</name>
+        </author>
+        <summary type="html">Summary</summary>
+        <id>http://www.feedbooks.com/book/859</id>
+        <link rel="alternate"
+              href="http://localhost:6500/HAZELNUT/works/URI/http://www.feedbooks.com/book/859"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+    </entry>
+
+    <entry schema:additionalType="http://schema.org/EBook">
+        <title>Quadrant Conference, August 1943 : papers and minutes of meetings</title>
+        <author>
+            <name>Quebec Conference</name>
+        </author>
+        <summary type="html">Summary</summary>
+        <id>urn:isbn:9780160938818</id>
+        <link rel="alternate"
+              href="http://localhost:6500/HAZELNUT/works/ISBN/9780160938818"
+              type="application/atom+xml;type=entry;profile=opds-catalog"/>
+    </entry>
+
+</feed>

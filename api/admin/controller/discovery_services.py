@@ -12,7 +12,7 @@ from . import SettingsController
 
 class DiscoveryServicesController(SettingsController):
     def __init__(self, manager):
-        super(DiscoveryServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.opds_registration = ExternalIntegration.OPDS_REGISTRATION
         self.protocols = [
             {

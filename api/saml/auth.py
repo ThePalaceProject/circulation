@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-import six
 from flask import request
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -13,6 +15,9 @@ from api.saml.metadata.parser import SAMLSubjectParser
 from core.problem_details import *
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
+
+if TYPE_CHECKING:
+    from api.saml.provider import SAMLWebSSOAuthSettings
 
 SAML_GENERIC_ERROR = pd(
     "http://librarysimplified.org/terms/problem/saml/generic-error",
@@ -43,7 +48,7 @@ SAML_NO_ACCESS_ERROR = pd(
 )
 
 
-class SAMLAuthenticationManager(object):
+class SAMLAuthenticationManager:
     """Implements SAML authentication process."""
 
     def __init__(self, configuration, subject_parser, subject_filter):
@@ -60,19 +65,19 @@ class SAMLAuthenticationManager(object):
         """
         if not isinstance(configuration, SAMLOneLoginConfiguration):
             raise ValueError(
-                "Argument 'configuration' must be an instance of {0} class".format(
+                "Argument 'configuration' must be an instance of {} class".format(
                     SAMLOneLoginConfiguration
                 )
             )
         if not isinstance(subject_parser, SAMLSubjectParser):
             raise ValueError(
-                "Argument 'subject_parser' must be an instance of {0} class".format(
+                "Argument 'subject_parser' must be an instance of {} class".format(
                     SAMLSubjectParser
                 )
             )
         if not isinstance(subject_filter, SAMLSubjectFilter):
             raise ValueError(
-                "Argument 'subject_filter' must be an instance of {0} class".format(
+                "Argument 'subject_filter' must be an instance of {} class".format(
                     SAMLSubjectFilter
                 )
             )
@@ -147,11 +152,11 @@ class SAMLAuthenticationManager(object):
         :return: SAML subject object if it has not been filtered out, a ProblemDetail object instead
         :rtype: Union[api.saml.metadata.model.SAMLSubject, core.util.problem_detail.ProblemDetail]
         """
-        self._logger.info("Started filtering {0}".format(subject))
+        self._logger.info(f"Started filtering {subject}")
 
         if not self._configuration.configuration.filter_expression:
             self._logger.info(
-                "There is no filtration expression. Finished filtering {0}".format(
+                "There is no filtration expression. Finished filtering {}".format(
                     subject
                 )
             )
@@ -163,9 +168,7 @@ class SAMLAuthenticationManager(object):
                 self._configuration.configuration.filter_expression, subject
             )
 
-            self._logger.info(
-                "Finished filtering {0}: {1}".format(subject, filtration_result)
-            )
+            self._logger.info(f"Finished filtering {subject}: {filtration_result}")
 
             if not filtration_result:
                 return SAML_NO_ACCESS_ERROR
@@ -173,10 +176,10 @@ class SAMLAuthenticationManager(object):
             return subject
         except SAMLSubjectFilterError as exception:
             self._logger.info(
-                "An unexpected error occurred during filtering {0}".format(subject)
+                f"An unexpected error occurred during filtering {subject}"
             )
 
-            return SAML_GENERIC_ERROR.detailed(six.ensure_text(str(exception)))
+            return SAML_GENERIC_ERROR.detailed(str(exception))
 
     @property
     def configuration(self):
@@ -203,7 +206,7 @@ class SAMLAuthenticationManager(object):
         :rtype: string
         """
         self._logger.info(
-            "Started authentication workflow for IdP '{0}' (redirection URL = '{1}')".format(
+            "Started authentication workflow for IdP '{}' (redirection URL = '{}')".format(
                 idp_entity_id, return_to_url
             )
         )
@@ -213,12 +216,10 @@ class SAMLAuthenticationManager(object):
             redirect_url = auth.login(return_to_url)
 
             if self._logger.isEnabledFor(logging.DEBUG):
-                self._logger.debug(
-                    "SAML request: {0}".format(auth.get_last_request_xml())
-                )
+                self._logger.debug(f"SAML request: {auth.get_last_request_xml()}")
 
             self._logger.info(
-                "Finished authentication workflow for IdP '{0}' (redirection URL = '{1}'): {2}".format(
+                "Finished authentication workflow for IdP '{}' (redirection URL = '{}'): {}".format(
                     idp_entity_id, return_to_url, redirect_url
                 )
             )
@@ -229,7 +230,7 @@ class SAMLAuthenticationManager(object):
                 "Unexpected exception occurred while initiating authentication workflow"
             )
 
-            return SAML_GENERIC_ERROR.detailed(six.ensure_text(str(exception)))
+            return SAML_GENERIC_ERROR.detailed(str(exception))
 
     def finish_authentication(self, db, idp_entity_id):
         """Finish the SAML authentication workflow by validating AuthnResponse and extracting a SAML assertion from it.
@@ -245,7 +246,7 @@ class SAMLAuthenticationManager(object):
         :rtype: Union[api.saml.metadata.model.SAMLSubject, core.util.problem_detail.ProblemDetail]
         """
         self._logger.info(
-            "Started finishing authentication workflow for IdP '{0}'".format(
+            "Started finishing authentication workflow for IdP '{}'".format(
                 idp_entity_id
             )
         )
@@ -253,7 +254,7 @@ class SAMLAuthenticationManager(object):
         request_data = self._get_request_data()
 
         if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug("Request data: {0}".format(request_data))
+            self._logger.debug(f"Request data: {request_data}")
 
         if (
             "post_data" not in request_data
@@ -267,9 +268,7 @@ class SAMLAuthenticationManager(object):
         auth.process_response()
 
         if self._logger.isEnabledFor(logging.DEBUG):
-            self._logger.debug(
-                "SAML response: {0}".format(auth.get_last_response_xml())
-            )
+            self._logger.debug(f"SAML response: {auth.get_last_response_xml()}")
 
         authenticated = auth.is_authenticated()
 
@@ -278,7 +277,7 @@ class SAMLAuthenticationManager(object):
             subject = self._filter_subject(subject)
 
             self._logger.info(
-                "Finished finishing authentication workflow for IdP '{0}': {1}".format(
+                "Finished finishing authentication workflow for IdP '{}': {}".format(
                     idp_entity_id, subject
                 )
             )
@@ -290,18 +289,18 @@ class SAMLAuthenticationManager(object):
             return SAML_AUTHENTICATION_ERROR.detailed(auth.get_last_error_reason())
 
 
-class SAMLAuthenticationManagerFactory(object):
+class SAMLAuthenticationManagerFactory:
     """Responsible for creating SAMLAuthenticationManager instances"""
 
-    def create(self, configuration):
+    def create(
+        self, configuration: SAMLWebSSOAuthSettings
+    ) -> SAMLAuthenticationManager:
         """
         Creates a new instance of SAMLAuthenticationManager class
 
         :param configuration: SAML authentication provider's configuration
-        :type configuration: api.saml.configuration.model.SAMLConfiguration
 
         :return: SAML authentication manager
-        :rtype: SAMLAuthenticationManager
         """
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
         subject_parser = SAMLSubjectParser()

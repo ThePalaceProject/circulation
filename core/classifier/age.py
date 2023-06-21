@@ -11,7 +11,7 @@ class GradeLevelClassifier(Classifier):
         "pre-school": 3,
         "p": 3,
         "pk": 4,
-        # Easy readers
+        # Early readers
         "kindergarten": 5,
         "k": 5,
         "0": 5,

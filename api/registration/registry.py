@@ -3,6 +3,7 @@ import json
 import logging
 
 import feedparser
+from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
 from sqlalchemy.orm.exc import NoResultFound
@@ -408,7 +409,9 @@ class Registration(RegistrationConstants):
         :return: A dictionary suitable for passing into requests.post.
         """
         auth_document_url = url_for(
-            "authentication_document", library_short_name=self.library.short_name
+            "authentication_document",
+            library_short_name=self.library.short_name,
+            _external=True,
         )
         payload = dict(url=auth_document_url, stage=stage)
 
@@ -562,7 +565,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         )
         return parser
 
-    def do_run(self, cmd_args=None, in_unit_test=False):
+    def do_run(self, cmd_args=None, manager=None):
         parser = self.arg_parser(self._db)
         parsed = self.parse_command_line(self._db, cmd_args)
 
@@ -575,7 +578,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         # Set up an application context so we have access to url_for.
         from api.app import app
 
-        app.manager = CirculationManager(self._db, testing=in_unit_test)
+        app.manager = manager or CirculationManager(self._db)
         base_url = ConfigurationSetting.sitewide(
             self._db, Configuration.BASE_URL_KEY
         ).value
@@ -584,7 +587,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         for library in parsed.libraries:
             registration = Registration(registry, library)
             library_stage = stage or registration.stage_field.value
-            self.process_library(registration, library_stage, app.manager.url_for)
+            self.process_library(registration, library_stage, url_for)
         ctx.pop()
 
         # For testing purposes, return the application object that was

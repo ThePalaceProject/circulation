@@ -10,7 +10,7 @@ from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now
 
 
-class PatronUtility(object):
+class PatronUtility:
     """Apply circulation-specific logic to Patron model objects."""
 
     @classmethod
@@ -71,15 +71,21 @@ class PatronUtility(object):
         if cls.has_excess_fines(patron):
             raise OutstandingFines()
 
-        from api.authenticator import PatronData
+        from api.authentication.base import PatronData
 
-        if patron.block_reason is not None:
-            if patron.block_reason is PatronData.EXCESSIVE_FINES:
-                # The authentication mechanism itself may know that
-                # the patron has outstanding fines, even if the circulation
-                # manager is not configured to make that deduction.
-                raise OutstandingFines()
-            raise AuthorizationBlocked()
+        if patron.block_reason is None:
+            return
+
+        if patron.block_reason == PatronData.NO_VALUE:
+            return
+
+        if patron.block_reason is PatronData.EXCESSIVE_FINES:
+            # The authentication mechanism itself may know that
+            # the patron has outstanding fines, even if the circulation
+            # manager is not configured to make that deduction.
+            raise OutstandingFines()
+
+        raise AuthorizationBlocked()
 
     @classmethod
     def has_excess_fines(cls, patron):

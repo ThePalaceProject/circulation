@@ -1,11 +1,14 @@
-# encoding: utf-8
 """Test functionality of util/ that doesn't have its own module."""
-from collections import defaultdict
 
+from __future__ import annotations
+
+from collections import defaultdict
+from decimal import Decimal
+
+import pytest
 from money import Money
 
 from core.model import Edition, Identifier
-from core.testing import DatabaseTest
 from core.util import (
     Bigrams,
     MetadataSimilarity,
@@ -16,15 +19,16 @@ from core.util import (
     slugify,
 )
 from core.util.median import median
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class DummyAuthor(object):
+class DummyAuthor:
     def __init__(self, name, aliases=[]):
         self.name = name
         self.aliases = aliases
 
 
-class TestMetadataSimilarity(object):
+class TestMetadataSimilarity:
     def test_identity(self):
         """Verify that we ignore the order of words in titles,
         as well as non-alphanumeric characters."""
@@ -136,7 +140,7 @@ class TestMetadataSimilarity(object):
 
     def _arrange_by_confidence_level(self, title, *other_titles):
         matches = defaultdict(list)
-        stopwords = set(["the", "a", "an"])
+        stopwords = {"the", "a", "an"}
         for other_title in other_titles:
             distance = MetadataSimilarity.histogram_distance(
                 [title], [other_title], stopwords
@@ -292,7 +296,7 @@ class TestMetadataSimilarity(object):
         assert 1 == MetadataSimilarity.author_similarity([], [])
 
 
-class TestTitleProcessor(object):
+class TestTitleProcessor:
     def test_title_processor(self):
         p = TitleProcessor.sort_title_for
         assert None == p(None)
@@ -322,7 +326,7 @@ class TestTitleProcessor(object):
         assert None == p(core_title, full_title)
 
 
-class TestEnglishDetector(object):
+class TestEnglishDetector:
     def test_proportional_bigram_difference(self):
         dutch_text = "Op haar nieuwe school leert de 17-jarige Bella (ik-figuur) een mysterieuze jongen kennen op wie ze ogenblikkelijk verliefd wordt. Hij blijkt een groot geheim te hebben. Vanaf ca. 14 jaar."
         dutch = Bigrams.from_string(dutch_text)
@@ -351,7 +355,7 @@ class TestEnglishDetector(object):
         assert round(diff, 7) == 0
 
 
-class TestMedian(object):
+class TestMedian:
     def test_median(self):
         test_set = [
             228.56,
@@ -374,21 +378,21 @@ class TestMedian(object):
         assert 290 == median(test_set)
 
 
-class TestFastQueryCount(DatabaseTest):
-    def test_no_distinct(self):
-        identifier = self._identifier()
-        qu = self._db.query(Identifier)
+class TestFastQueryCount:
+    def test_no_distinct(self, db: DatabaseTransactionFixture):
+        identifier = db.identifier()
+        qu = db.session.query(Identifier)
         assert 1 == fast_query_count(qu)
 
-    def test_distinct(self):
-        e1 = self._edition(title="The title", authors="Author 1")
-        e2 = self._edition(title="The title", authors="Author 1")
-        e3 = self._edition(title="The title", authors="Author 2")
-        e4 = self._edition(title="Another title", authors="Author 1")
+    def test_distinct(self, db: DatabaseTransactionFixture):
+        e1 = db.edition(title="The title", authors="Author 1")
+        e2 = db.edition(title="The title", authors="Author 1")
+        e3 = db.edition(title="The title", authors="Author 2")
+        e4 = db.edition(title="Another title", authors="Author 1")
 
         # Without the distinct clause, a query against Edition will
         # return four editions.
-        qu = self._db.query(Edition)
+        qu = db.session.query(Edition)
         assert qu.count() == fast_query_count(qu)
 
         # If made distinct on Edition.author, the query will return only
@@ -401,11 +405,11 @@ class TestFastQueryCount(DatabaseTest):
         qu3 = qu.distinct(Edition.title, Edition.author)
         assert qu3.count() == fast_query_count(qu3)
 
-    def test_limit(self):
+    def test_limit(self, db: DatabaseTransactionFixture):
         for x in range(4):
-            self._identifier()
+            db.identifier()
 
-        qu = self._db.query(Identifier)
+        qu = db.session.query(Identifier)
         assert qu.count() == fast_query_count(qu)
 
         qu2 = qu.limit(2)
@@ -415,7 +419,7 @@ class TestFastQueryCount(DatabaseTest):
         assert qu3.count() == fast_query_count(qu3)
 
 
-class TestSlugify(object):
+class TestSlugify:
     def test_slugify(self):
 
         # text are slugified.
@@ -432,12 +436,45 @@ class TestSlugify(object):
         assert "already-slugified" == slugify("already-slugified")
 
 
-class TestMoneyUtility(object):
-    def test_parse(self):
-        p = MoneyUtility.parse
-        assert Money("0", "USD") == p(None)
-        assert Money("4.00", "USD") == p("4")
-        assert Money("-4.00", "USD") == p("-4")
-        assert Money("4.40", "USD") == p("4.40")
-        assert Money("4.40", "USD") == p("$4.40")
-        assert Money("4.4", "USD") == p(4.4)
+class TestMoneyUtility:
+    @pytest.mark.parametrize(
+        "expected_amount, input_amount, money_amount, money_currency",
+        [
+            [Decimal("0"), None, "0", "USD"],
+            [Decimal("4.00"), "4", "4.00", "USD"],
+            [Decimal("-4.00"), "-4", "-4.00", "USD"],
+            [Decimal("4.40"), "4.40", "4.40", "USD"],
+            [Decimal("4.40"), "$4.40", "4.40", "USD"],
+            [Decimal("4.4"), 4.4, "4.40", "USD"],
+            [Decimal("4"), 4, "4", "USD"],
+            [Decimal("0.4"), 0.4, ".4", "USD"],
+            [Decimal("0.4"), ".4", ".4", "USD"],
+            [Decimal("4444.40"), "4,444.40", "4444.40", "USD"],
+        ],
+    )
+    def test_parse(
+        self,
+        expected_amount: Decimal,
+        input_amount: str | float | int | None,
+        money_amount: str,
+        money_currency: str,
+    ):
+        parsed = MoneyUtility.parse(input_amount)
+        money = Money(money_amount, money_currency)
+
+        assert money == parsed
+        assert expected_amount == parsed.amount
+
+    @pytest.mark.parametrize(
+        "bad_value",
+        [
+            "abc",
+            "12abc",
+            "4,444.40.40",
+            "4,444.40 40",
+            "4,444 40",
+        ],
+    )
+    def test_parsing_bad_value_raises_valueerror(self, bad_value):
+        with pytest.raises(ValueError):
+            MoneyUtility.parse(bad_value)

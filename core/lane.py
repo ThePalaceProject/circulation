@@ -1,12 +1,14 @@
-# encoding: utf-8
+from __future__ import annotations
+
 import datetime
 import logging
 import time
 from collections import defaultdict
+from typing import TYPE_CHECKING, List, Optional
 from urllib.parse import quote_plus
 
-import elasticsearch
 from flask_babel import lazy_gettext as _
+from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import (
     Boolean,
     Column,
@@ -22,17 +24,27 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import (
+    Mapped,
     aliased,
     backref,
     contains_eager,
     defer,
     joinedload,
+    query,
     relationship,
 )
+from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
-from sqlalchemy.sql.expression import Select
+
+from core.model.before_flush_decorator import Listener
+from core.model.configuration import (
+    ConfigurationAttributeValue,
+    ConfigurationSetting,
+    ExternalIntegration,
+)
+from core.model.hybrid import hybrid_property
+from core.model.listeners import site_configuration_has_changed
 
 from .classifier import Classifier
 from .config import Configuration
@@ -49,12 +61,9 @@ from .model import (
     Genre,
     Library,
     LicensePool,
-    Session,
     Work,
     WorkGenre,
-    directly_modified,
     get_one_or_create,
-    site_configuration_has_changed,
     tuple_to_numericrange,
 )
 from .model.constants import EditionConstants
@@ -64,6 +73,9 @@ from .util.accept_language import parse_accept_language
 from .util.datetime_helpers import utc_now
 from .util.opds_writer import OPDSFeed
 from .util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from core.model import CachedMARCFile  # noqa: autoflake
 
 
 class BaseFacets(FacetConstants):
@@ -76,7 +88,7 @@ class BaseFacets(FacetConstants):
     # type of feed (the way FeaturedFacets always implies a 'groups' feed),
     # set the type of feed here. This will override any CACHED_FEED_TYPE
     # associated with the WorkList.
-    CACHED_FEED_TYPE = None
+    CACHED_FEED_TYPE: Optional[str] = None
 
     # By default, faceting objects have no opinion on how long the feeds
     # generated using them should be cached.
@@ -197,7 +209,7 @@ class FacetsWithEntryPoint(BaseFacets):
             entrypoint=entrypoint,
             entrypoint_is_default=False,
             max_cache_age=self.max_cache_age,
-            **self.constructor_kwargs
+            **self.constructor_kwargs,
         )
 
     @classmethod
@@ -209,7 +221,7 @@ class FacetsWithEntryPoint(BaseFacets):
         get_header,
         worklist,
         default_entrypoint=None,
-        **extra_kwargs
+        **extra_kwargs,
     ):
         """Load a faceting object from an HTTP request.
 
@@ -244,7 +256,7 @@ class FacetsWithEntryPoint(BaseFacets):
             get_header,
             worklist,
             default_entrypoint,
-            **extra_kwargs
+            **extra_kwargs,
         )
 
     @classmethod
@@ -255,7 +267,7 @@ class FacetsWithEntryPoint(BaseFacets):
         get_header,
         worklist,
         default_entrypoint=None,
-        **extra_kwargs
+        **extra_kwargs,
     ):
         """Load a faceting object from an HTTP request.
 
@@ -281,7 +293,7 @@ class FacetsWithEntryPoint(BaseFacets):
             entrypoint=entrypoint,
             entrypoint_is_default=is_default,
             max_cache_age=max_cache_age,
-            **extra_kwargs
+            **extra_kwargs,
         )
 
     @classmethod
@@ -481,7 +493,7 @@ class Facets(FacetsWithEntryPoint):
         get_header,
         worklist,
         default_entrypoint=None,
-        **extra
+        **extra,
     ):
         """Load a faceting object from an HTTP request."""
 
@@ -505,7 +517,7 @@ class Facets(FacetsWithEntryPoint):
         enabled_facets=None,
         entrypoint=None,
         entrypoint_is_default=False,
-        **constructor_kwargs
+        **constructor_kwargs,
     ):
         """Constructor.
 
@@ -516,9 +528,7 @@ class Facets(FacetsWithEntryPoint):
         facet group is configured on a per-WorkList basis rather than
         a per-library basis.
         """
-        super(Facets, self).__init__(
-            entrypoint, entrypoint_is_default, **constructor_kwargs
-        )
+        super().__init__(entrypoint, entrypoint_is_default, **constructor_kwargs)
         collection = collection or self.default_facet(
             library, self.COLLECTION_FACET_GROUP_NAME
         )
@@ -570,8 +580,7 @@ class Facets(FacetsWithEntryPoint):
         )
 
     def items(self):
-        for k, v in list(super(Facets, self).items()):
-            yield k, v
+        yield from list(super().items())
         if self.order:
             yield (self.ORDER_FACET_GROUP_NAME, self.order)
         if self.availability:
@@ -655,11 +664,11 @@ class Facets(FacetsWithEntryPoint):
         """Modify the given external_search.Filter object
         so that it reflects the settings of this Facets object.
 
-        This is the Elasticsearch equivalent of apply(). However, the
-        Elasticsearch implementation of (e.g.) the meaning of the
+        This is the Opensearch equivalent of apply(). However, the
+        Opensearch implementation of (e.g.) the meaning of the
         different availabilty statuses is kept in Filter.build().
         """
-        super(Facets, self).modify_search_filter(filter)
+        super().modify_search_filter(filter)
 
         if self.library:
             filter.minimum_featured_quality = self.library.minimum_featured_quality
@@ -670,7 +679,7 @@ class Facets(FacetsWithEntryPoint):
         # No order and relevance order both signify the default and,
         # thus, either should leave `filter.order` unset.
         if self.order and self.order != self.ORDER_BY_RELEVANCE:
-            order = self.SORT_ORDER_TO_ELASTICSEARCH_FIELD_NAME.get(self.order)
+            order = self.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME.get(self.order)
             if order:
                 filter.order = order
                 filter.order_ascending = self.order_ascending
@@ -686,7 +695,7 @@ class Facets(FacetsWithEntryPoint):
         """
 
         # Apply any superclass criteria
-        qu = super(Facets, self).modify_database_query(_db, qu)
+        qu = super().modify_database_query(_db, qu)
 
         available_now = or_(
             LicensePool.open_access == True,
@@ -739,9 +748,7 @@ class DefaultSortOrderFacets(Facets):
         in the list of available sort orders.
         """
         if facet_group_name != cls.ORDER_FACET_GROUP_NAME:
-            return super(DefaultSortOrderFacets, cls).available_facets(
-                config, facet_group_name
-            )
+            return super().available_facets(config, facet_group_name)
         default = config.enabled_facets(facet_group_name)
 
         # Promote the default sort order to the front of the list,
@@ -755,15 +762,13 @@ class DefaultSortOrderFacets(Facets):
     def default_facet(cls, config, facet_group_name):
         if facet_group_name == cls.ORDER_FACET_GROUP_NAME:
             return cls.DEFAULT_SORT_ORDER
-        return super(DefaultSortOrderFacets, cls).default_facet(
-            config, facet_group_name
-        )
+        return super().default_facet(config, facet_group_name)
 
 
 class DatabaseBackedFacets(Facets):
     """A generic faceting object designed for managing queries against the
     database. (Other faceting objects are designed for managing
-    Elasticsearch searches.)
+    Opensearch searches.)
     """
 
     # Of the sort orders in Facets, these are the only available ones
@@ -789,9 +794,7 @@ class DatabaseBackedFacets(Facets):
     @classmethod
     def default_facet(cls, config, facet_group_name):
         """Exclude search orders not available through database queries."""
-        standard_default = super(DatabaseBackedFacets, cls).default_facet(
-            config, facet_group_name
-        )
+        standard_default = super().default_facet(config, facet_group_name)
         if facet_group_name != cls.ORDER_FACET_GROUP_NAME:
             return standard_default
         if standard_default in cls.ORDER_FACET_TO_DATABASE_FIELD:
@@ -842,7 +845,7 @@ class DatabaseBackedFacets(Facets):
         """
 
         # Filter by facet criteria
-        qu = super(DatabaseBackedFacets, self).modify_database_query(_db, qu)
+        qu = super().modify_database_query(_db, qu)
 
         # Set the ORDER BY clause.
         order_by, order_distinct = self.order_by()
@@ -872,7 +875,7 @@ class FeaturedFacets(FacetsWithEntryPoint):
         :param kwargs: Other arguments may be supplied based on user
             input, but the default implementation is to ignore them.
         """
-        super(FeaturedFacets, self).__init__(entrypoint=entrypoint, **kwargs)
+        super().__init__(entrypoint=entrypoint, **kwargs)
         self.minimum_featured_quality = minimum_featured_quality
         self.random_seed = random_seed
 
@@ -904,7 +907,7 @@ class FeaturedFacets(FacetsWithEntryPoint):
         )
 
     def modify_search_filter(self, filter):
-        super(FeaturedFacets, self).modify_search_filter(filter)
+        super().modify_search_filter(filter)
         filter.minimum_featured_quality = self.minimum_featured_quality
 
     def scoring_functions(self, filter):
@@ -952,7 +955,11 @@ class SearchFacets(Facets):
             default_min_score = self.DEFAULT_MIN_SCORE
         self.min_score = kwargs.pop("min_score", default_min_score)
 
-        super(SearchFacets, self).__init__(**kwargs)
+        self.search_type = kwargs.pop("search_type", "default")
+        if self.search_type not in ["default", "json"]:
+            raise ValueError(f"Invalid search type: {self.search_type}")
+
+        super().__init__(**kwargs)
         if media == Edition.ALL_MEDIUM:
             self.media = media
         else:
@@ -996,7 +1003,7 @@ class SearchFacets(Facets):
         get_header,
         worklist,
         default_entrypoint=EverythingEntryPoint,
-        **extra
+        **extra,
     ):
 
         values = cls._values_from_request(config, get_argument, get_header)
@@ -1041,6 +1048,10 @@ class SearchFacets(Facets):
         if languageQuery != "all":
             extra["languages"] = languages
 
+        search_type = get_argument("search_type")
+        if search_type:
+            extra["search_type"] = search_type
+
         return cls._from_request(
             config, get_argument, get_header, worklist, default_entrypoint, **extra
         )
@@ -1063,7 +1074,7 @@ class SearchFacets(Facets):
         """Modify the given external_search.Filter object
         so that it reflects this SearchFacets object.
         """
-        super(SearchFacets, self).modify_search_filter(filter)
+        super().modify_search_filter(filter)
 
         if filter.order is not None and filter.min_score is None:
             # The user wants search results to be ordered by one of
@@ -1106,8 +1117,7 @@ class SearchFacets(Facets):
         This means the EntryPoint (handled by the superclass)
         as well as possible settings for 'media' and "min_score".
         """
-        for k, v in list(super(SearchFacets, self).items()):
-            yield k, v
+        yield from list(super().items())
         if self.media_argument:
             yield ("media", self.media_argument)
 
@@ -1116,12 +1126,12 @@ class SearchFacets(Facets):
 
     def navigate(self, **kwargs):
         min_score = kwargs.pop("min_score", self.min_score)
-        new_facets = super(SearchFacets, self).navigate(**kwargs)
+        new_facets = super().navigate(**kwargs)
         new_facets.min_score = min_score
         return new_facets
 
 
-class Pagination(object):
+class Pagination:
 
     DEFAULT_SIZE = 50
     DEFAULT_SEARCH_SIZE = 10
@@ -1264,7 +1274,7 @@ class Pagination(object):
         self.page_has_loaded = True
 
 
-class WorkList(object):
+class WorkList:
     """An object that can obtain a list of Work objects for use
     in generating an OPDS feed.
 
@@ -1278,13 +1288,12 @@ class WorkList(object):
     # If a certain type of Worklist should always have its OPDS feeds
     # cached under a specific type, define that type as
     # CACHED_FEED_TYPE.
-    CACHED_FEED_TYPE = None
+    CACHED_FEED_TYPE: Optional[str] = None
 
     # By default, a WorkList is always visible.
-    visible = True
-
-    # By default, a WorkList does not draw from CustomLists
-    uses_customlists = False
+    @property
+    def visible(self) -> bool:
+        return True
 
     def max_cache_age(self, type):
         """Determine how long a feed for this WorkList should be cached
@@ -1519,7 +1528,7 @@ class WorkList(object):
         feed for that WorkList.
         """
         return sorted(
-            [x for x in self.children if x.visible],
+            (x for x in self.children if x.visible),
             key=lambda x: (x.priority, x.display_name or ""),
         )
 
@@ -1652,7 +1661,9 @@ class WorkList(object):
         This is used when caching feeds for this WorkList. For Lanes,
         the lane_id is used instead.
         """
-        return "%s-%s-%s" % (self.display_name, self.language_key, self.audience_key)
+        return "{}-{}-{}".format(
+            self.display_name, self.language_key, self.audience_key
+        )
 
     def accessible_to(self, patron):
         """As a matter of library policy, is the given `Patron` allowed
@@ -1778,7 +1789,7 @@ class WorkList(object):
         pagination=None,
         search_engine=None,
         debug=False,
-        **kwargs
+        **kwargs,
     ):
 
         """Use a search engine to obtain Work or Work-like objects that belong
@@ -1840,7 +1851,7 @@ class WorkList(object):
         containing a single list of search results.
 
         :param _db: A database connection
-        :param hits: A list of Hit objects from ElasticSearch.
+        :param hits: A list of Hit objects from Opensearch.
         :return: A list of Work or (if the search results include
             script fields), WorkSearchResult objects.
         """
@@ -1884,6 +1895,10 @@ class WorkList(object):
         # performance isn't a big concern -- it's just ugly.
         wl = SpecificWorkList(work_ids)
         wl.initialize(self.get_library(_db))
+        # If we are specifically targeting a collection and not a library
+        # ensure the worklist is aware of this
+        if not self.library_id and self.collection_ids:
+            wl.collection_ids = self.collection_ids
         qu = wl.works_from_database(_db, facets=facets)
         a = time.time()
         all_works = qu.all()
@@ -1941,9 +1956,9 @@ class WorkList(object):
         filter = self.filter(_db, facets)
         try:
             hits = search_client.query_works(query, filter, pagination, debug)
-        except elasticsearch.exceptions.ElasticsearchException as e:
+        except OpenSearchException as e:
             logging.error(
-                "Problem communicating with ElasticSearch. Returning empty list of search results.",
+                "Problem communicating with OpenSearch. Returning empty list of search results.",
                 exc_info=e,
             )
         if hits:
@@ -2070,13 +2085,12 @@ class WorkList(object):
                 # likely because this 'lane' is a WorkList and not a
                 # Lane at all. Do a whole separate query and plug it
                 # in at this point.
-                for x in lane.groups(
+                yield from lane.groups(
                     _db,
                     include_sublanes=False,
                     pagination=pagination,
                     facets=facets,
-                ):
-                    yield x
+                )
 
     def _featured_works_with_lanes(
         self, _db, lanes, pagination, facets, search_engine, debug=False
@@ -2106,7 +2120,7 @@ class WorkList(object):
         # Ask the search engine for works from every lane we're given.
 
         # NOTE: At the moment, every WorkList in the system can be
-        # generated using an Elasticsearch query. That is, there are
+        # generated using an Opensearch query. That is, there are
         # no subclasses of the DatabaseExclusiveWorkList class defined
         # in circulation/api/lanes.py. If that ever changes, we'll
         # need to change this code.
@@ -2114,6 +2128,7 @@ class WorkList(object):
         # The simplest change would probably be to return a dictionary
         # mapping WorkList to Works and let the caller figure out the
         # ordering. In fact, we could start doing that now.
+
         queries = []
         for lane in lanes:
             overview_facets = lane.overview_facets(_db, facets)
@@ -2148,7 +2163,7 @@ class HierarchyWorkList(WorkList):
         """
 
         # All the rules of WorkList apply.
-        if not super(HierarchyWorkList, self).accessible_to(patron):
+        if not super().accessible_to(patron):
             return False
 
         if patron is None:
@@ -2207,7 +2222,7 @@ class DatabaseBackedWorkList(WorkList):
         # the WorkList's collections and ready to be delivered to
         # patrons.
         qu = self.only_show_ready_deliverable_works(_db, qu)
-
+        qu = self._restrict_query_for_no_hold_collections(_db, qu)
         # Apply to the database the bibliographic restrictions with
         # which this WorkList was initialized -- genre, audience, and
         # whatnot.
@@ -2234,6 +2249,49 @@ class DatabaseBackedWorkList(WorkList):
         # Allow the pagination object to modify the database query.
         if pagination is not None:
             qu = pagination.modify_database_query(_db, qu)
+
+        return qu
+
+    def _restrict_query_for_no_hold_collections(
+        self, _db: Session, qu: query.Query
+    ) -> query.Query:
+        """Restrict the query to not select works that are part of a collection
+        that dissallow holds through DISPLAY_RESERVES if they have no available copies
+        This is only meant for Bibliotheca collections, but since they're the only ones with
+        the DISPLAY_RESERVES setting it will implicitly only be active for them
+        """
+
+        # Modify the query to not show holds on collections
+        # that don't allow it
+        # This query looks like a prime candidate for some in-memory caching
+        restricted_collections = (
+            _db.query(Collection.id)
+            .join(
+                ConfigurationSetting,
+                Collection.external_integration_id
+                == ConfigurationSetting.external_integration_id,
+            )
+            .filter(
+                Collection.id.in_(self.collection_ids),
+                ConfigurationSetting.library_id == self.library_id,
+                ConfigurationSetting.key == ExternalIntegration.DISPLAY_RESERVES,
+                ConfigurationSetting.value == ConfigurationAttributeValue.NOVALUE.value,
+            )
+            .all()
+        )
+        restricted_collection_ids = (r[0] for r in restricted_collections)
+
+        # If a licensepool is from a collection that restricts holds
+        # and has no available copies, then we don't want to see it
+        # Should this be a configurable feature?
+        qu = qu.filter(
+            not_(
+                and_(
+                    LicensePool.collection_id.in_(restricted_collection_ids),
+                    LicensePool.licenses_available == 0,
+                )
+            )
+        )
 
         return qu
 
@@ -2398,8 +2456,8 @@ class DatabaseBackedWorkList(WorkList):
             # Use a subquery to obtain the CustomList IDs of all
             # CustomLists from this DataSource. This is significantly
             # simpler than adding a join against CustomList.
-            customlist_ids = Select(
-                [CustomList.id], CustomList.data_source_id == self.list_datasource_id
+            customlist_ids = select(CustomList.id).where(
+                CustomList.data_source_id == self.list_datasource_id
             )
         else:
             customlist_ids = self.customlist_ids
@@ -2460,7 +2518,7 @@ class SpecificWorkList(DatabaseBackedWorkList):
     """A WorkList that only finds specific works, identified by ID."""
 
     def __init__(self, work_ids):
-        super(SpecificWorkList, self).__init__()
+        super().__init__()
         self.work_ids = work_ids
 
     def modify_database_query_hook(self, _db, qu):
@@ -2534,7 +2592,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
-    sublanes = relationship(
+    sublanes: Mapped[List[Lane]] = relationship(
         "Lane",
         backref=backref("parent", remote_side=[id]),
     )
@@ -2542,7 +2600,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # A lane may have multiple associated LaneGenres. For most lanes,
     # this is how the contents of the lanes are defined.
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
-    lane_genres = relationship(
+    lane_genres: Mapped[List[LaneGenre]] = relationship(
         "LaneGenre",
         foreign_keys="LaneGenre.lane_id",
         backref="lane",
@@ -2565,11 +2623,11 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # A lane may be restricted to works classified for specific audiences
     # (e.g. only Young Adult works).
-    _audiences = Column(ARRAY(Unicode), name="audiences")
+    _audiences = Column("audiences", ARRAY(Unicode))
 
     # A lane may further be restricted to works classified as suitable
     # for a specific age range.
-    _target_age = Column(INT4RANGE, name="target_age", index=True)
+    _target_age = Column("target_age", INT4RANGE, index=True)
 
     # A lane may be restricted to works available in certain languages.
     languages = Column(ARRAY(Unicode))
@@ -2594,7 +2652,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # Only the books on these specific CustomLists will be shown.
     customlists = relationship(
-        "CustomList", secondary=lambda: lanes_customlists, backref="lane"
+        "CustomList", secondary=lambda: lanes_customlists, backref="lane"  # type: ignore
     )
 
     # This has no effect unless list_datasource_id or
@@ -2626,17 +2684,17 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # Only a visible lane will show up in the user interface.  The
     # admin interface can see all the lanes, visible or not.
-    _visible = Column(Boolean, default=True, nullable=False, name="visible")
+    _visible = Column("visible", Boolean, default=True, nullable=False)
 
     # A Lane may have many CachedFeeds.
-    cachedfeeds = relationship(
+    cachedfeeds: Mapped[List[CachedFeed]] = relationship(
         "CachedFeed",
         backref="lane",
         cascade="all, delete-orphan",
     )
 
     # A Lane may have many CachedMARCFiles.
-    cachedmarcfiles = relationship(
+    cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
         backref="lane",
         cascade="all, delete-orphan",
@@ -2644,13 +2702,20 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     __table_args__ = (UniqueConstraint("parent_id", "display_name"),)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # We add this property to the class, so that we can disable the sqlalchemy
+        # listener that calls site_configuration_has_changed. Calling this repeatedly
+        # when updating lanes can cause performance issues. The plan is for this to
+        # be a temporary fix while we replace the need for the site_configuration_has_changed
+        # and listeners at all.
+        # TODO: we should remove this, once we remove the site_configuration_has_changed listeners
+        self._suppress_before_flush_listeners = False
+
     def get_library(self, _db):
         """For compatibility with WorkList.get_library()."""
         return self.library
-
-    @property
-    def list_datasource_id(self):
-        return self._list_datasource_id
 
     @property
     def collection_ids(self):
@@ -2682,7 +2747,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             parent = Session.object_session(self).merge(parent)
 
         yield parent
-        seen = set([self, parent])
+        seen = {self, parent}
         for grandparent in parent.parentage:
             if grandparent in seen:
                 raise ValueError("Lane parentage loop detected")
@@ -2695,7 +2760,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         :param ancestor: A WorkList.
         :return: A boolean.
         """
-        if super(Lane, self).is_self_or_descendant(ancestor):
+        if super().is_self_or_descendant(ancestor):
             return True
 
         # A TopLevelWorkList won't show up in a Lane's parentage,
@@ -2854,7 +2919,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             return CachedFeed.CACHE_FOREVER
 
         # Other than that, we have no opinion -- use the default.
-        return super(Lane, self).max_cache_age(type)
+        return super().max_cache_age(type)
 
     def update_size(self, _db, search_engine=None):
         """Update the stored estimate of the number of Works in this Lane."""
@@ -2920,7 +2985,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             # No genres have been explicitly included, so this lane
             # includes all genres that aren't excluded.
             _db = Session.object_session(self)
-            included_ids = set([genre.id for genre in _db.query(Genre)])
+            included_ids = {genre.id for genre in _db.query(Genre)}
         genre_ids = included_ids - excluded_ids
         if not genre_ids:
             # This can happen if you create a lane where 'Epic
@@ -3126,7 +3191,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
         if search_target == self:
             # The actual implementation happens in WorkList.
-            m = super(Lane, self).search
+            m = super().search
         else:
             # Searches in this Lane actually go against some other WorkList.
             # Tell that object to run the search.
@@ -3140,9 +3205,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         lines.append("ID: %s" % self.id)
         lines.append("Library: %s" % self.library.short_name)
         if self.parent:
-            lines.append(
-                "Parent ID: %s (%s)" % (self.parent.id, self.parent.display_name)
-            )
+            lines.append(f"Parent ID: {self.parent.id} ({self.parent.display_name})")
         lines.append("Priority: %s" % self.priority)
         lines.append("Display name: %s" % self.display_name)
         return lines
@@ -3177,19 +3240,9 @@ lanes_customlists = Table(
 )
 
 
-@event.listens_for(Lane, "after_insert")
-@event.listens_for(Lane, "after_delete")
-@event.listens_for(LaneGenre, "after_insert")
-@event.listens_for(LaneGenre, "after_delete")
-def configuration_relevant_lifecycle_event(mapper, connection, target):
-    site_configuration_has_changed(target)
-
-
-@event.listens_for(Lane, "after_update")
-@event.listens_for(LaneGenre, "after_update")
-def configuration_relevant_update(mapper, connection, target):
-    if directly_modified(target):
-        site_configuration_has_changed(target)
+@Listener.before_flush((Lane, LaneGenre), one_shot=True)
+def configuration_relevant_lifecycle_event(session: Session):
+    site_configuration_has_changed(session)
 
 
 @event.listens_for(Lane.library_id, "set")

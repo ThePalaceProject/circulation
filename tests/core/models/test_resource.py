@@ -1,4 +1,3 @@
-# encoding: utf-8
 import os
 
 import pytest
@@ -9,15 +8,20 @@ from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import RightsStatus
 from core.model.resource import Hyperlink, Representation, Resource
-from core.testing import DatabaseTest, DummyHTTPClient, MockRequestsResponse
+from tests.core.mock import DummyHTTPClient, MockRequestsResponse
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    TemporaryDirectoryConfigurationFixture,
+)
+from tests.fixtures.sample_covers import SampleCoversFixture
 
 
-class TestHyperlink(DatabaseTest):
-    def test_add_link(self):
-        edition, pool = self._edition(with_license_pool=True)
+class TestHyperlink:
+    def test_add_link(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_license_pool=True)
         identifier = edition.primary_identifier
         data_source = pool.data_source
-        original, ignore = create(self._db, Resource, url="http://bar.com")
+        original, ignore = create(db.session, Resource, url="http://bar.com")
         hyperlink, is_new = pool.add_link(
             Hyperlink.DESCRIPTION,
             "http://foo.com/",
@@ -50,42 +54,45 @@ class TestHyperlink(DatabaseTest):
         assert "cover" == m(Hyperlink.IMAGE)
         assert "cover-thumbnail" == m(Hyperlink.THUMBNAIL_IMAGE)
 
-    def test_unmirrored(self):
+    def test_unmirrored(self, db: DatabaseTransactionFixture):
+        ds = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
-        ds = DataSource.lookup(self._db, DataSource.GUTENBERG)
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-
-        c1 = self._default_collection
+        c1 = db.default_collection()
         c1.data_source = ds
 
         # Here's an Identifier associated with a collection.
-        work = self._work(with_license_pool=True, collection=c1)
+        work = db.work(with_license_pool=True, collection=c1)
         [pool] = work.license_pools
         i1 = pool.identifier
 
         # This is a random identifier not associated with the collection.
-        i2 = self._identifier()
+        i2 = db.identifier()
 
         def m():
             return Hyperlink.unmirrored(c1).all()
 
         # Identifier is not in the collection.
-        not_in_collection, ignore = i2.add_link(Hyperlink.IMAGE, self._url, ds)
+        not_in_collection, ignore = i2.add_link(Hyperlink.IMAGE, db.fresh_url(), ds)
         assert [] == m()
 
         # Hyperlink rel is not mirrorable.
-        wrong_type, ignore = i1.add_link("not mirrorable", self._url, ds, "text/plain")
+        wrong_type, ignore = i1.add_link(
+            "not mirrorable", db.fresh_url(), ds, "text/plain"
+        )
         assert [] == m()
 
         # Hyperlink has no associated representation -- it needs to be
         # mirrored, which will create one!
-        hyperlink, ignore = i1.add_link(Hyperlink.IMAGE, self._url, ds, "image/png")
+        hyperlink, ignore = i1.add_link(
+            Hyperlink.IMAGE, db.fresh_url(), ds, "image/png"
+        )
         assert [hyperlink] == m()
 
         # Representation is already mirrored, so does not show up
         # in the unmirrored list.
         representation = hyperlink.resource.representation
-        representation.set_as_mirrored(self._url)
+        representation.set_as_mirrored(db.fresh_url())
         assert [] == m()
 
         # Representation exists in database but is not mirrored -- it needs
@@ -100,13 +107,13 @@ class TestHyperlink(DatabaseTest):
         assert [] == m()
 
 
-class TestResource(DatabaseTest):
-    def test_as_delivery_mechanism_for(self):
+class TestResource:
+    def test_as_delivery_mechanism_for(self, db: DatabaseTransactionFixture):
 
         # Calling as_delivery_mechanism_for on a Resource that is used
         # to deliver a specific LicensePool returns the appropriate
         # LicensePoolDeliveryMechanism.
-        work = self._work(with_open_access_download=True)
+        work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
         [lpdm] = pool.delivery_mechanisms
         assert lpdm == lpdm.resource.as_delivery_mechanism_for(pool)
@@ -114,12 +121,12 @@ class TestResource(DatabaseTest):
         # If there's no relationship between the Resource and
         # the LicensePoolDeliveryMechanism, as_delivery_mechanism_for
         # returns None.
-        w2 = self._work(with_license_pool=True)
+        w2 = db.work(with_license_pool=True)
         [unrelated] = w2.license_pools
         assert None == lpdm.resource.as_delivery_mechanism_for(unrelated)
 
 
-class TestRepresentation(DatabaseTest):
+class TestRepresentation:
     def test_normalized_content_path(self):
         assert "baz" == Representation.normalize_content_path(
             "/foo/bar/baz", "/foo/bar"
@@ -168,8 +175,8 @@ class TestRepresentation(DatabaseTest):
             "http://images-galore/cover.jpeg", {"content-type": "image/png"}, None
         )
 
-    def test_mirrorable_media_type(self):
-        representation, ignore = self._representation(self._url)
+    def test_mirrorable_media_type(self, db: DatabaseTransactionFixture):
+        representation, ignore = db.representation(db.fresh_url())
 
         # Ebook formats and image formats get mirrored.
         representation.media_type = Representation.EPUB_MEDIA_TYPE
@@ -231,66 +238,74 @@ class TestRepresentation(DatabaseTest):
         assert Representation.ZIP_MEDIA_TYPE == m_url(zip_file_rel_path)
         assert Representation.ZIP_MEDIA_TYPE == m_url(zip_file_abs_path)
 
-    def test_external_media_type_and_extension(self):
+    def test_external_media_type_and_extension(self, db: DatabaseTransactionFixture):
         """Test the various transformations that might happen to media type
         and extension when we mirror a representation.
         """
 
         # An unknown file at /foo
-        representation, ignore = self._representation(self._url, "text/unknown")
+        representation, ignore = db.representation(db.fresh_url(), "text/unknown")
         assert "text/unknown" == representation.external_media_type
         assert "" == representation.extension()
 
         # A text file at /foo
-        representation, ignore = self._representation(self._url, "text/plain")
+        representation, ignore = db.representation(db.fresh_url(), "text/plain")
         assert "text/plain" == representation.external_media_type
         assert ".txt" == representation.extension()
 
         # A JPEG at /foo.jpg
-        representation, ignore = self._representation(self._url + ".jpg", "image/jpeg")
+        representation, ignore = db.representation(
+            db.fresh_url() + ".jpg", "image/jpeg"
+        )
         assert "image/jpeg" == representation.external_media_type
         assert ".jpg" == representation.extension()
 
         # A JPEG at /foo
-        representation, ignore = self._representation(self._url, "image/jpeg")
+        representation, ignore = db.representation(db.fresh_url(), "image/jpeg")
         assert "image/jpeg" == representation.external_media_type
         assert ".jpg" == representation.extension()
 
         # A PNG at /foo
-        representation, ignore = self._representation(self._url, "image/png")
+        representation, ignore = db.representation(db.fresh_url(), "image/png")
         assert "image/png" == representation.external_media_type
         assert ".png" == representation.extension()
 
         # An EPUB at /foo.epub.images -- information present in the URL
         # is preserved.
-        representation, ignore = self._representation(
-            self._url + ".epub.images", Representation.EPUB_MEDIA_TYPE
+        representation, ignore = db.representation(
+            db.fresh_url() + ".epub.images",
+            Representation.EPUB_MEDIA_TYPE,
         )
         assert Representation.EPUB_MEDIA_TYPE == representation.external_media_type
         assert ".epub.images" == representation.extension()
 
-        representation, ignore = self._representation(
-            self._url + ".svg", "image/svg+xml"
+        representation, ignore = db.representation(
+            db.fresh_url() + ".svg", "image/svg+xml"
         )
         assert "image/svg+xml" == representation.external_media_type
         assert ".svg" == representation.extension()
 
-    def test_set_fetched_content(self):
-        representation, ignore = self._representation(self._url, "text/plain")
+    def test_set_fetched_content(self, db: DatabaseTransactionFixture):
+        representation, ignore = db.representation(db.fresh_url(), "text/plain")
         representation.set_fetched_content("some text")
         assert b"some text" == representation.content_fh().read()
 
-    def test_set_fetched_content_file_on_disk(self):
+    def test_set_fetched_content_file_on_disk(
+        self,
+        db,
+        temporary_directory_configuration: TemporaryDirectoryConfigurationFixture,
+    ):
+        tmp = temporary_directory_configuration
         filename = "set_fetched_content_file_on_disk.txt"
-        path = os.path.join(self.tmp_data_dir, filename)
+        path = os.path.join(tmp.directory(), filename)
         open(path, "wb").write(b"some text")
 
-        representation, ignore = self._representation(self._url, "text/plain")
-        representation.set_fetched_content(None, filename)
+        representation, ignore = db.representation(db.fresh_url(), "text/plain")
+        representation.set_fetched_content(None, path)
         fh = representation.content_fh()
         assert b"some text" == fh.read()
 
-    def test_unicode_content_utf8_default(self):
+    def test_unicode_content_utf8_default(self, db: DatabaseTransactionFixture):
         unicode_content = "It’s complicated."
 
         utf8_content = unicode_content.encode("utf8")
@@ -300,7 +315,7 @@ class TestRepresentation(DatabaseTest):
         bad_windows_1252 = utf8_content.decode("windows-1252")
         assert "Itâ€™s complicated." == bad_windows_1252
 
-        representation, ignore = self._representation(self._url, "text/plain")
+        representation, ignore = db.representation(db.fresh_url(), "text/plain")
         representation.set_fetched_content(unicode_content, None)
         assert utf8_content == representation.content
 
@@ -308,30 +323,32 @@ class TestRepresentation(DatabaseTest):
         # Windows-1252, we get the right answer.
         assert unicode_content == representation.unicode_content
 
-    def test_unicode_content_windows_1252(self):
+    def test_unicode_content_windows_1252(self, db: DatabaseTransactionFixture):
         unicode_content = "A “love” story"
         windows_1252_content = unicode_content.encode("windows-1252")
 
-        representation, ignore = self._representation(self._url, "text/plain")
+        representation, ignore = db.representation(db.fresh_url(), "text/plain")
         representation.set_fetched_content(windows_1252_content)
         assert windows_1252_content == representation.content
         assert unicode_content == representation.unicode_content
 
-    def test_unicode_content_is_none_when_decoding_is_impossible(self):
+    def test_unicode_content_is_none_when_decoding_is_impossible(
+        self, db: DatabaseTransactionFixture
+    ):
         byte_content = b"\x81\x02\x03"
-        representation, ignore = self._representation(self._url, "text/plain")
+        representation, ignore = db.representation(db.fresh_url(), "text/plain")
         representation.set_fetched_content(byte_content)
         assert byte_content == representation.content
         assert None == representation.unicode_content
 
-    def test_presumed_media_type(self):
+    def test_presumed_media_type(self, db: DatabaseTransactionFixture):
         h = DummyHTTPClient()
 
         # In the absence of a content-type header, the presumed_media_type
         # takes over.
         h.queue_response(200, None, content="content")
         representation, cached = Representation.get(
-            self._db,
+            db.session,
             "http://url",
             do_get=h.do_get,
             max_age=0,
@@ -343,7 +360,7 @@ class TestRepresentation(DatabaseTest):
         # presumed_media_type takes over.
         h.queue_response(200, "application/octet-stream", content="content")
         representation, cached = Representation.get(
-            self._db,
+            db.session,
             "http://url",
             do_get=h.do_get,
             max_age=0,
@@ -355,7 +372,7 @@ class TestRepresentation(DatabaseTest):
         # presumed_media_type.
         h.queue_response(200, "text/plain", content="content")
         representation, cached = Representation.get(
-            self._db,
+            db.session,
             "http://url",
             do_get=h.do_get,
             max_age=0,
@@ -363,42 +380,46 @@ class TestRepresentation(DatabaseTest):
         )
         assert "text/plain" == representation.media_type
 
-    def test_404_creates_cachable_representation(self):
+    def test_404_creates_cachable_representation(self, db: DatabaseTransactionFixture):
         h = DummyHTTPClient()
         h.queue_response(404)
 
-        url = self._url
-        representation, cached = Representation.get(self._db, url, do_get=h.do_get)
+        url = db.fresh_url()
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
-        representation2, cached = Representation.get(self._db, url, do_get=h.do_get)
+        representation2, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert True == cached
         assert representation == representation2
 
-    def test_302_creates_cachable_representation(self):
+    def test_302_creates_cachable_representation(self, db: DatabaseTransactionFixture):
         h = DummyHTTPClient()
         h.queue_response(302)
 
-        url = self._url
-        representation, cached = Representation.get(self._db, url, do_get=h.do_get)
+        url = db.fresh_url()
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
-        representation2, cached = Representation.get(self._db, url, do_get=h.do_get)
+        representation2, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert True == cached
         assert representation == representation2
 
-    def test_500_creates_uncachable_representation(self):
+    def test_500_creates_uncachable_representation(
+        self, db: DatabaseTransactionFixture
+    ):
         h = DummyHTTPClient()
         h.queue_response(500)
-        url = self._url
-        representation, cached = Representation.get(self._db, url, do_get=h.do_get)
+        url = db.fresh_url()
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
         h.queue_response(500)
-        representation, cached = Representation.get(self._db, url, do_get=h.do_get)
+        representation, cached = Representation.get(db.session, url, do_get=h.do_get)
         assert False == cached
 
-    def test_response_reviewer_impacts_representation(self):
+    def test_response_reviewer_impacts_representation(
+        self, db: DatabaseTransactionFixture
+    ):
         h = DummyHTTPClient()
         h.queue_response(200, media_type="text/html")
 
@@ -408,20 +429,23 @@ class TestRepresentation(DatabaseTest):
                 raise Exception("No. Just no.")
 
         representation, cached = Representation.get(
-            self._db, self._url, do_get=h.do_get, response_reviewer=reviewer
+            db.session,
+            db.fresh_url(),
+            do_get=h.do_get,
+            response_reviewer=reviewer,
         )
         assert "No. Just no." in representation.fetch_exception
         assert False == cached
 
-    def test_exception_handler(self):
+    def test_exception_handler(self, db: DatabaseTransactionFixture):
         def oops(*args, **kwargs):
             raise Exception("oops!")
 
         # By default exceptions raised during get() are
         # recorded along with the (empty) Representation objects
         representation, cached = Representation.get(
-            self._db,
-            self._url,
+            db.session,
+            db.fresh_url(),
             do_get=oops,
         )
         assert representation.fetch_exception.strip().endswith("Exception: oops!")
@@ -432,33 +456,33 @@ class TestRepresentation(DatabaseTest):
         # being handled.
         with pytest.raises(Exception) as excinfo:
             Representation.get(
-                self._db,
-                self._url,
+                db.session,
+                db.fresh_url(),
                 do_get=oops,
                 exception_handler=Representation.reraise_exception,
             )
         assert "oops!" in str(excinfo.value)
 
-    def test_url_extension(self):
-        epub, ignore = self._representation("test.epub")
+    def test_url_extension(self, db: DatabaseTransactionFixture):
+        epub, ignore = db.representation("test.epub")
         assert ".epub" == epub.url_extension
 
-        epub3, ignore = self._representation("test.epub3")
+        epub3, ignore = db.representation("test.epub3")
         assert ".epub3" == epub3.url_extension
 
-        noimages, ignore = self._representation("test.epub.noimages")
+        noimages, ignore = db.representation("test.epub.noimages")
         assert ".epub.noimages" == noimages.url_extension
 
-        unknown, ignore = self._representation("test.1234.abcd")
+        unknown, ignore = db.representation("test.1234.abcd")
         assert ".abcd" == unknown.url_extension
 
-        no_extension, ignore = self._representation("test")
+        no_extension, ignore = db.representation("test")
         assert None == no_extension.url_extension
 
-        no_filename, ignore = self._representation("foo.com/")
+        no_filename, ignore = db.representation("foo.com/")
         assert None == no_filename.url_extension
 
-        query_param, ignore = self._representation("test.epub?version=3")
+        query_param, ignore = db.representation("test.epub?version=3")
         assert ".epub" == query_param.url_extension
 
     def test_clean_media_type(self):
@@ -474,11 +498,11 @@ class TestRepresentation(DatabaseTest):
         assert ".mobi" == m("application/x-mobipocket-ebook")
         assert "" == m("no/such-media-type")
 
-    def test_default_filename(self):
+    def test_default_filename(self, db: DatabaseTransactionFixture):
 
         # Here's a common sort of URL.
         url = "http://example.com/foo/bar/baz.txt"
-        representation, ignore = self._representation(url)
+        representation, ignore = db.representation(url)
 
         # Here's the filename we would give it if we were to mirror
         # it.
@@ -492,7 +516,7 @@ class TestRepresentation(DatabaseTest):
         # The original file extension is not treated as reliable and
         # need not be present.
         url = "http://example.com/1"
-        representation, ignore = self._representation(url, "text/plain")
+        representation, ignore = db.representation(url, "text/plain")
         filename = representation.default_filename()
         assert "1.txt" == filename
 
@@ -507,7 +531,7 @@ class TestRepresentation(DatabaseTest):
 
         # This URL has no path component, so we can't even come up with a
         # decent default filename. We have to go with 'resource'.
-        representation, ignore = self._representation(
+        representation, ignore = db.representation(
             "http://example.com/", "text/unknown"
         )
         assert "resource" == representation.default_filename()
@@ -677,11 +701,11 @@ class TestRepresentation(DatabaseTest):
             head_client=bad_redirect,
         )
 
-    def test_get_with_url_normalizer(self):
+    def test_get_with_url_normalizer(self, db: DatabaseTransactionFixture):
         # Verify our ability to store a Resource under a URL other than
         # the exact URL used to make the HTTP request.
 
-        class Normalizer(object):
+        class Normalizer:
             called_with = None
 
             def normalize(self, url):
@@ -696,7 +720,10 @@ class TestRepresentation(DatabaseTest):
         original_url = "http://url/?sid=12345"
 
         representation, from_cache = Representation.get(
-            self._db, original_url, do_get=h.do_get, url_normalizer=normalizer.normalize
+            db.session,
+            original_url,
+            do_get=h.do_get,
+            url_normalizer=normalizer.normalize,
         )
 
         # The original URL was used to make the actual request.
@@ -718,20 +745,23 @@ class TestRepresentation(DatabaseTest):
         # Replace do_get with a dud object to prove that no second
         # request goes out 'over the wire'.
         representation2, from_cache = Representation.get(
-            self._db, original_url, do_get=object(), url_normalizer=normalizer.normalize
+            db.session,
+            original_url,
+            do_get=object(),
+            url_normalizer=normalizer.normalize,
         )
         assert True == from_cache
         assert representation2 == representation
         assert normalized_url == representation.url
 
-    def test_best_thumbnail(self):
+    def test_best_thumbnail(self, db: DatabaseTransactionFixture):
         # This Representation has no thumbnails.
-        representation, ignore = self._representation()
+        representation, ignore = db.representation()
         assert None == representation.best_thumbnail
 
         # Now it has two thumbnails, neither of which is mirrored.
-        t1, ignore = self._representation()
-        t2, ignore = self._representation()
+        t1, ignore = db.representation()
+        t2, ignore = db.representation()
         for i in t1, t2:
             representation.thumbnails.append(i)
 
@@ -741,17 +771,23 @@ class TestRepresentation(DatabaseTest):
 
         # If one of the thumbnails is mirrored, it becomes the 'best'
         # thumbnail.
-        t2.set_as_mirrored(self._url)
+        t2.set_as_mirrored(db.fresh_url())
         assert t2 == representation.best_thumbnail
 
 
-class TestCoverResource(DatabaseTest):
-    def test_set_cover(self):
-        edition, pool = self._edition(with_license_pool=True)
-        original = self._url
-        mirror = self._url
-        thumbnail_mirror = self._url
-        sample_cover_path = self.sample_cover_path("test-book-cover.png")
+class TestCoverResource:
+    def test_set_cover(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
+        edition, pool = db.edition(with_license_pool=True)
+        original = db.fresh_url()
+        mirror = db.fresh_url()
+        thumbnail_mirror = db.fresh_url()
+        sample_cover_path = sample_covers_fixture.sample_cover_path(
+            "test-book-cover.png"
+        )
         hyperlink, ignore = pool.add_link(
             Hyperlink.IMAGE,
             original,
@@ -767,18 +803,24 @@ class TestCoverResource(DatabaseTest):
         assert None == edition.cover_thumbnail_url
 
         # Now scale the cover.
-        thumbnail, ignore = self._representation()
+        thumbnail, ignore = db.representation()
         thumbnail.thumbnail_of = full_rep
         thumbnail.set_as_mirrored(thumbnail_mirror)
         edition.set_cover(hyperlink.resource)
         assert mirror == edition.cover_full_url
         assert thumbnail_mirror == edition.cover_thumbnail_url
 
-    def test_set_cover_for_very_small_image(self):
-        edition, pool = self._edition(with_license_pool=True)
-        original = self._url
-        mirror = self._url
-        sample_cover_path = self.sample_cover_path("tiny-image-cover.png")
+    def test_set_cover_for_very_small_image(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
+        edition, pool = db.edition(with_license_pool=True)
+        original = db.fresh_url()
+        mirror = db.fresh_url()
+        sample_cover_path = sample_covers_fixture.sample_cover_path(
+            "tiny-image-cover.png"
+        )
         hyperlink, ignore = pool.add_link(
             Hyperlink.IMAGE,
             original,
@@ -793,11 +835,17 @@ class TestCoverResource(DatabaseTest):
         assert mirror == edition.cover_full_url
         assert mirror == edition.cover_thumbnail_url
 
-    def test_set_cover_for_smallish_image_uses_full_sized_image_as_thumbnail(self):
-        edition, pool = self._edition(with_license_pool=True)
-        original = self._url
-        mirror = self._url
-        sample_cover_path = self.sample_cover_path("tiny-image-cover.png")
+    def test_set_cover_for_smallish_image_uses_full_sized_image_as_thumbnail(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
+        edition, pool = db.edition(with_license_pool=True)
+        original = db.fresh_url()
+        mirror = db.fresh_url()
+        sample_cover_path = sample_covers_fixture.sample_cover_path(
+            "tiny-image-cover.png"
+        )
         hyperlink, ignore = pool.add_link(
             Hyperlink.IMAGE,
             original,
@@ -827,24 +875,30 @@ class TestCoverResource(DatabaseTest):
         edition.set_cover(hyperlink.resource)
         assert None == edition.cover_thumbnail_url
 
-    def test_attempt_to_scale_non_image_sets_scale_exception(self):
-        rep, ignore = self._representation(media_type="text/plain", content="foo")
-        scaled, ignore = rep.scale(300, 600, self._url, "image/png")
+    def test_attempt_to_scale_non_image_sets_scale_exception(
+        self, db: DatabaseTransactionFixture
+    ):
+        rep, ignore = db.representation(media_type="text/plain", content="foo")
+        scaled, ignore = rep.scale(300, 600, db.fresh_url(), "image/png")
         expect = (
             "ValueError: Cannot load non-image representation as image: type text/plain"
         )
         assert scaled == rep
         assert expect in rep.scale_exception
 
-    def test_cannot_scale_to_non_image(self):
-        rep, ignore = self._representation(media_type="image/png", content="foo")
+    def test_cannot_scale_to_non_image(self, db: DatabaseTransactionFixture):
+        rep, ignore = db.representation(media_type="image/png", content="foo")
         with pytest.raises(ValueError) as excinfo:
-            rep.scale(300, 600, self._url, "text/plain")
+            rep.scale(300, 600, db.fresh_url(), "text/plain")
         assert "Unsupported destination media type: text/plain" in str(excinfo.value)
 
-    def test_success(self):
-        cover = self.sample_cover_representation("test-book-cover.png")
-        url = self._url
+    def test_success(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
+        cover = sample_covers_fixture.sample_cover_representation("test-book-cover.png")
+        url = db.fresh_url()
         thumbnail, is_new = cover.scale(300, 600, url, "image/png")
         assert True == is_new
         assert url == thumbnail.url
@@ -863,7 +917,7 @@ class TestCoverResource(DatabaseTest):
         assert False == is_new
 
         # Let's say the thumbnail has been mirrored.
-        thumbnail.set_as_mirrored(self._url)
+        thumbnail.set_as_mirrored(db.fresh_url())
 
         old_content = thumbnail.content
         # With the force argument we can forcibly re-scale an image,
@@ -884,10 +938,16 @@ class TestCoverResource(DatabaseTest):
         # The thumbnail has been regenerated, so it needs to be mirrored again.
         assert None == thumbnail.mirrored_at
 
-    def test_book_with_odd_aspect_ratio(self):
+    def test_book_with_odd_aspect_ratio(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
         # This book is 1200x600.
-        cover = self.sample_cover_representation("childrens-book-cover.png")
-        url = self._url
+        cover = sample_covers_fixture.sample_cover_representation(
+            "childrens-book-cover.png"
+        )
+        url = db.fresh_url()
         thumbnail, is_new = cover.scale(300, 400, url, "image/png")
         assert True == is_new
         assert url == thumbnail.url
@@ -898,10 +958,16 @@ class TestCoverResource(DatabaseTest):
         # though this takes it below max_height.
         assert 200 == thumbnail.image_height
 
-    def test_book_smaller_than_thumbnail_size(self):
+    def test_book_smaller_than_thumbnail_size(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
         # This book is 200x200. No thumbnail will be created.
-        cover = self.sample_cover_representation("tiny-image-cover.png")
-        url = self._url
+        cover = sample_covers_fixture.sample_cover_representation(
+            "tiny-image-cover.png"
+        )
+        url = db.fresh_url()
         thumbnail, is_new = cover.scale(300, 600, url, "image/png")
         assert False == is_new
         assert thumbnail == cover
@@ -928,12 +994,18 @@ class TestCoverResource(DatabaseTest):
         assert jpeg < gif
         assert gif < svg
 
-    def test_best_covers_among(self):
+    def test_best_covers_among(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
         # Here's a book with a thumbnail image.
-        edition, pool = self._edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
 
         link1, ignore = pool.add_link(
-            Hyperlink.THUMBNAIL_IMAGE, self._url, pool.data_source
+            Hyperlink.THUMBNAIL_IMAGE,
+            db.fresh_url(),
+            pool.data_source,
         )
         resource_with_no_representation = link1.resource
 
@@ -942,11 +1014,15 @@ class TestCoverResource(DatabaseTest):
         assert [] == Resource.best_covers_among([resource_with_no_representation])
 
         # Here's an abysmally bad cover.
-        lousy_cover = self.sample_cover_representation("tiny-image-cover.png")
+        lousy_cover = sample_covers_fixture.sample_cover_representation(
+            "tiny-image-cover.png"
+        )
         lousy_cover.image_height = 1
         lousy_cover.image_width = 10000
         link2, ignore = pool.add_link(
-            Hyperlink.THUMBNAIL_IMAGE, self._url, pool.data_source
+            Hyperlink.THUMBNAIL_IMAGE,
+            db.fresh_url(),
+            pool.data_source,
         )
         resource_with_lousy_cover = link2.resource
         resource_with_lousy_cover.representation = lousy_cover
@@ -956,9 +1032,13 @@ class TestCoverResource(DatabaseTest):
         assert [] == Resource.best_covers_among([resource_with_lousy_cover])
 
         # Here's a decent cover.
-        decent_cover = self.sample_cover_representation("test-book-cover.png")
+        decent_cover = sample_covers_fixture.sample_cover_representation(
+            "test-book-cover.png"
+        )
         link3, ignore = pool.add_link(
-            Hyperlink.THUMBNAIL_IMAGE, self._url, pool.data_source
+            Hyperlink.THUMBNAIL_IMAGE,
+            db.fresh_url(),
+            pool.data_source,
         )
         resource_with_decent_cover = link3.resource
         resource_with_decent_cover.representation = decent_cover
@@ -972,9 +1052,13 @@ class TestCoverResource(DatabaseTest):
         # Let's create another cover image with identical
         # characteristics.
         link4, ignore = pool.add_link(
-            Hyperlink.THUMBNAIL_IMAGE, self._url, pool.data_source
+            Hyperlink.THUMBNAIL_IMAGE,
+            db.fresh_url(),
+            pool.data_source,
         )
-        decent_cover_2 = self.sample_cover_representation("test-book-cover.png")
+        decent_cover_2 = sample_covers_fixture.sample_cover_representation(
+            "test-book-cover.png"
+        )
         resource_with_decent_cover_2 = link4.resource
         resource_with_decent_cover_2.representation = decent_cover_2
 
@@ -992,21 +1076,29 @@ class TestCoverResource(DatabaseTest):
         assert [resource_with_decent_cover_2] == Resource.best_covers_among(l)
 
         # But if the metadata wrangler said to use the JPEG, we use the JPEG.
-        metadata_wrangler = DataSource.lookup(self._db, DataSource.METADATA_WRANGLER)
+        metadata_wrangler = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
         resource_with_decent_cover.data_source = metadata_wrangler
 
         # ...the decision becomes easy.
         assert [resource_with_decent_cover] == Resource.best_covers_among(l)
 
-    def test_rejection_and_approval(self):
+    def test_rejection_and_approval(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
         # Create a Resource.
-        edition, pool = self._edition(with_open_access_download=True)
-        link = pool.add_link(Hyperlink.IMAGE, self._url, pool.data_source)[0]
+        edition, pool = db.edition(with_open_access_download=True)
+        link = pool.add_link(Hyperlink.IMAGE, db.fresh_url(), pool.data_source)[0]
         cover = link.resource
 
         # Give it all the right covers.
-        cover_rep = self.sample_cover_representation("test-book-cover.png")
-        thumbnail_rep = self.sample_cover_representation("test-book-cover.png")
+        cover_rep = sample_covers_fixture.sample_cover_representation(
+            "test-book-cover.png"
+        )
+        thumbnail_rep = sample_covers_fixture.sample_cover_representation(
+            "test-book-cover.png"
+        )
         cover.representation = cover_rep
         cover_rep.thumbnails.append(thumbnail_rep)
 
@@ -1058,21 +1150,24 @@ class TestCoverResource(DatabaseTest):
 
         assert last_votes_for_quality + 1 == cover.votes_for_quality
 
-    def test_quality_as_thumbnail_image(self):
-
+    def test_quality_as_thumbnail_image(
+        self,
+        db,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
         # Get some data sources ready, since a big part of image
         # quality comes from data source.
-        gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         gutenberg_cover_generator = DataSource.lookup(
-            self._db, DataSource.GUTENBERG_COVER_GENERATOR
+            db.session, DataSource.GUTENBERG_COVER_GENERATOR
         )
-        overdrive = DataSource.lookup(self._db, DataSource.OVERDRIVE)
-        metadata_wrangler = DataSource.lookup(self._db, DataSource.METADATA_WRANGLER)
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        metadata_wrangler = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
 
         # Here's a book with a thumbnail image.
-        edition, pool = self._edition(with_license_pool=True)
+        edition, pool = db.edition(with_license_pool=True)
         hyperlink, ignore = pool.add_link(
-            Hyperlink.THUMBNAIL_IMAGE, self._url, overdrive
+            Hyperlink.THUMBNAIL_IMAGE, db.fresh_url(), overdrive
         )
         resource = hyperlink.resource
 
@@ -1082,7 +1177,9 @@ class TestCoverResource(DatabaseTest):
         ideal_height = Identifier.IDEAL_IMAGE_HEIGHT
         ideal_width = Identifier.IDEAL_IMAGE_WIDTH
 
-        cover = self.sample_cover_representation("tiny-image-cover.png")
+        cover = sample_covers_fixture.sample_cover_representation(
+            "tiny-image-cover.png"
+        )
         resource.representation = cover
         assert 1.0 == resource.quality_as_thumbnail_image
 

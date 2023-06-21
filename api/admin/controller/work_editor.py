@@ -5,7 +5,6 @@ import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import Counter
 from io import BytesIO
 
 import flask
@@ -16,8 +15,6 @@ from PIL import Image, ImageDraw, ImageFont
 from api.admin.opds import AdminAnnotator
 from api.admin.problem_details import *
 from api.admin.validator import Validator
-from api.config import CannotLoadConfiguration
-from api.metadata_wrangler import MetadataWranglerCollectionRegistrar
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
 from core.lane import Lane
 from core.metadata_layer import LinkData, Metadata, ReplacementPolicy
@@ -71,24 +68,6 @@ class WorkController(AdminCirculationManagerController):
         # cached, which is perfect. We want the admin interface
         # to update immediately when an admin makes a change.
         return AcquisitionFeed.single_entry(self._db, work, annotator)
-
-    def complaints(self, identifier_type, identifier):
-        """Return detailed complaint information for admins."""
-        self.require_librarian(flask.request.library)
-
-        work = self.load_work(flask.request.library, identifier_type, identifier)
-        if isinstance(work, ProblemDetail):
-            return work
-
-        counter = self._count_complaints_for_work(work)
-        response = dict(
-            {
-                "book": {"identifier_type": identifier_type, "identifier": identifier},
-                "complaints": counter,
-            }
-        )
-
-        return response
 
     def roles(self):
         """Return a mapping from MARC codes to contributor roles."""
@@ -432,12 +411,7 @@ class WorkController(AdminCirculationManagerController):
             return work
 
         if not provider and work.license_pools:
-            try:
-                provider = MetadataWranglerCollectionRegistrar(
-                    work.license_pools[0].collection
-                )
-            except CannotLoadConfiguration:
-                return METADATA_REFRESH_FAILURE
+            return METADATA_REFRESH_FAILURE
 
         identifier = work.presentation_edition.primary_identifier
         try:
@@ -457,32 +431,6 @@ class WorkController(AdminCirculationManagerController):
             # Otherwise, it just doesn't know anything.
             return METADATA_REFRESH_FAILURE
 
-        return Response("", 200)
-
-    def resolve_complaints(self, identifier_type, identifier):
-        """Resolve all complaints for a particular license pool and complaint type."""
-        self.require_librarian(flask.request.library)
-
-        work = self.load_work(flask.request.library, identifier_type, identifier)
-        if isinstance(work, ProblemDetail):
-            return work
-
-        resolved = False
-        found = False
-
-        requested_type = flask.request.form.get("type")
-        if requested_type:
-            for complaint in work.complaints:
-                if complaint.type == requested_type:
-                    found = True
-                    if complaint.resolved == None:
-                        complaint.resolve()
-                        resolved = True
-
-        if not found:
-            return UNRECOGNIZED_COMPLAINT
-        elif not resolved:
-            return COMPLAINT_ALREADY_RESOLVED
         return Response("", 200)
 
     def classifications(self, identifier_type, identifier):
@@ -600,7 +548,7 @@ class WorkController(AdminCirculationManagerController):
 
             # Create a new classification with a high weight - higher than audience
             if new_target_age_min and new_target_age_max:
-                age_range_identifier = "%s-%s" % (
+                age_range_identifier = "{}-{}".format(
                     new_target_age_min,
                     new_target_age_max,
                 )
@@ -996,12 +944,6 @@ class WorkController(AdminCirculationManagerController):
         work.calculate_presentation(policy=presentation_policy)
 
         return Response(_("Success"), 200)
-
-    def _count_complaints_for_work(self, work):
-        complaint_types = [
-            complaint.type for complaint in work.complaints if not complaint.resolved
-        ]
-        return Counter(complaint_types)
 
     def custom_lists(self, identifier_type, identifier):
         self.require_librarian(flask.request.library)

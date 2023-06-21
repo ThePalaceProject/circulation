@@ -10,14 +10,12 @@ from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
 from api.registration.registry import RemoteRegistry
 from core.model import ExternalIntegration, create
-from core.testing import MockRequestsResponse
-from tests.api.admin.controller.test_controller import SettingsControllerTest
+from tests.core.mock import MockRequestsResponse
 
 
-class TestGeographicValidator(SettingsControllerTest):
-    def test_validate_geographic_areas(self):
-        original_validator = GeographicValidator
-        db = self._db
+class TestGeographicValidator:
+    def test_validate_geographic_areas(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db.session
 
         class Mock(GeographicValidator):
             def __init__(self):
@@ -39,7 +37,7 @@ class TestGeographicValidator(SettingsControllerTest):
         mock.find_location_through_registry = mock.mock_find_location_through_registry
 
         # Invalid US zipcode
-        response = mock.validate_geographic_areas('["00000"]', self._db)
+        response = mock.validate_geographic_areas('["00000"]', db)
         assert response.uri == UNKNOWN_LOCATION.uri
         assert response.detail == '"00000" is not a valid U.S. zipcode.'
         assert response.status_code == 400
@@ -47,14 +45,14 @@ class TestGeographicValidator(SettingsControllerTest):
         assert mock.value == None
 
         # Invalid Canadian zipcode
-        response = mock.validate_geographic_areas('["X1Y"]', self._db)
+        response = mock.validate_geographic_areas('["X1Y"]', db)
         assert response.uri == UNKNOWN_LOCATION.uri
         assert response.detail == '"X1Y" is not a valid Canadian zipcode.'
         # The validator should have returned the problem detail without bothering to ask the registry.
         assert mock.value == None
 
         # Invalid 2-letter abbreviation
-        response = mock.validate_geographic_areas('["ZZ"]', self._db)
+        response = mock.validate_geographic_areas('["ZZ"]', db)
         assert response.uri == UNKNOWN_LOCATION.uri
         assert (
             response.detail
@@ -64,26 +62,26 @@ class TestGeographicValidator(SettingsControllerTest):
         assert mock.value == None
 
         # Validator converts Canadian 2-letter abbreviations into province names, without needing to ask the registry.
-        response = mock.validate_geographic_areas('["NL"]', self._db)
+        response = mock.validate_geographic_areas('["NL"]', db)
         assert response == {"CA": ["Newfoundland and Labrador"], "US": []}
         assert mock.value == None
 
         # County with wrong state
-        response = mock.validate_geographic_areas('["Fairfield County, FL"]', self._db)
+        response = mock.validate_geographic_areas('["Fairfield County, FL"]', db)
         assert response.uri == UNKNOWN_LOCATION.uri
         assert response.detail == 'Unable to locate "Fairfield County, FL".'
         # The validator should go ahead and call find_location_through_registry
         assert mock.value == "Fairfield County, FL"
 
         # City with wrong state
-        response = mock.validate_geographic_areas('["Albany, NJ"]', self._db)
+        response = mock.validate_geographic_areas('["Albany, NJ"]', db)
         assert response.uri == UNKNOWN_LOCATION.uri
         assert response.detail == 'Unable to locate "Albany, NJ".'
         # The validator should go ahead and call find_location_through_registry
         assert mock.value == "Albany, NJ"
 
         # The Canadian zip code is valid, but it corresponds to a place too small for the registry to know about it.
-        response = mock.validate_geographic_areas('["J5J"]', self._db)
+        response = mock.validate_geographic_areas('["J5J"]', db)
         assert response.uri == UNKNOWN_LOCATION.uri
         assert (
             response.detail
@@ -95,7 +93,7 @@ class TestGeographicValidator(SettingsControllerTest):
         mock.find_location_through_registry = (
             mock.mock_find_location_through_registry_with_error
         )
-        response = mock.validate_geographic_areas('["Victoria, BC"]', self._db)
+        response = mock.validate_geographic_areas('["Victoria, BC"]', db)
         # The controller goes ahead and calls find_location_through_registry, but it can't connect to the registry.
         assert response.uri == REMOTE_INTEGRATION_FAILED.uri
 
@@ -103,7 +101,7 @@ class TestGeographicValidator(SettingsControllerTest):
         mock.find_location_through_registry = (
             mock.mock_find_location_through_registry_success
         )
-        response = mock.validate_geographic_areas('["Victoria, BC"]', self._db)
+        response = mock.validate_geographic_areas('["Victoria, BC"]', db)
         assert response == {"CA": ["Victoria, BC"], "US": []}
 
     def test_format_as_string(self):
@@ -112,9 +110,9 @@ class TestGeographicValidator(SettingsControllerTest):
         as_string = GeographicValidator().format_as_string(value)
         assert as_string == json.dumps(value)
 
-    def test_find_location_through_registry(self):
-        get = self.do_request
-        test = self
+    def test_find_location_through_registry(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db.session
+        get = settings_ctrl_fixture.do_request
         original_ask_registry = GeographicValidator().ask_registry
 
         class Mock(GeographicValidator):
@@ -128,17 +126,17 @@ class TestGeographicValidator(SettingsControllerTest):
                 nation = list(service_area_info.keys())[0]
                 city_or_county = list(service_area_info.values())[0]
                 if city_or_county == "ERROR":
-                    test.responses.append(MockRequestsResponse(502))
+                    settings_ctrl_fixture.responses.append(MockRequestsResponse(502))
                 elif city_or_county in places[nation]:
                     self.called_with.append(service_area_info)
-                    test.responses.append(
+                    settings_ctrl_fixture.responses.append(
                         MockRequestsResponse(
                             200, content=json.dumps(dict(unknown=None, ambiguous=None))
                         )
                     )
                 else:
                     self.called_with.append(service_area_info)
-                    test.responses.append(
+                    settings_ctrl_fixture.responses.append(
                         MockRequestsResponse(
                             200, content=json.dumps(dict(unknown=[city_or_county]))
                         )
@@ -148,16 +146,16 @@ class TestGeographicValidator(SettingsControllerTest):
         mock = Mock()
         mock.ask_registry = mock.mock_ask_registry
 
-        self._registry("https://registry_url")
+        self._registry("https://registry_url", db)
 
-        us_response = mock.find_location_through_registry("Chicago", self._db)
+        us_response = mock.find_location_through_registry("Chicago", db)
         assert len(mock.called_with) == 1
         assert {"US": "Chicago"} == mock.called_with[0]
         assert us_response == "US"
 
         mock.called_with = []
 
-        ca_response = mock.find_location_through_registry("Victoria, BC", self._db)
+        ca_response = mock.find_location_through_registry("Victoria, BC", db)
         assert len(mock.called_with) == 2
         assert {"US": "Victoria, BC"} == mock.called_with[0]
         assert {"CA": "Victoria, BC"} == mock.called_with[1]
@@ -165,28 +163,30 @@ class TestGeographicValidator(SettingsControllerTest):
 
         mock.called_with = []
 
-        nowhere_response = mock.find_location_through_registry(
-            "Not a real place", self._db
-        )
+        nowhere_response = mock.find_location_through_registry("Not a real place", db)
         assert len(mock.called_with) == 2
         assert {"US": "Not a real place"} == mock.called_with[0]
         assert {"CA": "Not a real place"} == mock.called_with[1]
         assert nowhere_response == None
 
-        error_response = mock.find_location_through_registry("ERROR", self._db)
+        error_response = mock.find_location_through_registry("ERROR", db)
         assert (
             error_response.detail
             == "Unable to contact the registry at https://registry_url."
         )
         assert error_response.status_code == 502
 
-    def test_ask_registry(self, monkeypatch):
+    def test_ask_registry(self, monkeypatch, settings_ctrl_fixture):
         validator = GeographicValidator()
+        db = settings_ctrl_fixture.ctrl.db.session
+        get = settings_ctrl_fixture.do_request
 
         registry_1 = "https://registry_1_url"
         registry_2 = "https://registry_2_url"
         registry_3 = "https://registry_3_url"
-        registries = self._registries([registry_1, registry_2, registry_3], monkeypatch)
+        registries = self._registries(
+            [registry_1, registry_2, registry_3], monkeypatch, db
+        )
 
         true_response = MockRequestsResponse(200, content="{}")
         unknown_response = MockRequestsResponse(200, content='{"unknown": "place"}')
@@ -194,113 +194,103 @@ class TestGeographicValidator(SettingsControllerTest):
         problem_response = MockRequestsResponse(404)
 
         # Registry 1 knows about the place
-        self.responses.append(true_response)
-        response_1 = validator.ask_registry(
-            json.dumps({"CA": "Victoria, BC"}), self._db, self.do_request
-        )
+        settings_ctrl_fixture.responses.append(true_response)
+        response_1 = validator.ask_registry(json.dumps({"CA": "Victoria, BC"}), db, get)
         assert response_1 == True
-        assert len(self.requests) == 1
-        request_1 = self.requests.pop()
+        assert len(settings_ctrl_fixture.requests) == 1
+        request_1 = settings_ctrl_fixture.requests.pop()
         assert (
             request_1[0]
             == 'https://registry_1_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
 
         # Registry 1 says the place is unknown, but Registry 2 finds it.
-        self.responses.append(true_response)
-        self.responses.append(unknown_response)
-        response_2 = validator.ask_registry(
-            json.dumps({"CA": "Victoria, BC"}), self._db, self.do_request
-        )
+        settings_ctrl_fixture.responses.append(true_response)
+        settings_ctrl_fixture.responses.append(unknown_response)
+        response_2 = validator.ask_registry(json.dumps({"CA": "Victoria, BC"}), db, get)
         assert response_2 == True
-        assert len(self.requests) == 2
-        request_2 = self.requests.pop()
+        assert len(settings_ctrl_fixture.requests) == 2
+        request_2 = settings_ctrl_fixture.requests.pop()
         assert (
             request_2[0]
             == 'https://registry_2_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
-        request_1 = self.requests.pop()
+        request_1 = settings_ctrl_fixture.requests.pop()
         assert (
             request_1[0]
             == 'https://registry_1_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
 
         # Registry_1 says the place is ambiguous and Registry_2 says it's unknown, but Registry_3 finds it.
-        self.responses.append(true_response)
-        self.responses.append(unknown_response)
-        self.responses.append(ambiguous_response)
-        response_3 = validator.ask_registry(
-            json.dumps({"CA": "Victoria, BC"}), self._db, self.do_request
-        )
+        settings_ctrl_fixture.responses.append(true_response)
+        settings_ctrl_fixture.responses.append(unknown_response)
+        settings_ctrl_fixture.responses.append(ambiguous_response)
+        response_3 = validator.ask_registry(json.dumps({"CA": "Victoria, BC"}), db, get)
         assert response_3 == True
-        assert len(self.requests) == 3
-        request_3 = self.requests.pop()
+        assert len(settings_ctrl_fixture.requests) == 3
+        request_3 = settings_ctrl_fixture.requests.pop()
         assert (
             request_3[0]
             == 'https://registry_3_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
-        request_2 = self.requests.pop()
+        request_2 = settings_ctrl_fixture.requests.pop()
         assert (
             request_2[0]
             == 'https://registry_2_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
-        request_1 = self.requests.pop()
+        request_1 = settings_ctrl_fixture.requests.pop()
         assert (
             request_1[0]
             == 'https://registry_1_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
 
         # Registry 1 returns a problem detail, but Registry 2 finds the place
-        self.responses.append(true_response)
-        self.responses.append(problem_response)
-        response_4 = validator.ask_registry(
-            json.dumps({"CA": "Victoria, BC"}), self._db, self.do_request
-        )
+        settings_ctrl_fixture.responses.append(true_response)
+        settings_ctrl_fixture.responses.append(problem_response)
+        response_4 = validator.ask_registry(json.dumps({"CA": "Victoria, BC"}), db, get)
         assert response_4 == True
-        assert len(self.requests) == 2
-        request_2 = self.requests.pop()
+        assert len(settings_ctrl_fixture.requests) == 2
+        request_2 = settings_ctrl_fixture.requests.pop()
         assert (
             request_2[0]
             == 'https://registry_2_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
-        request_1 = self.requests.pop()
+        request_1 = settings_ctrl_fixture.requests.pop()
         assert (
             request_1[0]
             == 'https://registry_1_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
 
         # Registry 1 returns a problem detail and the other two registries can't find the place
-        self.responses.append(unknown_response)
-        self.responses.append(ambiguous_response)
-        self.responses.append(problem_response)
-        response_5 = validator.ask_registry(
-            json.dumps({"CA": "Victoria, BC"}), self._db, self.do_request
-        )
+        settings_ctrl_fixture.responses.append(unknown_response)
+        settings_ctrl_fixture.responses.append(ambiguous_response)
+        settings_ctrl_fixture.responses.append(problem_response)
+        response_5 = validator.ask_registry(json.dumps({"CA": "Victoria, BC"}), db, get)
         assert response_5.status_code == 502
         assert (
             response_5.detail
             == "Unable to contact the registry at https://registry_1_url."
         )
-        assert len(self.requests) == 3
-        request_3 = self.requests.pop()
+        assert len(settings_ctrl_fixture.requests) == 3
+        request_3 = settings_ctrl_fixture.requests.pop()
         assert (
             request_3[0]
             == 'https://registry_3_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
-        request_2 = self.requests.pop()
+        request_2 = settings_ctrl_fixture.requests.pop()
         assert (
             request_2[0]
             == 'https://registry_2_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
-        request_1 = self.requests.pop()
+        request_1 = settings_ctrl_fixture.requests.pop()
         assert (
             request_1[0]
             == 'https://registry_1_url/coverage?coverage={"CA": "Victoria, BC"}'
         )
 
-    def _registry(self, url):
+    def _registry(self, url, db_session):
         integration, is_new = create(
-            self._db,
+            db_session,
             ExternalIntegration,
             protocol=ExternalIntegration.OPDS_REGISTRATION,
             goal=ExternalIntegration.DISCOVERY_GOAL,
@@ -308,7 +298,7 @@ class TestGeographicValidator(SettingsControllerTest):
         integration.url = url
         return RemoteRegistry(integration)
 
-    def _registries(self, urls, monkeypatch):
+    def _registries(self, urls, monkeypatch, db_session):
         """Create and mock the `for_protocol_and_goal` function from
         RemoteRegistry. Instead of relying on getting the newly created
         integrations from the database in a specific order, we return them
@@ -317,7 +307,7 @@ class TestGeographicValidator(SettingsControllerTest):
         integrations = []
         for url in urls:
             integration, is_new = create(
-                self._db,
+                db_session,
                 ExternalIntegration,
                 protocol=ExternalIntegration.OPDS_REGISTRATION,
                 goal=ExternalIntegration.DISCOVERY_GOAL,

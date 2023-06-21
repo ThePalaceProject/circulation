@@ -13,7 +13,7 @@ from core.classifier.bisac import (
 )
 
 
-class TestMatchingRule(object):
+class TestMatchingRule:
     def test_registered_object_returned_on_match(self):
         o = object()
         rule = MatchingRule(o, "Fiction")
@@ -117,13 +117,13 @@ class TestMatchingRule(object):
         assert None == rule.match("juvenile fiction", "penguins", "and seals")
 
 
-class MockSubject(object):
+class MockSubject:
     def __init__(self, identifier, name):
         self.identifier = identifier
         self.name = name
 
 
-class TestBISACClassifier(object):
+class TestBISACClassifier:
     def _subject(self, identifier, name):
         subject = MockSubject(identifier, name)
         (

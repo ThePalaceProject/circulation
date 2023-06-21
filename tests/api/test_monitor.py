@@ -9,11 +9,11 @@ from api.monitor import (
 )
 from api.odl import ODLAPI, SharedODLAPI
 from core.model import Annotation, DataSource, ExternalIntegration
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestLoanlikeReaperMonitor(DatabaseTest):
+class TestLoanlikeReaperMonitor:
     """Tests the loan and hold reapers."""
 
     def test_source_of_truth_protocols(self):
@@ -27,50 +27,50 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         ):
             assert i in LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS
 
-    def test_reaping(self):
+    def test_reaping(self, db: DatabaseTransactionFixture):
         # This patron stopped using the circulation manager a long time
         # ago.
-        inactive_patron = self._patron()
+        inactive_patron = db.patron()
 
         # This patron is still using the circulation manager.
-        current_patron = self._patron()
+        current_patron = db.patron()
 
         # We're going to give these patrons some loans and holds.
-        edition, open_access = self._edition(
+        edition, open_access = db.edition(
             with_license_pool=True, with_open_access_download=True
         )
 
-        not_open_access_1 = self._licensepool(
+        not_open_access_1 = db.licensepool(
             edition, open_access=False, data_source_name=DataSource.OVERDRIVE
         )
-        not_open_access_2 = self._licensepool(
+        not_open_access_2 = db.licensepool(
             edition, open_access=False, data_source_name=DataSource.BIBLIOTHECA
         )
-        not_open_access_3 = self._licensepool(
+        not_open_access_3 = db.licensepool(
             edition, open_access=False, data_source_name=DataSource.AXIS_360
         )
-        not_open_access_4 = self._licensepool(
+        not_open_access_4 = db.licensepool(
             edition, open_access=False, data_source_name=DataSource.ODILO
         )
 
         # Here's a collection that is the source of truth for its
         # loans and holds, rather than mirroring loan and hold information
         # from some remote source.
-        sot_collection = self._collection(
+        sot_collection = db.collection(
             "Source of Truth",
             protocol=random.choice(LoanReaper.SOURCE_OF_TRUTH_PROTOCOLS),
         )
 
-        edition2 = self._edition(with_license_pool=False)
+        edition2 = db.edition(with_license_pool=False)
 
-        sot_lp1 = self._licensepool(
+        sot_lp1 = db.licensepool(
             edition2,
             open_access=False,
             data_source_name=DataSource.OVERDRIVE,
             collection=sot_collection,
         )
 
-        sot_lp2 = self._licensepool(
+        sot_lp2 = db.licensepool(
             edition2,
             open_access=False,
             data_source_name=DataSource.BIBLIOTHECA,
@@ -144,7 +144,7 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         assert 2 == len(current_patron.holds)
 
         # Now we fire up the loan reaper.
-        monitor = LoanReaper(self._db)
+        monitor = LoanReaper(db.session)
         monitor.run()
 
         # All of the inactive patron's loans have been reaped,
@@ -153,7 +153,7 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         # which will never be reaped.
         #
         # Holds are unaffected.
-        assert set([open_access_loan, sot_loan]) == set(inactive_patron.loans)
+        assert {open_access_loan, sot_loan} == set(inactive_patron.loans)
         assert 3 == len(inactive_patron.holds)
 
         # The active patron's loans and holds are unaffected, either
@@ -163,7 +163,7 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         assert 2 == len(current_patron.holds)
 
         # Now fire up the hold reaper.
-        monitor = HoldReaper(self._db)
+        monitor = HoldReaper(db.session)
         monitor.run()
 
         # All of the inactive patron's holds have been reaped,
@@ -173,16 +173,16 @@ class TestLoanlikeReaperMonitor(DatabaseTest):
         assert 2 == len(current_patron.holds)
 
 
-class TestIdlingAnnotationReaper(DatabaseTest):
-    def test_where_clause(self):
+class TestIdlingAnnotationReaper:
+    def test_where_clause(self, db: DatabaseTransactionFixture):
 
         # Two books.
-        ignore, lp1 = self._edition(with_license_pool=True)
-        ignore, lp2 = self._edition(with_license_pool=True)
+        ignore, lp1 = db.edition(with_license_pool=True)
+        ignore, lp2 = db.edition(with_license_pool=True)
 
         # Two patrons who sync their annotations.
-        p1 = self._patron()
-        p2 = self._patron()
+        p1 = db.patron()
+        p2 = db.patron()
         for p in [p1, p2]:
             p.synchronize_annotations = True
         now = utc_now()
@@ -193,7 +193,7 @@ class TestIdlingAnnotationReaper(DatabaseTest):
             patron, pool, content, motivation=Annotation.IDLING, timestamp=very_old
         ):
             annotation, ignore = Annotation.get_one_or_create(
-                self._db,
+                db.session,
                 patron=patron,
                 identifier=pool.identifier,
                 motivation=motivation,
@@ -227,6 +227,6 @@ class TestIdlingAnnotationReaper(DatabaseTest):
         # second book, which will not be reaped (even though there is
         # no active loan or hold) because it's not old enough.
         new_idling = _annotation(p2, lp2, "recent", timestamp=not_that_old)
-        reaper = IdlingAnnotationReaper(self._db)
-        qu = self._db.query(Annotation).filter(reaper.where_clause)
+        reaper = IdlingAnnotationReaper(db.session)
+        qu = db.session.query(Annotation).filter(reaper.where_clause)
         assert [reapable] == qu.all()

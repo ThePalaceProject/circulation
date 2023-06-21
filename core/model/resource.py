@@ -1,6 +1,5 @@
-# encoding: utf-8
 # Resource, ResourceTransformation, Hyperlink, Representation
-
+from __future__ import annotations
 
 import datetime
 import json
@@ -11,6 +10,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -27,11 +27,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
-from ..config import Configuration
 from ..util.datetime_helpers import utc_now
 from ..util.http import HTTP
 from . import Base, get_one, get_one_or_create
@@ -43,6 +42,9 @@ from .constants import (
 )
 from .edition import Edition
 from .licensing import LicensePool, LicensePoolDeliveryMechanism
+
+if TYPE_CHECKING:
+    from core.model import CachedMARCFile, Work  # noqa: autoflake
 
 
 class Resource(Base):
@@ -68,7 +70,7 @@ class Resource(Base):
 
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
-    cover_editions = relationship(
+    cover_editions: Mapped[List[Edition]] = relationship(
         "Edition", backref="cover", foreign_keys=[Edition.cover_id]
     )
 
@@ -76,19 +78,21 @@ class Resource(Base):
     # linked to them with rel="description") as their summary.
     from .work import Work
 
-    summary_works = relationship(
+    summary_works: Mapped[List[Work]] = relationship(
         "Work", backref="summary", foreign_keys=[Work.summary_id]
     )
 
     # Many LicensePools (but probably one at most) may use this
     # resource in a delivery mechanism.
-    licensepooldeliverymechanisms = relationship(
+    licensepooldeliverymechanisms: Mapped[
+        List[LicensePoolDeliveryMechanism]
+    ] = relationship(
         "LicensePoolDeliveryMechanism",
         backref="resource",
         foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
     )
 
-    links = relationship("Hyperlink", backref="resource")
+    links: Mapped[List[Hyperlink]] = relationship("Hyperlink", backref="resource")
 
     # The DataSource that is the controlling authority for this Resource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
@@ -103,20 +107,18 @@ class Resource(Base):
     rights_explanation = Column(Unicode)
 
     # A Resource may be transformed into many derivatives.
-    transformations = relationship(
+    transformations: Mapped[List[ResourceTransformation]] = relationship(
         "ResourceTransformation",
-        primaryjoin="ResourceTransformation.original_id==Resource.id",
-        foreign_keys=id,
+        foreign_keys="ResourceTransformation.original_id",
         lazy="joined",
         backref=backref("original", uselist=False),
         uselist=True,
     )
 
     # A derivative resource may have one original.
-    derived_through = relationship(
+    derived_through: Mapped[ResourceTransformation] = relationship(
         "ResourceTransformation",
-        primaryjoin="ResourceTransformation.derivative_id==Resource.id",
-        foreign_keys=id,
+        foreign_keys="ResourceTransformation.derivative_id",
         backref=backref("derivative", uselist=False),
         lazy="joined",
         uselist=False,
@@ -379,7 +381,7 @@ class ResourceTransformation(Base):
     original_id = Column(Integer, ForeignKey("resources.id"), index=True)
 
     # The settings used for the transformation.
-    settings = Column(MutableDict.as_mutable(JSON), default={})
+    settings: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 
 
 class Hyperlink(Base, LinkRelations):
@@ -406,6 +408,7 @@ class Hyperlink(Base, LinkRelations):
     resource_id = Column(
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
+    resource: Resource
 
     @classmethod
     def unmirrored(cls, collection):
@@ -497,7 +500,9 @@ class Representation(Base, MediaTypes):
     # The media type of the representation.
     media_type = Column(Unicode)
 
-    resource = relationship("Resource", backref="representation", uselist=False)
+    resource: Mapped[Resource] = relationship(
+        "Resource", backref="representation", uselist=False
+    )
 
     ### Records of things we tried to do with this representation.
 
@@ -534,7 +539,7 @@ class Representation(Base, MediaTypes):
     # Representation.
     thumbnail_of_id = Column(Integer, ForeignKey("representations.id"), index=True)
 
-    thumbnails = relationship(
+    thumbnails: Mapped[List[Representation]] = relationship(
         "Representation",
         backref=backref("thumbnail_of", remote_side=[id]),
         lazy="joined",
@@ -575,7 +580,7 @@ class Representation(Base, MediaTypes):
     local_content_path = Column(Unicode)
 
     # A Representation may be a CachedMARCFile.
-    marc_file = relationship(
+    marc_file: Mapped[CachedMARCFile] = relationship(
         "CachedMARCFile",
         backref="representation",
         cascade="all, delete-orphan",
@@ -968,7 +973,7 @@ class Representation(Base, MediaTypes):
             do_get=do_post,
             max_age=max_age,
             response_reviewer=response_reviewer,
-            **kwargs
+            **kwargs,
         )
 
     @property
@@ -998,8 +1003,7 @@ class Representation(Base, MediaTypes):
     def normalize_content_path(cls, content_path, base=None):
         if not content_path:
             return None
-        base = base or Configuration.data_directory()
-        if content_path.startswith(base):
+        if base and content_path.startswith(base):
             content_path = content_path[len(base) :]
             if content_path.startswith("/"):
                 content_path = content_path[1:]
@@ -1051,7 +1055,7 @@ class Representation(Base, MediaTypes):
         return json.dumps(dict(d))
 
     @classmethod
-    def simple_http_get(cls, url, headers, **kwargs):
+    def simple_http_get(cls, url, headers, **kwargs) -> Tuple[int, Any, Any]:
         """The most simple HTTP-based GET."""
         if not "allow_redirects" in kwargs:
             kwargs["allow_redirects"] = True
@@ -1188,9 +1192,7 @@ class Representation(Base, MediaTypes):
     @property
     def local_path(self):
         """Return the full local path to the representation on disk."""
-        if not self.local_content_path:
-            return None
-        return os.path.join(Configuration.data_directory(), self.local_content_path)
+        return self.local_content_path
 
     @property
     def clean_media_type(self):
@@ -1423,13 +1425,13 @@ class Representation(Base, MediaTypes):
 
         try:
             image.thumbnail(*args)
-        except IOError as e:
+        except OSError as e:
             # I'm not sure why, but sometimes just trying
             # it again works.
             original_exception = traceback.format_exc()
             try:
                 image.thumbnail(*args)
-            except IOError as e:
+            except OSError as e:
                 self.scale_exception = original_exception
                 self.scaled_at = None
                 return self, False

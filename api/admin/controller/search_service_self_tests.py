@@ -3,12 +3,11 @@ from flask_babel import lazy_gettext as _
 from api.admin.controller.self_tests import SelfTestsController
 from core.external_search import ExternalSearchIndex
 from core.model import ExternalIntegration
-from core.testing import ExternalSearchTest
 
 
-class SearchServiceSelfTestsController(SelfTestsController, ExternalSearchTest):
+class SearchServiceSelfTestsController(SelfTestsController):
     def __init__(self, manager):
-        super(SearchServiceSelfTestsController, self).__init__(manager)
+        super().__init__(manager)
         self.type = _("search service")
 
     def process_search_service_self_tests(self, identifier):
@@ -24,6 +23,6 @@ class SearchServiceSelfTestsController(SelfTestsController, ExternalSearchTest):
     def look_up_by_id(self, identifier):
         return self.look_up_service_by_id(
             identifier,
-            ExternalIntegration.ELASTICSEARCH,
+            ExternalIntegration.OPENSEARCH,
             ExternalIntegration.SEARCH_GOAL,
         )

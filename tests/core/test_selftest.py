@@ -6,19 +6,24 @@ configured, not that the code is correct.
 """
 
 import datetime
+from typing import Generator, Optional
+from unittest.mock import MagicMock
 
+from sqlalchemy.orm import Session
+
+from core.model import ExternalIntegration
 from core.selftest import HasSelfTests, SelfTestResult
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestSelfTestResult(DatabaseTest):
+class TestSelfTestResult:
 
     now = utc_now()
     future = now + datetime.timedelta(seconds=5)
 
-    def test_success_representation(self):
+    def test_success_representation(self, db: DatabaseTransactionFixture):
         """Show the string and dictionary representations of a successful
         test result.
         """
@@ -34,8 +39,8 @@ class TestSelfTestResult(DatabaseTest):
         )
 
         # A SelfTestResult may have an associated Collection.
-        self._default_collection.name = "CollectionA"
-        result.collection = self._default_collection
+        db.default_collection().name = "CollectionA"
+        result.collection = db.default_collection()
         assert (
             "<SelfTestResult: name='success1' collection='CollectionA' duration=5.00sec success=True result='The result'>"
             == repr(result)
@@ -88,13 +93,20 @@ class TestSelfTestResult(DatabaseTest):
         assert "debug info" == d["exception"]["debug_message"]
 
 
-class TestHasSelfTests(DatabaseTest):
-    def test_run_self_tests(self):
+class MockSelfTest(HasSelfTests):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+        raise Exception("I don't work!")
+
+
+class TestHasSelfTests:
+    def test_run_self_tests(self, db: DatabaseTransactionFixture):
         """See what might happen when run_self_tests tries to instantiate an
         object and run its self-tests.
         """
 
         class Tester(HasSelfTests):
+            integration: Optional[ExternalIntegration]
+
             def __init__(self, extra_arg=None):
                 """This constructor works."""
                 self.invoked_with = extra_arg
@@ -119,10 +131,10 @@ class TestHasSelfTests(DatabaseTest):
                 self._run_self_tests_called_with = _db
                 return [SelfTestResult("a test result")]
 
-        mock_db = object()
+        mock_db = MagicMock(spec=Session)
 
         # This integration will be used to store the test results.
-        integration = self._external_integration(self._str)
+        integration = db.external_integration(db.fresh_str())
         Tester.integration = integration
 
         # By default, the default constructor is instantiated and its
@@ -215,7 +227,7 @@ class TestHasSelfTests(DatabaseTest):
         assert failure.exception.debug_message.startswith("Traceback")
 
     def test_run_test_success(self):
-        o = HasSelfTests()
+        o = MockSelfTest()
         # This self-test method will succeed.
         def successful_test(arg, kwarg):
             return arg, kwarg
@@ -227,7 +239,7 @@ class TestHasSelfTests(DatabaseTest):
         assert (result.end - result.start).total_seconds() < 1
 
     def test_run_test_failure(self):
-        o = HasSelfTests()
+        o = MockSelfTest()
         # This self-test method will fail.
         def unsuccessful_test(arg, kwarg):
             raise IntegrationException(arg, kwarg)
@@ -243,7 +255,7 @@ class TestHasSelfTests(DatabaseTest):
         assert (result.end - result.start).total_seconds() < 1
 
     def test_test_failure(self):
-        o = HasSelfTests()
+        o = MockSelfTest()
 
         # You can pass in an Exception...
         exception = Exception("argh")

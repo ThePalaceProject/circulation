@@ -4,18 +4,18 @@ from decimal import Decimal
 import dateutil
 import pytest
 
-from api.authenticator import PatronData
+from api.authentication.base import PatronData
 from api.circulation_exceptions import *
 from api.config import Configuration
 from api.util.patron import PatronUtility
 from core.model import ConfigurationSetting
-from core.testing import DatabaseTest
 from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestPatronUtility(DatabaseTest):
-    def test_needs_external_sync(self):
+class TestPatronUtility:
+    def test_needs_external_sync(self, db: DatabaseTransactionFixture):
         """Test the method that encapsulates the determination
         of whether or not a patron needs to have their account
         synced with the remote.
@@ -35,7 +35,7 @@ class TestPatronUtility(DatabaseTest):
         three_seconds_ago = now - datetime.timedelta(seconds=3)
         yesterday = now - datetime.timedelta(days=1)
 
-        patron = self._patron()
+        patron = db.patron()
 
         # Patron has borrowing privileges. For now.
         MockPatronUtility.mock_has_borrowing_privileges = True
@@ -61,7 +61,7 @@ class TestPatronUtility(DatabaseTest):
         patron.last_external_sync = six_seconds_ago
         assert True == MockPatronUtility.needs_external_sync(patron)
 
-    def test_has_borrowing_privileges(self):
+    def test_has_borrowing_privileges(self, db: DatabaseTransactionFixture):
         """Test the methods that encapsulate the determination
         of whether or not a patron can borrow books.
         """
@@ -69,9 +69,9 @@ class TestPatronUtility(DatabaseTest):
         # Patron expirations checks are done against localtime, rather
         # than UTC; so `patron.authorization_expires` needs
         # timezone-aware datetimes set to local time.
-        now = datetime.datetime.now(tz=dateutil.tz.tzlocal())
+        now = datetime.datetime.now(tz=dateutil.tz.tzlocal())  # type: ignore
         one_day_ago = now - datetime.timedelta(days=1)
-        patron = self._patron()
+        patron = db.patron()
 
         # Most patrons have borrowing privileges.
         assert True == PatronUtility.has_borrowing_privileges(patron)
@@ -81,7 +81,7 @@ class TestPatronUtility(DatabaseTest):
         patron.authorization_expires = one_day_ago
         assert False == PatronUtility.has_borrowing_privileges(patron)
         pytest.raises(
-            AuthorizationExpired, PatronUtility.assert_borrowing_privileges, patron
+            AuthorizationExpired, PatronUtility.assert_borrowing_privileges, patron  # type: ignore
         )
         patron.authorization_expires = None
 
@@ -95,7 +95,7 @@ class TestPatronUtility(DatabaseTest):
 
         assert False == Mock.has_borrowing_privileges(patron)
         assert patron == Mock.called_with
-        pytest.raises(OutstandingFines, Mock.assert_borrowing_privileges, patron)
+        pytest.raises(OutstandingFines, Mock.assert_borrowing_privileges, patron)  # type: ignore
 
         # Even if the circulation manager is not configured to know
         # what "excessive fines" are, the authentication mechanism
@@ -103,7 +103,7 @@ class TestPatronUtility(DatabaseTest):
         # patron's block_reason.
         patron.block_reason = PatronData.EXCESSIVE_FINES
         pytest.raises(
-            OutstandingFines, PatronUtility.assert_borrowing_privileges, patron
+            OutstandingFines, PatronUtility.assert_borrowing_privileges, patron  # type: ignore
         )
 
         # If your card is blocked for any reason you lose borrowing
@@ -111,19 +111,19 @@ class TestPatronUtility(DatabaseTest):
         patron.block_reason = "some reason"
         assert False == PatronUtility.has_borrowing_privileges(patron)
         pytest.raises(
-            AuthorizationBlocked, PatronUtility.assert_borrowing_privileges, patron
+            AuthorizationBlocked, PatronUtility.assert_borrowing_privileges, patron  # type: ignore
         )
 
         patron.block_reason = None
         assert True == PatronUtility.has_borrowing_privileges(patron)
 
-    def test_has_excess_fines(self):
+    def test_has_excess_fines(self, db: DatabaseTransactionFixture):
         # Test the has_excess_fines method.
-        patron = self._patron()
+        patron = db.patron()
 
         # If you accrue excessive fines you lose borrowing privileges.
         setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, self._default_library
+            Configuration.MAX_OUTSTANDING_FINES, db.default_library()
         )
 
         # Verify that all these tests work no matter what data type has been stored in

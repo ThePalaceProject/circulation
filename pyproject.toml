@@ -2,9 +2,203 @@
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]
 
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    '^\s*\.\.\.\s*$',
+    '^\s*pass\s*$',
+    '^\s*raise NotImplementedError\s*$',
+]
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["api", "core"]
+
 [tool.isort]
-known_first_party = ["core", "api"]
+known_first_party = ["api", "core", "customlists"]
 profile = "black"
+
+[tool.mypy]
+# TODO: Enable the the check_untyped_defs option
+# This will get rid of the warnings that we get when running mypy
+# > note: By default the bodies of untyped functions are not checked
+# However this currently causes a number of errors to surface that will
+# need to be cleaned up before we can enable the option.
+# check_untyped_defs = true
+# When we enable this option, we should remove this disable. Its just here
+# to silence the noise in the mypy output for now, so its easier to see when
+# there are errors in the output.
+disable_error_code = "annotation-unchecked"
+exclude = [
+    'core/bin/repair/startup\.py',
+    'core/classifier',
+    'integration_tests/',
+    # TODO: Post test-suite refactoring.
+    'tests/api/admin/controller/test_admin_search_controller\.py',
+    'tests/api/admin/controller/test_analytics_services\.py',
+    'tests/api/admin/controller/test_announcement_service\.py',
+    'tests/api/admin/controller/test_catalog_services\.py',
+    'tests/api/admin/controller/test_collection_registrations\.py',
+    'tests/api/admin/controller/test_collection_self_tests\.py',
+    'tests/api/admin/controller/test_collections\.py',
+    'tests/api/admin/controller/test_controller\.py',
+    'tests/api/admin/controller/test_discovery_services\.py',
+    'tests/api/admin/controller/test_library\.py',
+    'tests/api/admin/controller/test_work_editor\.py',
+    'tests/api/admin/test_routes\.py',
+    'tests/api/test_adobe_vendor_id\.py',
+    'tests/api/test_announcements\.py',
+    'tests/api/test_axis\.py',
+    'tests/api/test_bibliotheca\.py',
+    'tests/api/test_circulationapi\.py',
+    'tests/api/test_controller_annotation\.py',
+    'tests/api/test_controller_base\.py',
+    'tests/api/test_controller_cm\.py',
+    'tests/api/test_controller_device_manage\.py',
+    'tests/api/test_controller_index\.py',
+    'tests/api/test_controller_loan\.py',
+    'tests/api/test_controller_odl_notify\.py',
+    'tests/api/test_controller_scopedsession\.py',
+    'tests/api/test_controller_work\.py',
+    'tests/api/test_coverage\.py',
+    'tests/api/test_jwe_provider\.py',
+    'tests/api/test_lanes\.py',
+    'tests/api/test_local_analytics_exporter\.py',
+    'tests/api/test_monitor\.py',
+    'tests/api/test_novelist\.py',
+    'tests/api/test_odilo\.py',
+    'tests/api/test_odl2\.py',
+    'tests/api/test_odl\.py',
+    'tests/api/test_opds2\.py',
+    'tests/api/test_opds\.py',
+    'tests/api/test_overdrive\.py',
+    'tests/api/test_patron_utility\.py',
+    'tests/api/test_registry\.py',
+    'tests/api/test_routes\.py',
+    'tests/api/test_scripts\.py',
+    'tests/core/models/test_admin\.py',
+    'tests/core/models/test_cachedfeed\.py',
+    'tests/core/models/test_collection\.py',
+    'tests/core/models/test_configuration\.py',
+    'tests/core/models/test_coverage\.py',
+    'tests/core/models/test_credential\.py',
+    'tests/core/models/test_datasource\.py',
+    'tests/core/models/test_devicetoken\.py',
+    'tests/core/models/test_hassessioncache\.py',
+    'tests/core/models/test_identifier\.py',
+    'tests/core/models/test_library\.py',
+    'tests/core/models/test_licensing\.py',
+    'tests/core/models/test_listeners\.py',
+    'tests/core/models/test_measurement\.py',
+    'tests/core/models/test_patron\.py',
+    'tests/core/models/test_work\.py',
+    'tests/core/test_analytics\.py',
+    'tests/core/test_app_server\.py',
+    'tests/core/test_circulation_data\.py',
+    'tests/core/test_coverage\.py',
+    'tests/core/test_equivalent_coverage\.py',
+    'tests/core/test_external_list\.py',
+    'tests/core/test_external_search\.py',
+    'tests/core/test_lane\.py',
+    'tests/core/test_local_analytics_provider\.py',
+    'tests/core/test_marc\.py',
+    'tests/core/test_metadata\.py',
+    'tests/core/test_monitor\.py',
+    'tests/core/test_opds2\.py',
+    'tests/core/test_opds\.py',
+    'tests/core/test_opds_import\.py',
+    'tests/core/test_overdrive\.py',
+    'tests/core/test_s3\.py',
+    'tests/core/test_scripts\.py',
+]
+files = ["."]
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# This override is the equivalent of running mypy with the --strict flag.
+# This is a work in progress, but we should try to get as many of our files
+# into the module list here as possible.
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+module = [
+    "api.admin.controller.patron_auth_services",
+    "api.admin.form_data",
+    "api.admin.model.dashboard_statistics",
+    "api.integration.*",
+    "core.integration.*",
+    "core.model.hassessioncache",
+    "core.model.integration",
+    "core.selftest",
+    "core.util.authentication_for_opds",
+    "core.util.cache",
+    "tests.migration.*",
+]
+no_implicit_reexport = true
+strict_concatenate = true
+strict_equality = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# This override silences errors for modules in our own codebase that we import
+# from other covered modules. Ideally we will be able to remove this override
+# eventually, once we have type hints for all of our own code.
+follow_imports = "silent"
+module = [
+    "core.classifier.*",
+]
+
+[[tool.mypy.overrides]]
+# This override silences errors for modules we import that don't currently
+# have type hints, or type stubs that cover them. We should go through this
+# list periodically and remove modules that have since added type hints.
+ignore_missing_imports = true
+module = [
+    "aws_xray_sdk.ext.*",
+    # This is ignored because the file is created when building a container
+    # so it typically doesn't exist when running mypy, but since it only
+    # contains a couple version strings it can be safely ignored
+    "core._version",
+    "expiringdict",
+    "feedparser",
+    "firebase_admin",
+    "firebase_admin.messaging",
+    "flask_babel",
+    "flask_pydantic_spec.*",
+    "fuzzywuzzy",
+    "greenlet",
+    "html_sanitizer",
+    "isbnlib",
+    "jwcrypto",
+    "lxml.*",
+    "money",
+    "multipledispatch",
+    "nameparser",
+    "onelogin.saml2.*",
+    "opensearch_dsl.*",
+    "pyfakefs.*",
+    "pyld",
+    "pymarc",
+    "pyparsing",
+    "pypostalcode",
+    "spellchecker",
+    "textblob.*",
+    "unicodecsv",
+    "uritemplate",
+    "uszipcode",
+    "watchtower",
+    "wcag_contrast_ratio",
+    "webpub_manifest_parser.*",
+]
 
 [tool.poetry]
 authors = ["The Palace Project <info@thepalaceproject.org>"]
@@ -14,80 +208,125 @@ license = "Apache-2.0"
 name = "Palace Manager"
 readme = "README.md"
 repository = "https://github.com/ThePalaceProject/circulation"
-version = "0" # Version number is managed with tags in git
+version = "0"  # Version number is managed with tags in git
 
 [tool.poetry.dependencies]
-aws-xray-sdk = "~2.9"
+alembic = {extras = ["tz"], version = "^1.8.1"}
+aws-xray-sdk = "~2.12"
+bcrypt = "^4.0.1"
 boto3 = "~1.18"
 botocore = "~1.21"
 certifi = "*"
-click = "7.1.2"
+click = "^8.1.3"
 contextlib2 = "21.6.0"
-elasticsearch = "~6.8"
-elasticsearch-dsl = "6.4.0"
-expiringdict = "1.2.1"
-feedparser = "6.0.8"
-Flask = "~1.1.2"
+expiringdict = "1.2.2"
+feedparser = "6.0.10"
+firebase-admin = "^6.0.1"
+Flask = "^2.2.3"
 Flask-Babel = "2.0.0"
 Flask-Cors = "3.0.10"
-flask-sqlalchemy-session = "1.1"
+flask-pydantic-spec = "^0.4.2"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
-html-sanitizer = "~1.9.1"
-isbnlib = "3.10.9"
-loggly-python-handler = "1.0.1"  # NYPL requirement, can possibly be removed.
-lxml = "4.7.1"
-mock = { version = "~4.0", python = "< 3.8" }
+html-sanitizer = "~1.9.3"
+isbnlib = "^3.10.14"
+itsdangerous = "^2.1.2"
+jwcrypto = "^1.4.2"
+levenshtein = "~0.21"
+lxml = "4.9.2"
 money = "1.3.0"
 multipledispatch = "0.6.0"
-nameparser = "1.1.0"  # nameparser is for author name manipulations
-nltk = "3.6.7"  # nltk is a textblob dependency.
-oauth2client = "4.1.3"  # Deprecated and should be replaced.
-palace-webpub-manifest-parser = "~2.0.3"
-Pillow = "8.4.0"
-psycopg2 = { version = "~2.9.3", optional = true }
-psycopg2-binary = { version = "~2.9.3", optional = true }
-py-bcrypt = "0.4"
-pycryptodome = "3.12.0"
-pyinstrument = "< 4.2"
-PyJWT = "1.5.3"
-PyLD = "1.0.5"
-pymarc = "4.1.2"
-pyOpenSSL = "21.0.0"
-pyparsing = "3.0.6"
+nameparser = "1.1.2"  # nameparser is for author name manipulations
+nltk = "3.8.1"  # nltk is a textblob dependency.
+opensearch-dsl = "~1.0"
+opensearch-py = "~1.1"
+palace-webpub-manifest-parser = "~3.0.1"
+Pillow = "9.5.0"
+pycryptodome = "^3.18"
+pyinstrument = "<4.6"
+PyJWT = "2.6.0"
+PyLD = "2.0.3"
+pymarc = "5.1.0"
+pyOpenSSL = "^23.1.0"
+pyparsing = "3.1.0"
 pypostalcode = "0.4.1"
-pyspellchecker = "0.6.2"
-pytest = "^6"  # Can't be made a dev dep because mocks included beside prod code.
-python = ">=3.6.1,<4"
+pyspellchecker = "0.7.2"
+python = ">=3.8,<4"
 python-dateutil = "2.8.2"
-python-Levenshtein = "~0.12"
-python3-saml = "1.12.0"  # python-saml is required for SAML authentication
+python3-saml = "~1.15.0"  # python-saml is required for SAML authentication
 pytz = "2021.3"
-requests = "~2.27"
-SQLAlchemy = "~1.3.19"
+pyyaml = "^6.0"
+redmail = "^0.6.0"
+requests = "^2.29"
+sqlalchemy = {version = "^1.4", extras = ["mypy"]}
 textblob = "0.17.1"
-typing-extensions = { version = "~4.0", python = "< 3.8" }
-unicodecsv = "0.14.1" # this is used, but can probably be removed on py3
-uritemplate = "3.0.1"
-urllib3 = "~1.26.8"
+types-pyopenssl = "^23.1.0.3"
+types-pyyaml = "^6.0.12.9"
+# We import typing_extensions, so we can use new annotation features.
+# - ParamSpec (Python 3.10)
+# - Self (Python 3.11)
+typing_extensions = {version = "^4.5.0", python = "<3.11"}
+unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
+uritemplate = "4.1.1"
+urllib3 = "~1.26.14"
 uszipcode = "0.2.6"
-uWSGI = "~2.0.19"
-watchtower = "1.0.6"  # watchtower is for Cloudwatch logging integration
+uWSGI = "~2.0.21"
+watchtower = "3.0.1"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"
-Werkzeug = "1.0.1"
+Werkzeug = "^2.2.3"
 
-[tool.poetry.dev-dependencies]
-freezegun = "~1.1"
-Jinja2 = "2.11.3"
-parameterized = "0.8.1"
-pre-commit = "~2.16"
-pyfakefs = "4.5.3"
+[tool.poetry.group.ci.dependencies]
+dunamai = "^1.16"
+pre-commit = "^3.2"
+tox = "^4.4"
+tox-docker = "^4.1"
+tox-gh-actions = "^3.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "^1.26.81"
+botocore-stubs = "^1.29.81"
+freezegun = "~1.2.2"
+Jinja2 = "^3.1.2"
+mypy = "^1.0.1"
+psycopg2-binary = "~2.9.5"
+pyfakefs = "~5.2.0"
+pytest = ">=7.2.0"
+pytest-alembic = "^0.10.4"
+pytest-cov = "^4.0.0"
 pytest-timeout = "*"
-requests-mock = "1.9.3"
+requests-mock = "1.11.0"
+types-aws-xray-sdk = "^2.11.0.13"
+types-Flask-Cors = "^3.0.10"
+types-jsonschema = "^4.17.0.5"
+types-Pillow = "^9.4.0"
+types-psycopg2 = "^2.9.21"
+types-python-dateutil = "^2.8.19"
+types-pytz = "^2023.2"
+types-requests = "^2.28.11"
 
-[tool.poetry.extras]
-pg = ["psycopg2"]
-pg-binary = ["psycopg2-binary"]
+[tool.poetry.group.pg]
+optional = true
+
+[tool.poetry.group.pg.dependencies]
+psycopg2 = "~2.9.5"
 
 [tool.pytest.ini_options]
+addopts = [
+    "--cov",
+    "--cov-report=xml",
+    "--strict-markers",
+]
+markers = [
+    "minio: mark test as requiring minio",
+    "opensearch: mark test as requiring opensearch",
+]
 timeout = "600"
 timeout_method = "thread"
+
+[tool.tomlsort]
+ignore_case = true
+in_place = true
+sort_inline_arrays = true
+sort_table_keys = true
+spaces_before_inline_comment = 2
+spaces_indent_inline_array = 4
+trailing_comma_inline_array = true

@@ -5,7 +5,7 @@ from core.model import DeliveryMechanism, Representation
 from core.util.web_publication_manifest import AudiobookManifest
 
 
-class SpineItem(object):
+class SpineItem:
     """Metadata about a piece of playable audio from an audiobook."""
 
     def __init__(
@@ -86,7 +86,7 @@ class FindawayManifest(AudiobookManifest):
             "http://readium.org/webpub/default.jsonld",
             {"findaway": self.FINDAWAY_EXTENSION_CONTEXT},
         ]
-        super(FindawayManifest, self).__init__(context=context_with_extension)
+        super().__init__(context=context_with_extension)
 
         # Add basic bibliographic information (identifier, title,
         # cover link) to the manifest based on our existing knowledge

@@ -1,11 +1,11 @@
 from core.facets import FacetConfig
 from core.facets import FacetConstants as Facets
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestFacetConfig(DatabaseTest):
-    def test_from_library(self):
-        library = self._default_library
+class TestFacetConfig:
+    def test_from_library(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
         order_by = Facets.ORDER_FACET_GROUP_NAME
 
         # When you create a FacetConfig from a Library it implements
@@ -24,11 +24,11 @@ class TestFacetConfig(DatabaseTest):
         assert library.default_facet(order_by) != Facets.ORDER_RANDOM
         assert Facets.ORDER_RANDOM in config.enabled_facets(order_by)
 
-    def test_enable_facet(self):
+    def test_enable_facet(self, db: DatabaseTransactionFixture):
         # You can enable a facet without making it the default for its
         # facet group.
         order_by = Facets.ORDER_FACET_GROUP_NAME
-        config = FacetConfig.from_library(self._default_library)
+        config = FacetConfig.from_library(db.default_library())
         config.enable_facet(order_by, Facets.ORDER_RANDOM)
         assert Facets.ORDER_RANDOM in config.enabled_facets(order_by)
         assert config.default_facet(order_by) != Facets.ORDER_RANDOM

@@ -6,13 +6,16 @@ import flask
 from flask import Response, make_response, request
 from flask_babel import lazy_gettext as _
 from flask_cors.core import get_cors_options, set_cors_headers
+from flask_pydantic_spec import Response as SpecResponse
 from werkzeug.exceptions import HTTPException
 
+from api.model.patron_auth import PatronAuthAccessToken
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import HasSessionCache
+from core.util.cache import CachedData
 from core.util.problem_detail import ProblemDetail
 
-from .app import app, babel
+from .app import api_spec, app, babel
 from .config import Configuration
 from .controller import CirculationManager
 from .problem_details import REMOTE_INTEGRATION_FAILED
@@ -34,6 +37,9 @@ def initialize_circulation_manager():
             # Make sure that any changes to the database (as might happen
             # on initial setup) are committed before continuing.
             app.manager._db.commit()
+
+            # setup the cache data object
+            CachedData.initialize(app._db)
 
 
 @babel.localeselector
@@ -302,13 +308,6 @@ def authentication_document():
     return app.manager.index_controller.authentication_document()
 
 
-@library_route("/public_key_document")
-@returns_problem_detail
-@compressible
-def public_key_document():
-    return app.manager.index_controller.public_key_document()
-
-
 @library_dir_route("/groups", defaults=dict(lane_identifier=None))
 @library_route("/groups/<lane_identifier>")
 @has_library
@@ -383,6 +382,24 @@ def crawlable_list_feed(list_name):
 @compressible
 def crawlable_collection_feed(collection_name):
     return app.manager.opds_feeds.crawlable_collection_feed(collection_name)
+
+
+@library_route("/opds2/publications")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_publications():
+    return app.manager.opds2_feeds.publications()
+
+
+@library_route("/opds2/navigation")
+@has_library
+@allows_patron_web
+@returns_problem_detail
+@compressible
+def opds2_navigation():
+    return app.manager.opds2_feeds.navigation()
 
 
 @app.route("/collections/<collection_name>")
@@ -479,6 +496,42 @@ def lane_search(lane_identifier):
 @returns_problem_detail
 def patron_profile():
     return app.manager.profiles.protocol()
+
+
+@library_dir_route("/patrons/me/devices", methods=["GET"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def patron_devices():
+    return app.manager.patron_devices.get_patron_device()
+
+
+@library_dir_route("/patrons/me/devices", methods=["PUT"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def put_patron_devices():
+    return app.manager.patron_devices.create_patron_device()
+
+
+@library_dir_route("/patrons/me/devices", methods=["DELETE"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def delete_patron_devices():
+    return app.manager.patron_devices.delete_patron_device()
+
+
+@library_dir_route("/patrons/me/token", methods=["GET"])
+@api_spec.validate(resp=SpecResponse(HTTP_200=PatronAuthAccessToken), tags=["patron"])
+@has_library
+@requires_auth
+@returns_problem_detail
+def patron_auth_token():
+    return app.manager.patron_auth_token.get_token()
 
 
 @library_dir_route("/loans", methods=["GET", "HEAD"])
@@ -634,16 +687,6 @@ def related_books(identifier_type, identifier):
     return app.manager.work_controller.related(identifier_type, identifier)
 
 
-@library_route(
-    "/works/<identifier_type>/<path:identifier>/report", methods=["GET", "POST"]
-)
-@has_library
-@allows_patron_web
-@returns_problem_detail
-def report(identifier_type, identifier):
-    return app.manager.work_controller.report(identifier_type, identifier)
-
-
 @library_route("/analytics/<identifier_type>/<path:identifier>/<event_type>")
 @has_library
 @allows_auth
@@ -704,26 +747,6 @@ def adobe_drm_device(device_id):
     return app.manager.adobe_device_management.device_id_handler(device_id)
 
 
-# Route that redirects to the authentication URL for an OAuth provider
-@library_route("/oauth_authenticate")
-@has_library
-@returns_problem_detail
-def oauth_authenticate():
-    return app.manager.oauth_controller.oauth_authentication_redirect(
-        flask.request.args, app.manager._db
-    )
-
-
-# Redirect URI for OAuth providers, eg. Clever
-@library_route("/oauth_callback")
-@has_library
-@returns_problem_detail
-def oauth_callback():
-    return app.manager.oauth_controller.oauth_authentication_callback(
-        app.manager._db, flask.request.args
-    )
-
-
 # Route that redirects to the authentication URL for a SAML provider
 @library_route("/saml_authenticate")
 @has_library
@@ -777,10 +800,21 @@ def odl_notify(loan_id):
 
 
 # Controllers used for operations purposes
+@app.route("/version.json")
+def application_version():
+    return app.manager.version.version()
+
+
+# TODO: This route is deprecated and should be removed in a
+#       future release of the code, it has been left here for
+#       one release to ease any deployment issues.
 @app.route("/heartbeat")
-@returns_problem_detail
 def heartbeat():
-    return app.manager.heartbeat.heartbeat()
+    version_info = application_version()
+    version_info[
+        "WARNING"
+    ] = "The /heartbeat endpoint is deprecated. Please use /version.json instead."
+    return version_info
 
 
 @app.route("/healthcheck.html")

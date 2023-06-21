@@ -6,9 +6,11 @@ from flask import send_file
 from sqlalchemy import or_
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
-from api.lcp.encrypt import LCPEncryptionConfiguration
+from api.lcp.encrypt import LCPEncryptionSettings
 from api.lcp.hash import HasherFactory
-from api.lcp.server import LCPServer, LCPServerConfiguration
+from api.lcp.server import LCPServer, LCPServerSettings
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import BaseSettings
 from core.lcp.credential import LCPCredentialFactory
 from core.model import (
     Collection,
@@ -18,11 +20,7 @@ from core.model import (
     Loan,
     get_one,
 )
-from core.model.configuration import (
-    ConfigurationFactory,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from core.model.configuration import HasExternalIntegration
 from core.util.datetime_helpers import utc_now
 
 
@@ -66,7 +64,7 @@ class LCPFulfilmentInfo(FulfillmentInfo):
         :param content_expires: Time when the content expires
         :type content_expires: Optional[datetime.datetime]
         """
-        super(LCPFulfilmentInfo, self).__init__(
+        super().__init__(
             collection,
             data_source_name,
             identifier_type,
@@ -88,20 +86,40 @@ class LCPFulfilmentInfo(FulfillmentInfo):
             BytesIO(json.dumps(self.content)),
             mimetype=DeliveryMechanism.LCP_DRM,
             as_attachment=True,
-            attachment_filename="{0}.lcpl".format(self.identifier),
+            attachment_filename=f"{self.identifier}.lcpl",
         )
 
 
-class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
+class LCPSettings(LCPEncryptionSettings, LCPServerSettings):
+    pass
+
+
+class LCPLibrarySettings(BaseSettings):
+    pass
+
+
+class LCPAPI(
+    BaseCirculationAPI, HasExternalIntegration, HasLibraryIntegrationConfiguration
+):
     """Implements LCP workflow"""
 
     NAME = ExternalIntegration.LCP
     SERVICE_NAME = "LCP"
     DESCRIPTION = "Manually imported collection protected using Readium LCP DRM"
 
-    SETTINGS = (
-        LCPServerConfiguration.to_settings() + LCPEncryptionConfiguration.to_settings()
-    )
+    @classmethod
+    def settings_class(cls):
+        return LCPSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return LCPLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
 
     def __init__(self, db, collection):
         """Initializes a new instance of LCPAPI class
@@ -114,7 +132,7 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         """
         if collection.protocol != ExternalIntegration.LCP:
             raise ValueError(
-                "Collection protocol is {0} but must be LCPAPI".format(
+                "Collection protocol is {} but must be LCPAPI".format(
                     collection.protocol
                 )
             )
@@ -158,13 +176,11 @@ class LCPAPI(BaseCirculationAPI, HasExternalIntegration):
         :return: New instance of LCPServer
         :rtype: LCPServer
         """
-        configuration_storage = ConfigurationStorage(self)
-        configuration_factory = ConfigurationFactory()
+
         hasher_factory = HasherFactory()
         credential_factory = LCPCredentialFactory()
         lcp_server = LCPServer(
-            configuration_storage,
-            configuration_factory,
+            self.configuration,
             hasher_factory,
             credential_factory,
         )

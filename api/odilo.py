@@ -1,4 +1,3 @@
-# coding=utf-8
 import base64
 import datetime
 import json
@@ -6,11 +5,14 @@ import logging
 
 import isbnlib
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -34,20 +36,18 @@ from core.model import (
     Identifier,
     Representation,
     Subject,
-    get_one_or_create,
 )
 from core.monitor import CollectionMonitor, TimelineMonitor
-from core.testing import DatabaseTest, MockRequestsResponse
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.personal_names import sort_name_to_display_name
 
 from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from .circulation_exceptions import *
-from .selftest import HasSelfTests, SelfTestResult
+from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
-class OdiloRepresentationExtractor(object):
+class OdiloRepresentationExtractor:
     """Extract useful information from Odilo's JSON representations."""
 
     log = logging.getLogger("OdiloRepresentationExtractor")
@@ -313,33 +313,44 @@ class OdiloRepresentationExtractor(object):
         return cls.odilo_medium_to_simplified_medium.get(format_received)
 
 
-class OdiloAPI(BaseCirculationAPI, HasSelfTests):
+class OdiloSettings(BaseSettings):
+    library_api_base_url: HttpUrl = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library API base URL"),
+            description=_(
+                "This might look like <code>https://[library].odilo.us/api/v2</code>."
+            ),
+            required=True,
+        )
+    )
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Key"),
+            required=True,
+        )
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Secret"),
+            required=True,
+        )
+    )
+
+
+class OdiloLibrarySettings(BaseSettings):
+    pass
+
+
+class OdiloAPI(
+    BaseCirculationAPI[OdiloSettings, OdiloLibrarySettings],
+    HasCollectionSelfTests,
+    HasLibraryIntegrationConfiguration,
+):
     log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
 
     NAME = ExternalIntegration.ODILO
     DESCRIPTION = _("Integrate an Odilo library collection.")
-    SETTINGS = [
-        {
-            "key": LIBRARY_API_BASE_URL,
-            "label": _("Library API base URL"),
-            "description": _(
-                "This might look like <code>https://[library].odilo.us/api/v2</code>."
-            ),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": ExternalIntegration.USERNAME,
-            "label": _("Client Key"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.PASSWORD,
-            "label": _("Client Secret"),
-            "required": True,
-        },
-    ] + BaseCirculationAPI.SETTINGS
 
     # --- OAuth ---
     TOKEN_ENDPOINT = "/token"
@@ -381,6 +392,20 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
         "CHECKOUT_NOT_FOUND": NotCheckedOut,
     }
 
+    @classmethod
+    def settings_class(cls):
+        return OdiloSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return OdiloLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
+
     def __init__(self, _db, collection):
         self.odilo_bibliographic_coverage_provider = OdiloBibliographicCoverageProvider(
             collection, api_class=self
@@ -390,17 +415,17 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
                 "Collection protocol is %s, but passed into OdiloAPI!"
                 % collection.protocol
             )
+        super().__init__(_db, collection)
 
         self._db = _db
         self.analytics = Analytics(self._db)
 
         self.collection_id = collection.id
         self.token = None
-        self.client_key = collection.external_integration.username
-        self.client_secret = collection.external_integration.password
-        self.library_api_base_url = collection.external_integration.setting(
-            self.LIBRARY_API_BASE_URL
-        ).value
+        config = self.configuration()
+        self.client_key = config.username
+        self.client_secret = config.password
+        self.library_api_base_url = config.library_api_base_url
 
         if (
             not self.client_key
@@ -588,7 +613,7 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
 
     def token_post(self, url, payload, headers={}, **kwargs):
         """Make an HTTP POST request for purposes of getting an OAuth token."""
-        s = "%s:%s" % (self.client_key, self.client_secret)
+        s = f"{self.client_key}:{self.client_secret}"
         auth = base64.standard_b64encode(s).strip()
         headers = dict(headers)
         headers["Authorization"] = "Basic %s" % auth
@@ -642,7 +667,7 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
         # TODO: we need to improve this at the API and use an error code
         elif response.status_code == 400:
             raise NoAcceptableFormat(
-                "record_id: %s, format: %s" % (record_id, internal_format)
+                f"record_id: {record_id}, format: {internal_format}"
             )
 
         raise CannotLoan(
@@ -712,7 +737,9 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
                 return checkout
 
         raise NotFoundOnRemote(
-            "Could not find active loan for patron %s, record %s" % (patron, record_id)
+            "Could not find active loan for patron {}, record {}".format(
+                patron, record_id
+            )
         )
 
     def get_hold(self, patron, pin, record_id):
@@ -725,7 +752,9 @@ class OdiloAPI(BaseCirculationAPI, HasSelfTests):
                 return hold
 
         raise NotFoundOnRemote(
-            "Could not find active hold for patron %s, record %s" % (patron, record_id)
+            "Could not find active hold for patron {}, record {}".format(
+                patron, record_id
+            )
         )
 
     def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
@@ -998,7 +1027,7 @@ class OdiloCirculationMonitor(CollectionMonitor, TimelineMonitor):
 
     def __init__(self, _db, collection, api_class=OdiloAPI):
         """Constructor."""
-        super(OdiloCirculationMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         self.api = api_class(_db, collection)
 
     def catch_up_from(self, start, cutoff, progress):
@@ -1091,86 +1120,9 @@ class OdiloCirculationMonitor(CollectionMonitor, TimelineMonitor):
     def get_url(self, limit, modification_date, offset):
         url = "%s?limit=%i&offset=%i" % (self.api.ALL_PRODUCTS_ENDPOINT, limit, offset)
         if modification_date:
-            url = "%s&modificationDate=%s" % (url, modification_date)
+            url = f"{url}&modificationDate={modification_date}"
 
         return url
-
-
-class MockOdiloAPI(OdiloAPI):
-    def patron_request(self, patron, pin, *args, **kwargs):
-        response = self._make_request(*args, **kwargs)
-
-        # Modify the record of the request to include the patron information.
-        original_data = self.requests[-1]
-
-        # The last item in the record of the request is keyword arguments.
-        # Stick this information in there to minimize confusion.
-        original_data[-1]["_patron"] = patron
-        original_data[-1]["_pin"] = pin
-        return response
-
-    @classmethod
-    def mock_collection(cls, _db):
-        library = DatabaseTest.make_default_library(_db)
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name="Test Odilo Collection",
-            create_method_kwargs=dict(
-                external_account_id="library_id_123",
-            ),
-        )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.ODILO
-        )
-        integration.username = "username"
-        integration.password = "password"
-        integration.setting(
-            OdiloAPI.LIBRARY_API_BASE_URL
-        ).value = "http://library_api_base_url/api/v2"
-        library.collections.append(collection)
-
-        return collection
-
-    def __init__(self, _db, collection, *args, **kwargs):
-        self.access_token_requests = []
-        self.requests = []
-        self.responses = []
-
-        self.access_token_response = self.mock_access_token_response("bearer token")
-        super(MockOdiloAPI, self).__init__(_db, collection, *args, **kwargs)
-
-    def token_post(self, url, payload, headers={}, **kwargs):
-        """Mock the request for an OAuth token."""
-
-        self.access_token_requests.append((url, payload, headers, kwargs))
-        response = self.access_token_response
-        return HTTP._process_response(url, response, **kwargs)
-
-    def mock_access_token_response(self, credential, expires_in=-1):
-        token = dict(token=credential, expiresIn=expires_in)
-        return MockRequestsResponse(200, {}, json.dumps(token))
-
-    def queue_response(self, status_code, headers={}, content=None):
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _do_get(self, url, *args, **kwargs):
-        """Simulate Representation.simple_http_get."""
-        response = self._make_request(url, *args, **kwargs)
-        return response.status_code, response.headers, response.content
-
-    def _do_post(self, url, *args, **kwargs):
-        return self._make_request(url, *args, **kwargs)
-
-    def _make_request(self, url, *args, **kwargs):
-        response = self.responses.pop()
-        self.requests.append((url, args, kwargs))
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
 
 
 class OdiloBibliographicCoverageProvider(BibliographicCoverageProvider):
@@ -1194,7 +1146,7 @@ class OdiloBibliographicCoverageProvider(BibliographicCoverageProvider):
         :param api_class: Instantiate this class with the given Collection,
             rather than instantiating OdiloAPI.
         """
-        super(OdiloBibliographicCoverageProvider, self).__init__(collection, **kwargs)
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, OdiloAPI):
             # Use a previously instantiated OdiloAPI instance
             # rather than creating a new one.

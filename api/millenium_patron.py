@@ -1,222 +1,240 @@
 import datetime
 import re
+from enum import Enum
+from typing import List, Optional, Type, Union
 from urllib import parse
 
 import dateutil
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from money import Money
+from pydantic import HttpUrl, validator
 
-from core.model import ExternalIntegration
+from core.analytics import Analytics
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+from core.model import Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
 from core.util.xmlparser import XMLParser
 
-from .authenticator import BasicAuthenticationProvider, PatronData
-from .config import CannotLoadConfiguration
+from .authentication.base import PatronData
+from .authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
+from .authenticator import BasicAuthenticationProvider
 
 
-class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
+class NeighborhoodMode(Enum):
+    DISABLED = "disabled"
+    HOME_BRANCH = "home_branch"
+    POSTAL_CODE = "postal_code"
 
-    NAME = "Millenium"
 
-    RECORD_NUMBER_FIELD = "RECORD #[p81]"
-    PATRON_TYPE_FIELD = "P TYPE[p47]"
-    EXPIRATION_FIELD = "EXP DATE[p43]"
-    HOME_BRANCH_FIELD = "HOME LIBR[p53]"
-    ADDRESS_FIELD = "ADDRESS[pa]"
-    BARCODE_FIELD = "P BARCODE[pb]"
-    USERNAME_FIELD = "ALT ID[pu]"
-    FINES_FIELD = "MONEY OWED[p96]"
-    BLOCK_FIELD = "MBLOCK[p56]"
-    ERROR_MESSAGE_FIELD = "ERRMSG"
-    PERSONAL_NAME_FIELD = "PATRN NAME[pn]"
-    EMAIL_ADDRESS_FIELD = "EMAIL ADDR[pz]"
-    EXPIRATION_DATE_FORMAT = "%m-%d-%y"
+class AuthenticationMode(Enum):
+    PIN = "pin"
+    FAMILY_NAME = "family_name"
 
-    MULTIVALUE_FIELDS = set(["NOTE[px]", BARCODE_FIELD])
 
-    DEFAULT_CURRENCY = "USD"
+class MilleniumPatronSettings(BasicAuthProviderSettings):
+    @validator("neighborhood_mode", pre=True)
+    def validate_neighborhood_mode(cls, v):
+        # TODO: We should fix this in the admin ui interface.
+        #  For the neighborhood_mode setting, the admin UI isn't sending the
+        #  default value, unless the user has changed it. Which causes us to
+        #  fail validation. So if no option is selected, we use the default.
+        if v is None:
+            return NeighborhoodMode.DISABLED
+        else:
+            return v
 
+    url: HttpUrl = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="URL",
+        ),
+    )
+    # A configuration value for whether to validate the SSL certificate
+    # of the Millenium Patron API server.
+    verify_certificate: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
+            label="Certificate Verification",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "Verify Certificate Normally (Required for production)",
+                "false": "Ignore Certificate Problems (For temporary testing only)",
+            },
+        ),
+    )
+    # The field to use when seeing which values of MBLOCK[p56] mean a patron
+    # is blocked. By default, any value other than '-' indicates a block.
+    block_types: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Block Types",
+            description="Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other "
+            "than '-' indicates a block.",
+        ),
+    )
     # Identifiers that contain any of these strings are ignored when
     # finding the "correct" identifier in a patron's record, even if
     # it means they end up with no identifier at all.
-    IDENTIFIER_BLACKLIST = "identifier_blacklist"
-
-    # A configuration value for whether or not to validate the SSL certificate
-    # of the Millenium Patron API server.
-    VERIFY_CERTIFICATE = "verify_certificate"
-
+    identifier_blacklist: List[str] = FormField(
+        [],
+        form=ConfigurationFormItem(
+            label="Identifier Blacklist",
+            description="Identifiers containing any of these strings are ignored when finding the 'correct' "
+            "identifier for a patron's record, even if it means they end up with no identifier at all. "
+            'If librarians invalidate library cards by adding strings like "EXPIRED" or "INVALID" '
+            "on to the beginning of the card number, put those strings here so the Circulation Manager "
+            "knows they do not represent real card numbers.",
+            type=ConfigurationFormItemType.LIST,
+        ),
+    )
     # The field to use when validating a patron's credential.
-    AUTHENTICATION_MODE = "auth_mode"
-    PIN_AUTHENTICATION_MODE = "pin"
-    FAMILY_NAME_AUTHENTICATION_MODE = "family_name"
-
-    NEIGHBORHOOD_MODE = "neighborhood_mode"
-    NO_NEIGHBORHOOD_MODE = "disabled"
-    HOME_BRANCH_NEIGHBORHOOD_MODE = "home_branch"
-    POSTAL_CODE_NEIGHBORHOOD_MODE = "postal_code"
-    NEIGHBORHOOD_MODES = set(
-        [
-            NO_NEIGHBORHOOD_MODE,
-            HOME_BRANCH_NEIGHBORHOOD_MODE,
-            POSTAL_CODE_NEIGHBORHOOD_MODE,
-        ]
+    authentication_mode: AuthenticationMode = FormField(
+        AuthenticationMode.PIN,
+        form=ConfigurationFormItem(
+            label="Authentication Mode",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                AuthenticationMode.PIN: "PIN",
+                AuthenticationMode.FAMILY_NAME: "Family Name",
+            },
+        ),
+        alias="auth_mode",
+    )
+    neighborhood_mode: NeighborhoodMode = FormField(
+        NeighborhoodMode.DISABLED,
+        form=ConfigurationFormItem(
+            label="Patron neighborhood field",
+            description="It's sometimes possible to guess a patron's neighborhood from their ILS record. "
+            "You can use this when analyzing circulation activity by neighborhood. If you don't need to do "
+            "this, it's better for patron privacy to disable this feature.",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                NeighborhoodMode.DISABLED: "Disable this feature",
+                NeighborhoodMode.HOME_BRANCH: "Patron's home library branch is their neighborhood.",
+                NeighborhoodMode.POSTAL_CODE: "Patron's postal code is their neighborhood.",
+            },
+        ),
+    )
+    # The option that defines which field will be used for the patron identifier.
+    # Defaults to the barcode field ("pb").
+    field_used_as_patron_identifier: str = FormField(
+        "pb",
+        form=ConfigurationFormItem(
+            label="Field for patron identifier",
+            description="The name of the field used as a patron identifier. Typically, this will be the "
+            "<i>barcode</i> field which has code <tt>pb</tt>. Some systems, however, are configured to "
+            "use a different field (such as the <i>username</i> field, which has code <tt>pu</tt>).",
+            required=True,
+        ),
+    )
+    use_post_requests: bool = FormField(
+        False,
+        form=ConfigurationFormItem(
+            label="Use POST for requests",
+            description="Whether to use POST (instead of GET) HTTP requests. If this is a Virtual Library Card "
+            "integration, using POST will improve the security of this integration and is the recommended "
+            "setting. Otherwise, do not use POST, as it is NOT compatible with other Millenium integrations.",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "True",
+                "false": "False",
+            },
+        ),
     )
 
-    # The field to use when seeing which values of MBLOCK[p56] mean a patron
-    # is blocked. By default, any value other than '-' indicates a block.
-    BLOCK_TYPES = "block_types"
 
-    AUTHENTICATION_MODES = [PIN_AUTHENTICATION_MODE, FAMILY_NAME_AUTHENTICATION_MODE]
+class MilleniumPatronLibrarySettings(BasicAuthProviderLibrarySettings):
+    library_identifier_field: str = FormField(
+        "barcode",
+        form=ConfigurationFormItem(
+            label="Library Identifier Field",
+            description="This is the field on the patron record that the <em>Library Identifier Restriction "
+            "Type</em> is applied to. The option 'barcode' matches the users barcode, other "
+            "values are pulled directly from the patron record for example: 'P TYPE[p47]'. "
+            "This value is not used if <em>Library Identifier Restriction Type</em> "
+            "is set to 'No restriction'.",
+        ),
+    )
 
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "format": "url",
-            "label": _("URL"),
-            "required": True,
-        },
-        {
-            "key": VERIFY_CERTIFICATE,
-            "label": _("Certificate Verification"),
-            "type": "select",
-            "options": [
-                {
-                    "key": "true",
-                    "label": _("Verify Certificate Normally (Required for production)"),
-                },
-                {
-                    "key": "false",
-                    "label": _(
-                        "Ignore Certificate Problems (For temporary testing only)"
-                    ),
-                },
-            ],
-            "default": "true",
-        },
-        {
-            "key": BLOCK_TYPES,
-            "label": _("Block types"),
-            "description": _(
-                "Values of MBLOCK[p56] which mean a patron is blocked. By default, any value other than '-' indicates a block."
-            ),
-        },
-        {
-            "key": IDENTIFIER_BLACKLIST,
-            "label": _("Identifier Blacklist"),
-            "type": "list",
-            "description": _(
-                "Identifiers containing any of these strings are ignored when finding the 'correct' "
-                + "identifier for a patron's record, even if it means they end up with no identifier at all. "
-                + 'If librarians invalidate library cards by adding strings like "EXPIRED" or "INVALID" '
-                + "on to the beginning of the card number, put those strings here so the Circulation Manager "
-                + "knows they do not represent real card numbers."
-            ),
-        },
-        {
-            "key": AUTHENTICATION_MODE,
-            "label": _("Authentication Mode"),
-            "type": "select",
-            "options": [
-                {"key": PIN_AUTHENTICATION_MODE, "label": _("PIN")},
-                {"key": FAMILY_NAME_AUTHENTICATION_MODE, "label": _("Family Name")},
-            ],
-            "default": PIN_AUTHENTICATION_MODE,
-        },
-        {
-            "key": NEIGHBORHOOD_MODE,
-            "label": _("Patron neighborhood field"),
-            "description": _(
-                "It's sometimes possible to guess a patron's neighborhood from their ILS record. You can use this when analyzing circulation activity by neighborhood. If you don't need to do this, it's better for patron privacy to disable this feature."
-            ),
-            "type": "select",
-            "options": [
-                {"key": NO_NEIGHBORHOOD_MODE, "label": _("Disable this feature")},
-                {
-                    "key": HOME_BRANCH_NEIGHBORHOOD_MODE,
-                    "label": _("Patron's home library branch is their neighborhood."),
-                },
-                {
-                    "key": POSTAL_CODE_NEIGHBORHOOD_MODE,
-                    "label": _("Patron's postal code is their neighborhood."),
-                },
-            ],
-            "default": NO_NEIGHBORHOOD_MODE,
-        },
-    ] + BasicAuthenticationProvider.SETTINGS
 
-    # Replace library settings to allow text in identifier field.
-    LIBRARY_SETTINGS = []
-    for setting in BasicAuthenticationProvider.LIBRARY_SETTINGS:
-        if setting["key"] == BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD:
-            LIBRARY_SETTINGS.append(
-                {
-                    "key": BasicAuthenticationProvider.LIBRARY_IDENTIFIER_FIELD,
-                    "label": _("Library Identifier Field"),
-                    "description": _(
-                        "This is the field on the patron record that the <em>Library Identifier Restriction "
-                        + "Type</em> is applied to. The option 'barcode' matches the users barcode, other "
-                        + "values are pulled directly from the patron record for example: 'P TYPE[p47]'. "
-                        + "This value is not used if <em>Library Identifier Restriction Type</em> "
-                        + "is set to 'No restriction'."
-                    ),
-                }
-            )
-        else:
-            LIBRARY_SETTINGS.append(setting)
+class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
+    @classmethod
+    def label(cls) -> str:
+        return "Millenium"
 
-    def __init__(self, library, integration, analytics=None):
-        super(MilleniumPatronAPI, self).__init__(library, integration, analytics)
-        url = integration.url
-        if not url:
-            raise CannotLoadConfiguration("Millenium Patron API server not configured.")
+    @classmethod
+    def description(cls) -> str:
+        return _("III Millenium Patron API")
 
+    @classmethod
+    def settings_class(cls) -> Type[MilleniumPatronSettings]:
+        return MilleniumPatronSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[MilleniumPatronLibrarySettings]:
+        return MilleniumPatronLibrarySettings
+
+    ERROR_MESSAGE_FIELD = "ERRMSG"
+    RECORD_NUMBER_FIELD = "p81"  # e.g., "RECORD #[p81]"
+    PATRON_TYPE_FIELD = "p47"  # e.g., "P TYPE[p47]"
+    EXPIRATION_FIELD = "p43"  # e.g., "EXP DATE[p43]"
+    HOME_BRANCH_FIELD = "p53"  # e.g., "HOME LIBR[p53]"
+    ADDRESS_FIELD = "pa"  # e.g., "ADDRESS[pa]"
+    BARCODE_FIELD = "pb"  # e.g., "P BARCODE[pb]"
+    USERNAME_FIELD = "pu"  # e.g., "UNIV ID[pu]"
+    FINES_FIELD = "p96"  # e.g., "MONEY OWED[p96]"
+    BLOCK_FIELD = "p56"  # e.g., "MBLOCK[p56]"
+    PERSONAL_NAME_FIELD = "pn"  # e.g., "PATRN NAME[pn]"
+    EMAIL_ADDRESS_FIELD = "pz"  # e.g., "EMAIL ADDR[pz]"
+    NOTE_FIELD = "px"  # e.g., "NOTE[px]"
+    EXPIRATION_DATE_FORMAT = "%m-%d-%y"
+
+    MULTIVALUE_FIELDS = {NOTE_FIELD, BARCODE_FIELD}
+
+    # The following regex will match a field name of the form `<label>[<code>]`
+    # with a group for the code. E.g., "P TYPE[p47]" -> "p47".
+    FIELD_CODE_REGEX = re.compile(r".*\[(.*)\]")
+
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: MilleniumPatronSettings,
+        library_settings: MilleniumPatronLibrarySettings,
+        analytics: Optional[Analytics] = None,
+    ):
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
+        )
+        url = str(settings.url)
         if not url.endswith("/"):
             url = url + "/"
         self.root = url
-        self.verify_certificate = integration.setting(
-            self.VERIFY_CERTIFICATE
-        ).json_value
-        if self.verify_certificate is None:
-            self.verify_certificate = True
+        self.verify_certificate = settings.verify_certificate
         self.parser = etree.HTMLParser()
 
         # In a Sierra ILS, a patron may have a large number of
         # identifiers, some of which are not real library cards. A
         # blacklist allows us to exclude certain types of identifiers
         # from being considered as library cards.
-        authorization_identifier_blacklist = (
-            integration.setting(self.IDENTIFIER_BLACKLIST).json_value or []
-        )
-        self.blacklist = [
-            re.compile(x, re.I) for x in authorization_identifier_blacklist
-        ]
+        self.blacklist = [re.compile(x, re.I) for x in settings.identifier_blacklist]
 
-        auth_mode = (
-            integration.setting(self.AUTHENTICATION_MODE).value
-            or self.PIN_AUTHENTICATION_MODE
-        )
-
-        if auth_mode not in self.AUTHENTICATION_MODES:
-            raise CannotLoadConfiguration(
-                "Unrecognized Millenium Patron API authentication mode: %s." % auth_mode
-            )
-        self.auth_mode = auth_mode
-
-        self.block_types = integration.setting(self.BLOCK_TYPES).value or None
-
-        neighborhood_mode = (
-            integration.setting(self.NEIGHBORHOOD_MODE).value
-            or self.NO_NEIGHBORHOOD_MODE
-        )
-        if neighborhood_mode not in self.NEIGHBORHOOD_MODES:
-            raise CannotLoadConfiguration(
-                "Unrecognized Millenium Patron API neighborhood mode: %s."
-                % neighborhood_mode
-            )
-        self.neighborhood_mode = neighborhood_mode
+        self.auth_mode = settings.authentication_mode
+        self.block_types = settings.block_types
+        self.neighborhood_mode = settings.neighborhood_mode
+        self.field_used_as_patron_identifier = settings.field_used_as_patron_identifier
+        self.use_post = settings.use_post_requests
 
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
@@ -224,43 +242,36 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
     def _request(self, path):
         """Make an HTTP request and parse the response."""
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         """Does the Millenium Patron API approve of these credentials?
 
         :return: False if the credentials are invalid. If they are
             valid, a PatronData that serves only to indicate which
             authorization identifier the patron prefers.
         """
+        if not username:
+            return None
+
         if not self.collects_password:
             # We don't even look at the password. If the patron exists, they
             # are authenticated.
-            patrondata = self._remote_patron_lookup(username)
+            patrondata = self.remote_patron_lookup(username)
             if not patrondata:
-                return False
+                return None
             return patrondata
 
-        if self.auth_mode == self.PIN_AUTHENTICATION_MODE:
-            # Patrons are authenticated with a secret PIN.
-            #
-            # The PIN is URL-encoded. The username is not: as far as
-            # we can tell Millenium Patron doesn't even try to decode
-            # it.
-            quoted_password = parse.quote(password, safe="") if password else password
-            path = "%(barcode)s/%(pin)s/pintest" % dict(
-                barcode=username, pin=quoted_password
+        if self.auth_mode == AuthenticationMode.PIN:
+            return self._remote_authenticate_pintest(
+                username=username, password=password
             )
-            url = self.root + path
-            response = self.request(url)
-            data = dict(self._extract_text_nodes(response.content))
-            if data.get("RETCOD") == "0":
-                return PatronData(authorization_identifier=username, complete=False)
-            return False
-        elif self.auth_mode == self.FAMILY_NAME_AUTHENTICATION_MODE:
+        elif self.auth_mode == AuthenticationMode.FAMILY_NAME:
             # Patrons are authenticated by their family name.
-            patrondata = self._remote_patron_lookup(username)
+            patrondata = self.remote_patron_lookup(username)
             if not patrondata:
                 # The patron doesn't even exist.
-                return False
+                return None
 
             # The patron exists; but do the last names match?
             if self.family_name_match(patrondata.personal_name, password):
@@ -268,7 +279,41 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 # to update their account without making a separate
                 # call to /dump.
                 return patrondata
-        return False
+        return None
+
+    def _remote_authenticate_pintest(
+        self, username: str, password: Optional[str]
+    ) -> Optional[PatronData]:
+        # Patrons are authenticated with a secret PIN.
+        #
+        # The PIN is URL-encoded. The username is not: as far as
+        # we can tell Millenium Patron doesn't even try to decode
+        # it.
+        quoted_password = parse.quote(password, safe="") if password else password
+
+        result: dict = {}
+        if self.use_post:
+            data = f"number={username}&pin={quoted_password}"
+            path = "pintest"
+            url = self.root + path
+            response = self.request_post(
+                url,
+                data=data,
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
+            result = dict(self._extract_text_nodes(response.content))
+        else:
+            path = "%(barcode)s/%(pin)s/pintest" % dict(
+                barcode=username, pin=quoted_password
+            )
+            url = self.root + path
+            response = self.request(url)
+            result = dict(self._extract_text_nodes(response.content))
+
+        if result.get("RETCOD") == "0":
+            return PatronData(authorization_identifier=username, complete=False)
+
+        return None
 
     @classmethod
     def family_name_match(self, actual_name, supposed_family_name):
@@ -284,10 +329,14 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
             return True
         return False
 
-    def _remote_patron_lookup(self, patron_or_patrondata_or_identifier):
+    def remote_patron_lookup(
+        self, patron_or_patrondata_or_identifier: Union[PatronData, Patron, str]
+    ) -> Optional[PatronData]:
         if isinstance(patron_or_patrondata_or_identifier, str):
             identifier = patron_or_patrondata_or_identifier
         else:
+            if not patron_or_patrondata_or_identifier.authorization_identifier:
+                return None
             identifier = patron_or_patrondata_or_identifier.authorization_identifier
         """Look up patron information for the given identifier."""
         path = "%(barcode)s/dump" % dict(barcode=identifier)
@@ -305,11 +354,19 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         self._update_request_kwargs(kwargs)
         return HTTP.request_with_timeout("GET", url, *args, **kwargs)
 
+    def request_post(self, url, *args, **kwargs):
+        """Actually make an HTTP request. This method exists only so the mock
+        can override it.
+        """
+        self._update_request_kwargs(kwargs)
+        return HTTP.request_with_timeout("POST", url, *args, **kwargs)
+
     def _update_request_kwargs(self, kwargs):
         """Modify the kwargs to HTTP.request_with_timeout to reflect the API
         configuration, in a testable way.
         """
         kwargs["verify"] = self.verify_certificate
+        kwargs["max_retry_count"] = 0
 
     @classmethod
     def _patron_block_reason(cls, block_types, mblock_value):
@@ -336,6 +393,30 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         # The patron does not have one of those types, so is not blocked.
         return PatronData.NO_VALUE
 
+    @classmethod
+    def _code_from_field(cls, field_name: Optional[str]) -> Optional[str]:
+        """Convert a Millenium property key to its code.
+
+        A field name may comprise a label and a code or just a code.
+
+        If the field name is of the form "<label>[<code>]" (e.g., "P TYPE[p47]"),
+        return "<code>" (e.g., "p47"). Otherwise, return the original field name.
+        """
+        if field_name is None:
+            return None
+
+        match = cls.FIELD_CODE_REGEX.match(field_name)
+        return match.groups()[0] if match is not None else field_name
+
+    def _is_blacklisted(self, identifier: str) -> bool:
+        # This identifier contains a blacklisted
+        # string. Ignore it, even if this means the patron
+        # ends up with no identifier whatsoever.
+        return any(x.search(identifier) for x in self.blacklist)
+
+    def _is_patron_identifier_field(self, k: str) -> bool:
+        return k == self.field_used_as_patron_identifier
+
     def patron_dump_to_patrondata(self, current_identifier, content):
         """Convert an HTML patron dump to a PatronData object.
 
@@ -358,25 +439,34 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
         neighborhood = PatronData.NO_VALUE
 
         potential_identifiers = []
-        for k, v in self._extract_text_nodes(content):
-            if k == self.BARCODE_FIELD:
-                if any(x.search(v) for x in self.blacklist):
-                    # This barcode contains a blacklisted
-                    # string. Ignore it, even if this means the patron
-                    # ends up with no barcode whatsoever.
+        for f, v in self._extract_text_nodes(content):
+            k = self._code_from_field(f)
+
+            # Check to see if the key should be treated as if it is a patron identifier.
+            # This is dependent on a configuration setting. The key will also have a
+            # chance to be treated as a different kind of field below (for example, if
+            # the configuration says that the username field 'pu' should be treated as
+            # a patron identifier, we _also_ want to treat it as a username below; both
+            # classifications should apply!
+            if self._is_patron_identifier_field(k):
+                if self._is_blacklisted(v):
                     continue
                 # We'll figure out which barcode is the 'right' one
                 # later.
                 potential_identifiers.append(v)
                 # The millenium API doesn't care about spaces, so we add
-                # a version of the barcode without spaces to our identifers
+                # a version of the barcode without spaces to our identifiers
                 # list as well.
                 if " " in v:
                     potential_identifiers.append(v.replace(" ", ""))
+
+            # Handle all the other interpretations for fields.
+            if k == self.USERNAME_FIELD:
+                if self._is_blacklisted(v):
+                    continue
+                username = v
             elif k == self.RECORD_NUMBER_FIELD:
                 permanent_id = v
-            elif k == self.USERNAME_FIELD:
-                username = v
             elif k == self.PERSONAL_NAME_FIELD:
                 personal_name = v
             elif k == self.EMAIL_ADDRESS_FIELD:
@@ -409,24 +499,30 @@ class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
                 external_type = v
             elif (
                 k == self.HOME_BRANCH_FIELD
-                and self.neighborhood_mode == self.HOME_BRANCH_NEIGHBORHOOD_MODE
+                and self.neighborhood_mode == NeighborhoodMode.HOME_BRANCH
             ):
                 neighborhood = v.strip()
             elif (
                 k == self.ADDRESS_FIELD
-                and self.neighborhood_mode == self.POSTAL_CODE_NEIGHBORHOOD_MODE
+                and self.neighborhood_mode == NeighborhoodMode.POSTAL_CODE
             ):
                 neighborhood = self.extract_postal_code(v)
             elif k == self.ERROR_MESSAGE_FIELD:
-                # An error has occured. Most likely the patron lookup
+                # An error has occurred. Most likely the patron lookup
                 # failed.
                 return None
 
         # Set the library identifier field
-        library_identifier = None
+        library_identifier_field_code = self._code_from_field(
+            self.library_identifier_field
+        )
         for k, v in self._extract_text_nodes(content):
-            if k == self.library_identifier_field:
+            code = self._code_from_field(k)
+            if code == library_identifier_field_code:
                 library_identifier = v.strip()
+                break
+        else:
+            library_identifier = None
 
         # We may now have multiple authorization
         # identifiers. PatronData expects the best authorization
@@ -562,6 +658,3 @@ class MockMilleniumPatronAPI(MilleniumPatronAPI):
             if u.authorization_identifier == look_for:
                 return u
         return None
-
-
-AuthenticationProvider = MilleniumPatronAPI

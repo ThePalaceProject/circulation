@@ -1,7 +1,6 @@
-# encoding: utf-8
 import json
 from collections import Counter
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -31,7 +30,7 @@ from api.lanes import (
 from api.novelist import MockNoveListAPI
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import Filter
+from core.external_search import Filter, MockExternalSearchIndex
 from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
@@ -42,15 +41,17 @@ from core.model import (
     ExternalIntegration,
     create,
 )
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestLaneCreation(DatabaseTest):
-    def test_create_lanes_for_large_collection(self):
+class TestLaneCreation:
+    NONEXISTENT_ALPHA3 = "nqq"
+
+    def test_create_lanes_for_large_collection(self, db: DatabaseTransactionFixture):
         languages = ["eng", "spa"]
-        create_lanes_for_large_collection(self._db, self._default_library, languages)
+        create_lanes_for_large_collection(db.session, db.default_library(), languages)
         lanes = (
-            self._db.query(Lane)
+            db.session.query(Lane)
             .filter(Lane.parent_id == None)
             .order_by(Lane.priority)
             .all()
@@ -66,7 +67,7 @@ class TestLaneCreation(DatabaseTest):
             "Children and Middle Grade",
         ] == [x.display_name for x in lanes]
         for lane in lanes:
-            assert self._default_library == lane.library
+            assert db.default_library() == lane.library
             # They all are restricted to English and Spanish.
             assert lane.languages == languages
 
@@ -116,22 +117,22 @@ class TestLaneCreation(DatabaseTest):
         assert "European History" in [genre.name for genre in european_history.genres]
 
         # Delete existing lanes.
-        for lane in self._db.query(Lane).filter(
-            Lane.library_id == self._default_library.id
+        for lane in db.session.query(Lane).filter(
+            Lane.library_id == db.default_library().id
         ):
-            self._db.delete(lane)
+            db.session.delete(lane)
 
         # If there's an NYT Best Sellers integration and we create the lanes again...
         integration, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             goal=ExternalIntegration.METADATA_GOAL,
             protocol=ExternalIntegration.NYT,
         )
 
-        create_lanes_for_large_collection(self._db, self._default_library, languages)
+        create_lanes_for_large_collection(db.session, db.default_library(), languages)
         lanes = (
-            self._db.query(Lane)
+            db.session.query(Lane)
             .filter(Lane.parent_id == None)
             .order_by(Lane.priority)
             .all()
@@ -153,23 +154,23 @@ class TestLaneCreation(DatabaseTest):
             assert "Best Sellers" == best_sellers.display_name
 
         # The best sellers lane has a data source.
-        nyt_data_source = DataSource.lookup(self._db, DataSource.NYT)
+        nyt_data_source = DataSource.lookup(db.session, DataSource.NYT)
         assert nyt_data_source == lanes[0].list_datasource
 
-    def test_create_world_languages_lane(self):
+    def test_create_world_languages_lane(self, db: DatabaseTransactionFixture):
         # If there are no small or tiny collections, calling
         # create_world_languages_lane does not create any lanes or change
         # the priority.
         new_priority = create_world_languages_lane(
-            self._db, self._default_library, [], [], priority=10
+            db.session, db.default_library(), [], [], priority=10
         )
         assert 10 == new_priority
-        assert [] == self._db.query(Lane).all()
+        assert [] == db.session.query(Lane).all()
 
         # If there are lanes to be created, create_world_languages_lane
         # creates them.
         new_priority = create_world_languages_lane(
-            self._db, self._default_library, ["eng"], [["spa", "fre"]], priority=10
+            db.session, db.default_library(), ["eng"], [["spa", "fre"]], priority=10
         )
 
         # priority has been incremented to make room for the newly
@@ -178,9 +179,9 @@ class TestLaneCreation(DatabaseTest):
 
         # One new top-level lane has been created. It contains books
         # from all three languages mentioned in its children.
-        top_level = self._db.query(Lane).filter(Lane.parent == None).one()
+        top_level = db.session.query(Lane).filter(Lane.parent == None).one()
         assert "World Languages" == top_level.display_name
-        assert set(["spa", "fre", "eng"]) == top_level.languages
+        assert {"spa", "fre", "eng"} == set(top_level.languages)
 
         # It has two children -- one for the small English collection and
         # one for the tiny Spanish/French collection.,
@@ -189,7 +190,7 @@ class TestLaneCreation(DatabaseTest):
         assert ["eng"] == small.languages
 
         assert "espa\xf1ol/fran\xe7ais" == tiny.display_name
-        assert ["spa", "fre"] == tiny.languages
+        assert {"spa", "fre"} == set(tiny.languages)
 
         # The tiny collection has no sublanes, but the small one has
         # three.  These lanes are tested in more detail in
@@ -200,12 +201,12 @@ class TestLaneCreation(DatabaseTest):
         assert "Nonfiction" == nonfiction.display_name
         assert "Children & Young Adult" == children.display_name
 
-    def test_create_lane_for_small_collection(self):
+    def test_create_lane_for_small_collection(self, db: DatabaseTransactionFixture):
         languages = ["eng", "spa", "chi"]
         create_lane_for_small_collection(
-            self._db, self._default_library, None, languages
+            db.session, db.default_library(), None, languages
         )
-        [lane] = self._db.query(Lane).filter(Lane.parent_id == None).all()
+        [lane] = db.session.query(Lane).filter(Lane.parent_id == None).all()
 
         assert "English/español/Chinese" == lane.display_name
         sublanes = lane.visible_children
@@ -217,29 +218,29 @@ class TestLaneCreation(DatabaseTest):
             assert [Edition.BOOK_MEDIUM] == x.media
 
         assert [
-            set(["All Ages", "Adults Only", "Adult"]),
-            set(["All Ages", "Adults Only", "Adult"]),
-            set(["Young Adult", "Children"]),
+            {"All Ages", "Adults Only", "Adult"},
+            {"All Ages", "Adults Only", "Adult"},
+            {"Young Adult", "Children"},
         ] == [set(x.audiences) for x in sublanes]
         assert [True, False, None] == [x.fiction for x in sublanes]
 
-        # If a language name is not found, don't create any lanes.
-        languages = ["eng", "mul", "chi"]
-        parent = self._lane()
+        # If any language codes do not map to a name, don't create any lanes.
+        languages = ["eng", self.NONEXISTENT_ALPHA3, "chi"]
+        parent = db.lane()
         priority = create_lane_for_small_collection(
-            self._db, self._default_library, parent, languages, priority=2
+            db.session, db.default_library(), parent, languages, priority=2
         )
-        lane = self._db.query(Lane).filter(Lane.parent == parent)
+        lane = db.session.query(Lane).filter(Lane.parent == parent)
         assert priority == 0
         assert lane.count() == 0
 
-    def test_lane_for_tiny_collection(self):
-        parent = self._lane()
+    def test_lane_for_tiny_collection(self, db: DatabaseTransactionFixture):
+        parent = db.lane()
         new_priority = create_lane_for_tiny_collection(
-            self._db, self._default_library, parent, "ger", priority=3
+            db.session, db.default_library(), parent, "ger", priority=3
         )
         assert 4 == new_priority
-        lane = self._db.query(Lane).filter(Lane.parent == parent).one()
+        lane = db.session.query(Lane).filter(Lane.parent == parent).one()
         assert [Edition.BOOK_MEDIUM] == lane.media
         assert parent == lane.parent
         assert ["ger"] == lane.languages
@@ -247,20 +248,20 @@ class TestLaneCreation(DatabaseTest):
         assert [] == lane.children
 
         # No lane should be created when the language has no name.
-        new_parent = self._lane()
+        new_parent = db.lane()
         new_priority = create_lane_for_tiny_collection(
-            self._db,
-            self._default_library,
+            db.session,
+            db.default_library(),
             new_parent,
-            ["spa", "gaa", "eng"],
+            ["spa", self.NONEXISTENT_ALPHA3, "eng"],
             priority=3,
         )
         assert 0 == new_priority
-        lane = self._db.query(Lane).filter(Lane.parent == new_parent)
+        lane = db.session.query(Lane).filter(Lane.parent == new_parent)
         assert lane.count() == 0
 
-    def test_create_default_lanes(self):
-        library = self._default_library
+    def test_create_default_lanes(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
         library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps(
             ["eng"]
         )
@@ -273,10 +274,10 @@ class TestLaneCreation(DatabaseTest):
             ["ger", "fre", "ita"]
         )
 
-        create_default_lanes(self._db, self._default_library)
+        create_default_lanes(db.session, db.default_library())
         lanes = (
-            self._db.query(Lane)
-            .filter(Lane.library == library)
+            db.session.query(Lane)
+            .filter(Lane.library == library)  # type: ignore
             .filter(Lane.parent_id == None)
             .all()
         )
@@ -284,27 +285,96 @@ class TestLaneCreation(DatabaseTest):
         # We have five top-level lanes for the large collection,
         # a top-level lane for each small collection, and a lane
         # for everything left over.
-        assert (
-            set(
-                [
-                    "Fiction",
-                    "Nonfiction",
-                    "Young Adult Fiction",
-                    "Young Adult Nonfiction",
-                    "Children and Middle Grade",
-                    "World Languages",
-                ]
-            )
-            == set([x.display_name for x in lanes])
-        )
+        assert {
+            "Fiction",
+            "Nonfiction",
+            "Young Adult Fiction",
+            "Young Adult Nonfiction",
+            "Children and Middle Grade",
+            "World Languages",
+        } == {x.display_name for x in lanes}
 
         [english_fiction_lane] = [x for x in lanes if x.display_name == "Fiction"]
         assert 0 == english_fiction_lane.priority
         [world] = [x for x in lanes if x.display_name == "World Languages"]
         assert 5 == world.priority
 
-    def test_lane_configuration_from_collection_sizes(self):
+        # ensure the target age is appropriately set for the children and middle grade lane
+        [children_and_middle_grade_lane] = [
+            x for x in lanes if x.display_name == "Children and Middle Grade"
+        ]
+        target_age = children_and_middle_grade_lane.target_age
+        assert 0 == target_age.lower
+        assert 13 == target_age.upper
+        # and that the audience is set to children
+        audiences = children_and_middle_grade_lane.audiences
+        assert 1 == len(audiences)
+        assert Classifier.AUDIENCE_CHILDREN == audiences[0]
 
+    def test_create_default_when_more_than_one_large_language_is_configured(
+        self, db: DatabaseTransactionFixture
+    ):
+        library = db.default_library()
+        library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps(
+            [
+                "eng",
+                "fre",
+            ]
+        )
+
+        library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps([])
+
+        library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps([])
+        session = db.session
+        create_default_lanes(session, library)
+        lanes = (
+            session.query(Lane)
+            .filter(Lane.library == library)
+            .filter(Lane.parent_id == None)
+            .all()
+        )
+
+        # We have five top-level lanes for the large collection,
+        # and no world languages lane
+        assert {
+            "Fiction",
+            "Nonfiction",
+            "Young Adult Fiction",
+            "Young Adult Nonfiction",
+            "Children and Middle Grade",
+        } == {x.display_name for x in lanes}
+
+    def test_create_default_when_more_than_one_large_language_is_returned_by_estimation(
+        self, db: DatabaseTransactionFixture
+    ):
+        library = db.default_library()
+        library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps([])
+        library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps([])
+        library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps([])
+        session = db.session
+        with patch(
+            "api.lanes._lane_configuration_from_collection_sizes"
+        ) as mock_lane_config:
+            mock_lane_config.return_value = (["eng", "fre"], [], [])
+            create_default_lanes(session, library)
+            lanes = (
+                session.query(Lane)
+                .filter(Lane.library == library)
+                .filter(Lane.parent_id == None)
+                .all()
+            )
+
+            # We have five top-level lanes for the large collection,
+            # and no world languages lane
+            assert {
+                "Fiction",
+                "Nonfiction",
+                "Young Adult Fiction",
+                "Young Adult Nonfiction",
+                "Children and Middle Grade",
+            } == {x.display_name for x in lanes}
+
+    def test_lane_configuration_from_collection_sizes(self):
         # If the library has no holdings, we assume it has a large English
         # collection.
         m = _lane_configuration_from_collection_sizes
@@ -325,36 +395,38 @@ class TestLaneCreation(DatabaseTest):
             tiny=base * 0.01,
         )
         large, small, tiny = m(holdings)
-        assert set(["large1", "large2"]) == set(large)
-        assert set(["small1", "small2"]) == set(small)
+        assert {"large1", "large2"} == set(large)
+        assert {"small1", "small2"} == set(small)
         assert ["tiny"] == tiny
 
 
-class TestWorkBasedLane(DatabaseTest):
-    def test_initialization_sets_appropriate_audiences(self):
-        work = self._work(with_license_pool=True)
+class TestWorkBasedLane:
+    def test_initialization_sets_appropriate_audiences(
+        self, db: DatabaseTransactionFixture
+    ):
+        work = db.work(with_license_pool=True)
 
         work.audience = Classifier.AUDIENCE_CHILDREN
-        children_lane = WorkBasedLane(self._default_library, work, "")
+        children_lane = WorkBasedLane(db.default_library(), work, "")
         assert [Classifier.AUDIENCE_CHILDREN] == children_lane.audiences
 
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT
-        ya_lane = WorkBasedLane(self._default_library, work, "")
+        ya_lane = WorkBasedLane(db.default_library(), work, "")
         assert sorted(Classifier.AUDIENCES_JUVENILE) == sorted(ya_lane.audiences)
 
         work.audience = Classifier.AUDIENCE_ADULT
-        adult_lane = WorkBasedLane(self._default_library, work, "")
+        adult_lane = WorkBasedLane(db.default_library(), work, "")
         assert sorted(Classifier.AUDIENCES) == sorted(adult_lane.audiences)
 
         work.audience = Classifier.AUDIENCE_ADULTS_ONLY
-        adults_only_lane = WorkBasedLane(self._default_library, work, "")
+        adults_only_lane = WorkBasedLane(db.default_library(), work, "")
         assert sorted(Classifier.AUDIENCES) == sorted(adults_only_lane.audiences)
 
-    def test_append_child(self):
+    def test_append_child(self, db: DatabaseTransactionFixture):
         """When a WorkBasedLane gets a child, its language and audience
         restrictions are propagated to the child.
         """
-        work = self._work(
+        work = db.work(
             with_license_pool=True,
             audience=Classifier.AUDIENCE_CHILDREN,
             language="spa",
@@ -366,19 +438,19 @@ class TestWorkBasedLane(DatabaseTest):
             # WorkBasedLane.
             child = WorkList()
             child.initialize(
-                self._default_library,
+                db.default_library(),
                 "sublane",
                 languages=["eng"],
                 audiences=[Classifier.AUDIENCE_ADULT],
             )
             return child
 
-        child1, child2 = [make_child() for i in range(2)]
+        child1, child2 = (make_child() for i in range(2))
 
         # The WorkBasedLane's restrictions are propagated to children
         # passed in to the constructor.
         lane = WorkBasedLane(
-            self._default_library, work, "parent lane", children=[child1]
+            db.default_library(), work, "parent lane", children=[child1]
         )
 
         assert ["spa"] == child1.languages
@@ -390,11 +462,11 @@ class TestWorkBasedLane(DatabaseTest):
         assert ["spa"] == child2.languages
         assert [Classifier.AUDIENCE_CHILDREN] == child2.audiences
 
-    def test_default_children_list_not_reused(self):
-        work = self._work()
+    def test_default_children_list_not_reused(self, db: DatabaseTransactionFixture):
+        work = db.work()
 
         # By default, a WorkBasedLane has no children.
-        lane1 = WorkBasedLane(self._default_library, work)
+        lane1 = WorkBasedLane(db.default_library(), work)
         assert [] == lane1.children
 
         # Add a child...
@@ -402,15 +474,15 @@ class TestWorkBasedLane(DatabaseTest):
 
         # Another lane for the same work gets a different, empty list
         # of children. It doesn't reuse the first lane's list.
-        lane2 = WorkBasedLane(self._default_library, work)
+        lane2 = WorkBasedLane(db.default_library(), work)
         assert [] == lane2.children
 
-    def test_accessible_to(self):
+    def test_accessible_to(self, db: DatabaseTransactionFixture):
         # A lane based on a Work is accessible to a patron only if
         # the Work is age-appropriate for the patron.
-        work = self._work()
-        patron = self._patron()
-        lane = WorkBasedLane(self._default_library, work)
+        work = db.work()
+        patron = db.patron()
+        lane = WorkBasedLane(db.default_library(), work)
 
         work.age_appropriate_for_patron = MagicMock(return_value=False)
         assert False == lane.accessible_to(patron)
@@ -427,14 +499,14 @@ class TestWorkBasedLane(DatabaseTest):
 
         lane.work = work
         work.age_appropriate_for_patron = MagicMock(return_value=True)
-        lane = WorkBasedLane(self._default_library, work)
+        lane = WorkBasedLane(db.default_library(), work)
         assert True == lane.accessible_to(patron)
         work.age_appropriate_for_patron.assert_called_once_with(patron)
 
         # The WorkList rules are still enforced -- for instance, a
         # patron from library B can't access any kind of WorkList from
         # library A.
-        other_library_patron = self._patron(library=self._library())
+        other_library_patron = db.patron(library=db.library())
         assert False == lane.accessible_to(other_library_patron)
 
         # age_appropriate_for_patron was never called with the new
@@ -443,65 +515,77 @@ class TestWorkBasedLane(DatabaseTest):
         work.age_appropriate_for_patron.assert_called_once_with(patron)
 
 
-class TestRelatedBooksLane(DatabaseTest):
-    def setup_method(self):
-        super(TestRelatedBooksLane, self).setup_method()
-        self.work = self._work(
+class RelatedBooksFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.work = db.work(
             with_license_pool=True, audience=Classifier.AUDIENCE_YOUNG_ADULT
         )
         [self.lp] = self.work.license_pools
         self.edition = self.work.presentation_edition
 
-    def test_feed_type(self):
+
+@pytest.fixture(scope="function")
+def related_books_fixture(db: DatabaseTransactionFixture) -> RelatedBooksFixture:
+    return RelatedBooksFixture(db)
+
+
+class TestRelatedBooksLane:
+    def test_feed_type(self, related_books_fixture: RelatedBooksFixture):
         # All feeds from these lanes are cached as 'related works' feeds.
         assert CachedFeed.RELATED_TYPE == RelatedBooksLane.CACHED_FEED_TYPE
 
-    def test_initialization(self):
+    def test_initialization(self, related_books_fixture: RelatedBooksFixture):
         # Asserts that a RelatedBooksLane won't be initialized for a work
         # without related books
 
         # A book without a series or a contributor on a circ manager without
         # NoveList recommendations raises an error.
-        self._db.delete(self.edition.contributions[0])
-        self._db.commit()
+        db = related_books_fixture.db
+        db.session.delete(related_books_fixture.edition.contributions[0])
+        db.session.commit()
 
         pytest.raises(
-            ValueError, RelatedBooksLane, self._default_library, self.work, ""
+            ValueError,
+            RelatedBooksLane,
+            db.default_library(),
+            related_books_fixture.work,
+            "",
         )
 
         # A book with a contributor initializes a RelatedBooksLane.
-        luthor, i = self._contributor("Luthor, Lex")
-        self.edition.add_contributor(luthor, [Contributor.EDITOR_ROLE])
+        luthor, i = db.contributor("Luthor, Lex")
+        related_books_fixture.edition.add_contributor(luthor, [Contributor.EDITOR_ROLE])
 
-        result = RelatedBooksLane(self._default_library, self.work, "")
-        assert self.work == result.work
+        result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
+        assert related_books_fixture.work == result.work
         [sublane] = result.children
         assert True == isinstance(sublane, ContributorLane)
         assert sublane.contributor == luthor
 
         # As does a book in a series.
-        self.edition.series = "All By Myself"
-        result = RelatedBooksLane(self._default_library, self.work, "")
+        related_books_fixture.edition.series = "All By Myself"
+        result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert 2 == len(result.children)
         [contributor, series] = result.children
         assert True == isinstance(series, SeriesLane)
 
         # When NoveList is configured and recommendations are available,
         # a RecommendationLane will be included.
-        self._external_integration(
+        db.external_integration(
             ExternalIntegration.NOVELIST,
             goal=ExternalIntegration.METADATA_GOAL,
             username="library",
             password="sure",
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
-        mock_api = MockNoveListAPI(self._db)
+        mock_api = MockNoveListAPI(db.session)
         response = Metadata(
-            self.edition.data_source, recommendations=[self._identifier()]
+            related_books_fixture.edition.data_source, recommendations=[db.identifier()]
         )
         mock_api.setup_method(response)
         result = RelatedBooksLane(
-            self._default_library, self.work, "", novelist_api=mock_api
+            db.default_library(), related_books_fixture.work, "", novelist_api=mock_api
         )
         assert 3 == len(result.children)
 
@@ -527,56 +611,69 @@ class TestRelatedBooksLane(DatabaseTest):
         assert True == isinstance(series, SeriesLane)
         assert True == isinstance(contributor, ContributorLane)
 
-    def test_contributor_lane_generation(self):
+    def test_contributor_lane_generation(
+        self, related_books_fixture: RelatedBooksFixture
+    ):
+        db = related_books_fixture.db
 
-        original = self.edition.contributions[0].contributor
-        luthor, i = self._contributor("Luthor, Lex")
-        self.edition.add_contributor(luthor, Contributor.EDITOR_ROLE)
+        original = related_books_fixture.edition.contributions[0].contributor
+        luthor, i = db.contributor("Luthor, Lex")
+        related_books_fixture.edition.add_contributor(luthor, Contributor.EDITOR_ROLE)
 
         # Lex Luthor doesn't show up because he's only an editor,
         # and an author is listed.
-        result = RelatedBooksLane(self._default_library, self.work, "")
+        result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert 1 == len(result.children)
         [sublane] = result.children
         assert original == sublane.contributor
 
         # A book with multiple contributors results in multiple
         # ContributorLane sublanes.
-        lane, i = self._contributor("Lane, Lois")
-        self.edition.add_contributor(lane, Contributor.PRIMARY_AUTHOR_ROLE)
-        result = RelatedBooksLane(self._default_library, self.work, "")
+        lane, i = db.contributor("Lane, Lois")
+        related_books_fixture.edition.add_contributor(
+            lane, Contributor.PRIMARY_AUTHOR_ROLE
+        )
+        result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert 2 == len(result.children)
         sublane_contributors = list()
         [sublane_contributors.append(c.contributor) for c in result.children]
-        assert set([lane, original]) == set(sublane_contributors)
+        assert {lane, original} == set(sublane_contributors)
 
         # When there are no AUTHOR_ROLES present, contributors in
         # displayable secondary roles appear.
-        for contribution in self.edition.contributions:
+        for contribution in related_books_fixture.edition.contributions:
             if contribution.role in Contributor.AUTHOR_ROLES:
-                self._db.delete(contribution)
-        self._db.commit()
+                db.session.delete(contribution)
+        db.session.commit()
 
-        result = RelatedBooksLane(self._default_library, self.work, "")
+        result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert 1 == len(result.children)
         [sublane] = result.children
         assert luthor == sublane.contributor
 
-    def test_works_query(self):
+    def test_works_query(self, related_books_fixture: RelatedBooksFixture):
         """RelatedBooksLane is an invisible, groups lane without works."""
 
-        self.edition.series = "All By Myself"
-        lane = RelatedBooksLane(self._default_library, self.work, "")
-        assert [] == lane.works(self._db)
+        db = related_books_fixture.db
+        related_books_fixture.edition.series = "All By Myself"
+        lane = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
+        assert [] == lane.works(db.session)
 
 
-class LaneTest(DatabaseTest):
+class LaneFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.work = db.work(with_license_pool=True)
+        self.contributor, i = self.db.contributor(
+            "Lane, Lois", **dict(viaf="7", display_name="Lois Lane")
+        )
+
     def assert_works_from_database(self, lane, expected):
         """Tests resulting Lane.works_from_database() results"""
 
         if expected:
             expected = [work.id for work in expected]
-        actual = [work.id for work in lane.works_from_database(self._db)]
+        actual = [work.id for work in lane.works_from_database(self.db.session)]
 
         assert sorted(expected) == sorted(actual)
 
@@ -591,7 +688,7 @@ class LaneTest(DatabaseTest):
         ]
 
         for audience in audiences:
-            work = self._work(
+            work = self.db.work(
                 with_license_pool=True,
                 audience=audience,
                 data_source_name=DataSource.OVERDRIVE,
@@ -601,28 +698,32 @@ class LaneTest(DatabaseTest):
         return works
 
 
-class TestRecommendationLane(LaneTest):
-    def setup_method(self):
-        super(TestRecommendationLane, self).setup_method()
-        self.work = self._work(with_license_pool=True)
+@pytest.fixture(scope="function")
+def lane_fixture(db: DatabaseTransactionFixture) -> LaneFixture:
+    return LaneFixture(db)
 
-    def generate_mock_api(self):
+
+class TestRecommendationLane:
+    def generate_mock_api(self, lane_fixture: LaneFixture):
         """Prep an empty NoveList result."""
-        source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        source = DataSource.lookup(lane_fixture.db.session, DataSource.OVERDRIVE)
         metadata = Metadata(source)
 
-        mock_api = MockNoveListAPI(self._db)
+        mock_api = MockNoveListAPI(lane_fixture.db.session)
         mock_api.setup_method(metadata)
         return mock_api
 
-    def test_modify_search_filter_hook(self):
+    def test_modify_search_filter_hook(self, lane_fixture: LaneFixture):
         # Prep an empty result.
-        mock_api = self.generate_mock_api()
+        mock_api = self.generate_mock_api(lane_fixture)
 
         # With an empty recommendation result, the Filter is set up
         # to return nothing.
         lane = RecommendationLane(
-            self._default_library, self.work, "", novelist_api=mock_api
+            lane_fixture.db.default_library(),
+            lane_fixture.work,
+            "",
+            novelist_api=mock_api,
         )
         filter = Filter()
         assert False == filter.match_nothing
@@ -632,8 +733,8 @@ class TestRecommendationLane(LaneTest):
 
         # When there are recommendations, the Filter is modified to
         # match only those ISBNs.
-        i1 = self._identifier()
-        i2 = self._identifier()
+        i1 = lane_fixture.db.identifier()
+        i2 = lane_fixture.db.identifier()
         lane.recommendations = [i1, i2]
         filter = Filter()
         assert [] == filter.identifiers
@@ -642,14 +743,17 @@ class TestRecommendationLane(LaneTest):
         assert [i1, i2] == filter.identifiers
         assert False == filter.match_nothing
 
-    def test_overview_facets(self):
+    def test_overview_facets(self, lane_fixture: LaneFixture):
         # A FeaturedFacets object is adapted to a Facets object with
         # specific settings.
         featured = FeaturedFacets(0.44, entrypoint=AudiobooksEntryPoint)
         lane = RecommendationLane(
-            self._default_library, self.work, "", novelist_api=self.generate_mock_api()
+            lane_fixture.db.default_library(),
+            lane_fixture.work,
+            "",
+            novelist_api=self.generate_mock_api(lane_fixture),
         )
-        overview = lane.overview_facets(self._db, featured)
+        overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, Facets)
         assert Facets.COLLECTION_FULL == overview.collection
         assert Facets.AVAILABLE_ALL == overview.availability
@@ -659,37 +763,39 @@ class TestRecommendationLane(LaneTest):
         assert AudiobooksEntryPoint == overview.entrypoint
 
 
-class TestHasSeriesFacets(DatabaseTest):
-    def test_modify_search_filter(self):
-        facets = HasSeriesFacets.default(self._default_library)
+class TestHasSeriesFacets:
+    def test_modify_search_filter(self, db: DatabaseTransactionFixture):
+        facets = HasSeriesFacets.default(db.default_library())
         filter = Filter()
         assert None == filter.series
         facets.modify_search_filter(filter)
         assert True == filter.series
 
 
-class TestSeriesFacets(DatabaseTest):
-    def test_default_sort_order(self):
+class TestSeriesFacets:
+    def test_default_sort_order(self, db: DatabaseTransactionFixture):
         assert Facets.ORDER_SERIES_POSITION == SeriesFacets.DEFAULT_SORT_ORDER
-        facets = SeriesFacets.default(self._default_library)
+        facets = SeriesFacets.default(db.default_library())
         assert isinstance(facets, DefaultSortOrderFacets)
         assert Facets.ORDER_SERIES_POSITION == facets.order
 
 
-class TestSeriesLane(LaneTest):
+class TestSeriesLane:
     def test_feed_type(self):
         # All feeds from these lanes are cached as series feeds.
         assert CachedFeed.SERIES_TYPE == SeriesLane.CACHED_FEED_TYPE
 
-    def test_initialization(self):
+    def test_initialization(self, lane_fixture: LaneFixture):
         # An error is raised if SeriesLane is created with an empty string.
-        pytest.raises(ValueError, SeriesLane, self._default_library, "")
-        pytest.raises(ValueError, SeriesLane, self._default_library, None)
+        pytest.raises(ValueError, SeriesLane, lane_fixture.db.default_library(), "")
+        pytest.raises(ValueError, SeriesLane, lane_fixture.db.default_library(), None)
 
-        work = self._work(language="spa", audience=[Classifier.AUDIENCE_CHILDREN])
-        work_based_lane = WorkBasedLane(self._default_library, work)
+        work = lane_fixture.db.work(
+            language="spa", audience=[Classifier.AUDIENCE_CHILDREN]
+        )
+        work_based_lane = WorkBasedLane(lane_fixture.db.default_library(), work)
         child = SeriesLane(
-            self._default_library,
+            lane_fixture.db.default_library(),
             "Alrighty Then",
             parent=work_based_lane,
             languages=["eng"],
@@ -712,22 +818,24 @@ class TestSeriesLane(LaneTest):
         # a basis for the parent lane, the parent lane's audience
         # filter is used as a basis for the child lane's audience filter.
         work_based_lane.source_audience = None
-        child = SeriesLane(self._default_library, "No Audience", parent=work_based_lane)
+        child = SeriesLane(
+            lane_fixture.db.default_library(), "No Audience", parent=work_based_lane
+        )
         assert work_based_lane.audiences == child.audiences
 
-    def test_modify_search_filter_hook(self):
-        lane = SeriesLane(self._default_library, "So That Happened")
+    def test_modify_search_filter_hook(self, lane_fixture: LaneFixture):
+        lane = SeriesLane(lane_fixture.db.default_library(), "So That Happened")
         filter = Filter()
         lane.modify_search_filter_hook(filter)
         assert "So That Happened" == filter.series
 
-    def test_overview_facets(self):
+    def test_overview_facets(self, lane_fixture: LaneFixture):
         # A FeaturedFacets object is adapted to a SeriesFacets object.
         # This guarantees that a SeriesLane's contributions to a
         # grouped feed will be ordered correctly.
         featured = FeaturedFacets(0.44, entrypoint=AudiobooksEntryPoint)
-        lane = SeriesLane(self._default_library, "Alrighty Then")
-        overview = lane.overview_facets(self._db, featured)
+        lane = SeriesLane(lane_fixture.db.default_library(), "Alrighty Then")
+        overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, SeriesFacets)
         assert Facets.COLLECTION_FULL == overview.collection
         assert Facets.AVAILABLE_ALL == overview.availability
@@ -737,43 +845,37 @@ class TestSeriesLane(LaneTest):
         assert AudiobooksEntryPoint == overview.entrypoint
 
 
-class TestContributorFacets(DatabaseTest):
-    def test_default_sort_order(self):
+class TestContributorFacets:
+    def test_default_sort_order(self, db: DatabaseTransactionFixture):
         assert Facets.ORDER_TITLE == ContributorFacets.DEFAULT_SORT_ORDER
-        facets = ContributorFacets.default(self._default_library)
+        facets = ContributorFacets.default(db.default_library())
         assert isinstance(facets, DefaultSortOrderFacets)
         assert Facets.ORDER_TITLE == facets.order
 
 
-class TestContributorLane(LaneTest):
+class TestContributorLane:
     def test_feed_type(self):
         # All feeds of this type are cached as contributor feeds.
         assert CachedFeed.CONTRIBUTOR_TYPE == ContributorLane.CACHED_FEED_TYPE
 
-    def setup_method(self):
-        super(TestContributorLane, self).setup_method()
-        self.contributor, i = self._contributor(
-            "Lane, Lois", **dict(viaf="7", display_name="Lois Lane")
-        )
-
-    def test_initialization(self):
+    def test_initialization(self, lane_fixture: LaneFixture):
         with pytest.raises(ValueError) as excinfo:
-            ContributorLane(self._default_library, None)
+            ContributorLane(lane_fixture.db.default_library(), None)
         assert "ContributorLane can't be created without contributor" in str(
             excinfo.value
         )
 
         parent = WorkList()
-        parent.initialize(self._default_library)
+        parent.initialize(lane_fixture.db.default_library())
 
         lane = ContributorLane(
-            self._default_library,
-            self.contributor,
+            lane_fixture.db.default_library(),
+            lane_fixture.contributor,
             parent,
             languages=["a"],
             audiences=["b"],
         )
-        assert self.contributor == lane.contributor
+        assert lane_fixture.contributor == lane.contributor
         assert ["a"] == lane.languages
         assert ["b"] == lane.audiences
         assert [lane] == parent.children
@@ -786,14 +888,14 @@ class TestContributorLane(LaneTest):
         # display name, their sort name is used as the
         # contributor_key.
         contributor = ContributorData(sort_name="Lane, Lois")
-        lane = ContributorLane(self._default_library, contributor)
+        lane = ContributorLane(lane_fixture.db.default_library(), contributor)
         assert contributor == lane.contributor
         assert "Lane, Lois" == lane.contributor_key
 
-    def test_url_arguments(self):
+    def test_url_arguments(self, lane_fixture: LaneFixture):
         lane = ContributorLane(
-            self._default_library,
-            self.contributor,
+            lane_fixture.db.default_library(),
+            lane_fixture.contributor,
             languages=["eng", "spa"],
             audiences=["Adult", "Children"],
         )
@@ -809,19 +911,23 @@ class TestContributorLane(LaneTest):
             == kwargs
         )
 
-    def test_modify_search_filter_hook(self):
-        lane = ContributorLane(self._default_library, self.contributor)
+    def test_modify_search_filter_hook(self, lane_fixture: LaneFixture):
+        lane = ContributorLane(
+            lane_fixture.db.default_library(), lane_fixture.contributor
+        )
         filter = Filter()
         lane.modify_search_filter_hook(filter)
-        assert self.contributor == filter.author
+        assert lane_fixture.contributor == filter.author
 
-    def test_overview_facets(self):
+    def test_overview_facets(self, lane_fixture: LaneFixture):
         # A FeaturedFacets object is adapted to a ContributorFacets object.
         # This guarantees that a ContributorLane's contributions to a
         # grouped feed will be ordered correctly.
         featured = FeaturedFacets(0.44, entrypoint=AudiobooksEntryPoint)
-        lane = ContributorLane(self._default_library, self.contributor)
-        overview = lane.overview_facets(self._db, featured)
+        lane = ContributorLane(
+            lane_fixture.db.default_library(), lane_fixture.contributor
+        )
+        overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, ContributorFacets)
         assert Facets.COLLECTION_FULL == overview.collection
         assert Facets.AVAILABLE_ALL == overview.availability
@@ -831,14 +937,14 @@ class TestContributorLane(LaneTest):
         assert AudiobooksEntryPoint == overview.entrypoint
 
 
-class TestCrawlableFacets(DatabaseTest):
-    def test_feed_type(self):
+class TestCrawlableFacets:
+    def test_feed_type(self, db: DatabaseTransactionFixture):
         # All crawlable feeds are cached as such, no matter what
         # WorkList they come from.
         assert CachedFeed.CRAWLABLE_TYPE == CrawlableFacets.CACHED_FEED_TYPE
 
-    def test_default(self):
-        facets = CrawlableFacets.default(self._default_library)
+    def test_default(self, db: DatabaseTransactionFixture):
+        facets = CrawlableFacets.default(db.default_library())
         assert CrawlableFacets.COLLECTION_FULL == facets.collection
         assert CrawlableFacets.AVAILABLE_ALL == facets.availability
         assert CrawlableFacets.ORDER_LAST_UPDATE == facets.order
@@ -849,26 +955,26 @@ class TestCrawlableFacets(DatabaseTest):
             assert 1 == len(group)
 
 
-class TestCrawlableCollectionBasedLane(DatabaseTest):
-    def test_init(self):
+class TestCrawlableCollectionBasedLane:
+    def test_init(self, db: DatabaseTransactionFixture):
 
         # Collection-based crawlable feeds are cached for 2 hours.
         assert 2 * 60 * 60 == CrawlableCollectionBasedLane.MAX_CACHE_AGE
 
         # This library has two collections.
-        library = self._default_library
-        default_collection = self._default_collection
-        other_library_collection = self._collection()
+        library = db.default_library()
+        default_collection = db.default_collection()
+        other_library_collection = db.collection()
         library.collections.append(other_library_collection)
 
         # This collection is not associated with any library.
-        unused_collection = self._collection()
+        unused_collection = db.collection()
 
         # A lane for all the collections associated with a library.
         lane = CrawlableCollectionBasedLane()
         lane.initialize(library)
         assert "Crawlable feed: %s" % library.name == lane.display_name
-        assert set([x.id for x in library.collections]) == set(lane.collection_ids)
+        assert {x.id for x in library.collections} == set(lane.collection_ids)
 
         # A lane for specific collection, regardless of their library
         # affiliation.
@@ -879,17 +985,17 @@ class TestCrawlableCollectionBasedLane(DatabaseTest):
             % tuple(sorted([unused_collection.name, other_library_collection.name]))
             == lane.display_name
         )
-        assert set([unused_collection.id, other_library_collection.id]) == set(
+        assert {unused_collection.id, other_library_collection.id} == set(
             lane.collection_ids
         )
 
         # Unlike pretty much all other lanes in the system, this lane
         # has no affiliated library.
-        assert None == lane.get_library(self._db)
+        assert None == lane.get_library(db.session)
 
-    def test_url_arguments(self):
-        library = self._default_library
-        other_collection = self._collection()
+    def test_url_arguments(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
+        other_collection = db.collection()
 
         # A lane for all the collections associated with a library.
         lane = CrawlableCollectionBasedLane()
@@ -906,16 +1012,35 @@ class TestCrawlableCollectionBasedLane(DatabaseTest):
         assert CrawlableCollectionBasedLane.COLLECTION_ROUTE == route
         assert other_collection.name == kwargs.get("collection_name")
 
+    def test_works(self, db: DatabaseTransactionFixture):
+        w1 = db.work(collection=db.default_collection())
+        w2 = db.work(collection=db.default_collection())
+        w3 = db.work(collection=db.collection())
 
-class TestCrawlableCustomListBasedLane(DatabaseTest):
-    def test_initialize(self):
+        lane = CrawlableCollectionBasedLane()
+        lane.initialize([db.default_collection()])
+        search = MockExternalSearchIndex()
+        lane.works(
+            db.session, facets=CrawlableFacets.default(None), search_engine=search
+        )
+
+        assert len(search.queries) == 1
+        filter = search.queries[0][1]
+        # Only target a single collection
+        assert filter.collection_ids == [db.default_collection().id]
+        # without any search query
+        assert None == search.queries[0][0]
+
+
+class TestCrawlableCustomListBasedLane:
+    def test_initialize(self, db: DatabaseTransactionFixture):
         # These feeds are cached for 12 hours.
         assert 12 * 60 * 60 == CrawlableCustomListBasedLane.MAX_CACHE_AGE
 
-        customlist, ignore = self._customlist()
+        customlist, ignore = db.customlist()
         lane = CrawlableCustomListBasedLane()
-        lane.initialize(self._default_library, customlist)
-        assert self._default_library.id == lane.library_id
+        lane.initialize(db.default_library(), customlist)
+        assert db.default_library().id == lane.library_id
         assert [customlist.id] == lane.customlist_ids
         assert customlist.name == lane.customlist_name
         assert "Crawlable feed: %s" % customlist.name == lane.display_name
@@ -924,16 +1049,16 @@ class TestCrawlableCustomListBasedLane(DatabaseTest):
         assert None == lane.media
         assert [] == lane.children
 
-    def test_url_arguments(self):
-        customlist, ignore = self._customlist()
+    def test_url_arguments(self, db: DatabaseTransactionFixture):
+        customlist, ignore = db.customlist()
         lane = CrawlableCustomListBasedLane()
-        lane.initialize(self._default_library, customlist)
+        lane.initialize(db.default_library(), customlist)
         route, kwargs = lane.url_arguments
         assert CrawlableCustomListBasedLane.ROUTE == route
         assert customlist.name == kwargs.get("list_name")
 
 
-class TestKnownOverviewFacetsWorkList(DatabaseTest):
+class TestKnownOverviewFacetsWorkList:
     """Test of the KnownOverviewFacetsWorkList class.
 
     This is an unusual class which should be used when hard-coding the
@@ -941,7 +1066,7 @@ class TestKnownOverviewFacetsWorkList(DatabaseTest):
     grouped feed.
     """
 
-    def test_overview_facets(self):
+    def test_overview_facets(self, db: DatabaseTransactionFixture):
         # Show that we can hard-code the return value of overview_facets.
         #
         # core/tests/test_lanes.py#TestWorkList.test_groups_propagates_facets
@@ -956,11 +1081,11 @@ class TestKnownOverviewFacetsWorkList(DatabaseTest):
         # That faceting object is always returned when we're
         # making a grouped feed.
         some_other_facets = object()
-        assert known_facets == wl.overview_facets(self._db, some_other_facets)
+        assert known_facets == wl.overview_facets(db.session, some_other_facets)
 
 
-class TestJackpotFacets(DatabaseTest):
-    def test_default_facet(self):
+class TestJackpotFacets:
+    def test_default_facet(self, db: DatabaseTransactionFixture):
         # A JackpotFacets object defaults to showing only books that
         # are currently available. Normal facet configuration is
         # ignored.
@@ -976,11 +1101,11 @@ class TestJackpotFacets(DatabaseTest):
             Facets.COLLECTION_FACET_GROUP_NAME,
             Facets.ORDER_FACET_GROUP_NAME,
         ):
-            assert m(self._default_library, group) == Facets.default_facet(
-                self._default_library, group
+            assert m(db.default_library(), group) == Facets.default_facet(
+                db.default_library(), group
             )
 
-    def test_available_facets(self):
+    def test_available_facets(self, db: DatabaseTransactionFixture):
         # A JackpotFacets object always has the same availability
         # facets. Normal facet configuration is ignored.
 
@@ -1000,45 +1125,45 @@ class TestJackpotFacets(DatabaseTest):
             Facets.COLLECTION_FACET_GROUP_NAME,
             Facets.ORDER_FACET_GROUP_NAME,
         ):
-            assert m(self._default_library, group) == Facets.available_facets(
-                self._default_library, group
+            assert m(db.default_library(), group) == Facets.available_facets(
+                db.default_library(), group
             )
 
 
-class TestJackpotWorkList(DatabaseTest):
+class TestJackpotWorkList:
     """Test the 'jackpot' WorkList that always contains the information
     necessary to run a full suite of integration tests.
     """
 
-    def test_constructor(self):
+    def test_constructor(self, db: DatabaseTransactionFixture):
         # Add some stuff to the default library to make sure we
         # test everything.
 
         # The default library comes with a collection whose data
         # source is unspecified. Make another one whose data source _is_
         # specified.
-        overdrive_collection = self._collection(
+        overdrive_collection = db.collection(
             "Test Overdrive Collection",
             protocol=ExternalIntegration.OVERDRIVE,
             data_source_name=DataSource.OVERDRIVE,
         )
-        self._default_library.collections.append(overdrive_collection)
+        db.default_library().collections.append(overdrive_collection)
 
         # Create another collection that is _not_ associated with this
         # library. It will not be used at all.
-        ignored_collection = self._collection(
+        ignored_collection = db.collection(
             "Ignored Collection",
             protocol=ExternalIntegration.BIBLIOTHECA,
             data_source_name=DataSource.BIBLIOTHECA,
         )
 
         # Pass in a JackpotFacets object
-        facets = JackpotFacets.default(self._default_library)
+        facets = JackpotFacets.default(db.default_library())
 
         # The JackpotWorkList has no works of its own -- only its children
         # have works.
-        wl = JackpotWorkList(self._default_library, facets)
-        assert [] == wl.works(self._db)
+        wl = JackpotWorkList(db.default_library(), facets)
+        assert [] == wl.works(db.session)
 
         # Let's take a look at the children.
 
@@ -1070,18 +1195,18 @@ class TestJackpotWorkList(DatabaseTest):
 
         assert (
             "License source {[Unknown]} - Medium {Book} - Collection name {%s}"
-            % self._default_collection.name
+            % db.default_collection().name
             == default_ebooks.display_name
         )
-        assert [self._default_collection.id] == default_ebooks.collection_ids
+        assert [db.default_collection().id] == default_ebooks.collection_ids
         assert [Edition.BOOK_MEDIUM] == default_ebooks.media
 
         assert (
             "License source {[Unknown]} - Medium {Audio} - Collection name {%s}"
-            % self._default_collection.name
+            % db.default_collection().name
             == default_audio.display_name
         )
-        assert [self._default_collection.id] == default_audio.collection_ids
+        assert [db.default_collection().id] == default_audio.collection_ids
         assert [Edition.AUDIO_MEDIUM] == default_audio.media
 
         assert (

@@ -11,10 +11,19 @@ from typing import Union
 import certifi
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import validator
 
+from api.admin.validator import Validator
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -40,10 +49,8 @@ from core.model import (
     Representation,
     Session,
     Subject,
-    get_one_or_create,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import HTTP, RequestNetworkException
@@ -51,10 +58,10 @@ from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
 
-from .authenticator import Authenticator
 from .circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
+    BaseCirculationLoanSettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -66,10 +73,70 @@ from .web_publication_manifest import FindawayManifest, SpineItem
 
 class Axis360APIConstants:
     VERIFY_SSL = "verify_certificate"
+    PRODUCTION_BASE_URL = "https://axis360api.baker-taylor.com/Services/VendorAPI/"
+    QA_BASE_URL = "http://axis360apiqa.baker-taylor.com/Services/VendorAPI/"
+    SERVER_NICKNAMES = {
+        "production": PRODUCTION_BASE_URL,
+        "qa": QA_BASE_URL,
+    }
+
+
+class Axis360Settings(BaseSettings):
+    username: str = FormField(
+        form=ConfigurationFormItem(label=_("Username"), required=True)
+    )
+    password: str = FormField(
+        form=ConfigurationFormItem(label=_("Password"), required=True)
+    )
+    external_account_id: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            required=True,
+        )
+    )
+    url: str = FormField(
+        default=Axis360APIConstants.PRODUCTION_BASE_URL,
+        form=ConfigurationFormItem(
+            label=_("Server"),
+            required=True,
+        ),
+    )
+    verify_certificate: Optional[bool] = FormField(
+        default=True,
+        form=ConfigurationFormItem(
+            label=_("Verify SSL Certificate"),
+            description=_(
+                "This should always be True in production, it may need to be set to False to use the"
+                "Axis 360 QA Environment."
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "True": _("True"),
+                "False": _("False"),
+            },
+        ),
+    )
+
+    @validator("url")
+    def _validate_url(cls, v):
+        # Validate if the url provided is valid http or a valid nickname
+        valid_names = list(Axis360APIConstants.SERVER_NICKNAMES.keys())
+        if not Validator._is_url(v, valid_names):
+            raise ValueError(
+                f"Server nickname must be one of {valid_names}, or an 'http[s]' URL."
+            )
+        return v
+
+
+class Axis360LibrarySettings(BaseCirculationLoanSettings):
+    pass
 
 
 class Axis360API(
-    Authenticator, BaseCirculationAPI, HasCollectionSelfTests, Axis360APIConstants
+    BaseCirculationAPI[Axis360Settings, Axis360LibrarySettings],
+    HasCollectionSelfTests,
+    Axis360APIConstants,
+    HasLibraryIntegrationConfiguration,
 ):
 
     NAME = ExternalIntegration.AXIS_360
@@ -77,52 +144,7 @@ class Axis360API(
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
 
     SERVICE_NAME = "Axis 360"
-    PRODUCTION_BASE_URL = "https://axis360api.baker-taylor.com/Services/VendorAPI/"
-    QA_BASE_URL = "http://axis360apiqa.baker-taylor.com/Services/VendorAPI/"
-    SERVER_NICKNAMES = {
-        "production": PRODUCTION_BASE_URL,
-        "qa": QA_BASE_URL,
-    }
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
-
-    SETTINGS = [
-        {"key": ExternalIntegration.USERNAME, "label": _("Username"), "required": True},
-        {"key": ExternalIntegration.PASSWORD, "label": _("Password"), "required": True},
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Library ID"),
-            "required": True,
-        },
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("Server"),
-            "default": PRODUCTION_BASE_URL,
-            "required": True,
-            "format": "url",
-            "allowed": list(SERVER_NICKNAMES.keys()),
-        },
-        {
-            "key": Axis360APIConstants.VERIFY_SSL,
-            "label": _("Verify SSL Certificate"),
-            "description": _(
-                "This should always be True in production, it may need to be set to False to use the"
-                "Axis 360 QA Environment."
-            ),
-            "type": "select",
-            "options": [
-                {"label": _("True"), "key": "True"},
-                {
-                    "label": _("False"),
-                    "key": "False",
-                },
-            ],
-            "default": True,
-        },
-    ] + BaseCirculationAPI.SETTINGS
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.DEFAULT_LOAN_DURATION_SETTING
-    ]
 
     access_token_endpoint = "accesstoken"
     availability_endpoint = "availability/v2"
@@ -153,19 +175,35 @@ class Axis360API(
         (None, axisnow_drm): AXISNOW,
     }
 
+    @classmethod
+    def settings_class(cls):
+        return Axis360Settings
+
+    @classmethod
+    def library_settings_class(cls):
+        return Axis360LibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return ""
+
     def __init__(self, _db, collection):
         if collection.protocol != ExternalIntegration.AXIS_360:
             raise ValueError(
                 "Collection protocol is %s, but passed into Axis360API!"
                 % collection.protocol
             )
-        self._db = _db
+
+        super().__init__(_db, collection)
         self.library_id = collection.external_account_id
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
+        config = self.configuration()
+        self.username = config.username
+        self.password = config.password
 
         # Convert the nickname for a server into an actual URL.
-        base_url = collection.external_integration.url or self.PRODUCTION_BASE_URL
+        base_url = config.url or self.PRODUCTION_BASE_URL
         if base_url in self.SERVER_NICKNAMES:
             base_url = self.SERVER_NICKNAMES[base_url]
         if not base_url.endswith("/"):
@@ -183,11 +221,8 @@ class Axis360API(
 
         self.token = None
         self.collection_id = collection.id
-        verify_certificate = collection.external_integration.setting(
-            self.VERIFY_SSL
-        ).bool_value
         self.verify_certificate: bool = (
-            verify_certificate if verify_certificate is not None else True
+            config.verify_certificate if config.verify_certificate is not None else True
         )
 
     @property
@@ -242,7 +277,7 @@ class Axis360API(
             )
 
         # Run the tests defined by HasCollectionSelfTests
-        for result in super(Axis360API, self)._run_self_tests():
+        for result in super()._run_self_tests():
             yield result
 
     def refresh_bearer_token(self):
@@ -261,7 +296,7 @@ class Axis360API(
         data=None,
         params=None,
         exception_on_401=False,
-        **kwargs
+        **kwargs,
     ):
         """Make an HTTP request, acquiring/refreshing a bearer token
         if necessary.
@@ -282,7 +317,7 @@ class Axis360API(
             data=data,
             params=params,
             disallowed_response_codes=disallowed_response_codes,
-            **kwargs
+            **kwargs,
         )
         if response.status_code == 401:
             # This must be our first 401, since our second 401 will
@@ -297,7 +332,7 @@ class Axis360API(
                 data=data,
                 params=params,
                 exception_on_401=True,
-                **kwargs
+                **kwargs,
             )
         else:
             return response
@@ -350,7 +385,7 @@ class Axis360API(
 
     def _checkin(self, title_id, patron_id):
         """Make a request to the EarlyCheckInTitle endpoint."""
-        url = self.base_url + "EarlyCheckInTitle/v3?itemID=%s&patronID=%s" % (
+        url = self.base_url + "EarlyCheckInTitle/v3?itemID={}&patronID={}".format(
             urllib.parse.quote(title_id),
             urllib.parse.quote(patron_id),
         )
@@ -570,10 +605,7 @@ class Axis360API(
         """
         availability = self.availability(since=since)
         content = availability.content
-        for bibliographic, circulation in BibliographicParser(
-            self.collection
-        ).process_all(content):
-            yield bibliographic, circulation
+        yield from BibliographicParser(self.collection).process_all(content)
 
     @classmethod
     def create_identifier_strings(cls, identifiers):
@@ -612,7 +644,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 
     def __init__(self, _db, collection, api_class=Axis360API):
-        super(Axis360CirculationMonitor, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         if isinstance(api_class, Axis360API):
             # Use a preexisting Axis360API instance rather than
             # creating a new one.
@@ -654,60 +686,6 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
         return edition, license_pool
 
 
-class MockAxis360API(Axis360API):
-    @classmethod
-    def mock_collection(cls, _db, name="Test Axis 360 Collection"):
-        """Create a mock Axis 360 collection for use in tests."""
-        library = DatabaseTest.make_default_library(_db)
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(
-                external_account_id="c",
-            ),
-        )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.AXIS_360
-        )
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://axis.test/"
-        library.collections.append(collection)
-        return collection
-
-    def __init__(self, _db, collection, with_token=True, **kwargs):
-        """Constructor.
-
-        :param collection: Get Axis 360 credentials from this
-            Collection.
-
-        :param with_token: If True, this class will assume that
-            it already has a valid token, and will not go through
-            the motions of negotiating one with the mock server.
-        """
-        super(MockAxis360API, self).__init__(_db, collection, **kwargs)
-        if with_token:
-            self.token = "mock token"
-        self.responses = []
-        self.requests = []
-
-    def queue_response(self, status_code, headers={}, content=None):
-        from core.testing import MockRequestsResponse
-
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
-
-    def _make_request(self, url, *args, **kwargs):
-        self.requests.append([url, args, kwargs])
-        response = self.responses.pop()
-        return HTTP._process_response(
-            url,
-            response,
-            kwargs.get("allowed_response_codes"),
-            kwargs.get("disallowed_response_codes"),
-        )
-
-
 class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
     """Fill in bibliographic metadata for Axis 360 records.
 
@@ -731,7 +709,7 @@ class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
         :param api_class: Instantiate this class with the given Collection,
             rather than instantiating Axis360API.
         """
-        super(Axis360BibliographicCoverageProvider, self).__init__(collection, **kwargs)
+        super().__init__(collection, **kwargs)
         if isinstance(api_class, Axis360API):
             # We were given a specific Axis360API instance to use.
             self.api = api_class
@@ -791,7 +769,7 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
     PROTOCOL = ExternalIntegration.AXIS_360
 
     def __init__(self, _db, collection, api_class=Axis360API):
-        super(AxisCollectionReaper, self).__init__(_db, collection)
+        super().__init__(_db, collection)
         if isinstance(api_class, Axis360API):
             # Use a preexisting Axis360API instance rather than
             # creating a new one.
@@ -804,7 +782,6 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
 
 
 class Axis360Parser(XMLParser):
-
     NS = {"axis": "http://axis360api.baker-taylor.com/vendorAPI"}
 
     SHORT_DATE_FORMAT = "%m/%d/%Y"
@@ -836,7 +813,6 @@ class Axis360Parser(XMLParser):
 
 
 class BibliographicParser(Axis360Parser):
-
     DELIVERY_DATA_FOR_AXIS_FORMAT = {
         "Blio": None,  # Legacy format, handled the same way as AxisNow
         "Acoustik": (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
@@ -861,10 +837,7 @@ class BibliographicParser(Axis360Parser):
         self.include_bibliographic = include_bibliographic
 
     def process_all(self, string):
-        for i in super(BibliographicParser, self).process_all(
-            string, "//axis:title", self.NS
-        ):
-            yield i
+        yield from super().process_all(string, "//axis:title", self.NS)
 
     def extract_availability(self, circulation_data, element, ns):
         identifier = self.text_of_subtag(element, "axis:titleId", ns)
@@ -1174,7 +1147,6 @@ class BibliographicParser(Axis360Parser):
 
 
 class ResponseParser(Axis360Parser):
-
     id_type = Identifier.AXIS_360_ID
 
     SERVICE_NAME = "Axis 360"
@@ -1301,9 +1273,7 @@ class ResponseParser(Axis360Parser):
 
 class CheckinResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(CheckinResponseParser, self).process_all(
-            string, "//axis:EarlyCheckinRestResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:EarlyCheckinRestResult", self.NS):
             return i
 
     def process_one(self, e, namespaces):
@@ -1314,13 +1284,10 @@ class CheckinResponseParser(ResponseParser):
 
 class CheckoutResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(CheckoutResponseParser, self).process_all(
-            string, "//axis:checkoutResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:checkoutResult", self.NS):
             return i
 
     def process_one(self, e, namespaces):
-
         """Either turn the given document into a LoanInfo
         object, or raise an appropriate exception.
         """
@@ -1350,9 +1317,7 @@ class CheckoutResponseParser(ResponseParser):
 
 class HoldResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(HoldResponseParser, self).process_all(
-            string, "//axis:addtoholdResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:addtoholdResult", self.NS):
             return i
 
     def process_one(self, e, namespaces):
@@ -1389,13 +1354,11 @@ class HoldResponseParser(ResponseParser):
 
 class HoldReleaseResponseParser(ResponseParser):
     def process_all(self, string):
-        for i in super(HoldReleaseResponseParser, self).process_all(
-            string, "//axis:removeholdResult", self.NS
-        ):
+        for i in super().process_all(string, "//axis:removeholdResult", self.NS):
             return i
 
     def post_process(self, i):
-        """Unlike other ResponseParser subclasses, we don't return any type of
+        r"""Unlike other ResponseParser subclasses, we don't return any type of
         \*Info object, so there's no need to do any post-processing.
         """
         return i
@@ -1421,19 +1384,16 @@ class AvailabilityResponseParser(ResponseParser):
         """
         self.api = api
         self.internal_format = internal_format
-        super(AvailabilityResponseParser, self).__init__(api.collection)
+        super().__init__(api.collection)
 
     def process_all(self, string):
-        for info in super(AvailabilityResponseParser, self).process_all(
-            string, "//axis:title", self.NS
-        ):
+        for info in super().process_all(string, "//axis:title", self.NS):
             # Filter out books where nothing in particular is
             # happening.
             if info:
                 yield info
 
     def process_one(self, e, ns):
-
         # Figure out which book we're talking about.
         axis_identifier = self.text_of_subtag(e, "axis:titleId", ns)
         availability = self._xpath1(e, "axis:availability", ns)
@@ -1473,7 +1433,7 @@ class AvailabilityResponseParser(ResponseParser):
                     content=None,
                     content_expires=None,
                     verify=self.api.verify_certificate,
-                    **kwargs
+                    **kwargs,
                 )
             elif transaction_id:
                 # We will eventually need to make a request to the
@@ -1607,7 +1567,7 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
         a fulfillment document triggers additional API requests.
         """
         self.api = api
-        super(Axis360FulfillmentInfoResponseParser, self).__init__(self.api.collection)
+        super().__init__(self.api.collection)
 
     def _parse(self, parsed, license_pool):
         """Extract all useful information from a parsed FulfillmentInfo
@@ -1700,7 +1660,7 @@ class AudiobookMetadataParser(JSONResponseParser):
         return SpineItem(title, duration, part_number, sequence)
 
 
-class AxisNowManifest(object):
+class AxisNowManifest:
     """A simple media type for conveying an entry point into the AxisNow access control
     system.
     """
@@ -1821,12 +1781,12 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
             )
         except socket.timeout:
             return self.problem_detail_document(
-                "Error connecting to {}. Timeout occurred.".format(service_name)
+                f"Error connecting to {service_name}. Timeout occurred."
             )
         except (urllib.error.URLError, ssl.SSLError) as e:
             reason = getattr(e, "reason", e.__class__.__name__)
             return self.problem_detail_document(
-                "Error connecting to {}. {}.".format(service_name, reason)
+                f"Error connecting to {service_name}. {reason}."
             )
 
         return Response(response=content, status=status, headers=headers)

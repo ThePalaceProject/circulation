@@ -2,7 +2,6 @@ import datetime
 
 import pytest
 import pytz
-from parameterized import parameterized
 
 from core.util.datetime_helpers import (
     datetime_utc,
@@ -13,8 +12,9 @@ from core.util.datetime_helpers import (
 )
 
 
-class TestDatetimeUTC(object):
-    @parameterized.expand(
+class TestDatetimeUTC:
+    @pytest.mark.parametrize(
+        "time,formatted,isoformat",
         [
             ([2021, 1, 1], "2021-01-01T00:00:00", "2021-01-01T00:00:00+00:00"),
             ([1955, 11, 5, 12], "1955-11-05T12:00:00", "1955-11-05T12:00:00+00:00"),
@@ -24,7 +24,7 @@ class TestDatetimeUTC(object):
                 "2015-05-09T09:30:15",
                 "2015-05-09T09:30:15+00:00",
             ),
-        ]
+        ],
     )
     def test_datetime_utc(self, time, formatted, isoformat):
         """`datetime_utc` is a wrapper around `datetime.datetime` but it also
@@ -46,7 +46,7 @@ class TestDatetimeUTC(object):
         assert util_dt.day == time[2]
 
 
-class TestFromTimestamp(object):
+class TestFromTimestamp:
     def test_from_timestamp(self):
         """`from_timestamp` is a wrapper around `datetime.fromtimestamp`
         that also includes UTC information.
@@ -65,7 +65,7 @@ class TestFromTimestamp(object):
         assert util_from_ts.tzinfo == pytz.UTC
 
 
-class TestUTCNow(object):
+class TestUTCNow:
     def test_utc_now(self):
         """`utc_now` is a wrapper around `datetime.now` but it also includes
         UTC information.
@@ -80,7 +80,7 @@ class TestUTCNow(object):
         assert util_now.tzinfo == pytz.UTC
 
 
-class TestToUTC(object):
+class TestToUTC:
     def test_to_utc(self):
         # `utc` marks a naive datetime object as being UTC, or
         # converts a timezone-aware datetime object to UTC.
@@ -113,11 +113,12 @@ class TestToUTC(object):
         d1_eastern = d1_utc.astimezone(pytz.timezone("US/Eastern"))
         assert d1_utc == to_utc(d1_eastern)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "expect,date_string,format",
         [
             ([2021, 1, 1], "2021-01-01", "%Y-%m-%d"),
             ([1955, 11, 5, 12], "1955-11-05T12:00:00", "%Y-%m-%dT%H:%M:%S"),
-        ]
+        ],
     )
     def test_strptime_utc(self, expect, date_string, format):
         assert strptime_utc(date_string, format) == datetime_utc(*expect)

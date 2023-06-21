@@ -1,16 +1,23 @@
+from __future__ import annotations
+
 import contextlib
 import datetime
 import json
+import logging
+from functools import partial
 from io import StringIO
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable
+from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import ProgrammingError
 
 from api.adobe_vendor_id import (
     AdobeVendorIDModel,
     AuthdataUtility,
     ShortClientTokenLibraryConfigurationScript,
 )
-from api.authenticator import BasicAuthenticationProvider
 from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
@@ -33,15 +40,13 @@ from core.model import (
     LicensePool,
     Representation,
     RightsStatus,
-    Timestamp,
+    SessionManager,
     create,
-    get_one,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
 from core.s3 import MockS3Uploader
 from core.scripts import CollectionType
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSFeedResponse, Response
 from scripts import (
@@ -57,11 +62,18 @@ from scripts import (
     LocalAnalyticsExportScript,
     NovelistSnapshotScript,
 )
+from tests.api.mockapi.circulation import MockCirculationManager
+
+if TYPE_CHECKING:
+    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.sample_covers import SampleCoversFixture
+    from tests.fixtures.search import ExternalSearchFixture
 
 
-class TestAdobeAccountIDResetScript(DatabaseTest):
-    def test_process_patron(self):
-        patron = self._patron()
+class TestAdobeAccountIDResetScript:
+    def test_process_patron(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
 
         # This patron has old-style and new-style Credentials that link
         # them to Adobe account IDs (hopefully the same ID, though that
@@ -71,7 +83,7 @@ class TestAdobeAccountIDResetScript(DatabaseTest):
 
         # Data source doesn't matter -- even if it's incorrect, a Credential
         # of the appropriate type will be deleted.
-        data_source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
         # Create two Credentials that will be deleted and one that will be
         # left alone.
@@ -82,35 +94,35 @@ class TestAdobeAccountIDResetScript(DatabaseTest):
         ):
 
             credential = Credential.lookup(
-                self._db, data_source, type, patron, set_value, True
+                db.session, data_source, type, patron, set_value, True
             )
 
         assert 3 == len(patron.credentials)
 
         # Run the patron through the script.
-        script = AdobeAccountIDResetScript(self._db)
+        script = AdobeAccountIDResetScript(db.session)
 
         # A dry run does nothing.
         script.delete = False
         script.process_patron(patron)
-        self._db.commit()
+        db.session.commit()
         assert 3 == len(patron.credentials)
 
         # Now try it for real.
         script.delete = True
         script.process_patron(patron)
-        self._db.commit()
+        db.session.commit()
 
         # The two Adobe-related credentials are gone. The other one remains.
         [credential] = patron.credentials
         assert "Some other type" == credential.type
 
 
-class TestLaneScript(DatabaseTest):
-    def setup_method(self):
-        super(TestLaneScript, self).setup_method()
+class LaneScriptFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
         base_url_setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
+            self.db.session, Configuration.BASE_URL_KEY
         )
         base_url_setting.value = "http://test-circulation-manager/"
         for k, v in [
@@ -119,17 +131,23 @@ class TestLaneScript(DatabaseTest):
             (Configuration.TINY_COLLECTION_LANGUAGES, ["eng", "fre"]),
         ]:
             ConfigurationSetting.for_library(
-                k, self._default_library
+                k, self.db.default_library()
             ).value = json.dumps(v)
 
 
-class TestCacheRepresentationPerLane(TestLaneScript):
-    def test_should_process_lane(self):
+@pytest.fixture(scope="function")
+def lane_script_fixture(db: DatabaseTransactionFixture) -> LaneScriptFixture:
+    return LaneScriptFixture(db)
+
+
+class TestCacheRepresentationPerLane:
+    def test_should_process_lane(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
 
         # Test that should_process_lane respects any specified
         # language restrictions.
         script = CacheRepresentationPerLane(
-            self._db,
+            db.session,
             [
                 "--language=fre",
                 "--language=English",
@@ -140,38 +158,41 @@ class TestCacheRepresentationPerLane(TestLaneScript):
         )
         assert ["fre", "eng"] == script.languages
 
-        english_lane = self._lane(languages=["eng"])
+        english_lane = db.lane(languages=["eng"])
         assert True == script.should_process_lane(english_lane)
 
-        no_english_lane = self._lane(languages=["spa", "fre"])
+        no_english_lane = db.lane(languages=["spa", "fre"])
         assert True == script.should_process_lane(no_english_lane)
 
-        no_english_or_french_lane = self._lane(languages=["spa"])
+        no_english_or_french_lane = db.lane(languages=["spa"])
         assert False == script.should_process_lane(no_english_or_french_lane)
 
         # Test that should_process_lane respects maximum depth
         # restrictions.
         script = CacheRepresentationPerLane(
-            self._db, ["--max-depth=0", "--min-depth=0"], manager=object()
+            db.session, ["--max-depth=0", "--min-depth=0"], manager=object()
         )
         assert 0 == script.max_depth
 
-        child = self._lane(display_name="sublane")
-        parent = self._lane(display_name="parent")
+        child = db.lane(display_name="sublane")
+        parent = db.lane(display_name="parent")
         parent.sublanes = [child]
         assert True == script.should_process_lane(parent)
         assert False == script.should_process_lane(child)
 
-        script = CacheRepresentationPerLane(self._db, ["--min-depth=1"], testing=True)
+        script = CacheRepresentationPerLane(
+            db.session, ["--min-depth=1"], manager=MockCirculationManager(db.session)
+        )
         assert 1 == script.min_depth
         assert False == script.should_process_lane(parent)
         assert True == script.should_process_lane(child)
 
-    def test_process_lane(self):
+    def test_process_lane(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
         # process_lane() calls do_generate() once for every
         # combination of items yielded by facets() and pagination().
 
-        class MockFacets(object):
+        class MockFacets:
             def __init__(self, query):
                 self.query = query
 
@@ -202,58 +223,64 @@ class TestCacheRepresentationPerLane(TestLaneScript):
                 yield page1
                 yield page2
 
-        lane = self._lane()
-        script = Mock(self._db, manager=object(), cmd_args=[])
+        lane = db.lane()
+        script = Mock(db.session, manager=object(), cmd_args=[])
         generated = script.process_lane(lane)
         assert generated == script.generated
 
-        c1, c2, c3, c4 = [x.value for x in script.generated]
+        c1, c2, c3, c4 = (x.value for x in script.generated)
         assert (lane, facets1, page1) == c1
         assert (lane, facets1, page2) == c2
         assert (lane, facets2, page1) == c3
         assert (lane, facets2, page2) == c4
 
-    def test_default_facets(self):
+    def test_default_facets(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
         # By default, do_generate will only be called once, with facets=None.
-        script = CacheRepresentationPerLane(self._db, manager=object(), cmd_args=[])
+        script = CacheRepresentationPerLane(db.session, manager=object(), cmd_args=[])
         assert [None] == list(script.facets(object()))
 
-    def test_default_pagination(self):
+    def test_default_pagination(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
         # By default, do_generate will only be called once, with pagination=None.
-        script = CacheRepresentationPerLane(self._db, manager=object(), cmd_args=[])
+        script = CacheRepresentationPerLane(db.session, manager=object(), cmd_args=[])
         assert [None] == list(script.pagination(object()))
 
 
-class TestCacheFacetListsPerLane(TestLaneScript):
-    def test_arguments(self):
+class TestCacheFacetListsPerLane:
+    def test_arguments(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
         # Verify that command-line arguments become attributes of
         # the CacheFacetListsPerLane object.
         script = CacheFacetListsPerLane(
-            self._db, ["--order=title", "--order=added"], manager=object()
+            db.session, ["--order=title", "--order=added"], manager=object()
         )
         assert ["title", "added"] == script.orders
         script = CacheFacetListsPerLane(
-            self._db, ["--availability=all", "--availability=always"], manager=object()
+            db.session,
+            ["--availability=all", "--availability=always"],
+            manager=object(),
         )
         assert ["all", "always"] == script.availabilities
 
         script = CacheFacetListsPerLane(
-            self._db, ["--collection=main", "--collection=full"], manager=object()
+            db.session, ["--collection=main", "--collection=full"], manager=object()
         )
         assert ["main", "full"] == script.collections
 
         script = CacheFacetListsPerLane(
-            self._db, ["--entrypoint=Audio", "--entrypoint=Book"], manager=object()
+            db.session, ["--entrypoint=Audio", "--entrypoint=Book"], manager=object()
         )
         assert ["Audio", "Book"] == script.entrypoints
 
-        script = CacheFacetListsPerLane(self._db, ["--pages=1"], manager=object())
+        script = CacheFacetListsPerLane(db.session, ["--pages=1"], manager=object())
         assert 1 == script.pages
 
-    def test_facets(self):
+    def test_facets(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
         # Verify that CacheFacetListsPerLane.facets combines the items
         # found in the attributes created by command-line parsing.
-        script = CacheFacetListsPerLane(self._db, manager=object(), cmd_args=[])
+        script = CacheFacetListsPerLane(db.session, manager=object(), cmd_args=[])
         script.orders = [Facets.ORDER_TITLE, Facets.ORDER_AUTHOR, "nonsense"]
         script.entrypoints = [
             AudiobooksEntryPoint.INTERNAL_NAME,
@@ -265,10 +292,10 @@ class TestCacheFacetListsPerLane(TestLaneScript):
 
         # EbooksEntryPoint is normally a valid entry point, but we're
         # going to disable it for this library.
-        setting = self._default_library.setting(EntryPoint.ENABLED_SETTING)
+        setting = db.default_library().setting(EntryPoint.ENABLED_SETTING)
         setting.value = json.dumps([AudiobooksEntryPoint.INTERNAL_NAME])
 
-        lane = self._lane()
+        lane = db.lane()
 
         # We get one Facets object for every valid combination
         # of parameters. Here there are 2*1*1*1 combinations.
@@ -291,25 +318,31 @@ class TestCacheFacetListsPerLane(TestLaneScript):
         # that have no parent. When the WorkList has a parent, the selected
         # entry point is treated as an explicit choice -- navigating downward
         # in the lane hierarchy ratifies the default value.
-        sublane = self._lane(parent=lane)
+        sublane = db.lane(parent=lane)
         f1, f2 = script.facets(sublane)
         for f in f1, f2:
             assert False == f.entrypoint_is_default
 
-    def test_pagination(self):
-        script = CacheFacetListsPerLane(self._db, manager=object(), cmd_args=[])
+    def test_pagination(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
+        script = CacheFacetListsPerLane(db.session, manager=object(), cmd_args=[])
         script.pages = 3
-        lane = self._lane()
+        lane = db.lane()
         p1, p2, p3 = script.pagination(lane)
         pagination = Pagination.default()
         assert pagination.query_string == p1.query_string
         assert pagination.next_page.query_string == p2.query_string
         assert pagination.next_page.next_page.query_string == p3.query_string
 
-    def test_do_generate(self):
+    def test_do_generate(
+        self,
+        lane_script_fixture: LaneScriptFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
+        db = lane_script_fixture.db
         # When it's time to generate a feed, AcquisitionFeed.page
         # is called with the right arguments.
-        class MockAcquisitionFeed(object):
+        class MockAcquisitionFeed:
             called_with = None
 
             @classmethod
@@ -318,35 +351,35 @@ class TestCacheFacetListsPerLane(TestLaneScript):
                 return "here's your feed"
 
         # Test our ability to generate a single feed.
-        script = CacheFacetListsPerLane(self._db, testing=True, cmd_args=[])
-        facets = Facets.default(self._default_library)
+        script = CacheFacetListsPerLane(db.session, testing=True, cmd_args=[])
+        facets = Facets.default(db.default_library())
         pagination = Pagination.default()
 
         with script.app.test_request_context("/"):
-            lane = self._lane()
+            lane = db.lane()
             result = script.do_generate(
                 lane, facets, pagination, feed_class=MockAcquisitionFeed
             )
             assert "here's your feed" == result
 
             args = MockAcquisitionFeed.called_with
-            assert self._db == args["_db"]
-            assert lane == args["worklist"]
-            assert lane.display_name == args["title"]
-            assert 0 == args["max_age"]
+            assert db.session == args["_db"]  # type: ignore
+            assert lane == args["worklist"]  # type: ignore
+            assert lane.display_name == args["title"]  # type: ignore
+            assert 0 == args["max_age"]  # type: ignore
 
             # The Pagination object was passed into
             # MockAcquisitionFeed.page, and it was also used to make the
             # feed URL (see below).
-            assert pagination == args["pagination"]
+            assert pagination == args["pagination"]  # type: ignore
 
             # The Facets object was passed into
             # MockAcquisitionFeed.page, and it was also used to make
             # the feed URL and to create the feed annotator.
-            assert facets == args["facets"]
-            annotator = args["annotator"]
+            assert facets == args["facets"]  # type: ignore
+            annotator = args["annotator"]  # type: ignore
             assert facets == annotator.facets
-            assert args["url"] == annotator.feed_url(
+            assert args["url"] == annotator.feed_url(  # type: ignore
                 lane, facets=facets, pagination=pagination
             )
 
@@ -358,14 +391,15 @@ class TestCacheFacetListsPerLane(TestLaneScript):
             assert response.get_data(as_text=True).startswith("<feed")
 
 
-class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
-    def test_should_process_lane(self):
-        parent = self._lane()
-        child = self._lane(parent=parent)
-        grandchild = self._lane(parent=child)
+class TestCacheOPDSGroupFeedPerLane:
+    def test_should_process_lane(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
+        parent = db.lane()
+        child = db.lane(parent=parent)
+        grandchild = db.lane(parent=child)
 
         # Only WorkLists which have children are processed.
-        script = CacheOPDSGroupFeedPerLane(self._db, manager=object(), cmd_args=[])
+        script = CacheOPDSGroupFeedPerLane(db.session, manager=object(), cmd_args=[])
         script.max_depth = 10
         assert True == script.should_process_lane(parent)
         assert True == script.should_process_lane(child)
@@ -377,11 +411,16 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         assert True == script.should_process_lane(parent)
         assert False == script.should_process_lane(child)
 
-    def test_do_generate(self):
+    def test_do_generate(
+        self,
+        lane_script_fixture: LaneScriptFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
+        db = lane_script_fixture.db
         # When it's time to generate a feed, AcquisitionFeed.groups
         # is called with the right arguments.
 
-        class MockAcquisitionFeed(object):
+        class MockAcquisitionFeed:
             called_with = None
 
             @classmethod
@@ -390,31 +429,31 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
                 return "here's your feed"
 
         # Test our ability to generate a single feed.
-        script = CacheOPDSGroupFeedPerLane(self._db, testing=True, cmd_args=[])
+        script = CacheOPDSGroupFeedPerLane(db.session, testing=True, cmd_args=[])
         facets = FeaturedFacets(0.1, entrypoint=AudiobooksEntryPoint)
         pagination = None
 
         with script.app.test_request_context("/"):
-            lane = self._lane()
+            lane = db.lane()
             result = script.do_generate(
                 lane, facets, pagination, feed_class=MockAcquisitionFeed
             )
             assert "here's your feed" == result
 
             args = MockAcquisitionFeed.called_with
-            assert self._db == args["_db"]
-            assert lane == args["worklist"]
-            assert lane.display_name == args["title"]
-            assert 0 == args["max_age"]
+            assert db.session == args["_db"]  # type: ignore
+            assert lane == args["worklist"]  # type: ignore
+            assert lane.display_name == args["title"]  # type: ignore
+            assert 0 == args["max_age"]  # type: ignore
             assert pagination == None
 
             # The Facets object was passed into
             # MockAcquisitionFeed.page, and it was also used to make
             # the feed URL and to create the feed annotator.
-            assert facets == args["facets"]
-            annotator = args["annotator"]
+            assert facets == args["facets"]  # type: ignore
+            annotator = args["annotator"]  # type: ignore
             assert facets == annotator.facets
-            assert args["url"] == annotator.groups_url(lane, facets)
+            assert args["url"] == annotator.groups_url(lane, facets)  # type: ignore
 
             # Try again without mocking AcquisitionFeed to verify that
             # we get a Flask response.
@@ -422,17 +461,18 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
             assert AcquisitionFeed.ACQUISITION_FEED_TYPE == response.content_type
             assert response.get_data(as_text=True).startswith("<feed")
 
-    def test_facets(self):
+    def test_facets(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
         # Normally we yield one FeaturedFacets object for each of the
         # library's enabled entry points.
-        library = self._default_library
-        script = CacheOPDSGroupFeedPerLane(self._db, manager=object(), cmd_args=[])
+        library = db.default_library()
+        script = CacheOPDSGroupFeedPerLane(db.session, manager=object(), cmd_args=[])
         setting = library.setting(EntryPoint.ENABLED_SETTING)
         setting.value = json.dumps(
             [AudiobooksEntryPoint.INTERNAL_NAME, EbooksEntryPoint.INTERNAL_NAME]
         )
 
-        lane = self._lane()
+        lane = db.lane()
         audio_facets, ebook_facets = script.facets(lane)
         assert AudiobooksEntryPoint == audio_facets.entrypoint
         assert EbooksEntryPoint == ebook_facets.entrypoint
@@ -452,13 +492,13 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         # that have no parent. When the WorkList has a parent, the selected
         # entry point is treated as an explicit choice  -- navigating downward
         # in the lane hierarchy ratifies the default value.
-        sublane = self._lane(parent=lane)
+        sublane = db.lane(parent=lane)
         f1, f2 = script.facets(sublane)
         for f in f1, f2:
             assert False == f.entrypoint_is_default
 
         # Make it look like the lane uses custom lists.
-        lane.list_datasource = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        lane.list_datasource = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
         # If the library has no enabled entry points, we yield one
         # FeaturedFacets object with no particular entry point.
@@ -466,12 +506,13 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         (no_entry_point,) = script.facets(lane)
         assert None == no_entry_point.entrypoint
 
-    def test_do_run(self):
+    def test_do_run(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
 
-        work = self._work(fiction=True, with_license_pool=True, genre="Science Fiction")
+        work = db.work(fiction=True, with_license_pool=True, genre="Science Fiction")
         work.quality = 1
-        lane = self._lane(display_name="Fantastic Fiction", fiction=True)
-        sublane = self._lane(
+        lane = db.lane(display_name="Fantastic Fiction", fiction=True)
+        sublane = db.lane(
             parent=lane,
             display_name="Science Fiction",
             fiction=True,
@@ -480,12 +521,12 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         search_engine = MockExternalSearchIndex()
         search_engine.bulk_update([work])
         with mock_search_index(search_engine):
-            script = CacheOPDSGroupFeedPerLane(self._db, cmd_args=[])
+            script = CacheOPDSGroupFeedPerLane(db.session, cmd_args=[])
             script.do_run(cmd_args=[])
 
         # The Lane object was disconnected from its database session
         # when the app server was initialized. Reconnect it.
-        lane = self._db.merge(lane)
+        lane = db.session.merge(lane)
         [feed] = lane.cachedfeeds
 
         assert "Fantastic Fiction" in feed.content
@@ -493,29 +534,31 @@ class TestCacheOPDSGroupFeedPerLane(TestLaneScript):
         assert work.title in feed.content
 
 
-class TestCacheMARCFiles(TestLaneScript):
-    def test_should_process_library(self):
-        script = CacheMARCFiles(self._db, cmd_args=[])
-        assert False == script.should_process_library(self._default_library)
-        integration = self._external_integration(
+class TestCacheMARCFiles:
+    def test_should_process_library(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
+        script = CacheMARCFiles(db.session, cmd_args=[])
+        assert False == script.should_process_library(db.default_library())
+        integration = db.external_integration(
             ExternalIntegration.MARC_EXPORT,
             ExternalIntegration.CATALOG_GOAL,
-            libraries=[self._default_library],
+            libraries=[db.default_library()],
         )
-        assert True == script.should_process_library(self._default_library)
+        assert True == script.should_process_library(db.default_library())
 
-    def test_should_process_lane(self):
-        parent = self._lane()
+    def test_should_process_lane(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
+        parent = db.lane()
         parent.size = 100
-        child = self._lane(parent=parent)
+        child = db.lane(parent=parent)
         child.size = 10
-        grandchild = self._lane(parent=child)
+        grandchild = db.lane(parent=child)
         grandchild.size = 1
         wl = WorkList()
-        empty = self._lane(fiction=False)
+        empty = db.lane(fiction=False)
         empty.size = 0
 
-        script = CacheMARCFiles(self._db, cmd_args=[])
+        script = CacheMARCFiles(db.session, cmd_args=[])
         script.max_depth = 1
         assert True == script.should_process_lane(parent)
         assert True == script.should_process_lane(child)
@@ -530,9 +573,10 @@ class TestCacheMARCFiles(TestLaneScript):
         assert True == script.should_process_lane(wl)
         assert False == script.should_process_lane(empty)
 
-    def test_process_lane(self):
-        lane = self._lane(genres=["Science Fiction"])
-        integration = self._external_integration(
+    def test_process_lane(self, lane_script_fixture: LaneScriptFixture):
+        db = lane_script_fixture.db
+        lane = db.lane(genres=["Science Fiction"])
+        integration = db.external_integration(
             ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL
         )
 
@@ -547,19 +591,19 @@ class TestCacheMARCFiles(TestLaneScript):
         # This just needs to be an ExternalIntegration, but a storage integration
         # makes the most sense in this context.
         the_linked_integration, ignore = create(
-            self._db,
+            db.session,
             ExternalIntegration,
             protocol=ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
         )
 
-        integration_link = self._external_integration_link(
+        integration_link = db.external_integration_link(
             integration=integration,
             other_integration=the_linked_integration,
             purpose=ExternalIntegrationLink.MARC,
         )
 
-        script = CacheMARCFiles(self._db, cmd_args=[])
+        script = CacheMARCFiles(db.session, cmd_args=[])
         script.process_lane(lane, exporter)
 
         # If the script has never been run before, it runs the exporter once
@@ -579,13 +623,13 @@ class TestCacheMARCFiles(TestLaneScript):
         yesterday = now - datetime.timedelta(days=1)
         last_week = now - datetime.timedelta(days=7)
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.UPDATE_FREQUENCY, self._default_library, integration
+            db.session, MARCExporter.UPDATE_FREQUENCY, db.default_library(), integration
         ).value = 3
-        representation, ignore = self._representation()
+        representation, ignore = db.representation()
         cached, ignore = create(
-            self._db,
+            db.session,
             CachedMARCFile,
-            library=self._default_library,
+            library=db.default_library(),
             lane=lane,
             representation=representation,
             end_time=last_week,
@@ -612,7 +656,7 @@ class TestCacheMARCFiles(TestLaneScript):
         assert [] == exporter.called_with
 
         # But we can force it to run anyway.
-        script = CacheMARCFiles(self._db, cmd_args=["--force"])
+        script = CacheMARCFiles(db.session, cmd_args=["--force"])
         script.process_lane(lane, exporter)
 
         assert 2 == len(exporter.called_with)
@@ -630,10 +674,10 @@ class TestCacheMARCFiles(TestLaneScript):
 
         # The update frequency can also be 0, in which case it will always run.
         ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.UPDATE_FREQUENCY, self._default_library, integration
+            db.session, MARCExporter.UPDATE_FREQUENCY, db.default_library(), integration
         ).value = 0
         exporter.called_with = []
-        script = CacheMARCFiles(self._db, cmd_args=[])
+        script = CacheMARCFiles(db.session, cmd_args=[])
         script.process_lane(lane, exporter)
 
         assert 2 == len(exporter.called_with)
@@ -650,18 +694,8 @@ class TestCacheMARCFiles(TestLaneScript):
         assert exporter.called_with[1][3] > last_week
 
 
-class TestInstanceInitializationScript(DatabaseTest):
-    def test_run(self):
-
-        # If the database has been initialized -- which happened
-        # during the test suite setup -- run() will bail out and never
-        # call do_run().
-        class Mock(InstanceInitializationScript):
-            def do_run(self):
-                raise Exception("I'll never be called.")
-
-        Mock().run()
-
+class TestInstanceInitializationScript:
+    def test_run(self, db: DatabaseTransactionFixture):
         # If the database has not been initialized, run() will detect
         # this and call do_run().
 
@@ -677,89 +711,130 @@ class TestInstanceInitializationScript(DatabaseTest):
 
         script = Mock()
         script.run()
-        assert True == script.was_run
+        assert script.was_run is True
 
-    def test_do_run(self):
-        # Normally, do_run is only called by run() if the database has
-        # not yet meen initialized. But we can test it by calling it
-        # directly.
-        timestamp = get_one(
-            self._db,
-            Timestamp,
-            service="Database Migration",
-            service_type=Timestamp.SCRIPT_TYPE,
+    def test_alembic_state(self, db: DatabaseTransactionFixture):
+        # Delete the table data, we should run the script
+        # using a session that is not locked into the current transaction (as the script does)
+        url = Configuration.database_url()
+        _db = SessionManager.session(
+            url, initialize_data=False, initialize_schema=False
         )
-        assert None == timestamp
+        try:
+            _db.execute("DELETE FROM alembic_version")
+            _db.commit()
+        except ProgrammingError as ex:
+            logging.getLogger().info(
+                "The alembic_version table does not exists yet!! Continuing... "
+            )
+            # If the table was not present, first testing run ever
+        finally:
+            _db.close()
 
+        script = InstanceInitializationScript(_db=db.session)
+        # Ensure search is skipped
+        script.do_run = partial(script.do_run, ignore_search=True)
+        # Mock the desired response from the DB
+        with patch("scripts.SessionManager") as manager:
+            manager.session().execute().first = MagicMock(return_value=None)
+            script.run()
+
+        # Alembic version got stamped
+        result = db.session.execute("select * from alembic_version")
+        assert result.first() is not None
+
+        # Re-running will not call the alembic functions
+        # Mock the do_run
+        script.do_run = MagicMock()
+        script.run()
+        assert script.do_run.call_count == 0
+
+    def test_do_run(self, db: DatabaseTransactionFixture):
         # Remove all secret keys, should they exist, before running the
         # script.
-        secret_keys = self._db.query(ConfigurationSetting).filter(
+        secret_keys = db.session.query(ConfigurationSetting).filter(
             ConfigurationSetting.key == Configuration.SECRET_KEY
         )
-        [self._db.delete(secret_key) for secret_key in secret_keys]
+        [db.session.delete(secret_key) for secret_key in secret_keys]
 
-        script = InstanceInitializationScript(_db=self._db)
+        script = InstanceInitializationScript(_db=db.session)
         script.do_run(ignore_search=True)
-
-        # It initializes the database.
-        timestamp = get_one(
-            self._db,
-            Timestamp,
-            service="Database Migration",
-            service_type=Timestamp.SCRIPT_TYPE,
-        )
-        assert timestamp
 
         # It creates a secret key.
         assert 1 == secret_keys.count()
         assert secret_keys.one().value == ConfigurationSetting.sitewide_secret(
-            self._db, Configuration.SECRET_KEY
+            db.session, Configuration.SECRET_KEY
         )
 
+    def test_find_alembic_ini(self, db: DatabaseTransactionFixture):
+        # Make sure we find alembic.ini for script command
+        with patch("scripts.command") as command:
+            script = InstanceInitializationScript(_db=db.session)
+            script.do_run(ignore_search=True)
 
-class TestLanguageListScript(DatabaseTest):
-    def test_languages(self):
+        command.stamp.assert_called()
+        filename = command.stamp.call_args.args[0].config_file_name
+        assert Path(filename).exists()
+
+
+class TestLanguageListScript:
+    def test_languages(self, db: DatabaseTransactionFixture):
         """Test the method that gives this script the bulk of its output."""
-        english = self._work(language="eng", with_open_access_download=True)
-        tagalog = self._work(language="tgl", with_license_pool=True)
+        english = db.work(language="eng", with_open_access_download=True)
+        tagalog = db.work(language="tgl", with_license_pool=True)
         [pool] = tagalog.license_pools
-        self._add_generic_delivery_mechanism(pool)
-        script = LanguageListScript(self._db)
-        output = list(script.languages(self._default_library))
+        db.add_generic_delivery_mechanism(pool)
+        script = LanguageListScript(db.session)
+        output = list(script.languages(db.default_library()))
 
         # English is ignored because all its works are open-access.
         # Tagalog shows up with the correct estimate.
         assert ["tgl 1 (Tagalog)"] == output
 
 
-class TestShortClientTokenLibraryConfigurationScript(DatabaseTest):
-    def setup_method(self):
-        super(TestShortClientTokenLibraryConfigurationScript, self).setup_method()
-        self._default_library.setting(Configuration.WEBSITE_URL).value = "http://foo/"
-        self.script = ShortClientTokenLibraryConfigurationScript(self._db)
+class ShortClientTokenLibraryConfigurationFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        db.default_library().setting(Configuration.WEBSITE_URL).value = "http://foo/"
+        self.script = ShortClientTokenLibraryConfigurationScript(db.session)
 
-    def test_identify_library_by_url(self):
+
+@pytest.fixture(scope="function")
+def short_client_token_fixture(
+    db: DatabaseTransactionFixture,
+) -> ShortClientTokenLibraryConfigurationFixture:
+    return ShortClientTokenLibraryConfigurationFixture(db)
+
+
+class TestShortClientTokenLibraryConfigurationScript:
+    def test_identify_library_by_url(
+        self, short_client_token_fixture: ShortClientTokenLibraryConfigurationFixture
+    ):
+        fixture, db = short_client_token_fixture, short_client_token_fixture.db
         with pytest.raises(Exception) as excinfo:
-            self.script.set_secret(
-                self._db, "http://bar/", "vendorid", "libraryname", "secret", None
+            fixture.script.set_secret(
+                db.session, "http://bar/", "vendorid", "libraryname", "secret", None
             )
         assert (
             "Could not locate library with URL http://bar/. Available URLs: http://foo/"
             in str(excinfo.value)
         )
 
-    def test_set_secret(self):
-        assert [] == self._default_library.integrations
+    def test_set_secret(
+        self, short_client_token_fixture: ShortClientTokenLibraryConfigurationFixture
+    ):
+        fixture, db = short_client_token_fixture, short_client_token_fixture.db
+        assert [] == db.default_library().integrations
 
         output = StringIO()
-        self.script.set_secret(
-            self._db, "http://foo/", "vendorid", "libraryname", "secret", output
+        fixture.script.set_secret(
+            db.session, "http://foo/", "vendorid", "libraryname", "secret", output
         )
         assert (
             "Current Short Client Token configuration for http://foo/:\n Vendor ID: vendorid\n Library name: libraryname\n Shared secret: secret\n"
             == output.getvalue()
         )
-        [integration] = self._default_library.integrations
+        [integration] = db.default_library().integrations
         assert [
             ("password", "secret"),
             ("username", "libraryname"),
@@ -768,8 +843,8 @@ class TestShortClientTokenLibraryConfigurationScript(DatabaseTest):
 
         # We can modify an existing configuration.
         output = StringIO()
-        self.script.set_secret(
-            self._db, "http://foo/", "newid", "newname", "newsecret", output
+        fixture.script.set_secret(
+            db.session, "http://foo/", "newid", "newname", "newsecret", output
         )
         expect = "Current Short Client Token configuration for http://foo/:\n Vendor ID: newid\n Library name: newname\n Shared secret: newsecret\n"
         assert expect == output.getvalue()
@@ -783,7 +858,7 @@ class TestShortClientTokenLibraryConfigurationScript(DatabaseTest):
         # We can also just check on the existing configuration without
         # changing anything.
         output = StringIO()
-        self.script.set_secret(self._db, "http://foo/", None, None, None, output)
+        fixture.script.set_secret(db.session, "http://foo/", None, None, None, output)
         assert expect == output.getvalue()
         assert expect_settings == sorted((x.key, x.value) for x in integration.settings)
 
@@ -792,7 +867,7 @@ class MockDirectoryImportScript(DirectoryImportScript):
     """Mock a filesystem to make it easier to test DirectoryInputScript."""
 
     def __init__(self, _db, mock_filesystem={}):
-        super(MockDirectoryImportScript, self).__init__(_db)
+        super().__init__(_db)
         self.mock_filesystem = mock_filesystem
         self._locate_file_args = None
 
@@ -801,8 +876,8 @@ class MockDirectoryImportScript(DirectoryImportScript):
         return self.mock_filesystem.get(directory, (None, None, None))
 
 
-class TestDirectoryImportScript(DatabaseTest):
-    def test_do_run(self):
+class TestDirectoryImportScript:
+    def test_do_run(self, db: DatabaseTransactionFixture):
         # Calling do_run with command-line arguments parses the
         # arguments and calls run_with_arguments.
 
@@ -810,7 +885,7 @@ class TestDirectoryImportScript(DatabaseTest):
             def run_with_arguments(self, *args, **kwargs):
                 self.ran_with = kwargs
 
-        script = Mock(self._db)
+        script = Mock(db.session)
         script.do_run(
             cmd_args=[
                 "--collection-name=coll1",
@@ -821,7 +896,7 @@ class TestDirectoryImportScript(DatabaseTest):
                 "--ebook-directory=ebooks",
                 "--rights-uri=rights",
                 "--dry-run",
-                "--default-medium-type={0}".format(EditionConstants.AUDIO_MEDIUM),
+                f"--default-medium-type={EditionConstants.AUDIO_MEDIUM}",
             ]
         )
         assert {
@@ -837,11 +912,11 @@ class TestDirectoryImportScript(DatabaseTest):
             "default_medium_type": EditionConstants.AUDIO_MEDIUM,
         } == script.ran_with
 
-    def test_run_with_arguments(self):
+    def test_run_with_arguments(self, db: DatabaseTransactionFixture):
 
         metadata1 = object()
         metadata2 = object()
-        collection = self._default_collection
+        collection = db.default_collection()
         mirrors = object()
         work = object()
         licensepool = LicensePool()
@@ -871,9 +946,9 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # Make a change to a model object so we can track when the
         # session is committed.
-        self._default_collection.name = "changed"
+        db.default_collection().name = "changed"
 
-        script = Mock(self._db)
+        script = Mock(db.session)
         basic_args = [
             "collection name",
             CollectionType.OPEN_ACCESS,
@@ -905,7 +980,7 @@ class TestDirectoryImportScript(DatabaseTest):
             (coll2, t2, o2, policy2, c2, e2, r2),
         ] = script.work_from_metadata_calls
 
-        assert coll1 == self._default_collection
+        assert coll1 == db.default_collection()
         assert coll1 == coll2
 
         assert o1 == metadata1
@@ -930,7 +1005,7 @@ class TestDirectoryImportScript(DatabaseTest):
             assert True == policy.rights
 
         # Now try it not as a dry run.
-        script = Mock(self._db)
+        script = Mock(db.session)
         script.run_with_arguments(*(basic_args + [False]))
 
         # This time, the ReplacementPolicy has a mirror set
@@ -944,18 +1019,18 @@ class TestDirectoryImportScript(DatabaseTest):
 
         # timestamp_collection has been set to the Collection that will be
         # used when a Timestamp is created for this script.
-        assert self._default_collection == script.timestamp_collection
+        assert db.default_collection() == script.timestamp_collection
 
-    def test_load_collection_setting_mirrors(self):
+    def test_load_collection_setting_mirrors(self, db: DatabaseTransactionFixture):
         # Calling load_collection does not create a new collection.
-        script = DirectoryImportScript(self._db)
+        script = DirectoryImportScript(db.session)
         collection, mirrors = script.load_collection(
             "New collection", CollectionType.OPEN_ACCESS, "data source name"
         )
         assert None == collection
         assert None == mirrors
 
-        existing_collection = self._collection(
+        existing_collection = db.collection(
             name="some collection", protocol=ExternalIntegration.MANUAL
         )
 
@@ -969,13 +1044,13 @@ class TestDirectoryImportScript(DatabaseTest):
         assert None == mirrors
 
         # Both mirrors need to set up or else nothing is returned.
-        storage1 = self._external_integration(
+        storage1 = db.external_integration(
             ExternalIntegration.S3,
             ExternalIntegration.STORAGE_GOAL,
             username="name",
             password="password",
         )
-        external_integration_link = self._external_integration_link(
+        external_integration_link = db.external_integration_link(
             integration=existing_collection.external_integration,
             other_integration=storage1,
             purpose=ExternalIntegrationLink.COVERS,
@@ -988,13 +1063,13 @@ class TestDirectoryImportScript(DatabaseTest):
         assert None == mirrors
 
         # Create another storage and assign it for the books mirror
-        storage2 = self._external_integration(
+        storage2 = db.external_integration(
             ExternalIntegration.S3,
             ExternalIntegration.STORAGE_GOAL,
             username="name",
             password="password",
         )
-        external_integration_link = self._external_integration_link(
+        external_integration_link = db.external_integration_link(
             integration=existing_collection.external_integration,
             other_integration=storage2,
             purpose=ExternalIntegrationLink.OPEN_ACCESS_BOOKS,
@@ -1009,7 +1084,9 @@ class TestDirectoryImportScript(DatabaseTest):
             mirrors[ExternalIntegrationLink.OPEN_ACCESS_BOOKS], MirrorUploader
         )
 
-    def test_work_from_metadata(self):
+    def test_work_from_metadata(
+        self, db: DatabaseTransactionFixture, sample_covers_fixture: SampleCoversFixture
+    ):
         # Validate the ability to create a new Work from appropriate metadata.
 
         class Mock(MockDirectoryImportScript):
@@ -1019,18 +1096,18 @@ class TestDirectoryImportScript(DatabaseTest):
 
             def annotate_metadata(self, collection_type, metadata, *args, **kwargs):
                 metadata.annotated = True
-                return super(Mock, self).annotate_metadata(
+                return super().annotate_metadata(
                     collection_type, metadata, *args, **kwargs
                 )
 
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "1003")
-        identifier_obj, ignore = identifier.load(self._db)
+        identifier_obj, ignore = identifier.load(db.session)
         metadata = Metadata(
             DataSource.GUTENBERG, primary_identifier=identifier, title="A book"
         )
-        metadata.annotated = False
-        datasource = DataSource.lookup(self._db, DataSource.GUTENBERG)
-        policy = ReplacementPolicy.from_license_source(self._db)
+        metadata.annotated = False  # type: ignore
+        datasource = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        policy = ReplacementPolicy.from_license_source(db.session)
         mirrors = dict(books_mirror=MockS3Uploader(), covers_mirror=MockS3Uploader())
         mirror_type_books = ExternalIntegrationLink.OPEN_ACCESS_BOOKS
         mirror_type_covers = ExternalIntegrationLink.COVERS
@@ -1039,7 +1116,7 @@ class TestDirectoryImportScript(DatabaseTest):
         # Here, work_from_metadata calls annotate_metadata, but does
         # not actually import anything because there are no files 'on
         # disk' and thus no way to actually get the book.
-        collection = self._default_collection
+        collection = db.default_collection()
         collection_type = CollectionType.OPEN_ACCESS
         shared_args = (
             collection_type,
@@ -1050,12 +1127,14 @@ class TestDirectoryImportScript(DatabaseTest):
             RightsStatus.CC0,
         )
         # args = (collection, *shared_args)
-        script = Mock(self._db)
+        script = Mock(db.session)
         assert None == script.work_from_metadata(collection, *shared_args)
-        assert True == metadata.annotated
+        assert True == metadata.annotated  # type: ignore
 
         # Now let's try it with some files 'on disk'.
-        with open(self.sample_cover_path("test-book-cover.png"), "rb") as fh:
+        with open(
+            sample_covers_fixture.sample_cover_path("test-book-cover.png"), "rb"
+        ) as fh:
             image = fh.read()
         mock_filesystem = {
             "cover directory": ("cover.jpg", Representation.JPEG_MEDIA_TYPE, image),
@@ -1065,12 +1144,12 @@ class TestDirectoryImportScript(DatabaseTest):
                 "I'm an EPUB.",
             ),
         }
-        script = MockDirectoryImportScript(self._db, mock_filesystem=mock_filesystem)
+        script = MockDirectoryImportScript(db.session, mock_filesystem=mock_filesystem)  # type: ignore
         work, licensepool_for_work = script.work_from_metadata(collection, *shared_args)
 
         # Get the edition that was created for this book. It should have
         # already been created by `script.work_from_metadata`.
-        edition, is_new_edition = metadata.edition(self._db)
+        edition, is_new_edition = metadata.edition(db.session)
         assert False == is_new_edition
 
         # We have created a book. It has a cover image, which has a
@@ -1115,7 +1194,7 @@ class TestDirectoryImportScript(DatabaseTest):
         # the same metadata.
         # Even though there will be two license pools associated with the
         # work's presentation edition, the call should be successful.
-        collection2 = self._collection("second collection")
+        collection2 = db.collection("second collection")
         work2, licensepool_for_work2 = script.work_from_metadata(
             collection2, *shared_args
         )
@@ -1136,7 +1215,7 @@ class TestDirectoryImportScript(DatabaseTest):
             [lp for lp in edition2.license_pools if lp.collection == collection2]
         )
 
-    def test_annotate_metadata(self):
+    def test_annotate_metadata(self, db: DatabaseTransactionFixture):
         """Verify that annotate_metadata calls load_circulation_data
         and load_cover_link appropriately.
         """
@@ -1155,11 +1234,11 @@ class TestDirectoryImportScript(DatabaseTest):
                 raise Exception("Explode!")
 
         collection_type = CollectionType.OPEN_ACCESS
-        gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "11111")
-        identifier_obj, ignore = identifier.load(self._db)
+        identifier_obj, ignore = identifier.load(db.session)
         metadata = Metadata(
-            title=self._str, data_source=gutenberg, primary_identifier=identifier
+            title=db.fresh_str(), data_source=gutenberg, primary_identifier=identifier
         )
         mirrors = object()
         policy = ReplacementPolicy(mirrors=mirrors)
@@ -1167,7 +1246,7 @@ class TestDirectoryImportScript(DatabaseTest):
         ebook_directory = object()
         rights_uri = object()
 
-        script = MockNoCirculationData(self._db)
+        script = MockNoCirculationData(db.session)
         args = (
             collection_type,
             metadata,
@@ -1208,7 +1287,7 @@ class TestDirectoryImportScript(DatabaseTest):
                 self.load_cover_link_args = args
                 return None
 
-        script = MockNoCoverLink(self._db)
+        script = MockNoCoverLink(db.session)  # type: ignore
         script.annotate_metadata(*args)
 
         # The Metadata object was annotated with the return value of
@@ -1221,7 +1300,7 @@ class TestDirectoryImportScript(DatabaseTest):
             gutenberg,
             cover_directory,
             mirrors,
-        ) == script.load_cover_link_args
+        ) == script.load_cover_link_args  # type: ignore
 
         # But since it provided no cover link, metadata.links was empty.
         assert [] == metadata.links
@@ -1239,18 +1318,18 @@ class TestDirectoryImportScript(DatabaseTest):
                 return "A cover link"
 
         metadata.circulation = None
-        script = MockWithCoverLink(self._db)
+        script = MockWithCoverLink(db.session)  # type: ignore
         script.annotate_metadata(*args)
 
         assert "Some circulation data" == metadata.circulation
         assert ["A cover link"] == metadata.links
 
-    def test_load_circulation_data(self):
+    def test_load_circulation_data(self, db: DatabaseTransactionFixture):
         # Create a directory import script with an empty mock filesystem.
-        script = MockDirectoryImportScript(self._db, {})
+        script = MockDirectoryImportScript(db.session, {})
 
-        identifier = self._identifier(Identifier.GUTENBERG_ID, "2345")
-        gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        identifier = db.identifier(Identifier.GUTENBERG_ID, "2345")
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         mirrors = dict(books_mirror=MockS3Uploader(), covers_mirror=None)
         args = (
             CollectionType.OPEN_ACCESS,
@@ -1278,14 +1357,14 @@ class TestDirectoryImportScript(DatabaseTest):
         mock_filesystem = {
             "ebooks": ("book.epub", Representation.EPUB_MEDIA_TYPE, "I'm an EPUB.")
         }
-        script = MockDirectoryImportScript(self._db, mock_filesystem)
+        script = MockDirectoryImportScript(db.session, mock_filesystem)
 
         # Now _locate_file finds something on the mock filesystem, and
         # load_circulation_data loads it into a fully populated
         # CirculationData object.
         circulation = script.load_circulation_data(*args)
-        assert identifier == circulation.primary_identifier(self._db)
-        assert gutenberg == circulation.data_source(self._db)
+        assert identifier == circulation.primary_identifier(db.session)
+        assert gutenberg == circulation.data_source(db.session)
         assert "rights URI" == circulation.default_rights_uri
 
         # The CirculationData has an open-access link associated with it.
@@ -1305,12 +1384,12 @@ class TestDirectoryImportScript(DatabaseTest):
         assert link.media_type == format.content_type
         assert DeliveryMechanism.NO_DRM == format.drm_scheme
 
-    def test_load_cover_link(self):
+    def test_load_cover_link(self, db: DatabaseTransactionFixture):
         # Create a directory import script with an empty mock filesystem.
-        script = MockDirectoryImportScript(self._db, {})
+        script = MockDirectoryImportScript(db.session, {})
 
-        identifier = self._identifier(Identifier.GUTENBERG_ID, "2345")
-        gutenberg = DataSource.lookup(self._db, DataSource.GUTENBERG)
+        identifier = db.identifier(Identifier.GUTENBERG_ID, "2345")
+        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
         mirrors = dict(covers_mirror=MockS3Uploader(), books_mirror=None)
         args = (identifier, gutenberg, "covers", mirrors)
 
@@ -1330,7 +1409,7 @@ class TestDirectoryImportScript(DatabaseTest):
         mock_filesystem = {
             "covers": ("acover.jpeg", Representation.JPEG_MEDIA_TYPE, "I'm an image.")
         }
-        script = MockDirectoryImportScript(self._db, mock_filesystem)
+        script = MockDirectoryImportScript(db.session, mock_filesystem)
         link = script.load_cover_link(*args)
         assert Hyperlink.IMAGE == link.rel
         assert (
@@ -1401,11 +1480,11 @@ class TestDirectoryImportScript(DatabaseTest):
         assert_not_found("thefile", "directory", [])
 
 
-class TestNovelistSnapshotScript(DatabaseTest):
+class TestNovelistSnapshotScript:
     def mockNoveListAPI(self, *args, **kwargs):
         self.called_with = (args, kwargs)
 
-    def test_do_run(self):
+    def test_do_run(self, db: DatabaseTransactionFixture):
         """Test that NovelistSnapshotScript.do_run() calls the NoveList api."""
 
         class MockNovelistSnapshotScript(NovelistSnapshotScript):
@@ -1414,9 +1493,9 @@ class TestNovelistSnapshotScript(DatabaseTest):
         oldNovelistConfig = NoveListAPI.from_config
         NoveListAPI.from_config = self.mockNoveListAPI
 
-        l1 = self._library()
+        l1 = db.library()
         cmd_args = [l1.name]
-        script = MockNovelistSnapshotScript(self._db)
+        script = MockNovelistSnapshotScript(db.session)
         script.do_run(cmd_args=cmd_args)
 
         (params, args) = self.called_with
@@ -1426,9 +1505,9 @@ class TestNovelistSnapshotScript(DatabaseTest):
         NoveListAPI.from_config = oldNovelistConfig
 
 
-class TestLocalAnalyticsExportScript(DatabaseTest):
-    def test_do_run(self):
-        class MockLocalAnalyticsExporter(object):
+class TestLocalAnalyticsExportScript:
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        class MockLocalAnalyticsExporter:
             def export(self, _db, start, end):
                 self.called_with = [start, end]
                 return "test"
@@ -1442,7 +1521,7 @@ class TestLocalAnalyticsExportScript(DatabaseTest):
         assert ["20190820", "20190827"] == exporter.called_with
 
 
-class TestGenerateShortTokenScript(DatabaseTest):
+class TestGenerateShortTokenScript:
     @pytest.fixture
     def script(self):
         return GenerateShortTokenScript()
@@ -1464,10 +1543,10 @@ class TestGenerateShortTokenScript(DatabaseTest):
         return authdata
 
     @pytest.fixture
-    def patron(self, authdata):
-        patron = self._patron(external_identifier="test")
+    def patron(self, authdata, db: DatabaseTransactionFixture):
+        patron = db.patron(external_identifier="test")
         patron.authorization_identifier = "test"
-        adobe_credential = self._credential(
+        adobe_credential = db.credential(
             data_source_name=DataSource.INTERNAL_PROCESSING,
             patron=patron,
             type=authdata.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
@@ -1476,25 +1555,28 @@ class TestGenerateShortTokenScript(DatabaseTest):
         return patron
 
     @pytest.fixture
-    def authentication_provider(self):
+    def authentication_provider(
+        self,
+        db: DatabaseTransactionFixture,
+        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+    ):
         barcode = "12345"
         pin = "abcd"
-        integration = self._external_integration(
-            "api.simple_authentication", goal=ExternalIntegration.PATRON_AUTH_GOAL
-        )
-        self._default_library.integrations.append(integration)
-        integration.setting(BasicAuthenticationProvider.TEST_IDENTIFIER).value = barcode
-        integration.setting(BasicAuthenticationProvider.TEST_PASSWORD).value = pin
+        create_simple_auth_integration(db.default_library(), barcode, pin)
         return barcode, pin
 
-    def test_run_days(self, script, output, authdata, patron):
+    def test_run_days(
+        self, script, output, authdata, patron, db: DatabaseTransactionFixture
+    ):
         # Test with --days
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--days=2",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
-        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        script.do_run(
+            _db=db.session, output=output, cmd_args=cmd_args, authdata=authdata
+        )
         assert output.getvalue().split("\n") == [
             "Vendor ID: The Vendor ID",
             "Token: YOU|1620345600|1234567|ZP45vhpfs3fHREvFkDDVgDAmhoD699elFD3PGaZu7yo@",
@@ -1503,74 +1585,98 @@ class TestGenerateShortTokenScript(DatabaseTest):
             "",
         ]
 
-    def test_run_minutes(self, script, output, authdata, patron):
+    def test_run_minutes(
+        self, script, output, authdata, patron, db: DatabaseTransactionFixture
+    ):
         # Test with --minutes
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--minutes=20",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
-        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        script.do_run(
+            _db=db.session, output=output, cmd_args=cmd_args, authdata=authdata
+        )
         assert output.getvalue().split("\n")[2] == "Username: YOU|1620174000|1234567"
 
-    def test_run_hours(self, script, output, authdata, patron):
+    def test_run_hours(
+        self, script, output, authdata, patron, db: DatabaseTransactionFixture
+    ):
         # Test with --hours
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--hours=4",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
-        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        script.do_run(
+            _db=db.session, output=output, cmd_args=cmd_args, authdata=authdata
+        )
         assert output.getvalue().split("\n")[2] == "Username: YOU|1620187200|1234567"
 
-    def test_no_registry(self, script, output, patron):
+    def test_no_registry(self, script, output, patron, db: DatabaseTransactionFixture):
         cmd_args = [
-            "--barcode={}".format(patron.authorization_identifier),
+            f"--barcode={patron.authorization_identifier}",
             "--minutes=20",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
         with pytest.raises(SystemExit) as pytest_exit:
-            script.do_run(_db=self._db, output=output, cmd_args=cmd_args)
+            script.do_run(_db=db.session, output=output, cmd_args=cmd_args)
         assert pytest_exit.value.code == -1
         assert "Library not registered with library registry" in output.getvalue()
 
-    def test_no_patron_auth_method(self, script, output):
+    def test_no_patron_auth_method(
+        self, script, output, db: DatabaseTransactionFixture
+    ):
         # Test running when the patron does not exist
         cmd_args = [
             "--barcode={}".format("1234567"),
             "--hours=4",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
         with pytest.raises(SystemExit) as pytest_exit:
-            script.do_run(_db=self._db, output=output, cmd_args=cmd_args)
+            script.do_run(_db=db.session, output=output, cmd_args=cmd_args)
         assert pytest_exit.value.code == -1
         assert "No methods to authenticate patron found" in output.getvalue()
 
-    def test_patron_auth(self, script, output, authdata, authentication_provider):
+    def test_patron_auth(
+        self,
+        script,
+        output,
+        authdata,
+        authentication_provider,
+        db: DatabaseTransactionFixture,
+    ):
         barcode, pin = authentication_provider
         # Test running when the patron does not exist
         cmd_args = [
-            "--barcode={}".format(barcode),
-            "--pin={}".format(pin),
+            f"--barcode={barcode}",
+            f"--pin={pin}",
             "--hours=4",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
-        script.do_run(_db=self._db, output=output, cmd_args=cmd_args, authdata=authdata)
+        script.do_run(
+            _db=db.session, output=output, cmd_args=cmd_args, authdata=authdata
+        )
         assert "Token: YOU|1620187200" in output.getvalue()
 
     def test_patron_auth_no_patron(
-        self, script, output, authdata, authentication_provider
+        self,
+        script,
+        output,
+        authdata,
+        authentication_provider,
+        db: DatabaseTransactionFixture,
     ):
         barcode = "nonexistent"
         # Test running when the patron does not exist
         cmd_args = [
-            "--barcode={}".format(barcode),
+            f"--barcode={barcode}",
             "--hours=4",
-            self._default_library.short_name,
+            db.default_library().short_name,
         ]
         with pytest.raises(SystemExit) as pytest_exit:
             script.do_run(
-                _db=self._db, output=output, cmd_args=cmd_args, authdata=authdata
+                _db=db.session, output=output, cmd_args=cmd_args, authdata=authdata
             )
         assert pytest_exit.value.code == -1
         assert "Patron not found" in output.getvalue()

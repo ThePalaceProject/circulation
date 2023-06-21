@@ -1,0 +1,200 @@
+{
+  "metadata": {
+    "title": "Test",
+    "itemsPerPage": 10,
+    "currentPage": 1,
+    "numberOfItems": 100
+  },
+  "links": [
+    {
+      "type": "application/opds+json",
+      "rel": "self",
+      "href": "https://market.feedbooks.com/api/libraries/harvest.json"
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "Gun Runner",
+        "duration": 64920,
+        "language": "en",
+        "modified": "2022-10-24T19:33:47Z",
+        "published": "2021-02-02T00:00:00Z",
+        "identifier": "urn:ISBN:9781603937221",
+        "author": [
+          {
+            "name": "Larry Correia",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=197931&lang=en"
+              }
+            ]
+          },
+          {
+            "name": "John Brown",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=34808&lang=en"
+              }
+            ]
+          }
+        ],
+        "narrator": [
+          {
+            "name": "Oliver Wyman",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=133023&lang=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Audible Studios",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Audible+Studios"
+            }
+          ]
+        },
+        "description": "<p><b>Thrilling science-fiction adventure from best-selling authors Larry Correia and John Brown.</b></p>\n<p><b>The heart of a warrior </b></p>\n<p>Once, Jackson Rook was a war hero. Raised from boyhood to pilot an exosuit mech, he&#x2019;d fought gallantly for the rebellion against the Collectivists. But that was a long time ago, on a world very far away.&#xA0;</p>\n<p>Now, Jackson Rook is a criminal, a smuggler on board the Multipurpose Supply Vehicle <i>Tar Heel</i>. His latest mission: steal a top-of-the-line mech called the Citadel and deliver it to the far-flung planet Swindle, a world so hostile even the air will kill you. The client: a man known only as the Warlord.&#xA0;</p>\n<p>Rook has been in the smuggling business long enough to know that it&#x2019;s best to take the money and not ask questions. But Rook cannot stand by and watch as the Warlord runs roughshod over the citizens of Swindle, the way the Collectivists did on his homeworld. For all his mercenary ways, Rook is not a pirate. And deep within the smuggler, the heart of a warrior still beats.</p>",
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC028000",
+            "name": "Science fiction",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC028000.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC028010",
+            "name": "Adventure",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC028010.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC028030",
+            "name": "Space opera and planet opera",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC028030.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC028050",
+            "name": "Military",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/category/FBFIC028050.json?lang=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "Adult",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/top.json?age=READ0000&lang=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.feedbooks.net/item/4699654.jpg?size=large&t=1666640027",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.feedbooks.net/item/4699654.jpg?t=1666640027",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "licenses": [
+        {
+          "metadata": {
+            "identifier": "urn:uuid:a44b9e96-7ad6-42b5-a86d-786563f32b12",
+            "format": [
+              "application/audiobook+lcp"
+            ],
+            "created": "2022-10-06T18:21:36+02:00",
+            "source": "http://www.cantook.net/",
+            "price": {
+              "currency": "USD",
+              "value": 99.99
+            },
+            "terms": {
+              "concurrency": 1,
+              "length": 5097600
+            },
+            "markets": [
+              "public_library"
+            ],
+            "cap_loan_expiration_to_license": false,
+            "protection": {
+              "format": [
+                "application/vnd.readium.lcp.license.v1.0+json"
+              ],
+              "devices": 6
+            },
+            "order": {
+              "name": "Duplicate of Audible (ALL) 40x10 as of Sept. 2022",
+              "identifier": "202210-761-027824",
+              "href": "https://market.feedbooks.com/carts/27824"
+            }
+          },
+          "links": [
+            {
+              "rel": "http://opds-spec.org/acquisition/borrow",
+              "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+              "type": "application/vnd.readium.license.status.v1.0+json",
+              "templated": true
+            },
+            {
+              "rel": "self",
+              "href": "https://license.feedbooks.net/copy/status/?uuid=a9f8b5a1-6763-4d28-9d42-1342092e1977",
+              "type": "application/vnd.odl.info+json"
+            }
+          ]
+        }
+      ],
+      "links": []
+    }
+  ]
+}

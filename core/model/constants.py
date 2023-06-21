@@ -1,12 +1,12 @@
-# encoding: utf-8
 # DataSourceConstants, EditionConstants, IdentifierConstants, LinkRelations,
 # MediaTypes
 
 import re
 from collections import OrderedDict
+from enum import Enum
 
 
-class DataSourceConstants(object):
+class DataSourceConstants:
     GUTENBERG = "Gutenberg"
     OVERDRIVE = "Overdrive"
     ODILO = "Odilo"
@@ -89,7 +89,7 @@ class DataSourceConstants(object):
     COVER_IMAGE_PRIORITY = [METADATA_WRANGLER] + PRESENTATION_EDITION_PRIORITY
 
 
-class EditionConstants(object):
+class EditionConstants:
     ALL_MEDIUM = object()
     BOOK_MEDIUM = "Book"
     PERIODICAL_MEDIUM = "Periodical"
@@ -98,9 +98,6 @@ class EditionConstants(object):
     VIDEO_MEDIUM = "Video"
     IMAGE_MEDIUM = "Image"
     COURSEWARE_MEDIUM = "Courseware"
-
-    ELECTRONIC_FORMAT = "Electronic"
-    CODEX_FORMAT = "Codex"
 
     # These are all media known to the system.
     KNOWN_MEDIA = (
@@ -146,7 +143,7 @@ class EditionConstants(object):
     }
 
 
-class IdentifierConstants(object):
+class IdentifierConstants:
     # Common types of identifiers.
     OVERDRIVE_ID = "Overdrive ID"
     ODILO_ID = "Odilo ID"
@@ -195,7 +192,32 @@ class IdentifierConstants(object):
     IDEAL_IMAGE_WIDTH = 160
 
 
-class LinkRelations(object):
+class IdentifierType(Enum):
+    """Enumeration of all available identifier types."""
+
+    OVERDRIVE_ID = IdentifierConstants.OVERDRIVE_ID
+    ODILO_ID = IdentifierConstants.ODILO_ID
+    BIBLIOTHECA_ID = IdentifierConstants.BIBLIOTHECA_ID
+    GUTENBERG_ID = IdentifierConstants.GUTENBERG_ID
+    AXIS_360_ID = IdentifierConstants.AXIS_360_ID
+    ELIB_ID = IdentifierConstants.ELIB_ID
+    ASIN = IdentifierConstants.ASIN
+    ISBN = IdentifierConstants.ISBN
+    NOVELIST_ID = IdentifierConstants.NOVELIST_ID
+    OCLC_WORK = IdentifierConstants.OCLC_WORK
+    OCLC_NUMBER = IdentifierConstants.OCLC_NUMBER
+    OPEN_LIBRARY_ID = IdentifierConstants.OPEN_LIBRARY_ID
+    BIBLIOCOMMONS_ID = IdentifierConstants.BIBLIOCOMMONS_ID
+    URI = IdentifierConstants.URI
+    DOI = IdentifierConstants.DOI
+    UPC = IdentifierConstants.UPC
+    BIBBLIO_CONTENT_ITEM_ID = IdentifierConstants.BIBBLIO_CONTENT_ITEM_ID
+    ENKI_ID = IdentifierConstants.ENKI_ID
+    SUDOC_CALL_NUMBER = IdentifierConstants.SUDOC_CALL_NUMBER
+    PROQUEST_ID = IdentifierConstants.PROQUEST_ID
+
+
+class LinkRelations:
     # Some common link relations.
     CANONICAL = "canonical"
     GENERIC_OPDS_ACQUISITION = "http://opds-spec.org/acquisition"
@@ -209,6 +231,17 @@ class LinkRelations(object):
     SHORT_DESCRIPTION = "http://librarysimplified.org/terms/rel/short-description"
     AUTHOR = "http://schema.org/author"
     ALTERNATE = "alternate"
+
+    # The rel for a link we feed to clients for samples/previews.
+    CLIENT_SAMPLE = "preview"
+
+    # A uri rel type for authentication documents with a vendor specific "link"
+    PATRON_PASSWORD_RESET = (
+        "http://librarysimplified.org/terms/rel/patron-password-reset"
+    )
+
+    # opds/opds2 auth token rel
+    TOKEN_AUTH = "token_endpoint"
 
     # TODO: Is this the appropriate relation?
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
@@ -236,7 +269,7 @@ class LinkRelations(object):
     SELF_HOSTED_BOOKS = list(set(CIRCULATION_ALLOWED) & set(MIRRORED))
 
 
-class MediaTypes(object):
+class MediaTypes:
     EPUB_MEDIA_TYPE = "application/epub+zip"
     PDF_MEDIA_TYPE = "application/pdf"
     MOBI_MEDIA_TYPE = "application/x-mobipocket-ebook"
@@ -244,6 +277,7 @@ class MediaTypes(object):
     TEXT_XML_MEDIA_TYPE = "text/xml"
     TEXT_HTML_MEDIA_TYPE = "text/html"
     APPLICATION_XML_MEDIA_TYPE = "application/xml"
+    APPLICATION_JSON_MEDIA_TYPE = "application/json"
     JPEG_MEDIA_TYPE = "image/jpeg"
     PNG_MEDIA_TYPE = "image/png"
     GIF_MEDIA_TYPE = "image/gif"
@@ -276,13 +310,13 @@ class MediaTypes(object):
         AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         AUDIOBOOK_PACKAGE_MEDIA_TYPE,
         AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
+        MP3_MEDIA_TYPE,
     ]
 
     BOOK_MEDIA_TYPES = [
         EPUB_MEDIA_TYPE,
         PDF_MEDIA_TYPE,
         MOBI_MEDIA_TYPE,
-        MP3_MEDIA_TYPE,
         AMAZON_KF8_MEDIA_TYPE,
     ]
 
@@ -342,10 +376,16 @@ class MediaTypes(object):
         ".jpeg": JPEG_MEDIA_TYPE,
     }
 
-    for media_type, extension in list(FILE_EXTENSIONS.items()):
-        extension = "." + extension
-        if extension not in MEDIA_TYPE_FOR_EXTENSION:
+    for _media_type, _extension in list(FILE_EXTENSIONS.items()):
+        _extension = "." + _extension
+        if _extension not in MEDIA_TYPE_FOR_EXTENSION:
             # FILE_EXTENSIONS lists more common extensions first.  If
             # multiple media types have the same extension, the most
             # common media type will be used.
-            MEDIA_TYPE_FOR_EXTENSION[extension] = media_type
+            MEDIA_TYPE_FOR_EXTENSION[_extension] = _media_type
+
+
+class NotificationConstants:
+    ACTIVITY_SYNC_TYPE = "ActivitySync"
+    LOAN_EXPIRY_TYPE = "LoanExpiry"
+    HOLD_AVAILABLE_TYPE = "HoldAvailable"

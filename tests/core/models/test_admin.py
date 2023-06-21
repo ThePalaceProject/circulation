@@ -1,155 +1,241 @@
-# encoding: utf-8
+from datetime import timedelta
+
 import pytest
+from freezegun import freeze_time
 
 from core.model import create
 from core.model.admin import Admin, AdminRole
-from core.testing import DatabaseTest
+from core.problem_details import INVALID_RESET_PASSWORD_TOKEN
+from core.util.datetime_helpers import utc_now
+from core.util.problem_detail import ProblemDetail
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestAdmin(DatabaseTest):
-    def setup_method(self):
-        super(TestAdmin, self).setup_method()
-        self.admin, ignore = create(self._db, Admin, email="admin@nypl.org")
-        self.admin.password = "password"
+class AdminFixture:
+    admin: Admin
+    db: DatabaseTransactionFixture
 
-    def test_password_hashed(self):
-        pytest.raises(NotImplementedError, lambda: self.admin.password)
-        assert self.admin.password_hashed.startswith("$2a$")
+    def __init__(self, admin: Admin, db: DatabaseTransactionFixture):
+        self.admin = admin
+        self.db = db
 
-    def test_with_password(self):
-        self._db.delete(self.admin)
-        assert [] == Admin.with_password(self._db).all()
 
-        admin, ignore = create(self._db, Admin, email="admin@nypl.org")
-        assert [] == Admin.with_password(self._db).all()
+@pytest.fixture()
+def admin_fixture(db: DatabaseTransactionFixture) -> AdminFixture:
+    a, ignore = create(db.session, Admin, email="admin@nypl.org")
+    a.password = "password"
+    return AdminFixture(a, db)
+
+
+class TestAdmin:
+    def test_password_hashed(self, admin_fixture: AdminFixture):
+        pytest.raises(NotImplementedError, lambda: admin_fixture.admin.password)
+        assert admin_fixture.admin.password_hashed.startswith("$2b$")
+
+    def test_with_password(self, admin_fixture: AdminFixture):
+        session = admin_fixture.db.session
+        session.delete(admin_fixture.admin)
+        assert [] == Admin.with_password(session).all()
+
+        admin, ignore = create(session, Admin, email="admin@nypl.org")
+        assert [] == Admin.with_password(session).all()
 
         admin.password = "password"
-        assert [admin] == Admin.with_password(self._db).all()
+        assert [admin] == Admin.with_password(session).all()
 
-        admin2, ignore = create(self._db, Admin, email="admin2@nypl.org")
-        assert [admin] == Admin.with_password(self._db).all()
+        admin2, ignore = create(session, Admin, email="admin2@nypl.org")
+        assert [admin] == Admin.with_password(session).all()
 
         admin2.password = "password2"
-        assert set([admin, admin2]) == set(Admin.with_password(self._db).all())
+        assert {admin, admin2} == set(Admin.with_password(session).all())
 
-    def test_with_email_spaces(self):
-        admin_spaces, ignore = create(self._db, Admin, email="test@email.com ")
+    def test_with_email_spaces(self, admin_fixture: AdminFixture):
+        admin_spaces, ignore = create(
+            admin_fixture.db.session, Admin, email="test@email.com "
+        )
         assert "test@email.com" == admin_spaces.email
 
-    def test_has_password(self):
-        assert True == self.admin.has_password("password")
-        assert False == self.admin.has_password("banana")
+    def test_has_password(self, admin_fixture: AdminFixture):
+        assert True == admin_fixture.admin.has_password("password")
+        assert False == admin_fixture.admin.has_password("banana")
 
-    def test_authenticate(self):
-        other_admin, ignore = create(self._db, Admin, email="other@nypl.org")
+    def test_authenticate(self, admin_fixture: AdminFixture):
+        session = admin_fixture.db.session
+        other_admin, ignore = create(session, Admin, email="other@nypl.org")
         other_admin.password = "banana"
-        assert self.admin == Admin.authenticate(self._db, "admin@nypl.org", "password")
-        assert None == Admin.authenticate(self._db, "other@nypl.org", "password")
-        assert None == Admin.authenticate(self._db, "example@nypl.org", "password")
+        assert admin_fixture.admin == Admin.authenticate(
+            session, "admin@nypl.org", "password"
+        )
+        assert None == Admin.authenticate(session, "other@nypl.org", "password")
+        assert None == Admin.authenticate(session, "example@nypl.org", "password")
 
-    def test_roles(self):
+    def test_roles(self, admin_fixture: AdminFixture):
+        library = admin_fixture.db.default_library()
+        other_library = admin_fixture.db.library()
+
         # The admin has no roles yet.
-        assert False == self.admin.is_system_admin()
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert False == self.admin.is_librarian(self._default_library)
+        admin = admin_fixture.admin
+        assert False == admin.is_system_admin()
+        assert False == admin.is_library_manager(library)
+        assert False == admin.is_librarian(library)
 
-        self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-        assert True == self.admin.is_system_admin()
-        assert True == self.admin.is_sitewide_library_manager()
-        assert True == self.admin.is_sitewide_librarian()
-        assert True == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_librarian(self._default_library)
+        admin.add_role(AdminRole.SYSTEM_ADMIN)
+        assert True == admin.is_system_admin()
+        assert True == admin.is_sitewide_library_manager()
+        assert True == admin.is_sitewide_librarian()
+        assert True == admin.is_library_manager(library)
+        assert True == admin.is_librarian(library)
 
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        self.admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-        assert False == self.admin.is_system_admin()
-        assert True == self.admin.is_sitewide_library_manager()
-        assert True == self.admin.is_sitewide_librarian()
-        assert True == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_librarian(self._default_library)
+        admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        assert False == admin.is_system_admin()
+        assert True == admin.is_sitewide_library_manager()
+        assert True == admin.is_sitewide_librarian()
+        assert True == admin.is_library_manager(library)
+        assert True == admin.is_librarian(library)
 
-        self.admin.remove_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-        self.admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
-        assert False == self.admin.is_system_admin()
-        assert False == self.admin.is_sitewide_library_manager()
-        assert True == self.admin.is_sitewide_librarian()
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_librarian(self._default_library)
+        admin.remove_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert False == admin.is_system_admin()
+        assert False == admin.is_sitewide_library_manager()
+        assert True == admin.is_sitewide_librarian()
+        assert False == admin.is_library_manager(library)
+        assert True == admin.is_librarian(library)
 
-        self.admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
-        self.admin.add_role(AdminRole.LIBRARY_MANAGER, self._default_library)
-        assert False == self.admin.is_system_admin()
-        assert False == self.admin.is_sitewide_library_manager()
-        assert False == self.admin.is_sitewide_librarian()
-        assert True == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_librarian(self._default_library)
+        admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
+        admin.add_role(AdminRole.LIBRARY_MANAGER, library)
+        assert False == admin.is_system_admin()
+        assert False == admin.is_sitewide_library_manager()
+        assert False == admin.is_sitewide_librarian()
+        assert True == admin.is_library_manager(library)
+        assert True == admin.is_librarian(library)
 
-        self.admin.remove_role(AdminRole.LIBRARY_MANAGER, self._default_library)
-        self.admin.add_role(AdminRole.LIBRARIAN, self._default_library)
-        assert False == self.admin.is_system_admin()
-        assert False == self.admin.is_sitewide_library_manager()
-        assert False == self.admin.is_sitewide_librarian()
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_librarian(self._default_library)
+        admin.remove_role(AdminRole.LIBRARY_MANAGER, library)
+        admin.add_role(AdminRole.LIBRARIAN, library)
+        assert False == admin.is_system_admin()
+        assert False == admin.is_sitewide_library_manager()
+        assert False == admin.is_sitewide_librarian()
+        assert False == admin.is_library_manager(library)
+        assert True == admin.is_librarian(library)
 
-        self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
-        assert False == self.admin.is_system_admin()
-        assert False == self.admin.is_sitewide_library_manager()
-        assert False == self.admin.is_sitewide_librarian()
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert False == self.admin.is_librarian(self._default_library)
+        admin.remove_role(AdminRole.LIBRARIAN, library)
+        assert False == admin.is_system_admin()
+        assert False == admin.is_sitewide_library_manager()
+        assert False == admin.is_sitewide_librarian()
+        assert False == admin.is_library_manager(library)
+        assert False == admin.is_librarian(library)
 
-        other_library = self._library()
-        self.admin.add_role(AdminRole.LIBRARY_MANAGER, other_library)
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_library_manager(other_library)
-        self.admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert True == self.admin.is_library_manager(other_library)
-        assert True == self.admin.is_librarian(self._default_library)
-        assert True == self.admin.is_librarian(other_library)
-        self.admin.remove_role(AdminRole.LIBRARY_MANAGER, other_library)
-        assert False == self.admin.is_library_manager(self._default_library)
-        assert False == self.admin.is_library_manager(other_library)
-        assert True == self.admin.is_librarian(self._default_library)
-        assert True == self.admin.is_librarian(other_library)
+        admin.add_role(AdminRole.LIBRARY_MANAGER, other_library)
+        assert False == admin.is_library_manager(library)
+        assert True == admin.is_library_manager(other_library)
+        admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert False == admin.is_library_manager(library)
+        assert True == admin.is_library_manager(other_library)
+        assert True == admin.is_librarian(library)
+        assert True == admin.is_librarian(other_library)
+        admin.remove_role(AdminRole.LIBRARY_MANAGER, other_library)
+        assert False == admin.is_library_manager(library)
+        assert False == admin.is_library_manager(other_library)
+        assert True == admin.is_librarian(library)
+        assert True == admin.is_librarian(other_library)
 
-    def test_can_see_collection(self):
+    def test_can_see_collection(self, admin_fixture: AdminFixture):
         # This collection is only visible to system admins since it has no libraries.
-        c1 = self._collection()
+        c1 = admin_fixture.db.collection()
 
         # This collection is visible to libraries of its library.
-        c2 = self._collection()
-        c2.libraries += [self._default_library]
+        c2 = admin_fixture.db.collection()
+        c2.libraries += [admin_fixture.db.default_library()]
 
         # The admin has no roles yet.
-        assert False == self.admin.can_see_collection(c1)
-        assert False == self.admin.can_see_collection(c2)
+        admin = admin_fixture.admin
+        assert False == admin.can_see_collection(c1)
+        assert False == admin.can_see_collection(c2)
 
-        self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-        assert True == self.admin.can_see_collection(c1)
-        assert True == self.admin.can_see_collection(c2)
+        admin.add_role(AdminRole.SYSTEM_ADMIN)
+        assert True == admin.can_see_collection(c1)
+        assert True == admin.can_see_collection(c2)
 
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        self.admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-        assert False == self.admin.can_see_collection(c1)
-        assert True == self.admin.can_see_collection(c2)
+        admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        assert False == admin.can_see_collection(c1)
+        assert True == admin.can_see_collection(c2)
 
-        self.admin.remove_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
-        self.admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
-        assert False == self.admin.can_see_collection(c1)
-        assert True == self.admin.can_see_collection(c2)
+        admin.remove_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert False == admin.can_see_collection(c1)
+        assert True == admin.can_see_collection(c2)
 
-        self.admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
-        self.admin.add_role(AdminRole.LIBRARY_MANAGER, self._default_library)
-        assert False == self.admin.can_see_collection(c1)
-        assert True == self.admin.can_see_collection(c2)
+        admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
+        admin.add_role(AdminRole.LIBRARY_MANAGER, admin_fixture.db.default_library())
+        assert False == admin.can_see_collection(c1)
+        assert True == admin.can_see_collection(c2)
 
-        self.admin.remove_role(AdminRole.LIBRARY_MANAGER, self._default_library)
-        self.admin.add_role(AdminRole.LIBRARIAN, self._default_library)
-        assert False == self.admin.can_see_collection(c1)
-        assert True == self.admin.can_see_collection(c2)
+        admin.remove_role(AdminRole.LIBRARY_MANAGER, admin_fixture.db.default_library())
+        admin.add_role(AdminRole.LIBRARIAN, admin_fixture.db.default_library())
+        assert False == admin.can_see_collection(c1)
+        assert True == admin.can_see_collection(c2)
 
-        self.admin.remove_role(AdminRole.LIBRARIAN, self._default_library)
-        assert False == self.admin.can_see_collection(c1)
-        assert False == self.admin.can_see_collection(c2)
+        admin.remove_role(AdminRole.LIBRARIAN, admin_fixture.db.default_library())
+        assert False == admin.can_see_collection(c1)
+        assert False == admin.can_see_collection(c2)
+
+    def test_validate_reset_password_token_and_fetch_admin(
+        self, admin_fixture: AdminFixture
+    ):
+        admin = admin_fixture.admin
+        db_session = admin_fixture.db.session
+        secret_key = "secret"
+
+        # Random manually generated token - unsuccessful validation
+        random_token = "random"
+        invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
+            random_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_token, ProblemDetail)
+        assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
+
+        # Generated valid token but manually changed - unsuccessful validation
+        tampered_token = f"tampered-{admin.generate_reset_password_token(secret_key)}"
+        invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
+            tampered_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_token, ProblemDetail)
+        assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
+
+        # Valid token but too much time has passed - unsuccessful validation with "expired" keyword
+        valid_token = admin.generate_reset_password_token(secret_key)
+        with freeze_time(
+            utc_now() + timedelta(seconds=Admin.RESET_PASSWORD_TOKEN_MAX_AGE + 1)
+        ):
+            expired_token = Admin.validate_reset_password_token_and_fetch_admin(
+                valid_token, admin.id, db_session, secret_key
+            )
+            assert isinstance(expired_token, ProblemDetail)
+            assert expired_token.uri == INVALID_RESET_PASSWORD_TOKEN.uri
+            assert "expired" in expired_token.detail
+
+        # Valid token but invalid admin id - unsuccessful validation
+        valid_token = admin.generate_reset_password_token(secret_key)
+        invalid_admin_id = admin.id + 1
+        invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, invalid_admin_id, db_session, secret_key
+        )
+        assert isinstance(invalid_token, ProblemDetail)
+        assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
+
+        # Valid token but the admin email has changed in the meantime - strange situation - unsuccessful validation
+        admin.email = "changed@email.com"
+        invalid_email = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(invalid_email, ProblemDetail)
+        assert invalid_email == INVALID_RESET_PASSWORD_TOKEN
+
+        # Valid token - admin is successfully extracted from token
+        valid_token = admin.generate_reset_password_token(secret_key)
+        extracted_admin = Admin.validate_reset_password_token_and_fetch_admin(
+            valid_token, admin.id, db_session, secret_key
+        )
+        assert isinstance(extracted_admin, Admin)
+        assert extracted_admin == admin

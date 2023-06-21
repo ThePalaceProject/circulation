@@ -1,117 +1,196 @@
 import json
 from datetime import datetime
+from typing import Callable, Optional, Type, Union
 
-from flask_babel import lazy_gettext as _
+from pydantic import Field, PositiveInt
 
-from api.authenticator import BasicAuthenticationProvider, PatronData
-from api.sip.client import SIPClient
+from api.authentication.base import PatronData
+from api.authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
+from api.sip.client import Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
-from core.model import ExternalIntegration
+from core.analytics import Analytics
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
+from core.model import Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
 
 
-class SIP2AuthenticationProvider(BasicAuthenticationProvider):
+class SIP2Settings(BasicAuthProviderSettings):
+    """Settings for SIP2 authentication providers."""
 
-    NAME = "SIP2"
-
-    DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
-
-    # Constants for integration configuration settings.
-    PORT = "port"
-    LOCATION_CODE = "location code"
-    FIELD_SEPARATOR = "field separator"
-    ENCODING = "encoding"
-    DEFAULT_ENCODING = SIPClient.DEFAULT_ENCODING
-    USE_SSL = "use_ssl"
-    SSL_CERTIFICATE = "ssl_certificate"
-    SSL_KEY = "ssl_key"
-    ILS = "ils"
-    PATRON_STATUS_BLOCK = "patron status block"
-
-    SETTINGS = [
-        {"key": ExternalIntegration.URL, "label": _("Server"), "required": True},
-        {"key": PORT, "label": _("Port"), "required": True, "type": "number"},
-        {"key": ExternalIntegration.USERNAME, "label": _("Login User ID")},
-        {"key": ExternalIntegration.PASSWORD, "label": _("Login Password")},
-        {"key": LOCATION_CODE, "label": _("Location Code")},
-        {
-            "key": ENCODING,
-            "label": _("Data encoding"),
-            "default": DEFAULT_ENCODING,
-            "description": _(
-                "By default, SIP2 servers encode outgoing data using the Code Page 850 encoding, but some ILSes allow some other encoding to be used, usually UTF-8."
+    # Hostname of the SIP server
+    url: str = FormField(..., form=ConfigurationFormItem(label="Server"))
+    # The port number to connect to on the SIP server.
+    port: PositiveInt = FormField(
+        6001,
+        form=ConfigurationFormItem(
+            label="Port",
+            required=True,
+        ),
+    )
+    # SIP field CN; the user ID to use when initiating a SIP session, if necessary.
+    # This is _not_ a patron identifier (SIP field AA); it identifies the SC
+    # creating the SIP session. SIP2 defines SC as "...any library automation
+    # device dealing with patrons or library materials."
+    username: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Login User ID",
+        ),
+    )
+    # Sip field CO; the password to use when initiating a SIP session, if necessary.
+    password: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Login Password",
+        ),
+    )
+    # SIP field CP; the location code to use when initiating a SIP session. A
+    # location code supposedly refers to the physical location of a self-checkout
+    # machine within a library system. Some libraries require a special location
+    # code to be provided when authenticating patrons; others may require the
+    # circulation manager to be treated as its own special 'location'.
+    location_code: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Location Code",
+        ),
+        alias="location code",
+    )
+    encoding: Sip2Encoding = FormField(
+        Sip2Encoding.cp850,
+        form=ConfigurationFormItem(
+            label="Data Encoding",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                Sip2Encoding.utf8: "UTF-8",
+                Sip2Encoding.cp850: "CP850",
+            },
+            description=(
+                "By default, SIP2 servers encode outgoing data using the Code Page "
+                "850 encoding, but some ILSes allow some other encoding to be used, "
+                "usually UTF-8."
             ),
-        },
-        {
-            "key": USE_SSL,
-            "label": _("Connect over SSL?"),
-            "description": _(
-                "Some SIP2 servers require or allow clients to connect securely over SSL. Other servers don't support SSL, and require clients to use an ordinary socket connection."
+        ),
+    )
+    use_ssl: bool = FormField(
+        False,
+        form=ConfigurationFormItem(
+            label="Connect over SSL?",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "Connect to the SIP2 server over SSL",
+                "false": "Connect to the SIP2 server over an ordinary socket connection",
+            },
+            required=True,
+        ),
+    )
+    ssl_verification: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
+            label="Perform SSL certificate verification.",
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "Perform SSL certificate verification.",
+                "false": "Do not perform SSL certificate verification.",
+            },
+            description=(
+                "Strict certificate verification may be optionally turned off for "
+                "hosts that have misconfigured or untrusted certificates."
             ),
-            "type": "select",
-            "options": [
-                {"key": "true", "label": _("Connect to the SIP2 server over SSL")},
-                {
-                    "key": "false",
-                    "label": _(
-                        "Connect to the SIP2 server over an ordinary socket connection"
-                    ),
-                },
-            ],
-            "default": "false",
-            "required": True,
-        },
-        {
-            "key": ILS,
-            "label": _("ILS"),
-            "description": _(
-                "Some ILS require specific SIP2 settings. If the ILS you are using is in the list please pick it otherwise select 'Generic ILS'."
+        ),
+    )
+    ils: Sip2Dialect = FormField(
+        Sip2Dialect.GENERIC_ILS,
+        form=ConfigurationFormItem(
+            label="ILS",
+            description=(
+                "Some ILS require specific SIP2 settings. If the ILS you are using "
+                "is in the list please pick it otherwise select 'Generic ILS'."
             ),
-            "type": "select",
-            "options": [
-                {"key": Sip2Dialect.GENERIC_ILS, "label": _("Generic ILS")},
-                {"key": Sip2Dialect.AG_VERSO, "label": _("Auto-Graphics VERSO")},
-            ],
-            "default": Sip2Dialect.GENERIC_ILS,
-            "required": True,
-        },
-        {
-            "key": SSL_CERTIFICATE,
-            "label": _("SSL Certificate"),
-            "description": _(
-                "The SSL certificate used to securely connect to an SSL-enabled SIP2 server. Not all SSL-enabled SIP2 servers require a custom certificate, but some do. This should be a string beginning with <code>-----BEGIN CERTIFICATE-----</code> and ending with <code>-----END CERTIFICATE-----</code>"
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                Sip2Dialect.GENERIC_ILS: "Generic ILS",
+                Sip2Dialect.AG_VERSO: "Auto-Graphics VERSO",
+            },
+            required=True,
+        ),
+    )
+    ssl_certificate: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="SSL Certificate",
+            description=(
+                "The SSL certificate used to securely connect to an SSL-enabled SIP2 "
+                "server. Not all SSL-enabled SIP2 servers require a custom "
+                "certificate, but some do. This should be a string beginning with "
+                "<code>-----BEGIN CERTIFICATE-----</code> and ending with "
+                "<code>-----END CERTIFICATE-----</code>"
             ),
-            "type": "textarea",
-        },
-        {
-            "key": SSL_KEY,
-            "label": _("SSL Key"),
-            "description": _(
-                "The private key, if any, used to sign the SSL certificate above. If present, this should be a string beginning with <code>-----BEGIN PRIVATE KEY-----</code> and ending with <code>-----END PRIVATE KEY-----</code>"
+            type=ConfigurationFormItemType.TEXTAREA,
+        ),
+    )
+    ssl_key: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="SSL Key",
+            description=(
+                "The private key, if any, used to sign the SSL certificate above. "
+                "If present, this should be a string beginning with "
+                "<code>-----BEGIN PRIVATE KEY-----</code> and ending with "
+                "<code>-----END PRIVATE KEY-----</code>"
             ),
-            "type": "textarea",
-        },
-        {
-            "key": FIELD_SEPARATOR,
-            "label": _("Field Separator"),
-            "default": "|",
-            "required": True,
-        },
-        {
-            "key": PATRON_STATUS_BLOCK,
-            "label": _("SIP2 Patron Status Block"),
-            "description": _(
+            type=ConfigurationFormItemType.TEXTAREA,
+        ),
+    )
+    # The field delimiter (see "Variable-length fields" in the SIP2 spec). If no
+    # value is specified, the default (the pipe character) will be used.
+    field_separator: str = FormField(
+        "|",
+        form=ConfigurationFormItem(
+            label="Field Seperator",
+            required=True,
+        ),
+        alias="field seperator",
+    )
+    patron_status_block: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
+            label="SIP2 Patron Status Block",
+            description=(
                 "Block patrons from borrowing based on the status of the SIP2 <em>patron status</em> field."
             ),
-            "type": "select",
-            "options": [
-                {"key": "true", "label": _("Block based on patron status field")},
-                {"key": "false", "label": _("No blocks based on patron status field")},
-            ],
-            "default": "true",
-        },
-    ] + BasicAuthenticationProvider.SETTINGS
+            type=ConfigurationFormItemType.SELECT,
+            options={
+                "true": "Block based on patron status field",
+                "false": "No blocks based on patron status field",
+            },
+        ),
+        alias="patron status block",
+    )
+
+
+class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
+    # Used as the SIP2 AO field.
+    institution_id: Optional[str] = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Institution ID",
+            description="A specific identifier for the library or branch, if used in patron authentication",
+        ),
+    )
+
+
+class SIP2AuthenticationProvider(BasicAuthenticationProvider):
+    DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
     # Map the reasons why SIP2 might report a patron is blocked to the
     # protocol-independent block reason used by PatronData.
@@ -129,99 +208,85 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
     }
 
     def __init__(
-        self, library, integration, analytics=None, client=SIPClient, connect=True
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: SIP2Settings,
+        library_settings: SIP2LibrarySettings,
+        analytics: Optional[Analytics] = None,
+        client: Optional[Callable[..., SIPClient]] = None,
     ):
-        """An object capable of communicating with a SIP server.
-
-        :param server: Hostname of the SIP server.
-        :param port: The port number to connect to on the SIP server.
-
-        :param login_user_id: SIP field CN; the user ID to use when
-         initiating a SIP session, if necessary. This is _not_ a
-         patron identifier (SIP field AA); it identifies the SC
-         creating the SIP session. SIP2 defines SC as "...any library
-         automation device dealing with patrons or library materials."
-
-        :param login_password: Sip field CO; the password to use when
-         initiating a SIP session, if necessary.
-
-        :param location_code: SIP field CP; the location code to use
-         when initiating a SIP session. A location code supposedly
-         refers to the physical location of a self-checkout machine
-         within a library system. Some libraries require a special
-         location code to be provided when authenticating patrons;
-         others may require the circulation manager to be treated as
-         its own special 'location'.
-
-        :param field_separator: The field delimiter (see
-        "Variable-length fields" in the SIP2 spec). If no value is
-        specified, the default (the pipe character) will be used.
-
-        :param client: A SIPClient, or a class that works like
-        SIPClient. If a class, the class will be initialized with the
-        appropriate configuration whenever necessary. Only intended to be
-        overridden during testing.
-
-        :param connect: If this is false, the generated SIPClient will
-        not attempt to connect to the server. Only intended for use
-        during testing.
-
-        """
-        super(SIP2AuthenticationProvider, self).__init__(
-            library, integration, analytics
+        """An object capable of communicating with a SIP server."""
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
         )
 
-        self.server = integration.url
-        self.port = integration.setting(self.PORT).int_value
-        self.login_user_id = integration.username
-        self.login_password = integration.password
-        self.location_code = integration.setting(self.LOCATION_CODE).value
-        self.encoding = integration.setting(self.ENCODING).value_or_default(
-            self.DEFAULT_ENCODING
-        )
-        self.field_separator = integration.setting(self.FIELD_SEPARATOR).value or "|"
-        self.use_ssl = integration.setting(self.USE_SSL).json_value
-        self.ssl_cert = integration.setting(self.SSL_CERTIFICATE).value
-        self.ssl_key = integration.setting(self.SSL_KEY).value
-        self.dialect = Sip2Dialect.load_dialect(integration.setting(self.ILS).value)
-        self.client = client
-        patron_status_block = integration.setting(self.PATRON_STATUS_BLOCK).json_value
-        if patron_status_block is None or patron_status_block:
-            self.fields_that_deny_borrowing = (
-                SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
-            )
+        self.server = settings.url
+        self.port = settings.port
+        self.login_user_id = settings.username
+        self.login_password = settings.password
+        self.location_code = settings.location_code
+        self.encoding = settings.encoding.value
+        self.field_separator = settings.field_separator
+        self.use_ssl = settings.use_ssl
+        self.ssl_cert = settings.ssl_certificate
+        self.ssl_key = settings.ssl_key
+        self.ssl_verification = settings.ssl_verification
+        self.dialect = settings.ils
+        self.institution_id = library_settings.institution_id
+        self._client = client
+
+        # Check if patrons should be blocked based on SIP status
+        if settings.patron_status_block:
+            _deny_fields = SIPClient.PATRON_STATUS_FIELDS_THAT_DENY_BORROWING_PRIVILEGES
+            self.patron_status_should_block = True
+            self.fields_that_deny_borrowing = _deny_fields
         else:
+            self.patron_status_should_block = False
             self.fields_that_deny_borrowing = []
 
     @property
-    def _client(self):
+    def client(self) -> SIPClient:
         """Initialize a SIPClient object using the default settings.
 
         :return: A SIPClient
         """
-        if isinstance(self.client, SIPClient):
-            # A specific SIPClient was provided, hopefully during
-            # a test scenario.
-            return self.client
-
-        return self.client(
+        sip_client = self._client or SIPClient
+        return sip_client(
             target_server=self.server,
             target_port=self.port,
             login_user_id=self.login_user_id,
             login_password=self.login_password,
             location_code=self.location_code,
-            institution_id=self.institution_id,
+            institution_id=self.institution_id or "",
             separator=self.field_separator,
             use_ssl=self.use_ssl,
             ssl_cert=self.ssl_cert,
             ssl_key=self.ssl_key,
+            ssl_verification=self.ssl_verification,
             encoding=self.encoding.lower(),
             dialect=self.dialect,
         )
 
+    @classmethod
+    def label(cls) -> str:
+        return "SIP2"
+
+    @classmethod
+    def description(cls) -> str:
+        return "SIP2 Patron Authentication"
+
+    @classmethod
+    def settings_class(cls) -> Type[SIP2Settings]:
+        return SIP2Settings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[SIP2LibrarySettings]:
+        return SIP2LibrarySettings
+
     def patron_information(self, username, password):
         try:
-            sip = self._client
+            sip = self.client
             sip.connect()
             sip.login()
             info = sip.patron_information(username, password)
@@ -229,16 +294,20 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             sip.disconnect()
             return info
 
-        except IOError as e:
+        except OSError as e:
             raise RemoteIntegrationException(self.server or "unknown server", str(e))
 
-    def _remote_patron_lookup(self, patron_or_patrondata):
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Union[PatronData, Patron]
+    ) -> Optional[PatronData]:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
         return self.info_to_patrondata(info, False)
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         """Authenticate a patron with the SIP2 server.
 
         :param username: The patron's username/barcode/card
@@ -257,7 +326,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             sip.connect()
             return sip.connection
 
-        sip = self._client
+        sip = self.client
         connection = self.run_test(("Test Connection"), makeConnection, sip)
         yield connection
 
@@ -278,8 +347,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             results = [
                 r for r in super(SIP2AuthenticationProvider, self)._run_self_tests(_db)
             ]
-            for result in results:
-                yield result
+            yield from results
 
             if results[0].success:
 
@@ -300,8 +368,7 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     ("Raw test patron information"), raw_patron_information
                 )
 
-    def info_to_patrondata(self, info, validate_password=True):
-
+    def info_to_patrondata(self, info, validate_password=True) -> Optional[PatronData]:
         """Convert the SIP-specific dictionary obtained from
         SIPClient.patron_information() to an abstract,
         authenticator-independent PatronData object.
@@ -316,10 +383,10 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             # return any data.
             return None
 
-            # TODO: I'm not 100% convinced that a missing CQ field
-            # always means "we don't have passwords so you're
-            # authenticated," rather than "you didn't provide a
-            # password so we didn't check."
+        # TODO: I'm not 100% convinced that a missing CQ field
+        # always means "we don't have passwords so you're
+        # authenticated," rather than "you didn't provide a
+        # password so we didn't check."
         patrondata = PatronData()
         if "sipserver_internal_id" in info:
             patrondata.permanent_id = info["sipserver_internal_id"]
@@ -347,11 +414,23 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     patrondata.authorization_expires = value
                     break
 
+        if self.patron_status_should_block:
+            patrondata.block_reason = self.info_to_patrondata_block_reason(
+                info, patrondata
+            )
+        else:
+            patrondata.block_reason = PatronData.NO_VALUE
+
+        return patrondata
+
+    def info_to_patrondata_block_reason(
+        self, info, patrondata: PatronData
+    ) -> Union[PatronData.NoValue, str]:
         # A True value in most (but not all) subfields of the
         # patron_status field will prohibit the patron from borrowing
         # books.
         status = info["patron_status_parsed"]
-        block_reason = PatronData.NO_VALUE
+        block_reason: Union[str, PatronData.NoValue] = PatronData.NO_VALUE
         for field in self.fields_that_deny_borrowing:
             if status.get(field) is True:
                 block_reason = self.SPECIFIC_BLOCK_REASONS.get(
@@ -363,7 +442,6 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
                     # error message. There's no need to look through
                     # more fields.
                     break
-        patrondata.block_reason = block_reason
 
         # If we can tell by looking at the SIP2 message that the
         # patron has excessive fines, we can use that as the reason
@@ -371,9 +449,9 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
         if "fee_limit" in info:
             fee_limit = MoneyUtility.parse(info["fee_limit"]).amount
             if fee_limit and patrondata.fines > fee_limit:
-                patrondata.block_reason = PatronData.EXCESSIVE_FINES
+                block_reason = PatronData.EXCESSIVE_FINES
 
-        return patrondata
+        return block_reason
 
     @classmethod
     def parse_date(cls, value):
@@ -386,9 +464,3 @@ class SIP2AuthenticationProvider(BasicAuthenticationProvider):
             except ValueError as e:
                 continue
         return date_value
-
-    # NOTE: It's not necessary to implement remote_patron_lookup
-    # because authentication gets patron data as a side effect.
-
-
-AuthenticationProvider = SIP2AuthenticationProvider

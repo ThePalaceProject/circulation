@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from parameterized import parameterized
+import pytest
 
 from api.onix import ONIXExtractor
 from core.classifier import Classifier
@@ -8,17 +8,14 @@ from core.metadata_layer import CirculationData
 from core.model import Classification, Edition, Identifier, LicensePool
 from core.util.datetime_helpers import datetime_utc
 
-from . import sample_data
+from ..fixtures.api_onix_files import ONIXFilesFixture
 
 
-class TestONIXExtractor(object):
-    def sample_data(self, filename):
-        return sample_data(filename, "onix")
-
-    def test_parser(self):
+class TestONIXExtractor:
+    def test_parser(self, api_onix_files_fixture: ONIXFilesFixture):
         """Parse an ONIX file into Metadata objects."""
 
-        file = self.sample_data("onix_example.xml")
+        file = api_onix_files_fixture.sample_data("onix_example.xml")
         metadata_records = ONIXExtractor().parse(BytesIO(file), "MIT Press")
 
         assert 2 == len(metadata_records)
@@ -56,7 +53,8 @@ class TestONIXExtractor(object):
         assert "The Test Corporation" == record.contributors[0].display_name
         assert "Test Corporation, The" == record.contributors[0].sort_name
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,file_name,licenses_number",
         [
             ("limited_usage_status", "onix_3_usage_constraints_example.xml", 20),
             (
@@ -69,13 +67,13 @@ class TestONIXExtractor(object):
                 "onix_3_usage_constraints_example_with_day_usage_unit.xml",
                 LicensePool.UNLIMITED_ACCESS,
             ),
-        ]
+        ],
     )
     def test_parse_parses_correctly_onix_3_usage_constraints(
-        self, _, file_name, licenses_number
+        self, name, file_name, licenses_number, api_onix_files_fixture: ONIXFilesFixture
     ):
         # Arrange
-        file = self.sample_data(file_name)
+        file = api_onix_files_fixture.sample_data(file_name)
 
         # Act
         metadata_records = ONIXExtractor().parse(

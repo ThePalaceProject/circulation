@@ -8,279 +8,247 @@ from api.admin.exceptions import *
 from api.admin.problem_details import *
 from core.model import Admin, AdminRole, create, get_one
 
-from .test_controller import SettingsControllerTest
 
+class TestIndividualAdmins:
+    def test_individual_admins_get(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
 
-class TestIndividualAdmins(SettingsControllerTest):
-    def test_individual_admins_get(self):
-        for admin in self._db.query(Admin):
-            self._db.delete(admin)
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
 
         # There are two admins that can sign in with passwords, with different roles.
-        admin1, ignore = create(self._db, Admin, email="admin1@nypl.org")
+        admin1, ignore = create(db.session, Admin, email="admin1@nypl.org")
         admin1.password = "pass1"
         admin1.add_role(AdminRole.SYSTEM_ADMIN)
-        admin2, ignore = create(self._db, Admin, email="admin2@nypl.org")
+        admin2, ignore = create(db.session, Admin, email="admin2@nypl.org")
         admin2.password = "pass2"
-        admin2.add_role(AdminRole.LIBRARY_MANAGER, self._default_library)
+        admin2.add_role(AdminRole.LIBRARY_MANAGER, db.default_library())
         admin2.add_role(AdminRole.SITEWIDE_LIBRARIAN)
 
         # These admins don't have passwords.
-        admin3, ignore = create(self._db, Admin, email="admin3@nypl.org")
-        admin3.add_role(AdminRole.LIBRARIAN, self._default_library)
-        library2 = self._library()
-        admin4, ignore = create(self._db, Admin, email="admin4@l2.org")
+        admin3, ignore = create(db.session, Admin, email="admin3@nypl.org")
+        admin3.add_role(AdminRole.LIBRARIAN, db.default_library())
+        library2 = db.library()
+        admin4, ignore = create(db.session, Admin, email="admin4@l2.org")
         admin4.add_role(AdminRole.LIBRARY_MANAGER, library2)
-        admin5, ignore = create(self._db, Admin, email="admin5@l2.org")
+        admin5, ignore = create(db.session, Admin, email="admin5@l2.org")
         admin5.add_role(AdminRole.LIBRARIAN, library2)
 
-        with self.request_context_with_admin("/", admin=admin1):
+        admin6, ignore = create(db.session, Admin, email="admin6@l2.org")
+        admin6.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+
+        with settings_ctrl_fixture.request_context_with_admin("/", admin=admin1):
             # A system admin can see all other admins' roles.
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
-                                },
-                                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                            ],
-                        },
-                        {
-                            "email": "admin3@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
 
-        with self.request_context_with_admin("/", admin=admin2):
+            expected = {
+                "admin1@nypl.org": [{"role": AdminRole.SYSTEM_ADMIN}],
+                "admin2@nypl.org": [
+                    {
+                        "role": AdminRole.LIBRARY_MANAGER,
+                        "library": db.default_library().short_name,
+                    },
+                    {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                ],
+                "admin3@nypl.org": [
+                    {
+                        "role": AdminRole.LIBRARIAN,
+                        "library": db.default_library().short_name,
+                    }
+                ],
+                "admin4@l2.org": [
+                    {
+                        "role": AdminRole.LIBRARY_MANAGER,
+                        "library": library2.short_name,
+                    }
+                ],
+                "admin5@l2.org": [
+                    {
+                        "role": AdminRole.LIBRARIAN,
+                        "library": library2.short_name,
+                    }
+                ],
+                "admin6@l2.org": [
+                    {
+                        "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                    }
+                ],
+            }
+
+            assert len(admins) == len(expected)
+            for admin in admins:
+                assert admin["email"] in expected
+                assert sorted(admin["roles"], key=lambda x: x["role"]) == sorted(
+                    expected[admin["email"]], key=lambda x: x["role"]
+                )
+
+        with settings_ctrl_fixture.request_context_with_admin("/", admin=admin2):
             # A sitewide librarian or library manager can also see all admins' roles.
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
-                                },
-                                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                            ],
-                        },
-                        {
-                            "email": "admin3@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
+            assert sorted(
+                [
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": db.default_library().short_name,
+                            },
+                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                        ],
+                    },
+                    {
+                        "email": "admin3@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": db.default_library().short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
+
+        with settings_ctrl_fixture.request_context_with_admin("/", admin=admin3):
+            # A librarian cannot view this API anymore
+            pytest.raises(
+                AdminNotAuthorized,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get,
             )
 
-        with self.request_context_with_admin("/", admin=admin3):
-            # A librarian or library manager of a specific library can see all admins, but only
-            # roles that affect their libraries.
+        with settings_ctrl_fixture.request_context_with_admin("/", admin=admin4):
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
-                                },
-                                {"role": AdminRole.SITEWIDE_LIBRARIAN},
-                            ],
-                        },
-                        {
-                            "email": "admin3@nypl.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
-                                }
-                            ],
-                        },
-                        {"email": "admin4@l2.org", "roles": []},
-                        {"email": "admin5@l2.org", "roles": []},
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
+            assert sorted(
+                [
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
+                    },
+                    {
+                        "email": "admin4@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin5@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
+
+        with settings_ctrl_fixture.request_context_with_admin("/", admin=admin5):
+            pytest.raises(
+                AdminNotAuthorized,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get,
             )
 
-        with self.request_context_with_admin("/", admin=admin4):
+        with settings_ctrl_fixture.request_context_with_admin("/", admin=admin6):
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
             )
             admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
-                        },
-                        {"email": "admin3@nypl.org", "roles": []},
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+            assert sorted(
+                [
+                    {
+                        "email": "admin2@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": db.default_library().short_name,
+                            },
+                            {"role": AdminRole.SITEWIDE_LIBRARIAN},
+                        ],
+                    },
+                    {
+                        "email": "admin3@nypl.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": db.default_library().short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin4@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARY_MANAGER,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin5@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.LIBRARIAN,
+                                "library": library2.short_name,
+                            }
+                        ],
+                    },
+                    {
+                        "email": "admin6@l2.org",
+                        "roles": [
+                            {
+                                "role": AdminRole.SITEWIDE_LIBRARY_MANAGER,
+                            }
+                        ],
+                    },
+                ],
+                key=lambda x: x["email"],
+            ) == sorted(admins, key=lambda x: x["email"])
 
-        with self.request_context_with_admin("/", admin=admin5):
-            response = (
-                self.manager.admin_individual_admin_settings_controller.process_get()
-            )
-            admins = response.get("individualAdmins")
-            assert (
-                sorted(
-                    [
-                        {
-                            "email": "admin1@nypl.org",
-                            "roles": [{"role": AdminRole.SYSTEM_ADMIN}],
-                        },
-                        {
-                            "email": "admin2@nypl.org",
-                            "roles": [{"role": AdminRole.SITEWIDE_LIBRARIAN}],
-                        },
-                        {"email": "admin3@nypl.org", "roles": []},
-                        {
-                            "email": "admin4@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                        {
-                            "email": "admin5@l2.org",
-                            "roles": [
-                                {
-                                    "role": AdminRole.LIBRARIAN,
-                                    "library": library2.short_name,
-                                }
-                            ],
-                        },
-                    ],
-                    key=lambda x: x["email"],
-                )
-                == sorted(admins, key=lambda x: x["email"])
-            )
+    def test_individual_admins_post_errors(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
 
-    def test_individual_admins_post_errors(self):
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([])
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "test@library.org"),
+                    ("password", "334df3f70bfe1979"),
                     (
                         "roles",
                         json.dumps(
@@ -290,15 +258,16 @@ class TestIndividualAdmins(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.uri == LIBRARY_NOT_FOUND.uri
 
-        library = self._library()
-        with self.request_context_with_admin("/", method="POST"):
+        library = db.library()
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "test@library.org"),
+                    ("password", "334df3f70bfe1979"),
                     (
                         "roles",
                         json.dumps(
@@ -308,41 +277,56 @@ class TestIndividualAdmins(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.uri == UNKNOWN_ROLE.uri
 
-    def test_individual_admins_post_permissions(self):
-        l1 = self._library()
-        l2 = self._library()
-        system, ignore = create(self._db, Admin, email="system@example.com")
+    def test_individual_admins_post_permissions(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
+
+        l1 = db.library()
+        l2 = db.library()
+        system, ignore = create(db.session, Admin, email="system@example.com")
         system.add_role(AdminRole.SYSTEM_ADMIN)
+        assert system.is_system_admin()
+
         sitewide_manager, ignore = create(
-            self._db, Admin, email="sitewide_manager@example.com"
+            db.session, Admin, email="sitewide_manager@example.com"
         )
         sitewide_manager.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        assert sitewide_manager.is_sitewide_library_manager()
+
         sitewide_librarian, ignore = create(
-            self._db, Admin, email="sitewide_librarian@example.com"
+            db.session, Admin, email="sitewide_librarian@example.com"
         )
         sitewide_librarian.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert sitewide_manager.is_sitewide_librarian()
+
         manager1, ignore = create(
-            self._db, Admin, email="library_manager_l1@example.com"
+            db.session, Admin, email="library_manager_l1@example.com"
         )
         manager1.add_role(AdminRole.LIBRARY_MANAGER, l1)
-        librarian1, ignore = create(self._db, Admin, email="librarian_l1@example.com")
+        assert manager1.is_library_manager(l1)
+
+        librarian1, ignore = create(db.session, Admin, email="librarian_l1@example.com")
         librarian1.add_role(AdminRole.LIBRARIAN, l1)
-        l2 = self._library()
+        assert librarian1.is_librarian(l1)
+
+        l2 = db.library()
         manager2, ignore = create(
-            self._db, Admin, email="library_manager_l2@example.com"
+            db.session, Admin, email="library_manager_l2@example.com"
         )
         manager2.add_role(AdminRole.LIBRARY_MANAGER, l2)
-        librarian2, ignore = create(self._db, Admin, email="librarian_l2@example.com")
+        assert manager2.is_library_manager(l2)
+
+        librarian2, ignore = create(db.session, Admin, email="librarian_l2@example.com")
         librarian2.add_role(AdminRole.LIBRARIAN, l2)
+        assert librarian2.is_librarian(l2)
 
         def test_changing_roles(
             admin_making_request, target_admin, roles=None, allowed=False
         ):
-            with self.request_context_with_admin(
+            with settings_ctrl_fixture.request_context_with_admin(
                 "/", method="POST", admin=admin_making_request
             ):
                 flask.request.form = MultiDict(
@@ -352,12 +336,12 @@ class TestIndividualAdmins(SettingsControllerTest):
                     ]
                 )
                 if allowed:
-                    self.manager.admin_individual_admin_settings_controller.process_post()
-                    self._db.rollback()
+                    settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+                    db.session.rollback()
                 else:
                     pytest.raises(
                         AdminNotAuthorized,
-                        self.manager.admin_individual_admin_settings_controller.process_post,
+                        settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post,
                     )
 
         # Various types of user trying to change a system admin's roles
@@ -421,7 +405,7 @@ class TestIndividualAdmins(SettingsControllerTest):
         )
 
         def test_changing_password(admin_making_request, target_admin, allowed=False):
-            with self.request_context_with_admin(
+            with settings_ctrl_fixture.request_context_with_admin(
                 "/", method="POST", admin=admin_making_request
             ):
                 flask.request.form = MultiDict(
@@ -435,12 +419,12 @@ class TestIndividualAdmins(SettingsControllerTest):
                     ]
                 )
                 if allowed:
-                    self.manager.admin_individual_admin_settings_controller.process_post()
-                    self._db.rollback()
+                    settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+                    db.session.rollback()
                 else:
                     pytest.raises(
                         AdminNotAuthorized,
-                        self.manager.admin_individual_admin_settings_controller.process_post,
+                        settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post,
                     )
 
         # Various types of user trying to change a system admin's password
@@ -464,8 +448,8 @@ class TestIndividualAdmins(SettingsControllerTest):
         # Various types of user trying to change a sitewide librarian's password
         test_changing_password(system, sitewide_librarian, allowed=True)
         test_changing_password(sitewide_manager, sitewide_librarian, allowed=True)
-        test_changing_password(manager1, sitewide_librarian, allowed=True)
-        test_changing_password(manager2, sitewide_librarian, allowed=True)
+        test_changing_password(manager1, sitewide_librarian)
+        test_changing_password(manager2, sitewide_librarian)
         test_changing_password(sitewide_librarian, sitewide_librarian)
         test_changing_password(librarian1, sitewide_librarian)
         test_changing_password(librarian2, sitewide_librarian)
@@ -502,8 +486,33 @@ class TestIndividualAdmins(SettingsControllerTest):
         test_changing_password(manager1, librarian2)
         test_changing_password(librarian1, librarian2)
 
-    def test_individual_admins_post_create(self):
-        with self.request_context_with_admin("/", method="POST"):
+        # Library crossover tests
+        manager1_2, ignore = create(
+            db.session, Admin, email="library_manager_l1_l2@example.com"
+        )
+        manager1_2.add_role(AdminRole.LIBRARY_MANAGER, l1)
+        manager1_2.add_role(AdminRole.LIBRARY_MANAGER, l2)
+        # A manager of library1 should not be allowed for a manager of library1 and library2
+        test_changing_password(system, manager1_2, allowed=True)
+        test_changing_password(sitewide_manager, manager1_2, allowed=True)
+        test_changing_password(manager1_2, manager1_2, allowed=True)
+        test_changing_password(sitewide_librarian, manager1_2)
+        test_changing_password(manager1, manager1_2)
+        test_changing_password(manager2, manager1_2)
+        test_changing_password(librarian1, manager1_2)
+        # A manager of both libraries should be able to change the passwords of both
+        test_changing_password(manager1_2, manager1, allowed=True)
+        test_changing_password(manager1_2, manager2, allowed=True)
+        test_changing_password(manager1_2, librarian1, allowed=True)
+        test_changing_password(manager1_2, librarian2, allowed=True)
+        test_changing_password(manager1_2, system)
+        test_changing_password(manager1_2, sitewide_manager)
+        test_changing_password(manager1_2, sitewide_librarian)
+
+    def test_individual_admins_post_create(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
+
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "admin@nypl.org"),
@@ -514,7 +523,7 @@ class TestIndividualAdmins(SettingsControllerTest):
                             [
                                 {
                                     "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
+                                    "library": db.default_library().short_name,
                                 }
                             ]
                         ),
@@ -522,22 +531,24 @@ class TestIndividualAdmins(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.status_code == 201
 
         # The admin was created.
-        admin_match = Admin.authenticate(self._db, "admin@nypl.org", "pass")
+        admin_match = Admin.authenticate(db.session, "admin@nypl.org", "pass")
         assert admin_match.email == response.get_data(as_text=True)
         assert admin_match
         assert admin_match.has_password("pass")
 
         [role] = admin_match.roles
         assert AdminRole.LIBRARY_MANAGER == role.role
-        assert self._default_library == role.library
+        assert db.default_library() == role.library
 
         # The new admin is a library manager, so they can create librarians.
-        with self.request_context_with_admin("/", method="POST", admin=admin_match):
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="POST", admin=admin_match
+        ):
             flask.request.form = MultiDict(
                 [
                     ("email", "admin2@nypl.org"),
@@ -548,7 +559,7 @@ class TestIndividualAdmins(SettingsControllerTest):
                             [
                                 {
                                     "role": AdminRole.LIBRARIAN,
-                                    "library": self._default_library.short_name,
+                                    "library": db.default_library().short_name,
                                 }
                             ]
                         ),
@@ -556,30 +567,32 @@ class TestIndividualAdmins(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.status_code == 201
 
-        admin_match = Admin.authenticate(self._db, "admin2@nypl.org", "pass")
+        admin_match = Admin.authenticate(db.session, "admin2@nypl.org", "pass")
         assert admin_match.email == response.get_data(as_text=True)
         assert admin_match
         assert admin_match.has_password("pass")
 
         [role] = admin_match.roles
         assert AdminRole.LIBRARIAN == role.role
-        assert self._default_library == role.library
+        assert db.default_library() == role.library
 
-    def test_individual_admins_post_edit(self):
+    def test_individual_admins_post_edit(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
+
         # An admin exists.
         admin, ignore = create(
-            self._db,
+            db.session,
             Admin,
             email="admin@nypl.org",
         )
         admin.password = "password"
         admin.add_role(AdminRole.SYSTEM_ADMIN)
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "admin@nypl.org"),
@@ -591,7 +604,7 @@ class TestIndividualAdmins(SettingsControllerTest):
                                 {"role": AdminRole.SITEWIDE_LIBRARIAN},
                                 {
                                     "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
+                                    "library": db.default_library().short_name,
                                 },
                             ]
                         ),
@@ -599,18 +612,20 @@ class TestIndividualAdmins(SettingsControllerTest):
                 ]
             )
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert response.status_code == 200
 
         assert admin.email == response.get_data(as_text=True)
 
         # The password was changed.
-        old_password_match = Admin.authenticate(self._db, "admin@nypl.org", "password")
+        old_password_match = Admin.authenticate(
+            db.session, "admin@nypl.org", "password"
+        )
         assert None == old_password_match
 
         new_password_match = Admin.authenticate(
-            self._db, "admin@nypl.org", "new password"
+            db.session, "admin@nypl.org", "new password"
         )
         assert admin == new_password_match
 
@@ -620,62 +635,66 @@ class TestIndividualAdmins(SettingsControllerTest):
         assert AdminRole.SITEWIDE_LIBRARIAN == librarian_all.role
         assert None == librarian_all.library
         assert AdminRole.LIBRARY_MANAGER == manager.role
-        assert self._default_library == manager.library
+        assert db.default_library() == manager.library
 
-    def test_individual_admin_delete(self):
-        librarian, ignore = create(self._db, Admin, email=self._str)
+    def test_individual_admin_delete(self, settings_ctrl_fixture):
+        db = settings_ctrl_fixture.ctrl.db
+
+        librarian, ignore = create(db.session, Admin, email=db.fresh_str())
         librarian.password = "password"
-        librarian.add_role(AdminRole.LIBRARIAN, self._default_library)
+        librarian.add_role(AdminRole.LIBRARIAN, db.default_library())
 
-        sitewide_manager, ignore = create(self._db, Admin, email=self._str)
+        sitewide_manager, ignore = create(db.session, Admin, email=db.fresh_str())
         sitewide_manager.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
 
-        system_admin, ignore = create(self._db, Admin, email=self._str)
+        system_admin, ignore = create(db.session, Admin, email=db.fresh_str())
         system_admin.add_role(AdminRole.SYSTEM_ADMIN)
 
-        with self.request_context_with_admin("/", method="DELETE", admin=librarian):
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="DELETE", admin=librarian
+        ):
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_individual_admin_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete,
                 librarian.email,
             )
 
-        with self.request_context_with_admin(
+        with settings_ctrl_fixture.request_context_with_admin(
             "/", method="DELETE", admin=sitewide_manager
         ):
-            response = (
-                self.manager.admin_individual_admin_settings_controller.process_delete(
-                    librarian.email
-                )
+            response = settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete(
+                librarian.email
             )
             assert response.status_code == 200
 
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_individual_admin_settings_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete,
                 system_admin.email,
             )
 
-        with self.request_context_with_admin("/", method="DELETE", admin=system_admin):
-            response = (
-                self.manager.admin_individual_admin_settings_controller.process_delete(
-                    system_admin.email
-                )
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="DELETE", admin=system_admin
+        ):
+            response = settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_delete(
+                system_admin.email
             )
             assert response.status_code == 200
 
-        admin = get_one(self._db, Admin, id=librarian.id)
+        admin = get_one(db.session, Admin, id=librarian.id)
         assert None == admin
 
-        admin = get_one(self._db, Admin, id=system_admin.id)
+        admin = get_one(db.session, Admin, id=system_admin.id)
         assert None == admin
 
-    def test_individual_admins_post_create_on_setup(self):
-        for admin in self._db.query(Admin):
-            self._db.delete(admin)
+    def test_individual_admins_post_create_not_system(self, settings_ctrl_fixture):
+        """Creating an admin that's not a system admin will fail."""
+        db = settings_ctrl_fixture.ctrl.db
 
-        # Creating an admin that's not a system admin will fail.
-        with self.app.test_request_context("/", method="POST"):
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        with settings_ctrl_fixture.ctrl.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "first_admin@nypl.org"),
@@ -686,7 +705,7 @@ class TestIndividualAdmins(SettingsControllerTest):
                             [
                                 {
                                     "role": AdminRole.LIBRARY_MANAGER,
-                                    "library": self._default_library.short_name,
+                                    "library": db.default_library().short_name,
                                 }
                             ]
                         ),
@@ -696,12 +715,19 @@ class TestIndividualAdmins(SettingsControllerTest):
             flask.request.files = {}
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_individual_admin_settings_controller.process_post,
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post,
             )
-            self._db.rollback()
 
-        # The password is required.
-        with self.app.test_request_context("/", method="POST"):
+    def test_individual_admins_post_create_requires_password(
+        self, settings_ctrl_fixture
+    ):
+        """The password is required."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        with settings_ctrl_fixture.ctrl.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "first_admin@nypl.org"),
@@ -710,13 +736,43 @@ class TestIndividualAdmins(SettingsControllerTest):
             )
             flask.request.files = {}
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 400 == response.status_code
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        # Creating a system admin with a password works.
-        with self.app.test_request_context("/", method="POST"):
+    def test_individual_admins_post_create_requires_non_empty_password(
+        self, settings_ctrl_fixture
+    ):
+        """The password is required."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        with settings_ctrl_fixture.ctrl.app.test_request_context("/", method="POST"):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "first_admin@nypl.org"),
+                    ("password", ""),
+                    ("roles", json.dumps([{"role": AdminRole.SYSTEM_ADMIN}])),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 400 == response.status_code
+            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+
+    def test_individual_admins_post_create_on_setup(self, settings_ctrl_fixture):
+        """Creating a system admin with a password works."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        with settings_ctrl_fixture.ctrl.app.test_request_context("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("email", "first_admin@nypl.org"),
@@ -726,15 +782,148 @@ class TestIndividualAdmins(SettingsControllerTest):
             )
             flask.request.files = {}
             response = (
-                self.manager.admin_individual_admin_settings_controller.process_post()
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
             )
             assert 201 == response.status_code
 
         # The admin was created.
-        admin_match = Admin.authenticate(self._db, "first_admin@nypl.org", "pass")
+        admin_match = Admin.authenticate(db.session, "first_admin@nypl.org", "pass")
         assert admin_match.email == response.get_data(as_text=True)
         assert admin_match
         assert admin_match.has_password("pass")
 
         [role] = admin_match.roles
         assert AdminRole.SYSTEM_ADMIN == role.role
+
+    def test_individual_admins_post_create_second_admin(self, settings_ctrl_fixture):
+        """Creating a second admin with a password works."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        system_admin, ignore = create(db.session, Admin, email=db.fresh_str())
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="POST", admin=system_admin
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "second_admin@nypl.org"),
+                    ("password", "pass"),
+                    ("roles", []),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 201 == response.status_code
+
+    def test_individual_admins_post_create_second_admin_no_roles(
+        self, settings_ctrl_fixture
+    ):
+        """Creating a second admin with a password works."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        system_admin, ignore = create(db.session, Admin, email=db.fresh_str())
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="POST", admin=system_admin
+        ):
+            flask.request.form = MultiDict(
+                [("email", "second_admin@nypl.org"), ("password", "pass")]
+            )
+            flask.request.files = {}
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 201 == response.status_code
+
+    def test_individual_admins_post_create_second_admin_no_password(
+        self, settings_ctrl_fixture
+    ):
+        """Creating a second admin without a password fails."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        system_admin, ignore = create(db.session, Admin, email=db.fresh_str())
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="POST", admin=system_admin
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "second_admin@nypl.org"),
+                    ("roles", []),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 400 == response.status_code
+
+    def test_individual_admins_post_create_second_admin_empty_password(
+        self, settings_ctrl_fixture
+    ):
+        """Creating a second admin without a password fails."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        system_admin, ignore = create(db.session, Admin, email=db.fresh_str())
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="POST", admin=system_admin
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "second_admin@nypl.org"),
+                    ("password", ""),
+                    ("roles", []),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 400 == response.status_code
+
+    def test_individual_admins_post_create_second_admin_blank_password(
+        self, settings_ctrl_fixture
+    ):
+        """Creating a second admin without a password fails."""
+        db = settings_ctrl_fixture.ctrl.db
+
+        for admin in db.session.query(Admin):
+            db.session.delete(admin)
+
+        system_admin, ignore = create(db.session, Admin, email=db.fresh_str())
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        with settings_ctrl_fixture.request_context_with_admin(
+            "/", method="POST", admin=system_admin
+        ):
+            flask.request.form = MultiDict(
+                [
+                    ("email", "second_admin@nypl.org"),
+                    ("password", "            "),
+                    ("roles", []),
+                ]
+            )
+            flask.request.files = {}
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_post()
+            )
+            assert 400 == response.status_code

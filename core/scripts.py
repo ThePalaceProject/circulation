@@ -1,22 +1,32 @@
 import argparse
+import csv
+import datetime
+import json
 import logging
 import os
 import random
-import re
-import subprocess
 import sys
 import traceback
 import unicodedata
 import uuid
-from collections import defaultdict
 from enum import Enum
+from pathlib import Path
+from typing import Generator, List, Optional, Type
 
-from sqlalchemy import and_, exists, text
-from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, exists, tuple_
+from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from .config import CannotLoadConfiguration, Configuration
+from alembic.command import downgrade, upgrade
+from alembic.config import Config as AlembicConfig
+from alembic.util import CommandError
+from core.model.classification import Classification
+from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.patron import Loan
+from core.query.customlist import CustomListQueries
+from core.util.notifications import PushNotifications
+
+from .config import CannotLoadConfiguration, Configuration, ConfigurationConstants
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
 from .lane import Lane
@@ -31,7 +41,6 @@ from .model import (
     BaseCoverageRecord,
     CachedFeed,
     Collection,
-    Complaint,
     ConfigurationSetting,
     Contributor,
     CustomList,
@@ -55,20 +64,21 @@ from .model import (
     get_one,
     get_one_or_create,
     production_session,
-    site_configuration_has_changed,
 )
 from .model.configuration import ExternalIntegrationLink
+from .model.listeners import site_configuration_has_changed
 from .monitor import CollectionMonitor, ReaperMonitor
 from .opds_import import OPDSImporter, OPDSImportMonitor
+from .overdrive import OverdriveCoreAPI
 from .util import fast_query_count
-from .util.datetime_helpers import strptime_utc, to_utc, utc_now
+from .util.datetime_helpers import strptime_utc, utc_now
 from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
 from .util.worker_pools import DatabasePool
 
 
-class Script(object):
+class Script:
     @property
-    def _db(self):
+    def _db(self) -> Session:
         if not hasattr(self, "_session"):
             self._session = production_session()
         return self._session
@@ -87,10 +97,6 @@ class Script(object):
         if not hasattr(self, "_log"):
             self._log = logging.getLogger(self.script_name)
         return self._log
-
-    @property
-    def data_directory(self):
-        return Configuration.data_directory()
 
     @classmethod
     def parse_command_line(cls, _db=None, cmd_args=None):
@@ -126,7 +132,6 @@ class Script(object):
             self._session = _db
 
     def run(self):
-        self.load_configuration()
         DataSource.well_known_sources(self._db)
         start_time = utc_now()
         try:
@@ -140,10 +145,6 @@ class Script(object):
             stack_trace = traceback.format_exc()
             self.update_timestamp(None, start_time, stack_trace)
             raise
-
-    def load_configuration(self):
-        if not Configuration.cdns_loaded_from_database():
-            Configuration.load(self._db)
 
     def update_timestamp(self, timestamp_data, start_time, exception):
         """By default scripts have no timestamp of their own.
@@ -163,7 +164,7 @@ class TimestampScript(Script):
     """A script that automatically records a timestamp whenever it runs."""
 
     def __init__(self, *args, **kwargs):
-        super(TimestampScript, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.timestamp_collection = None
 
     def update_timestamp(self, timestamp_data, start, exception):
@@ -195,7 +196,7 @@ class TimestampScript(Script):
 
 class RunMonitorScript(Script):
     def __init__(self, monitor, _db=None, **kwargs):
-        super(RunMonitorScript, self).__init__(_db)
+        super().__init__(_db)
         if issubclass(monitor, CollectionMonitor):
             self.collection_monitor = monitor
             self.collection_monitor_kwargs = kwargs
@@ -237,7 +238,7 @@ class RunMultipleMonitorsScript(Script):
         :param kwargs: Keyword arguments to pass into the `monitors` method
             when building the Monitor objects.
         """
-        super(RunMultipleMonitorsScript, self).__init__(_db)
+        super().__init__(_db)
         self.kwargs = kwargs
 
     def monitors(self, **kwargs):
@@ -281,7 +282,7 @@ class RunCoverageProvidersScript(Script):
     """Alternate between multiple coverage providers."""
 
     def __init__(self, providers, _db=None):
-        super(RunCoverageProvidersScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
         self.providers = []
         for i in providers:
             if callable(i):
@@ -324,7 +325,7 @@ class RunCollectionCoverageProviderScript(RunCoverageProvidersScript):
         providers = providers or list()
         if provider_class:
             providers += self.get_providers(_db, provider_class, **kwargs)
-        super(RunCollectionCoverageProviderScript, self).__init__(providers, _db=_db)
+        super().__init__(providers, _db=_db)
 
     def get_providers(self, _db, provider_class, **kwargs):
         return list(provider_class.all(_db, **kwargs))
@@ -336,7 +337,7 @@ class RunThreadedCollectionCoverageProviderScript(Script):
     DEFAULT_WORKER_SIZE = 5
 
     def __init__(self, provider_class, worker_size=None, _db=None, **provider_kwargs):
-        super(RunThreadedCollectionCoverageProviderScript, self).__init__(_db)
+        super().__init__(_db)
 
         self.worker_size = worker_size or self.DEFAULT_WORKER_SIZE
         self.session_factory = SessionManager.sessionmaker(session=self._db)
@@ -633,14 +634,12 @@ class PatronInputScript(LibraryInputScript):
         parsed = parser.parse_args(cmd_args)
         if stdin:
             stdin = cls.read_stdin_lines(stdin)
-        parsed = super(PatronInputScript, cls).look_up_libraries(
-            _db, parsed, *args, **kwargs
-        )
+        parsed = super().look_up_libraries(_db, parsed, *args, **kwargs)
         return cls.look_up_patrons(_db, parsed, stdin, *args, **kwargs)
 
     @classmethod
     def arg_parser(cls, _db):
-        parser = super(PatronInputScript, cls).arg_parser(_db, multiple_libraries=False)
+        parser = super().arg_parser(_db, multiple_libraries=False)
         parser.add_argument(
             "identifiers",
             help="A specific patron identifier to process.",
@@ -802,7 +801,7 @@ class RunCoverageProviderScript(IdentifierInputScript):
         self, provider, _db=None, cmd_args=None, *provider_args, **provider_kwargs
     ):
 
-        super(RunCoverageProviderScript, self).__init__(_db)
+        super().__init__(_db)
         parsed_args = self.parse_command_line(self._db, cmd_args)
         if parsed_args.identifier_type:
             self.identifier_type = parsed_args.identifier_type
@@ -908,12 +907,70 @@ class ConfigurationSettingScript(Script):
             obj.setting(key).value = value
 
 
+class RunSelfTestsScript(LibraryInputScript):
+    """Run the self-tests for every collection in the given library
+    where that's possible.
+    """
+
+    def __init__(self, _db=None, output=sys.stdout):
+        super().__init__(_db)
+        self.out = output
+
+    def do_run(self, *args, **kwargs):
+        from api.circulation import CirculationAPI
+
+        parsed = self.parse_command_line(self._db, *args, **kwargs)
+        for library in parsed.libraries:
+            api_map = CirculationAPI(self._db, library).default_api_map
+            api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
+            self.out.write("Testing %s\n" % library.name)
+            for collection in library.collections:
+                try:
+                    self.test_collection(collection, api_map)
+                except Exception as e:
+                    self.out.write("  Exception while running self-test: '%s'\n" % e)
+
+    def test_collection(self, collection, api_map, extra_args=None):
+        tester = api_map.get(collection.protocol)
+        if not tester:
+            self.out.write(
+                " Cannot find a self-test for %s, ignoring.\n" % collection.name
+            )
+            return
+
+        self.out.write(" Running self-test for %s.\n" % collection.name)
+        # Some HasSelfTests classes require extra arguments to their
+        # constructors.
+        extra_args = extra_args or {
+            OPDSImportMonitor: [OPDSImporter],
+        }
+        extra = extra_args.get(tester, [])
+        constructor_args = [self._db, collection] + list(extra)
+        results_dict, results_list = tester.run_self_tests(
+            self._db, None, *constructor_args
+        )
+        for result in results_list:
+            self.process_result(result)
+
+    def process_result(self, result):
+        """Process a single TestResult object."""
+        if result.success:
+            success = "SUCCESS"
+        else:
+            success = "FAILURE"
+        self.out.write(f"  {success} {result.name} ({result.duration:.1f}sec)\n")
+        if isinstance(result.result, (bytes, str)):
+            self.out.write("   Result: %s\n" % result.result)
+        if result.exception:
+            self.out.write("   Exception: '%s'\n" % result.exception)
+
+
 class ConfigureSiteScript(ConfigurationSettingScript):
     """View or update site-wide configuration."""
 
     def __init__(self, _db=None, config=Configuration):
         self.config = config
-        super(ConfigureSiteScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
 
     @classmethod
     def arg_parser(cls):
@@ -1192,19 +1249,27 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     'No collection called "%s". You can create it, but you must specify a protocol.'
                     % name
                 )
+        config = collection.integration_configuration
+        settings = config.settings.copy()
         integration = collection.external_integration
         if protocol:
+            config.protocol = protocol
             integration.protocol = protocol
         if args.external_account_id:
             collection.external_account_id = args.external_account_id
 
         if args.url:
-            integration.url = args.url
+            settings["url"] = args.url
         if args.username:
-            integration.username = args.username
+            settings["username"] = args.username
         if args.password:
-            integration.password = args.password
+            settings["password"] = args.password
         self.apply_settings(args.setting, integration)
+        if args.setting:
+            for setting in args.setting:
+                key, value = ConfigurationSettingScript._parse_setting(setting)
+                settings[key] = value
+        config.settings = settings
 
         if hasattr(args, "library"):
             for name in args.library:
@@ -1217,6 +1282,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     raise ValueError(message)
                 if collection not in library.collections:
                     library.collections.append(collection)
+                    config.for_library(library.id, create=True)
         site_configuration_has_changed(_db)
         _db.commit()
         output.write("Configuration settings stored.\n")
@@ -1454,7 +1520,7 @@ class AddClassificationScript(IdentifierInputScript):
         return parser
 
     def __init__(self, _db=None, cmd_args=None, stdin=sys.stdin):
-        super(AddClassificationScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
         args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
         self.identifier_type = args.identifier_type
         self.identifiers = args.identifiers
@@ -1511,7 +1577,7 @@ class WorkProcessingScript(IdentifierInputScript):
     def __init__(
         self, force=False, batch_size=10, _db=None, cmd_args=None, stdin=sys.stdin
     ):
-        super(WorkProcessingScript, self).__init__(_db=_db)
+        super().__init__(_db=_db)
 
         args = self.parse_command_line(self._db, cmd_args=cmd_args, stdin=stdin)
         self.identifier_type = args.identifier_type
@@ -1530,6 +1596,9 @@ class WorkProcessingScript(IdentifierInputScript):
             log=self.log,
         )
         self.force = force
+
+    def paginate_query(self, query):
+        raise NotImplementedError()
 
     @classmethod
     def make_query(cls, _db, identifier_type, identifiers, data_source, log=None):
@@ -1561,8 +1630,20 @@ class WorkProcessingScript(IdentifierInputScript):
     def do_run(self):
         works = True
         offset = 0
+
+        # Does this script class allow uniquely paged queries
+        # If not we will default to OFFSET paging
+        try:
+            paged_query = self.paginate_query(self.query)
+        except NotImplementedError:
+            paged_query = None
+
         while works:
-            works = self.query.offset(offset).limit(self.batch_size).all()
+            if not paged_query:
+                works = self.query.offset(offset).limit(self.batch_size).all()
+            else:
+                works = next(paged_query, [])
+
             for work in works:
                 self.process_work(work)
             offset += self.batch_size
@@ -1603,7 +1684,7 @@ class WorkConsolidationScript(WorkProcessingScript):
         licensepool.calculate_work()
 
     def do_run(self):
-        super(WorkConsolidationScript, self).do_run()
+        super().do_run()
         qu = (
             self._db.query(Work)
             .outerjoin(Work.license_pools)
@@ -1660,9 +1741,118 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
     batch_size = 100
 
     def __init__(self, _db=None):
+        self.timestamp_collection = None
         if _db:
             self._session = _db
-        self.query = Work.for_unchecked_subjects(self._db)
+        self.query = self._optimized_query()
+
+    def _optimized_query(self):
+        """Optimizations include
+        - Order by each joined table's PK, so that paging is consistent
+        - Deferred loading of large text columns"""
+
+        # No filter clause yet, we will filter this PER SUBJECT ID
+        # in the paginate query
+        query = (
+            self._db.query(Work)
+            .join(Work.license_pools)
+            .join(LicensePool.identifier)
+            .join(Identifier.classifications)
+            .join(Classification.subject)
+        )
+
+        # Must order by all joined attributes
+        query = (
+            query.order_by(None)
+            .order_by(
+                Subject.id, Work.id, LicensePool.id, Identifier.id, Classification.id
+            )
+            .options(
+                defer(Work.summary_text),
+                defer(Work.simple_opds_entry),
+                defer(Work.verbose_opds_entry),
+            )
+        )
+
+        return query
+
+    def _unchecked_subjects(self):
+        """Yield one unchecked subject at a time"""
+        query = (
+            self._db.query(Subject)
+            .filter(Subject.checked == False)
+            .order_by(Subject.id)
+        )
+        last_id = None
+        while True:
+            qu = query
+            if last_id:
+                qu = qu.filter(Subject.id > last_id)
+            subject = qu.first()
+
+            if not subject:
+                return
+
+            last_id = subject.id
+            yield subject
+
+    def paginate_query(self, query) -> Generator:
+        """Page this query using the row-wise comparison
+        technique unique to this job. We have already ensured
+        the ordering of the rows follows all the joined tables"""
+
+        for subject in self._unchecked_subjects():
+
+            last_work: Optional[Work] = None  # Last work object of the previous page
+            # IDs of the last work, for paging
+            work_id, license_id, iden_id, classn_id = (
+                None,
+                None,
+                None,
+                None,
+            )
+
+            while True:
+                # We are a "per subject" filter, this is the MOST efficient method
+                qu: Query = query.filter(Subject.id == subject.id)
+                # Add the columns we need to page with explicitly in the query
+                qu = qu.add_columns(LicensePool.id, Identifier.id, Classification.id)
+                # We're not on the first page, add the row-wise comparison
+                if last_work is not None:
+                    qu = qu.filter(
+                        tuple_(
+                            Work.id,
+                            LicensePool.id,
+                            Identifier.id,
+                            Classification.id,
+                        )
+                        > (work_id, license_id, iden_id, classn_id)
+                    )
+
+                qu = qu.limit(self.batch_size)
+                works = qu.all()
+                if not len(works):
+                    break
+
+                last_work_row = works[-1]
+                last_work = last_work_row[0]
+                # set comprehension ensures we get unique works per loop
+                # Works will get duplicated in the query because of the addition
+                # of the ID columns in the select, it is possible and expected
+                # that works will get duplicated across loops. It is not a desired
+                # outcome to duplicate works across loops, but the alternative is to maintain
+                # the IDs in memory and add a NOT IN operator in the query
+                # which would grow quite large, quite fast
+                only_works = list({w[0] for w in works})
+
+                yield only_works
+
+                work_id, license_id, iden_id, classn_id = (
+                    last_work_row[0].id,
+                    last_work_row[1],
+                    last_work_row[2],
+                    last_work_row[3],
+                )
 
 
 class WorkOPDSScript(WorkPresentationScript):
@@ -1797,7 +1987,7 @@ class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsS
             constructor each time it's called.
 
         """
-        super(RunCollectionMonitorScript, self).__init__(_db, **kwargs)
+        super().__init__(_db, **kwargs)
         self.monitor_class = monitor_class
         self.name = self.monitor_class.SERVICE_NAME
         parsed = vars(self.parse_command_line(self._db, cmd_args=cmd_args))
@@ -1815,7 +2005,7 @@ class OPDSImportScript(CollectionInputScript):
     name = "Import all books from the OPDS feed associated with a collection."
 
     IMPORTER_CLASS = OPDSImporter
-    MONITOR_CLASS = OPDSImportMonitor
+    MONITOR_CLASS: Type[OPDSImportMonitor] = OPDSImportMonitor
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
     def __init__(
@@ -1827,7 +2017,7 @@ class OPDSImportScript(CollectionInputScript):
         *args,
         **kwargs,
     ):
-        super(OPDSImportScript, self).__init__(_db, *args, **kwargs)
+        super().__init__(_db, *args, **kwargs)
         self.importer_class = importer_class or self.IMPORTER_CLASS
         self.monitor_class = monitor_class or self.MONITOR_CLASS
         self.protocol = protocol or self.PROTOCOL
@@ -1974,9 +2164,7 @@ class MirrorResourcesScript(CollectionInputScript):
             # this particular resource, but if every
             # LicensePoolDeliveryMechanism has the same rights
             # status, we can assume it's that one.
-            statuses = list(
-                set([x.rights_status for x in license_pool.delivery_mechanisms])
-            )
+            statuses = list({x.rights_status for x in license_pool.delivery_mechanisms})
             if len(statuses) == 1:
                 [rights_status] = statuses
         if rights_status:
@@ -2033,677 +2221,6 @@ class MirrorResourcesScript(CollectionInputScript):
         )
 
 
-class DatabaseMigrationScript(Script):
-    """Runs new migrations.
-
-    This script needs to execute without ever loading an ORM object,
-    because the database might be in a state that's not compatible
-    with the current ORM version.
-
-    This is not a TimestampScript because it keeps separate Timestamps
-    for the Python and the SQL migrations, and because Timestamps
-    are ORM objects, which this script can't touch.
-    """
-
-    SERVICE_NAME = "Database Migration"
-    PY_TIMESTAMP_SERVICE_NAME = SERVICE_NAME + " - Python"
-
-    MIGRATION_WITH_COUNTER = re.compile(r"\d{8}-(\d+)-(.)+\.(py|sql)")
-
-    # There are some SQL commands that can't be run inside a transaction.
-    TRANSACTIONLESS_COMMANDS = ["alter type"]
-
-    TRANSACTION_PER_STATEMENT = "SIMPLYE_MIGRATION_TRANSACTION_PER_STATEMENT"
-    DO_NOT_EXECUTE = "SIMPLYE_MIGRATION_DO_NOT_EXECUTE"
-
-    class TimestampInfo(object):
-        """Act like a ORM Timestamp object, but with no database connection."""
-
-        @classmethod
-        def find(cls, script, service):
-            """Find or create an existing timestamp representing the last
-            migration script that was run.
-
-            :return: A TimestampInfo object or None
-            """
-
-            # We need to be aware of schema changes to the timestamps
-            # table itself, since this is a necessary prerequisite to
-            # running the migration scripts that will make those
-            # schema changes.
-            #
-            # 2.3.0 - 'timestamp' field renamed to 'finish'
-            exception = None
-            for sql in (
-                "SELECT finish, counter FROM timestamps WHERE service=:service LIMIT 1;",
-                "SELECT timestamp, counter FROM timestamps WHERE service=:service LIMIT 1;",
-            ):
-                _db = script._db
-                try:
-                    results = list(_db.execute(text(sql), dict(service=service)))
-                    if exception:
-                        logging.error(
-                            "Yes, everything should be fine -- I was able to find a timestamp in the new schema."
-                        )
-                    exception = None
-                    _db.commit()
-                    break
-                except ProgrammingError as e:
-                    # The database connection is now tainted; we must
-                    # create a new one.
-                    logging.error(
-                        "Got a database error obtaining the timestamp for %s. Hopefully the timestamps table itself must be migrated and this is all according to plan.",
-                        service,
-                        exc_info=e,
-                    )
-                    _db.close()
-                    script._session = production_session(initialize_data=False)
-                    exception = e
-
-            # If _none_ of those worked, something is wrong on a
-            # deeper level.
-            if exception:
-                raise exception
-
-            if not results:
-                # Make sure there's a row for this service in the timestamps
-                # table so that we can update it later.
-                sql = "INSERT INTO timestamps (service) values (:service);"
-                _db.execute(text(sql), dict(service=service))
-                return None
-
-            [(date, counter)] = results
-            if not date:
-                # This is an empty Timestamp created during a previous
-                # TimestampInfo.find attempt. It shouldn't be returned or
-                # worked with in any way.
-                return None
-            return cls(service, date, counter)
-
-        def __init__(self, service, finish, counter=None):
-            self.service = service
-            if isinstance(finish, str):
-                finish = Script.parse_time(finish)
-            else:
-                finish = to_utc(finish)
-            self.finish = finish
-            if isinstance(counter, str):
-                counter = int(counter)
-            self.counter = counter
-
-        def save(self, _db):
-            self.update(_db, self.finish, self.counter)
-
-        def update(self, _db, finish, counter, migration_name=None):
-            """Saves a TimestampInfo object to the database."""
-            # Reset values locally.
-            self.finish = to_utc(finish)
-            self.counter = counter
-
-            sql = (
-                "UPDATE timestamps SET start=(:finish at time zone 'utc'), finish=(:finish at time zone 'utc'), counter=:counter"
-                " where service=:service"
-            )
-            values = dict(
-                finish=self.finish,
-                counter=self.counter,
-                service=self.service,
-            )
-            _db.execute(text(sql), values)
-            _db.flush()
-
-            message = "%s Timestamp stamped at %s" % (
-                self.service,
-                self.finish.strftime("%Y-%m-%d"),
-            )
-            if migration_name:
-                message += " for %s" % migration_name
-            print(message)
-
-    @classmethod
-    def arg_parser(cls):
-        parser = argparse.ArgumentParser()
-        parser.add_argument(
-            "-d",
-            "--last-run-date",
-            help=(
-                "A date string representing the last migration file "
-                "run against your database, formatted as YYYY-MM-DD"
-            ),
-        )
-        parser.add_argument(
-            "-c",
-            "--last-run-counter",
-            type=int,
-            help=(
-                "An optional digit representing the counter of the last "
-                "migration run against your database. Only necessary if "
-                "multiple migrations were created on the same date."
-            ),
-        )
-        parser.add_argument(
-            "--python-only",
-            action="store_true",
-            help=(
-                "Only run python migrations since the given timestamp or the"
-                "most recent python timestamp"
-            ),
-        )
-        return parser
-
-    @classmethod
-    def migratable_files(cls, filelist, extensions):
-        """Filter a list of files for migratable file extensions"""
-        extensions = tuple(extensions)
-        migratable = [f for f in filelist if f.endswith(extensions)]
-        return cls.sort_migrations(migratable)
-
-    @classmethod
-    def sort_migrations(cls, migrations):
-        """All Python migrations sort after all SQL migrations, since a Python
-        migration requires an up-to-date database schema.
-
-        Migrations with a counter digit sort after migrations without
-        one.
-        """
-
-        def compare_migrations(first):
-            """Compares migrations according to ideal sorting order.
-
-            - All Python migrations run after all SQL migrations.
-            - Migrations are first ordered by timestamp (asc).
-            - If two migrations have the same timestamp, any migrations
-              without counters come before migrations with counters.
-            - If two migrations with the same timestamp, have counters,
-              migrations are sorted by counter (asc).
-            """
-            key = []
-            if first.endswith(".py"):
-                key.append(1)
-            else:
-                key.append(-1)
-
-            try:
-                key.append(int(first[:8]))
-            except ValueError:
-                key.append(-1)
-
-            # Both migrations have the same timestamp, so compare using
-            # their counters (default to 0 if no counter is included)
-            first_count = cls.MIGRATION_WITH_COUNTER.search(first)
-            if first_count is not None:
-                first_count = int(first_count.groups()[0])
-            else:
-                first_count = 0
-            key.append(first_count)
-
-            return key
-
-        return sorted(migrations, key=compare_migrations)
-
-    @property
-    def directories_by_priority(self):
-        """Returns a list containing the migration directory path for core
-        and its container server, organized in priority order (core first)
-        """
-        current_dir = os.path.split(os.path.abspath(__file__))[0]
-        core = os.path.join(current_dir, "migration")
-        server = os.path.join(os.path.split(current_dir)[0], "migration")
-
-        # Core is listed first, since core makes changes to the core database
-        # schema. Server migrations generally fix bugs or otherwise update
-        # the data itself.
-        return [core, server]
-
-    @property
-    def name(self):
-        """Returns the appropriate target Timestamp service name for the
-        timestamp, depending on the script parameters.
-        """
-        if self.python_only:
-            return self.PY_TIMESTAMP_SERVICE_NAME
-        return self.SERVICE_NAME
-
-    @property
-    def overall_timestamp(self):
-        """Returns a TimestampInfo object corresponding to the the overall or
-        general "Database Migration" service.
-
-        If there is no Timestamp or the Timestamp doesn't have a timestamp
-        attribute, it returns None.
-        """
-        return self.TimestampInfo.find(self, self.SERVICE_NAME)
-
-    @property
-    def python_timestamp(self):
-        """Returns a TimestampInfo object corresponding to the python migration-
-        specific "Database Migration - Python" Timestamp.
-
-        If there is no Timestamp or the Timestamp hasn't been initialized with
-        a timestamp attribute, it returns None.
-        """
-        return self.TimestampInfo.find(self, self.PY_TIMESTAMP_SERVICE_NAME)
-
-    def __init__(self, *args, **kwargs):
-        super(DatabaseMigrationScript, self).__init__(*args, **kwargs)
-        self.python_only = False
-
-    def load_configuration(self):
-        """Load configuration without accessing the database."""
-        Configuration.load(None)
-
-    def run(self, test_db=None, test=False, cmd_args=None):
-        # Use or create a database session.
-        if test_db:
-            self._session = test_db
-        else:
-            # Create a special database session that doesn't initialize
-            # the ORM. As long as we only execute SQL and don't try to use
-            # any ORM objects, we'll be fine.
-            url = Configuration.database_url()
-            self._session = SessionManager.session(url, initialize_data=False)
-
-        parsed = self.parse_command_line(cmd_args=cmd_args)
-        if parsed.python_only:
-            self.python_only = parsed.python_only
-
-        timestamp = None
-        last_run_date = parsed.last_run_date
-        last_run_counter = parsed.last_run_counter
-        if last_run_date:
-            timestamp = self.TimestampInfo(self.name, last_run_date, last_run_counter)
-            # Save the timestamp at this point. This will set back the clock
-            # in the case that the input last_run_date/counter is before the
-            # existing Timestamp.finish / Timestamp.counter.
-            #
-            # DatabaseMigrationScript.update_timestamps will no longer rewind
-            # a Timestamp, so saving here is important.
-            timestamp.save(self._db)
-
-        if not timestamp:
-            # No timestamp was given. Get the timestamp from the database.
-            timestamp = self.TimestampInfo.find(self, self.name)
-
-        if not timestamp or not self.overall_timestamp:
-            # There's no timestamp in the database! Raise an error.
-            print("")
-            print(
-                "NO TIMESTAMP FOUND. Either initialize your untouched database "
-                "with the script `core/bin/initialize_database` OR run this "
-                "script with a timestamp that indicates the last migration run "
-                "against your existing-but-uninitialized database."
-            )
-            self.arg_parser().print_help()
-            sys.exit(1)
-
-        migrations, migrations_by_dir = self.fetch_migration_files()
-
-        new_migrations = self.get_new_migrations(timestamp, migrations)
-        if new_migrations:
-            # Log the new migrations.
-            print("%d new migrations found." % len(new_migrations))
-            for migration in new_migrations:
-                print("  - %s" % migration)
-            self.run_migrations(new_migrations, migrations_by_dir, timestamp)
-            self._db.commit()
-        else:
-            print("No new migrations found. Your database is up-to-date.")
-
-    def fetch_migration_files(self):
-        """Pulls migration files from the expected locations
-
-        :return: a tuple with a list of migration filenames and a dictionary of
-            those files separated by their absolute directory location.
-        """
-        migrations = list()
-        migrations_by_dir = defaultdict(list)
-
-        extensions = [".py"]
-        if not self.python_only:
-            extensions.insert(0, ".sql")
-
-        for directory in self.directories_by_priority:
-            # In the case of tests, the container server migration directory
-            # may not exist.
-            if os.path.isdir(directory):
-                dir_migrations = self.migratable_files(
-                    os.listdir(directory), extensions
-                )
-                migrations += dir_migrations
-                migrations_by_dir[directory] = dir_migrations
-
-        return migrations, migrations_by_dir
-
-    def get_new_migrations(self, timestamp, migrations):
-        """Return a list of migration filenames, representing migrations
-        created since the timestamp
-        """
-        last_run = timestamp.finish.strftime("%Y%m%d")
-        migrations = self.sort_migrations(migrations)
-        new_migrations = [
-            migration for migration in migrations if int(migration[:8]) >= int(last_run)
-        ]
-
-        # Multiple migrations run on the same day have an additional digit
-        # after the date and a dash, eg:
-        #
-        #     20150826-1-change_target_age_from_int_to_range.sql
-        #
-        # When that migration is run, the number will be saved to the
-        # 'counter' column of Timestamp, so we have to account for that.
-        start_found = False
-        later_found = False
-        index = 0
-        while not start_found and not later_found and index < len(new_migrations):
-            start_found, later_found = self._is_matching_migration(
-                new_migrations[index], timestamp
-            )
-            index += 1
-
-        if later_found:
-            index -= 1
-        new_migrations = new_migrations[index:]
-        return new_migrations
-
-    def _is_matching_migration(self, migration_file, timestamp):
-        """Determine whether a given migration filename matches a given
-        timestamp or is after it.
-        """
-        is_match = False
-        is_after_timestamp = False
-
-        timestamp_str = timestamp.finish.strftime("%Y%m%d")
-        counter = timestamp.counter
-
-        if migration_file[:8] >= timestamp_str:
-            if migration_file[:8] > timestamp_str:
-                is_after_timestamp = True
-            elif counter:
-                count = self.MIGRATION_WITH_COUNTER.search(migration_file)
-                if count:
-                    migration_num = int(count.groups()[0])
-                    if migration_num == counter:
-                        is_match = True
-                    if migration_num > counter:
-                        is_after_timestamp = True
-            else:
-                is_match = True
-        return is_match, is_after_timestamp
-
-    def run_migrations(self, migrations, migrations_by_dir, timestamp):
-        """Run each migration, first by timestamp and then by directory
-        priority.
-        """
-        previous = None
-
-        def raise_error(migration_path, message, code=1):
-            print()
-            print("ERROR: %s" % message)
-            print("%s must be migrated manually." % migration_path)
-            print("=" * 50)
-            print(traceback.print_exc(file=sys.stdout))
-            sys.exit(code)
-
-        migrations = self.sort_migrations(migrations)
-        for migration_file in migrations:
-            for d in self.directories_by_priority:
-                if migration_file in migrations_by_dir[d]:
-                    full_migration_path = os.path.join(d, migration_file)
-                    try:
-                        self._run_migration(full_migration_path, timestamp)
-                        self._db.commit()
-                        previous = migration_file
-                    except SystemExit as se:
-                        if se.code:
-                            raise_error(
-                                full_migration_path,
-                                "Migration raised error code '%d'" % se.code,
-                                code=se.code,
-                            )
-
-                        # Sometimes a migration isn't relevant and it
-                        # runs sys.exit() to carry on with things.
-                        # This shouldn't end the migration script, though.
-                        self.update_timestamps(migration_file)
-                        continue
-                    except Exception:
-                        raise_error(full_migration_path, "Migration has been halted.")
-        else:
-            print("All new migrations have been run.")
-
-    def _run_migration(self, migration_path, timestamp):
-        """Runs a single SQL or Python migration file"""
-
-        migration_filename = os.path.split(migration_path)[1]
-        ok_to_execute = True
-
-        if migration_path.endswith(".sql"):
-            with open(migration_path) as clause:
-                sql = clause.read()
-
-                transactionless = any(
-                    [c for c in self.TRANSACTIONLESS_COMMANDS if c in sql.lower()]
-                )
-                one_tx_per_statement = bool(
-                    self.TRANSACTION_PER_STATEMENT.lower() in sql.lower()
-                )
-                ok_to_execute = not bool(self.DO_NOT_EXECUTE.lower() in sql.lower())
-
-                if ok_to_execute:
-                    if transactionless:
-                        new_session = self._run_migration_without_transaction(sql)
-                    elif one_tx_per_statement:
-                        commands = self._extract_statements_from_sql_file(
-                            migration_path
-                        )
-                        for command in commands:
-                            self._db.execute(f"BEGIN;{command}COMMIT;")
-                    else:
-                        # By wrapping the action in a transation, we can avoid
-                        # rolling over errors and losing data in files
-                        # with multiple interrelated SQL actions.
-                        sql = "BEGIN;\n%s\nCOMMIT;" % sql
-                        self._db.execute(sql)
-
-        if migration_path.endswith(".py"):
-            module_name = migration_filename[:-3]
-            subprocess.call(migration_path)
-
-        # Update timestamp for the migration.
-        if ok_to_execute:
-            self.update_timestamps(migration_filename)
-
-    def _extract_statements_from_sql_file(self, filepath):
-        """
-        From an SQL file, return a python list of the individual statements.
-
-        Removes comment lines and extraneous whitespace at the start / end of
-        statements, but that's about it. Use carefully.
-        """
-        with open(filepath) as f:
-            sql_file_lines = f.readlines()
-
-        sql_commands = []
-        current_command = ""
-
-        for line in sql_file_lines:
-            if line.strip().startswith("--"):
-                continue
-            else:
-                if current_command == "":
-                    current_command = line.strip()
-                else:
-                    current_command = current_command + " " + line.strip()
-
-            if current_command.endswith(";"):
-                sql_commands.append(current_command)
-                current_command = ""
-
-        return sql_commands
-
-    def _run_migration_without_transaction(self, sql_statement):
-        """Runs a single SQL statement outside of a transaction."""
-        # Go back up to engine-level.
-        connection = self._db.get_bind()
-
-        # Close the Session so it benefits from the changes.
-        self._session.close()
-
-        # Get each individual SQL command from the migration text.
-        #
-        # In the case of 'ALTER TYPE' (at least), running commands
-        # simultaneously raises psycopg2.InternalError ending with 'cannot be
-        # executed from a fuction or multi-command string'
-        sql_commands = [
-            command.strip() + ";"
-            for command in sql_statement.split(";")
-            if command.strip()
-        ]
-
-        # Run each command in the sql statement right up against the
-        # database: no transactions, no guardrails.
-        for command in sql_commands:
-            connection.execution_options(isolation_level="AUTOCOMMIT").execute(
-                text(command)
-            )
-
-        # Update the script's Session to a new one that has the changed schema
-        # and other important info.
-        self._session = Session(connection)
-        self.load_configuration()
-        DataSource.well_known_sources(self._db)
-
-    def update_timestamps(self, migration_file):
-        """Updates this service's timestamp to match a given migration"""
-        last_run_date = self.parse_time(migration_file[0:8])
-        counter = None
-
-        # When multiple migration files are created on the same date, an
-        # additional number is added. This number is held in the 'counter'
-        # column of Timestamp.
-        # (It's not ideal, but it avoids creating a new database table.)
-        match = self.MIGRATION_WITH_COUNTER.search(migration_file)
-        if match:
-            counter = int(match.groups()[0])
-
-        if migration_file.endswith("py") and self.python_timestamp:
-            # This is a python migration. Update the python timestamp.
-            self.python_timestamp.update(
-                self._db,
-                finish=last_run_date,
-                counter=counter,
-                migration_name=migration_file,
-            )
-
-        # Nothing to update
-        if self.overall_timestamp is None:
-            return
-
-        if self.overall_timestamp.finish is not None:
-            finish_timestamp = self.overall_timestamp.finish
-        # The last script that ran had an earlier timestamp than the current script
-        if finish_timestamp > last_run_date:
-            return
-
-        # The dates of the scrips are the same so compare the counters
-        if finish_timestamp == last_run_date:
-            # The current script has no counter, so it's the same script that ran
-            # or an earlier script that ran
-            if counter is None:
-                return
-            # The previous script has a higher counter
-            if (
-                self.overall_timestamp.counter is not None
-                and self.overall_timestamp.counter > counter
-            ):
-                return
-
-        self.overall_timestamp.update(
-            self._db,
-            finish=last_run_date,
-            counter=counter,
-            migration_name=migration_file,
-        )
-
-
-class DatabaseMigrationInitializationScript(DatabaseMigrationScript):
-
-    """Creates a timestamp to kickoff the regular use of
-    DatabaseMigrationScript to manage migrations.
-    """
-
-    @classmethod
-    def arg_parser(cls):
-        parser = super(DatabaseMigrationInitializationScript, cls).arg_parser()
-        parser.add_argument(
-            "-f",
-            "--force",
-            action="store_true",
-            help="Force reset the initialization, ignoring any existing timestamps.",
-        )
-        return parser
-
-    def run(self, cmd_args=None):
-        parsed = self.parse_command_line(cmd_args=cmd_args)
-        last_run_date = parsed.last_run_date
-        last_run_counter = parsed.last_run_counter
-
-        if last_run_counter and not last_run_date:
-            raise ValueError(
-                "Timestamp.counter must be reset alongside Timestamp.finish"
-            )
-
-        existing_timestamp = get_one(self._db, Timestamp, service=self.name)
-        if existing_timestamp and existing_timestamp.finish:
-            # A Timestamp exists and it has a .finish, so it wasn't created
-            # by TimestampInfo.find.
-            if parsed.force:
-                self.log.warning(
-                    "Overwriting existing %s timestamp: %r",
-                    self.name,
-                    existing_timestamp,
-                )
-            else:
-                raise RuntimeError(
-                    "%s timestamp already exists: %r. Use --force to update."
-                    % (self.name, existing_timestamp)
-                )
-
-        # Initialize the required timestamps with the Space Jam release date.
-        init_timestamp = self.parse_time("1996-11-15")
-        overall_timestamp = existing_timestamp or Timestamp.stamp(
-            _db=self._db,
-            service=self.SERVICE_NAME,
-            service_type=Timestamp.SCRIPT_TYPE,
-            finish=init_timestamp,
-        )
-        python_timestamp = Timestamp.stamp(
-            _db=self._db,
-            service=self.PY_TIMESTAMP_SERVICE_NAME,
-            service_type=Timestamp.SCRIPT_TYPE,
-            finish=init_timestamp,
-        )
-
-        if last_run_date:
-            submitted_time = self.parse_time(last_run_date)
-            for timestamp in (overall_timestamp, python_timestamp):
-                timestamp.finish = submitted_time
-                timestamp.counter = last_run_counter
-            self._db.commit()
-            return
-
-        migrations = self.sort_migrations(self.fetch_migration_files()[0])
-        py_migrations = [m for m in migrations if m.endswith(".py")]
-        sql_migrations = [m for m in migrations if m.endswith(".sql")]
-
-        most_recent_sql_migration = sql_migrations[-1]
-        most_recent_python_migration = py_migrations[-1]
-
-        self.update_timestamps(most_recent_sql_migration)
-        self.update_timestamps(most_recent_python_migration)
-        self._db.commit()
-
-
 class CheckContributorNamesInDB(IdentifierInputScript):
     """Checks that contributor sort_names are display_names in
     "last name, comma, other names" format.
@@ -2723,7 +2240,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
     COMPLAINT_TYPE = "http://librarysimplified.org/terms/problem/wrong-author"
 
     def __init__(self, _db=None, cmd_args=None, stdin=sys.stdin):
-        super(CheckContributorNamesInDB, self).__init__(_db=_db)
+        super().__init__(_db=_db)
 
         self.parsed_args = self.parse_command_line(
             _db=self._db, cmd_args=cmd_args, stdin=stdin
@@ -2782,6 +2299,10 @@ class CheckContributorNamesInDB(IdentifierInputScript):
 
             self._db.commit()
         self._db.commit()
+
+    def process_local_mismatch(self, **kwargs):
+        """XXX: This used to produce a Complaint, but the complaint system no longer exists..."""
+        return None
 
     def process_contribution_local(self, _db, contribution, log=None):
         if not contribution or not contribution.edition:
@@ -2845,7 +2366,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
                     )
                 else:
                     # we can fix it!
-                    output = "%s|\t%s|\t%s|\t%s|\tlocal_fix" % (
+                    output = "{}|\t{}|\t{}|\t{}|\tlocal_fix".format(
                         contributor.id,
                         contributor.sort_name,
                         contributor.display_name,
@@ -2873,53 +2394,6 @@ class CheckContributorNamesInDB(IdentifierInputScript):
                 == contribution.contributor.display_name
             ):
                 contribution.edition.sort_author = sort_name
-
-    def process_local_mismatch(
-        self, _db, contribution, computed_sort_name, error_message_detail, log=None
-    ):
-        """
-        Determines if a problem is to be investigated further or recorded as a Complaint,
-        to be solved by a human.  In this class, it's always a complaint.  In the overridden
-        method in the child class in metadata_wrangler code, we sometimes go do a web query.
-        """
-        self.register_problem(
-            source=self.COMPLAINT_SOURCE,
-            contribution=contribution,
-            computed_sort_name=computed_sort_name,
-            error_message_detail=error_message_detail,
-            log=log,
-        )
-
-    @classmethod
-    def register_problem(
-        cls, source, contribution, computed_sort_name, error_message_detail, log=None
-    ):
-        """
-        Make a Complaint in the database, so a human can take a look at this Contributor's name
-        and resolve whatever the complex issue that got us here.
-        """
-        success = True
-        contributor = contribution.contributor
-
-        pools = contribution.edition.is_presentation_for
-        try:
-            complaint, is_new = Complaint.register(
-                pools[0], cls.COMPLAINT_TYPE, source, error_message_detail
-            )
-            output = "%s|\t%s|\t%s|\t%s|\tcomplain|\t%s" % (
-                contributor.id,
-                contributor.sort_name,
-                contributor.display_name,
-                computed_sort_name,
-                source,
-            )
-            print(output.encode("utf8"))
-        except ValueError as e:
-            # log and move on, don't stop run
-            log.error("Error registering complaint: %r", contributor, exc_info=e)
-            success = False
-
-        return success
 
 
 class Explain(IdentifierInputScript):
@@ -2956,7 +2430,7 @@ class Explain(IdentifierInputScript):
             return
 
         # Tell about the Edition record.
-        output = "%s (%s, %s) according to %s" % (
+        output = "{} ({}, {}) according to {}".format(
             edition.title,
             edition.author,
             edition.medium,
@@ -3073,7 +2547,7 @@ class Explain(IdentifierInputScript):
                     fulfillable = "Fulfillable"
                 else:
                     fulfillable = "Unfulfillable"
-                self.write("  %s %s/%s" % (fulfillable, dm.content_type, dm.drm_scheme))
+                self.write(f"  {fulfillable} {dm.content_type}/{dm.drm_scheme}")
         else:
             self.write(" No delivery mechanisms.")
         self.write(
@@ -3110,7 +2584,7 @@ class Explain(IdentifierInputScript):
                 collection = pool.collection.name
             else:
                 collection = "!collection"
-            self.write("  %s: %r %s" % (active, pool.identifier, collection))
+            self.write(f"  {active}: {pool.identifier!r} {collection}")
         wcrs = sorted(work.coverage_records, key=lambda x: x.timestamp)
         if wcrs:
             self.write(" %s work coverage records" % len(wcrs))
@@ -3144,7 +2618,9 @@ class Explain(IdentifierInputScript):
         else:
             exception = ""
         self.write(
-            "   %s | %s%s%s%s" % (timestamp, data_source, operation, status, exception)
+            "   {} | {}{}{}{}".format(
+                timestamp, data_source, operation, status, exception
+            )
         )
 
 
@@ -3157,7 +2633,7 @@ class WhereAreMyBooksScript(CollectionInputScript):
 
     def __init__(self, _db=None, output=None, search=None):
         _db = _db or self._db
-        super(WhereAreMyBooksScript, self).__init__(_db)
+        super().__init__(_db)
         self.output = output or sys.stdout
         try:
             self.search = search or ExternalSearchIndex(_db)
@@ -3287,7 +2763,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
     def __init__(self, _db=None, output=None):
         _db = _db or self._db
-        super(ListCollectionMetadataIdentifiersScript, self).__init__(_db)
+        super().__init__(_db)
         self.output = output or sys.stdout
 
     def run(self, cmd_args=None):
@@ -3307,7 +2783,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
         self.output.write("=" * 50 + "\n")
 
         def add_line(id, name, protocol, metadata_identifier):
-            line = "(%s) %s/%s => %s\n" % (id, name, protocol, metadata_identifier)
+            line = f"({id}) {name}/{protocol} => {metadata_identifier}\n"
             self.output.write(line)
 
         count = 0
@@ -3336,16 +2812,28 @@ class UpdateLaneSizeScript(LaneSweeperScript):
 
     def process_lane(self, lane):
         """Update the estimated size of a Lane."""
+
+        # We supress the configuration changes updates, as each lane is updated
+        # and call the site_configuration_has_changed function once after this
+        # script has finished running.
+        #
+        # This is done because calling site_configuration_has_changed repeatedly
+        # was causing performance problems, when we have lots of lanes to update.
+        lane._suppress_before_flush_listeners = True
         lane.update_size(self._db)
         self.log.info("%s: %d", lane.full_identifier, lane.size)
+
+    def do_run(self, *args, **kwargs):
+        super().do_run(*args, **kwargs)
+        site_configuration_has_changed(self._db)
 
 
 class UpdateCustomListSizeScript(CustomListSweeperScript):
     def process_custom_list(self, custom_list):
-        custom_list.update_size()
+        custom_list.update_size(self._db)
 
 
-class RemovesSearchCoverage(object):
+class RemovesSearchCoverage:
     """Mix-in class for a script that might remove all coverage records
     for the search engine.
     """
@@ -3383,9 +2871,7 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
     def __init__(self, *args, **kwargs):
         search = kwargs.get("search_index_client", None)
         self.search = search or ExternalSearchIndex(self._db)
-        super(RebuildSearchIndexScript, self).__init__(
-            SearchIndexCoverageProvider, *args, **kwargs
-        )
+        super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
 
     def do_run(self):
         # Calling setup_index will destroy the index and recreate it
@@ -3398,7 +2884,7 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
         self.log.info("Deleted %d search coverage records.", count)
 
         # Now let the SearchIndexCoverageProvider do its thing.
-        return super(RebuildSearchIndexScript, self).do_run()
+        return super().do_run()
 
 
 class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
@@ -3415,7 +2901,318 @@ class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
         )
 
 
-class MockStdin(object):
+class GenerateOverdriveAdvantageAccountList(InputScript):
+    """Generates a CSV containing the following fields:
+    circulation manager
+    collection
+    client_key
+    external_account_id
+    library_token
+    advantage_name
+    advantage_id
+    advantage_token
+    already_configured
+    """
+
+    def __init__(self, _db=None, *args, **kwargs):
+        super().__init__(_db, args, kwargs)
+        self._data: List[List[str]] = list()
+
+    def _create_overdrive_api(self, c: Collection):
+        return OverdriveCoreAPI(_db=self._db, collection=c)
+
+    def do_run(self, *args, **kwargs):
+        parsed = GenerateOverdriveAdvantageAccountList.parse_command_line(
+            _db=self._db, *args, **kwargs
+        )
+        query: Query = Collection.by_protocol(
+            self._db, protocol=ExternalIntegration.OVERDRIVE
+        )
+        for c in query.filter(Collection.parent_id == None):
+            collection: Collection = c
+            api = self._create_overdrive_api(collection=collection)
+            client_key = api.client_key().decode()
+            client_secret = api.client_secret().decode()
+
+            try:
+                library_token = api.collection_token
+                advantage_accounts = api.get_advantage_accounts()
+
+                for aa in advantage_accounts:
+                    existing_child_collections = query.filter(
+                        Collection.parent_id == collection.id
+                    )
+                    already_configured_aa_libraries = [
+                        e.external_account_id for e in existing_child_collections
+                    ]
+                    self._data.append(
+                        [
+                            collection.name,
+                            collection.external_account_id,
+                            client_key,
+                            client_secret,
+                            library_token,
+                            aa.name,
+                            aa.library_id,
+                            aa.token,
+                            aa.library_id in already_configured_aa_libraries,
+                        ]
+                    )
+            except Exception as e:
+                logging.error(
+                    f"Could not connect to collection {c.name}: reason: {str(e)}."
+                )
+
+        file_path = parsed.output_file_path[0]
+        circ_manager_name = parsed.circulation_manager_name[0]
+        self.write_csv(output_file_path=file_path, circ_manager_name=circ_manager_name)
+
+    def write_csv(self, output_file_path: str, circ_manager_name: str):
+        with open(output_file_path, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(
+                [
+                    "cm",
+                    "collection",
+                    "overdrive_library_id",
+                    "client_key",
+                    "client_secret",
+                    "library_token",
+                    "advantage_name",
+                    "advantage_id",
+                    "advantage_token",
+                    "already_configured",
+                ]
+            )
+            for i in self._data:
+                i.insert(0, circ_manager_name)
+                writer.writerow(i)
+
+    @classmethod
+    def arg_parser(cls):
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            "--output-file-path",
+            help="The path of an output file",
+            metavar="o",
+            nargs=1,
+        )
+
+        parser.add_argument(
+            "--circulation-manager-name",
+            help="The name of the circulation-manager",
+            metavar="c",
+            nargs=1,
+            required=True,
+        )
+
+        parser.add_argument(
+            "--file-format",
+            help="The file format of the output file",
+            metavar="f",
+            nargs=1,
+            default="csv",
+        )
+
+        return parser
+
+
+class CustomListUpdateEntriesScript(CustomListSweeperScript):
+    """Traverse all entries and update lists if they have auto_update_enabled"""
+
+    def process_custom_list(self, custom_list: CustomList):
+        if not custom_list.auto_update_enabled:
+            return
+        try:
+            self.log.info(f"Auto updating list entries for: {custom_list.name}")
+            self._update_list_with_new_entries(custom_list)
+        except Exception:
+            self.log.exception(f"Could not auto update {custom_list.name}")
+
+    def _update_list_with_new_entries(self, custom_list: CustomList):
+        """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
+        Only json type queries are supported right now, without any support for additional facets"""
+
+        start_page = 1
+        json_query = None
+        if custom_list.auto_update_status == CustomList.INIT:
+            # We're in the init phase, we need to back-populate all titles
+            # starting from page 2, since page 1 should be already populated
+            start_page = 2
+        elif custom_list.auto_update_status == CustomList.REPOPULATE:
+            # During a repopulate phase we must empty the list
+            # and start population from page 1
+            for entry in custom_list.entries:
+                self._db.delete(entry)
+            custom_list.entries = []
+        else:
+            # Otherwise we are in an update type process, which means we only search for
+            # "newer" books from the last time we updated the list
+            try:
+                if custom_list.auto_update_query:
+                    json_query = json.loads(custom_list.auto_update_query)
+                else:
+                    return
+            except json.JSONDecodeError as e:
+                self.log.error(
+                    f"Could not decode custom list({custom_list.id}) saved query: {e}"
+                )
+                return
+            # Update availability time as a query part that allows us to filter for new licenses
+            # Although the last_update should never be null, we're failsafing
+            availability_time = (
+                custom_list.auto_update_last_update or datetime.datetime.now()
+            )
+            query_part = json_query["query"]
+            query_part = {
+                "and": [
+                    {
+                        "key": "licensepools.availability_time",
+                        "op": "gte",
+                        "value": availability_time.timestamp(),
+                    },
+                    query_part,
+                ]
+            }
+            # Update the query as such
+            json_query["query"] = query_part
+
+        CustomListQueries.populate_query_pages(
+            self._db, custom_list, json_query=json_query, start_page=start_page
+        )
+        custom_list.auto_update_status = CustomList.UPDATED
+
+
+class AlembicMigrateVersion(Script):
+    @classmethod
+    def arg_parser(cls):
+        parser = argparse.ArgumentParser(
+            prog="Alembic Database Migration",
+            description="By default, running this script without any arguments "
+            "will run an 'upgrade head' command from alembic",
+        )
+        parser.add_argument(
+            "-d",
+            "--downgrade",
+            help="Downgrade to a specific version.",
+            required=False,
+            default=None,
+        )
+        parser.add_argument(
+            "-u",
+            "--upgrade",
+            help="Upgrade to a specific version.",
+            required=False,
+            default="head",
+        )
+        return parser
+
+    def do_run(self, cmd_args=None):
+        args = self.parse_command_line(cmd_args=cmd_args)
+        config = AlembicConfig(
+            str(Path(__file__).parent.parent.absolute() / "alembic.ini")
+        )
+        try:
+            if args.downgrade is not None:
+                downgrade(config, args.downgrade)
+            elif args.upgrade is not None:
+                upgrade(config, args.upgrade)
+        except CommandError as e:
+            print(f"Error: {e}. No migrations performed.")
+
+
+class DeleteInvisibleLanesScript(LibraryInputScript):
+    """Delete lanes that are flagged as invisible"""
+
+    def process_library(self, library):
+
+        try:
+            for lane in self._db.query(Lane).filter(Lane.library_id == library.id):
+                if not lane.visible:
+                    self._db.delete(lane)
+            self._db.commit()
+            logging.info(f"Completed hidden lane deletion for {library.short_name}")
+        except Exception as e:
+            try:
+                logging.exception(
+                    f"hidden lane deletion failed for {library.short_name}. "
+                    f"Attempting to rollback updates",
+                    e,
+                )
+                self._db.rollback()
+            except Exception as e:
+                logging.exception(
+                    f"hidden lane deletion rollback for {library.short_name} failed", e
+                )
+
+
+class LoanNotificationsScript(Script):
+    """Notifications must be sent to Patrons based on when their current loans
+    are expiring"""
+
+    # Days before on which to send out a notification
+    LOAN_EXPIRATION_DAYS = [5, 1]
+    BATCH_SIZE = 100
+
+    def do_run(self):
+        self.log.info("Loan Notifications Job started")
+
+        setting = ConfigurationSetting.sitewide(
+            self._db, Configuration.PUSH_NOTIFICATIONS_STATUS
+        )
+        if setting.value == ConfigurationConstants.FALSE:
+            self.log.info(
+                "Push notifications have been turned off in the sitewide settings, skipping this job"
+            )
+            return
+
+        _query = self._db.query(Loan).order_by(Loan.id)
+        last_loan_id = None
+        processed_loans = 0
+
+        while True:
+            query = _query.limit(self.BATCH_SIZE)
+            if last_loan_id:
+                query = _query.filter(Loan.id > last_loan_id)
+
+            loans = query.all()
+            if len(loans) == 0:
+                break
+
+            for loan in loans:
+                processed_loans += 1
+                self.process_loan(loan)
+            last_loan_id = loan.id
+
+        self.log.info(
+            f"Loan Notifications Job ended: {processed_loans} loans processed"
+        )
+
+    def process_loan(self, loan: Loan):
+        tokens = []
+        patron: Patron = loan.patron
+        t: DeviceToken
+        for t in patron.device_tokens:
+            if t.token_type in [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]:
+                tokens.append(t)
+
+        # No tokens means no notifications
+        if not tokens:
+            return
+
+        now = utc_now()
+        delta: datetime.timedelta = loan.end - now
+        # We assume this script runs ONCE A DAY
+        # else this will send notifications multiple times for
+        # the same day
+        if delta.days in self.LOAN_EXPIRATION_DAYS:
+            self.log.info(
+                f"Patron {patron.external_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
+            )
+            PushNotifications.send_loan_expiry_message(loan, delta.days, tokens)
+
+
+class MockStdin:
     """Mock a list of identifiers passed in on standard input."""
 
     def __init__(self, *lines):

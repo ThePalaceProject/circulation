@@ -1,10 +1,11 @@
 # Palace Manager
 
 [![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![codecov](https://codecov.io/github/thepalaceproject/circulation/branch/main/graph/badge.svg?token=T09QW6DLH6)](https://codecov.io/github/thepalaceproject/circulation)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-![Python: 3.6,3.7,3.8,3.9](https://img.shields.io/badge/Python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)
+![Python: 3.8,3.9,3.10,3.11](https://img.shields.io/badge/Python-3.8%20|%203.9%20|%203.10%20|%203.11-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL
 [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
@@ -35,6 +36,18 @@ absolutely necessary.
 
 ## Set Up
 
+### Docker Compose
+
+In order to help quickly set up a development environment, we include a [docker-compose.yml](./docker-compose.yml)
+file. This docker-compose file, will build the webapp and scripts containers from your local repository, and start
+those containers as well as all the necessary service containers.
+
+You can give this a try by running the following command:
+
+```shell
+docker-compose up --build
+```
+
 ### Python Set Up
 
 #### Homebrew (OSX)
@@ -56,11 +69,36 @@ brew install libxmlsec1
 brew install libjpeg
 ```
 
+#### Linux
+
+Most distributions will offer Python packages. On Arch Linux, the following command is sufficient:
+
+```sh
+pacman -S python
+```
+
 #### pyenv
 
 [pyenv](https://github.com/pyenv/pyenv) pyenv lets you easily switch between multiple versions of Python. It can be
 [installed](https://github.com/pyenv/pyenv-installer) using the command `curl https://pyenv.run | bash`. You can then
 install the version of Python you want to work with.
+
+It is recommended that [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) be used to allow `pyenv`
+to manage _virtual environments_ in a manner that can be used by the [poetry](#poetry) tool. The `pyenv-virtualenv`
+plugin can be installed by cloning the relevant repository into the `plugins` subdirectory of your `$PYENV_ROOT`:
+
+```sh
+mkdir -p $PYENV_ROOT/plugins
+cd $PYENV_ROOT/plugins
+git clone https://github.com/pyenv/pyenv-virtualenv
+```
+
+After cloning the repository, `pyenv` now has a new `virtualenv` command:
+
+```sh
+$ pyenv virtualenv
+pyenv-virtualenv: no virtualenv name given.
+```
 
 #### Poetry
 
@@ -72,27 +110,20 @@ Poetry can be installed using the command `curl -sSL https://install.python-poet
 More information about installation options can be found in the
 [poetry documentation](https://python-poetry.org/docs/master/#installation).
 
-### Elasticsearch
+### Opensearch
+
+Palace now supports Opensearch: please use it instead of Elasticsearch.
+Elasticsearch is no longer supported.
 
 #### Docker
 
-The easiest way to setup a local elasticsearch environment is to use docker.
+We recommend that you run Opensearch with docker using the following docker commands:
 
 ```sh
-docker run -d --name es -e discovery.type=single-node -p 9200:9200 elasticsearch:6.8.6
-docker exec es elasticsearch-plugin -s install analysis-icu
-docker restart es
+docker run --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
+docker exec opensearch opensearch-plugin -s install analysis-icu
+docker restart opensearch
 ```
-
-#### Local
-
-1. Download it [here](https://www.elastic.co/downloads/past-releases/elasticsearch-6-8-6).
-2. `cd` into the `elasticsearch-[version number]` directory.
-3. Run `$ elasticsearch-plugin install analysis-icu`
-4. Run `$ ./bin/elasticsearch`.
-5. You may be prompted to download [Java SE](https://www.oracle.com/java/technologies/javase-downloads.html). If so, go
-   ahead and do so.
-6. Check `http://localhost:9200` to make sure the Elasticsearch server is running.
 
 ### Database
 
@@ -122,18 +153,88 @@ grant all privileges on database circ to palace;
 
 #### Environment variables
 
-To let the application know which database to use set the `SIMPLIFIED_PRODUCTION_DATABASE` env variable.
+##### Database
+
+To let the application know which database to use, set the `SIMPLIFIED_PRODUCTION_DATABASE` environment variable.
 
 ```sh
-export SIMPLIFIED_PRODUCTION_DATABASE="postgres://palace:test@localhost:5432/circ"
+export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
+```
+
+##### Firebase Cloud Messaging
+
+For Firebase Cloud Messaging (FCM) support (e.g., for notifications), `one` (and only one) of the following should be set:
+- `SIMPLIFIED_FCM_CREDENTIALS_JSON` - the JSON-format Google Cloud Platform (GCP) service account key  or
+- `SIMPLIFIED_FCM_CREDENTIALS_FILE` - the name of the file containing that key.
+
+```sh
+export SIMPLIFIED_FCM_CREDENTIALS_JSON='{"type":"service_account","project_id":"<id>", "private_key_id":"f8...d1", ...}'
+```
+
+...or...
+
+```sh
+export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
+```
+
+The FCM credentials can be downloaded once a Google Service account has been created.
+More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
+
+### Email sending
+
+To use the features that require sending emails, for example to reset the password for logged-out users, you will need
+to have a working SMTP server and set some environment variables:
+
+```sh
+export SIMPLIFIED_MAIL_SERVER=example.smtp.com
+export SIMPLIFIED_MAIL_PORT=465
+export SIMPLIFIED_MAIL_USERNAME=username
+export SIMPLIFIED_MAIL_PASSWORD=password
+export SIMPLIFIED_MAIL_SENDER=sender@example.com
 ```
 
 ### Running the Application
 
-Install the dependencies:
+As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
+in order to guarantee that it will use the Python version you expect. To use a particular Python version,
+you should create a local virtual environment in the cloned `circulation` repository directory. Assuming that
+you want to use, for example, Python 3.9.9:
 
 ```sh
-poetry install --no-root -E pg-binary
+pyenv virtualenv 3.9.9 circ
+```
+
+This will create a new local virtual environment called `circ` that uses Python 3.9.9. Switch to that environment:
+
+```sh
+pyenv local circ
+```
+
+On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
+are now in. For example, the version of Python installed in your operating system might be `3.10.1`, but
+using a virtual environment can substitute, for example, `3.9.9`:
+
+```sh
+$ python --version
+Python 3.10.1
+
+$ pyenv local circ
+(circ) $ python --version
+Python 3.9.9
+```
+
+For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
+
+Install the dependencies (including dev and CI):
+
+```sh
+poetry install
+```
+
+Install only the production dependencies:
+
+```sh
+poetry install --only main,pg
 ```
 
 Run the application with:
@@ -142,7 +243,151 @@ Run the application with:
 poetry run python app.py
 ```
 
-And visit `http://localhost:6500/`.
+Check that there is now a web server listening on port `6500`:
+
+```sh
+curl http://localhost:6500/
+```
+
+### The Admin Interface
+
+#### Access
+
+By default, the application is configured to provide a built-in version of the [admin web interface](https://github.com/ThePalaceProject/circulation-admin).
+The admin interface can be accessed by visiting the `/admin` endpoint:
+
+```sh
+# On Linux
+xdg-open http://localhost:6500/admin/
+
+# On MacOS
+open http://localhost:6500/admin/
+```
+
+If no existing users are configured (which will be the case if this is a fresh instance of the application), the
+admin interface will prompt you to specify an email address and password that will be used for subsequent logins.
+Extra users can be configured later.
+
+#### Creating A Library
+
+Navigate to `System Configuration → Libraries` and click _Create new library_. You will be prompted to enter various
+details such as the name of the library, a URL, and more. For example, the configuration for a hypothetical
+library, _Hazelnut Peak_, might look like this:
+
+![.github/readme/library.png](.github/readme/library.png)
+
+Note that the _Patron support email address_ will appear in OPDS feeds served by the application, so make sure
+that it is an email address you are happy to make public.
+
+At this point, the _library_ exists but does not contain any _collections_ and therefore won't be of much use to anyone.
+
+#### Adding Collections
+
+Navigate to `System Configuration → Collections` and click _Create new collection_. You will prompted to enter
+details that will be used to source the data for the collection. A good starting point, for testing purposes,
+is to use an open access OPDS feed as a data source. The
+[Open Bookshelf](https://palace-bookshelf-opds2.dp.la/v1/publications) is a good example of such a feed. Enter the
+following details:
+
+![.github/readme/collection.png](.github/readme/collection.png)
+
+Note that we associate the collection with the _Hazelnut Peak_ library by selecting it in the `Libraries` drop-down.
+A collection can be associated with any number of libraries.
+
+##### Importing
+
+At this point, we have a library named _Hazelnut Peak_ configured to use the _Palace Bookshelf_ collection we created.
+It's now necessary to tell the application to start importing books from the OPDS feed. When the application is
+running inside a Docker image, the image is typically configured to execute various import operations on a regular
+schedule using `cron`. Because we're running the application from the command-line for development purposes, we
+need to execute these operations ourselves manually. In this particular case, we need to execute the `opds_import_monitor`:
+
+```sh
+(circ) $ ./bin/opds_import_monitor
+{"host": "hazelnut",
+ "app": "simplified",
+ "name": "OPDS Import Monitor",
+ "level": "INFO",
+ "filename": "opds_import.py",
+ "message": "[Palace Bookshelf] Following next link: http://openbookshelf.dp.la/lists/Open%20Bookshelf/crawlable",
+ "timestamp": "2022-01-17T11:52:35.839978+00:00"}
+...
+```
+
+The command will cause the application to crawl the configured OPDS feed and import every book in it. At the time
+of writing, this command will take around an hour to run the first time it is executed, but subsequent executions
+complete in seconds. Please wait for the import to complete before continuing!
+
+When the import has completed, the books are imported but no OPDS feeds will have been generated, and no search
+service has been configured.
+
+#### Configuring Search
+
+Navigate to `System Configuration → Search` and add a new search configuration. The required URL is
+the URL of the [Opensearch instance configured earlier](#opensearch):
+
+![Opensearch](.github/readme/search.png)
+
+#### Generating Search Indices
+
+As with the collection [configured earlier](#adding-collections), the application depends upon various operations
+being executed on a regular schedule to generate search indices. Because we're running the application from
+the local command-line, we need to execute those operations manually:
+
+```sh
+./bin/search_index_clear
+./bin/search_index_refresh
+```
+
+Neither of the commands will produce any output if the operations succeed.
+
+#### Generating OPDS Feeds
+
+When the collection has finished [importing](#importing), we are required to generate OPDS feeds. Again,
+this operation is configured to execute on a regular schedule in the Docker image, but we'll need to execute
+it manually here:
+
+```sh
+./bin/opds_entry_coverage
+```
+
+The command will produce output indicating any errors.
+
+Navigating to `http://localhost:6500/` should show an OPDS feed containing various books:
+
+![Feed](.github/readme/feed.png)
+
+#### Troubleshooting
+
+The `./bin/repair/where_are_my_books` command can produce output that may indicate why books are not appearing
+in OPDS feeds. A working, correctly configured installation, at the time of writing, produces output such as this:
+
+```sh
+(circ) $ ./bin/repair/where_are_my_books
+Checking library Hazelnut Peak
+ Associated with collection Palace Bookshelf.
+ Associated with 171 lanes.
+
+0 feeds in cachedfeeds table, not counting grouped feeds.
+
+Examining collection "Palace Bookshelf"
+ 7838 presentation-ready works.
+ 0 works not presentation-ready.
+ 7824 works in the search index, expected around 7838.
+```
+
+We can see from the above output that the vast majority of the books in the _Open Bookshelf_ collection
+were indexed correctly.
+
+### Sitewide Settings
+
+Some settings have been provided in the admin UI that configure or toggle various functions of the Circulation Manager.
+These can be found at `/admin/web/config/SitewideSettings` in the admin interface.
+
+#### Push Notification Status
+
+This setting is a toggle that may be used to turn on or off the ability for the the system
+to send the Loan and Hold reminders to the mobile applications.
 
 ### Installation Issues
 
@@ -166,6 +411,26 @@ the `xcode-select --install` command. If it does not work, you can try adding th
 ```sh
 export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
 ```
+
+## Scheduled Jobs
+
+All jobs are scheduled via `cron`, as specified in the `docker/services/simplified_crontab` file.
+This includes all the import and reaper jobs, as well as other necessary background tasks, such as maintaining
+the search index and feed caches.
+
+### Job Requirements
+
+#### hold_notifications
+
+Requires one of [the Firebase Cloud Messaging credentials environment variables (described above)](#firebase-cloud-messaging)
+to be present and non-empty.
+In addition, the site-wide `PUSH_NOTIFICATIONS_STATUS` setting must be either `unset` or `true`.
+
+#### loan_notifications
+
+Requires one of [the Firebase Cloud Messaging credentials environment variables (described above](#firebase-cloud-messaging)
+to be present and non-empty.
+In addition, the site-wide `PUSH_NOTIFICATIONS_STATUS` setting must be either `unset` or `true`.
 
 ## Code Style
 
@@ -225,16 +490,16 @@ before pushing changes to make sure you find any failing tests before committing
 For each push to a branch, CI also creates a docker image for the code in the branch. These images can be used for
 testing the branch, or deploying hotfixes.
 
-## Testing
-
-The Github Actions CI service runs the unit tests against Python 3.6, 3.7, 3.8 and 3.9 automatically using
-[tox](https://tox.readthedocs.io/en/latest/).
-
-To run `pytest` unit tests locally, install `tox`.
+To install the tools used by CI run:
 
 ```sh
-pip install tox
+poetry install --only ci
 ```
+
+## Testing
+
+The Github Actions CI service runs the unit tests against Python 3.8, 3.9, 3.10, and 3.11 automatically using
+[tox](https://tox.readthedocs.io/en/latest/).
 
 Tox has an environment for each python version, the module being tested, and an optional `-docker` factor that will
 automatically use docker to deploy service containers used for the tests. You can select the environment you would like
@@ -247,12 +512,12 @@ with service dependencies running in docker containers.
 
 #### Python version
 
-| Factor      | Python Version |
-| ----------- | -------------- |
-| py36        | Python 3.6     |
-| py37        | Python 3.7     |
-| py38        | Python 3.8     |
-| py39        | Python 3.9     |
+| Factor | Python Version |
+|--------|----------------|
+| py38   | Python 3.8     |
+| py39   | Python 3.9     |
+| py310  | Python 3.10    |
+| py311  | Python 3.11    |
 
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
 flag.
@@ -282,11 +547,7 @@ missing Python versions in your system for local testing.
 If you install `tox-docker` tox will take care of setting up all the service containers necessary to run the unit tests
 and pass the correct environment variables to configure the tests to use these services. Using `tox-docker` is not
 required, but it is the recommended way to run the tests locally, since it runs the tests in the same way they are run
-on the Github Actions CI server.
-
-```sh
-pip install tox-docker
-```
+on the Github Actions CI server. `tox-docker` is automatically included when installing the `ci` dependency group.
 
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
 with a particular factor you add it to the end of the environment.
@@ -303,14 +564,14 @@ If you already have elastic search or postgres running locally, you can run them
 following environment variables:
 
 - `SIMPLIFIED_TEST_DATABASE`
-- `SIMPLIFIED_TEST_ELASTICSEARCH`
+- `SIMPLIFIED_TEST_OPENSEARCH`
 
 Make sure the ports and usernames are updated to reflect the local configuration.
 
 ```sh
 # Set environment variables
-export SIMPLIFIED_TEST_DATABASE="postgres://simplified_test:test@localhost:9005/simplified_circulation_test"
-export SIMPLIFIED_TEST_ELASTICSEARCH="http://localhost:9006"
+export SIMPLIFIED_TEST_DATABASE="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
+export SIMPLIFIED_TEST_OPENSEARCH="http://localhost:9200"
 
 # Run tox
 tox -e "py38-{api,core}"
@@ -325,6 +586,22 @@ Only run the `test_google_analytics_provider` tests with Python 3.8 using docker
 
 ```sh
 tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
+```
+
+### Coverage Reports
+
+Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
+When the tests are run with github actions, the coverage report is automatically uploaded to
+[codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
+
+When running locally, the results from each individual run can be collected and combined into an HTML report using
+the `report` tox environment. This can be run on its own after running the tests, or as part of the tox environment
+selection.
+
+```shell
+# Run core and api tests under Python 3.8, using docker
+# containers for dependencies, and generate code coverage report
+tox -e "py38-{core,api}-docker,report"
 ```
 
 ## Usage with Docker
@@ -407,3 +684,7 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
           renderer = HTMLRenderer()
           renderer.open_in_browser(session)
       ```
+
+### Other Environment Variables
+
+- `SIMPLIFIED_SIRSI_DYNIX_APP_ID`: The Application ID for the SirsiDynix Authentication API (optional)

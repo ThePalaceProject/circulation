@@ -6,10 +6,8 @@
 
 import json
 
-from . import LanguageCodes
 
-
-class JSONable(object):
+class JSONable:
     """An object whose Unicode representation is a JSON dump
     of a dictionary.
     """
@@ -41,6 +39,7 @@ class Manifest(JSONable):
 
     DEFAULT_CONTEXT = "http://readium.org/webpub/default.jsonld"
     DEFAULT_TYPE = BOOK_TYPE
+    links: list = []
 
     def __init__(self, context=None, type=None):
         self.context = context or self.DEFAULT_CONTEXT
@@ -66,7 +65,7 @@ class Manifest(JSONable):
 
     def _append(self, append_to, **kwargs):
         # Omit properties with None values, rather than propagating nulls to manifest.
-        append_to.append(dict((k, v) for k, v in kwargs.items() if v is not None))
+        append_to.append({k: v for k, v in kwargs.items() if v is not None})
 
     def add_link(self, href, rel, **kwargs):
         self._append(self.links, href=href, rel=rel, **kwargs)
@@ -93,9 +92,8 @@ class Manifest(JSONable):
             return
         self.metadata["title"] = edition.title
 
-        self.metadata["language"] = LanguageCodes.three_to_two.get(
-            edition.language, edition.language
-        )
+        self.metadata["language"] = edition.language_code
+
         authors = [
             author.display_name or author.sort_name
             for author in edition.author_contributors

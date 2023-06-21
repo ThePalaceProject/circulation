@@ -3,12 +3,12 @@ from datetime import date, datetime, timedelta
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.announcements import Announcement
-from api.testing import AnnouncementTest
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail
+from tests.fixtures.announcements import AnnouncementFixture
 
 
-class TestAnnouncementListValidator(AnnouncementTest):
+class TestAnnouncementListValidator:
     def assert_invalid(self, x, detail):
         assert isinstance(x, ProblemDetail)
         assert INVALID_INPUT.uri == x.uri
@@ -225,12 +225,12 @@ class TestAnnouncementListValidator(AnnouncementTest):
             "Value for somedate must be no earlier than 2020-02-01",
         )
 
-    def test_format(self):
+    def test_format(self, announcement_fixture: AnnouncementFixture):
         # Test our ability to format the output of validate_announcements for storage
         # in the database.
 
         validator = AnnouncementListValidator()
-        announcements = [self.active, self.forthcoming]
+        announcements = [announcement_fixture.active, announcement_fixture.forthcoming]
 
         # Convert the announcements into a single JSON string.
         ready_for_storage = validator.format_as_string(announcements)

@@ -13,7 +13,7 @@ from . import SettingsController
 
 class StorageServicesController(SettingsController):
     def __init__(self, manager):
-        super(StorageServicesController, self).__init__(manager)
+        super().__init__(manager)
         self.goal = ExternalIntegration.STORAGE_GOAL
         self.protocols = self._get_integration_protocols(
             list(MirrorUploader.IMPLEMENTATION_REGISTRY.values()),

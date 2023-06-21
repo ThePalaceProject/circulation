@@ -31,8 +31,12 @@ import re
 import socket
 import ssl
 import tempfile
+from enum import Enum
+from typing import Callable, Optional
 
-from api.sip.dialect import GenericILS
+import certifi
+
+from api.sip.dialect import Dialect
 from core.util.datetime_helpers import utc_now
 
 # SIP2 defines a large number of fields which are used in request and
@@ -40,8 +44,11 @@ from core.util.datetime_helpers import utc_now
 # fields in a way that makes it easy to reliably parse response
 # documents.
 
+# Client-level logger.
+client_logger = logging.getLogger("SIPClient")
 
-class fixed(object):
+
+class fixed:
     """A fixed-width field in a SIP2 response."""
 
     def __init__(self, internal_name, length):
@@ -82,17 +89,24 @@ fixed._add("login_ok", 1)
 fixed._add("end_session", 1)
 
 
-class named(object):
+class named:
     """A variable-length field in a SIP2 response."""
 
     def __init__(
-        self, internal_name, sip_code, required=False, length=None, allow_multiple=False
+        self,
+        internal_name: str,
+        sip_code: str,
+        required=False,
+        length: Optional[int] = None,
+        allow_multiple=False,
+        log: Optional[logging.Logger] = None,
     ):
         self.sip_code = sip_code
         self.internal_name = internal_name
         self.req = required
         self.length = length
         self.allow_multiple = allow_multiple
+        self.log = log or client_logger
 
     @property
     def required(self):
@@ -106,7 +120,12 @@ class named(object):
         `field.req`.
         """
         return named(
-            self.internal_name, self.sip_code, True, self.length, self.allow_multiple
+            self.internal_name,
+            self.sip_code,
+            True,
+            self.length,
+            self.allow_multiple,
+            log=self.log,
         )
 
     def consume(self, value, in_progress):
@@ -121,7 +140,7 @@ class named(object):
             dictionary.
         """
         if self.length and len(value) != self.length:
-            self.log.warn(
+            self.log.warning(
                 "Expected string of length %d for field %s, but got %r",
                 self.length,
                 self.sip_code,
@@ -187,7 +206,12 @@ class RequestResend(IOError):
     """
 
 
-class Constants(object):
+class Sip2Encoding(Enum):
+    cp850 = "cp850"
+    utf8 = "utf8"
+
+
+class Constants:
     UNKNOWN_LANGUAGE = "000"
     ENGLISH = "001"
 
@@ -200,10 +224,12 @@ class Constants(object):
 
 class SIPClient(Constants):
 
-    log = logging.getLogger("SIPClient")
+    log = client_logger
 
     # Maximum retries of a SIP message before failing.
     MAXIMUM_RETRIES = 5
+    # Timeout in seconds
+    TIMEOUT = 3
 
     # These are the subfield names associated with the 'patron status'
     # field as specified in the SIP2 spec.
@@ -267,8 +293,10 @@ class SIPClient(Constants):
         use_ssl=False,
         ssl_cert=None,
         ssl_key=None,
+        ssl_verification=True,
+        ssl_contexts: Callable[[ssl._SSLMethod], ssl.SSLContext] = ssl.SSLContext,
         encoding=Constants.DEFAULT_ENCODING,
-        dialect=GenericILS,
+        dialect=Dialect.GENERIC_ILS,
     ):
         """Initialize a client for (but do not connect to) a SIP2 server.
 
@@ -294,6 +322,8 @@ class SIPClient(Constants):
         self.use_ssl = use_ssl or ssl_cert or ssl_key
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
+        self.ssl_contexts = ssl_contexts
+        self.ssl_verification = ssl_verification
         self.encoding = encoding
 
         # Turn the separator string into a regular expression that splits
@@ -316,7 +346,7 @@ class SIPClient(Constants):
             # We're implicitly logged in.
             self.must_log_in = False
         self.login_password = login_password
-        self.dialect = dialect
+        self.dialect_config = dialect.config
 
     def login(self):
         """Log in to the SIP server if required."""
@@ -329,7 +359,7 @@ class SIPClient(Constants):
                 self.location_code,
             )
             if response["login_ok"] != "1":
-                raise IOError("Error logging in: %r" % response)
+                raise OSError("Error logging in: %r" % response)
             return response
 
     def patron_information(self, *args, **kwargs):
@@ -338,17 +368,17 @@ class SIPClient(Constants):
             self.patron_information_request,
             self.patron_information_parser,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     def end_session(self, *args, **kwargs):
         """Send end session message."""
-        if self.dialect.sendEndSession:
+        if self.dialect_config.sendEndSession:
             return self.make_request(
                 self.end_session_message,
                 self.end_session_response_parser,
                 *args,
-                **kwargs
+                **kwargs,
             )
         else:
             return None
@@ -364,10 +394,10 @@ class SIPClient(Constants):
             else:
                 self.connection = self.make_insecure_connection()
 
-            self.connection.settimeout(12)
+            self.connection.settimeout(self.TIMEOUT)
             self.connection.connect((self.target_server, self.target_port))
-        except socket.error as message:
-            raise IOError(
+        except OSError as message:
+            raise OSError(
                 "Could not connect to %s:%s - %s"
                 % (self.target_server, self.target_port, message)
             )
@@ -401,9 +431,30 @@ class SIPClient(Constants):
             fd, tmp_ssl_key_path = tempfile.mkstemp()
             os.write(fd, self.ssl_key.encode("utf-8"))
             os.close(fd)
-        connection = self.make_insecure_connection()
-        connection = ssl.wrap_socket(
-            connection, certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
+        insecure_connection = self.make_insecure_connection()
+
+        context = self.ssl_contexts(ssl.PROTOCOL_TLS_CLIENT)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
+        context.load_verify_locations(cafile=certifi.where())
+
+        # If the certificate path is provided, the certificate will be loaded.
+        # The private key is dependent on the certificate, so can't be loaded if
+        # there's no certificate present.
+        if tmp_ssl_cert_path:
+            context.load_cert_chain(
+                certfile=tmp_ssl_cert_path, keyfile=tmp_ssl_key_path
+            )
+
+        if self.ssl_verification:
+            context.check_hostname = True
+            context.verify_mode = ssl.CERT_REQUIRED
+        else:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+        connection = context.wrap_socket(
+            insecure_connection, server_hostname=self.target_server
         )
 
         # Now that the connection has been established, the temporary
@@ -438,9 +489,9 @@ class SIPClient(Constants):
         retries = 0
         while not parsed:
             if retries >= self.MAXIMUM_RETRIES:
-                # Only retry MAXIMUM_RETRIES times in case we we are sending
+                # Only retry MAXIMUM_RETRIES times in case we are sending
                 # a message the ILS doesn't like, so we don't retry forever
-                raise IOError("Maximum SIP retries reached")
+                raise OSError("Maximum SIP retries reached")
             self.send(message_with_checksum)
             response = self.read_message()
             try:
@@ -687,6 +738,9 @@ class SIPClient(Constants):
         """
         data = data.decode(self.encoding)
 
+        # We save the original data that is parsed so we can log it if there would be some errors.
+        original_data = data
+
         parsed = {}
         data = self.consume_status_code(data, str(expect_status_code), parsed)
 
@@ -744,7 +798,7 @@ class SIPClient(Constants):
                     # This is an extension field. Do the best we can.
                     # This basically means storing it in the dictionary
                     # under its SIP code.
-                    field = named(sip_code, sip_code, allow_multiple=True)
+                    field = named(sip_code, sip_code, allow_multiple=True, log=self.log)
 
                 if field:
                     field.consume(value, parsed)
@@ -755,7 +809,7 @@ class SIPClient(Constants):
         # If a named field is required and never showed up, sound the alarm.
         for field in required_fields_not_seen:
             self.log.error(
-                "Expected required field %s but did not find it.", field.sip_code
+                f"Expected required field {field.sip_code} but did not find it. Response data:{original_data}. SIP2 server:{self.target_server}"
             )
         return parsed
 
@@ -769,7 +823,7 @@ class SIPClient(Constants):
             if status_code == "96":  # Request SC Resend
                 raise RequestResend()
             else:
-                raise IOError("Unexpected status code %s: %s" % (status_code, data))
+                raise OSError(f"Unexpected status code {status_code}: {data}")
         return data[2:]
 
     @classmethod
@@ -851,11 +905,11 @@ class SIPClient(Constants):
             tmp = self.connection.recv(4096)
             data = data + tmp
             if not tmp:
-                raise IOError("No data read from socket.")
+                raise OSError("No data read from socket.")
             if data[-1] == 13 or data[-1] == 10:
                 done = True
             if len(data) > max_size:
-                raise IOError("SIP2 response too large.")
+                raise OSError("SIP2 response too large.")
         return data
 
     def append_checksum(self, text, include_sequence_number=True):
@@ -898,68 +952,3 @@ class SIPClient(Constants):
         text += checksum
 
         return text
-
-
-class MockSIPClient(SIPClient):
-    """A SIP client that relies on canned responses rather than a socket
-    connection.
-    """
-
-    def __init__(self, **kwargs):
-        # Override any settings that might cause us to actually
-        # make requests.
-        kwargs["target_server"] = None
-        kwargs["target_port"] = None
-        super(MockSIPClient, self).__init__(**kwargs)
-
-        self.read_count = 0
-        self.write_count = 0
-        self.requests = []
-        self.responses = []
-        self.status = []
-
-    def queue_response(self, response):
-        if isinstance(response, str):
-            # Make sure responses come in as bytestrings, as they would
-            # in real life.
-            response = response.encode(Constants.DEFAULT_ENCODING)
-        self.responses.append(response)
-
-    def connect(self):
-        # Since there is no socket, do nothing but reset the local
-        # connection-specific variables.
-        self.status.append("Creating new socket connection.")
-        self.reset_connection_state()
-        return None
-
-    def do_send(self, data):
-        self.write_count += 1
-        self.requests.append(data)
-
-    def read_message(self, max_size=1024 * 1024):
-        """Read a response message off the queue."""
-        self.read_count += 1
-        response = self.responses[0]
-        self.responses = self.responses[1:]
-        return response
-
-    def disconnect(self):
-        pass
-
-
-class MockSIPClientFactory(object):
-    """Pass this into SIP2AuthenticationProvider to instantiate a
-    MockSIPClient based on its configuration, _and_ to use that
-    MockSIPClient every single time; normally
-    SIP2AuthenticationProvider will instantiate a different client for
-    every simulated server interaction, making it impossible to queue
-    responses or look at the results.
-    """
-
-    def __init__(self):
-        self.client = None
-
-    def __call__(self, **kwargs):
-        if self.client is None:
-            self.client = MockSIPClient(**kwargs)
-        return self.client

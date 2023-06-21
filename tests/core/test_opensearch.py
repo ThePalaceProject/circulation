@@ -1,14 +1,14 @@
 from core.classifier import Classifier
 from core.model import Genre
 from core.opensearch import OpenSearchDocument
-from core.testing import DatabaseTest
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestOpenSearchDocument(DatabaseTest):
-    def test_search_info(self):
+class TestOpenSearchDocument:
+    def test_search_info(self, db: DatabaseTransactionFixture):
         # Searching this lane will use the language
         # and audience restrictions from the lane.
-        lane = self._lane()
+        lane = db.lane()
         lane.display_name = "Fiction"
         lane.languages = ["eng", "ger"]
         lane.audiences = [Classifier.AUDIENCE_YOUNG_ADULT]
@@ -21,11 +21,11 @@ class TestOpenSearchDocument(DatabaseTest):
 
         # This lane is the root for a patron type, so searching
         # it will use all the lane's restrictions.
-        root_lane = self._lane()
+        root_lane = db.lane()
         root_lane.root_for_patron_type = ["A"]
         root_lane.display_name = "Science Fiction & Fantasy"
-        sf, ignore = Genre.lookup(self._db, "Science Fiction")
-        fantasy, ignore = Genre.lookup(self._db, "Fantasy")
+        sf, ignore = Genre.lookup(db.session, "Science Fiction")
+        fantasy, ignore = Genre.lookup(db.session, "Fantasy")
         root_lane.add_genre(sf)
         root_lane.add_genre(fantasy)
 

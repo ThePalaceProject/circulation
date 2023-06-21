@@ -1,0 +1,1041 @@
+{
+    "metadata": {
+        "title": "Feedbooks",
+        "itemsPerPage": 100,
+        "currentPage": 1,
+        "numberOfItems": 787
+    },
+    "links": [
+        {
+            "type": "application/opds+json",
+            "rel": "self",
+            "href": "https://market.feedbooks.com/api/libraries/harvest.json"
+        },
+        {
+            "type": "application/opds+json",
+            "rel": "next",
+            "href": "https://market.feedbooks.com/api/libraries/harvest.json?page=2&token=sfv12i2uzvmoulkq9bvu"
+        },
+        {
+            "type": "application/opds+json",
+            "rel": "last",
+            "href": "https://market.feedbooks.com/api/libraries/harvest.json?page=8&token=sfv12i2uzvmoulkq9bvu"
+        }
+    ],
+    "publications": [
+        {
+            "metadata": {
+                "@type": "http://schema.org/Book",
+                "title": "Secret Language of Sisters, The",
+                "language": "en",
+                "modified": "2021-04-17T10:24:22Z",
+                "published": "2019-08-01T00:00:00Z",
+                "identifier": "urn:ISBN:9781338252989",
+                "author": [
+                    {
+                        "name": "Luanne Rice",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=3633&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "narrator": [
+                    {
+                        "name": "Kate Rudd",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=1234140&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "publisher": {
+                    "name": "Scholastic Inc. Audio",
+                    "links": [
+                        {
+                            "type": "application/opds+json",
+                            "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Scholastic+Inc.+Audio"
+                        }
+                    ]
+                },
+                "description": "New York Times bestselling adult author Luanne Rice makes her dazzling YA debut with this gorgeous, unputdownable story of love, hope, and redemption. \n\nWhen Ruth Ann (Roo) McCabe responds to a text message while she's driving, her life as she knows it ends. The car flips, and Roo winds up in a hospital bed, paralyzed. Silent. Everyone thinks she's in a coma, but Roo has locked-in syndrome--she can see and hear and understand everything around her, but no one knows it. She's trapped inside her own body, screaming to be heard.\n\nMathilda (Tilly) is Roo's sister and best friend. She was the one who texted Roo and inadvertently caused the accident. Now, Tilly must grapple with her overwhelming guilt and her growing feelings for Roo's boyfriend, Newton--the only other person who seems to get what Tilly is going through.\n\nBut Tilly might be the only person who can solve the mystery of her sister's condition--who can see through Roo's silence to the truth underneath.\n\nSomehow, through medicine or miracles, will both sisters find a way to heal?",
+                "subject": [
+                    {
+                        "code": "FBFIC000000",
+                        "name": "Fiction",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBJUV000000",
+                        "name": "Juvenile & young adult",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBJUV000000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBJUV000000N",
+                        "name": "Themes",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBJUV000000N.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBJUV009001N",
+                        "name": "Family",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBJUV009001N.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBJUV013070",
+                        "name": "Siblings",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBJUV013070.json?lang=en"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "images": [
+                {
+                    "href": "https://covers.feedbooks.net/item/3264313.jpg?size=large&t=1602926692",
+                    "type": "image/jpeg",
+                    "width": 260,
+                    "height": 420
+                },
+                {
+                    "href": "https://covers.feedbooks.net/item/3264313.jpg?t=1602926692",
+                    "type": "image/jpeg",
+                    "width": 100,
+                    "height": 180
+                }
+            ],
+            "licenses": [
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:8b58d9e4-6fb0-4d22-bb1a-3a9a51eb5087",
+                        "format": [
+                            "application/audiobook+lcp",
+                            "text/html"
+                        ],
+                        "created": "2021-09-29T19:22:29+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 79.99
+                        },
+                        "terms": {
+                            "checkouts": 15,
+                            "concurrency": 5,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6
+                        },
+                        "order": {
+                            "name": "Tester Books",
+                            "identifier": "202109-262-013664",
+                            "href": "https://market.feedbooks.com/carts/13664"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=8b58d9e4-6fb0-4d22-bb1a-3a9a51eb5087",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "@type": "http://schema.org/Book",
+                "title": "Heartbreaker",
+                "language": "en",
+                "modified": "2021-07-06T20:43:41Z",
+                "published": "2021-05-25T00:00:00Z",
+                "identifier": "urn:ISBN:9781665103107",
+                "author": [
+                    {
+                        "name": "Karen Robards",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=6648&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "narrator": [
+                    {
+                        "name": "Lisa Jandovitz",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=1441778&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "publisher": {
+                    "name": "Blackstone Publishing",
+                    "links": [
+                        {
+                            "type": "application/opds+json",
+                            "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Blackstone+Publishing"
+                        }
+                    ]
+                },
+                "description": "<p>While vacationing in Utah’s mountain wilderness, Lynn Nelson suddenly finds herself having to deal with her teenage daughter Rory’s raging hormones. The object of Rory’s passion is their guide, drop-dead gorgeous Jess Feldman, a man the divorced Lynn instinctively distrusts, even as she shields herself from his blazing baby blues. But after Lynn and Rory fall off a cliff of sheared rock, Jess becomes their only hope. Risking his life, he navigates them through the impenetrable forest thousands of feet below, unwittingly plunging them into a danger more menacing than they could have imagined. Exhausted and injured, all they have is one another—a terrified child, and a man and a woman who rediscover passion in each other’s arms—as they race against time for their lives.</p>",
+                "subject": [
+                    {
+                        "code": "FBFIC000000",
+                        "name": "Fiction",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC019000",
+                        "name": "Literary",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC019000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC027000",
+                        "name": "Romance",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC027000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC027020",
+                        "name": "Contemporary",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC027020.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC022000",
+                        "name": "Mystery & detective",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC022000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC030000",
+                        "name": "Suspense",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC030000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC027110",
+                        "name": "Suspense",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC027110.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "READ0000",
+                        "scheme": "http://schema.org/Audience",
+                        "name": "Adult",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/top.json?age=READ0000&lang=en"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "images": [
+                {
+                    "href": "https://covers.feedbooks.net/item/4141052.jpg?size=large&t=1625604221",
+                    "type": "image/jpeg",
+                    "width": 260,
+                    "height": 420
+                },
+                {
+                    "href": "https://covers.feedbooks.net/item/4141052.jpg?t=1625604221",
+                    "type": "image/jpeg",
+                    "width": 100,
+                    "height": 180
+                }
+            ],
+            "licenses": [
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:874a5001-de62-40c1-ae95-29ca0c0a19d3",
+                        "format": [
+                            "application/audiobook+lcp",
+                            "text/html"
+                        ],
+                        "created": "2021-10-04T16:21:20+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 59.95
+                        },
+                        "terms": {
+                            "concurrency": 1,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6
+                        },
+                        "order": {
+                            "name": "Tester Requests 3",
+                            "identifier": "202110-262-013793",
+                            "href": "https://market.feedbooks.com/carts/13793"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=874a5001-de62-40c1-ae95-29ca0c0a19d3",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "@type": "http://schema.org/Book",
+                "title": "Past Prologue",
+                "language": "en",
+                "modified": "2021-08-21T04:37:21Z",
+                "published": "2019-07-23T00:00:00Z",
+                "numberOfPages": 34,
+                "identifier": "urn:ISBN:9781982139582",
+                "author": [
+                    {
+                        "name": "Diana Gabaldon",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=4830&lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Steve Berry",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=16652&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "publisher": {
+                    "name": "Simon & Schuster",
+                    "links": [
+                        {
+                            "type": "application/opds+json",
+                            "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Simon+%26+Schuster"
+                        }
+                    ]
+                },
+                "description": "<i>Where should we go? All that we knew is gone, and all that we have is each other&hellip;</i><BR> <BR>In this short story from the thrilling anthology <i>MatchUp</i>, bestselling authors Diana Gabaldon and Steve Berry—along with their popular series characters Jamie Fraser and Cotton Malone—team up for the first time ever.",
+                "belongsTo": {
+                    "collection": "The MatchUp Collection"
+                },
+                "subject": [
+                    {
+                        "code": "FBFIC000000",
+                        "name": "Fiction",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC003000",
+                        "name": "Anthologies (multiple authors)",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC003000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "READ0000",
+                        "scheme": "http://schema.org/Audience",
+                        "name": "Adult",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/top.json?age=READ0000&lang=en"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "images": [
+                {
+                    "href": "https://covers.feedbooks.net/item/3126702.jpg?size=large&t=1590787701",
+                    "type": "image/jpeg",
+                    "width": 260,
+                    "height": 420
+                },
+                {
+                    "href": "https://covers.feedbooks.net/item/3126702.jpg?t=1590787701",
+                    "type": "image/jpeg",
+                    "width": 100,
+                    "height": 180
+                }
+            ],
+            "licenses": [
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:a89913d2-0511-4b12-89d5-57ba64870be5",
+                        "format": [
+                            "application/epub+zip",
+                            "text/html"
+                        ],
+                        "created": "2021-09-29T19:22:21+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 9.99
+                        },
+                        "terms": {
+                            "expires": "2023-09-29",
+                            "concurrency": 1,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.adobe.adept+xml",
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6,
+                            "copy": false,
+                            "print": false,
+                            "tts": false
+                        },
+                        "order": {
+                            "name": "Tester Books",
+                            "identifier": "202109-262-013664",
+                            "href": "https://market.feedbooks.com/carts/13664"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=a89913d2-0511-4b12-89d5-57ba64870be5",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "@type": "http://schema.org/Book",
+                "title": "The Eighth Sister: A Thriller",
+                "language": "en",
+                "modified": "2021-09-24T09:03:04Z",
+                "published": "2019-04-09T00:00:00Z",
+                "numberOfPages": 478,
+                "identifier": "urn:ISBN:9781503958302",
+                "author": [
+                    {
+                        "name": "Robert Dugoni",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=35158&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "publisher": {
+                    "name": "Thomas & Mercer",
+                    "links": [
+                        {
+                            "type": "application/opds+json",
+                            "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Thomas+%26+Mercer"
+                        }
+                    ]
+                },
+                "description": "<p>\n                        <b>An Amazon Charts, <i>Washington Post</i>, and <i>Wall Street Journal</i> bestseller. </b>\n                    </p>\n                    <p>\n                        <b>A pulse-pounding thriller of espionage, spy games, and treachery by the <i>New York Times</i> bestselling author of the Tracy Crosswhite Series.</b>\n                    </p>\n                    <p>Former CIA case officer Charles Jenkins is a man at a crossroads: in his early sixties, he has a family, a new baby on the way, and a security consulting business on the brink of bankruptcy. Then his former bureau chief shows up at his house with a risky new assignment: travel undercover to Moscow and locate a Russian agent believed to be killing members of a clandestine US spy cell known as the seven sisters.</p>\n                    <p>Desperate for money, Jenkins agrees to the mission and heads to the Russian capital. But when he finds the mastermind agent behind the assassinations&#x2014;the so-called eighth sister&#x2014;she is not who or what he was led to believe. Then again, neither is anyone else in this deadly game of cat and mouse.</p>\n                    <p>Pursued by a dogged Russian intelligence officer, Jenkins executes a daring escape across the Black Sea, only to find himself abandoned by the agency he serves. With his family and freedom at risk, Jenkins is in the fight of his life&#x2014;against his own country.</p>",
+                "belongsTo": {
+                    "collection": "Charles Jenkins",
+                    "series": [
+                        {
+                            "name": "Charles Jenkins",
+                            "position": 1,
+                            "links": [
+                                {
+                                    "type": "application/opds+json",
+                                    "href": "https://market.feedbooks.com/series/42251.json?lang=en"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "subject": [
+                    {
+                        "code": "FBFIC000000",
+                        "name": "Fiction",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC031000",
+                        "name": "Thrillers",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC031000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "INFEN000",
+                        "name": "English literature",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/top.json?influence=INFEN000&lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "INFENUSA",
+                        "name": "American and Canadian literature",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/top.json?influence=INFENUSA&lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "READ0000",
+                        "scheme": "http://schema.org/Audience",
+                        "name": "Adult",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/top.json?age=READ0000&lang=en"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "images": [
+                {
+                    "href": "https://covers.feedbooks.net/item/4239559.jpg?size=large&t=1632474184",
+                    "type": "image/jpeg",
+                    "width": 260,
+                    "height": 420
+                },
+                {
+                    "href": "https://covers.feedbooks.net/item/4239559.jpg?t=1632474184",
+                    "type": "image/jpeg",
+                    "width": 100,
+                    "height": 180
+                }
+            ],
+            "licenses": [
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:3cd67474-2958-45c7-92b0-3d5d6e798474",
+                        "format": [
+                            "application/epub+zip",
+                            "text/html"
+                        ],
+                        "created": "2021-09-29T18:21:15+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 65.89
+                        },
+                        "terms": {
+                            "checkouts": 40,
+                            "concurrency": 10,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.adobe.adept+xml",
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6,
+                            "copy": false,
+                            "print": false,
+                            "tts": false
+                        },
+                        "order": {
+                            "name": "Amazon cart",
+                            "po_number": "Amazon test +",
+                            "identifier": "202109-262-013540",
+                            "href": "https://market.feedbooks.com/carts/13540"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=3cd67474-2958-45c7-92b0-3d5d6e798474",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                },
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:4d1b9fd3-b943-434a-919a-dceca8044552",
+                        "format": [
+                            "application/epub+zip",
+                            "text/html"
+                        ],
+                        "created": "2021-09-29T19:22:18+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 16.48
+                        },
+                        "terms": {
+                            "checkouts": 5,
+                            "concurrency": 5,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.adobe.adept+xml",
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6,
+                            "copy": false,
+                            "print": false,
+                            "tts": false
+                        },
+                        "order": {
+                            "name": "Tester Books",
+                            "identifier": "202109-262-013664",
+                            "href": "https://market.feedbooks.com/carts/13664"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=4d1b9fd3-b943-434a-919a-dceca8044552",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "metadata": {
+                "@type": "http://schema.org/Book",
+                "title": "Your Story, My Story",
+                "language": "en",
+                "modified": "2021-10-04T16:30:46Z",
+                "published": "2021-01-01T00:00:00Z",
+                "identifier": "urn:ISBN:9781713651147",
+                "author": [
+                    {
+                        "name": "Connie Palmen",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?author_id=170563&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "translator": [
+                    {
+                        "name": "Eileen J. Stevens",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=1447608&lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Anna Asbury",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=790096&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "narrator": [
+                    {
+                        "name": "Guy Mott",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/store/browse/recent.json?contributor_id=1468854&lang=en"
+                            }
+                        ]
+                    }
+                ],
+                "publisher": {
+                    "name": "Brilliance Audio",
+                    "links": [
+                        {
+                            "type": "application/opds+json",
+                            "href": "https://market.feedbooks.com/store/browse/recent.json?lang=en&publisher=Brilliance+Audio"
+                        }
+                    ]
+                },
+                "description": "<p><b>From the award-winning author of <i>The Friendship</i> comes a shattering, brilliantly inventive novel based on the volatile true love story of literary icons Sylvia Plath and Ted Hughes.</b></p><p>In 1963 Sylvia Plath took her own life in her London flat. Her death was the culmination of a brief, brilliant life lived in the shadow of clinical depression—a condition exacerbated by her tempestuous relationship with mercurial poet Ted Hughes. The ensuing years saw Plath rise to martyr status while Hughes was cast as the cause of her suicide, his infidelity at the heart of her demise.</p><p>For decades, Hughes never bore witness to the truth of their marriage—one buried beneath a mudslide of apocryphal stories, gossip, sensationalism, and myth. Until now.</p><p>In this mesmerizing fictional work, Connie Palmen tells his side of the story, previously untold, delivered in Ted Hughes’s own uncompromising voice. A brutal and lyrical confessional, <i>Your Story, My Story</i> paints an indelible picture of their seven-year relationship—the soaring highs and profound lows of star-crossed soul mates bedeviled by their personal demons. It will forever change the way we think about these two literary icons.</p>",
+                "subject": [
+                    {
+                        "code": "FBFIC000000",
+                        "name": "Fiction",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC000000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC019000",
+                        "name": "Literary",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC019000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "FBFIC041000",
+                        "name": "Biographical",
+                        "scheme": "http://www.feedbooks.com/categories",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/category/FBFIC041000.json?lang=en"
+                            }
+                        ]
+                    },
+                    {
+                        "code": "READ0000",
+                        "scheme": "http://schema.org/Audience",
+                        "name": "Adult",
+                        "links": [
+                            {
+                                "type": "application/opds+json",
+                                "href": "https://market.feedbooks.com/top.json?age=READ0000&lang=en"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "images": [
+                {
+                    "href": "https://covers.feedbooks.net/item/4319263.jpg?size=large&t=1633365046",
+                    "type": "image/jpeg",
+                    "width": 260,
+                    "height": 420
+                },
+                {
+                    "href": "https://covers.feedbooks.net/item/4319263.jpg?t=1633365046",
+                    "type": "image/jpeg",
+                    "width": 100,
+                    "height": 180
+                }
+            ],
+            "licenses": [
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:9759cd84-2619-4a02-8b03-6ccd1ba5ec72",
+                        "format": [
+                            "application/audiobook+lcp",
+                            "text/html"
+                        ],
+                        "created": "2021-10-01T18:24:19+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 69.99
+                        },
+                        "terms": {
+                            "checkouts": 40,
+                            "concurrency": 10,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6
+                        },
+                        "order": {
+                            "name": "Amazon Audio",
+                            "po_number": "Amazon Audio test ",
+                            "identifier": "202110-262-013768",
+                            "href": "https://market.feedbooks.com/carts/13768"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=9759cd84-2619-4a02-8b03-6ccd1ba5ec72",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                },
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:71374d6c-5eaa-4297-b536-fe9d4f02289c",
+                        "format": [
+                            "application/audiobook+lcp",
+                            "text/html"
+                        ],
+                        "created": "2021-10-01T18:24:20+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 17.5
+                        },
+                        "terms": {
+                            "checkouts": 5,
+                            "concurrency": 5,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6
+                        },
+                        "order": {
+                            "name": "Amazon Audio",
+                            "po_number": "Amazon Audio test ",
+                            "identifier": "202110-262-013768",
+                            "href": "https://market.feedbooks.com/carts/13768"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=71374d6c-5eaa-4297-b536-fe9d4f02289c",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                },
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:5e21b578-9db4-46c6-802d-8f59c923c270",
+                        "format": [
+                            "application/audiobook+lcp",
+                            "text/html"
+                        ],
+                        "created": "2021-10-01T18:24:21+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 63
+                        },
+                        "terms": {
+                            "expires": "2023-10-01",
+                            "concurrency": 1,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6
+                        },
+                        "order": {
+                            "name": "Amazon Audio",
+                            "po_number": "Amazon Audio test ",
+                            "identifier": "202110-262-013768",
+                            "href": "https://market.feedbooks.com/carts/13768"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=5e21b578-9db4-46c6-802d-8f59c923c270",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                },
+                {
+                    "metadata": {
+                        "identifier": "urn:uuid:f782a41f-f4d9-4917-8276-edfe1dac35de",
+                        "format": [
+                            "application/audiobook+lcp",
+                            "text/html"
+                        ],
+                        "created": "2021-10-01T18:24:21+02:00",
+                        "source": "http://www.cantook.net/",
+                        "price": {
+                            "currency": "USD",
+                            "value": 29.75
+                        },
+                        "terms": {
+                            "checkouts": 26,
+                            "concurrency": 1,
+                            "length": 5097600
+                        },
+                        "protection": {
+                            "format": [
+                                "application/vnd.readium.lcp.license.v1.0+json"
+                            ],
+                            "devices": 6
+                        },
+                        "order": {
+                            "name": "Amazon Audio",
+                            "po_number": "Amazon Audio test ",
+                            "identifier": "202110-262-013768",
+                            "href": "https://market.feedbooks.com/carts/13768"
+                        }
+                    },
+                    "links": [
+                        {
+                            "rel": "http://opds-spec.org/acquisition/borrow",
+                            "href": "https://license.feedbooks.net/loan/status/{?id,checkout_id,expires,patron_id,notification_url,passphrase,hint,hint_url}",
+                            "type": "application/vnd.readium.license.status.v1.0+json",
+                            "templated": true
+                        },
+                        {
+                            "rel": "self",
+                            "href": "https://license.feedbooks.net/copy/status/?uuid=f782a41f-f4d9-4917-8276-edfe1dac35de",
+                            "type": "application/vnd.odl.info+json"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

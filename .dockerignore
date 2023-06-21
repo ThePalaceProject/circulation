@@ -1,0 +1,19 @@
+# Hidden files / folders
+.*
+
+# Temp files
+*~
+
+# Readmes
+**/*.md
+
+# Tests
+tests/
+integration_tests/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Mac OS
+.DS_Store

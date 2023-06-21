@@ -8,16 +8,15 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from api.authenticator import LibraryAuthenticator, PatronData  # noqa: E402
+from api.authentication.base import PatronData
+from api.authenticator import LibraryAuthenticator  # noqa: E402
 from core.scripts import LibraryInputScript  # noqa: E402
 
 
 class PatronInformationScript(LibraryInputScript):
     @classmethod
     def arg_parser(cls, _db):
-        parser = super(PatronInformationScript, cls).arg_parser(
-            _db, multiple_libraries=False
-        )
+        parser = super().arg_parser(_db, multiple_libraries=False)
         parser.add_argument(
             "--barcode",
             help="The barcode to lookup.",

@@ -2,7 +2,7 @@ from core.classifier import *
 from core.classifier.lcc import LCCClassifier as LCC
 
 
-class TestLCC(object):
+class TestLCC:
     def test_name_for(self):
 
         child = Classifier.AUDIENCE_CHILDREN

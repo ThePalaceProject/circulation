@@ -1,19 +1,24 @@
+import logging
 from pathlib import Path
+from typing import Any, Generator, Optional
 
 import flask
+import pytest
 from flask import Response
+from werkzeug.exceptions import MethodNotAllowed
 
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import AdminController, setup_admin_controllers
 from api.admin.problem_details import *
-from api.controller import CirculationManager
+from api.controller import CirculationManagerController
+from tests.api.mockapi.circulation import MockCirculationManager
+from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.api_routes import MockApp, MockController, MockManager
+from tests.fixtures.vendor_id import VendorIDFixture
 
-from ..test_controller import ControllerTest
-from ..test_routes import MockApp, MockController, MockManager, RouteTestFixtures
 
-
-class MockAdminApp(object):
+class MockAdminApp:
     """Pretends to be a Flask application with a configured
     CirculationManager and Admin routes.
     """
@@ -55,9 +60,8 @@ class MockAdminController(MockController):
         return "data", "date", "date_end", "library"
 
 
-class AdminRouteTest(ControllerTest, RouteTestFixtures):
-
-    # The first time setup_method() is called, it will instantiate a real
+class AdminRouteFixture:
+    # The first time __init__() is called, it will instantiate a real
     # CirculationManager object and store it in REAL_CIRCULATION_MANAGER.
     # We only do this once because it takes about a second to instantiate
     # this object. Calling any of this object's methods could be problematic,
@@ -65,24 +69,24 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
     # calling any methods -- we just want to verify the _existence_,
     # in a real CirculationManager, of the methods called in
     # routes.py.
-    @classmethod
-    def setup_class(cls):
-        super(AdminRouteTest, cls).setup_class()
-        cls.REAL_CIRCULATION_MANAGER = None
+    REAL_CIRCULATION_MANAGER = None
 
-    def setup_method(self):
+    def __init__(
+        self, vendor_id: VendorIDFixture, controller_fixture: ControllerFixture
+    ):
+        self.db = vendor_id.db
+        self.controller_fixture = controller_fixture
         self.setup_circulation_manager = False
-        super(AdminRouteTest, self).setup_method()
         if not self.REAL_CIRCULATION_MANAGER:
-            library = self._default_library
+            library = self.db.default_library()
             # Set up the necessary configuration so that when we
             # instantiate the CirculationManager it gets an
             # adobe_vendor_id controller -- this wouldn't normally
             # happen because most circulation managers don't need such a
             # controller.
-            self.initialize_adobe(library, [library])
-            self.adobe_vendor_id.password = self.TEST_NODE_VALUE
-            circ_manager = CirculationManager(self._db, testing=True)
+            vendor_id.initialize_adobe(library, [library])
+            vendor_id.adobe_vendor_id.password = vendor_id.TEST_NODE_VALUE
+            circ_manager = MockCirculationManager(self.db.session)
             manager = AdminController(circ_manager)
             setup_admin_controllers(circ_manager)
             self.REAL_CIRCULATION_MANAGER = circ_manager
@@ -97,28 +101,59 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
         self.original_api_app = self.api_routes.app
         self.resolver = self.original_app.url_map.bind("", "/")
 
-        # For convenience, set self.controller to a specific controller
-        # whose routes are being tested.
-        controller_name = getattr(self, "CONTROLLER_NAME", None)
-        if controller_name:
-            self.controller = getattr(self.manager, controller_name)
-
-            # Make sure there's a controller by this name in the real
-            # CirculationManager.
-            self.real_controller = getattr(
-                self.REAL_CIRCULATION_MANAGER, controller_name
-            )
-        else:
-            self.real_controller = None
+        self.controller: Optional[CirculationManagerController] = None
+        self.real_controller: Optional[CirculationManagerController] = None
 
         self.routes.app = app
         # Need to also mock the route app from /api/routes.
         self.api_routes.app = api_app
 
-    def teardown_method(self):
-        super(ControllerTest, self).teardown_method()
+    def close(self):
         self.routes.app = self.original_app
         self.api_routes.app = self.original_api_app
+
+    def set_controller_name(self, name: str):
+        self.controller = getattr(self.manager, name)
+        # Make sure there's a controller by this name in the real
+        # CirculationManager.
+        self.real_controller = getattr(self.REAL_CIRCULATION_MANAGER, name)
+
+    def request(self, url, method="GET"):
+        """Simulate a request to a URL without triggering any code outside
+        routes.py.
+        """
+        # Map an incoming URL to the name of a function within routes.py
+        # and a set of arguments to the function.
+        function_name, kwargs = self.resolver.match(url, method)
+        # Locate the corresponding function in our mock app.
+        mock_function = getattr(self.routes, function_name)
+
+        # Call it in the context of the mock app.
+        with self.controller_fixture.app.test_request_context():
+            return mock_function(**kwargs)
+
+    def assert_request_calls(self, url, method, *args, **kwargs):
+        """Make a request to the given `url` and assert that
+        the given controller `method` was called with the
+        given `args` and `kwargs`.
+        """
+        http_method = kwargs.pop("http_method", "GET")
+        response = self.request(url, http_method)
+        assert response.method == method
+        assert response.method.args == args
+        assert response.method.kwargs == kwargs
+
+        # Make sure the real controller has a method by the name of
+        # the mock method that was called. We won't call it, because
+        # it would slow down these tests dramatically, but we can make
+        # sure it exists.
+        if self.real_controller:
+            real_method = getattr(self.real_controller, method.callable_name)
+
+            # TODO: We could use inspect.getarcspec to verify that the
+            # argument names line up with the variables passed in to
+            # the mock method. This might remove the need to call the
+            # mock method at all.
 
     def assert_authenticated_request_calls(self, url, method, *args, **kwargs):
         """First verify that an unauthenticated request fails. Then make an
@@ -154,6 +189,24 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
             # assertions in this test function.
             self.manager.admin_sign_in_controller.authenticated = False
 
+    def assert_supported_methods(self, url, *methods):
+        """Verify that the given HTTP `methods` are the only ones supported
+        on the given `url`.
+        """
+        # The simplest way to do this seems to be to try each of the
+        # other potential methods and verify that MethodNotAllowed is
+        # raised each time.
+        check = {"GET", "POST", "PUT", "DELETE"} - set(methods)
+        # Treat HEAD specially. Any controller that supports GET
+        # automatically supports HEAD. So we only assert that HEAD
+        # fails if the method supports neither GET nor HEAD.
+        if "GET" not in methods and "HEAD" not in methods:
+            check.add("HEAD")
+        for method in check:
+            logging.debug("MethodNotAllowed should be raised on %s", method)
+            pytest.raises(MethodNotAllowed, self.request, url, method)
+            logging.debug("And it was.")
+
     def assert_file_response(self, url, *args, **kwargs):
         http_method = kwargs.pop("http_method", "GET")
         response = self.request(url, http_method)
@@ -161,7 +214,6 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
         assert response.headers["Content-type"] == "text/csv"
 
     def assert_redirect_call(self, url, *args, **kwargs):
-
         # Correctly render the sign in again template when the admin
         # is authenticated and there is a csrf token.
         self.manager.admin_sign_in_controller.csrf_token = True
@@ -205,651 +257,728 @@ class AdminRouteTest(ControllerTest, RouteTestFixtures):
         self.manager.admin_sign_in_controller.authenticated_problem_detail = False
 
 
-class TestAdminSignIn(AdminRouteTest):
+@pytest.fixture(scope="function")
+def admin_route_fixture(
+    vendor_id_fixture: VendorIDFixture, controller_fixture: ControllerFixture
+) -> Generator[AdminRouteFixture, Any, None]:
+    fix = AdminRouteFixture(vendor_id_fixture, controller_fixture)
+    yield fix
+    fix.close()
 
+
+class TestAdminSignIn:
     CONTROLLER_NAME = "admin_sign_in_controller"
 
-    def test_google_auth_callback(self):
-        url = "/admin/GoogleAuth/callback"
-        self.assert_request_calls(url, self.controller.redirect_after_google_sign_in)
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
 
-    def test_sign_in_with_password(self):
+    def test_sign_in_with_password(self, fixture: AdminRouteFixture):
         url = "/admin/sign_in_with_password"
-        self.assert_request_calls(
-            url, self.controller.password_sign_in, http_method="POST"
+        fixture.assert_request_calls(
+            url, fixture.controller.password_sign_in, http_method="POST"
         )
 
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
-    def test_sign_in(self):
+    def test_sign_in(self, fixture: AdminRouteFixture):
         url = "/admin/sign_in"
-        self.assert_request_calls(url, self.controller.sign_in)
+        fixture.assert_request_calls(url, fixture.controller.sign_in)
 
-    def test_sign_out(self):
+    def test_sign_out(self, fixture: AdminRouteFixture):
         url = "/admin/sign_out"
-        self.assert_authenticated_request_calls(url, self.controller.sign_out)
+        fixture.assert_authenticated_request_calls(url, fixture.controller.sign_out)
 
-    def test_change_password(self):
+    def test_change_password(self, fixture: AdminRouteFixture):
         url = "/admin/change_password"
-        self.assert_authenticated_request_calls(
-            url, self.controller.change_password, http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.change_password, http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
-    def test_sign_in_again(self):
+    def test_sign_in_again(self, fixture: AdminRouteFixture):
         url = "/admin/sign_in_again"
-        self.assert_redirect_call(url)
+        fixture.assert_redirect_call(url)
 
-    def test_redirect(self):
+    def test_redirect(self, fixture: AdminRouteFixture):
         url = "/admin"
-        response = self.request(url)
+        response = fixture.request(url)
 
         assert 302 == response.status_code
         assert "Redirecting..." in response.get_data(as_text=True)
 
 
-class TestAdminWork(AdminRouteTest):
-
+class TestAdminWork:
     CONTROLLER_NAME = "admin_work_controller"
 
-    def test_details(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_details(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier"
-        self.assert_authenticated_request_calls(
-            url, self.controller.details, "<identifier_type>", "an/identifier"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.details, "<identifier_type>", "an/identifier"
         )
-        self.assert_supported_methods(url, "GET")
+        fixture.assert_supported_methods(url, "GET")
 
-    def test_classifications(self):
+    def test_classifications(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/classifications"
-        self.assert_authenticated_request_calls(
-            url, self.controller.classifications, "<identifier_type>", "an/identifier"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.classifications,
+            "<identifier_type>",
+            "an/identifier",
         )
-        self.assert_supported_methods(url, "GET")
+        fixture.assert_supported_methods(url, "GET")
 
-    def test_preview_book_cover(self):
+    def test_preview_book_cover(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/preview_book_cover"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.preview_book_cover,
+            fixture.controller.preview_book_cover,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_change_book_cover(self):
+    def test_change_book_cover(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/change_book_cover"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.change_book_cover,
+            fixture.controller.change_book_cover,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_complaints(self):
-        url = "/admin/works/<identifier_type>/an/identifier/complaints"
-        self.assert_authenticated_request_calls(
-            url, self.controller.complaints, "<identifier_type>", "an/identifier"
-        )
-        self.assert_supported_methods(url, "GET")
-
-    def test_custom_lists(self):
+    def test_custom_lists(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/lists"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.custom_lists,
+            fixture.controller.custom_lists,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_edit(self):
+    def test_edit(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/edit"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.edit,
+            fixture.controller.edit,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_suppress(self):
+    def test_suppress(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/suppress"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.suppress,
+            fixture.controller.suppress,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_unsuppress(self):
+    def test_unsuppress(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/unsuppress"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.unsuppress,
+            fixture.controller.unsuppress,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_refresh_metadata(self):
+    def test_refresh_metadata(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/refresh"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.refresh_metadata,
+            fixture.controller.refresh_metadata,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_resolve_complaints(self):
-        url = "/admin/works/<identifier_type>/an/identifier/resolve_complaints"
-        self.assert_authenticated_request_calls(
-            url,
-            self.controller.resolve_complaints,
-            "<identifier_type>",
-            "an/identifier",
-            http_method="POST",
-        )
-
-    def test_edit_classifications(self):
+    def test_edit_classifications(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/edit_classifications"
-        self.assert_authenticated_request_calls(
+        fixture.assert_authenticated_request_calls(
             url,
-            self.controller.edit_classifications,
+            fixture.controller.edit_classifications,
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
         )
 
-    def test_roles(self):
+    def test_roles(self, fixture: AdminRouteFixture):
         url = "/admin/roles"
-        self.assert_request_calls(url, self.controller.roles)
+        fixture.assert_request_calls(url, fixture.controller.roles)
 
-    def test_languages(self):
+    def test_languages(self, fixture: AdminRouteFixture):
         url = "/admin/languages"
-        self.assert_request_calls(url, self.controller.languages)
+        fixture.assert_request_calls(url, fixture.controller.languages)
 
-    def test_media(self):
+    def test_media(self, fixture: AdminRouteFixture):
         url = "/admin/media"
-        self.assert_request_calls(url, self.controller.media)
+        fixture.assert_request_calls(url, fixture.controller.media)
 
-    def test_right_status(self):
+    def test_right_status(self, fixture: AdminRouteFixture):
         url = "/admin/rights_status"
-        self.assert_request_calls(url, self.controller.rights_status)
+        fixture.assert_request_calls(url, fixture.controller.rights_status)
 
 
-class TestAdminFeed(AdminRouteTest):
-
+class TestAdminFeed:
     CONTROLLER_NAME = "admin_feed_controller"
 
-    def test_complaints(self):
-        url = "/admin/complaints"
-        self.assert_authenticated_request_calls(url, self.controller.complaints)
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
 
-    def test_suppressed(self):
+    def test_suppressed(self, fixture: AdminRouteFixture):
         url = "/admin/suppressed"
-        self.assert_authenticated_request_calls(url, self.controller.suppressed)
+        fixture.assert_authenticated_request_calls(url, fixture.controller.suppressed)
 
-    def test_genres(self):
+    def test_genres(self, fixture: AdminRouteFixture):
         url = "/admin/genres"
-        self.assert_authenticated_request_calls(url, self.controller.genres)
+        fixture.assert_authenticated_request_calls(url, fixture.controller.genres)
 
 
-class TestAdminDashboard(AdminRouteTest):
-
+class TestAdminDashboard:
     CONTROLLER_NAME = "admin_dashboard_controller"
 
-    def test_bulk_circulation_events(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_bulk_circulation_events(self, fixture: AdminRouteFixture):
         url = "/admin/bulk_circulation_events"
-        self.assert_authenticated_request_calls(
-            url, self.controller.bulk_circulation_events, file_response=True
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.bulk_circulation_events, file_response=True
         )
 
-    def test_circulation_events(self):
+    def test_circulation_events(self, fixture: AdminRouteFixture):
         url = "/admin/circulation_events"
-        self.assert_authenticated_request_calls(url, self.controller.circulation_events)
-
-    def test_stats(self):
-        url = "/admin/stats"
-        self.assert_authenticated_request_calls(url, self.controller.stats)
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.circulation_events
+        )
 
 
-class TestAdminLibrarySettings(AdminRouteTest):
-
+class TestAdminLibrarySettings:
     CONTROLLER_NAME = "admin_library_settings_controller"
 
-    def test_process_libraries(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_libraries(self, fixture: AdminRouteFixture):
         url = "/admin/libraries"
-        self.assert_authenticated_request_calls(url, self.controller.process_libraries)
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_delete(self):
-        url = "/admin/library/<library_uuid>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<library_uuid>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_libraries
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_delete(self, fixture: AdminRouteFixture):
+        url = "/admin/library/<library_uuid>"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.process_delete,
+            "<library_uuid>",
+            http_method="DELETE",
+        )
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminCollectionSettings(AdminRouteTest):
-
+class TestAdminCollectionSettings:
     CONTROLLER_NAME = "admin_collection_settings_controller"
 
-    def test_process_get(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_get(self, fixture: AdminRouteFixture):
         url = "/admin/collections"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_collections
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_collections
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_post(self):
+    def test_process_post(self, fixture: AdminRouteFixture):
         url = "/admin/collection/<collection_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<collection_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.process_delete,
+            "<collection_id>",
+            http_method="DELETE",
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminCollectionSelfTests(AdminRouteTest):
-
+class TestAdminCollectionSelfTests:
     CONTROLLER_NAME = "admin_collection_self_tests_controller"
 
-    def test_process_collection_self_tests(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_collection_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/collection_self_tests/<identifier>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_collection_self_tests, "<identifier>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_collection_self_tests, "<identifier>"
         )
 
 
-class TestAdminCollectionLibraryRegistrations(AdminRouteTest):
-
+class TestAdminCollectionLibraryRegistrations:
     CONTROLLER_NAME = "admin_collection_library_registrations_controller"
 
-    def test_process_collection_library_registrations(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_collection_library_registrations(self, fixture: AdminRouteFixture):
         url = "/admin/collection_library_registrations"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_collection_library_registrations
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_collection_library_registrations
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
 
-class TestAdminAuthServices(AdminRouteTest):
-
-    CONTROLLER_NAME = "admin_auth_services_controller"
-
-    def test_process_admin_auth_services(self):
-        url = "/admin/admin_auth_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_admin_auth_services
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/admin_auth_service/<protocol>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<protocol>", http_method="DELETE"
-        )
-        self.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminIndividualAdminSettings(AdminRouteTest):
-
+class TestAdminIndividualAdminSettings:
     CONTROLLER_NAME = "admin_individual_admin_settings_controller"
 
-    def test_process_individual_admins(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_individual_admins(self, fixture: AdminRouteFixture):
         url = "/admin/individual_admins"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_individual_admins
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_individual_admins
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_delete(self):
+    def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/individual_admin/<email>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<email>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<email>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminPatronAuthServices(AdminRouteTest):
-
+class TestAdminPatronAuthServices:
     CONTROLLER_NAME = "admin_patron_auth_services_controller"
 
-    def test_process_patron_auth_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_patron_auth_services(self, fixture: AdminRouteFixture):
         url = "/admin/patron_auth_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_patron_auth_services
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_patron_auth_services
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_delete(self):
+    def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/patron_auth_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminPatronAuthServicesSelfTests(AdminRouteTest):
-
+class TestAdminPatronAuthServicesSelfTests:
     CONTROLLER_NAME = "admin_patron_auth_service_self_tests_controller"
 
-    def test_process_patron_auth_service_self_tests(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_patron_auth_service_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/patron_auth_service_self_tests/<identifier>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_patron_auth_service_self_tests, "<identifier>"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.process_patron_auth_service_self_tests,
+            "<identifier>",
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
 
-class TestAdminPatron(AdminRouteTest):
-
+class TestAdminPatron:
     CONTROLLER_NAME = "admin_patron_controller"
 
-    def test_lookup_patron(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_lookup_patron(self, fixture: AdminRouteFixture):
         url = "/admin/manage_patrons"
-        self.assert_authenticated_request_calls(
-            url, self.controller.lookup_patron, http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.lookup_patron, http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
-    def test_reset_adobe_id(self):
+    def test_reset_adobe_id(self, fixture: AdminRouteFixture):
         url = "/admin/manage_patrons/reset_adobe_id"
-        self.assert_authenticated_request_calls(
-            url, self.controller.reset_adobe_id, http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.reset_adobe_id, http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
 
-class TestAdminMetadataServices(AdminRouteTest):
-
+class TestAdminMetadataServices:
     CONTROLLER_NAME = "admin_metadata_services_controller"
 
-    def test_process_metadata_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_metadata_services(self, fixture: AdminRouteFixture):
         url = "/admin/metadata_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_metadata_services
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_metadata_services
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_delete(self):
+    def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/metadata_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminAnalyticsServices(AdminRouteTest):
-
+class TestAdminAnalyticsServices:
     CONTROLLER_NAME = "admin_analytics_services_controller"
 
-    def test_process_analytics_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_analytics_services(self, fixture: AdminRouteFixture):
         url = "/admin/analytics_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_analytics_services
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_analytics_services
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_delete(self):
+    def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/analytics_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminCDNServices(AdminRouteTest):
-
-    CONTROLLER_NAME = "admin_cdn_services_controller"
-
-    def test_process_cdn_services(self):
-        url = "/admin/cdn_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_cdn_services
-        )
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/cdn_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
-        )
-        self.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminSearchServices(AdminRouteTest):
-
+class TestAdminSearchServices:
     CONTROLLER_NAME = "admin_search_services_controller"
 
-    def test_process_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_services(self, fixture: AdminRouteFixture):
         url = "/admin/search_services"
-        self.assert_authenticated_request_calls(url, self.controller.process_services)
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/search_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_services
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_process_delete(self, fixture: AdminRouteFixture):
+        url = "/admin/search_service/<service_id>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
+        )
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminSearchServicesSelfTests(AdminRouteTest):
-
+class TestAdminSearchServicesSelfTests:
     CONTROLLER_NAME = "admin_search_service_self_tests_controller"
 
-    def test_process_search_service_self_tests(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_search_service_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/search_service_self_tests/<identifier>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_search_service_self_tests, "<identifier>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_search_service_self_tests, "<identifier>"
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
 
-class TestAdminStorageServices(AdminRouteTest):
-
+class TestAdminStorageServices:
     CONTROLLER_NAME = "admin_storage_services_controller"
 
-    def test_process_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_services(self, fixture: AdminRouteFixture):
         url = "/admin/storage_services"
-        self.assert_authenticated_request_calls(url, self.controller.process_services)
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/storage_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_services
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_process_delete(self, fixture: AdminRouteFixture):
+        url = "/admin/storage_service/<service_id>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
+        )
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminCatalogServices(AdminRouteTest):
-
+class TestAdminCatalogServices:
     CONTROLLER_NAME = "admin_catalog_services_controller"
 
-    def test_process_catalog_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_catalog_services(self, fixture: AdminRouteFixture):
         url = "/admin/catalog_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_catalog_services
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_catalog_services
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_delete(self):
+    def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/catalog_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminDiscoveryServices(AdminRouteTest):
-
+class TestAdminDiscoveryServices:
     CONTROLLER_NAME = "admin_discovery_services_controller"
 
-    def test_process_discovery_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_discovery_services(self, fixture: AdminRouteFixture):
         url = "/admin/discovery_services"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_discovery_services
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_discovery_services
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_process_delete(self):
+    def test_process_delete(self, fixture: AdminRouteFixture):
         url = "/admin/discovery_service/<service_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<service_id>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminSitewideServices(AdminRouteTest):
-
+class TestAdminSitewideServices:
     CONTROLLER_NAME = "admin_sitewide_configuration_settings_controller"
 
-    def test_process_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_services(self, fixture: AdminRouteFixture):
         url = "/admin/sitewide_settings"
-        self.assert_authenticated_request_calls(url, self.controller.process_services)
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/sitewide_setting/<key>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<key>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_services
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_process_delete(self, fixture: AdminRouteFixture):
+        url = "/admin/sitewide_setting/<key>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<key>", http_method="DELETE"
+        )
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminLoggingServices(AdminRouteTest):
-
+class TestAdminLoggingServices:
     CONTROLLER_NAME = "admin_logging_services_controller"
 
-    def test_process_services(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_services(self, fixture: AdminRouteFixture):
         url = "/admin/logging_services"
-        self.assert_authenticated_request_calls(url, self.controller.process_services)
-        self.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self):
-        url = "/admin/logging_service/<key>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_delete, "<key>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_services
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "GET", "POST")
+
+    def test_process_delete(self, fixture: AdminRouteFixture):
+        url = "/admin/logging_service/<key>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_delete, "<key>", http_method="DELETE"
+        )
+        fixture.assert_supported_methods(url, "DELETE")
 
 
-class TestAdminDiscoveryServiceLibraryRegistrations(AdminRouteTest):
-
+class TestAdminDiscoveryServiceLibraryRegistrations:
     CONTROLLER_NAME = "admin_discovery_service_library_registrations_controller"
 
-    def test_process_discovery_service_library_registrations(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_process_discovery_service_library_registrations(
+        self, fixture: AdminRouteFixture
+    ):
         url = "/admin/discovery_service_library_registrations"
-        self.assert_authenticated_request_calls(
-            url, self.controller.process_discovery_service_library_registrations
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.process_discovery_service_library_registrations
         )
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_supported_methods(url, "GET", "POST")
 
 
-class TestAdminCustomListsServices(AdminRouteTest):
-
+class TestAdminCustomListsServices:
     CONTROLLER_NAME = "admin_custom_lists_controller"
 
-    def test_custom_lists(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_custom_lists(self, fixture: AdminRouteFixture):
         url = "/admin/custom_lists"
-        self.assert_authenticated_request_calls(url, self.controller.custom_lists)
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_authenticated_request_calls(url, fixture.controller.custom_lists)
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_custom_list(self):
+    def test_custom_list(self, fixture: AdminRouteFixture):
         url = "/admin/custom_list/<list_id>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.custom_list, "<list_id>"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.custom_list, "<list_id>"
         )
-        self.assert_supported_methods(url, "GET", "POST", "DELETE")
+        fixture.assert_supported_methods(url, "GET", "POST", "DELETE")
 
 
-class TestAdminLanes(AdminRouteTest):
-
+class TestAdminLanes:
     CONTROLLER_NAME = "admin_lanes_controller"
 
-    def test_lanes(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_lanes(self, fixture: AdminRouteFixture):
         url = "/admin/lanes"
-        self.assert_authenticated_request_calls(url, self.controller.lanes)
-        self.assert_supported_methods(url, "GET", "POST")
+        fixture.assert_authenticated_request_calls(url, fixture.controller.lanes)
+        fixture.assert_supported_methods(url, "GET", "POST")
 
-    def test_lane(self):
+    def test_lane(self, fixture: AdminRouteFixture):
         url = "/admin/lane/<lane_identifier>"
-        self.assert_authenticated_request_calls(
-            url, self.controller.lane, "<lane_identifier>", http_method="DELETE"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.lane, "<lane_identifier>", http_method="DELETE"
         )
-        self.assert_supported_methods(url, "DELETE")
+        fixture.assert_supported_methods(url, "DELETE")
 
-    def test_show_lane(self):
+    def test_show_lane(self, fixture: AdminRouteFixture):
         url = "/admin/lane/<lane_identifier>/show"
-        self.assert_authenticated_request_calls(
-            url, self.controller.show_lane, "<lane_identifier>", http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.show_lane, "<lane_identifier>", http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
-    def test_hide_lane(self):
+    def test_hide_lane(self, fixture: AdminRouteFixture):
         url = "/admin/lane/<lane_identifier>/hide"
-        self.assert_authenticated_request_calls(
-            url, self.controller.hide_lane, "<lane_identifier>", http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.hide_lane, "<lane_identifier>", http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
-    def test_reset(self):
+    def test_reset(self, fixture: AdminRouteFixture):
         url = "/admin/lanes/reset"
-        self.assert_authenticated_request_calls(
-            url, self.controller.reset, http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.reset, http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
-    def test_change_order(self):
+    def test_change_order(self, fixture: AdminRouteFixture):
         url = "/admin/lanes/change_order"
-        self.assert_authenticated_request_calls(
-            url, self.controller.change_order, http_method="POST"
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.change_order, http_method="POST"
         )
-        self.assert_supported_methods(url, "POST")
+        fixture.assert_supported_methods(url, "POST")
 
 
-class TestTimestamps(AdminRouteTest):
-
+class TestTimestamps:
     CONTROLLER_NAME = "timestamps_controller"
 
-    def test_diagnostics(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_diagnostics(self, fixture: AdminRouteFixture):
         url = "/admin/diagnostics"
-        self.assert_authenticated_request_calls(url, self.controller.diagnostics)
+        fixture.assert_authenticated_request_calls(url, fixture.controller.diagnostics)
 
 
-class TestAdminView(AdminRouteTest):
-
+class TestAdminView:
     CONTROLLER_NAME = "admin_view_controller"
 
-    def test_admin_view(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_admin_view(self, fixture: AdminRouteFixture):
         url = "/admin/web/"
-        self.assert_request_calls(url, self.controller, None, None, path=None)
+        fixture.assert_request_calls(url, fixture.controller, None, None, path=None)
 
         url = "/admin/web/collection/a/collection/book/a/book"
-        self.assert_request_calls(
-            url, self.controller, "a/collection", "a/book", path=None
+        fixture.assert_request_calls(
+            url, fixture.controller, "a/collection", "a/book", path=None
         )
 
         url = "/admin/web/collection/a/collection"
-        self.assert_request_calls(url, self.controller, "a/collection", None, path=None)
+        fixture.assert_request_calls(
+            url, fixture.controller, "a/collection", None, path=None
+        )
 
         url = "/admin/web/book/a/book"
-        self.assert_request_calls(url, self.controller, None, "a/book", path=None)
+        fixture.assert_request_calls(url, fixture.controller, None, "a/book", path=None)
 
         url = "/admin/web/a/path"
-        self.assert_request_calls(url, self.controller, None, None, path="a/path")
+        fixture.assert_request_calls(url, fixture.controller, None, None, path="a/path")
 
 
-class TestAdminStatic(AdminRouteTest):
-
+class TestAdminStatic:
     CONTROLLER_NAME = "static_files"
 
-    def test_static_file(self):
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_static_file(self, fixture: AdminRouteFixture):
         # Go to the back to the root folder to get the right
         # path for the static files.
         root_path = Path(__file__).parent.parent.parent.parent
@@ -859,11 +988,14 @@ class TestAdminStatic(AdminRouteTest):
         )
 
         url = "/admin/static/circulation-admin.js"
-        self.assert_request_calls(
-            url, self.controller.static_file, str(local_path), "circulation-admin.js"
+        fixture.assert_request_calls(
+            url, fixture.controller.static_file, str(local_path), "circulation-admin.js"
         )
 
         url = "/admin/static/circulation-admin.css"
-        self.assert_request_calls(
-            url, self.controller.static_file, str(local_path), "circulation-admin.css"
+        fixture.assert_request_calls(
+            url,
+            fixture.controller.static_file,
+            str(local_path),
+            "circulation-admin.css",
         )

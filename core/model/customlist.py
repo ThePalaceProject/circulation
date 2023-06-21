@@ -1,20 +1,23 @@
-# encoding: utf-8
 # CustomList, CustomListEntry
+from __future__ import annotations
 
 import logging
 from functools import total_ordering
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
+    Table,
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
@@ -25,12 +28,20 @@ from .identifier import Identifier
 from .licensing import LicensePool
 from .work import Work
 
+if TYPE_CHECKING:
+    from . import Collection, Library
+
 
 @total_ordering
 class CustomList(Base):
     """A custom grouping of Editions."""
 
     STAFF_PICKS_NAME = "Staff Picks"
+
+    INIT = "init"
+    UPDATED = "updated"
+    REPOPULATE = "repopulate"
+    auto_update_status_enum = Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status")
 
     __tablename__ = "customlists"
     id = Column(Integer, primary_key=True)
@@ -48,7 +59,27 @@ class CustomList(Base):
     # cached when the list contents change.
     size = Column(Integer, nullable=False, default=0)
 
-    entries = relationship("CustomListEntry", backref="customlist")
+    entries: Mapped[List[CustomListEntry]] = relationship(
+        "CustomListEntry", backref="customlist", uselist=True
+    )
+
+    # List sharing mechanisms
+    shared_locally_with_libraries: Mapped[List[Library]] = relationship(
+        "Library",
+        secondary=lambda: customlist_sharedlibrary,
+        back_populates="shared_custom_lists",
+        uselist=True,
+    )
+
+    auto_update_enabled = Column(Boolean, default=False)
+    auto_update_query = Column(Unicode, nullable=True)  # holds json data
+    auto_update_facets = Column(Unicode, nullable=True)  # holds json data
+    auto_update_last_update = Column(DateTime, nullable=True)
+    auto_update_status: Mapped[str] = Column(auto_update_status_enum, default=INIT)  # type: ignore[assignment]
+
+    # Typing specific
+    collections: List[Collection]
+    library: Library
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),
@@ -82,6 +113,15 @@ class CustomList(Base):
         return (self.foreign_identifier, self.name) < (
             other.foreign_identifier,
             other.name,
+        )
+
+    @classmethod
+    def entries_having_works(cls, _db: Session, list_id: int):
+        return (
+            _db.query(Work)
+            .join(Work.custom_list_entries)
+            .filter(CustomListEntry.list_id == list_id)
+            .order_by(Work.id)
         )
 
     @classmethod
@@ -289,8 +329,30 @@ class CustomList(Base):
         )
         return qu
 
-    def update_size(self):
-        self.size = len(self.entries)
+    def update_size(self, db: Session):
+        if self.id is not None:
+            self.size = CustomList.entries_having_works(db, self.id).count()
+
+
+customlist_sharedlibrary: Table = Table(
+    "customlist_sharedlibraries",
+    Base.metadata,
+    Column(
+        "customlist_id",
+        Integer,
+        ForeignKey("customlists.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    ),
+    Column(
+        "library_id",
+        Integer,
+        ForeignKey("libraries.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    ),
+    UniqueConstraint("customlist_id", "library_id"),
+)
 
 
 class CustomListEntry(Base):
@@ -309,7 +371,7 @@ class CustomListEntry(Base):
     first_appearance = Column(DateTime(timezone=True), index=True)
     most_recent_appearance = Column(DateTime(timezone=True), index=True)
 
-    def set_work(self, metadata=None, metadata_client=None, policy=None):
+    def set_work(self, metadata=None, policy=None):
         """If possible, identify a locally known Work that is the same
         title as the title identified by this CustomListEntry.
 
@@ -332,7 +394,7 @@ class CustomListEntry(Base):
 
         # Try to guess based on metadata, if we can get a high-quality
         # guess.
-        potential_license_pools = metadata.guess_license_pools(_db, metadata_client)
+        potential_license_pools = metadata.guess_license_pools(_db)
         for lp, quality in sorted(
             list(potential_license_pools.items()), key=lambda x: -x[1]
         ):
@@ -395,7 +457,7 @@ class CustomListEntry(Base):
         equivalent_entries = list(set(equivalent_entries))
 
         # Confirm that all the entries are from the same CustomList.
-        list_ids = set([e.list_id for e in equivalent_entries])
+        list_ids = {e.list_id for e in equivalent_entries}
         if not len(list_ids) == 1:
             raise ValueError("Cannot combine entries on different CustomLists.")
 
@@ -407,7 +469,7 @@ class CustomListEntry(Base):
                 raise ValueError(error)
 
         # And get a Work if one exists.
-        works = set([])
+        works = set()
         for e in equivalent_entries:
             work = e.edition.work
             if work:
@@ -420,9 +482,9 @@ class CustomListEntry(Base):
                 raise ValueError(error)
             [work] = works
 
-        self.first_appearance = min([e.first_appearance for e in equivalent_entries])
+        self.first_appearance = min(e.first_appearance for e in equivalent_entries)
         self.most_recent_appearance = max(
-            [e.most_recent_appearance for e in equivalent_entries]
+            e.most_recent_appearance for e in equivalent_entries
         )
 
         annotations = [str(e.annotation) for e in equivalent_entries if e.annotation]

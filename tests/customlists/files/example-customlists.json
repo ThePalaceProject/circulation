@@ -1,0 +1,65 @@
+{
+  "%id": "https://schemas.thepalaceproject.io/customlists/1.0",
+  "customlists": [
+    {
+      "%type": "customlist",
+      "books": [
+        {
+          "%type": "book",
+          "id-full": "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+          "id-type": "URI",
+          "id-value": "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f6",
+          "title": "Chameleon",
+          "author": "Someone Else"
+        },
+        {
+          "%type": "book",
+          "id-full": "urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+          "id-type": "URI",
+          "id-value": "urn:uuid:b309844e-7d4e-403e-945b-fbc78acd5e03",
+          "title": "Chameleon",
+          "author": "Someone New"
+        },
+        {
+          "%type": "book",
+          "author": "Robert Crais",
+          "id-full": "urn:librarysimplified.org/terms/id/Overdrive ID/614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+          "id-type": "Overdrive ID",
+          "id-value": "614ed125-d7e5-4cff-b3de-6b6c90ff853c",
+          "title": "Suspect"
+        },
+        {
+          "%type": "book",
+          "author": "Andre Alice Norton",
+          "id-full": "http://www.feedbooks.com/book/859",
+          "id-type": "URI",
+          "id-value": "http://www.feedbooks.com/book/859",
+          "title": "The Time Traders"
+        }
+      ],
+      "id": 90,
+      "library-id": "HAZELNUT",
+      "name": "Something Else",
+      "problematic-books": [
+        {
+          "%type": "problematic-book",
+          "id-full": "urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7",
+          "id-type": "URI",
+          "id-value": "9c9c1f5c-6742-47d4-b94c-e77f88ca55f7",
+          "title": "Bad Book",
+          "message": "Something went wrong on the source CM",
+          "author": "Someone New"
+        }
+      ],
+      "collections": [
+        {
+          "%type": "collection",
+          "id": 864,
+          "name": "B2",
+          "protocol": "OPDS for Distributors"
+        }
+      ]
+    }
+  ],
+  "problematic-customlists": []
+}

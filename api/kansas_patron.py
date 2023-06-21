@@ -1,53 +1,63 @@
-import logging
+from typing import Optional, Type, Union
 
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import HttpUrl
 
-from core.model import ExternalIntegration
+from core.integration.settings import ConfigurationFormItem, FormField
+from core.model import Patron
 from core.util.http import HTTP
 
-from .authenticator import BasicAuthenticationProvider, PatronData
-from .config import CannotLoadConfiguration
+from .authentication.base import PatronData
+from .authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
+
+
+class KansasAuthSettings(BasicAuthProviderSettings):
+    url: HttpUrl = FormField(
+        "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails",
+        form=ConfigurationFormItem(
+            label=_("URL"),
+            required=True,
+        ),
+    )
 
 
 class KansasAuthenticationAPI(BasicAuthenticationProvider):
+    @classmethod
+    def label(cls) -> str:
+        return "Kansas"
 
-    NAME = "Kansas"
+    @classmethod
+    def description(cls) -> str:
+        return "An authentication service for the Kansas State Library."
 
-    DESCRIPTION = _(
-        """
-        An authentication service for the Kansas State Library.
-        """
-    )
+    @classmethod
+    def settings_class(cls) -> Type[KansasAuthSettings]:
+        return KansasAuthSettings
 
-    DISPLAY_NAME = NAME
-
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "format": "url",
-            "label": _("URL"),
-            "default": "https://ks-kansaslibrary3m.civicplus.com/api/UserDetails",
-            "required": True,
-        },
-    ] + BasicAuthenticationProvider.SETTINGS
-
-    log = logging.getLogger("Kansas authentication API")
-
-    def __init__(self, library_id, integration, analytics=None, base_url=None):
-        super(KansasAuthenticationAPI, self).__init__(
-            library_id, integration, analytics
+    def __init__(
+        self,
+        library_id: int,
+        integration_id: int,
+        settings: KansasAuthSettings,
+        library_settings: BasicAuthProviderLibrarySettings,
+        analytics=None,
+    ):
+        super().__init__(
+            library_id, integration_id, settings, library_settings, analytics
         )
-        if base_url is None:
-            base_url = integration.url
-        if not base_url:
-            raise CannotLoadConfiguration("Kansas server url not configured.")
-        self.base_url = base_url
+        self.base_url = str(settings.url)
 
     # Begin implementation of BasicAuthenticationProvider abstract
     # methods.
 
-    def remote_authenticate(self, username, password):
+    def remote_authenticate(
+        self, username: Optional[str], password: Optional[str]
+    ) -> Optional[PatronData]:
         # Create XML doc for request
         authorization_request = self.create_authorize_request(username, password)
         # Post request to the server
@@ -57,7 +67,7 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             response.content
         )
         if not authorized:
-            return False
+            return None
         # Kansas auth gives very little data about the patron. Only name and a library identifier.
         return PatronData(
             permanent_id=username,
@@ -66,6 +76,15 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             library_identifier=library_identifier,
             complete=True,
         )
+
+    def remote_patron_lookup(
+        self, patron_or_patrondata: Union[PatronData, Patron]
+    ) -> Optional[PatronData]:
+        # Kansas auth gives very little data about the patron. So this function is just a passthrough.
+        if isinstance(patron_or_patrondata, PatronData):
+            return patron_or_patrondata
+
+        return None
 
     # End implementation of BasicAuthenticationProvider abstract methods.
 
@@ -115,10 +134,6 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
             self.base_url,
             data,
             headers={"Content-Type": "application/xml"},
+            max_retry_count=0,
             allowed_response_codes=["2xx"],
         )
-
-
-# Specify which of the classes defined in this module is the
-# authentication provider.
-AuthenticationProvider = KansasAuthenticationAPI

@@ -1,35 +1,45 @@
 import datetime
 import json
+from typing import Any, Dict
 
+import pytest
 from pyld import jsonld
 
 from api.annotations import AnnotationParser, AnnotationWriter
 from api.problem_details import *
 from core.model import Annotation, create
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import utc_now
 
-from .test_controller import ControllerTest
+from ..fixtures.api_controller import ControllerFixture
 
 
-class AnnotationTest(DatabaseTest):
-    def _patron(self):
+class AnnotationFixture:
+    def __init__(self, controller_fixture: ControllerFixture):
+        self.controller = controller_fixture
+        self.db = controller_fixture.db
+
+    def patron(self):
         """Create a test patron who has opted in to annotation sync."""
-        patron = super(AnnotationTest, self)._patron()
+        patron = self.db.patron()
         patron.synchronize_annotations = True
         return patron
 
 
-class TestAnnotationWriter(AnnotationTest, ControllerTest):
-    def test_annotations_for(self):
-        patron = self._patron()
+@pytest.fixture(scope="function")
+def annotation_fixture(controller_fixture: ControllerFixture) -> AnnotationFixture:
+    return AnnotationFixture(controller_fixture)
+
+
+class TestAnnotationWriter:
+    def test_annotations_for(self, annotation_fixture: AnnotationFixture):
+        patron = annotation_fixture.patron()
 
         # The patron doesn't have any annotations yet.
         assert [] == AnnotationWriter.annotations_for(patron)
 
-        identifier = self._identifier()
+        identifier = annotation_fixture.db.identifier()
         annotation, ignore = create(
-            self._db,
+            annotation_fixture.db.session,
             Annotation,
             patron=patron,
             identifier=identifier,
@@ -40,9 +50,9 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
         assert [annotation] == AnnotationWriter.annotations_for(patron)
         assert [annotation] == AnnotationWriter.annotations_for(patron, identifier)
 
-        identifier2 = self._identifier()
+        identifier2 = annotation_fixture.db.identifier()
         annotation2, ignore = create(
-            self._db,
+            annotation_fixture.db.session,
             Annotation,
             patron=patron,
             identifier=identifier2,
@@ -50,25 +60,24 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
         )
 
         # The patron has two annotations for different identifiers.
-        assert set([annotation, annotation2]) == set(
+        assert {annotation, annotation2} == set(
             AnnotationWriter.annotations_for(patron)
         )
         assert [annotation] == AnnotationWriter.annotations_for(patron, identifier)
         assert [annotation2] == AnnotationWriter.annotations_for(patron, identifier2)
 
-    def test_annotation_container_for(self):
-        patron = self._patron()
+    def test_annotation_container_for(self, annotation_fixture: AnnotationFixture):
+        patron = annotation_fixture.patron()
 
-        with self.app.test_request_context("/"):
+        with annotation_fixture.controller.app.test_request_context("/"):
             container, timestamp = AnnotationWriter.annotation_container_for(patron)
 
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
             assert 0 == container["total"]
 
             first_page = container["first"]
@@ -84,9 +93,9 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             assert None == timestamp
 
             # Now, add an annotation.
-            identifier = self._identifier()
+            identifier = annotation_fixture.db.identifier()
             annotation, ignore = create(
-                self._db,
+                annotation_fixture.db.session,
                 Annotation,
                 patron=patron,
                 identifier=identifier,
@@ -97,14 +106,13 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             container, timestamp = AnnotationWriter.annotation_container_for(patron)
 
             # The context, type, and id stay the same.
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
             assert identifier.identifier not in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
 
             # But now there is one item.
             assert 1 == container["total"]
@@ -127,23 +135,24 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             assert 0 == container["total"]
             assert None == timestamp
 
-    def test_annotation_container_for_with_identifier(self):
-        patron = self._patron()
-        identifier = self._identifier()
+    def test_annotation_container_for_with_identifier(
+        self, annotation_fixture: AnnotationFixture
+    ):
+        patron = annotation_fixture.patron()
+        identifier = annotation_fixture.db.identifier()
 
-        with self.app.test_request_context("/"):
+        with annotation_fixture.controller.app.test_request_context("/"):
             container, timestamp = AnnotationWriter.annotation_container_for(
                 patron, identifier
             )
 
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
             assert identifier.identifier in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
             assert 0 == container["total"]
 
             first_page = container["first"]
@@ -160,7 +169,7 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
 
             # Now, add an annotation for this identifier, and one for a different identifier.
             annotation, ignore = create(
-                self._db,
+                annotation_fixture.db.session,
                 Annotation,
                 patron=patron,
                 identifier=identifier,
@@ -169,10 +178,10 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             annotation.timestamp = utc_now()
 
             other_annotation, ignore = create(
-                self._db,
+                annotation_fixture.db.session,
                 Annotation,
                 patron=patron,
-                identifier=self._identifier(),
+                identifier=annotation_fixture.db.identifier(),
                 motivation=Annotation.IDLING,
             )
 
@@ -181,14 +190,13 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             )
 
             # The context, type, and id stay the same.
-            assert set(
-                [AnnotationWriter.JSONLD_CONTEXT, AnnotationWriter.LDP_CONTEXT]
-            ) == set(container["@context"])
+            assert {
+                AnnotationWriter.JSONLD_CONTEXT,
+                AnnotationWriter.LDP_CONTEXT,
+            } == set(container["@context"])
             assert "annotations" in container["id"]
             assert identifier.identifier in container["id"]
-            assert set(["BasicContainer", "AnnotationCollection"]) == set(
-                container["type"]
-            )
+            assert {"BasicContainer", "AnnotationCollection"} == set(container["type"])
 
             # But now there is one item.
             assert 1 == container["total"]
@@ -213,10 +221,10 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             assert 0 == container["total"]
             assert None == timestamp
 
-    def test_annotation_page_for(self):
-        patron = self._patron()
+    def test_annotation_page_for(self, annotation_fixture: AnnotationFixture):
+        patron = annotation_fixture.patron()
 
-        with self.app.test_request_context("/"):
+        with annotation_fixture.controller.app.test_request_context("/"):
             page = AnnotationWriter.annotation_page_for(patron)
 
             # The patron doesn't have any annotations, so the page is empty.
@@ -226,9 +234,9 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             assert 0 == len(page["items"])
 
             # If we add an annotation, the page will have an item.
-            identifier = self._identifier()
+            identifier = annotation_fixture.db.identifier()
             annotation, ignore = create(
-                self._db,
+                annotation_fixture.db.session,
                 Annotation,
                 patron=patron,
                 identifier=identifier,
@@ -246,11 +254,13 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
 
             assert 0 == len(page["items"])
 
-    def test_annotation_page_for_with_identifier(self):
-        patron = self._patron()
-        identifier = self._identifier()
+    def test_annotation_page_for_with_identifier(
+        self, annotation_fixture: AnnotationFixture
+    ):
+        patron = annotation_fixture.patron()
+        identifier = annotation_fixture.db.identifier()
 
-        with self.app.test_request_context("/"):
+        with annotation_fixture.controller.app.test_request_context("/"):
             page = AnnotationWriter.annotation_page_for(patron, identifier)
 
             # The patron doesn't have any annotations, so the page is empty.
@@ -262,7 +272,7 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
 
             # If we add an annotation, the page will have an item.
             annotation, ignore = create(
-                self._db,
+                annotation_fixture.db.session,
                 Annotation,
                 patron=patron,
                 identifier=identifier,
@@ -274,10 +284,10 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
 
             # If a different identifier has an annotation, the page will still have one item.
             other_annotation, ignore = create(
-                self._db,
+                annotation_fixture.db.session,
                 Annotation,
                 patron=patron,
-                identifier=self._identifier(),
+                identifier=annotation_fixture.db.identifier(),
                 motivation=Annotation.IDLING,
             )
 
@@ -290,9 +300,9 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             page = AnnotationWriter.annotation_page_for(patron, identifier)
             assert 0 == len(page["items"])
 
-    def test_detail_target(self):
-        patron = self._patron()
-        identifier = self._identifier()
+    def test_detail_target(self, annotation_fixture: AnnotationFixture):
+        patron = annotation_fixture.patron()
+        identifier = annotation_fixture.db.identifier()
         target = {
             "http://www.w3.org/ns/oa#hasSource": {"@id": identifier.urn},
             "http://www.w3.org/ns/oa#hasSelector": {
@@ -302,18 +312,19 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
         }
 
         annotation, ignore = create(
-            self._db,
+            annotation_fixture.db.session,
             Annotation,
             patron=patron,
             identifier=identifier,
             motivation=Annotation.IDLING,
             target=json.dumps(target),
         )
+        assert annotation is not None
 
-        with self.app.test_request_context("/"):
+        with annotation_fixture.controller.app.test_request_context("/"):
             detail = AnnotationWriter.detail(annotation)
 
-            assert "annotations/%i" % annotation.id in detail["id"]
+            assert "annotations/%i" % (annotation.id or 0) in detail["id"]
             assert "Annotation" == detail["type"]
             assert Annotation.IDLING == detail["motivation"]
             compacted_target = {
@@ -325,9 +336,9 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             }
             assert compacted_target == detail["target"]
 
-    def test_detail_body(self):
-        patron = self._patron()
-        identifier = self._identifier()
+    def test_detail_body(self, annotation_fixture: AnnotationFixture):
+        patron = annotation_fixture.patron()
+        identifier = annotation_fixture.db.identifier()
         body = {
             "@type": "http://www.w3.org/ns/oa#TextualBody",
             "http://www.w3.org/ns/oa#bodyValue": "A good description of the topic that bears further investigation",
@@ -337,18 +348,19 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
         }
 
         annotation, ignore = create(
-            self._db,
+            annotation_fixture.db.session,
             Annotation,
             patron=patron,
             identifier=identifier,
             motivation=Annotation.IDLING,
             content=json.dumps(body),
         )
+        assert annotation is not None
 
-        with self.app.test_request_context("/"):
+        with annotation_fixture.controller.app.test_request_context("/"):
             detail = AnnotationWriter.detail(annotation)
 
-            assert "annotations/%i" % annotation.id in detail["id"]
+            assert "annotations/%i" % (annotation.id or 0) in detail["id"]
             assert "Annotation" == detail["type"]
             assert Annotation.IDLING == detail["motivation"]
             compacted_body = {
@@ -359,15 +371,27 @@ class TestAnnotationWriter(AnnotationTest, ControllerTest):
             assert compacted_body == detail["body"]
 
 
-class TestAnnotationParser(AnnotationTest):
-    def setup_method(self):
-        super(TestAnnotationParser, self).setup_method()
-        self.pool = self._licensepool(None)
+class AnnotationParserFixture(AnnotationFixture):
+    def __init__(self, controller_fixture: ControllerFixture):
+        super().__init__(controller_fixture)
+        self.pool = self.db.licensepool(None)
         self.identifier = self.pool.identifier
-        self.patron = self._patron()
+        self.patron_value = self.patron()
 
-    def _sample_jsonld(self, motivation=Annotation.IDLING):
-        data = dict()
+
+@pytest.fixture(scope="function")
+def annotation_parser_fixture(
+    controller_fixture: ControllerFixture,
+) -> AnnotationParserFixture:
+    return AnnotationParserFixture(controller_fixture)
+
+
+class TestAnnotationParser:
+    @staticmethod
+    def _sample_jsonld(
+        annotation_parser_fixture: AnnotationParserFixture, motivation=Annotation.IDLING
+    ):
+        data: Dict[Any, Any] = dict()
         data["@context"] = [
             AnnotationWriter.JSONLD_CONTEXT,
             {"ls": Annotation.LS_NAMESPACE},
@@ -382,7 +406,7 @@ class TestAnnotationParser(AnnotationTest):
             "purpose": "describing",
         }
         data["target"] = {
-            "source": self.identifier.urn,
+            "source": annotation_parser_fixture.identifier.urn,
             "selector": {
                 "type": "oa:FragmentSelector",
                 "value": "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/3:10)",
@@ -390,32 +414,50 @@ class TestAnnotationParser(AnnotationTest):
         }
         return data
 
-    def test_parse_invalid_json(self):
-        annotation = AnnotationParser.parse(self._db, "not json", self.patron)
+    def test_parse_invalid_json(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            "not json",
+            annotation_parser_fixture.patron_value,
+        )
         assert INVALID_ANNOTATION_FORMAT == annotation
 
-    def test_invalid_identifier(self):
+    def test_invalid_identifier(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
         # If the target source can't be parsed as a URN we send
         # INVALID_ANNOTATION_TARGET
-        data = self._sample_jsonld()
+        data = self._sample_jsonld(annotation_parser_fixture)
         data["target"]["source"] = "not a URN"
-        annotation = AnnotationParser.parse(self._db, json.dumps(data), self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            json.dumps(data),
+            annotation_parser_fixture.patron_value,
+        )
         assert INVALID_ANNOTATION_TARGET == annotation
 
-    def test_null_id(self):
+    def test_null_id(self, annotation_parser_fixture: AnnotationParserFixture):
         # A JSON-LD document can have its @id set to null -- it's the
         # same as if the @id wasn't present -- but the jsonld library
         # can't handle this, so we need to test it specially.
-        self.pool.loan_to(self.patron)
-        data = self._sample_jsonld()
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
+        data = self._sample_jsonld(annotation_parser_fixture)
         data["id"] = None
-        annotation = AnnotationParser.parse(self._db, json.dumps(data), self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            json.dumps(data),
+            annotation_parser_fixture.patron_value,
+        )
         assert isinstance(annotation, Annotation)
 
-    def test_parse_expanded_jsonld(self):
-        self.pool.loan_to(self.patron)
+    def test_parse_expanded_jsonld(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data = dict()
+        data: Dict[Any, Any] = dict()
         data["@type"] = ["http://www.w3.org/ns/oa#Annotation"]
         data["http://www.w3.org/ns/oa#motivatedBy"] = [{"@id": Annotation.IDLING}]
         data["http://www.w3.org/ns/oa#hasBody"] = [
@@ -443,15 +485,21 @@ class TestAnnotationParser(AnnotationTest):
                         ],
                     }
                 ],
-                "http://www.w3.org/ns/oa#hasSource": [{"@id": self.identifier.urn}],
+                "http://www.w3.org/ns/oa#hasSource": [
+                    {"@id": annotation_parser_fixture.identifier.urn}
+                ],
             }
         ]
 
         data_json = json.dumps(data)
 
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
-        assert self.patron.id == annotation.patron_id
-        assert self.identifier.id == annotation.identifier_id
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
+        assert annotation_parser_fixture.patron_value.id == annotation.patron_id
+        assert annotation_parser_fixture.identifier.id == annotation.identifier_id
         assert Annotation.IDLING == annotation.motivation
         assert True == annotation.active
         assert (
@@ -462,10 +510,12 @@ class TestAnnotationParser(AnnotationTest):
             json.dumps(data["http://www.w3.org/ns/oa#hasBody"][0]) == annotation.content
         )
 
-    def test_parse_compacted_jsonld(self):
-        self.pool.loan_to(self.patron)
+    def test_parse_compacted_jsonld(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data = dict()
+        data: Dict[Any, Any] = dict()
         data["@type"] = "http://www.w3.org/ns/oa#Annotation"
         data["http://www.w3.org/ns/oa#motivatedBy"] = {"@id": Annotation.IDLING}
         data["http://www.w3.org/ns/oa#hasBody"] = {
@@ -476,7 +526,9 @@ class TestAnnotationParser(AnnotationTest):
             },
         }
         data["http://www.w3.org/ns/oa#hasTarget"] = {
-            "http://www.w3.org/ns/oa#hasSource": {"@id": self.identifier.urn},
+            "http://www.w3.org/ns/oa#hasSource": {
+                "@id": annotation_parser_fixture.identifier.urn
+            },
             "http://www.w3.org/ns/oa#hasSelector": {
                 "@type": "http://www.w3.org/ns/oa#FragmentSelector",
                 "http://www.w3.org/1999/02/22-rdf-syntax-ns#value": "epubcfi(/6/4[chap01ref]!/4[body01]/10[para05]/3:10)",
@@ -486,9 +538,13 @@ class TestAnnotationParser(AnnotationTest):
         data_json = json.dumps(data)
         expanded = jsonld.expand(data)[0]
 
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
-        assert self.patron.id == annotation.patron_id
-        assert self.identifier.id == annotation.identifier_id
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
+        assert annotation_parser_fixture.patron_value.id == annotation.patron_id
+        assert annotation_parser_fixture.identifier.id == annotation.identifier_id
         assert Annotation.IDLING == annotation.motivation
         assert True == annotation.active
         assert (
@@ -500,17 +556,23 @@ class TestAnnotationParser(AnnotationTest):
             == annotation.content
         )
 
-    def test_parse_jsonld_with_context(self):
-        self.pool.loan_to(self.patron)
+    def test_parse_jsonld_with_context(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data = self._sample_jsonld()
+        data = self._sample_jsonld(annotation_parser_fixture)
         data_json = json.dumps(data)
         expanded = jsonld.expand(data)[0]
 
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
 
-        assert self.patron.id == annotation.patron_id
-        assert self.identifier.id == annotation.identifier_id
+        assert annotation_parser_fixture.patron_value.id == annotation.patron_id
+        assert annotation_parser_fixture.identifier.id == annotation.identifier_id
         assert Annotation.IDLING == annotation.motivation
         assert True == annotation.active
         assert (
@@ -522,18 +584,30 @@ class TestAnnotationParser(AnnotationTest):
             == annotation.content
         )
 
-    def test_parse_jsonld_with_bookmarking_motivation(self):
+    def test_parse_jsonld_with_bookmarking_motivation(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
         """You can create multiple bookmarks in a single book."""
-        self.pool.loan_to(self.patron)
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data = self._sample_jsonld(motivation=Annotation.BOOKMARKING)
+        data = self._sample_jsonld(
+            annotation_parser_fixture, motivation=Annotation.BOOKMARKING
+        )
         data_json = json.dumps(data)
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
         assert Annotation.BOOKMARKING == annotation.motivation
 
         # You can't create another bookmark at the exact same location --
         # you just get the same annotation again.
-        annotation2 = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation2 = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
         assert annotation == annotation2
 
         # But unlike with IDLING, you _can_ create multiple bookmarks
@@ -543,79 +617,109 @@ class TestAnnotationParser(AnnotationTest):
             "value"
         ] = "epubcfi(/3/4[chap01ref]!/4[body01]/15[para05]/3:10)"
         data_json = json.dumps(data)
-        annotation3 = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation3 = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
         assert annotation3 != annotation
-        assert 2 == len(self.patron.annotations)
+        assert 2 == len(annotation_parser_fixture.patron_value.annotations)
 
-    def test_parse_jsonld_with_invalid_motivation(self):
-        self.pool.loan_to(self.patron)
+    def test_parse_jsonld_with_invalid_motivation(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data = self._sample_jsonld()
+        data = self._sample_jsonld(annotation_parser_fixture)
         data["motivation"] = "not-a-valid-motivation"
         data_json = json.dumps(data)
 
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
 
         assert INVALID_ANNOTATION_MOTIVATION == annotation
 
-    def test_parse_jsonld_with_no_loan(self):
-        data = self._sample_jsonld()
+    def test_parse_jsonld_with_no_loan(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        data = self._sample_jsonld(annotation_parser_fixture)
         data_json = json.dumps(data)
 
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
 
         assert INVALID_ANNOTATION_TARGET == annotation
 
-    def test_parse_jsonld_with_no_target(self):
-        data = self._sample_jsonld()
+    def test_parse_jsonld_with_no_target(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        data = self._sample_jsonld(annotation_parser_fixture)
         del data["target"]
         data_json = json.dumps(data)
 
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
 
         assert INVALID_ANNOTATION_TARGET == annotation
 
-    def test_parse_updates_existing_annotation(self):
-        self.pool.loan_to(self.patron)
+    def test_parse_updates_existing_annotation(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
         original_annotation, ignore = create(
-            self._db,
+            annotation_parser_fixture.db.session,
             Annotation,
-            patron_id=self.patron.id,
-            identifier_id=self.identifier.id,
+            patron_id=annotation_parser_fixture.patron_value.id,
+            identifier_id=annotation_parser_fixture.identifier.id,
             motivation=Annotation.IDLING,
         )
         original_annotation.active = False
         yesterday = utc_now() - datetime.timedelta(days=1)
         original_annotation.timestamp = yesterday
 
-        data = self._sample_jsonld()
+        data = self._sample_jsonld(annotation_parser_fixture)
         data = json.dumps(data)
 
-        annotation = AnnotationParser.parse(self._db, data, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data,
+            annotation_parser_fixture.patron_value,
+        )
 
         assert original_annotation == annotation
         assert True == annotation.active
         assert annotation.timestamp > yesterday
 
-    def test_parse_treats_duplicates_as_interchangeable(self):
-        self.pool.loan_to(self.patron)
+    def test_parse_treats_duplicates_as_interchangeable(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
         # Due to an earlier race condition, two duplicate annotations
         # were put in the database.
         a1, ignore = create(
-            self._db,
+            annotation_parser_fixture.db.session,
             Annotation,
-            patron_id=self.patron.id,
-            identifier_id=self.identifier.id,
+            patron_id=annotation_parser_fixture.patron_value.id,
+            identifier_id=annotation_parser_fixture.identifier.id,
             motivation=Annotation.IDLING,
         )
 
         a2, ignore = create(
-            self._db,
+            annotation_parser_fixture.db.session,
             Annotation,
-            patron_id=self.patron.id,
-            identifier_id=self.identifier.id,
+            patron_id=annotation_parser_fixture.patron_value.id,
+            identifier_id=annotation_parser_fixture.identifier.id,
             motivation=Annotation.IDLING,
         )
 
@@ -624,16 +728,26 @@ class TestAnnotationParser(AnnotationTest):
         # Parsing the annotation again retrieves one or the other
         # of the annotations rather than crashing or creating a third
         # annotation.
-        data = self._sample_jsonld()
+        data = self._sample_jsonld(annotation_parser_fixture)
         data = json.dumps(data)
-        annotation = AnnotationParser.parse(self._db, data, self.patron)
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data,
+            annotation_parser_fixture.patron_value,
+        )
         assert annotation in (a1, a2)
 
-    def test_parse_jsonld_with_patron_opt_out(self):
-        self.pool.loan_to(self.patron)
-        data = self._sample_jsonld()
+    def test_parse_jsonld_with_patron_opt_out(
+        self, annotation_parser_fixture: AnnotationParserFixture
+    ):
+        annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
+        data = self._sample_jsonld(annotation_parser_fixture)
         data_json = json.dumps(data)
 
-        self.patron.synchronize_annotations = False
-        annotation = AnnotationParser.parse(self._db, data_json, self.patron)
+        annotation_parser_fixture.patron_value.synchronize_annotations = False
+        annotation = AnnotationParser.parse(
+            annotation_parser_fixture.db.session,
+            data_json,
+            annotation_parser_fixture.patron_value,
+        )
         assert PATRON_NOT_OPTED_IN_TO_ANNOTATION_SYNC == annotation

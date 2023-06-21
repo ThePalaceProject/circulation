@@ -77,7 +77,7 @@ class GeographicValidator(Validator):
                     # Is it a Canadian zipcode?
                     try:
                         info = self.look_up_zip(value, "CA")
-                        formatted = "%s, %s" % (info.city, info.province)
+                        formatted = f"{info.city}, {info.province}"
                         # In some cases--mainly involving very small towns--even if the zip code is valid,
                         # the registry won't recognize the name of the place to which it corresponds.
                         registry_response = self.find_location_through_registry(
@@ -159,12 +159,12 @@ class GeographicValidator(Validator):
         return info
 
     def format_place(self, zip, city, state_or_province):
-        details = "%s, %s" % (city, state_or_province)
+        details = f"{city}, {state_or_province}"
         return {zip: details}
 
     def find_location_through_registry(self, value, db):
         for nation in ["US", "CA"]:
-            service_area_object = urllib.parse.quote('{"%s": "%s"}' % (nation, value))
+            service_area_object = urllib.parse.quote(f'{{"{nation}": "{value}"}}')
             registry_check = self.ask_registry(service_area_object, db)
             if registry_check and isinstance(registry_check, ProblemDetail):
                 return registry_check

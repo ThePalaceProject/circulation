@@ -1,10 +1,7 @@
-# encoding: utf-8
-
-from core.testing import DatabaseTest
 from core.util.personal_names import display_name_to_sort_name
 
 
-class TestNameConversions(DatabaseTest):
+class TestNameConversions:
     def test_display_name_to_sort_name(self):
         # Make sure the sort name algorithm processes the messy reality of contributor
         # names in a way we expect.

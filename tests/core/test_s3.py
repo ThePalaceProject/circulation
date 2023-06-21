@@ -1,14 +1,9 @@
-# encoding: utf-8
 import functools
-import os
-import sys
-from urllib.parse import urlsplit
+from unittest.mock import MagicMock
 
-import boto3
 import botocore
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
-from parameterized import parameterized
 
 from core.mirror import MirrorUploader
 from core.model import (
@@ -28,189 +23,15 @@ from core.s3 import (
     S3Uploader,
     S3UploaderConfiguration,
 )
-from core.testing import DatabaseTest
 from core.util.datetime_helpers import datetime_utc, utc_now
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
-if sys.version_info < (3, 8):
-    from mock import MagicMock
-else:
-    from unittest.mock import MagicMock
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.s3 import S3UploaderFixture, S3UploaderIntegrationFixture
+from tests.fixtures.sample_covers import SampleCoversFixture
 
 
-class S3UploaderTest(DatabaseTest):
-    def _integration(self, **settings):
-        """Create and configure a simple S3 integration."""
-        integration = self._external_integration(
-            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL, settings=settings
-        )
-        integration.username = settings.get("username", "username")
-        integration.password = settings.get("password", "password")
-        return integration
-
-    def _add_settings_value(self, settings, key, value):
-        """Adds a value to settings dictionary
-
-        :param settings: Settings dictionary
-        :type settings: Dict
-
-        :param key: Key
-        :type key: string
-
-        :param value: Value
-        :type value: Any
-
-        :return: Updated settings dictionary
-        :rtype: Dict
-        """
-        if value:
-            if settings:
-                settings[key] = value
-
-            else:
-                settings = {key: value}
-
-        return settings
-
-    def _create_s3_uploader(
-        self,
-        client_class=None,
-        uploader_class=None,
-        region=None,
-        addressing_style=None,
-        **settings
-    ):
-        """Creates a new instance of S3 uploader
-
-        :param client_class: (Optional) Custom class to be used instead of boto3's client class
-        :type client_class: Optional[Type]
-
-        :param: uploader_class: (Optional) Custom class which will be used insted of S3Uploader
-        :type uploader_class: Optional[Type]
-
-        :param region: (Optional) S3 region
-        :type region: Optional[string]
-
-        :param addressing_style: (Optional) S3 addressing style
-        :type addressing_style: Optional[string]
-
-        :param settings: Kwargs used for initializing an external integration
-        :type: Optional[Dict]
-
-        :return: New intance of S3 uploader
-        :rtype: S3Uploader
-        """
-        settings = self._add_settings_value(
-            settings, S3UploaderConfiguration.S3_REGION, region
-        )
-        settings = self._add_settings_value(
-            settings, S3UploaderConfiguration.S3_ADDRESSING_STYLE, addressing_style
-        )
-        integration = self._integration(**settings)
-        uploader_class = uploader_class or S3Uploader
-
-        return uploader_class(integration, client_class=client_class)
-
-
-class S3UploaderIntegrationTest(S3UploaderTest):
-    SIMPLIFIED_TEST_MINIO_ENDPOINT_URL = os.environ.get(
-        "SIMPLIFIED_TEST_MINIO_ENDPOINT_URL", "http://localhost:9000"
-    )
-    SIMPLIFIED_TEST_MINIO_USER = os.environ.get(
-        "SIMPLIFIED_TEST_MINIO_USER", "minioadmin"
-    )
-    SIMPLIFIED_TEST_MINIO_PASSWORD = os.environ.get(
-        "SIMPLIFIED_TEST_MINIO_PASSWORD", "minioadmin"
-    )
-    _, SIMPLIFIED_TEST_MINIO_HOST, _, _, _ = urlsplit(
-        SIMPLIFIED_TEST_MINIO_ENDPOINT_URL
-    )
-
-    minio_s3_client = None
-    """boto3 client connected to locally running MinIO instance"""
-
-    s3_client_class = None
-    """Factory function used for creating a boto3 client inside S3Uploader"""
-
-    @classmethod
-    def setup_class(cls):
-        """Initializes the test suite by creating a boto3 client set up with MinIO credentials"""
-        super(S3UploaderIntegrationTest, cls).setup_class()
-
-        cls.minio_s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=TestS3UploaderIntegration.SIMPLIFIED_TEST_MINIO_USER,
-            aws_secret_access_key=TestS3UploaderIntegration.SIMPLIFIED_TEST_MINIO_PASSWORD,
-            endpoint_url=TestS3UploaderIntegration.SIMPLIFIED_TEST_MINIO_ENDPOINT_URL,
-        )
-        cls.s3_client_class = functools.partial(
-            boto3.client,
-            endpoint_url=TestS3UploaderIntegration.SIMPLIFIED_TEST_MINIO_ENDPOINT_URL,
-        )
-
-    def teardown_method(self):
-        """Deinitializes the test suite by removing all the buckets from MinIO"""
-        super(S3UploaderTest, self).teardown_method()
-
-        response = self.minio_s3_client.list_buckets()
-
-        for bucket in response["Buckets"]:
-            bucket_name = bucket["Name"]
-
-            response = self.minio_s3_client.list_objects(Bucket=bucket_name)
-
-            for object in response.get("Contents", []):
-                object_key = object["Key"]
-
-                self.minio_s3_client.delete_object(Bucket=bucket_name, Key=object_key)
-
-            self.minio_s3_client.delete_bucket(Bucket=bucket_name)
-
-    def _create_s3_uploader(
-        self,
-        client_class=None,
-        uploader_class=None,
-        region=None,
-        addressing_style=None,
-        **settings
-    ):
-        """Creates a new instance of S3 uploader
-
-        :param client_class: (Optional) Custom class to be used instead of boto3's client class
-        :type client_class: Optional[Type]
-
-        :param: uploader_class: (Optional) Custom class which will be used insted of S3Uploader
-        :type uploader_class: Optional[Type]
-
-        :param region: (Optional) S3 region
-        :type region: Optional[string]
-
-        :param addressing_style: (Optional) S3 addressing style
-        :type addressing_style: Optional[string]
-
-        :param settings: Kwargs used for initializing an external integration
-        :type: Optional[Dict]
-
-        :return: New intance of S3 uploader
-        :rtype: S3Uploader
-        """
-        if settings and "username" not in settings:
-            self._add_settings_value(
-                settings, "username", self.SIMPLIFIED_TEST_MINIO_USER
-            )
-        if settings and "password" not in settings:
-            self._add_settings_value(
-                settings, "password", self.SIMPLIFIED_TEST_MINIO_PASSWORD
-            )
-        if not client_class:
-            client_class = self.s3_client_class
-
-        return super(S3UploaderIntegrationTest, self)._create_s3_uploader(
-            client_class, uploader_class, region, addressing_style, **settings
-        )
-
-
-class TestS3Uploader(S3UploaderTest):
+class TestS3Uploader:
     def test_names(self):
         # The NAME associated with this class must be the same as its
         # key in the MirrorUploader implementation registry, and it's
@@ -221,8 +42,10 @@ class TestS3Uploader(S3UploaderTest):
             S3Uploader == MirrorUploader.IMPLEMENTATION_REGISTRY[ExternalIntegration.S3]
         )
 
-    def test_instantiation(self):
-        integration = self._external_integration(
+    def test_instantiation(self, s3_uploader_fixture: S3UploaderFixture):
+        transaction = s3_uploader_fixture.transaction
+
+        integration = transaction.external_integration(
             ExternalIntegration.S3, goal=ExternalIntegration.STORAGE_GOAL
         )
         integration.username = "your-access-key"
@@ -237,17 +60,21 @@ class TestS3Uploader(S3UploaderTest):
         # attribute on the S3Uploader object.
         assert "a transform" == uploader.url_transform
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,username,password",
         [
             ("empty_credentials", None, None),
             ("empty_string_credentials", "", ""),
             ("non_empty_string_credentials", "username", "password"),
-        ]
+        ],
     )
-    def test_initialization(self, name, username, password):
+    def test_initialization(
+        self, s3_uploader_fixture: S3UploaderFixture, name, username, password
+    ):
         # Arrange
+        transaction = s3_uploader_fixture.transaction
         settings = {"username": username, "password": password}
-        integration = self._external_integration(
+        integration = transaction.external_integration(
             ExternalIntegration.S3,
             goal=ExternalIntegration.STORAGE_GOAL,
             settings=settings,
@@ -289,20 +116,22 @@ class TestS3Uploader(S3UploaderTest):
         assert aws_secret_access_key == (password if password != "" else None)
         assert "config" not in client_class.call_args_list[1].kwargs
 
-    def test_custom_client_class(self):
+    def test_custom_client_class(self, s3_uploader_fixture: S3UploaderFixture):
         """You can specify a client class to use instead of boto3.client."""
-        integration = self._integration()
+        integration = s3_uploader_fixture.integration()
         uploader = S3Uploader(integration, MockS3Client)
         assert isinstance(uploader.client, MockS3Client)
 
-    def test_get_bucket(self):
+    def test_get_bucket(self, s3_uploader_fixture: S3UploaderFixture):
         buckets = {
             S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY: "banana",
             S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "bucket",
         }
         buckets_plus_irrelevant_setting = dict(buckets)
         buckets_plus_irrelevant_setting["not-a-bucket-at-all"] = "value"
-        uploader = self._create_s3_uploader(**buckets_plus_irrelevant_setting)
+        uploader = s3_uploader_fixture.create_s3_uploader(
+            **buckets_plus_irrelevant_setting
+        )
 
         # This S3Uploader knows about the configured buckets.  It
         # wasn't informed of the irrelevant 'not-a-bucket-at-all'
@@ -314,7 +143,8 @@ class TestS3Uploader(S3UploaderTest):
         result = uploader.get_bucket("foo")
         assert uploader.buckets["foo"] == result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,bucket,path,expected_result,region,addressing_style",
         [
             (
                 "s3_url_with_path_without_slash",
@@ -322,12 +152,14 @@ class TestS3Uploader(S3UploaderTest):
                 "a-path",
                 "https://a-bucket.s3.amazonaws.com/a-path",
                 None,
+                None,
             ),
             (
                 "s3_dummy_url_with_path_without_slash",
                 "dummy",
                 "dummy",
                 "https://dummy.s3.amazonaws.com/dummy",
+                None,
                 None,
             ),
             (
@@ -352,6 +184,7 @@ class TestS3Uploader(S3UploaderTest):
                 "/a-path",
                 "https://a-bucket.s3.amazonaws.com/a-path",
                 None,
+                None,
             ),
             (
                 "s3_path_style_url_with_path_with_slash",
@@ -367,6 +200,7 @@ class TestS3Uploader(S3UploaderTest):
                 "a-path",
                 "https://a-bucket.s3.us-east-2.amazonaws.com/a-path",
                 "us-east-2",
+                None,
             ),
             (
                 "s3_path_style_url_with_custom_region_and_path_without_slash",
@@ -382,6 +216,7 @@ class TestS3Uploader(S3UploaderTest):
                 "/a-path",
                 "https://a-bucket.s3.us-east-3.amazonaws.com/a-path",
                 "us-east-3",
+                None,
             ),
             (
                 "s3_path_style_url_with_custom_region_and_path_with_slash",
@@ -397,12 +232,14 @@ class TestS3Uploader(S3UploaderTest):
                 "a-path",
                 "http://a-bucket.com/a-path",
                 None,
+                None,
             ),
             (
                 "custom_http_url_and_path_with_slash",
                 "http://a-bucket.com/",
                 "/a-path",
                 "http://a-bucket.com/a-path",
+                None,
                 None,
             ),
             (
@@ -411,6 +248,7 @@ class TestS3Uploader(S3UploaderTest):
                 "a-path",
                 "https://a-bucket.com/a-path",
                 None,
+                None,
             ),
             (
                 "custom_http_url_and_path_with_slash",
@@ -418,14 +256,22 @@ class TestS3Uploader(S3UploaderTest):
                 "/a-path",
                 "https://a-bucket.com/a-path",
                 None,
+                None,
             ),
-        ]
+        ],
     )
     def test_url(
-        self, name, bucket, path, expected_result, region=None, addressing_style=None
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        name,
+        bucket,
+        path,
+        expected_result,
+        region,
+        addressing_style,
     ):
         # Arrange
-        uploader = self._create_s3_uploader(
+        uploader = s3_uploader_fixture.create_s3_uploader(
             region=region, addressing_style=addressing_style
         )
 
@@ -435,13 +281,16 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,bucket,key,expected_result,url_transform,region",
         [
             (
                 "implicit_s3_url_template",
                 "bucket",
                 "the key",
                 "https://bucket.s3.amazonaws.com/the%20key",
+                None,
+                None,
             ),
             (
                 "implicit_s3_url_template_with_custom_region",
@@ -457,6 +306,7 @@ class TestS3Uploader(S3UploaderTest):
                 "the key",
                 "https://bucket.s3.amazonaws.com/the%20key",
                 S3UploaderConfiguration.URL_TEMPLATE_DEFAULT,
+                None,
             ),
             (
                 "explicit_s3_url_template_with_custom_region",
@@ -472,6 +322,7 @@ class TestS3Uploader(S3UploaderTest):
                 "the këy",
                 "http://bucket/the%20k%C3%ABy",
                 S3UploaderConfiguration.URL_TEMPLATE_HTTP,
+                None,
             ),
             (
                 "https_url_template",
@@ -479,14 +330,22 @@ class TestS3Uploader(S3UploaderTest):
                 "the këy",
                 "https://bucket/the%20k%C3%ABy",
                 S3UploaderConfiguration.URL_TEMPLATE_HTTPS,
+                None,
             ),
-        ]
+        ],
     )
     def test_final_mirror_url(
-        self, name, bucket, key, expected_result, url_transform=None, region=None
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        name,
+        bucket,
+        key,
+        expected_result,
+        url_transform,
+        region,
     ):
         # Arrange
-        uploader = self._create_s3_uploader(region=region)
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region)
 
         if url_transform:
             uploader.url_transform = url_transform
@@ -510,19 +369,24 @@ class TestS3Uploader(S3UploaderTest):
             == S3Uploader.key_join(parts)
         )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,bucket,data_source_name,expected_result,scaled_size,region,",
         [
             (
                 "with_gutenberg_cover_generator_data_source",
                 "test-book-covers-s3-bucket",
                 DataSource.GUTENBERG_COVER_GENERATOR,
                 "https://test-book-covers-s3-bucket.s3.amazonaws.com/Gutenberg%20Illustrated/",
+                None,
+                None,
             ),
             (
                 "with_overdrive_data_source",
                 "test-book-covers-s3-bucket",
                 DataSource.OVERDRIVE,
                 "https://test-book-covers-s3-bucket.s3.amazonaws.com/Overdrive/",
+                None,
+                None,
             ),
             (
                 "with_overdrive_data_source_and_scaled_size",
@@ -530,6 +394,7 @@ class TestS3Uploader(S3UploaderTest):
                 DataSource.OVERDRIVE,
                 "https://test-book-covers-s3-bucket.s3.amazonaws.com/scaled/300/Overdrive/",
                 300,
+                None,
             ),
             (
                 "with_gutenberg_cover_generator_data_source_and_custom_region",
@@ -555,20 +420,22 @@ class TestS3Uploader(S3UploaderTest):
                 300,
                 "us-east-3",
             ),
-        ]
+        ],
     )
     def test_cover_image_root(
         self,
+        s3_uploader_fixture: S3UploaderFixture,
         name,
         bucket,
         data_source_name,
         expected_result,
-        scaled_size=None,
-        region=None,
+        scaled_size,
+        region,
     ):
         # Arrange
-        uploader = self._create_s3_uploader(region=region)
-        data_source = DataSource.lookup(self._db, data_source_name)
+        session = s3_uploader_fixture.transaction.session
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region)
+        data_source = DataSource.lookup(session, data_source_name)
 
         # Act
         result = uploader.cover_image_root(bucket, data_source, scaled_size=scaled_size)
@@ -576,12 +443,14 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,bucket,expected_result,region",
         [
             (
                 "with_default_region",
                 "test-open-access-s3-bucket",
                 "https://test-open-access-s3-bucket.s3.amazonaws.com/",
+                None,
             ),
             (
                 "with_custom_region",
@@ -589,11 +458,18 @@ class TestS3Uploader(S3UploaderTest):
                 "https://test-open-access-s3-bucket.s3.us-east-3.amazonaws.com/",
                 "us-east-3",
             ),
-        ]
+        ],
     )
-    def test_content_root(self, name, bucket, expected_result, region=None):
+    def test_content_root(
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        name,
+        bucket,
+        expected_result,
+        region,
+    ):
         # Arrange
-        uploader = self._create_s3_uploader(region=region)
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region)
 
         # Act
         result = uploader.content_root(bucket)
@@ -601,13 +477,15 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,bucket,library_name,expected_result,region",
         [
             (
                 "s3_url",
                 "test-marc-s3-bucket",
                 "SHORT",
                 "https://test-marc-s3-bucket.s3.amazonaws.com/SHORT/",
+                None,
             ),
             (
                 "s3_url_with_custom_region",
@@ -616,16 +494,34 @@ class TestS3Uploader(S3UploaderTest):
                 "https://test-marc-s3-bucket.s3.us-east-2.amazonaws.com/SHORT/",
                 "us-east-2",
             ),
-            ("custom_http_url", "http://my-feed/", "SHORT", "http://my-feed/SHORT/"),
-            ("custom_https_url", "https://my-feed/", "SHORT", "https://my-feed/SHORT/"),
-        ]
+            (
+                "custom_http_url",
+                "http://my-feed/",
+                "SHORT",
+                "http://my-feed/SHORT/",
+                None,
+            ),
+            (
+                "custom_https_url",
+                "https://my-feed/",
+                "SHORT",
+                "https://my-feed/SHORT/",
+                None,
+            ),
+        ],
     )
     def test_marc_file_root(
-        self, name, bucket, library_name, expected_result, region=None
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        name,
+        bucket,
+        library_name,
+        expected_result,
+        region,
     ):
         # Arrange
-        uploader = self._create_s3_uploader(region=region)
-        library = self._library(short_name=library_name)
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region)
+        library = s3_uploader_fixture.transaction.library(short_name=library_name)
 
         # Act
         result = uploader.marc_file_root(bucket, library)
@@ -633,13 +529,19 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,buckets,identifier,expected_result,extension,data_source_name,title,region,open_access",
         [
             (
                 "with_identifier",
                 {S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY: "thebooks"},
                 "ABOOK",
                 "https://thebooks.s3.amazonaws.com/Gutenberg%20ID/ABOOK.epub",
+                None,
+                None,
+                None,
+                None,
+                True,
             ),
             (
                 "with_custom_extension",
@@ -647,6 +549,10 @@ class TestS3Uploader(S3UploaderTest):
                 "ABOOK",
                 "https://thebooks.s3.amazonaws.com/Gutenberg%20ID/ABOOK.pdf",
                 "pdf",
+                None,
+                None,
+                None,
+                True,
             ),
             (
                 "with_custom_dotted_extension",
@@ -654,6 +560,10 @@ class TestS3Uploader(S3UploaderTest):
                 "ABOOK",
                 "https://thebooks.s3.amazonaws.com/Gutenberg%20ID/ABOOK.pdf",
                 ".pdf",
+                None,
+                None,
+                None,
+                True,
             ),
             (
                 "with_custom_data_source",
@@ -662,6 +572,9 @@ class TestS3Uploader(S3UploaderTest):
                 "https://thebooks.s3.amazonaws.com/unglue.it/Gutenberg%20ID/ABOOK.epub",
                 None,
                 DataSource.UNGLUE_IT,
+                None,
+                None,
+                True,
             ),
             (
                 "with_custom_title",
@@ -671,6 +584,8 @@ class TestS3Uploader(S3UploaderTest):
                 None,
                 None,
                 "On Books",
+                None,
+                True,
             ),
             (
                 "with_custom_extension_and_title_and_data_source",
@@ -680,6 +595,8 @@ class TestS3Uploader(S3UploaderTest):
                 ".pdf",
                 DataSource.UNGLUE_IT,
                 "On Books",
+                None,
+                True,
             ),
             (
                 "with_custom_extension_and_title_and_data_source_and_region",
@@ -690,6 +607,7 @@ class TestS3Uploader(S3UploaderTest):
                 DataSource.UNGLUE_IT,
                 "On Books",
                 "us-east-3",
+                True,
             ),
             (
                 "with_protected_access_and_custom_extension_and_title_and_data_source_and_region",
@@ -702,23 +620,25 @@ class TestS3Uploader(S3UploaderTest):
                 "us-east-3",
                 False,
             ),
-        ]
+        ],
     )
     def test_book_url(
         self,
+        s3_uploader_fixture: S3UploaderFixture,
         name,
         buckets,
         identifier,
         expected_result,
-        extension=None,
-        data_source_name=None,
-        title=None,
-        region=None,
-        open_access=True,
+        extension,
+        data_source_name,
+        title,
+        region,
+        open_access,
     ):
         # Arrange
-        identifier = self._identifier(foreign_id=identifier)
-        uploader = self._create_s3_uploader(region=region, **buckets)
+        transaction = s3_uploader_fixture.transaction
+        identifier = transaction.identifier(foreign_id=identifier)
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region, **buckets)
 
         parameters = {"identifier": identifier, "open_access": open_access}
 
@@ -728,7 +648,7 @@ class TestS3Uploader(S3UploaderTest):
             parameters["title"] = title
 
         if data_source_name:
-            data_source = DataSource.lookup(self._db, DataSource.UNGLUE_IT)
+            data_source = DataSource.lookup(transaction.session, DataSource.UNGLUE_IT)
             parameters["data_source"] = data_source
 
         # Act
@@ -737,7 +657,8 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,buckets,data_source_name,identifier,filename,expected_result,scaled_size,region",
         [
             (
                 "without_scaled_size",
@@ -746,6 +667,8 @@ class TestS3Uploader(S3UploaderTest):
                 "ABOOK",
                 "filename",
                 "https://thecovers.s3.amazonaws.com/unglue.it/Gutenberg%20ID/ABOOK/filename",
+                None,
+                None,
             ),
             (
                 "without_scaled_size_and_with_custom_region",
@@ -765,6 +688,7 @@ class TestS3Uploader(S3UploaderTest):
                 "filename",
                 "https://thecovers.s3.amazonaws.com/scaled/601/unglue.it/Gutenberg%20ID/ABOOK/filename",
                 601,
+                None,
             ),
             (
                 "with_scaled_size_and_custom_region",
@@ -776,19 +700,22 @@ class TestS3Uploader(S3UploaderTest):
                 601,
                 "us-east-3",
             ),
-        ]
+        ],
     )
     def test_cover_image_url(
         self,
+        s3_uploader_fixture: S3UploaderFixture,
         name,
         buckets,
         data_source_name,
         identifier,
         filename,
         expected_result,
-        scaled_size=None,
-        region=None,
+        scaled_size,
+        region,
     ):
+        transaction = s3_uploader_fixture.transaction
+
         # identifier = self._identifier(foreign_id="ABOOK")
         # buckets = {S3Uploader.BOOK_COVERS_BUCKET_KEY : 'thecovers'}
         # uploader = self._uploader(**buckets)
@@ -800,9 +727,9 @@ class TestS3Uploader(S3UploaderTest):
         #     m(unglueit, identifier, "filename", scaled_size=601))
 
         # Arrange
-        data_source = DataSource.lookup(self._db, data_source_name)
-        identifier = self._identifier(foreign_id=identifier)
-        uploader = self._create_s3_uploader(region=region, **buckets)
+        data_source = DataSource.lookup(transaction.session, data_source_name)
+        identifier = transaction.identifier(foreign_id=identifier)
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region, **buckets)
 
         # Act
         result = uploader.cover_image_url(
@@ -812,7 +739,8 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,bucket,library_name,lane_name,end_time,expected_result,start_time,region",
         [
             (
                 "with_s3_bucket_and_end_time",
@@ -821,6 +749,8 @@ class TestS3Uploader(S3UploaderTest):
                 "Lane",
                 datetime_utc(2020, 1, 1, 0, 0, 0),
                 "https://marc.s3.amazonaws.com/SHORT/2020-01-01%2000%3A00%3A00%2B00%3A00/Lane.mrc",
+                None,
+                None,
             ),
             (
                 "with_s3_bucket_and_end_time_and_start_time",
@@ -830,6 +760,7 @@ class TestS3Uploader(S3UploaderTest):
                 datetime_utc(2020, 1, 2, 0, 0, 0),
                 "https://marc.s3.amazonaws.com/SHORT/2020-01-01%2000%3A00%3A00%2B00%3A00-2020-01-02%2000%3A00%3A00%2B00%3A00/Lane.mrc",
                 datetime_utc(2020, 1, 1, 0, 0, 0),
+                None,
             ),
             (
                 "with_s3_bucket_and_end_time_and_start_time_and_custom_region",
@@ -849,6 +780,7 @@ class TestS3Uploader(S3UploaderTest):
                 datetime_utc(2020, 1, 2, 0, 0, 0),
                 "http://marc/SHORT/2020-01-01%2000%3A00%3A00%2B00%3A00-2020-01-02%2000%3A00%3A00%2B00%3A00/Lane.mrc",
                 datetime_utc(2020, 1, 1, 0, 0, 0),
+                None,
             ),
             (
                 "with_https_bucket_and_end_time_and_start_time",
@@ -858,25 +790,28 @@ class TestS3Uploader(S3UploaderTest):
                 datetime_utc(2020, 1, 2, 0, 0, 0),
                 "https://marc/SHORT/2020-01-01%2000%3A00%3A00%2B00%3A00-2020-01-02%2000%3A00%3A00%2B00%3A00/Lane.mrc",
                 datetime_utc(2020, 1, 1, 0, 0, 0),
+                None,
             ),
-        ]
+        ],
     )
     def test_marc_file_url(
         self,
+        s3_uploader_fixture: S3UploaderFixture,
         name,
         bucket,
         library_name,
         lane_name,
         end_time,
         expected_result,
-        start_time=None,
-        region=None,
+        start_time,
+        region,
     ):
         # Arrange
-        library = self._library(short_name=library_name)
-        lane = self._lane(display_name=lane_name)
+        transaction = s3_uploader_fixture.transaction
+        library = transaction.library(short_name=library_name)
+        lane = transaction.lane(display_name=lane_name)
         buckets = {S3UploaderConfiguration.MARC_BUCKET_KEY: bucket}
-        uploader = self._create_s3_uploader(region=region, **buckets)
+        uploader = s3_uploader_fixture.create_s3_uploader(region=region, **buckets)
 
         # Act
         result = uploader.marc_file_url(library, lane, end_time, start_time)
@@ -884,47 +819,56 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,url,expected_result,unquote",
         [
             (
                 "s3_path_style_request_without_region",
                 "https://s3.amazonaws.com/bucket/directory/filename.jpg",
                 ("bucket", "directory/filename.jpg"),
+                True,
             ),
             (
                 "s3_path_style_request_with_region",
                 "https://s3.us-east-2.amazonaws.com/bucket/directory/filename.jpg",
                 ("bucket", "directory/filename.jpg"),
+                True,
             ),
             (
                 "s3_virtual_hosted_style_request_with_global_endpoint",
                 "https://bucket.s3.amazonaws.com/directory/filename.jpg",
                 ("bucket", "directory/filename.jpg"),
+                True,
             ),
             (
                 "s3_virtual_hosted_style_request_with_dashed_region",
                 "https://bucket.s3-us-east-2.amazonaws.com/directory/filename.jpg",
                 ("bucket", "directory/filename.jpg"),
+                True,
             ),
             (
                 "s3_virtual_hosted_style_request_with_dotted_region",
                 "https://bucket.s3.us-east-2.amazonaws.com/directory/filename.jpg",
                 ("bucket", "directory/filename.jpg"),
+                True,
             ),
             (
                 "http_url",
                 "http://book-covers.nypl.org/directory/filename.jpg",
                 ("book-covers.nypl.org", "directory/filename.jpg"),
+                True,
             ),
             (
                 "https_url",
                 "https://book-covers.nypl.org/directory/filename.jpg",
                 ("book-covers.nypl.org", "directory/filename.jpg"),
+                True,
             ),
             (
                 "http_url_with_escaped_symbols",
                 "http://book-covers.nypl.org/directory/filename+with+spaces%21.jpg",
                 ("book-covers.nypl.org", "directory/filename with spaces!.jpg"),
+                True,
             ),
             (
                 "http_url_with_escaped_symbols_but_unquote_set_to_false",
@@ -932,11 +876,18 @@ class TestS3Uploader(S3UploaderTest):
                 ("book-covers.nypl.org", "directory/filename+with+spaces%21.jpg"),
                 False,
             ),
-        ]
+        ],
     )
-    def test_split_url(self, name, url, expected_result, unquote=True):
+    def test_split_url(
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        name,
+        url,
+        expected_result,
+        unquote,
+    ):
         # Arrange
-        s3_uploader = self._create_s3_uploader()
+        s3_uploader = s3_uploader_fixture.create_s3_uploader()
 
         # Act
         result = s3_uploader.split_url(url, unquote)
@@ -944,10 +895,18 @@ class TestS3Uploader(S3UploaderTest):
         # Assert
         assert result == expected_result
 
-    def test_mirror_one(self):
-        edition, pool = self._edition(with_license_pool=True)
+    def test_mirror_one(
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        sample_covers_fixture: SampleCoversFixture,
+    ):
+        transaction = s3_uploader_fixture.transaction
+
+        edition, pool = transaction.edition(with_license_pool=True)
         original_cover_location = "http://example.com/a-cover.png"
-        content = open(self.sample_cover_path("test-book-cover.png"), "rb").read()
+        content = open(
+            sample_covers_fixture.sample_cover_path("test-book-cover.png"), "rb"
+        ).read()
         cover, ignore = pool.add_link(
             Hyperlink.IMAGE,
             original_cover_location,
@@ -969,12 +928,14 @@ class TestS3Uploader(S3UploaderTest):
         epub_rep = epub.resource.representation
         assert None == epub_rep.mirrored_at
 
-        s3 = self._create_s3_uploader(client_class=MockS3Client)
+        s3 = s3_uploader_fixture.create_s3_uploader(client_class=MockS3Client)
 
         # Mock final_mirror_url so we can verify that it's called with
         # the right arguments
         def mock_final_mirror_url(bucket, key):
-            return "final_mirror_url was called with bucket %s, key %s" % (bucket, key)
+            return "final_mirror_url was called with bucket {}, key {}".format(
+                bucket, key
+            )
 
         s3.final_mirror_url = mock_final_mirror_url
 
@@ -1014,8 +975,10 @@ class TestS3Uploader(S3UploaderTest):
         for rep in epub_rep, cover_rep:
             assert (utc_now() - rep.mirrored_at).seconds < 10
 
-    def test_mirror_failure(self):
-        edition, pool = self._edition(with_license_pool=True)
+    def test_mirror_failure(self, s3_uploader_fixture: S3UploaderFixture):
+        transaction = s3_uploader_fixture.transaction
+
+        edition, pool = transaction.edition(with_license_pool=True)
         original_epub_location = "https://books.com/a-book.epub"
         epub, ignore = pool.add_link(
             Hyperlink.OPEN_ACCESS_DOWNLOAD,
@@ -1026,11 +989,11 @@ class TestS3Uploader(S3UploaderTest):
         )
         epub_rep = epub.resource.representation
 
-        uploader = self._create_s3_uploader(MockS3Client)
+        uploader = s3_uploader_fixture.create_s3_uploader(MockS3Client)
 
         # A network failure is treated as a transient error.
         uploader.client.fail_with = BotoCoreError()
-        uploader.mirror_one(epub_rep, self._url)
+        uploader.mirror_one(epub_rep, transaction.fresh_url())
         assert None == epub_rep.mirrored_at
         assert None == epub_rep.mirror_exception
 
@@ -1042,7 +1005,7 @@ class TestS3Uploader(S3UploaderTest):
             )
         )
         uploader.client.fail_with = ClientError(response, "SomeOperation")
-        uploader.mirror_one(epub_rep, self._url)
+        uploader.mirror_one(epub_rep, transaction.fresh_url())
         assert None == epub_rep.mirrored_at
         assert None == epub_rep.mirror_exception
 
@@ -1054,11 +1017,13 @@ class TestS3Uploader(S3UploaderTest):
         # A bug in the code is not treated as a transient error --
         # the exception propagates through.
         uploader.client.fail_with = Exception("crash!")
-        pytest.raises(Exception, uploader.mirror_one, epub_rep, self._url)
+        pytest.raises(Exception, uploader.mirror_one, epub_rep, transaction.fresh_url())
 
-    def test_svg_mirroring(self):
-        edition, pool = self._edition(with_license_pool=True)
-        original = self._url
+    def test_svg_mirroring(self, s3_uploader_fixture: S3UploaderFixture):
+        transaction = s3_uploader_fixture.transaction
+
+        edition, pool = transaction.edition(with_license_pool=True)
+        original = transaction.fresh_url()
 
         # Create an SVG cover for the book.
         svg = """<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
@@ -1076,15 +1041,17 @@ class TestS3Uploader(S3UploaderTest):
         )
 
         # 'Upload' it to S3.
-        s3 = self._create_s3_uploader(MockS3Client)
-        s3.mirror_one(hyperlink.resource.representation, self._url)
+        s3 = s3_uploader_fixture.create_s3_uploader(MockS3Client)
+        s3.mirror_one(hyperlink.resource.representation, transaction.fresh_url())
         [[data, bucket, key, args, ignore]] = s3.client.uploads
 
         assert Representation.SVG_MEDIA_TYPE == args["ContentType"]
         assert b"svg" in data
         assert b"PNG" not in data
 
-    def test_multipart_upload(self):
+    def test_multipart_upload(self, s3_uploader_fixture: S3UploaderFixture):
+        transaction = s3_uploader_fixture.transaction
+
         class MockMultipartS3Upload(MultipartS3Upload):
             completed = None
             aborted = None
@@ -1104,13 +1071,13 @@ class TestS3Uploader(S3UploaderTest):
                 MockMultipartS3Upload.aborted = True
 
         rep, ignore = create(
-            self._db,
+            transaction.session,
             Representation,
             url="http://books.mrc",
             media_type=Representation.MARC_MEDIA_TYPE,
         )
 
-        s3 = self._create_s3_uploader(MockS3Client)
+        s3 = s3_uploader_fixture.create_s3_uploader(MockS3Client)
 
         # Successful upload
         with s3.multipart_upload(
@@ -1158,7 +1125,8 @@ class TestS3Uploader(S3UploaderTest):
         assert True == MockMultipartS3Upload.aborted
         assert "Error!" == rep.mirror_exception
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "name,expiration_settings,expected_expiration",
         [
             (
                 "default_expiration_parameter",
@@ -1170,17 +1138,23 @@ class TestS3Uploader(S3UploaderTest):
                 {S3UploaderConfiguration.S3_PRESIGNED_URL_EXPIRATION: 100},
                 100,
             ),
-        ]
+        ],
     )
-    def test_sign_url(self, name, expiration_settings, expected_expiration):
+    def test_sign_url(
+        self,
+        s3_uploader_fixture: S3UploaderFixture,
+        name,
+        expiration_settings,
+        expected_expiration,
+    ):
         # Arrange
         region = "us-east-1"
         bucket = "bucket"
         filename = "filename"
-        url = "https://{0}.s3.{1}.amazonaws.com/{2}".format(bucket, region, filename)
+        url = f"https://{bucket}.s3.{region}.amazonaws.com/{filename}"
         expected_url = url + "?AWSAccessKeyId=KEY&Expires=1&Signature=S"
         settings = expiration_settings if expiration_settings else {}
-        s3_uploader = self._create_s3_uploader(region=region, **settings)
+        s3_uploader = s3_uploader_fixture.create_s3_uploader(region=region, **settings)
         s3_uploader.split_url = MagicMock(return_value=(bucket, filename))
         s3_uploader.client.generate_presigned_url = MagicMock(return_value=expected_url)
 
@@ -1197,19 +1171,20 @@ class TestS3Uploader(S3UploaderTest):
         )
 
 
-class TestMultiPartS3Upload(S3UploaderTest):
-    def _representation(self):
+class TestMultiPartS3Upload:
+    @staticmethod
+    def _representation(transaction: DatabaseTransactionFixture):
         rep, ignore = create(
-            self._db,
+            transaction.session,
             Representation,
             url="http://bucket/books.mrc",
             media_type=Representation.MARC_MEDIA_TYPE,
         )
         return rep
 
-    def test_init(self):
-        uploader = self._create_s3_uploader(MockS3Client)
-        rep = self._representation()
+    def test_init(self, s3_uploader_fixture: S3UploaderFixture):
+        uploader = s3_uploader_fixture.create_s3_uploader(MockS3Client)
+        rep = self._representation(s3_uploader_fixture.transaction)
         upload = MultipartS3Upload(uploader, rep, rep.url)
         assert uploader == upload.uploader
         assert rep == upload.representation
@@ -1222,9 +1197,9 @@ class TestMultiPartS3Upload(S3UploaderTest):
         uploader.client.fail_with = Exception("Error!")
         pytest.raises(Exception, MultipartS3Upload, uploader, rep, rep.url)
 
-    def test_upload_part(self):
-        uploader = self._create_s3_uploader(MockS3Client)
-        rep = self._representation()
+    def test_upload_part(self, s3_uploader_fixture: S3UploaderFixture):
+        uploader = s3_uploader_fixture.create_s3_uploader(MockS3Client)
+        rep = self._representation(s3_uploader_fixture.transaction)
         upload = MultipartS3Upload(uploader, rep, rep.url)
         upload.upload_part("Part 1")
         upload.upload_part("Part 2")
@@ -1253,9 +1228,9 @@ class TestMultiPartS3Upload(S3UploaderTest):
         uploader.client.fail_with = Exception("Error!")
         pytest.raises(Exception, upload.upload_part, "Part 3")
 
-    def test_complete(self):
-        uploader = self._create_s3_uploader(MockS3Client)
-        rep = self._representation()
+    def test_complete(self, s3_uploader_fixture: S3UploaderFixture):
+        uploader = s3_uploader_fixture.create_s3_uploader(MockS3Client)
+        rep = self._representation(s3_uploader_fixture.transaction)
         upload = MultipartS3Upload(uploader, rep, rep.url)
         upload.upload_part("Part 1")
         upload.upload_part("Part 2")
@@ -1274,9 +1249,9 @@ class TestMultiPartS3Upload(S3UploaderTest):
             }
         ] == uploader.client.uploads
 
-    def test_abort(self):
-        uploader = self._create_s3_uploader(MockS3Client)
-        rep = self._representation()
+    def test_abort(self, s3_uploader_fixture: S3UploaderFixture):
+        uploader = s3_uploader_fixture.create_s3_uploader(MockS3Client)
+        rep = self._representation(s3_uploader_fixture.transaction)
         upload = MultipartS3Upload(uploader, rep, rep.url)
         upload.upload_part("Part 1")
         upload.upload_part("Part 2")
@@ -1285,28 +1260,31 @@ class TestMultiPartS3Upload(S3UploaderTest):
 
 
 @pytest.mark.minio
-class TestS3UploaderIntegration(S3UploaderIntegrationTest):
-    @parameterized.expand(
+class TestS3UploaderIntegration:
+    @pytest.mark.parametrize(
+        "name,uploader_class,bucket_type,bucket_name,open_access,settings",
         [
             (
                 "using_s3_uploader_and_open_access_bucket",
                 functools.partial(
                     S3Uploader,
-                    host=S3UploaderIntegrationTest.SIMPLIFIED_TEST_MINIO_HOST,
+                    host=S3UploaderIntegrationFixture.SIMPLIFIED_TEST_MINIO_HOST,
                 ),
                 S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY,
                 "test-bucket",
                 True,
+                None,
             ),
             (
                 "using_s3_uploader_and_protected_access_bucket",
                 functools.partial(
                     S3Uploader,
-                    host=S3UploaderIntegrationTest.SIMPLIFIED_TEST_MINIO_HOST,
+                    host=S3UploaderIntegrationFixture.SIMPLIFIED_TEST_MINIO_HOST,
                 ),
                 S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY,
                 "test-bucket",
                 False,
+                None,
             ),
             (
                 "using_minio_uploader_and_open_access_bucket",
@@ -1315,7 +1293,7 @@ class TestS3UploaderIntegration(S3UploaderIntegrationTest):
                 "test-bucket",
                 True,
                 {
-                    MinIOUploaderConfiguration.ENDPOINT_URL: S3UploaderIntegrationTest.SIMPLIFIED_TEST_MINIO_ENDPOINT_URL
+                    MinIOUploaderConfiguration.ENDPOINT_URL: S3UploaderIntegrationFixture.SIMPLIFIED_TEST_MINIO_ENDPOINT_URL
                 },
             ),
             (
@@ -1325,14 +1303,23 @@ class TestS3UploaderIntegration(S3UploaderIntegrationTest):
                 "test-bucket",
                 False,
                 {
-                    MinIOUploaderConfiguration.ENDPOINT_URL: S3UploaderIntegrationTest.SIMPLIFIED_TEST_MINIO_ENDPOINT_URL
+                    MinIOUploaderConfiguration.ENDPOINT_URL: S3UploaderIntegrationFixture.SIMPLIFIED_TEST_MINIO_ENDPOINT_URL
                 },
             ),
-        ]
+        ],
     )
     def test_mirror(
-        self, name, uploader_class, bucket_type, bucket_name, open_access, settings=None
+        self,
+        s3_uploader_integration_fixture: S3UploaderIntegrationFixture,
+        name,
+        uploader_class,
+        bucket_type,
+        bucket_name,
+        open_access,
+        settings,
     ):
+        fixture = s3_uploader_integration_fixture
+
         # Arrange
         book_title = "1234567890"
         book_content = "1234567890"
@@ -1349,21 +1336,21 @@ class TestS3UploaderIntegration(S3UploaderIntegrationTest):
         else:
             settings = buckets
 
-        s3_uploader = self._create_s3_uploader(
+        s3_uploader = fixture.create_s3_uploader(
             uploader_class=uploader_class, **settings
         )
 
-        self.minio_s3_client.create_bucket(Bucket=bucket_name)
+        fixture.minio_s3_client.create_bucket(Bucket=bucket_name)
 
         # Act
         book_url = s3_uploader.book_url(identifier, open_access=open_access)
         s3_uploader.mirror_one(representation, book_url)
 
         # Assert
-        response = self.minio_s3_client.list_objects(Bucket=bucket_name)
+        response = fixture.minio_s3_client.list_objects(Bucket=bucket_name)
         assert "Contents" in response
         assert len(response["Contents"]) == 1
 
         [object] = response["Contents"]
 
-        assert object["Key"] == "ISBN/{0}.epub".format(book_title)
+        assert object["Key"] == f"ISBN/{book_title}.epub"

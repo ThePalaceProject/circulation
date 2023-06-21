@@ -1,4 +1,3 @@
-import contextlib
 import json
 
 from Crypto.Cipher import PKCS1_OAEP
@@ -8,17 +7,14 @@ from flask_babel import lazy_gettext as _
 from core.config import CannotLoadConfiguration  # noqa: autoflake
 from core.config import IntegrationException  # noqa: autoflake
 from core.config import Configuration as CoreConfiguration
-from core.config import empty_config as core_empty_config
-from core.config import temp_config as core_temp_config
 from core.model import ConfigurationSetting
+from core.model.constants import LinkRelations
 from core.util import MoneyUtility
 
 from .announcements import Announcements
 
 
 class Configuration(CoreConfiguration):
-
-    LENDING_POLICY = "lending"
 
     DEFAULT_OPDS_FORMAT = "simple_opds_entry"
 
@@ -34,10 +30,6 @@ class Configuration(CoreConfiguration):
     # The name of the setting controlling how long authentication
     # documents are cached.
     AUTHENTICATION_DOCUMENT_CACHE_TIME = "authentication_document_cache_time"
-
-    # The name of a setting that turns UWSGI debugging information on
-    # or off.
-    WSGI_DEBUG_KEY = "wsgi_debug"
 
     # A custom link to a Terms of Service document to be understood by
     # users of the administrative interface.
@@ -163,7 +155,7 @@ class Configuration(CoreConfiguration):
 
     # These are link relations that are valid in Authentication for
     # OPDS documents but are not registered with IANA.
-    AUTHENTICATION_FOR_OPDS_LINKS = ["register"]
+    AUTHENTICATION_FOR_OPDS_LINKS = ["register", LinkRelations.PATRON_PASSWORD_RESET]
 
     # We support three different ways of integrating help processes.
     # All three of these will be sent out as links with rel='help'
@@ -266,16 +258,18 @@ class Configuration(CoreConfiguration):
             "description": _(
                 "An email address a patron can use if they need help, e.g. 'simplyehelp@yourlibrary.org'."
             ),
-            "required": True,
+            "category": "Basic Information",
             "format": "email",
             "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
             "key": HELP_WEB,
             "label": _("Patron support web site"),
-            "description": _("A URL for patrons to get help."),
+            "description": _(
+                "A URL for patrons to get help. Either this field or patron support email address must be provided."
+            ),
             "format": "url",
-            "category": "Patron Support",
+            "category": "Basic Information",
             "level": CoreConfiguration.ALL_ACCESS,
         },
         {
@@ -409,7 +403,7 @@ class Configuration(CoreConfiguration):
                 f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
                 "and look good on a light or dark mode background. "
                 "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
-                f"the longest dimension does not excede {LOGO_MAX_DIMENSION} pixels."
+                f"the longest dimension does not exceed {LOGO_MAX_DIMENSION} pixels."
             ),
             "category": "Client Interface Customization",
             "level": CoreConfiguration.ALL_ACCESS,
@@ -526,6 +520,16 @@ class Configuration(CoreConfiguration):
             "level": CoreConfiguration.ALL_ACCESS,
         },
         {
+            "key": LinkRelations.PATRON_PASSWORD_RESET,
+            "label": _("Password Reset Link"),
+            "description": _(
+                "A link to a web page where a user can reset their virtual library card password"
+            ),
+            "format": "url",
+            "category": "Patron Support",
+            "level": CoreConfiguration.SYS_ADMIN_ONLY,
+        },
+        {
             "key": LARGE_COLLECTION_LANGUAGES,
             "label": _(
                 "The primary languages represented in this library's collection"
@@ -561,9 +565,18 @@ class Configuration(CoreConfiguration):
         },
     ]
 
-    @classmethod
-    def lending_policy(cls):
-        return cls.policy(cls.LENDING_POLICY)
+    ANNOUNCEMENT_SETTINGS = [
+        {
+            "key": Announcements.GLOBAL_SETTING_NAME,
+            "label": _("Scheduled announcements"),
+            "description": _(
+                "Announcements will be displayed to authenticated patrons."
+            ),
+            "category": "Announcements",
+            "type": "announcements",
+            "level": CoreConfiguration.ALL_ACCESS,
+        },
+    ]
 
     @classmethod
     def _collection_languages(cls, library, key):
@@ -605,12 +618,6 @@ class Configuration(CoreConfiguration):
         if max_fines.value is None:
             return None
         return MoneyUtility.parse(max_fines.value)
-
-    @classmethod
-    def load(cls, _db=None):
-        CoreConfiguration.load(_db)
-        cls.instance = CoreConfiguration.instance
-        return cls.instance
 
     @classmethod
     def estimate_language_collections_for_library(cls, library):
@@ -747,7 +754,6 @@ class Configuration(CoreConfiguration):
 
         if not public or not private:
             key = RSA.generate(2048)
-            encryptor = PKCS1_OAEP.new(key)
             public = key.publickey().exportKey().decode("utf8")
             private = key.exportKey().decode("utf8")
             setting.value = json.dumps([public, private])
@@ -776,18 +782,3 @@ class Configuration(CoreConfiguration):
 # involving a registry of Configuration objects that returns the
 # appropriate one in any situation. This is a source of subtle bugs.
 CoreConfiguration.DEFAULT_OPDS_FORMAT = Configuration.DEFAULT_OPDS_FORMAT
-
-
-@contextlib.contextmanager
-def empty_config():
-    with core_empty_config({}, [CoreConfiguration, Configuration]) as i:
-        yield i
-
-
-@contextlib.contextmanager
-def temp_config(new_config=None, replacement_classes=None):
-    all_replacement_classes = [CoreConfiguration, Configuration]
-    if replacement_classes:
-        all_replacement_classes.extend(replacement_classes)
-    with core_temp_config(new_config, all_replacement_classes) as i:
-        yield i

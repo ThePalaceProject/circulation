@@ -2,9 +2,8 @@ import json
 import logging
 import socket
 
-from boto3.session import Session as AwsSession
+from boto3 import client as AwsClient
 from flask_babel import lazy_gettext as _
-from loggly.handlers import HTTPSHandler as LogglyHandler
 from watchtower import CloudWatchLogHandler
 
 from .config import CannotLoadConfiguration, Configuration
@@ -19,7 +18,7 @@ class JSONFormatter(logging.Formatter):
         hostname = fqdn
 
     def __init__(self, app_name):
-        super(JSONFormatter, self).__init__()
+        super().__init__()
         self.app_name = app_name or LogConfiguration.DEFAULT_APP_NAME
 
     def format(self, record):
@@ -35,7 +34,7 @@ class JSONFormatter(logging.Formatter):
         message = ensure_str(record.msg)
 
         if record.args:
-            record_args = tuple([ensure_str(arg) for arg in record.args])
+            record_args = tuple(ensure_str(arg) for arg in record.args)
             try:
                 message = message % record_args
             except Exception as e:
@@ -66,11 +65,11 @@ class StringFormatter(logging.Formatter):
     """Encode all output as a string."""
 
     def format(self, record):
-        data = super(StringFormatter, self).format(record)
+        data = super().format(record)
         return str(data)
 
 
-class Logger(object):
+class Logger:
     """Abstract base class for logging"""
 
     DEFAULT_APP_NAME = "simplified"
@@ -175,83 +174,6 @@ class SysLogger(Logger):
             app_name=app_name,
         )
         return handler
-
-
-class Loggly(Logger):
-
-    NAME = "Loggly"
-    DEFAULT_LOGGLY_URL = "https://logs-01.loggly.com/inputs/%(token)s/tag/python/"
-
-    USER = "user"
-    PASSWORD = "password"
-    URL = "url"
-
-    SETTINGS = [
-        {"key": USER, "label": _("Username"), "required": True},
-        {"key": PASSWORD, "label": _("Password"), "required": True},
-        {"key": URL, "label": _("URL"), "required": True, "format": "url"},
-    ]
-
-    SITEWIDE = True
-
-    @classmethod
-    def from_configuration(cls, _db, testing=False):
-        loggly = None
-        from .model import ConfigurationSetting, ExternalIntegration
-
-        app_name = cls.DEFAULT_APP_NAME
-        if _db and not testing:
-            goal = ExternalIntegration.LOGGING_GOAL
-            loggly = ExternalIntegration.lookup(_db, ExternalIntegration.LOGGLY, goal)
-            app_name = (
-                ConfigurationSetting.sitewide(_db, Configuration.LOG_APP_NAME).value
-                or app_name
-            )
-
-        if loggly:
-            loggly = Loggly.loggly_handler(loggly)
-            cls.set_formatter(loggly, app_name)
-
-        return loggly
-
-    @classmethod
-    def loggly_handler(cls, externalintegration):
-        """Turn a Loggly ExternalIntegration into a log handler."""
-        token = externalintegration.password
-        url = externalintegration.url or cls.DEFAULT_LOGGLY_URL
-        if not url:
-            raise CannotLoadConfiguration(
-                "Loggly integration configured but no URL provided."
-            )
-        try:
-            url = cls._interpolate_loggly_url(url, token)
-        except (TypeError, KeyError) as e:
-            raise CannotLoadConfiguration(
-                "Cannot interpolate token %s into loggly URL %s"
-                % (
-                    token,
-                    url,
-                )
-            )
-        return LogglyHandler(url)
-
-    @classmethod
-    def _interpolate_loggly_url(cls, url, token):
-        if "%s" in url:
-            return url % token
-        if "%(" in url:
-            return url % dict(token=token)
-
-        # Assume the token is already in the URL.
-        return url
-
-    @classmethod
-    def set_formatter(cls, handler, app_name):
-        """Tell the given `handler` to format its log messages in a
-        certain way.
-        """
-        formatter = JSONFormatter(app_name)
-        handler.setFormatter(formatter)
 
 
 class CloudwatchLogs(Logger):
@@ -373,12 +295,12 @@ class CloudwatchLogs(Logger):
             raise CannotLoadConfiguration(
                 "AWS Cloudwatch Logs interval configuration must be an integer."
             )
-        session = AwsSession(region_name=region)
+        client = AwsClient("logs", region_name=region)
         handler = CloudWatchLogHandler(
-            log_group=group,
-            stream_name=stream,
+            log_group_name=group,
+            log_stream_name=stream,
             send_interval=interval,
-            boto3_session=session,
+            boto3_client=client,
             create_log_group=create_group == "TRUE",
         )
         # Add a filter that makes sure no messages from botocore are processed by
@@ -391,7 +313,7 @@ class CloudwatchLogs(Logger):
         return handler
 
 
-class LogConfiguration(object):
+class LogConfiguration:
     """Configures the active Python logging handlers based on logging
     configuration from the database.
     """
@@ -475,7 +397,7 @@ class LogConfiguration(object):
         # log level, which is probably higher than the normal log level.
         for logger in (
             "sqlalchemy.engine",
-            "elasticsearch",
+            "opensearch",
             "requests.packages.urllib3.connectionpool",
             "botocore",
         ):
@@ -483,7 +405,7 @@ class LogConfiguration(object):
 
         # These loggers can cause infinite loops if they're set to
         # DEBUG, because their log is triggered during the process of
-        # logging something to Loggly. These loggers will never have their
+        # logging something to Cloudwatch. These loggers will never have their
         # log level set lower than WARN.
         if database_log_level == cls.ERROR:
             loop_prevention_log_level = cls.ERROR
@@ -533,7 +455,7 @@ class LogConfiguration(object):
                 or database_log_level
             )
 
-        loggers = [SysLogger, Loggly, CloudwatchLogs]
+        loggers = [SysLogger, CloudwatchLogs]
         handlers = []
         errors = []
 
@@ -543,6 +465,6 @@ class LogConfiguration(object):
                 if handler:
                     handlers.append(handler)
             except Exception as e:
-                errors.append("Error creating logger %s %s" % (logger.NAME, str(e)))
+                errors.append(f"Error creating logger {logger.NAME} {str(e)}")
 
         return log_level, database_log_level, handlers, errors

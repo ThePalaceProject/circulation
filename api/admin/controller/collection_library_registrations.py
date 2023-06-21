@@ -1,5 +1,5 @@
 import flask
-from flask import Response
+from flask import Response, url_for
 from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
@@ -21,7 +21,7 @@ class CollectionLibraryRegistrationsController(SettingsController):
     # TODO: This controller can share some code with DiscoveryServiceLibraryRegistrationsController.
 
     def __init__(self, manager):
-        super(CollectionLibraryRegistrationsController, self).__init__(manager)
+        super().__init__(manager)
         self.shared_collection_provider_apis = [SharedODLAPI]
 
     def process_collection_library_registrations(
@@ -90,7 +90,7 @@ class CollectionLibraryRegistrationsController(SettingsController):
         registration = registration_class(registry, library)
         registered = registration.push(
             Registration.PRODUCTION_STAGE,
-            self.url_for,
+            url_for,
             catalog_url=collection.external_account_id,
             do_get=do_get,
             do_post=do_post,

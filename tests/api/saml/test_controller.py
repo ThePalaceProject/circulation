@@ -2,10 +2,11 @@ import json
 from unittest.mock import MagicMock, PropertyMock, create_autospec
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+import pytest
 from flask import request
-from parameterized import parameterized
 
-from api.authenticator import Authenticator, PatronData
+from api.authentication.base import PatronData
+from api.authenticator import Authenticator
 from api.saml.auth import SAML_INCORRECT_RESPONSE, SAMLAuthenticationManager
 from api.saml.controller import (
     SAML_INVALID_REQUEST,
@@ -21,34 +22,37 @@ from api.saml.metadata.model import (
     SAMLUIInfo,
 )
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
+from api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 from core.model import Credential, Library
+from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
-from tests.api.saml import fixtures
-from tests.api.saml.controller_test import ControllerTest
+from tests.api.saml import saml_strings
+from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
-    fixtures.SP_ENTITY_ID,
+    saml_strings.SP_ENTITY_ID,
     SAMLUIInfo(),
     SAMLOrganization(),
     SAMLNameIDFormat.UNSPECIFIED.value,
-    SAMLService(fixtures.SP_ACS_URL, fixtures.SP_ACS_BINDING),
+    SAMLService(saml_strings.SP_ACS_URL, saml_strings.SP_ACS_BINDING),
 )
 
 IDENTITY_PROVIDERS = [
     SAMLIdentityProviderMetadata(
-        fixtures.IDP_1_ENTITY_ID,
+        saml_strings.IDP_1_ENTITY_ID,
         SAMLUIInfo(),
         SAMLOrganization(),
         SAMLNameIDFormat.UNSPECIFIED.value,
-        SAMLService(fixtures.IDP_1_SSO_URL, fixtures.IDP_1_SSO_BINDING),
-        signing_certificates=[fixtures.SIGNING_CERTIFICATE],
+        SAMLService(saml_strings.IDP_1_SSO_URL, saml_strings.IDP_1_SSO_BINDING),
+        signing_certificates=[saml_strings.SIGNING_CERTIFICATE],
     ),
     SAMLIdentityProviderMetadata(
-        fixtures.IDP_2_ENTITY_ID,
+        saml_strings.IDP_2_ENTITY_ID,
         SAMLUIInfo(),
         SAMLOrganization(),
         SAMLNameIDFormat.UNSPECIFIED.value,
-        SAMLService(fixtures.IDP_2_SSO_URL, fixtures.IDP_2_SSO_BINDING),
+        SAMLService(saml_strings.IDP_2_SSO_URL, saml_strings.IDP_2_SSO_BINDING),
     ),
 ]
 
@@ -60,8 +64,9 @@ def create_patron_data_mock():
     return patron_data_mock
 
 
-class TestSAMLController(ControllerTest):
-    @parameterized.expand(
+class TestSAMLController:
+    @pytest.mark.parametrize(
+        "_, provider_name, idp_entity_id, redirect_uri, expected_problem, expected_relay_state",
         [
             (
                 "with_missing_provider_name",
@@ -69,7 +74,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_REQUEST.detailed(
-                    "Required parameter {0} is missing".format(
+                    "Required parameter {} is missing".format(
                         SAMLController.PROVIDER_NAME
                     )
                 ),
@@ -77,11 +82,11 @@ class TestSAMLController(ControllerTest):
             ),
             (
                 "with_missing_idp_entity_id",
-                SAMLWebSSOAuthenticationProvider.NAME,
+                SAMLWebSSOAuthenticationProvider.label(),
                 None,
                 None,
                 SAML_INVALID_REQUEST.detailed(
-                    "Required parameter {0} is missing".format(
+                    "Required parameter {} is missing".format(
                         SAMLController.IDP_ENTITY_ID
                     )
                 ),
@@ -89,11 +94,11 @@ class TestSAMLController(ControllerTest):
             ),
             (
                 "with_missing_redirect_uri",
-                SAMLWebSSOAuthenticationProvider.NAME,
+                SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 None,
                 SAML_INVALID_REQUEST.detailed(
-                    "Required parameter {0} is missing".format(
+                    "Required parameter {} is missing".format(
                         SAMLController.REDIRECT_URI
                     )
                 ),
@@ -101,14 +106,14 @@ class TestSAMLController(ControllerTest):
                 + urlencode(
                     {
                         SAMLController.LIBRARY_SHORT_NAME: "default",
-                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                         SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
                     }
                 ),
             ),
             (
                 "with_all_parameters_set",
-                SAMLWebSSOAuthenticationProvider.NAME,
+                SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 "http://localhost",
                 None,
@@ -116,14 +121,14 @@ class TestSAMLController(ControllerTest):
                 + urlencode(
                     {
                         SAMLController.LIBRARY_SHORT_NAME: "default",
-                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                         SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
                     }
                 ),
             ),
             (
                 "with_all_parameters_set_and_fragment",
-                SAMLWebSSOAuthenticationProvider.NAME,
+                SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 "http://localhost#fragment",
                 None,
@@ -131,7 +136,7 @@ class TestSAMLController(ControllerTest):
                 + urlencode(
                     {
                         SAMLController.LIBRARY_SHORT_NAME: "default",
-                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                         SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
                     }
                 )
@@ -139,7 +144,7 @@ class TestSAMLController(ControllerTest):
             ),
             (
                 "with_all_parameters_set_and_redirect_uri_containing_other_parameters",
-                SAMLWebSSOAuthenticationProvider.NAME,
+                SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 "http://localhost?patron_info=%7B%7D&access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
                 None,
@@ -147,17 +152,18 @@ class TestSAMLController(ControllerTest):
                 + urlencode(
                     {
                         SAMLController.LIBRARY_SHORT_NAME: "default",
-                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                        SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                         SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
                         "patron_info": "{}",
                         "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
                     }
                 ),
             ),
-        ]
+        ],
     )
     def test_saml_authentication_redirect(
         self,
+        controller_fixture: ControllerFixture,
         _,
         provider_name,
         idp_entity_id,
@@ -187,18 +193,25 @@ class TestSAMLController(ControllerTest):
             return_value=expected_authentication_redirect_uri
         )
         provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
-        type(provider).NAME = PropertyMock(
-            return_value=SAMLWebSSOAuthenticationProvider.NAME
+        provider.label = MagicMock(
+            return_value=SAMLWebSSOAuthenticationProvider.label()
         )
         provider.get_authentication_manager = MagicMock(
             return_value=authentication_manager
         )
-        provider.library = MagicMock(return_value=self._default_library)
-        authenticator = Authenticator(self._db, self._db.query(Library))
+        provider.library = MagicMock(
+            return_value=controller_fixture.db.default_library()
+        )
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+        integration = create_autospec(spec=IntegrationConfiguration)
+        type(integration).parent_id = PropertyMock()
 
         authenticator.library_authenticators["default"].register_saml_provider(provider)
 
-        controller = SAMLController(self.app.manager, authenticator)
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
         params = {}
 
         if provider_name:
@@ -210,13 +223,15 @@ class TestSAMLController(ControllerTest):
 
         query = urlencode(params)
 
-        with self.app.test_request_context(
+        with controller_fixture.app.test_request_context(
             "http://circulationmanager.org/saml_authenticate?" + query
         ):
-            request.library = self._default_library
+            request.library = controller_fixture.db.default_library()  # type: ignore[attr-defined]
 
             # Act
-            result = controller.saml_authentication_redirect(request.args, self._db)
+            result = controller.saml_authentication_redirect(
+                request.args, controller_fixture.db.session
+            )
 
             # Assert
             if expected_problem:
@@ -229,10 +244,13 @@ class TestSAMLController(ControllerTest):
                 )
 
                 authentication_manager.start_authentication.assert_called_once_with(
-                    self._db, idp_entity_id, expected_relay_state
+                    controller_fixture.db.session,
+                    idp_entity_id,
+                    expected_relay_state,
                 )
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "_, data, finish_authentication_result, saml_callback_result, bearer_token, expected_authentication_redirect_uri, expected_problem,",
         [
             (
                 "with_missing_relay_state",
@@ -242,7 +260,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from the response body".format(
+                    "Required parameter {} is missing from the response body".format(
                         SAMLController.RELAY_STATE
                     )
                 ),
@@ -255,7 +273,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from RelayState".format(
+                    "Required parameter {} is missing from RelayState".format(
                         SAMLController.LIBRARY_SHORT_NAME
                     )
                 ),
@@ -271,7 +289,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from RelayState".format(
+                    "Required parameter {} is missing from RelayState".format(
                         SAMLController.PROVIDER_NAME
                     )
                 ),
@@ -283,7 +301,7 @@ class TestSAMLController(ControllerTest):
                     + urlencode(
                         {
                             SAMLController.LIBRARY_SHORT_NAME: "default",
-                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                         }
                     )
                 },
@@ -292,7 +310,7 @@ class TestSAMLController(ControllerTest):
                 None,
                 None,
                 SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {0} is missing from RelayState".format(
+                    "Required parameter {} is missing from RelayState".format(
                         SAMLController.IDP_ENTITY_ID
                     )
                 ),
@@ -304,7 +322,7 @@ class TestSAMLController(ControllerTest):
                     + urlencode(
                         {
                             SAMLController.LIBRARY_SHORT_NAME: "default",
-                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                             SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[
                                 0
                             ].entity_id,
@@ -324,7 +342,7 @@ class TestSAMLController(ControllerTest):
                     + urlencode(
                         {
                             SAMLController.LIBRARY_SHORT_NAME: "default",
-                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                             SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[
                                 0
                             ].entity_id,
@@ -344,7 +362,7 @@ class TestSAMLController(ControllerTest):
                     + urlencode(
                         {
                             SAMLController.LIBRARY_SHORT_NAME: "default",
-                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.NAME,
+                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                             SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[
                                 0
                             ].entity_id,
@@ -357,10 +375,11 @@ class TestSAMLController(ControllerTest):
                 "http://localhost?access_token=ABCDEFG&patron_info=%22%22",
                 None,
             ),
-        ]
+        ],
     )
     def test_saml_authentication_callback(
         self,
+        controller_fixture: ControllerFixture,
         _,
         data,
         finish_authentication_result,
@@ -375,30 +394,38 @@ class TestSAMLController(ControllerTest):
             return_value=finish_authentication_result
         )
         provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
-        type(provider).NAME = PropertyMock(
-            return_value=SAMLWebSSOAuthenticationProvider.NAME
+        provider.label = MagicMock(
+            return_value=SAMLWebSSOAuthenticationProvider.label()
         )
         provider.get_authentication_manager = MagicMock(
             return_value=authentication_manager
         )
-        provider.library = MagicMock(return_value=self._default_library)
+        provider.library = MagicMock(
+            return_value=controller_fixture.db.default_library()
+        )
         provider.saml_callback = MagicMock(return_value=saml_callback_result)
-        authenticator = Authenticator(self._db, libraries=self._db.query(Library))
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            libraries=controller_fixture.db.session.query(Library),
+        )
+        integration = create_autospec(spec=IntegrationConfiguration)
+        type(integration).parent_id = PropertyMock()
 
         authenticator.library_authenticators["default"].register_saml_provider(provider)
-        authenticator.bearer_token_signing_secret = "test"
         authenticator.library_authenticators[
             "default"
         ].bearer_token_signing_secret = "test"
-        authenticator.create_bearer_token = MagicMock(return_value=bearer_token)
+        authenticator.create_bearer_token = MagicMock(return_value=bearer_token)  # type: ignore[method-assign]
 
-        controller = SAMLController(self.app.manager, authenticator)
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
 
-        with self.app.test_request_context(
+        with controller_fixture.app.test_request_context(
             "http://circulationmanager.org/saml_callback", data=data
         ):
             # Act
-            result = controller.saml_authentication_callback(request, self._db)
+            result = controller.saml_authentication_callback(
+                request, controller_fixture.db.session
+            )
 
             # Assert
             if isinstance(finish_authentication_result, ProblemDetail) or isinstance(
@@ -410,8 +437,8 @@ class TestSAMLController(ControllerTest):
 
                 assert SAMLController.ERROR in query_items
 
-                error = query_items[SAMLController.ERROR][0]
-                error = json.loads(error)
+                error_str = query_items[SAMLController.ERROR][0]
+                error = json.loads(error_str)
 
                 problem = (
                     finish_authentication_result
@@ -433,8 +460,21 @@ class TestSAMLController(ControllerTest):
                 )
 
                 authentication_manager.finish_authentication.assert_called_once_with(
-                    self._db, IDENTITY_PROVIDERS[0].entity_id
+                    controller_fixture.db.session,
+                    IDENTITY_PROVIDERS[0].entity_id,
                 )
                 provider.saml_callback.assert_called_once_with(
-                    self._db, finish_authentication_result
+                    controller_fixture.db.session,
+                    finish_authentication_result,
                 )
+
+
+class TestSAMLWAYFlessAcquisitionLinkProcessor:
+    def test_fulfill_no_wayless_template_url(self, db: DatabaseTransactionFixture):
+        processor = SAMLWAYFlessAcquisitionLinkProcessor(db.default_collection())
+        assert processor._wayfless_url_template == None
+
+        mocked_fulfillment = MagicMock()
+        # As long as there is no template url, no actions should take place
+        response = processor.fulfill(None, None, None, None, mocked_fulfillment)
+        assert response == mocked_fulfillment

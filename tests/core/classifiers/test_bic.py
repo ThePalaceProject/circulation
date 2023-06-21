@@ -3,7 +3,7 @@ from core.classifier import *
 from core.classifier.bic import BICClassifier as BIC
 
 
-class TestBIC(object):
+class TestBIC:
     def test_is_fiction(self):
         def fic(bic):
             return BIC.is_fiction(BIC.scrub_identifier(bic), None)

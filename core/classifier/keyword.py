@@ -26,7 +26,7 @@ def match_kw(*l):
     return {"search": match_term}
 
 
-class Eg(object):
+class Eg:
     """Mark this string as an example of a classification, rather than
     an exact identifier for that classification. For example, basketball
     is an an example of a sport, but athletics is an identifier for the sports
@@ -85,28 +85,24 @@ class KeywordBasedClassifier(AgeOrGradeClassifier):
     # Children's books don't generally deal with romance, so although
     # "Juvenile Fiction" generally refers to children's fiction,
     # "Juvenile Fiction / Love & Romance" is almost certainly YA.
-    JUVENILE_TERMS_THAT_IMPLY_YOUNG_ADULT = set(
-        [
-            "love & romance",
-            "romance",
-            "romantic",
-        ]
-    )
+    JUVENILE_TERMS_THAT_IMPLY_YOUNG_ADULT = {
+        "love & romance",
+        "romance",
+        "romantic",
+    }
 
     # These identifiers indicate that the string "children" or
     # "juvenile" in the identifier does not actually mean the work is
     # _for_ children.
-    JUVENILE_BLACKLIST = set(
-        [
-            "military participation",
-            "services",
-            "children's accidents",
-            "children's voices",
-            "juvenile delinquency",
-            "children's television workshop",
-            "missing children",
-        ]
-    )
+    JUVENILE_BLACKLIST = {
+        "military participation",
+        "services",
+        "children's accidents",
+        "children's voices",
+        "juvenile delinquency",
+        "children's television workshop",
+        "missing children",
+    }
 
     CATCHALL_KEYWORDS = {
         Adventure: match_kw(

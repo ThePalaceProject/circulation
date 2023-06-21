@@ -36,9 +36,6 @@ msgstr "Tipo de problema no especificado."
 msgid "Unrecognized problem type: %(type)s"
 msgstr "Tipo de problema no reconocido: %(type)s"
 
-msgid "Error registering complaint: %(error)s"
-msgstr "Error al registrar la queja: %(error)s"
-
 msgid "Success"
 msgstr "éxito"
 

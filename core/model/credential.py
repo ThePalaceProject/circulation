@@ -1,7 +1,9 @@
-# encoding: utf-8
+from __future__ import annotations
+
 # Credential, DRMDeviceIdentifier, DelegatedPatronIdentifier
 import datetime
 import uuid
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import (
     Column,
@@ -12,13 +14,16 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import backref, relationship
+from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
 from ..util import is_session
 from ..util.datetime_helpers import utc_now
 from . import Base, get_one, get_one_or_create
+
+if TYPE_CHECKING:
+    from core.model import Patron
 
 
 class Credential(Base):
@@ -34,7 +39,7 @@ class Credential(Base):
     expires = Column(DateTime(timezone=True), index=True)
 
     # One Credential can have many associated DRMDeviceIdentifiers.
-    drm_device_identifiers = relationship(
+    drm_device_identifiers: Mapped[List[DRMDeviceIdentifier]] = relationship(
         "DRMDeviceIdentifier", backref=backref("credential", lazy="joined")
     )
 
@@ -92,14 +97,13 @@ class Credential(Base):
     IDENTIFIER_FROM_REMOTE_SERVICE = "Identifier Received From Remote Service"
 
     @classmethod
-    def _filter_invalid_credential(cls, credential, allow_persistent_token):
+    def _filter_invalid_credential(
+        cls, credential: Credential, allow_persistent_token: bool
+    ) -> Credential | None:
         """Filter out invalid credentials based on their expiration time and persistence.
 
         :param credential: Credential object
-        :type credential: Credential
-
         :param allow_persistent_token: Boolean value indicating whether persistent tokens are allowed
-        :type allow_persistent_token: bool
         """
         if not credential:
             # No matching token.
@@ -171,35 +175,24 @@ class Credential(Base):
     @classmethod
     def lookup_by_patron(
         cls,
-        _db,
-        data_source_name,
-        token_type,
-        patron,
-        allow_persistent_token=False,
-        auto_create_datasource=True,
-    ):
+        _db: Session,
+        data_source_name: str,
+        token_type: str,
+        patron: Patron,
+        allow_persistent_token: bool = False,
+        auto_create_datasource: bool = True,
+    ) -> Credential | None:
         """Look up a unique token.
         Lookup will fail on expired tokens. Unless persistent tokens
         are specifically allowed, lookup will fail on persistent tokens.
 
         :param _db: Database session
-        :type _db: sqlalchemy.orm.session.Session
-
         :param data_source_name: Name of the data source
-        :type data_source_name: str
-
         :param token_type: Token type
-        :type token_type: str
-
         :param patron: Patron object
-        :type patron: core.model.patron.Patron
-
         :param allow_persistent_token: Boolean value indicating whether persistent tokens are allowed or not
-        :type allow_persistent_token: bool
-
         :param auto_create_datasource: Boolean value indicating whether
             a data source should be created in the case it doesn't
-        :type auto_create_datasource: bool
         """
         from .patron import Patron
 
@@ -225,7 +218,11 @@ class Credential(Base):
             _db, Credential, data_source=data_source, type=token_type, patron=patron
         )
 
-        return cls._filter_invalid_credential(credential, allow_persistent_token)
+        return (
+            cls._filter_invalid_credential(credential, allow_persistent_token)
+            if credential
+            else None
+        )
 
     @classmethod
     def lookup_and_expire_temporary_token(cls, _db, data_source, type, token):
@@ -298,12 +295,12 @@ class Credential(Base):
     def __repr__(self):
         return (
             "<Credential("
-            "data_source_id={0}, "
-            "patron_id={1}, "
-            "collection_id={2}, "
-            "type={3}, "
-            "credential={4}, "
-            "expires={5}>)".format(
+            "data_source_id={}, "
+            "patron_id={}, "
+            "collection_id={}, "
+            "type={}, "
+            "credential={}, "
+            "expires={}>)".format(
                 self.data_source_id,
                 self.patron_id,
                 self.collection_id,

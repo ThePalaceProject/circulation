@@ -6,25 +6,23 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.controller.metadata_services import MetadataServicesController
 from api.admin.exceptions import *
-from api.admin.problem_details import INVALID_URL
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import AdminRole, ExternalIntegration, Library, create, get_one
-from core.opds_import import MetadataWranglerOPDSLookup
-
-from .test_controller import SettingsControllerTest
 
 
-class TestMetadataServices(SettingsControllerTest):
-    def create_service(self, name):
+class TestMetadataServices:
+    def create_service(self, name, db_session):
         return create(
-            self._db,
+            db_session,
             ExternalIntegration,
             protocol=ExternalIntegration.__dict__.get(name) or "fake",
             goal=ExternalIntegration.METADATA_GOAL,
         )[0]
 
-    def test_process_metadata_services_dispatches_by_request_method(self):
+    def test_process_metadata_services_dispatches_by_request_method(
+        self, settings_ctrl_fixture
+    ):
         class Mock(MetadataServicesController):
             def process_get(self):
                 return "GET"
@@ -32,36 +30,40 @@ class TestMetadataServices(SettingsControllerTest):
             def process_post(self):
                 return "POST"
 
-        controller = Mock(self.manager)
-        with self.request_context_with_admin("/"):
+        controller = Mock(settings_ctrl_fixture.manager)
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             assert "GET" == controller.process_metadata_services()
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             assert "POST" == controller.process_metadata_services()
 
         # This is also where permissions are checked.
-        self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        self._db.flush()
+        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        settings_ctrl_fixture.ctrl.db.session.flush()
 
-        with self.request_context_with_admin("/"):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             pytest.raises(AdminNotAuthorized, controller.process_metadata_services)
 
-    def test_process_get_with_no_services(self):
-        with self.request_context_with_admin("/"):
-            response = self.manager.admin_metadata_services_controller.process_get()
+    def test_process_get_with_no_services(self, settings_ctrl_fixture):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_metadata_services_controller.process_get()
+            )
             assert response.get("metadata_services") == []
             protocols = response.get("protocols")
             assert NoveListAPI.NAME in [p.get("label") for p in protocols]
             assert "settings" in protocols[0]
 
-    def test_process_get_with_one_service(self):
-        novelist_service = self.create_service("NOVELIST")
+    def test_process_get_with_one_service(self, settings_ctrl_fixture):
+        novelist_service = self.create_service(
+            "NOVELIST", settings_ctrl_fixture.ctrl.db.session
+        )
         novelist_service.username = "user"
         novelist_service.password = "pass"
 
-        controller = self.manager.admin_metadata_services_controller
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
 
-        with self.request_context_with_admin("/"):
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = controller.process_get()
             [service] = response.get("metadata_services")
 
@@ -70,49 +72,34 @@ class TestMetadataServices(SettingsControllerTest):
             assert "user" == service.get("settings").get(ExternalIntegration.USERNAME)
             assert "pass" == service.get("settings").get(ExternalIntegration.PASSWORD)
 
-        novelist_service.libraries += [self._default_library]
-        with self.request_context_with_admin("/"):
+        novelist_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
+        with settings_ctrl_fixture.request_context_with_admin("/"):
             response = controller.process_get()
             [service] = response.get("metadata_services")
 
             assert "user" == service.get("settings").get(ExternalIntegration.USERNAME)
             [library] = service.get("libraries")
-            assert self._default_library.short_name == library.get("short_name")
-
-    def test_process_get_with_self_tests(self):
-        metadata_service = self.create_service("METADATA_WRANGLER")
-        metadata_service.name = "Test"
-        controller = self.manager.admin_metadata_services_controller
-
-        with self.request_context_with_admin("/"):
-            response = controller.process_get()
-            [service] = response.get("metadata_services")
-            assert metadata_service.id == service.get("id")
-            assert ExternalIntegration.METADATA_WRANGLER == service.get("protocol")
-            assert "self_test_results" in service
-            # The exception is because there isn't a library registered with the metadata service.
-            # But we just need to make sure that the response has a self_test_results attribute--for this test,
-            # it doesn't matter what it is--so that's fine.
             assert (
-                service.get("self_test_results").get("exception")
-                == "Exception getting self-test results for metadata service Test: Metadata Wrangler improperly configured."
+                settings_ctrl_fixture.ctrl.db.default_library().short_name
+                == library.get("short_name")
             )
 
-    def test_find_protocol_class(self):
-        [wrangler, nyt, novelist, fake] = [
-            self.create_service(x)
-            for x in ["METADATA_WRANGLER", "NYT", "NOVELIST", "FAKE"]
+    def test_find_protocol_class(self, settings_ctrl_fixture):
+        [nyt, novelist, fake] = [
+            self.create_service(x, settings_ctrl_fixture.ctrl.db.session)
+            for x in ["NYT", "NOVELIST", "FAKE"]
         ]
-        m = self.manager.admin_metadata_services_controller.find_protocol_class
+        m = (
+            settings_ctrl_fixture.manager.admin_metadata_services_controller.find_protocol_class
+        )
 
-        assert m(wrangler)[0] == MetadataWranglerOPDSLookup
         assert m(nyt)[0] == NYTBestSellerAPI
         assert m(novelist)[0] == NoveListAPI
         pytest.raises(NotImplementedError, m, fake)
 
-    def test_metadata_services_post_errors(self):
-        controller = self.manager.admin_metadata_services_controller
-        with self.request_context_with_admin("/", method="POST"):
+    def test_metadata_services_post_errors(self, settings_ctrl_fixture):
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -122,12 +109,12 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response == UNKNOWN_PROTOCOL
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict([])
             response = controller.process_post()
             assert response == INCOMPLETE_CONFIGURATION
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -136,7 +123,7 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -147,10 +134,10 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response == MISSING_SERVICE
 
-        service = self.create_service("NOVELIST")
+        service = self.create_service("NOVELIST", settings_ctrl_fixture.ctrl.db.session)
         service.name = "name"
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", service.name),
@@ -160,7 +147,7 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -171,7 +158,7 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response == CANNOT_CHANGE_PROTOCOL
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("id", service.id),
@@ -181,7 +168,7 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -195,15 +182,15 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response.uri == NO_SUCH_LIBRARY.uri
 
-    def test_metadata_services_post_create(self):
-        controller = self.manager.admin_metadata_services_controller
+    def test_metadata_services_post_create(self, settings_ctrl_fixture):
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
         library, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library",
             short_name="L",
         )
-        with self.request_context_with_admin("/", method="POST"):
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -219,7 +206,9 @@ class TestMetadataServices(SettingsControllerTest):
         # A new ExternalIntegration has been created based on the submitted
         # information.
         service = get_one(
-            self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            goal=ExternalIntegration.METADATA_GOAL,
         )
         assert service.id == int(response.response[0])
         assert ExternalIntegration.NOVELIST == service.protocol
@@ -227,26 +216,28 @@ class TestMetadataServices(SettingsControllerTest):
         assert "pass" == service.password
         assert [library] == service.libraries
 
-    def test_metadata_services_post_edit(self):
+    def test_metadata_services_post_edit(self, settings_ctrl_fixture):
         l1, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library 1",
             short_name="L1",
         )
         l2, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library 2",
             short_name="L2",
         )
-        novelist_service = self.create_service("NOVELIST")
+        novelist_service = self.create_service(
+            "NOVELIST", settings_ctrl_fixture.ctrl.db.session
+        )
         novelist_service.username = "olduser"
         novelist_service.password = "oldpass"
         novelist_service.libraries = [l1]
 
-        controller = self.manager.admin_metadata_services_controller
-        with self.request_context_with_admin("/", method="POST"):
+        controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
                     ("name", "Name"),
@@ -260,144 +251,27 @@ class TestMetadataServices(SettingsControllerTest):
             response = controller.process_post()
             assert response.status_code == 200
 
-    def test_metadata_services_post_calls_register_with_metadata_wrangler(self):
-        """Verify that process_post() calls register_with_metadata_wrangler
-        if the rest of the request is handled successfully.
-        """
-
-        class Mock(MetadataServicesController):
-            RETURN_VALUE = INVALID_URL
-            called_with = None
-
-            def register_with_metadata_wrangler(self, do_get, do_post, is_new, service):
-                self.called_with = (do_get, do_post, is_new, service)
-                return self.RETURN_VALUE
-
-        controller = Mock(self.manager)
-        library, ignore = create(
-            self._db,
-            Library,
-            name="Library",
-            short_name="L",
-        )
-        do_get = object()
-        do_post = object()
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([])
-            controller.process_post(do_get, do_post)
-
-            # Since there was an error condition,
-            # register_with_metadata_wrangler was not called.
-            assert None == controller.called_with
-
-        form = MultiDict(
-            [
-                ("name", "Name"),
-                ("protocol", ExternalIntegration.NOVELIST),
-                (ExternalIntegration.USERNAME, "user"),
-                (ExternalIntegration.PASSWORD, "pass"),
-            ]
-        )
-
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = form
-            response = controller.process_post(do_get=do_get, do_post=do_post)
-
-            # register_with_metadata_wrangler was called, but it
-            # returned a ProblemDetail, so the overall request
-            # failed.
-            assert (do_get, do_post, True) == controller.called_with[:-1]
-            assert INVALID_URL == response
-
-            # We ended up not creating an ExternalIntegration.
-            assert None == get_one(
-                self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
-            )
-
-            # But the ExternalIntegration we _would_ have created was
-            # passed in to register_with_metadata_wrangler.
-            bad_integration = controller.called_with[-1]
-
-            # We can tell it's bad because it was disconnected from
-            # our database session.
-            assert None == bad_integration._sa_instance_state.session
-
-        # Now try the same scenario, except that
-        # register_with_metadata_wrangler does _not_ return a
-        # ProblemDetail.
-        Mock.RETURN_VALUE = "It's all good"
-        Mock.called_with = None
-        with self.request_context_with_admin("/", method="POST"):
-            flask.request.form = form
-            response = controller.process_post(do_get=do_get, do_post=do_post)
-
-            # This time we successfully created an ExternalIntegration.
-            integration = get_one(
-                self._db, ExternalIntegration, goal=ExternalIntegration.METADATA_GOAL
-            )
-            assert integration != None
-
-            # It was passed in to register_with_metadata_wrangler
-            # along with the rest of the arguments we expect.
-            assert (do_get, do_post, True, integration) == controller.called_with
-            assert integration == controller.called_with[-1]
-            assert self._db == integration._sa_instance_state.session
-
-    def test_register_with_metadata_wrangler(self):
-        """Verify that register_with_metadata wrangler calls
-        process_sitewide_registration appropriately.
-        """
-
-        class Mock(MetadataServicesController):
-            called_with = None
-
-            def process_sitewide_registration(self, integration, do_get, do_post):
-                self.called_with = (integration, do_get, do_post)
-
-        controller = Mock(self.manager)
-        m = controller.register_with_metadata_wrangler
-        do_get = object()
-        do_post = object()
-
-        # If register_with_metadata_wrangler is called on an ExternalIntegration
-        # with some other service, nothing happens.
-        integration = self._external_integration(protocol=ExternalIntegration.NOVELIST)
-        m(do_get, do_post, True, integration)
-        assert None == controller.called_with
-
-        # If it's called on an existing metadata wrangler integration
-        # that that already has a password set, nothing happens.
-        integration = self._external_integration(
-            protocol=ExternalIntegration.METADATA_WRANGLER
-        )
-        integration.password = "already done"
-        m(do_get, do_post, False, integration)
-        assert None == controller.called_with
-
-        # If it's called on a new metadata wrangler integration,
-        # register_with_metadata_wrangler is called.
-        m(do_get, do_post, True, integration)
-        assert (integration, do_get, do_post) == controller.called_with
-
-        # Same if it's called on an old integration that's missing its
-        # password.
-        controller.called_with = None
-        integration.password = None
-        result = m(do_get, do_post, False, integration)
-
-    def test_check_name_unique(self):
+    def test_check_name_unique(self, settings_ctrl_fixture):
         kwargs = dict(
             protocol=ExternalIntegration.NYT, goal=ExternalIntegration.METADATA_GOAL
         )
 
         existing_service, ignore = create(
-            self._db, ExternalIntegration, name="existing service", **kwargs
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            name="existing service",
+            **kwargs
         )
         new_service, ignore = create(
-            self._db, ExternalIntegration, name="new service", **kwargs
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            name="new service",
+            **kwargs
         )
 
-        m = self.manager.admin_metadata_services_controller.check_name_unique
+        m = (
+            settings_ctrl_fixture.manager.admin_metadata_services_controller.check_name_unique
+        )
 
         # Try to change new service so that it has the same name as existing service
         # -- this is not allowed.
@@ -410,31 +284,37 @@ class TestMetadataServices(SettingsControllerTest):
         # Changing the existing service's name is also fine.
         assert None == m(existing_service, "new name")
 
-    def test_metadata_service_delete(self):
+    def test_metadata_service_delete(self, settings_ctrl_fixture):
         l1, ignore = create(
-            self._db,
+            settings_ctrl_fixture.ctrl.db.session,
             Library,
             name="Library 1",
             short_name="L1",
         )
-        novelist_service = self.create_service("NOVELIST")
+        novelist_service = self.create_service(
+            "NOVELIST", settings_ctrl_fixture.ctrl.db.session
+        )
         novelist_service.username = "olduser"
         novelist_service.password = "oldpass"
         novelist_service.libraries = [l1]
 
-        with self.request_context_with_admin("/", method="DELETE"):
-            self.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
-                self.manager.admin_metadata_services_controller.process_delete,
+                settings_ctrl_fixture.manager.admin_metadata_services_controller.process_delete,
                 novelist_service.id,
             )
 
-            self.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = self.manager.admin_metadata_services_controller.process_delete(
+            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            response = settings_ctrl_fixture.manager.admin_metadata_services_controller.process_delete(
                 novelist_service.id
             )
             assert response.status_code == 200
 
-        service = get_one(self._db, ExternalIntegration, id=novelist_service.id)
+        service = get_one(
+            settings_ctrl_fixture.ctrl.db.session,
+            ExternalIntegration,
+            id=novelist_service.id,
+        )
         assert None == service
