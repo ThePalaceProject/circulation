@@ -786,7 +786,7 @@ class SAMLNameID:
         self,
         name_format: str,
         name_qualifier: str,
-        sp_name_qualifier: str,
+        sp_name_qualifier: Optional[str],
         name_id: str,
     ) -> None:
         """Initializes a new instance of NameID class
@@ -850,7 +850,7 @@ class SAMLNameID:
         return self._name_qualifier
 
     @property
-    def sp_name_qualifier(self) -> str:
+    def sp_name_qualifier(self) -> Optional[str]:
         """Returns the attribute that further qualifies a federated name identifier with the name of the service provider
         or affiliation of providers which has federated the principal's identity
 
@@ -1045,8 +1045,8 @@ class SAMLSubject:
     def __init__(
         self,
         idp: str,
-        name_id: SAMLNameID,
-        attribute_statement: SAMLAttributeStatement,
+        name_id: Optional[SAMLNameID],
+        attribute_statement: Optional[SAMLAttributeStatement],
         valid_till: Optional[Union[datetime.datetime, datetime.timedelta, int]] = None,
     ):
         """Initializes a new instance of Subject class

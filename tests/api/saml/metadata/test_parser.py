@@ -1,10 +1,10 @@
 from typing import Dict, Union
 from unittest.mock import MagicMock, create_autospec
 
-import onelogin
 import pytest
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
+from onelogin.saml2.xmlparser import RestrictedElement
 
 from api.saml.metadata.model import (
     SAMLAttribute,
@@ -135,9 +135,7 @@ class TestSAMLMetadataParser:
         [parsing_result] = parsing_results
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
-        assert True == isinstance(
-            parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_result.xml_node, RestrictedElement)
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=saml_strings.IDP_1_ENTITY_ID,
@@ -183,9 +181,7 @@ class TestSAMLMetadataParser:
         [parsing_result] = parsing_results
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
-        assert True == isinstance(
-            parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_result.xml_node, RestrictedElement)
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=saml_strings.IDP_1_ENTITY_ID,
@@ -287,9 +283,7 @@ class TestSAMLMetadataParser:
         [parsing_result] = parsing_results
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
-        assert True == isinstance(
-            parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_result.xml_node, RestrictedElement)
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=saml_strings.IDP_1_ENTITY_ID,
@@ -398,9 +392,7 @@ class TestSAMLMetadataParser:
 
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLIdentityProviderMetadata)
-        assert True == isinstance(
-            parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_result.xml_node, RestrictedElement)
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=saml_strings.IDP_1_ENTITY_ID,
@@ -505,9 +497,7 @@ class TestSAMLMetadataParser:
         assert True == isinstance(
             parsing_results[0].provider, SAMLIdentityProviderMetadata
         )
-        assert True == isinstance(
-            parsing_results[0].xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_results[0].xml_node, RestrictedElement)
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=saml_strings.IDP_1_ENTITY_ID,
@@ -568,9 +558,7 @@ class TestSAMLMetadataParser:
         assert True == isinstance(
             parsing_results[1].provider, SAMLIdentityProviderMetadata
         )
-        assert True == isinstance(
-            parsing_results[1].xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_results[1].xml_node, RestrictedElement)
         assert (
             SAMLIdentityProviderMetadata(
                 entity_id=saml_strings.IDP_2_ENTITY_ID,
@@ -679,9 +667,7 @@ class TestSAMLMetadataParser:
         [parsing_result] = parsing_results
         assert True == isinstance(parsing_result, SAMLMetadataParsingResult)
         assert True == isinstance(parsing_result.provider, SAMLServiceProviderMetadata)
-        assert True == isinstance(
-            parsing_result.xml_node, onelogin.saml2.xmlparser.RestrictedElement
-        )
+        assert True == isinstance(parsing_result.xml_node, RestrictedElement)
 
         assert (
             SAMLServiceProviderMetadata(
