@@ -1,7 +1,7 @@
 """Add the license type goal
 
 Revision ID: b883671b7bc5
-Revises: a9ed3f76d649
+Revises: 0a1c9c3f5dd2
 Create Date: 2023-05-31 10:50:32.045821+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b883671b7bc5"
-down_revision = "a9ed3f76d649"
+down_revision = "0a1c9c3f5dd2"
 branch_labels = None
 depends_on = None
 
