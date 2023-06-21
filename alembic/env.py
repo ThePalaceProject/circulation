@@ -10,7 +10,8 @@ from core.config import Configuration
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Because this line overrides the logging configuration, we use a flag
+# to disable it when running alembic from within the application.
 if config.config_file_name is not None and config.attributes.get(
     "configure_logger", True
 ):
@@ -93,7 +94,9 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
-            # Acquire an application lock to ensure multiple migrations are queued and not concurrent
+            # Acquire an application lock to ensure multiple migrations are queued and not concurrent.
+            # Migrations are run as part of the application initialization script, so we use the
+            # same lock id.
             with pg_advisory_lock(connection, CIRCULATION_INIT_ADVISORY_LOCK_ID):
                 context.run_migrations()
 
