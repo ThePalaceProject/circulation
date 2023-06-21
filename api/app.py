@@ -128,11 +128,11 @@ def run(url=None):
 
         socket.setdefaulttimeout(None)
 
-    initialize_application()
-    logging.info("Starting app on %s:%s", host, port)
-
     # Setup database by initializing it or running migrations
     InstanceInitializationScript().run()
+
+    initialize_application()
+    logging.info("Starting app on %s:%s", host, port)
 
     sslContext = "adhoc" if scheme == "https" else None
     app.run(debug=debug, host=host, port=port, threaded=True, ssl_context=sslContext)
