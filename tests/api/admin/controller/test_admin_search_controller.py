@@ -2,7 +2,8 @@ import pytest
 
 from core.model.classification import Subject
 from core.model.datasource import DataSource
-from core.model.work import LicensePool, Work
+from core.model.licensing import LicensePool
+from core.model.work import Work
 from tests.fixtures.api_admin import AdminControllerFixture
 
 
