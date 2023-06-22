@@ -45,7 +45,7 @@ from core.metadata_layer import (
 )
 from core.mirror import MirrorUploader
 from core.model import (
-    CIRCULATION_INIT_ADVISORY_LOCK_ID,
+    LOCK_ID_DB_INIT,
     CachedMARCFile,
     CirculationEvent,
     Collection,
@@ -914,7 +914,7 @@ class InstanceInitializationScript:
         """
         engine = SessionManager.engine()
         with engine.begin() as connection:
-            with pg_advisory_lock(connection, CIRCULATION_INIT_ADVISORY_LOCK_ID):
+            with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
                 self.initialize(connection)
 
         engine.dispose()

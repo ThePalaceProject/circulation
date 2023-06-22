@@ -21,7 +21,7 @@ if config.config_file_name is not None and config.attributes.get(
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from core.model import CIRCULATION_INIT_ADVISORY_LOCK_ID, Base, pg_advisory_lock
+from core.model import LOCK_ID_DB_INIT, Base, pg_advisory_lock
 
 target_metadata = Base.metadata
 
@@ -97,7 +97,7 @@ def run_migrations_online() -> None:
             # Acquire an application lock to ensure multiple migrations are queued and not concurrent.
             # Migrations are run as part of the application initialization script, so we use the
             # same lock id.
-            with pg_advisory_lock(connection, CIRCULATION_INIT_ADVISORY_LOCK_ID):
+            with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
                 context.run_migrations()
 
 

@@ -29,7 +29,7 @@ from core.marc import MARCExporter
 from core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
 from core.mirror import MirrorUploader
 from core.model import (
-    CIRCULATION_INIT_ADVISORY_LOCK_ID,
+    LOCK_ID_DB_INIT,
     CachedMARCFile,
     ConfigurationSetting,
     Credential,
@@ -707,7 +707,7 @@ class TestInstanceInitializationScript:
 
                 advisory_lock.assert_called_once_with(
                     session_manager.engine().begin().__enter__(),
-                    CIRCULATION_INIT_ADVISORY_LOCK_ID,
+                    LOCK_ID_DB_INIT,
                 )
                 advisory_lock().__enter__.assert_called_once()
                 advisory_lock().__exit__.assert_called_once()
