@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from attr import define
 from flask_babel import lazy_gettext as _
@@ -25,7 +25,6 @@ from opensearch_dsl.query import (
 from opensearch_dsl.query import Query as BaseQuery
 from opensearch_dsl.query import Range, Regexp, Term, Terms
 from opensearchpy import OpenSearch
-from opensearchpy.exceptions import OpenSearchException, RequestError
 from opensearchpy.helpers import bulk as opensearch_bulk
 from spellchecker import SpellChecker
 
@@ -57,6 +56,13 @@ from .model import (
     numericrange_to_tuple,
 )
 from .problem_details import INVALID_INPUT
+from .search.migrator import SearchMigrator
+from .search.revision import SearchSchemaRevision
+from .search.revision_directory import SearchRevisionDirectory
+from .search.service import (
+    SearchMigratorClientService,
+    SearchMigratorClientServiceOpensearch1,
+)
 from .selftest import HasSelfTests
 from .util.cache import CachedData
 from .util.datetime_helpers import from_timestamp
@@ -78,7 +84,6 @@ def mock_search_index(mock=None):
 
 
 class ExternalSearchIndex(HasSelfTests):
-
     NAME = ExternalIntegration.OPENSEARCH
 
     # A test may temporarily set this to a mock of this class.
@@ -92,14 +97,9 @@ class ExternalSearchIndex(HasSelfTests):
     TEST_SEARCH_TERM_KEY = "test_search_term"
     DEFAULT_TEST_SEARCH_TERM = "test"
 
-    SEARCH_VERSION = "search_version"
-    SEARCH_VERSION_OS1_X = "Opensearch 1.x"
-    DEFAULT_SEARCH_VERSION = SEARCH_VERSION_OS1_X
-
     __client = None
 
     CURRENT_ALIAS_SUFFIX = "current"
-    VERSION_RE = re.compile("-v([0-9]+)$")
 
     SETTINGS = [
         {
@@ -123,19 +123,6 @@ class ExternalSearchIndex(HasSelfTests):
             "default": DEFAULT_TEST_SEARCH_TERM,
             "description": _("Self tests will use this value as the search term."),
         },
-        {
-            "key": SEARCH_VERSION,
-            "label": _("The search service version"),
-            "default": DEFAULT_SEARCH_VERSION,
-            "description": _(
-                "Which version of the search engine is being used. Changing this value will require a CM restart."
-            ),
-            "required": True,
-            "type": "select",
-            "options": [
-                {"key": SEARCH_VERSION_OS1_X, "label": SEARCH_VERSION_OS1_X},
-            ],
-        },
     ]
 
     SITEWIDE = True
@@ -150,42 +137,11 @@ class ExternalSearchIndex(HasSelfTests):
         cls.__client = None
 
     @classmethod
-    def search_integration(cls, _db) -> ExternalIntegration:
+    def search_integration(cls, _db) -> Optional[ExternalIntegration]:
         """Look up the ExternalIntegration for Opensearch."""
         return ExternalIntegration.lookup(
             _db, ExternalIntegration.OPENSEARCH, goal=ExternalIntegration.SEARCH_GOAL
         )
-
-    @classmethod
-    def works_prefixed(cls, _db, value):
-        """Prefix the given value with the prefix to use when generating index
-        and alias names.
-
-        :return: A string "{prefix}-{value}", or None if no prefix is configured.
-
-        """
-        integration = cls.search_integration(_db)
-        if not integration:
-            return None
-        setting = integration.setting(cls.WORKS_INDEX_PREFIX_KEY)
-        prefix = setting.value_or_default(cls.DEFAULT_WORKS_INDEX_PREFIX)
-        return prefix + "-" + value
-
-    @classmethod
-    def works_index_name(cls, _db):
-        """Look up the name of the search index.
-
-        It's possible, but unlikely, that the search index alias will
-        point to some other index. But if there were no indexes, and a
-        new one needed to be created, this would be the name of that
-        index.
-        """
-        return cls.works_prefixed(_db, CurrentMapping.version_name())
-
-    @classmethod
-    def works_alias_name(cls, _db):
-        """Look up the name of the search index alias."""
-        return cls.works_prefixed(_db, cls.CURRENT_ALIAS_SUFFIX)
 
     @classmethod
     def load(cls, _db, *args, **kwargs):
@@ -194,298 +150,127 @@ class ExternalSearchIndex(HasSelfTests):
             return cls.MOCK_IMPLEMENTATION
         return cls(_db, *args, **kwargs)
 
+    _bulk: Callable[..., Any]
+    _revision: SearchSchemaRevision
+    _revision_base_name: str
+    _revision_directory: SearchRevisionDirectory
+    _search_read_pointer: str
+    _search: Search
+    _search_migrator_service: SearchMigratorClientService
+    _test_search_term: str
+
     def __init__(
         self,
         _db,
-        url=None,
-        works_index=None,
-        test_search_term=None,
-        in_testing=False,
-        mapping=None,
-        version=None,
+        url: Optional[str] = None,
+        test_search_term: Optional[str] = None,
+        revision_directory: Optional[SearchRevisionDirectory] = None,
+        version: Optional[int] = None,
     ):
         """Constructor
 
-        :param in_testing: Set this to true if you don't want an
-        Opensearch client to be created, e.g. because you're
-        running a unit test of the constructor.
-
-
-        :param mapping: A custom Mapping object, for use in unit tests. By
-        default, the most recent mapping will be instantiated.
+        :param revision_directory Override the directory of revisions that will be used. If this isn't provided,
+               the default directory will be used.
+        :param version The specific revision that will be used. If not specified, the highest version in the
+               revision directory will be used.
         """
         self.log = logging.getLogger("External search index")
-        self.works_index = None
-        self.works_alias = None
-        integration = None
 
-        self.version = None
-        integration = self.search_integration(_db)
-        if not integration:
-            raise CannotLoadConfiguration("No search integration configured.")
-
-        valid_versions = [self.SEARCH_VERSION_OS1_X]
-        if version and version not in valid_versions:
-            raise ValueError(
-                f"{version} is not a valid search version, must be one of {valid_versions}"
-            )
-        elif version:
-            self.version = version
-        else:
-            self.version = integration.setting(self.SEARCH_VERSION).value_or_default(
-                self.DEFAULT_SEARCH_VERSION
-            )
-
-        self.mapping = mapping or CurrentMapping(self)
-
-        if isinstance(url, ExternalIntegration):
-            # This is how the self-test initializes this object.
-            integration = url
-            url = integration.url
-
+        # We can't proceed without a database.
         if not _db:
             raise CannotLoadConfiguration(
                 "Cannot load Search configuration without a database.",
             )
 
+        # Load the search integration.
+        integration = self.search_integration(_db)
+        if not integration:
+            raise CannotLoadConfiguration("No search integration configured.")
+
+        # Determine the URL that is going to be used to connect to the search server.
+        if isinstance(url, ExternalIntegration):
+            # This is how the self-test initializes this object.
+            integration = url
+            url = integration.url
+
+        if not url:
+            url = url or integration.url
+            test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
+
+        if not url:
+            raise CannotLoadConfiguration("No URL configured to the search server.")
+
+        # Create the necessary search client, and the service used by the schema migrator.
+        use_ssl = url.startswith("https://")
+        self.log.info("Connecting to the search cluster at %s", url)
+        new_client = OpenSearch(url, use_ssl=use_ssl, timeout=20, maxsize=25)
+        ExternalSearchIndex.__client = new_client
+        self.indices = new_client.indices
+        self.index = new_client.index
+        self.delete = new_client.delete
+        self.exists = new_client.exists
+        self.put_script = new_client.put_script
+        self._search_migrator_service = SearchMigratorClientServiceOpensearch1(
+            ExternalSearchIndex.__client
+        )
+
+        # Locate the revision of the search index that we're going to use.
+        # This will fail fast if the requested version isn't available.
+        self._revision_directory = (
+            revision_directory or SearchRevisionDirectory.create()
+        )
+        if version:
+            self._revision = self._revision_directory.find(version)
+        else:
+            self._revision = self._revision_directory.highest()
+
+        # Determine the base name we're going to use for storing revisions.
+        self._revision_base_name = integration.setting(ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY).value
+        self._search_read_pointer = self._search_migrator_service.read_pointer_name(
+            self._revision_base_name
+        )
+
         # initialize the cached data if not already done so
         CachedData.initialize(_db)
 
-        if not url or not works_index:
-            url = url or integration.url
-            if not works_index:
-                works_index = self.works_index_name(_db)
-            test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
-        if not url:
-            raise CannotLoadConfiguration("No URL configured to the search server.")
-        self.test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
+        self._test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
 
-        if not in_testing:
-            if not ExternalSearchIndex.__client:
-                use_ssl = url.startswith("https://")
-                self.log.info(
-                    "Connecting to index %s in the search cluster at %s",
-                    works_index,
-                    url,
-                )
-                ExternalSearchIndex.__client = OpenSearch(
-                    url, use_ssl=use_ssl, timeout=20, maxsize=25
-                )
-
-            self.indices = self.__client.indices
-            self.index = self.__client.index
-            self.delete = self.__client.delete
-            self.exists = self.__client.exists
-            self.put_script = self.__client.put_script
-
-        # Sets self.works_index and self.works_alias values.
-        # Document upload runs against the works_index.
-        # Search queries run against works_alias.
-        if works_index and integration and not in_testing:
-            try:
-                self.set_works_index_and_alias(_db)
-            except RequestError:
-                # This is almost certainly a problem with our code,
-                # not a communications error.
-                raise
-            except OpenSearchException as e:
-                raise CannotLoadConfiguration(
-                    "Exception communicating with Search server: %s" % repr(e)
-                )
-
-        self.search = Search(using=self.__client, index=self.works_alias)
+        # Create a search client.
+        self._search = Search(using=self.__client, index=self._search_read_pointer)
 
         def bulk(docs, **kwargs):
             return opensearch_bulk(self.__client, docs, **kwargs)
 
-        self.bulk = bulk
+        self._bulk = bulk
+
+        # Try to perform a migration to the requested schema version. This might be a no-op if everything
+        # is already up-to-date, or if we're downgrading to an already-populated index.
+        try:
+            migrator = SearchMigrator(
+                revisions=self._revision_directory,
+                service=self._search_migrator_service,
+            )
+            migrator.migrate(
+                base_name=self._revision_base_name,
+                version=self._revision.version,
+                documents=lambda: self._create_search_documents(_db),
+            )
+        except Exception as e:
+            raise CannotLoadConfiguration("Error migrating search index: %s" % repr(e))
+
+    def _create_search_documents(self, _db) -> List[dict]:
+        return []
 
     def prime_query_values(self, _db):
         JSONQuery.data_sources = _db.query(DataSource).all()
 
-    def set_works_index_and_alias(self, _db):
-        """Finds or creates the works_index and works_alias based on
-        the current configuration.
-        """
-        # The index name to use is the one known to be right for this
-        # version.
-        self.works_index = self.__client.works_index = self.works_index_name(_db)
-        if not self.indices.exists(self.works_index):
-            # That index doesn't actually exist. Set it up.
-            self.setup_index()
-        else:
-            # Update the mapping incase there are any new properties
-            self._update_index_mapping()
-
-        # Make sure the alias points to the most recent index.
-        self.setup_current_alias(_db)
-
-        # Make sure the stored scripts for the latest mapping exist.
-        self.set_stored_scripts()
-
-    def _update_index_mapping(self, dry_run=False) -> Dict:
-        """Updates the index mapping with any NEW properties added"""
-
-        def _properties(mapping: Dict) -> Dict:
-            """We may or may not have doc types depending on the versioning"""
-            return mapping["properties"]
-
-        current_mapping: Dict = _properties(
-            self.indices.get_mapping(self.works_index)[self.works_index]["mappings"]
-        )
-        new_mapping = _properties(self.mapping.body()["mappings"])
-        puts = {}
-        for name, v in new_mapping.items():
-            split_name = name.split(".")[0]  # dot based names become dicts
-            if split_name not in current_mapping:
-                puts[name] = v
-
-        if not dry_run and puts:
-            self.indices.put_mapping(
-                dict(properties=puts),
-                index=self.works_index,
-            )
-            self.log.info(f"Updated {self.works_index} mapping with {puts}")
-        return puts
-
-    def setup_current_alias(self, _db):
-        """Finds or creates the works_alias as named by the current site
-        settings.
-
-        If the resulting alias exists and is affixed to a different
-        index or if it can't be generated for any reason, the alias will
-        not be created or moved. Instead, the search client will use the
-        the works_index directly for search queries.
-        """
-        alias_name = self.works_alias_name(_db)
-        alias_is_set = self.indices.exists_alias(name=alias_name)
-
-        def _use_as_works_alias(name):
-            self.works_alias = self.__client.works_alias = name
-
-        if alias_is_set:
-            # The alias exists on the Opensearch server, so it must
-            # point _somewhere.
-            exists_on_works_index = self.indices.exists_alias(
-                index=self.works_index, name=alias_name
-            )
-            if exists_on_works_index:
-                # It points to the index we were expecting it to point to.
-                # Use it.
-                _use_as_works_alias(alias_name)
-            else:
-                # The alias exists but it points somewhere we didn't
-                # expect. Rather than changing how the alias works and
-                # then using the alias, use the index directly instead
-                # of going through the alias.
-                _use_as_works_alias(self.works_index)
-            return
-
-        # Create the alias and search against it.
-        response = self.indices.put_alias(index=self.works_index, name=alias_name)
-        if not response.get("acknowledged"):
-            self.log.error("Alias '%s' could not be created", alias_name)
-            # Work against the index instead of an alias.
-            _use_as_works_alias(self.works_index)
-            return
-        _use_as_works_alias(alias_name)
-
-    def setup_index(self, new_index=None, **index_settings):
-        """Create the search index with appropriate mapping.
-
-        This will destroy the search index, and all works will need
-        to be indexed again. In production, don't use this on an
-        existing index. Use it to create a new index, then change the
-        alias to point to the new index.
-        """
-        index_name = new_index or self.works_index
-        if self.indices.exists(index_name):
-            self.log.info("Deleting index %s", index_name)
-            self.indices.delete(index_name)
-
-        self.log.info("Creating index %s", index_name)
-        body = self.mapping.body()
-        body.setdefault("settings", {}).update(index_settings)
-        index = self.indices.create(index=index_name, body=body)
-
-    def set_stored_scripts(self):
-        for name, definition in self.mapping.stored_scripts():
-            # Make sure the name of the script is scoped and versioned.
-            if not name.startswith("simplified."):
-                name = self.mapping.script_name(name)
-
-            # If only the source code was provided, configure it as a
-            # Painless script.
-            if isinstance(definition, (bytes, str)):
-                definition = dict(script=dict(lang="painless", source=definition))
-
-            # Put it in the database.
-            self.put_script(name, definition)
-
-    def transfer_current_alias(self, _db, new_index):
-        """Force -current alias onto a new index"""
-        if not self.indices.exists(index=new_index):
-            raise ValueError("Index '%s' does not exist on this client." % new_index)
-
-        current_base_name = self.base_index_name(self.works_index)
-        new_base_name = self.base_index_name(new_index)
-
-        if new_base_name != current_base_name:
-            raise ValueError(
-                (
-                    "Index '%s' is not in series with current index '%s'. "
-                    "Confirm the base name (without version number) of both indices"
-                    "is the same."
-                )
-                % (new_index, self.works_index)
-            )
-
-        self.works_index = self.__client.works_index = new_index
-        alias_name = self.works_alias_name(_db)
-
-        exists = self.indices.exists_alias(name=alias_name)
-        if not exists:
-            # The alias doesn't already exist. Set it.
-            self.setup_current_alias(_db)
-            return
-
-        # We know the alias already exists. Before we set it to point
-        # to self.works_index, we may need to remove it from some
-        # other indices.
-        other_indices = list(self.indices.get_alias(name=alias_name).keys())
-
-        if self.works_index in other_indices:
-            # If the alias already points to the works index,
-            # that's fine -- we want to see if it points to any
-            # _other_ indices.
-            other_indices.remove(self.works_index)
-
-        if other_indices:
-            # The alias exists on one or more other indices.  Remove
-            # the alias altogether, then put it back on the works
-            # index.
-            self.indices.delete_alias(index="_all", name=alias_name)
-            self.indices.put_alias(index=self.works_index, name=alias_name)
-
-        self.works_alias = self.__client.works_alias = alias_name
-
-    def base_index_name(self, index_or_alias):
-        """Removes version or current suffix from base index name"""
-
-        current_re = re.compile(self.CURRENT_ALIAS_SUFFIX + "$")
-        base_works_index = re.sub(current_re, "", index_or_alias)
-        base_works_index = re.sub(self.VERSION_RE, "", base_works_index)
-
-        return base_works_index
-
     def create_search_doc(self, query_string, filter, pagination, debug):
-
         if filter and filter.search_type == "json":
             query = JSONQuery(query_string, filter)
         else:
             query = Query(query_string, filter)
 
-        search = query.build(self.search, pagination)
+        search = query.build(self._search, pagination)
         if debug:
             search = search.extra(explain=True)
 
@@ -554,15 +339,6 @@ class ExternalSearchIndex(HasSelfTests):
             each containing the search results from that
             (query string, Filter, Pagination) 3-tuple.
         """
-        # If the works alias is not set, all queries return empty.
-        #
-        # TODO: Maybe an unset works_alias should raise
-        # CannotLoadConfiguration in the constructor. Then we wouldn't
-        # have to worry about this.
-        if not self.works_alias:
-            for q in queries:
-                yield []
-
         # Create a MultiSearch.
         multi = MultiSearch(using=self.__client)
 
@@ -640,10 +416,10 @@ class ExternalSearchIndex(HasSelfTests):
         docs = Work.to_search_documents(needs_add)
 
         for doc in docs:
-            doc["_index"] = self.works_index
+            doc["_index"] = self._search_read_pointer
         time2 = time.time()
 
-        success_count, errors = self.bulk(
+        success_count, errors = self._bulk(
             docs,
             raise_on_error=False,
             raise_on_exception=False,
@@ -691,7 +467,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         failures = []
         for missing in missing_works:
-            failures.append((work, "Work not indexed"))
+            failures.append((missing, "Work not indexed"))
 
         for error in errors:
 
@@ -717,7 +493,7 @@ class ExternalSearchIndex(HasSelfTests):
 
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
-        args = dict(index=self.works_index, id=work.id)
+        args = dict(index=self._search_read_pointer, id=work.id)
         args["doc_type"] = "_doc"
 
         if self.exists(**args):
@@ -728,12 +504,12 @@ class ExternalSearchIndex(HasSelfTests):
 
         def _search():
             return self.create_search_doc(
-                self.test_search_term, filter=None, pagination=None, debug=True
+                self._test_search_term, filter=None, pagination=None, debug=True
             )
 
         def _works():
             return self.query_works(
-                self.test_search_term, filter=None, pagination=None, debug=True
+                self._test_search_term, filter=None, pagination=None, debug=True
             )
 
         # The self-tests:
@@ -743,7 +519,7 @@ class ExternalSearchIndex(HasSelfTests):
             return titles
 
         yield self.run_test(
-            ("Search results for '%s':" % (self.test_search_term)), _search_for_term
+            ("Search results for '%s':" % (self._test_search_term)), _search_for_term
         )
 
         def _get_raw_doc():
@@ -755,24 +531,25 @@ class ExternalSearchIndex(HasSelfTests):
             return json.dumps(search.to_dict(), indent=1)
 
         yield self.run_test(
-            ("Search document for '%s':" % (self.test_search_term)), _get_raw_doc
+            ("Search document for '%s':" % (self._test_search_term)), _get_raw_doc
         )
 
         def _get_raw_results():
             return [json.dumps(x.to_dict(), indent=1) for x in _works()]
 
         yield self.run_test(
-            ("Raw search results for '%s':" % (self.test_search_term)), _get_raw_results
+            ("Raw search results for '%s':" % (self._test_search_term)),
+            _get_raw_results,
         )
 
         def _count_docs():
             # The mock methods used in testing return a list, so we have to call len() rather than count().
             if in_testing:
-                return str(len(self.search))
-            return str(self.search.count())
+                return str(len(self._search))
+            return str(self._search.count())
 
         yield self.run_test(
-            ("Total number of search results for '%s':" % (self.test_search_term)),
+            ("Total number of search results for '%s':" % (self._test_search_term)),
             _count_docs,
         )
 
@@ -794,462 +571,6 @@ class ExternalSearchIndex(HasSelfTests):
             return json.dumps(result, indent=1)
 
         yield self.run_test("Total number of documents per collection:", _collections)
-
-
-class MappingDocument:
-    """This class knows a lot about how the 'properties' section of an
-    Opensearch mapping document (or one of its subdocuments) is
-    created.
-    """
-
-    def __init__(self, service: ExternalSearchIndex):
-        self.service = service
-        self.properties: Dict[str, Any] = {}
-        self.subdocuments: Dict[str, Any] = {}
-
-    def add_property(self, name, type, **description):
-        """Add a field to the list of properties.
-
-        :param name: Name of the field as found in search documents.
-        :param type: Type of the field. This may be a custom type,
-            so long as a hook method is defined for that type.
-        :param description: Description of the field.
-        """
-        # TODO: For some fields we could set index: False here, which
-        # would presumably lead to a smaller index and faster
-        # updates. However, it might hurt performance of
-        # searches. When this code is more mature we can do a
-        # side-by-side comparison.
-
-        defaults = dict(index=True, store=False)
-        description["type"] = type
-        for default_name, default_value in list(defaults.items()):
-            if default_name not in description:
-                description[default_name] = default_value
-
-        hook_method = getattr(self, type + "_property_hook", None)
-        if hook_method is not None:
-            hook_method(description)
-        # TODO: Cross-check the description for correctness. Do the
-        # things it mention actually exist? Better to fail now with a
-        # useful error than to fail when talking to Opensearch.
-        self.properties[name] = description
-
-    def add_properties(self, properties_by_type):
-        """Turn a dictionary mapping types to field names into a
-        bunch of add_property() calls.
-
-        Useful when you have a lot of fields that don't need any
-        customization.
-        """
-        for type, properties in list(properties_by_type.items()):
-            for name in properties:
-                self.add_property(name, type)
-
-    def subdocument(self, name):
-        """Create a new HasProperties object and register it as a
-        sub-document of this one.
-        """
-        subdocument = MappingDocument(self.service)
-        self.subdocuments[name] = subdocument
-        return subdocument
-
-    def basic_text_property_hook(self, description):
-        """Hook method to handle the custom 'basic_text'
-        property type.
-
-        This type does not exist in Opensearch. It's our name for a
-        text field that is indexed three times: once using our default
-        English analyzer ("title"), once using an analyzer with
-        minimal stemming ("title.minimal") for close matches, and once
-        using an analyzer that leaves stopwords in place, for searches
-        that rely on stopwords.
-        """
-        description["type"] = "text"
-        description["analyzer"] = "en_default_text_analyzer"
-        description["fields"] = {
-            "minimal": {"type": "text", "analyzer": "en_minimal_text_analyzer"},
-            "with_stopwords": {
-                "type": "text",
-                "analyzer": "en_with_stopwords_text_analyzer",
-            },
-        }
-
-    def filterable_text_property_hook(self, description):
-        """Hook method to handle the custom 'filterable_text'
-        property type.
-
-        This type does not exist in Opensearch. It's our name for a
-        text field that can be used in both queries and filters.
-
-        This field is indexed _four_ times -- the three ways a normal
-        text field is indexed, plus again as an unparsed keyword that
-        can be used in filters.
-        """
-        self.basic_text_property_hook(description)
-        description["fields"]["keyword"] = {
-            "type": "keyword",
-            "index": True,
-            "store": False,
-            "normalizer": "filterable_string",
-        }
-
-    def keyword_property_hook(self, description):
-        """Hook method to ensure the keyword type attributes are case-insensitive"""
-        description["normalizer"] = "filterable_string"
-
-
-class Mapping(MappingDocument):
-    """A class that defines the mapping for a particular version of the search index.
-
-    Code that won't change between versions can go here. (Or code that
-    can change between versions without affecting anything.)
-    """
-
-    VERSION_NAME: Optional[str] = None
-
-    @classmethod
-    def version_name(cls):
-        """Return the name of this Mapping subclass."""
-        version = cls.VERSION_NAME
-        if not version:
-            raise NotImplementedError("VERSION_NAME not defined")
-        if not version.startswith("v"):
-            version = "v%s" % version
-        return version
-
-    @classmethod
-    def script_name(cls, base_name):
-        """Scope a script name with "simplified" (to avoid confusion with
-        other applications on the Opensearch server), and the
-        version number (to avoid confusion with other versions *of
-        this application*, which may implement the same script
-        differently, on this Opensearch server).
-        """
-        return f"simplified.{base_name}.{cls.version_name()}"
-
-    def __init__(self, service):
-        super().__init__(service)
-        self.filters = {}
-        self.char_filters = {}
-        self.normalizers = {}
-        self.analyzers = {}
-
-    def create(self, search_client, base_index_name):
-        """Ensure that an index exists in `search_client` for this Mapping.
-
-        :return: True or False, indicating whether the index was created new.
-        """
-        versioned_index = base_index_name + "-" + self.version_name()
-        if search_client.indices.exists(index=versioned_index):
-            return False
-        else:
-            search_client.setup_index(new_index=versioned_index)
-            return True
-
-    def sort_author_keyword_property_hook(self, description):
-        """Give the `sort_author` property its custom analyzer."""
-        description["type"] = "text"
-        description["analyzer"] = "en_sort_author_analyzer"
-        description["fielddata"] = True
-
-    def body(self):
-        """Generate the body of the mapping document for this version of the
-        mapping.
-        """
-        settings = dict(
-            analysis=dict(
-                filter=self.filters,
-                char_filter=self.char_filters,
-                normalizer=self.normalizers,
-                analyzer=self.analyzers,
-            )
-        )
-
-        # Start with the normally defined properties.
-        properties = dict(self.properties)
-
-        # Add subdocuments as additional properties.
-        for name, subdocument in list(self.subdocuments.items()):
-            properties[name] = dict(type="nested", properties=subdocument.properties)
-
-        mappings = dict(properties=properties)
-        return dict(settings=settings, mappings=mappings)
-
-
-class CurrentMapping(Mapping):
-    """The first mapping to support only Opensearch 1.x.
-
-    The body of this mapping looks for bibliographic information in
-    the core document, primarily used for matching search
-    requests. It also has nested documents, which are used for
-    filtering and ranking Works when generating other types of
-    feeds:
-
-    * licensepools -- the Work has these LicensePools (includes current
-      availability as a boolean, but not detailed availability information)
-    * customlists -- the Work is on these CustomLists
-    * contributors -- these Contributors worked on the Work
-    """
-
-    VERSION_NAME = "v5"
-
-    # Use regular expressions to normalized values in sortable fields.
-    # These regexes are applied in order; that way "H. G. Wells"
-    # becomes "H G Wells" becomes "HG Wells".
-    CHAR_FILTERS = {
-        "remove_apostrophes": dict(
-            type="pattern_replace",
-            pattern="'",
-            replacement="",
-        )
-    }
-    AUTHOR_CHAR_FILTER_NAMES = []
-    for name, pattern, replacement in [
-        # The special author name "[Unknown]" should sort after everything
-        # else. REPLACEMENT CHARACTER is the final valid Unicode character.
-        ("unknown_author", r"\[Unknown\]", "\N{REPLACEMENT CHARACTER}"),
-        # Works by a given primary author should be secondarily sorted
-        # by title, not by the other contributors.
-        ("primary_author_only", r"\s+;.*", ""),
-        # Remove parentheticals (e.g. the full name of someone who
-        # goes by initials).
-        ("strip_parentheticals", r"\s+\([^)]+\)", ""),
-        # Remove periods from consideration.
-        ("strip_periods", r"\.", ""),
-        # Collapse spaces for people whose sort names end with initials.
-        ("collapse_three_initials", r" ([A-Z]) ([A-Z]) ([A-Z])$", " $1$2$3"),
-        ("collapse_two_initials", r" ([A-Z]) ([A-Z])$", " $1$2"),
-    ]:
-        normalizer = dict(
-            type="pattern_replace", pattern=pattern, replacement=replacement
-        )
-        CHAR_FILTERS[name] = normalizer
-        AUTHOR_CHAR_FILTER_NAMES.append(name)
-
-    def __init__(self, service):
-        super().__init__(service)
-
-        # Set up character filters.
-        #
-        self.char_filters = self.CHAR_FILTERS
-
-        # This normalizer is used on freeform strings that
-        # will be used as tokens in filters. This way we can,
-        # e.g. ignore capitalization when considering whether
-        # two books belong to the same series or whether two
-        # author names are the same.
-        self.normalizers["filterable_string"] = dict(
-            type="custom", filter=["lowercase", "asciifolding"]
-        )
-
-        # Set up analyzers.
-        #
-
-        # We use three analyzers:
-        #
-        # 1. An analyzer based on Opensearch's default English
-        #    analyzer, with a normal stemmer -- used as the default
-        #    view of a text field such as 'description'.
-        #
-        # 2. An analyzer that's exactly the same as #1 but with a less
-        #    aggressive stemmer -- used as the 'minimal' view of a
-        #    text field such as 'description.minimal'.
-        #
-        # 3. An analyzer that's exactly the same as #2 but with
-        #    English stopwords left in place instead of filtered out --
-        #    used as the 'with_stopwords' view of a text field such as
-        #    'title.with_stopwords'.
-        #
-        # The analyzers are identical except for the end of the filter
-        # chain.
-        #
-        # All three analyzers are based on Opensearch's default English
-        # analyzer, defined here:
-        # https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-lang-analyzer.html#english-analyzer
-
-        # First, recreate the filters from the default English
-        # analyzer. We'll be using these to build our own analyzers.
-
-        # Filter out English stopwords.
-        self.filters["english_stop"] = dict(type="stop", stopwords=["_english_"])
-
-        # The default English stemmer, used in the en_default analyzer.
-        self.filters["english_stemmer"] = dict(type="stemmer", language="english")
-
-        # A less aggressive English stemmer, used in the en_minimal analyzer.
-        self.filters["minimal_english_stemmer"] = dict(
-            type="stemmer", language="minimal_english"
-        )
-
-        # A filter that removes English posessives such as "'s"
-        self.filters["english_posessive_stemmer"] = dict(
-            type="stemmer", language="possessive_english"
-        )
-
-        # Some potentially useful filters that are currently not used:
-        #
-        # * keyword_marker -- Exempt certain keywords from stemming
-        # * synonym -- Introduce synonyms for words
-        #   (but probably better to use synonym_graph during the search
-        #    -- it's more flexible).
-
-        # Here's the common analyzer configuration. The comment NEW
-        # means this is something we added on top of Opensearch's
-        # default configuration for the English analyzer.
-        common_text_analyzer = dict(
-            type="custom",
-            char_filter=["html_strip", "remove_apostrophes"],  # NEW
-            tokenizer="standard",
-        )
-        common_filter = [
-            "lowercase",
-            "asciifolding",  # NEW
-        ]
-
-        # The default_text_analyzer uses Opensearch's standard
-        # English stemmer and removes stopwords.
-        self.analyzers["en_default_text_analyzer"] = dict(common_text_analyzer)
-        self.analyzers["en_default_text_analyzer"]["filter"] = common_filter + [
-            "english_stop",
-            "english_stemmer",
-        ]
-
-        # The minimal_text_analyzer uses a less aggressive English
-        # stemmer, and removes stopwords.
-        self.analyzers["en_minimal_text_analyzer"] = dict(common_text_analyzer)
-        self.analyzers["en_minimal_text_analyzer"]["filter"] = common_filter + [
-            "english_stop",
-            "minimal_english_stemmer",
-        ]
-
-        # The en_with_stopwords_text_analyzer uses the less aggressive
-        # stemmer and does not remove stopwords.
-        self.analyzers["en_with_stopwords_text_analyzer"] = dict(common_text_analyzer)
-        self.analyzers["en_with_stopwords_text_analyzer"]["filter"] = common_filter + [
-            "minimal_english_stemmer"
-        ]
-
-        # Now we need to define a special analyzer used only by the
-        # 'sort_author' property.
-
-        # Here's a special filter used only by that analyzer. It
-        # duplicates the filter used by the icu_collation_keyword data
-        # type.
-        self.filters["en_sortable_filter"] = dict(
-            type="icu_collation", language="en", country="US"
-        )
-
-        # Here's the analyzer used by the 'sort_author' property.
-        # It's the same as icu_collation_keyword, but it has some
-        # extra character filters -- regexes that do things like
-        # convert "Tolkien, J. R. R." to "Tolkien, JRR".
-        #
-        # This is necessary because normal icu_collation_keyword
-        # fields can't specify char_filter.
-        self.analyzers["en_sort_author_analyzer"] = dict(
-            tokenizer="keyword",
-            filter=["en_sortable_filter"],
-            char_filter=self.AUTHOR_CHAR_FILTER_NAMES,
-        )
-
-        # Now, the main event. Set up the field properties for the
-        # base document.
-        fields_by_type = {
-            "basic_text": ["summary"],
-            "filterable_text": [
-                "title",
-                "subtitle",
-                "series",
-                "classifications.term",
-                "author",
-                "publisher",
-                "imprint",
-            ],
-            "boolean": ["presentation_ready"],
-            "icu_collation_keyword": ["sort_title"],
-            "sort_author_keyword": ["sort_author"],
-            "integer": ["series_position", "work_id"],
-            "long": ["last_update_time", "published"],
-            "keyword": ["audience", "language"],
-        }
-        self.add_properties(fields_by_type)
-
-        # Set up subdocuments.
-        contributors = self.subdocument("contributors")
-        contributor_fields = {
-            "filterable_text": ["sort_name", "display_name", "family_name"],
-            "keyword": ["role", "lc", "viaf"],
-        }
-        contributors.add_properties(contributor_fields)
-
-        licensepools = self.subdocument("licensepools")
-        licensepool_fields = {
-            "integer": ["collection_id", "data_source_id"],
-            "long": ["availability_time"],
-            "boolean": ["available", "open_access", "suppressed", "licensed"],
-            "keyword": ["medium"],
-        }
-        licensepools.add_properties(licensepool_fields)
-
-        identifiers = self.subdocument("identifiers")
-        identifier_fields = {"keyword": ["identifier", "type"]}
-        identifiers.add_properties(identifier_fields)
-
-        genres = self.subdocument("genres")
-        genre_fields = {
-            "keyword": ["scheme", "name", "term"],
-            "float": ["weight"],
-        }
-        genres.add_properties(genre_fields)
-
-        customlists = self.subdocument("customlists")
-        customlist_fields = {
-            "integer": ["list_id"],
-            "long": ["first_appearance"],
-            "boolean": ["featured"],
-        }
-        customlists.add_properties(customlist_fields)
-
-    @classmethod
-    def stored_scripts(cls):
-        """This version defines a single stored script, "work_last_update",
-        defined below.
-        """
-        yield "work_last_update", cls.WORK_LAST_UPDATE_SCRIPT
-
-    # Definition of the work_last_update_script.
-    WORK_LAST_UPDATE_SCRIPT = """
-double champion = -1;
-// Start off by looking at the work's last update time.
-for (candidate in doc['last_update_time']) {
-    if (champion == -1 || candidate > champion) { champion = candidate; }
-}
-if (params.collection_ids != null && params.collection_ids.length > 0) {
-    // Iterate over all licensepools looking for a pool in a collection
-    // relevant to this filter. When one is found, check its
-    // availability time to see if it's later than the last update time.
-    for (licensepool in params._source.licensepools) {
-        if (!params.collection_ids.contains(licensepool['collection_id'])) { continue; }
-        double candidate = licensepool['availability_time'];
-        if (champion == -1 || candidate > champion) { champion = candidate; }
-    }
-}
-if (params.list_ids != null && params.list_ids.length > 0) {
-
-    // Iterate over all customlists looking for a list relevant to
-    // this filter. When one is found, check the previous work's first
-    // appearance on that list to see if it's later than the last
-    // update time.
-    for (customlist in params._source.customlists) {
-        if (!params.list_ids.contains(customlist['list_id'])) { continue; }
-        double candidate = customlist['first_appearance'];
-        if (champion == -1 || candidate > champion) { champion = candidate; }
-    }
-}
-
-return champion;
-"""
 
 
 class SearchBase:
@@ -3068,8 +2389,7 @@ class Filter(SearchBase):
         mode = "min"
         return nested, mode
 
-    @property
-    def last_update_time_script_field(self):
+    def last_update_time_script_field(self, script_name: Callable[[str], str]):
         """Return the configuration for a script field that calculates the
         'last update' time of a work. An 'update' happens when the
         work's metadata is changed, when it's added to a collection
@@ -3093,11 +2413,7 @@ class Filter(SearchBase):
             filter=dict(terms={"customlists.list_id": list(all_list_ids)}),
         )
         params = dict(collection_ids=collection_ids, list_ids=list(all_list_ids))
-        return dict(
-            script=dict(
-                stored=CurrentMapping.script_name("work_last_update"), params=params
-            )
-        )
+        return dict(script=dict(stored=script_name("work_last_update"), params=params))
 
     @property
     def _last_update_time_order_by(self):
@@ -3490,7 +2806,7 @@ class WorkSearchResult:
 
 
 class MockExternalSearchIndex(ExternalSearchIndex):
-    def __init__(self, url=None, version=ExternalSearchIndex.SEARCH_VERSION_OS1_X):
+    def __init__(self, url=None):
         self.url = url
         self.docs = {}
         self.works_index = "works"
@@ -3499,7 +2815,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
         self.queries = []
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
-        self.version = version
+        self._search_read_pointer = "works-search-read"
 
     def _key(self, index, id):
         return (index, id)
@@ -3523,6 +2839,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
 
     def query_works(self, query_string, filter, pagination, debug=False):
         self.queries.append((query_string, filter, pagination, debug))
+
         # During a test we always sort works by the order in which the
         # work was created.
 
@@ -3573,7 +2890,7 @@ class MockExternalSearchIndex(ExternalSearchIndex):
     def count_works(self, filter):
         return len(self.docs)
 
-    def bulk(self, docs, **kwargs):
+    def _bulk(self, docs, **kwargs):
         for doc in docs:
             self.index(doc["_index"], doc["_id"], doc)
         return len(docs), []

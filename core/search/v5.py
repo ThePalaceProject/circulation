@@ -18,6 +18,52 @@ from core.search.revision import SearchSchemaRevision
 
 
 class SearchV5(SearchSchemaRevision):
+    """
+    The body of this mapping looks for bibliographic information in
+    the core document, primarily used for matching search
+    requests. It also has nested documents, which are used for
+    filtering and ranking Works when generating other types of
+    feeds:
+
+    * licensepools -- the Work has these LicensePools (includes current
+      availability as a boolean, but not detailed availability information)
+    * customlists -- the Work is on these CustomLists
+    * contributors -- these Contributors worked on the Work
+    """
+
+    # Definition of the work_last_update_script.
+    WORK_LAST_UPDATE_SCRIPT = """
+double champion = -1;
+// Start off by looking at the work's last update time.
+for (candidate in doc['last_update_time']) {
+    if (champion == -1 || candidate > champion) { champion = candidate; }
+}
+if (params.collection_ids != null && params.collection_ids.length > 0) {
+    // Iterate over all licensepools looking for a pool in a collection
+    // relevant to this filter. When one is found, check its
+    // availability time to see if it's later than the last update time.
+    for (licensepool in params._source.licensepools) {
+        if (!params.collection_ids.contains(licensepool['collection_id'])) { continue; }
+        double candidate = licensepool['availability_time'];
+        if (champion == -1 || candidate > champion) { champion = candidate; }
+    }
+}
+if (params.list_ids != null && params.list_ids.length > 0) {
+
+    // Iterate over all customlists looking for a list relevant to
+    // this filter. When one is found, check the previous work's first
+    // appearance on that list to see if it's later than the last
+    // update time.
+    for (customlist in params._source.customlists) {
+        if (!params.list_ids.contains(customlist['list_id'])) { continue; }
+        double candidate = customlist['first_appearance'];
+        if (champion == -1 || candidate > champion) { champion = candidate; }
+    }
+}
+
+return champion;
+"""
+
     # Use regular expressions to normalized values in sortable fields.
     # These regexes are applied in order; that way "H. G. Wells"
     # becomes "H G Wells" becomes "HG Wells".
@@ -247,4 +293,5 @@ class SearchV5(SearchSchemaRevision):
             analyzer=dict(self._analyzers),
         )
         document.properties = self._fields
+        document.scripts["work_last_update"] = SearchV5.WORK_LAST_UPDATE_SCRIPT
         return document

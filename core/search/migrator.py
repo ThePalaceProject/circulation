@@ -1,7 +1,8 @@
+import logging
 from typing import Callable, Iterable
 
 from core.search.revision_directory import SearchRevisionDirectory
-from core.search.service import SearchService
+from core.search.service import SearchMigratorClientService
 
 
 class SearchMigrationException(Exception):
@@ -14,7 +15,9 @@ class SearchMigrationException(Exception):
 class SearchMigrator:
     """A search migrator. This moves a search service to the targeted schema version."""
 
-    def __init__(self, revisions: SearchRevisionDirectory, service: SearchService):
+    def __init__(
+        self, revisions: SearchRevisionDirectory, service: SearchMigratorClientService
+    ):
         self._revisions = revisions
         self._service = service
 

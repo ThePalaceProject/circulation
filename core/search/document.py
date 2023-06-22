@@ -227,10 +227,15 @@ class SearchMappingDocument:
         super().__init__()
         self._settings: Dict[str, dict] = {}
         self._fields: Dict[str, SearchMappingFieldType] = {}
+        self._scripts: Dict[str, str] = {}
 
     @property
     def settings(self) -> Dict[str, dict]:
         return self._settings
+
+    @property
+    def scripts(self) -> Dict[str, str]:
+        return self._scripts
 
     @property
     def properties(self) -> Dict[str, SearchMappingFieldType]:

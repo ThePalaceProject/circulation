@@ -4,7 +4,6 @@ from typing import Any, Iterable, List, Optional
 from unittest import mock
 
 import pytest
-from _pytest.fixtures import FixtureRequest
 
 from core import external_search
 from core.external_search import (
@@ -27,26 +26,16 @@ class ExternalSearchFixture:
     to ensure that it works well overall, with a realistic index.
     """
 
-    SEARCH_TEST_URLS = {
-        ExternalSearchIndex.SEARCH_VERSION_OS1_X: os.environ.get(
-            "SIMPLIFIED_TEST_OPENSEARCH", "http://localhost:9200"
-        ),
-    }
-
     indexes: List[Any]
     integration: ExternalIntegration
     search: Optional[SearchClientForTesting]
     db: DatabaseTransactionFixture
-    version: str
 
     @classmethod
-    def create(
-        cls, db: DatabaseTransactionFixture, testing_version: str
-    ) -> "ExternalSearchFixture":
+    def create(cls, db: DatabaseTransactionFixture) -> "ExternalSearchFixture":
         fixture = ExternalSearchFixture()
         fixture.db = db
         fixture.indexes = []
-        fixture.version = testing_version
 
         fixture.integration = db.external_integration(
             ExternalIntegration.OPENSEARCH,
@@ -55,12 +44,11 @@ class ExternalSearchFixture:
             settings={
                 ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
                 ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
-                ExternalSearchIndex.SEARCH_VERSION: fixture.version,
             },
         )
 
         try:
-            fixture.search = SearchClientForTesting(db.session, version=testing_version)
+            fixture.search = SearchClientForTesting(db.session)
         except Exception as e:
             fixture.search = None
             logging.error(
@@ -71,13 +59,13 @@ class ExternalSearchFixture:
 
     @property
     def url(self) -> str:
-        return self.SEARCH_TEST_URLS[self.version]
+        env = os.environ.get("SIMPLIFIED_TEST_OPENSEARCH")
+        if env is None:
+            raise OSError("SIMPLIFIED_TEST_OPENSEARCH is not defined.")
+        return env
 
     def close(self):
         if self.search:
-            # Delete the works_index, which is almost always created.
-            if self.search.works_index:
-                self.search.indices.delete(self.search.works_index, ignore=[404])
             # Delete any other indexes created over the course of the test.
             for index in self.indexes:
                 self.search.indices.delete(index, ignore=[404])
@@ -102,20 +90,13 @@ class ExternalSearchFixture:
         return work
 
 
-@pytest.fixture(
-    scope="function",
-    params=[
-        ExternalSearchIndex.SEARCH_VERSION_OS1_X,
-    ],
-)
+@pytest.fixture(scope="function")
 def external_search_fixture(
-    request: FixtureRequest,
     db: DatabaseTransactionFixture,
 ) -> Iterable[ExternalSearchFixture]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
-    version = request.param
-    data = ExternalSearchFixture.create(db, version)
+    data = ExternalSearchFixture.create(db)
     yield data
     data.close()
 
@@ -127,11 +108,9 @@ class EndToEndSearchFixture:
     external_search: ExternalSearchFixture
 
     @classmethod
-    def create(
-        cls, transaction: DatabaseTransactionFixture, test_version: str
-    ) -> "EndToEndSearchFixture":
+    def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
         data = EndToEndSearchFixture()
-        data.external_search = ExternalSearchFixture.create(transaction, test_version)
+        data.external_search = ExternalSearchFixture.create(transaction)
         return data
 
     def populate_search_index(self):
@@ -266,18 +245,12 @@ class EndToEndSearchFixture:
         self.external_search.close()
 
 
-@pytest.fixture(
-    scope="function",
-    params=[
-        ExternalSearchIndex.SEARCH_VERSION_OS1_X,
-    ],
-)
+@pytest.fixture(scope="function")
 def end_to_end_search_fixture(
-    request: FixtureRequest,
     db: DatabaseTransactionFixture,
 ) -> Iterable[EndToEndSearchFixture]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    data = EndToEndSearchFixture.create(db, request.param)
+    data = EndToEndSearchFixture.create(db)
     yield data
     data.close()
 

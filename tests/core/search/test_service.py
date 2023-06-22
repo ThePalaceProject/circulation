@@ -4,7 +4,7 @@ from opensearchpy import OpenSearch
 
 from core.search.document import LONG, SearchMappingDocument
 from core.search.revision import SearchSchemaRevision
-from core.search.service import SearchServiceOpensearch1
+from core.search.service import SearchMigratorClientServiceOpensearch1
 from tests.fixtures.search import ExternalSearchFixture
 
 
@@ -32,7 +32,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Creating the empty index is idempotent."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         service.create_empty_index("base")
@@ -50,7 +50,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Creating any index is idempotent."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)
@@ -66,21 +66,21 @@ class TestService:
 
     def test_read_pointer_none(self, external_search_fixture: ExternalSearchFixture):
         """The read pointer is initially unset."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         assert None == service.read_pointer("nonexistent")
 
     def test_write_pointer_none(self, external_search_fixture: ExternalSearchFixture):
         """The write pointer is initially unset."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         assert None == service.write_pointer("nonexistent")
 
     def test_read_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the read pointer works."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)
@@ -96,7 +96,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Setting the read pointer to the empty index works."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         service.create_empty_index("base")
@@ -109,7 +109,7 @@ class TestService:
 
     def test_write_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the write pointer works."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)
@@ -128,7 +128,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Populating an index is idempotent."""
-        service = SearchServiceOpensearch1(
+        service = SearchMigratorClientServiceOpensearch1(
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)

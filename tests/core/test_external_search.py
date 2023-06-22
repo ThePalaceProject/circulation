@@ -26,7 +26,6 @@ from psycopg2.extras import NumericRange
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration, Configuration
 from core.external_search import (
-    CurrentMapping,
     ExternalSearchIndex,
     Filter,
     JSONQuery,
@@ -58,6 +57,7 @@ from core.model import (
 from core.model.classification import Subject
 from core.model.work import Work
 from core.problem_details import INVALID_INPUT
+from core.search.v5 import SearchV5
 from core.util.cache import CachedData
 from core.util.datetime_helpers import datetime_utc, from_timestamp
 from tests.fixtures.database import (
@@ -100,7 +100,7 @@ class TestExternalSearch:
 
         index = MockIndex(session)
         assert session == index.set_works_index_and_alias_called_with
-        assert "test_search_term" == index.test_search_term
+        assert "test_search_term" == index._test_search_term
 
     # TODO: would be good to check the put_script calls, but the
     # current constructor makes put_script difficult to mock.
@@ -178,7 +178,7 @@ class TestExternalSearch:
         )
         search.set_works_index_and_alias(session)
 
-        expected_index = "banana-" + CurrentMapping.version_name()
+        expected_index = "banana-" + "FAIL!"
         expected_alias = "banana-" + search.CURRENT_ALIAS_SUFFIX
         assert expected_index == search.works_index
         assert expected_alias == search.works_alias
@@ -194,7 +194,7 @@ class TestExternalSearch:
         search = external_search_fixture.search
 
         # The index was generated from the string in configuration.
-        version = CurrentMapping.version_name()
+        version = "FAIL!"
         index_name = "test_index-" + version
         assert index_name == search.works_index
         assert True == search.indices.exists(index_name)
@@ -409,14 +409,14 @@ class TestExternalSearch:
         assert "new_long_property" in new_mapping["properties"]
 
 
-class TestCurrentMapping:
+class TestSearchV5:
     def test_character_filters(self):
         # Verify the functionality of the regular expressions we tell
         # Opensearch to use when normalizing fields that will be used
         # for searching.
         filters = []
-        for filter_name in CurrentMapping.AUTHOR_CHAR_FILTER_NAMES:
-            configuration = CurrentMapping.CHAR_FILTERS[filter_name]
+        for filter_name in SearchV5.AUTHOR_CHAR_FILTER_NAMES:
+            configuration = SearchV5.CHAR_FILTERS[filter_name]
             find = re.compile(configuration["pattern"])
             replace = configuration["replacement"]
             # Hack to (imperfectly) convert Java regex format to Python format.
@@ -4356,7 +4356,8 @@ class TestFilter:
         assert {} == sort
 
         # The script is the 'simplified.work_last_update' stored script.
-        assert CurrentMapping.script_name("work_last_update") == script.pop("stored")
+        # assert CurrentMapping.script_name("work_last_update") == script.pop("stored")
+        assert False
 
         # Two parameters are passed into the script -- the IDs of the
         # collections and the lists relevant to the query. This is so
