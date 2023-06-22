@@ -772,7 +772,7 @@ class TestInstanceInitializationScript:
         conf = InstanceInitializationScript._get_alembic_config(mock_connection)
         assert Path(conf.config_file_name).exists()
         assert conf.config_file_name.endswith("alembic.ini")
-        assert conf.attributes["connection"] == mock_connection
+        assert conf.attributes["connection"] == mock_connection.engine
         assert conf.attributes["configure_logger"] is False
 
 
