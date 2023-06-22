@@ -350,8 +350,6 @@ class SessionManager:
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
-    engine_for_url: Dict[str, Engine] = {}
-
     @classmethod
     def engine(cls, url=None):
         url = url or Configuration.database_url()

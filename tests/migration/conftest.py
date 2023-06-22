@@ -10,7 +10,6 @@ import pytest
 import pytest_alembic
 from pytest_alembic.config import Config
 
-from core.model import SessionManager
 from tests.fixtures.database import ApplicationFixture, DatabaseFixture
 
 if TYPE_CHECKING:
@@ -36,7 +35,6 @@ def database(application: ApplicationFixture) -> Generator[DatabaseFixture, None
     db = DatabaseFixture.create()
     yield db
     db.close()
-    SessionManager.engine_for_url = {}
 
 
 @pytest.fixture
