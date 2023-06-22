@@ -1,7 +1,7 @@
 """opds for distributors unlimited access
 
 Revision ID: 28717fc6e50f
-Revises: a9ed3f76d649
+Revises: 0af587ff8595
 Create Date: 2023-06-06 10:08:35.892018+00:00
 
 """
@@ -9,7 +9,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "28717fc6e50f"
-down_revision = "0a1c9c3f5dd2"
+down_revision = "0af587ff8595"
 branch_labels = None
 depends_on = None
 
