@@ -1,6 +1,6 @@
 import flask
 import pytest
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.exceptions import (
     INCOMPLETE_CONFIGURATION,
@@ -77,7 +77,7 @@ class TestDiscoveryServices:
     ):
         controller = settings_ctrl_fixture.manager.admin_discovery_services_controller
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
                     ("protocol", "Unknown"),
@@ -87,7 +87,7 @@ class TestDiscoveryServices:
             assert response == UNKNOWN_PROTOCOL
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
                 ]
@@ -96,7 +96,7 @@ class TestDiscoveryServices:
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
                     ("id", "123"),
@@ -115,7 +115,7 @@ class TestDiscoveryServices:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", service.name),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
@@ -130,7 +130,8 @@ class TestDiscoveryServices:
             url=settings_ctrl_fixture.ctrl.db.fresh_url(),
         )
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            assert isinstance(existing_integration.protocol, str)
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "new name"),
                     ("protocol", existing_integration.protocol),
@@ -141,7 +142,7 @@ class TestDiscoveryServices:
             assert response == INTEGRATION_URL_ALREADY_IN_USE
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", service.id),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
@@ -152,7 +153,7 @@ class TestDiscoveryServices:
 
         settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
                     (ExternalIntegration.URL, "registry url"),
@@ -164,7 +165,7 @@ class TestDiscoveryServices:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
@@ -197,7 +198,7 @@ class TestDiscoveryServices:
         discovery_service.url = "registry url"
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
                     ("id", discovery_service.id),

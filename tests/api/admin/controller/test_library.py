@@ -7,7 +7,7 @@ import flask
 import pytest
 from PIL import Image
 from werkzeug import Response
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.controller.library_settings import LibrarySettingsController
@@ -54,7 +54,7 @@ class TestLibrarySettings:
             Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS: "email@example.com",
         }
         defaults.update(fields)
-        form = MultiDict(list(defaults.items()))
+        form = ImmutableMultiDict(list(defaults.items()))
         return form
 
     def test_libraries_get_with_no_libraries(self, settings_ctrl_fixture):
@@ -209,7 +209,7 @@ class TestLibrarySettings:
 
     def test_libraries_post_errors(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
                 ]
@@ -228,7 +228,7 @@ class TestLibrarySettings:
             assert response.uri == LIBRARY_NOT_FOUND.uri
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
                     ("short_name", library.short_name),
@@ -243,7 +243,7 @@ class TestLibrarySettings:
             settings_ctrl_fixture.ctrl.db.session, Library, short_name="bpl"
         )
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", bpl.uuid),
                     ("name", "Brooklyn Public Library"),
@@ -256,7 +256,7 @@ class TestLibrarySettings:
             assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", library.uuid),
                     ("name", "The New York Public Library"),
@@ -270,7 +270,7 @@ class TestLibrarySettings:
 
         # Either patron support email or website MUST be present
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Email or Website Library"),
                     ("short_name", "Email or Website"),
@@ -308,7 +308,7 @@ class TestLibrarySettings:
         # aren't the same length.
         library = settings_ctrl_fixture.ctrl.db.library()
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", library.uuid),
                     ("name", "The New York Public Library"),
@@ -391,20 +391,20 @@ class TestLibrarySettings:
                 return original_announcement_validate(values)
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
                     ("library_description", "Short description of library"),
                     (Configuration.WEBSITE_URL, "https://library.library/"),
-                    (Configuration.TINY_COLLECTION_LANGUAGES, ["ger"]),
+                    (Configuration.TINY_COLLECTION_LANGUAGES, ["ger"]),  # type: ignore[list-item]
                     (
                         Configuration.LIBRARY_SERVICE_AREA,
-                        ["06759", "everywhere", "MD", "Boston, MA"],
+                        ["06759", "everywhere", "MD", "Boston, MA"],  # type: ignore[list-item]
                     ),
                     (
                         Configuration.LIBRARY_FOCUS_AREA,
-                        ["Manitoba", "Broward County, FL", "QC"],
+                        ["Manitoba", "Broward County, FL", "QC"],  # type: ignore[list-item]
                     ),
                     (
                         Announcements.SETTING_NAME,
@@ -442,9 +442,9 @@ class TestLibrarySettings:
                     ),
                 ]
             )
-            flask.request.files = MultiDict(
+            flask.request.files = ImmutableMultiDict(
                 [
-                    (Configuration.LOGO, TestFileUpload(image_data)),
+                    (Configuration.LOGO, TestFileUpload(image_data)),  # type: ignore[list-item]
                 ]
             )
             geographic_validator = MockGeographicValidator()
@@ -551,7 +551,7 @@ class TestLibrarySettings:
         ).value = "A tiny image"
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", library.uuid),
                     ("name", "The New York Public Library"),
@@ -585,7 +585,7 @@ class TestLibrarySettings:
                     ),
                 ]
             )
-            flask.request.files = MultiDict([])
+            flask.request.files = ImmutableMultiDict([])
             response = (
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
@@ -634,7 +634,7 @@ class TestLibrarySettings:
         ).value = "description"
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", library.uuid),
                     ("name", "The New York Public Library"),
@@ -665,7 +665,7 @@ class TestLibrarySettings:
 
     def test_library_post_empty_values_create(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),

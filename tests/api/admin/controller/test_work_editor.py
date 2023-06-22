@@ -12,7 +12,7 @@ import feedparser
 import flask
 import pytest
 from PIL import Image
-from werkzeug.datastructures import ImmutableMultiDict, MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.controller import CustomListsController
 from api.admin.exceptions import *
@@ -475,7 +475,7 @@ class TestWorkController:
 
         # make no changes
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Adult"),
                     ("fiction", "fiction"),
@@ -512,7 +512,7 @@ class TestWorkController:
 
         # remove all genres
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [("audience", "Adult"), ("fiction", "fiction")]
             )
             response = work_fixture.manager.admin_work_controller.edit_classifications(
@@ -542,7 +542,7 @@ class TestWorkController:
 
         # completely change genres
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Adult"),
                     ("fiction", "fiction"),
@@ -567,11 +567,11 @@ class TestWorkController:
 
         # remove some genres and change audience and target age
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Young Adult"),
-                    ("target_age_min", 16),
-                    ("target_age_max", 18),
+                    ("target_age_min", "16"),
+                    ("target_age_max", "18"),
                     ("fiction", "fiction"),
                     ("genres", "Urban Fantasy"),
                 ]
@@ -594,11 +594,11 @@ class TestWorkController:
 
         # try to add a nonfiction genre
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Young Adult"),
-                    ("target_age_min", 16),
-                    ("target_age_max", 18),
+                    ("target_age_min", "16"),
+                    ("target_age_max", "18"),
                     ("fiction", "fiction"),
                     ("genres", "Cooking"),
                     ("genres", "Urban Fantasy"),
@@ -618,11 +618,11 @@ class TestWorkController:
 
         # try to add Erotica
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Young Adult"),
-                    ("target_age_min", 16),
-                    ("target_age_max", 18),
+                    ("target_age_min", "16"),
+                    ("target_age_max", "18"),
                     ("fiction", "fiction"),
                     ("genres", "Erotica"),
                     ("genres", "Urban Fantasy"),
@@ -643,11 +643,11 @@ class TestWorkController:
         # try to set min target age greater than max target age
         # othe edits should not go through
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Young Adult"),
-                    ("target_age_min", 16),
-                    ("target_age_max", 14),
+                    ("target_age_min", "16"),
+                    ("target_age_max", "14"),
                     ("fiction", "nonfiction"),
                     ("genres", "Cooking"),
                 ]
@@ -664,11 +664,11 @@ class TestWorkController:
 
         # change to nonfiction with nonfiction genres and new target age
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Young Adult"),
-                    ("target_age_min", 15),
-                    ("target_age_max", 17),
+                    ("target_age_min", "15"),
+                    ("target_age_max", "17"),
                     ("fiction", "nonfiction"),
                     ("genres", "Cooking"),
                 ]
@@ -687,7 +687,7 @@ class TestWorkController:
 
         # set to Adult and make sure that target ages is set automatically
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Adult"),
                     ("fiction", "nonfiction"),
@@ -708,7 +708,7 @@ class TestWorkController:
             AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
         )
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("audience", "Children"),
                     ("fiction", "nonfiction"),
@@ -986,7 +986,7 @@ class TestWorkController:
             assert "Image file or image URL is required." == response.detail
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("cover_url", "bad_url"),
                 ]
@@ -1010,18 +1010,18 @@ class TestWorkController:
         image_data = buffer.getvalue()
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict([("title_position", "none")])
-            flask.request.files = MultiDict(
+            flask.request.form = ImmutableMultiDict([("title_position", "none")])
+            flask.request.files = ImmutableMultiDict(
                 [
-                    ("cover_file", TestFileUpload(image_data)),
+                    ("cover_file", TestFileUpload(image_data)),  # type: ignore[list-item]
                 ]
             )
             response = work_fixture.manager.admin_work_controller.preview_book_cover(
                 identifier.type, identifier.identifier
             )
             assert 200 == response.status_code
-            assert "data:image/png;base64,%s" % base64.b64encode(
-                image_data
+            assert "data:image/png;base64,%s" % base64.b64encode(image_data).decode(
+                "utf-8"
             ) == response.get_data(as_text=True)
 
         work_fixture.admin.remove_role(
@@ -1046,7 +1046,11 @@ class TestWorkController:
             return image
 
         old_process = work_fixture.manager.admin_work_controller._process_cover_image
-        work_fixture.manager.admin_work_controller._process_cover_image = mock_process
+        setattr(
+            work_fixture.manager.admin_work_controller,
+            "_process_cover_image",
+            mock_process,
+        )
 
         work = work_fixture.ctrl.db.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
@@ -1054,7 +1058,7 @@ class TestWorkController:
         mirrors = dict(covers_mirror=MockS3Uploader(), books_mirror=None)
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("rights_status", RightsStatus.CC_BY),
                     ("rights_explanation", "explanation"),
@@ -1067,13 +1071,13 @@ class TestWorkController:
             assert "Image file or image URL is required." == response.detail
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("cover_url", "http://example.com"),
                     ("title_position", "none"),
                 ]
             )
-            flask.request.files = MultiDict([])
+            flask.request.files = ImmutableMultiDict([])
             response = work_fixture.manager.admin_work_controller.change_book_cover(
                 identifier.type, identifier.identifier
             )
@@ -1081,7 +1085,7 @@ class TestWorkController:
             assert "You must specify the image's license." == response.detail
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("cover_url", "bad_url"),
                     ("title_position", "none"),
@@ -1095,7 +1099,7 @@ class TestWorkController:
             assert '"bad_url" is not a valid URL.' == response.detail
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("cover_url", "http://example.com"),
                     ("title_position", "none"),
@@ -1103,7 +1107,7 @@ class TestWorkController:
                     ("rights_explanation", "explanation"),
                 ]
             )
-            flask.request.files = MultiDict([])
+            flask.request.files = ImmutableMultiDict([])
             response = work_fixture.manager.admin_work_controller.change_book_cover(
                 identifier.type, identifier.identifier
             )
@@ -1128,16 +1132,16 @@ class TestWorkController:
 
         # Upload a new cover image but don't modify it.
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("title_position", "none"),
                     ("rights_status", RightsStatus.CC_BY),
                     ("rights_explanation", "explanation"),
                 ]
             )
-            flask.request.files = MultiDict(
+            flask.request.files = ImmutableMultiDict(
                 [
-                    ("cover_file", TestFileUpload(image_data)),
+                    ("cover_file", TestFileUpload(image_data)),  # type: ignore[list-item]
                 ]
             )
             response = work_fixture.manager.admin_work_controller.change_book_cover(
@@ -1166,10 +1170,13 @@ class TestWorkController:
             assert identifier.identifier in thumbnail.mirror_url
 
             assert [] == process_called_with
-            assert [representation, thumbnail] == mirrors[mirror_type].uploaded
-            assert [representation.mirror_url, thumbnail.mirror_url] == mirrors[
-                mirror_type
-            ].destinations
+            s3_uploader = mirrors[mirror_type]
+            assert isinstance(s3_uploader, MockS3Uploader)
+            assert [representation, thumbnail] == s3_uploader.uploaded
+            assert [
+                representation.mirror_url,
+                thumbnail.mirror_url,
+            ] == s3_uploader.destinations
 
         work = work_fixture.ctrl.db.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
@@ -1177,16 +1184,16 @@ class TestWorkController:
         # Upload a new cover image and add the title and author to it.
         # Both the original image and the generated image will become resources.
         with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("title_position", "center"),
                     ("rights_status", RightsStatus.CC_BY),
                     ("rights_explanation", "explanation"),
                 ]
             )
-            flask.request.files = MultiDict(
+            flask.request.files = ImmutableMultiDict(
                 [
-                    ("cover_file", TestFileUpload(image_data)),
+                    ("cover_file", TestFileUpload(image_data)),  # type: ignore[list-item]
                 ]
             )
             response = work_fixture.manager.admin_work_controller.change_book_cover(
@@ -1238,13 +1245,11 @@ class TestWorkController:
             assert identifier.identifier in resource.representation.mirror_url
             assert identifier.identifier in thumbnail.mirror_url
 
-            assert [resource.representation, thumbnail] == mirrors[
-                mirror_type
-            ].uploaded[2:]
+            assert [resource.representation, thumbnail] == s3_uploader.uploaded[2:]
             assert [
                 resource.representation.mirror_url,
                 thumbnail.mirror_url,
-            ] == mirrors[mirror_type].destinations[2:]
+            ] == s3_uploader.destinations[2:]
 
         work_fixture.admin.remove_role(
             AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
@@ -1257,7 +1262,11 @@ class TestWorkController:
                 identifier.identifier,
             )
 
-        work_fixture.manager.admin_work_controller._process_cover_image = old_process
+        setattr(
+            work_fixture.manager.admin_work_controller,
+            "_process_cover_image",
+            old_process,
+        )
 
     def test_custom_lists_get(self, work_fixture: WorkFixture):
         staff_data_source = DataSource.lookup(
@@ -1299,7 +1308,7 @@ class TestWorkController:
         identifier = work.presentation_edition.primary_identifier
 
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("id", "4"),
                     ("name", "name"),
@@ -1337,7 +1346,7 @@ class TestWorkController:
 
         # Add the list to the work.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [("lists", json.dumps([{"id": str(list.id), "name": list.name}]))]
             )
             response = work_fixture.manager.admin_work_controller.custom_lists(
@@ -1357,7 +1366,7 @@ class TestWorkController:
         # Now remove the work from the list.
         work_fixture.ctrl.controller.search_engine.docs = dict(id1="doc1")
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("lists", json.dumps([])),
                 ]
@@ -1374,7 +1383,7 @@ class TestWorkController:
 
         # Add a list that didn't exist before.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [("lists", json.dumps([{"name": "new list"}]))]
             )
             response = work_fixture.manager.admin_work_controller.custom_lists(
@@ -1395,7 +1404,7 @@ class TestWorkController:
             AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
         )
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [("lists", json.dumps([{"name": "another new list"}]))]
             )
             pytest.raises(

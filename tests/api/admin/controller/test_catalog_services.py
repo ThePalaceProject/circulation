@@ -2,7 +2,7 @@ import json
 
 import flask
 import pytest
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.exceptions import *
 from core.marc import MARCExporter
@@ -91,7 +91,7 @@ class TestCatalogServicesController:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("protocol", "Unknown"),
                 ]
@@ -102,7 +102,7 @@ class TestCatalogServicesController:
             assert response == UNKNOWN_PROTOCOL
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", "123"),
                 ]
@@ -121,7 +121,7 @@ class TestCatalogServicesController:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", service.id),
                     ("protocol", ExternalIntegration.MARC_EXPORT),
@@ -133,7 +133,7 @@ class TestCatalogServicesController:
             assert response == CANNOT_CHANGE_PROTOCOL
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", service.name),
                     ("protocol", ExternalIntegration.MARC_EXPORT),
@@ -154,7 +154,7 @@ class TestCatalogServicesController:
         # Attempt to set an S3 mirror external integration but it does not exist!
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             ME = MARCExporter
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
                     ("id", service.id),
@@ -177,7 +177,7 @@ class TestCatalogServicesController:
         # Now an S3 integration exists, but it has no MARC bucket configured.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             ME = MARCExporter
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
                     ("id", service.id),
@@ -193,7 +193,7 @@ class TestCatalogServicesController:
         settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         settings_ctrl_fixture.ctrl.db.session.flush()
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "new name"),
                     ("protocol", ME.NAME),
@@ -213,7 +213,7 @@ class TestCatalogServicesController:
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             ME = MARCExporter
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "new name"),
                     ("protocol", ME.NAME),
@@ -251,7 +251,7 @@ class TestCatalogServicesController:
         s3.setting(S3UploaderConfiguration.MARC_BUCKET_KEY).value = "marc-files"
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
                     ("protocol", ME.NAME),
@@ -338,7 +338,7 @@ class TestCatalogServicesController:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
                     ("id", service.id),

@@ -301,7 +301,7 @@ class ExternalIntegration(Base):
     # ConfigurationSettings.
     settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
-        backref="external_integration",
+        back_populates="external_integration",
         cascade="all, delete",
         uselist=True,
     )
@@ -586,7 +586,13 @@ class ConfigurationSetting(Base, HasSessionCache):
     external_integration_id = Column(
         Integer, ForeignKey("externalintegrations.id"), index=True
     )
+    external_integration: ExternalIntegration = relationship(
+        "ExternalIntegration", back_populates="settings"
+    )
+
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
+    library: Library = relationship("Library", back_populates="settings")
+
     key = Column(Unicode)
     _value = Column("value", Unicode)
 

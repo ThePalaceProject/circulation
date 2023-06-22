@@ -34,7 +34,11 @@ class TestCollectionSelfTests:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
+        setattr(
+            HasSelfTests,
+            "prior_test_results",
+            settings_ctrl_fixture.mock_prior_test_results,
+        )
         collection = MockAxis360API.mock_collection(
             settings_ctrl_fixture.ctrl.db.session
         )
@@ -56,14 +60,18 @@ class TestCollectionSelfTests:
                 == settings_ctrl_fixture.self_test_results
             )
 
-        HasSelfTests.prior_test_results = old_prior_test_results
+        setattr(HasSelfTests, "prior_test_results", old_prior_test_results)
 
     def test_collection_self_tests_failed_post(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         # This makes HasSelfTests.run_self_tests return no values
         old_run_self_tests = HasSelfTests.run_self_tests
-        HasSelfTests.run_self_tests = settings_ctrl_fixture.mock_failed_run_self_tests
+        setattr(
+            HasSelfTests,
+            "run_self_tests",
+            settings_ctrl_fixture.mock_failed_run_self_tests,
+        )
 
         collection = MockAxis360API.mock_collection(
             settings_ctrl_fixture.ctrl.db.session
@@ -83,13 +91,15 @@ class TestCollectionSelfTests:
             assert response.detail == "Failed to run self tests for this collection."
             assert response.status_code == 400
 
-        HasSelfTests.run_self_tests = old_run_self_tests
+        setattr(HasSelfTests, "run_self_tests", old_run_self_tests)
 
     def test_collection_self_tests_post(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         old_run_self_tests = HasSelfTests.run_self_tests
-        HasSelfTests.run_self_tests = settings_ctrl_fixture.mock_run_self_tests
+        setattr(
+            HasSelfTests, "run_self_tests", settings_ctrl_fixture.mock_run_self_tests
+        )
 
         collection = settings_ctrl_fixture.ctrl.db.collection()
         # Successfully ran new self tests for the OPDSImportMonitor provider API
@@ -155,4 +165,4 @@ class TestCollectionSelfTests:
             # The method returns None but it was not called
             assert run_self_tests_args == None
 
-        HasSelfTests.run_self_tests = old_run_self_tests
+        setattr(HasSelfTests, "run_self_tests", old_run_self_tests)

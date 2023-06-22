@@ -41,6 +41,8 @@ if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
     from core.model import WorkGenre  # noqa: autoflake
+    from core.model.datasource import DataSource  # noqa: autoflake
+    from core.model.identifier import Identifier  # noqa: autoflake
 
 
 class Subject(Base):
@@ -348,9 +350,11 @@ class Classification(Base):
     __tablename__ = "classifications"
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier: Identifier
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
     subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: DataSource
 
     # How much weight the data source gives to this classification.
     weight = Column(Integer)

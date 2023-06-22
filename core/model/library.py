@@ -133,7 +133,7 @@ class Library(Base, HasSessionCache):
     # ConfigurationSettings.
     settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
-        backref="library",
+        back_populates="library",
         lazy="joined",
         cascade="all, delete",
     )

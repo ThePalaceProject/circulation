@@ -159,6 +159,7 @@ if TYPE_CHECKING:
         SitewideConfigurationSettingsController,
     )
     from api.admin.controller.storage_services import StorageServicesController
+    from api.admin.controller.work_editor import WorkController as AdminWorkController
 
     from .admin.controller import (
         AdminSearchController,
@@ -171,6 +172,7 @@ if TYPE_CHECKING:
         SettingsController,
         SignInController,
         TimestampsController,
+        ViewController,
     )
     from .admin.controller.analytics_services import AnalyticsServicesController
     from .admin.controller.discovery_service_library_registrations import (
@@ -204,7 +206,7 @@ class CirculationManager:
     admin_sign_in_controller: SignInController
     admin_reset_password_controller: ResetPasswordController
     timestamps_controller: TimestampsController
-    admin_work_controller: WorkController
+    admin_work_controller: AdminWorkController
     admin_feed_controller: FeedController
     admin_custom_lists_controller: CustomListsController
     admin_lanes_controller: LanesController
@@ -233,6 +235,7 @@ class CirculationManager:
     admin_catalog_services_controller: CatalogServicesController
     admin_announcement_service: AnnouncementSettings
     admin_search_controller: AdminSearchController
+    admin_view_controller: ViewController
 
     def __init__(self, _db):
         self._db = _db

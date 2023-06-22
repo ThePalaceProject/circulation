@@ -2580,6 +2580,8 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     __tablename__ = "lanes"
     id = Column(Integer, primary_key=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
+    library: Library
+
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
     priority = Column(Integer, index=True, nullable=False, default=0)
 
