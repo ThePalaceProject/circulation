@@ -21,9 +21,12 @@ def _run_script() -> None:
         logging.basicConfig(stream=stream, level=logging.INFO, force=True)
         script.run()
 
-        # Set out exit code to the number of upgrades we ran
+        # Set our exit code to the number of upgrades we ran
         sys.exit(stream.getvalue().count("Running upgrade"))
-    except Exception:
+    except Exception as e:
+        # Print the exception for debugging and exit with -1
+        # which will cause the test to fail.
+        print(str(e))
         sys.exit(-1)
 
 
@@ -83,8 +86,8 @@ def test_initialize(application: ApplicationFixture) -> None:
     assert script.initialize_database.call_count == 1
     assert script.migrate_database.call_count == 0
 
-    # Run the script again and make sure we don't call initialize_database,
-    # but we do call migrate_database since the schema already exists.
+    # Run the script again. Ensure we don't call initialize_database again,
+    # but that we do call migrate_database, since the schema already exists.
     script.run()
     assert script.initialize_database.call_count == 1
     assert script.migrate_database.call_count == 1

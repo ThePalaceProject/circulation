@@ -123,4 +123,4 @@ class TestAdvisoryLock:
 
     def test_no_lock_id(self, db: DatabaseTransactionFixture):
         with pg_advisory_lock(db.session, None):
-            assert self._lock_exists(db.session, self.TEST_LOCK_ID) == False
+            assert self._lock_exists(db.session, self.TEST_LOCK_ID) is False
