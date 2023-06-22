@@ -164,7 +164,7 @@ class OPDSXMLParser(XMLParser):
 
 
 class BaseOPDSImporterSettings(BaseSettings):
-    NO_DEFAULT_AUDIENCE = ""
+    _NO_DEFAULT_AUDIENCE = ""
 
     external_account_id: Optional[HttpUrl] = FormField(
         form=ConfigurationFormItem(
@@ -178,7 +178,7 @@ class BaseOPDSImporterSettings(BaseSettings):
     )
 
     default_audience: str = FormField(
-        default=NO_DEFAULT_AUDIENCE,
+        default=_NO_DEFAULT_AUDIENCE,
         form=ConfigurationFormItem(
             label=_("Default audience"),
             description=_(
@@ -187,7 +187,7 @@ class BaseOPDSImporterSettings(BaseSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             format="narrow",
-            options={NO_DEFAULT_AUDIENCE: _("No default audience")}.update(
+            options={_NO_DEFAULT_AUDIENCE: _("No default audience")}.update(
                 {audience: audience for audience in sorted(Classifier.AUDIENCES)}
             ),
             required=False,
