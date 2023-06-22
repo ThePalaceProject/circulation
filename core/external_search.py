@@ -225,7 +225,9 @@ class ExternalSearchIndex(HasSelfTests):
             self._revision = self._revision_directory.highest()
 
         # Determine the base name we're going to use for storing revisions.
-        self._revision_base_name = integration.setting(ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY).value
+        self._revision_base_name = integration.setting(
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
+        ).value
         self._search_read_pointer = self._search_migrator_service.read_pointer_name(
             self._revision_base_name
         )

@@ -102,7 +102,9 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
         return f"{base_name}-empty"
 
     def __init__(self, client: OpenSearch):
-        self._logger = logging.getLogger(SearchMigratorClientServiceOpensearch1.__name__)
+        self._logger = logging.getLogger(
+            SearchMigratorClientServiceOpensearch1.__name__
+        )
         self._client = client
 
     def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
@@ -149,7 +151,9 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
                 {"add": {"index": target_index, "alias": alias_name}},
             ]
         }
-        self._logger.debug(f"setting read pointer {alias_name} to empty index {target_index}")
+        self._logger.debug(
+            f"setting read pointer {alias_name} to empty index {target_index}"
+        )
         self._client.indices.update_aliases(body=action)
 
     def create_index(self, base_name: str, revision: SearchSchemaRevision) -> None:
@@ -181,11 +185,11 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
         data = {"properties": revision.mapping_document().serialize_properties()}
         index_name = revision.name_for_index(base_name)
         self._logger.debug(f"populating index {index_name}")
-        self._client.indices.put_mapping(
-            index=index_name, body=data
-        )
+        self._client.indices.put_mapping(index=index_name, body=data)
         document_list = documents()
         opensearchpy.helpers.bulk(client=self._client, actions=document_list)
+        self._logger.debug(f"waiting for indexes to become ready")
+        self._client.indices.refresh()
 
     def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
         alias_name = self.write_pointer_name(base_name)

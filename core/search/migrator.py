@@ -1,4 +1,3 @@
-import logging
 from typing import Callable, Iterable
 
 from core.search.revision_directory import SearchRevisionDirectory
