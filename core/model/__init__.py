@@ -41,19 +41,23 @@ LOCK_ID_APP_INIT = 1000000002
 
 @contextmanager
 def pg_advisory_lock(
-    connection: Connection | Session, lock_id: int
+    connection: Connection | Session, lock_id: int | None
 ) -> Generator[None, None, None]:
-    """Application wide locking based on Lock IDs
-    :param connection: The database connection
-    :param lock_id: The numeric lock ID to create
     """
-    # Create the lock
-    connection.execute(text(f"SELECT pg_advisory_lock({lock_id});"))
-    try:
+    Application wide locking based on Lock IDs
+
+    If lock_id is None, no lock is acquired.
+    """
+    if lock_id is None:
         yield
-    finally:
-        # Close the lock
-        connection.execute(text(f"SELECT pg_advisory_unlock({lock_id});"))
+    else:
+        # Create the lock
+        connection.execute(text(f"SELECT pg_advisory_lock({lock_id});"))
+        try:
+            yield
+        finally:
+            # Close the lock
+            connection.execute(text(f"SELECT pg_advisory_unlock({lock_id});"))
 
 
 def flush(db):

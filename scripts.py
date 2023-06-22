@@ -856,9 +856,9 @@ class InstanceInitializationScript:
     def _get_alembic_config(connection: Connection) -> config.Config:
         """Get the Alembic config object for the current app."""
         conf = config.Config(str(Path(__file__).parent.absolute() / "alembic.ini"))
-        conf.set_main_option("sqlalchemy.url", Configuration.database_url())
         conf.attributes["configure_logger"] = False
-        conf.attributes["connection"] = connection
+        conf.attributes["connection"] = connection.engine
+        conf.attributes["need_lock"] = False
         return conf
 
     def migrate_database(self, connection: Connection) -> None:

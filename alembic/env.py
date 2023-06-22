@@ -94,10 +94,15 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            lock_id = (
+                LOCK_ID_DB_INIT
+                if context.config.attributes.get("need_lock", True)
+                else None
+            )
             # Acquire an application lock to ensure multiple migrations are queued and not concurrent.
             # Migrations are run as part of the application initialization script, so we use the
             # same lock id.
-            with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
+            with pg_advisory_lock(connection, lock_id):
                 context.run_migrations()
 
 
