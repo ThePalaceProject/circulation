@@ -59,6 +59,7 @@ class TestDatabaseInterface:
             collection=None,
             service=Configuration.SITE_CONFIGURATION_CHANGED,
         )
+        assert timestamp is not None
         old_timestamp = timestamp.finish
         SessionManager.initialize_data(db.session)
         assert old_timestamp == timestamp.finish

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import copy
 import json
@@ -13,8 +15,10 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     TypeVar,
     Union,
+    cast,
 )
 
 import flask
@@ -55,6 +59,7 @@ from api.bibliotheca import BibliothecaAPI
 from api.config import Configuration
 from api.controller import CirculationManager, CirculationManagerController
 from api.enki import EnkiAPI
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
@@ -66,6 +71,13 @@ from api.overdrive import OverdriveAPI
 from core.app_server import load_pagination_from_request
 from core.classifier import genres
 from core.external_search import ExternalSearchIndex
+from core.integration.base import (
+    HasChildIntegrationConfiguration,
+    HasIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration,
+)
+from core.integration.registry import IntegrationRegistry
+from core.integration.settings import BaseSettings
 from core.lane import Lane, WorkList
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
@@ -89,12 +101,16 @@ from core.model import (
 from core.model.classification import Classification, Genre, Subject
 from core.model.configuration import ExternalIntegrationLink
 from core.model.edition import Edition
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from core.opds import AcquisitionFeed
 from core.opds2_import import OPDS2Importer
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.query.customlist import CustomListQueries
 from core.s3 import S3UploaderConfiguration
-from core.selftest import HasSelfTests
+from core.selftest import BaseHasSelfTests, HasSelfTests
 from core.util.cache import memoize
 from core.util.flask_util import OPDSFeedResponse
 from core.util.languages import LanguageCodes
@@ -1100,11 +1116,11 @@ class CustomListsController(AdminCirculationManagerController):
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
 
-        list: CustomList
+        list: CustomList | None
         if id:
             is_new = False
             list = get_one(self._db, CustomList, id=int(id), data_source=data_source)
-            if not list:
+            if list is None:
                 return MISSING_CUSTOM_LIST
             if list.library != library:
                 return CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST
@@ -1113,11 +1129,12 @@ class CustomListsController(AdminCirculationManagerController):
         elif old_list_with_name:
             return CUSTOM_LIST_NAME_ALREADY_IN_USE
         else:
-            list, is_new = create(
+            new_list, is_new = create(
                 self._db, CustomList, name=name, data_source=data_source
             )
-            list.created = datetime.now()
-            list.library = library
+            new_list.created = datetime.now()
+            new_list.library = library
+            list = new_list
 
         # Test JSON viability of auto update data
         try:
@@ -1271,9 +1288,7 @@ class CustomListsController(AdminCirculationManagerController):
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
-        list: CustomList = get_one(
-            self._db, CustomList, id=list_id, data_source=data_source
-        )
+        list = get_one(self._db, CustomList, id=list_id, data_source=data_source)
         if not list:
             return MISSING_CUSTOM_LIST
 
@@ -1354,7 +1369,9 @@ class CustomListsController(AdminCirculationManagerController):
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
-        customlist: CustomList = get_one(self._db, CustomList, id=customlist_id)
+        customlist = get_one(self._db, CustomList, id=customlist_id)
+        if not customlist:
+            return MISSING_CUSTOM_LIST
         if customlist.library != flask.request.library:  # type: ignore
             return ADMIN_NOT_AUTHORIZED.detailed(
                 _("This library does not have permissions on this customlist.")
@@ -1731,21 +1748,6 @@ class SettingsController(AdminCirculationManagerController):
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
 
-    PROVIDER_APIS = [
-        OPDSImporter,
-        OPDSForDistributorsAPI,
-        OPDS2Importer,
-        OverdriveAPI,
-        OdiloAPI,
-        BibliothecaAPI,
-        Axis360API,
-        EnkiAPI,
-        ODLAPI,
-        ODL2API,
-        SharedODLAPI,
-        LCPAPI,
-    ]
-
     def _set_storage_external_integration_link(
         self, service: ExternalIntegration, purpose: str, setting_key: str
     ) -> Optional[ProblemDetail]:
@@ -1792,7 +1794,7 @@ class SettingsController(AdminCirculationManagerController):
             ):
                 return MISSING_INTEGRATION
 
-            current_integration_link, ignore = get_one_or_create(
+            current_integration_link_created, ignore = get_one_or_create(
                 self._db,
                 ExternalIntegrationLink,
                 library_id=None,
@@ -1800,13 +1802,31 @@ class SettingsController(AdminCirculationManagerController):
                 purpose=purpose,
             )
 
-            current_integration_link.other_integration_id = storage_integration.id
+            current_integration_link_created.other_integration_id = (
+                storage_integration.id
+            )
 
         return None
 
-    @classmethod
-    def _get_integration_protocols(cls, provider_apis, protocol_name_attr="__module__"):
+    def _get_settings_class(
+        self, registry: IntegrationRegistry, protocol_name: str, is_child=False
+    ) -> Type[BaseSettings] | ProblemDetail | None:
+        api_class = registry.get(protocol_name)
+        if not api_class:
+            return None
+
+        if is_child and issubclass(api_class, HasChildIntegrationConfiguration):
+            return api_class.child_settings_class()
+        elif is_child:
+            return PROTOCOL_DOES_NOT_SUPPORT_PARENTS
+
+        return api_class.settings_class()
+
+    def _get_integration_protocols(
+        self, provider_apis, protocol_name_attr="__module__"
+    ):
         protocols = []
+        _db = self._db
         for api in provider_apis:
             protocol = dict()
             name = getattr(api, protocol_name_attr)
@@ -1829,14 +1849,22 @@ class SettingsController(AdminCirculationManagerController):
 
             settings = getattr(api, "SETTINGS", [])
             protocol["settings"] = list(settings)
+            if _db and issubclass(api, HasIntegrationConfiguration):
+                protocol["settings"] = api.settings_class().configuration_form(_db)
 
-            child_settings = getattr(api, "CHILD_SETTINGS", None)
-            if child_settings != None:
-                protocol["child_settings"] = list(child_settings)
+            if issubclass(api, HasChildIntegrationConfiguration):
+                protocol[
+                    "child_settings"
+                ] = api.child_settings_class().configuration_form(_db)
 
             library_settings = getattr(api, "LIBRARY_SETTINGS", None)
             if library_settings != None:
                 protocol["library_settings"] = list(library_settings)
+
+            if _db and issubclass(api, HasLibraryIntegrationConfiguration):
+                protocol[
+                    "library_settings"
+                ] = api.library_settings_class().configuration_form(_db)
 
             cardinality = getattr(api, "CARDINALITY", None)
             if cardinality != None:
@@ -2017,6 +2045,28 @@ class SettingsController(AdminCirculationManagerController):
 
         integration.setting(setting_key).value = value
 
+    def _set_configuration_library(
+        self,
+        configuration: IntegrationConfiguration,
+        library_info: dict,
+        protocol_class: Type[HasLibraryIntegrationConfiguration],
+    ) -> IntegrationLibraryConfiguration:
+        """Set the library configuration for the integration configuration.
+        The data will be validated first."""
+        # We copy the data so we can remove unwanted keys like "short_name"
+        info_copy = library_info.copy()
+        library = get_one(self._db, Library, short_name=info_copy.pop("short_name"))
+        if not library:
+            raise RuntimeError("Could not find the configuration library")
+        config = None
+
+        # Validate first
+        protocol_class.library_settings_class()(**info_copy)
+        # Attach the configuration
+        config = configuration.for_library(cast(int, library.id), create=True)
+        config.settings = info_copy
+        return config
+
     def _set_integration_library(self, integration, library_info, protocol):
         library = get_one(self._db, Library, short_name=library_info.get("short_name"))
         if not library:
@@ -2122,20 +2172,15 @@ class SettingsController(AdminCirculationManagerController):
             if self.type == "collection":
                 if not item.protocol or not len(item.protocol):
                     return None
-                provider_apis = list(self.PROVIDER_APIS)
-                provider_apis.append(OPDSImportMonitor)
+
+                if not protocol_class:
+                    protocol_class = LicenseProvidersRegistry().get(item.protocol)
 
                 if item.protocol == OPDSImportMonitor.PROTOCOL:
                     protocol_class = OPDSImportMonitor
+                    extra_args = (OPDSImporter,)
 
-                if protocol_class in provider_apis and issubclass(
-                    protocol_class, HasSelfTests
-                ):
-                    if item.protocol == OPDSImportMonitor.PROTOCOL:
-                        extra_args = (OPDSImporter,)
-                    else:
-                        extra_args = ()
-
+                if issubclass(protocol_class, BaseHasSelfTests):
                     self_test_results = protocol_class.prior_test_results(
                         self._db, protocol_class, self._db, item, *extra_args
                     )

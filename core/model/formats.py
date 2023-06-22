@@ -3,17 +3,17 @@ from typing import List, Mapping, Optional
 
 from flask_babel import lazy_gettext as _
 
-from core.config import ConfigurationTrait
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.model import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
     MediaTypes,
-)
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationMetadata,
-    ConfigurationOption,
 )
 
 
@@ -142,67 +142,68 @@ class FormatPriorities:
         return self._prioritized_content_types.get(content_type, 0)
 
 
-class FormatPrioritiesConfigurationTrait(ConfigurationTrait):
-    """A configuration trait that can be used to enable format/DRM prioritization."""
-
-    prioritized_drm_schemes = ConfigurationMetadata(
-        key=FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY,
-        label=_("Prioritized DRM schemes"),
-        description=_(
-            "A list of DRM schemes that will be prioritized when OPDS links are generated. "
-            "DRM schemes specified earlier in the list will be prioritized over schemes specified later. "
-            f"Example schemes include <tt>{DeliveryMechanism.LCP_DRM}</tt> for LCP, and <tt>{DeliveryMechanism.ADOBE_DRM}</tt> "
-            "for Adobe DRM. "
-            "An empty list here specifies backwards-compatible behavior where no schemes are prioritized."
-            "<br/>"
-            "<br/>"
-            "<b>Note:</b> Adding any DRM scheme will cause acquisition links to be reordered into a predictable "
-            "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
-            "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
-            "collection originally behaved."
-        ),
-        type=ConfigurationAttributeType.LIST,
-        required=False,
+class FormatPrioritiesSettings(BaseSettings):
+    prioritized_drm_schemes: Optional[list] = FormField(
         default=[],
+        form=ConfigurationFormItem(
+            label=_("Prioritized DRM schemes"),
+            description=_(
+                "A list of DRM schemes that will be prioritized when OPDS links are generated. "
+                "DRM schemes specified earlier in the list will be prioritized over schemes specified later. "
+                f"Example schemes include <tt>{DeliveryMechanism.LCP_DRM}</tt> for LCP, and <tt>{DeliveryMechanism.ADOBE_DRM}</tt> "
+                "for Adobe DRM. "
+                "An empty list here specifies backwards-compatible behavior where no schemes are prioritized."
+                "<br/>"
+                "<br/>"
+                "<b>Note:</b> Adding any DRM scheme will cause acquisition links to be reordered into a predictable "
+                "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
+                "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
+                "collection originally behaved."
+            ),
+            type=ConfigurationFormItemType.LIST,
+            required=False,
+        ),
     )
 
-    prioritized_content_types = ConfigurationMetadata(
-        key=FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY,
-        label=_("Prioritized content types"),
-        description=_(
-            "A list of content types that will be prioritized when OPDS links are generated. "
-            "Content types specified earlier in the list will be prioritized over types specified later. "
-            f"Example types include <tt>{MediaTypes.EPUB_MEDIA_TYPE}</tt> for EPUB, and <tt>{MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE}</tt> "
-            "for audiobook manifests. "
-            "An empty list here specifies backwards-compatible behavior where no types are prioritized."
-            "<br/>"
-            "<br/>"
-            "<b>Note:</b> Adding any content type here will cause acquisition links to be reordered into a predictable "
-            "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
-            "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
-            "collection originally behaved."
-        ),
-        type=ConfigurationAttributeType.LIST,
-        required=False,
+    prioritized_content_types: Optional[list] = FormField(
         default=[],
+        form=ConfigurationFormItem(
+            label=_("Prioritized content types"),
+            description=_(
+                "A list of content types that will be prioritized when OPDS links are generated. "
+                "Content types specified earlier in the list will be prioritized over types specified later. "
+                f"Example types include <tt>{MediaTypes.EPUB_MEDIA_TYPE}</tt> for EPUB, and <tt>{MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE}</tt> "
+                "for audiobook manifests. "
+                "An empty list here specifies backwards-compatible behavior where no types are prioritized."
+                "<br/>"
+                "<br/>"
+                "<b>Note:</b> Adding any content type here will cause acquisition links to be reordered into a predictable "
+                "order that prioritizes DRM-free content over content with DRM. If a book exists with <i>both</i> DRM-free "
+                "<i>and</i> DRM-encumbered formats, the DRM-free version will become preferred, which might not be how your "
+                "collection originally behaved."
+            ),
+            type=ConfigurationFormItemType.LIST,
+            required=False,
+        ),
     )
 
-    deprioritize_lcp_non_epubs = ConfigurationMetadata(
-        key=FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY,
-        label=_("De-prioritize LCP non-EPUBs"),
-        description=_(
-            "De-prioritize all LCP content except for EPUBs. Setting this configuration option to "
-            "<i>De-prioritize</i> will preserve any priorities specified above, but will artificially "
-            "push (for example) LCP audiobooks and PDFs to the lowest priority."
-            "<br/>"
-            "<br/>"
-            "<b>Note:</b> This option is a temporary solution and will be removed in future releases!"
-        ),
-        type=ConfigurationAttributeType.SELECT,
-        required=False,
+    deprioritize_lcp_non_epubs: Optional[str] = FormField(
         default="false",
-        options=[
-            ConfigurationOption(label=_("De-prioritize"), key="true"),
-            ConfigurationOption(label=_("Do not de-prioritize"), key="false"),
-        ],
+        form=ConfigurationFormItem(
+            label=_("De-prioritize LCP non-EPUBs"),
+            description=_(
+                "De-prioritize all LCP content except for EPUBs. Setting this configuration option to "
+                "<i>De-prioritize</i> will preserve any priorities specified above, but will artificially "
+                "push (for example) LCP audiobooks and PDFs to the lowest priority."
+                "<br/>"
+                "<br/>"
+                "<b>Note:</b> This option is a temporary solution and will be removed in future releases!"
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            options={
+                "true": _("De-prioritize"),
+                "false": _("Do not de-prioritize"),
+            },
+        ),
     )

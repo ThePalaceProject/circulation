@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import datetime
 import json
 import logging
 from threading import RLock
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, cast
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import isbnlib
@@ -11,11 +13,18 @@ from requests.adapters import CaseInsensitiveDict, Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
+from api.circulation import CirculationConfigurationMixin
 from api.circulation_exceptions import CannotFulfill
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 
 from .config import CannotLoadConfiguration, Configuration
 from .coverage import BibliographicCoverageProvider
-from .importers import BaseImporterConfiguration
+from .importers import BaseImporterSettings
 from .metadata_layer import (
     CirculationData,
     ContributorData,
@@ -29,7 +38,6 @@ from .metadata_layer import (
 from .model import (
     Classification,
     Collection,
-    ConfigurationSetting,
     Contributor,
     Credential,
     DataSource,
@@ -44,23 +52,16 @@ from .model import (
     Subject,
     get_one_or_create,
 )
-from .model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationFactory,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from .model.configuration import HasExternalIntegration
 from .util.datetime_helpers import strptime_utc, utc_now
 from .util.http import HTTP, BadResponseException
 from .util.string_helpers import base64
 
+if TYPE_CHECKING:
+    pass
 
-class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """The basic Overdrive configuration"""
 
+class OverdriveConstants:
     OVERDRIVE_CLIENT_KEY = "overdrive_client_key"
     OVERDRIVE_CLIENT_SECRET = "overdrive_client_secret"
     OVERDRIVE_SERVER_NICKNAME = "overdrive_server_nickname"
@@ -74,53 +75,74 @@ class OverdriveConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
         OVERDRIVE_WEBSITE_ID,
     }
 
-    library_id = ConfigurationMetadata(
-        key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
-        label=_("Library ID"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The library identifier.",
-        required=True,
-    )
-    overdrive_website_id = ConfigurationMetadata(
-        key=OVERDRIVE_WEBSITE_ID,
-        label=_("Website ID"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The web site identifier.",
-        required=True,
-    )
-    overdrive_client_key = ConfigurationMetadata(
-        key=OVERDRIVE_CLIENT_KEY,
-        label=_("Client Key"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The Overdrive client key.",
-        required=True,
-    )
-    overdrive_client_secret = ConfigurationMetadata(
-        key=OVERDRIVE_CLIENT_SECRET,
-        label=_("Client Secret"),
-        type=ConfigurationAttributeType.TEXT,
-        description="The Overdrive client secret.",
-        required=True,
-    )
-
     PRODUCTION_SERVERS = "production"
     TESTING_SERVERS = "testing"
 
-    overdrive_server_nickname = ConfigurationMetadata(
-        key=OVERDRIVE_SERVER_NICKNAME,
-        label=_("Server family"),
-        type=ConfigurationAttributeType.SELECT,
-        required=False,
-        default=PRODUCTION_SERVERS,
-        description="Unless you hear otherwise from Overdrive, your integration should use their production servers.",
-        options=[
-            ConfigurationOption(label=_("Production"), key=PRODUCTION_SERVERS),
-            ConfigurationOption(label=_("Testing"), key=TESTING_SERVERS),
-        ],
+
+class OverdriveSettings(BaseImporterSettings):
+    """The basic Overdrive configuration"""
+
+    external_account_id: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library ID"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The library identifier.",
+            required=True,
+        ),
+    )
+    overdrive_website_id: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Website ID"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The web site identifier.",
+            required=True,
+        )
+    )
+    overdrive_client_key: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Key"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The Overdrive client key.",
+            required=True,
+        )
+    )
+    overdrive_client_secret: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Client Secret"),
+            type=ConfigurationFormItemType.TEXT,
+            description="The Overdrive client secret.",
+            required=True,
+        )
+    )
+
+    overdrive_server_nickname: str = FormField(
+        default=OverdriveConstants.PRODUCTION_SERVERS,
+        form=ConfigurationFormItem(
+            label=_("Server family"),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            description="Unless you hear otherwise from Overdrive, your integration should use their production servers.",
+            options={
+                OverdriveConstants.PRODUCTION_SERVERS: ("Production"),
+                OverdriveConstants.TESTING_SERVERS: _("Testing"),
+            },
+        ),
     )
 
 
-class OverdriveCoreAPI(HasExternalIntegration):
+class OverdriveData:
+    overdrive_client_key: str
+    overdrive_client_secret: str
+    overdrive_website_id: str
+    overdrive_server_nickname: str = OverdriveConstants.PRODUCTION_SERVERS
+    max_retry_count: int = 0
+
+
+class OverdriveCoreAPI(
+    HasExternalIntegration,
+    HasLibraryIntegrationConfiguration,
+    CirculationConfigurationMixin,
+):
     # An OverDrive defined constant indicating the "main" or parent account
     # associated with an OverDrive collection.
     OVERDRIVE_MAIN_ACCOUNT_ID = -1
@@ -133,11 +155,11 @@ class OverdriveCoreAPI(HasExternalIntegration):
     # Production and testing have different host names for some of the
     # API endpoints. This is configurable on the collection level.
     HOSTS = {
-        OverdriveConfiguration.PRODUCTION_SERVERS: dict(
+        OverdriveConstants.PRODUCTION_SERVERS: dict(
             host="https://api.overdrive.com",
             patron_host="https://patron.api.overdrive.com",
         ),
-        OverdriveConfiguration.TESTING_SERVERS: dict(
+        OverdriveConstants.TESTING_SERVERS: dict(
             host="https://integration.api.overdrive.com",
             patron_host="https://integration-patron.api.overdrive.com",
         ),
@@ -218,14 +240,25 @@ class OverdriveCoreAPI(HasExternalIntegration):
     ILS_NAME_KEY = "ils_name"
     ILS_NAME_DEFAULT = "default"
 
-    _configuration_storage: ConfigurationStorage
-    _configuration_factory: ConfigurationFactory
-    _configuration: OverdriveConfiguration
     _external_integration: ExternalIntegration
     _db: Session
     _hosts: Dict[str, str]
     _library_id: str
     _collection_id: int
+
+    def label(self):
+        return "Overdrive Core API"
+
+    def description(self):
+        return ""
+
+    @classmethod
+    def library_settings_class(cls):
+        raise NotImplementedError()
+
+    @classmethod
+    def settings_class(cls):
+        return OverdriveSettings
 
     def __init__(self, _db: Session, collection: Collection):
         if collection.protocol != ExternalIntegration.OVERDRIVE:
@@ -252,11 +285,10 @@ class OverdriveCoreAPI(HasExternalIntegration):
         self._collection_id = collection.id
 
         # Initialize configuration information.
-        self._configuration_storage = ConfigurationStorage(self)
-        self._configuration_factory = ConfigurationFactory()
-        self._configuration = OverdriveConfiguration(
-            configuration_storage=self._configuration_storage, db=_db
+        self._integration_configuration_id = cast(
+            int, collection.integration_configuration.id
         )
+        self._configuration = OverdriveData()
 
         if collection.parent:
             # This is an Overdrive Advantage account.
@@ -265,13 +297,21 @@ class OverdriveCoreAPI(HasExternalIntegration):
             # We're going to inherit all of the Overdrive credentials
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
-            parent_integration = collection.parent.external_integration
-
-            for key in OverdriveConfiguration.OVERDRIVE_CONFIGURATION_KEYS:
-                parent_value = parent_integration.setting(key)
-                self._configuration.set_setting_value(key, parent_value.value)
+            parent_integration = collection.parent.integration_configuration
+            parent_config = self.settings_class()(**parent_integration.settings)
+            for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
+                parent_value = getattr(parent_config, key, None)
+                setattr(self._configuration, key, parent_value)
         else:
             self.parent_library_id = None
+
+        # Self settings should override parent settings where available
+        settings = collection.integration_configuration.settings
+        for name, schema in self.settings_class().schema()["properties"].items():
+            if name in settings or not hasattr(self._configuration, name):
+                setattr(
+                    self._configuration, name, settings.get(name, schema.get("default"))
+                )
 
         if not self._configuration.overdrive_client_key:
             raise CannotLoadConfiguration("Overdrive client key is not configured")
@@ -282,10 +322,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
         if not self._configuration.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
-        self._server_nickname = (
-            self._configuration.overdrive_server_nickname
-            or OverdriveConfiguration.PRODUCTION_SERVERS
-        )
+        self._server_nickname = self._configuration.overdrive_server_nickname
 
         self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 
@@ -296,11 +333,15 @@ class OverdriveCoreAPI(HasExternalIntegration):
         # This is set by an access to .collection_token
         self._collection_token = None
 
+    def configuration(self):
+        """Overdrive has a different implementation for configuration"""
+        return self._configuration
+
     def _determine_hosts(self, *, server_nickname: str) -> Dict[str, str]:
         # Figure out which hostnames we'll be using when constructing
         # endpoint URLs.
         if server_nickname not in self.HOSTS:
-            server_nickname = OverdriveConfiguration.PRODUCTION_SERVERS
+            server_nickname = OverdriveConstants.PRODUCTION_SERVERS
 
         return dict(self.HOSTS[server_nickname])
 
@@ -357,18 +398,10 @@ class OverdriveCoreAPI(HasExternalIntegration):
 
     def ils_name(self, library):
         """Determine the ILS name to use for the given Library."""
-        return self.ils_name_setting(
-            self._db, self.collection, library
-        ).value_or_default(self.ILS_NAME_DEFAULT)
-
-    @classmethod
-    def ils_name_setting(cls, _db, collection, library):
-        """Find the ConfigurationSetting controlling the ILS name
-        for the given collection and library.
-        """
-        return ConfigurationSetting.for_library_and_externalintegration(
-            _db, cls.ILS_NAME_KEY, library, collection.external_integration
-        )
+        config = self.integration_configuration().for_library(library.id)
+        if not config:
+            return self.ILS_NAME_DEFAULT
+        return config.settings.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
 
     @property
     def advantage_library_id(self):
@@ -464,7 +497,7 @@ class OverdriveCoreAPI(HasExternalIntegration):
     def fulfillment_authorization_header(self) -> str:
         is_test_mode = (
             True
-            if self._server_nickname == OverdriveConfiguration.TESTING_SERVERS
+            if self._server_nickname == OverdriveConstants.TESTING_SERVERS
             else False
         )
         try:
@@ -1401,6 +1434,9 @@ class OverdriveAdvantageAccount:
         if is_new:
             # Make sure the child has its protocol set appropriately.
             integration = child.create_external_integration(
+                ExternalIntegration.OVERDRIVE
+            )
+            configuration = child.create_integration_configuration(
                 ExternalIntegration.OVERDRIVE
             )
 

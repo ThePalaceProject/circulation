@@ -1,57 +1,68 @@
-import json
-from typing import Optional, Sequence, Set, Union
+from typing import List, Optional, Sequence, Set, Union
 
 from flask_babel import lazy_gettext as _
 
-from core.config import ConfigurationTrait
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationMetadata,
-    ConfigurationOption,
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
 )
 from core.model.constants import IdentifierType
+from core.model.integration import IntegrationConfiguration
+
+ALL_IGNORED_IDENTIFIER_TYPES = {
+    identifier_type.value for identifier_type in IdentifierType
+}
 
 
-class IgnoredIdentifierConfiguration(ConfigurationTrait):
-    """
-    Configuration to allow ignored identifiers as a setting
-    The purpose is to allow the collections to record identifier types
-    that can be ignored during an import
-    """
-
-    KEY = "IGNORED_IDENTIFIER_TYPE"
-    ALL_IGNORED_IDENTIFIER_TYPES = {
-        identifier_type.value for identifier_type in IdentifierType
-    }
-
-    ignored_identifier_types = ConfigurationMetadata(
-        key=KEY,
-        label=_("List of identifiers that will be skipped"),
-        description=_(
-            "Circulation Manager will not be importing publications with identifiers having one of the selected types."
+class IgnoredIdentifierSettings(BaseSettings):
+    ignored_identifier_types: Optional[List[IdentifierType]] = FormField(
+        alias="IGNORED_IDENTIFIER_TYPE",
+        default=[],
+        form=ConfigurationFormItem(
+            label=_("List of identifiers that will be skipped"),
+            description=_(
+                "Circulation Manager will not be importing publications with identifiers having one of the selected types."
+            ),
+            type=ConfigurationFormItemType.MENU,
+            required=False,
+            options={
+                identifier_type: identifier_type
+                for identifier_type in ALL_IGNORED_IDENTIFIER_TYPES
+            },
+            format="narrow",
         ),
-        type=ConfigurationAttributeType.MENU,
-        required=False,
-        default=tuple(),
-        options=[
-            ConfigurationOption(identifier_type, identifier_type)
-            for identifier_type in ALL_IGNORED_IDENTIFIER_TYPES
-        ],
-        format="narrow",
     )
 
-    def get_ignored_identifier_types(self) -> Union[Set[str], tuple]:
-        """Return the list of ignored identifier types.
 
-        By default, when the configuration setting hasn't been set yet, it returns no identifier types.
+class IgnoredIdentifierImporterMixin:
+    """
+    Mixin to track ignored identifiers within importers
+    The child class must contain an IgnoredIdentifierConfiguration
+    """
 
-        :return: List of ignored identifier types
+    def __init__(self, *args, **kargs) -> None:
+        super().__init__(*args, **kargs)
+        self._ignored_identifier_types: Optional[Union[Set[str], list]] = None
+
+    def _get_ignored_identifier_types(
+        self, configuration: IntegrationConfiguration
+    ) -> Union[Set[str], list]:
+        """Return a set of ignored identifier types.
+        :return: Set of ignored identifier types
         """
-        return self.ignored_identifier_types or tuple()
+        if self._ignored_identifier_types is None:
+            self._ignored_identifier_types = configuration.settings.get(
+                "ignored_identifier_types", []
+            )
+
+        return self._ignored_identifier_types  # type: ignore[return-value]
 
     def set_ignored_identifier_types(
         self,
         value: Sequence[Union[str, IdentifierType]],
+        configuration: IntegrationConfiguration,
     ) -> None:
         """Update the list of ignored identifier types.
 
@@ -72,28 +83,7 @@ class IgnoredIdentifierConfiguration(ConfigurationTrait):
                     "Argument 'value' must contain string or IdentifierType enumeration's items only"
                 )
 
-        self.ignored_identifier_types = json.dumps(ignored_identifier_types)
-
-
-class IgnoredIdentifierImporterMixin:
-    """
-    Mixin to track ignored identifiers within importers
-    The child class must contain an IgnoredIdentifierConfiguration
-    """
-
-    def __init__(self, *args, **kargs) -> None:
-        super().__init__(*args, **kargs)
-        self._ignored_identifier_types: Optional[Union[Set[str], tuple]] = None
-
-    def _get_ignored_identifier_types(
-        self, configuration: IgnoredIdentifierConfiguration
-    ) -> Union[Set[str], tuple]:
-        """Return a set of ignored identifier types.
-        :return: Set of ignored identifier types
-        """
-        if self._ignored_identifier_types is None:
-            self._ignored_identifier_types = (
-                configuration.get_ignored_identifier_types()
-            )
-
-        return self._ignored_identifier_types
+        settings = configuration.settings.copy()
+        settings["ignored_identifier_types"] = ignored_identifier_types
+        configuration.settings = settings
+        self._ignored_identifier_types = None

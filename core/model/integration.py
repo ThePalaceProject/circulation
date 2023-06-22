@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, overload
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -9,10 +9,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from core.integration.goals import Goals
-from core.model import Base
+from core.model import Base, get_one_or_create
 
 if TYPE_CHECKING:
-    from core.model import Library
+    from core.model import Collection, Library
 
 
 class IntegrationConfiguration(Base):
@@ -21,7 +21,7 @@ class IntegrationConfiguration(Base):
 
     This is used to store the configuration of integrations. It is
     a combination of the now deprecated ExternalIntegration and
-    ConfigutationSetting classes.
+    ConfigurationSetting classes.
 
     It stores the configuration settings for each external integration in
     a single json row in the database. These settings are then serialized
@@ -45,7 +45,7 @@ class IntegrationConfiguration(Base):
     name = Column(Unicode, nullable=False, unique=True)
 
     # The configuration settings for this integration. Stored as json.
-    settings = Column(JSONB, nullable=False, default=dict)
+    settings: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)
@@ -59,6 +59,39 @@ class IntegrationConfiguration(Base):
         cascade="all, delete",
         passive_deletes=True,
     )
+
+    collection: Mapped[Collection] = relationship("Collection", uselist=False)
+
+    @overload
+    def for_library(
+        self, library_id: int, create: Literal[True] = True
+    ) -> IntegrationLibraryConfiguration:
+        ...
+
+    @overload
+    def for_library(
+        self, library_id: int, create: Literal[False] = False
+    ) -> IntegrationLibraryConfiguration | None:
+        ...
+
+    def for_library(
+        self, library_id: int, create: bool = False
+    ) -> IntegrationLibraryConfiguration | None:
+        """Fetch the library configuration specifically by library_id"""
+        for config in self.library_configurations:
+            if config.library_id == library_id:
+                return config
+        if create:
+            session = Session.object_session(self)
+            config, _ = get_one_or_create(
+                session,
+                IntegrationLibraryConfiguration,
+                parent_id=self.id,
+                library_id=library_id,
+            )
+            session.refresh(self)
+            return config
+        return None
 
     def __repr__(self) -> str:
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
@@ -101,7 +134,7 @@ class IntegrationLibraryConfiguration(Base):
     library: Mapped[Library] = relationship("Library")
 
     # The configuration settings for this integration. Stored as json.
-    settings = Column(JSONB, nullable=False, default=dict)
+    settings: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 
     def __repr__(self) -> str:
         return (

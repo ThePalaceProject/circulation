@@ -802,7 +802,6 @@ class TestLoanController:
             assert as_response_value == result
 
     def test_fulfill_without_active_loan(self, loan_fixture: LoanFixture):
-
         controller = loan_fixture.manager.loans
 
         # Most of the time, it is not possible to fulfill a title if the
@@ -1056,7 +1055,6 @@ class TestLoanController:
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
-
             # The patron's credentials are valid, but they have a lot
             # of fines.
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
@@ -1118,7 +1116,6 @@ class TestLoanController:
             )
 
     def test_active_loans(self, loan_fixture: LoanFixture):
-
         # First, verify that this controller supports conditional HTTP
         # GET by calling handle_conditional_request and propagating
         # any Response it returns.
@@ -1445,9 +1442,13 @@ class TestLoanController:
             )
 
             if collection_default_loan_period:
-                collection.default_loan_period_setting(
-                    loan_fixture.db.default_library()
-                ).value = collection_default_loan_period
+                DatabaseTransactionFixture.set_settings(
+                    collection.integration_configuration.for_library(
+                        loan_fixture.db.default_library().id, create=True
+                    ),
+                    collection.loan_period_key(),
+                    collection_default_loan_period,
+                )
 
             loan_fixture.db.default_library().collections.append(collection)
 

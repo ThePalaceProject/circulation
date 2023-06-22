@@ -32,3 +32,11 @@ class HasLibraryIntegrationConfiguration(HasIntegrationConfiguration, ABC):
     def library_settings_class(cls) -> Type[BaseSettings]:
         """Get the library settings for this integration"""
         ...
+
+
+class HasChildIntegrationConfiguration(HasIntegrationConfiguration, ABC):
+    @classmethod
+    @abstractmethod
+    def child_settings_class(cls) -> Type[BaseSettings]:
+        """Get the child settings class"""
+        ...

@@ -493,6 +493,7 @@ class TestPatronAuth:
             IntegrationConfiguration,
             goal=Goals.PATRON_AUTH_GOAL,
         )
+        assert auth_service is not None
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
         settings = SimpleAuthenticationProvider.settings_class()(
@@ -526,6 +527,7 @@ class TestPatronAuth:
             goal=Goals.PATRON_AUTH_GOAL,
             protocol=MilleniumPatronAPI.__module__,
         )
+        assert auth_service2 is not None
         assert auth_service2 != auth_service
         assert auth_service2.id == int(response.response[0])  # type: ignore[index]
         settings2 = MilleniumPatronAPI.settings_class()(**auth_service2.settings)

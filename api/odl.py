@@ -13,12 +13,20 @@ import sqlalchemy
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import HttpUrl, PositiveInt
 from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
 
 from core import util
 from core.analytics import Analytics
-from core.importers import BaseImporterConfiguration
+from core.importers import BaseImporterSettings
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.settings import (
+    BaseSettings,
+    ConfigurationFormItem,
+    ConfigurationFormItemType,
+    FormField,
+)
 from core.lcp.credential import (
     LCPCredentialFactory,
     LCPHashedPassphrase,
@@ -27,7 +35,6 @@ from core.lcp.credential import (
 from core.metadata_layer import FormatData, LicenseData, TimestampData
 from core.model import (
     Collection,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -43,15 +50,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationFactory,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
-    ConfigurationStorage,
-    HasExternalIntegration,
-)
+from core.model.configuration import HasExternalIntegration
 from core.model.licensing import LicenseStatus
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor
@@ -60,98 +59,121 @@ from core.util.datetime_helpers import to_utc, utc_now
 from core.util.http import HTTP, BadResponseException, RemoteIntegrationException
 from core.util.string_helpers import base64
 
-from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from .circulation import (
+    BaseCirculationAPI,
+    BaseCirculationEbookLoanSettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from .circulation_exceptions import *
 from .lcp.hash import Hasher, HasherFactory, HashingAlgorithm
-from .shared_collection import BaseSharedCollectionAPI
+from .shared_collection import BaseSharedCollectionAPI, BaseSharedCollectionSettings
 
 
-class ODLAPIConfiguration(ConfigurationGrouping, BaseImporterConfiguration):
-    """Contains LCP License Server's settings"""
-
+class ODLAPIConstants:
     DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
     DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
     DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
-    feed_url = ConfigurationMetadata(
+
+class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
+    external_account_id: Optional[HttpUrl] = FormField(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
-        label=_("ODL feed URL"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-        format="url",
+        form=ConfigurationFormItem(
+            label=_("ODL feed URL"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        ),
     )
 
-    username = ConfigurationMetadata(
-        key=ExternalIntegration.USERNAME,
-        label=_("Library's API username"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
+    username: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Library's API username"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
     )
 
-    password = ConfigurationMetadata(
+    password: str = FormField(
         key=ExternalIntegration.PASSWORD,
-        label=_("Library's API password"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    datasource_name = ConfigurationMetadata(
-        key=Collection.DATA_SOURCE_NAME_SETTING,
-        label=_("Data source name"),
-        description="",
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-    )
-
-    default_reservation_period = ConfigurationMetadata(
-        key=Collection.DEFAULT_RESERVATION_PERIOD_KEY,
-        label=_("Default Reservation Period (in Days)"),
-        description=_(
-            "The number of days a patron has to check out a book after a hold becomes available."
+        form=ConfigurationFormItem(
+            label=_("Library's API password"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
         ),
-        type=ConfigurationAttributeType.NUMBER,
-        required=False,
+    )
+
+    data_source: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Data source name"),
+            description="",
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        )
+    )
+
+    default_reservation_period: Optional[PositiveInt] = FormField(
         default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
-    )
-
-    passphrase_hint = ConfigurationMetadata(
-        key="passphrase_hint",
-        label=_("Passphrase hint"),
-        description=_(
-            "Hint displayed to the user when opening an LCP protected publication."
+        form=ConfigurationFormItem(
+            label=_("Default Reservation Period (in Days)"),
+            description=_(
+                "The number of days a patron has to check out a book after a hold becomes available."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+            required=False,
         ),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-        default=DEFAULT_PASSPHRASE_HINT,
     )
 
-    passphrase_hint_url = ConfigurationMetadata(
-        key="passphrase_hint_url",
-        label=_("Passphrase hint URL"),
-        description=_(
-            "Hint URL available to the user when opening an LCP protected publication."
+    passphrase_hint: str = FormField(
+        default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT,
+        form=ConfigurationFormItem(
+            label=_("Passphrase hint"),
+            description=_(
+                "Hint displayed to the user when opening an LCP protected publication."
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
         ),
-        type=ConfigurationAttributeType.TEXT,
-        required=True,
-        default=DEFAULT_PASSPHRASE_HINT_URL,
-        format="url",
     )
 
-    encryption_algorithm = ConfigurationMetadata(
-        key="encryption_algorithm",
-        label=_("Passphrase encryption algorithm"),
-        description=_("Algorithm used for encrypting the passphrase."),
-        type=ConfigurationAttributeType.SELECT,
-        required=False,
-        default=DEFAULT_ENCRYPTION_ALGORITHM,
-        options=ConfigurationOption.from_enum(HashingAlgorithm),
+    passphrase_hint_url: HttpUrl = FormField(
+        default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT_URL,
+        form=ConfigurationFormItem(
+            label=_("Passphrase hint URL"),
+            description=_(
+                "Hint URL available to the user when opening an LCP protected publication."
+            ),
+            type=ConfigurationFormItemType.TEXT,
+            required=True,
+        ),
+    )
+
+    encryption_algorithm: Optional[str] = FormField(
+        default=ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+        form=ConfigurationFormItem(
+            label=_("Passphrase encryption algorithm"),
+            description=_("Algorithm used for encrypting the passphrase."),
+            type=ConfigurationFormItemType.SELECT,
+            required=False,
+            options=ConfigurationFormItemType.options_from_enum(HashingAlgorithm),
+        ),
     )
 
 
-class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration):
+class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
+    pass
+
+
+class ODLAPI(
+    BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
+    BaseSharedCollectionAPI,
+    HasExternalIntegration,
+    HasLibraryIntegrationConfiguration,
+):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
     of control to the library, but it requires the circulation manager to
@@ -169,12 +191,6 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
     DESCRIPTION = _(
         "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
     )
-
-    SETTINGS = BaseSharedCollectionAPI.SETTINGS + ODLAPIConfiguration.to_settings()
-
-    LIBRARY_SETTINGS = BaseCirculationAPI.LIBRARY_SETTINGS + [
-        BaseCirculationAPI.EBOOK_LOAN_DURATION_SETTING
-    ]
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
@@ -207,25 +223,37 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         EXPIRED_STATUS,
     ]
 
+    @classmethod
+    def settings_class(cls):
+        return ODLSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return ODLLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
+
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
         if collection.protocol != self.NAME:
             raise ValueError(
-                "Collection protocol is %s, but passed into ODLAPI!"
-                % collection.protocol
+                "Collection protocol is %s, but passed into %s!"
+                % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        self.data_source_name = collection.external_integration.setting(
-            Collection.DATA_SOURCE_NAME_SETTING
-        ).value
+        config = self.configuration()
+        self.data_source_name = config.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
-        self.username = collection.external_integration.username
-        self.password = collection.external_integration.password
+        self.username = config.username
+        self.password = config.password
         self.analytics = Analytics(_db)
 
-        self._configuration_storage = ConfigurationStorage(self)
-        self._configuration_factory = ConfigurationFactory()
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Optional[Hasher] = None
@@ -252,22 +280,23 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
         :param db: Database session
         :return: Collection associated with this object
         """
-        return get_one(db, Collection, id=self.collection_id)
+        collection = get_one(db, Collection, id=self.collection_id)
+        if not collection:
+            raise ValueError(f"Collection not found: {self.collection_id}")
+        return collection
 
-    def _get_hasher(self, configuration):
+    def _get_hasher(self):
         """Returns a Hasher instance
-
-        :param configuration: Configuration object
-        :type configuration: LCPServerConfiguration
 
         :return: Hasher instance
         :rtype: hash.Hasher
         """
+        config = self.configuration()
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                configuration.encryption_algorithm
-                if configuration.encryption_algorithm
-                else ODLAPIConfiguration.DEFAULT_ENCRYPTION_ALGORITHM
+                config.encryption_algorithm
+                if config.encryption_algorithm
+                else ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM
             )
 
         return self._hasher_instance
@@ -328,39 +357,34 @@ class ODLAPI(BaseCirculationAPI, BaseSharedCollectionAPI, HasExternalIntegration
 
             db = Session.object_session(loan)
             patron = loan.patron
+            hasher = self._get_hasher()
 
-            with self._configuration_factory.create(
-                self._configuration_storage, db, ODLAPIConfiguration
-            ) as configuration:
-                hasher = self._get_hasher(configuration)
+            unhashed_pass: LCPUnhashedPassphrase = (
+                self._credential_factory.get_patron_passphrase(db, patron)
+            )
+            hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
+            self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
+            encoded_pass: str = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
 
-                unhashed_pass: LCPUnhashedPassphrase = (
-                    self._credential_factory.get_patron_passphrase(db, patron)
-                )
-                hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
-                self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
-                encoded_pass: str = base64.b64encode(
-                    binascii.unhexlify(hashed_pass.hashed)
-                )
+            notification_url = self._url_for(
+                "odl_notify",
+                library_short_name=library_short_name,
+                loan_id=loan.id,
+                _external=True,
+            )
 
-                notification_url = self._url_for(
-                    "odl_notify",
-                    library_short_name=library_short_name,
-                    loan_id=loan.id,
-                    _external=True,
-                )
-
-                url_template = URITemplate(loan.license.checkout_url)
-                url = url_template.expand(
-                    id=id,
-                    checkout_id=checkout_id,
-                    patron_id=patron_id,
-                    expires=expires.isoformat(),
-                    notification_url=notification_url,
-                    passphrase=encoded_pass,
-                    hint=configuration.passphrase_hint,
-                    hint_url=configuration.passphrase_hint_url,
-                )
+            config = self.configuration()
+            url_template = URITemplate(loan.license.checkout_url)
+            url = url_template.expand(
+                id=id,
+                checkout_id=checkout_id,
+                patron_id=patron_id,
+                expires=expires.isoformat(),
+                notification_url=notification_url,
+                passphrase=encoded_pass,
+                hint=config.passphrase_hint,
+                hint_url=config.passphrase_hint_url,
+            )
 
         response = self._get(url)
 
@@ -1311,7 +1335,31 @@ class ODLHoldReaper(CollectionMonitor):
         return progress
 
 
-class SharedODLAPI(BaseCirculationAPI):
+class SharedODLSettings(BaseSettings):
+    external_account_id: Optional[str] = FormField(
+        form=ConfigurationFormItem(
+            label=_("Base URL"),
+            description=_(
+                "The base URL for the collection on the other circulation manager."
+            ),
+            required=True,
+        )
+    )
+    data_source: str = FormField(
+        form=ConfigurationFormItem(
+            label=_("Data source name"),
+            required=True,
+        )
+    )
+
+
+class SharedODLLibrarySettings(BaseSettings):
+    pass
+
+
+class SharedODLAPI(
+    BaseCirculationAPI[SharedODLSettings, SharedODLLibrarySettings],
+):
     """An API for circulation managers to use to connect to an ODL collection that's shared
     by another circulation manager.
     """
@@ -1322,35 +1370,32 @@ class SharedODLAPI(BaseCirculationAPI):
         odl_name=ODLAPI.NAME,
     )
 
-    SETTINGS = [
-        {
-            "key": Collection.EXTERNAL_ACCOUNT_ID_KEY,
-            "label": _("Base URL"),
-            "description": _(
-                "The base URL for the collection on the other circulation manager."
-            ),
-            "required": True,
-        },
-        {
-            "key": Collection.DATA_SOURCE_NAME_SETTING,
-            "label": _("Data source name"),
-            "required": True,
-        },
-    ]
-
     SUPPORTS_REGISTRATION = True
     SUPPORTS_STAGING = False
 
+    @classmethod
+    def settings_class(cls):
+        return SharedODLSettings
+
+    @classmethod
+    def library_settings_class(cls):
+        return SharedODLLibrarySettings
+
+    def label(self):
+        return self.NAME
+
+    def description(self):
+        return self.DESCRIPTION
+
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
         if collection.protocol != self.NAME:
             raise ValueError(
                 "Collection protocol is %s, but passed into SharedODLPI!"
                 % collection.protocol
             )
         self.collection_id = collection.id
-        self.data_source_name = collection.external_integration.setting(
-            Collection.DATA_SOURCE_NAME_SETTING
-        ).value
+        self.data_source_name = self.configuration().data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
@@ -1400,12 +1445,10 @@ class SharedODLAPI(BaseCirculationAPI):
         patron = patron or flask.request.patron
         _db = Session.object_session(patron)
         collection = self.collection(_db)
-        shared_secret = ConfigurationSetting.for_library_and_externalintegration(
-            _db,
-            ExternalIntegration.PASSWORD,
-            patron.library,
-            collection.external_integration,
-        ).value
+        config = collection.integration_configuration
+        shared_secret = config.for_library(patron.library.id).settings.get(
+            ExternalIntegration.PASSWORD
+        )
         if not shared_secret:
             raise LibraryAuthorizationFailedException(
                 _(

@@ -2,8 +2,8 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.problem_details import *
 from api.axis import Axis360API
+from api.selftest import HasCollectionSelfTests
 from core.opds_import import OPDSImportMonitor
-from core.selftest import HasSelfTests
 from tests.api.mockapi.axis import MockAxis360API
 from tests.fixtures.api_admin import SettingsControllerFixture
 
@@ -33,9 +33,9 @@ class TestCollectionSelfTests:
     def test_collection_self_tests_test_get(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        old_prior_test_results = HasSelfTests.prior_test_results
+        old_prior_test_results = HasCollectionSelfTests.prior_test_results
         setattr(
-            HasSelfTests,
+            HasCollectionSelfTests,
             "prior_test_results",
             settings_ctrl_fixture.mock_prior_test_results,
         )
@@ -60,15 +60,15 @@ class TestCollectionSelfTests:
                 == settings_ctrl_fixture.self_test_results
             )
 
-        setattr(HasSelfTests, "prior_test_results", old_prior_test_results)
+        setattr(HasCollectionSelfTests, "prior_test_results", old_prior_test_results)
 
     def test_collection_self_tests_failed_post(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         # This makes HasSelfTests.run_self_tests return no values
-        old_run_self_tests = HasSelfTests.run_self_tests
+        old_run_self_tests = HasCollectionSelfTests.run_self_tests
         setattr(
-            HasSelfTests,
+            HasCollectionSelfTests,
             "run_self_tests",
             settings_ctrl_fixture.mock_failed_run_self_tests,
         )
@@ -91,14 +91,16 @@ class TestCollectionSelfTests:
             assert response.detail == "Failed to run self tests for this collection."
             assert response.status_code == 400
 
-        setattr(HasSelfTests, "run_self_tests", old_run_self_tests)
+        setattr(HasCollectionSelfTests, "run_self_tests", old_run_self_tests)
 
     def test_collection_self_tests_post(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        old_run_self_tests = HasSelfTests.run_self_tests
+        old_run_self_tests = HasCollectionSelfTests.run_self_tests
         setattr(
-            HasSelfTests, "run_self_tests", settings_ctrl_fixture.mock_run_self_tests
+            HasCollectionSelfTests,
+            "run_self_tests",
+            settings_ctrl_fixture.mock_run_self_tests,
         )
 
         collection = settings_ctrl_fixture.ctrl.db.collection()
@@ -165,4 +167,4 @@ class TestCollectionSelfTests:
             # The method returns None but it was not called
             assert run_self_tests_args == None
 
-        setattr(HasSelfTests, "run_self_tests", old_run_self_tests)
+        setattr(HasCollectionSelfTests, "run_self_tests", old_run_self_tests)

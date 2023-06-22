@@ -24,6 +24,12 @@ def make_default_library(_db):
         ExternalIntegration.OPDS_IMPORT
     )
     integration.goal = ExternalIntegration.LICENSE_GOAL
+
     if collection not in library.collections:
         library.collections.append(collection)
+
+    config = collection.create_integration_configuration(
+        ExternalIntegration.OPDS_IMPORT
+    )
+    config.for_library(library.id, create=True)
     return library

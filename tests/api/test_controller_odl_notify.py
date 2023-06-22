@@ -29,12 +29,15 @@ class ODLFixture:
         integration = self.collection.create_external_integration(
             protocol=self.integration_protocol()
         )
-        integration.username = "a"
-        integration.password = "b"
-        integration.url = "http://metadata"
-        self.collection.external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, "Feedbooks"
+        config = self.collection.create_integration_configuration(
+            self.integration_protocol()
         )
+        config.settings = {
+            "username": "a",
+            "password": "b",
+            "url": "http://metadata",
+            Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
+        }
         self.library.collections.append(self.collection)
         self.work = self.db.work(with_license_pool=True, collection=self.collection)
 
@@ -85,7 +88,7 @@ class TestODLNotificationController:
     ):
         db = controller_fixture.db
 
-        odl_fixture.collection.external_integration.protocol = protocol
+        odl_fixture.collection.integration_configuration.protocol = protocol
         odl_fixture.pool.licenses_owned = 10
         odl_fixture.pool.licenses_available = 5
         loan, ignore = odl_fixture.pool.loan_to(odl_fixture.patron)

@@ -1218,7 +1218,6 @@ class TestConfigureCollectionScript:
             name="Library 3",
             short_name="L3",
         )
-        db.session.commit()
 
         # Create a collection, set all its attributes, set a custom
         # setting, and associate it with two libraries.
@@ -1239,13 +1238,15 @@ class TestConfigureCollectionScript:
             output,
         )
 
+        db.session.commit()
+
         # The collection was created and configured properly.
         collection = get_one(db.session, Collection)
         assert "New Collection" == collection.name
-        assert "url" == collection.external_integration.url
+        assert "url" == collection.integration_configuration.settings["url"]
         assert "acctid" == collection.external_account_id
-        assert "username" == collection.external_integration.username
-        assert "password" == collection.external_integration.password
+        assert "username" == collection.integration_configuration.settings["username"]
+        assert "password" == collection.integration_configuration.settings["password"]
 
         # Two libraries now have access to the collection.
         assert [collection] == l1.collections
@@ -1254,9 +1255,8 @@ class TestConfigureCollectionScript:
 
         # One CollectionSetting was set on the collection, in addition
         # to url, username, and password.
-        setting = collection.external_integration.setting("library_id")
-        assert "library_id" == setting.key
-        assert "1234" == setting.value
+        setting = collection.integration_configuration.settings.get("library_id")
+        assert "1234" == setting
 
         # The output explains the collection settings.
         expect = (
@@ -1284,7 +1284,8 @@ class TestConfigureCollectionScript:
         )
 
         # The collection has been changed.
-        assert "foo" == collection.external_integration.url
+        db.session.refresh(collection.integration_configuration)
+        assert "foo" == collection.integration_configuration.settings.get("url")
         assert ExternalIntegration.BIBLIOTHECA == collection.protocol
 
         expect = (
@@ -1582,9 +1583,11 @@ class MockOPDSImportScript(OPDSImportScript):
 
 class TestOPDSImportScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
-        db.default_collection().external_integration.setting(
-            Collection.DATA_SOURCE_NAME_SETTING
-        ).value = DataSource.OA_CONTENT_SERVER
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            Collection.DATA_SOURCE_NAME_SETTING,
+            DataSource.OA_CONTENT_SERVER,
+        )
 
         script = MockOPDSImportScript(db.session)
         script.do_run([])

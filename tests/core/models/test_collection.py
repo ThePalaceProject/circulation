@@ -1,17 +1,12 @@
 import datetime
 import json
-from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
 from core.config import Configuration
 from core.model import create, get_one_or_create
 from core.model.circulationevent import CirculationEvent
-from core.model.collection import (
-    Collection,
-    CollectionConfigurationStorage,
-    HasExternalIntegrationPerCollection,
-)
+from core.model.collection import Collection
 from core.model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
@@ -22,6 +17,10 @@ from core.model.customlist import CustomList
 from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.identifier import Identifier
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from core.model.licensing import Hold, License, LicensePool, Loan
 from core.model.work import Work
 from core.util.datetime_helpers import utc_now
@@ -38,6 +37,14 @@ class ExampleCollectionFixture:
     ):
         self.collection = collection
         self.database_fixture = database_transaction
+
+    def set_default_loan_period(self, medium, value, library=None):
+        config = self.collection.integration_configuration
+        if library is not None:
+            config = config.for_library(library.id)
+        DatabaseTransactionFixture.set_settings(
+            config, **{self.collection.loan_period_key(medium): value}
+        )
 
 
 @pytest.fixture()
@@ -295,6 +302,7 @@ class TestCollection:
 
         library = db.default_library()
         library.collections.append(test_collection)
+        test_collection.integration_configuration.for_library(library.id, create=True)
 
         ebook = Edition.BOOK_MEDIUM
         audio = Edition.AUDIO_MEDIUM
@@ -311,14 +319,14 @@ class TestCollection:
         )
 
         # Set a value, and it's used.
-        test_collection.default_loan_period_setting(library, ebook).value = 604
+        example_collection_fixture.set_default_loan_period(ebook, 604, library=library)
         assert 604 == test_collection.default_loan_period(library)
         assert (
             Collection.STANDARD_DEFAULT_LOAN_PERIOD
             == test_collection.default_loan_period(library, audio)
         )
 
-        test_collection.default_loan_period_setting(library, audio).value = 606
+        example_collection_fixture.set_default_loan_period(audio, 606, library=library)
         assert 606 == test_collection.default_loan_period(library, audio)
 
         # Given an integration client rather than a library, use
@@ -338,14 +346,14 @@ class TestCollection:
         )
 
         # Set a value, and it's used.
-        test_collection.default_loan_period_setting(client, ebook).value = 347
+        example_collection_fixture.set_default_loan_period(ebook, 347)
         assert 347 == test_collection.default_loan_period(client)
         assert (
             Collection.STANDARD_DEFAULT_LOAN_PERIOD
             == test_collection.default_loan_period(client, audio)
         )
 
-        test_collection.default_loan_period_setting(client, audio).value = 349
+        example_collection_fixture.set_default_loan_period(audio, 349)
         assert 349 == test_collection.default_loan_period(client, audio)
 
         # The same value is used for other clients.
@@ -371,9 +379,11 @@ class TestCollection:
         assert 601 == test_collection.default_reservation_period
 
         # The underlying value is controlled by a ConfigurationSetting.
-        test_collection.external_integration.setting(
-            Collection.DEFAULT_RESERVATION_PERIOD_KEY
-        ).value = 954
+        DatabaseTransactionFixture.set_settings(
+            test_collection.integration_configuration,
+            Collection.DEFAULT_RESERVATION_PERIOD_KEY,
+            954,
+        )
         assert 954 == test_collection.default_reservation_period
 
     def test_pools_with_no_delivery_mechanisms(
@@ -417,10 +427,12 @@ class TestCollection:
         library.collections.append(test_collection)
 
         test_collection.external_account_id = "id"
-        test_collection.external_integration.url = "url"
-        test_collection.external_integration.username = "username"
-        test_collection.external_integration.password = "password"
-        setting = test_collection.external_integration.set_setting("setting", "value")
+        test_collection.integration_configuration.settings = {
+            "url": "url",
+            "username": "username",
+            "password": "password",
+            "setting": "value",
+        }
 
         data = test_collection.explain()
         assert [
@@ -442,6 +454,7 @@ class TestCollection:
             name="Child", parent=test_collection, external_account_id="id2"
         )
         child.create_external_integration(protocol=ExternalIntegration.OVERDRIVE)
+        child.create_integration_configuration(protocol=ExternalIntegration.OVERDRIVE)
         data = child.explain()
         assert [
             'Name: "Child"',
@@ -547,6 +560,7 @@ class TestCollection:
             db.session, Collection, name=collection.metadata_identifier
         )[0]
         mirror_collection.create_external_integration(collection.protocol)
+        mirror_collection.create_integration_configuration(collection.protocol)
 
         # Confirm that there's no external_account_id and no DataSource.
         # TODO I don't understand why we don't store this information,
@@ -654,22 +668,18 @@ class TestCollection:
         collection.libraries.append(other_library)
 
         # It has an ExternalIntegration, which has some settings.
-        integration = collection.external_integration
-        setting1 = integration.set_setting("integration setting", "value2")
-        setting2 = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            "default_library+integration setting",
-            db.default_library(),
-            integration,
+        integration = collection.integration_configuration
+        DatabaseTransactionFixture.set_settings(
+            integration, **{"integration setting": "value2"}
         )
-        setting2.value = "value2"
-        setting3 = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            "other_library+integration setting",
-            other_library,
-            integration,
+        setting2 = integration.for_library(db.default_library().id)
+        DatabaseTransactionFixture.set_settings(
+            setting2, **{"default_library+integration setting": "value2"}
         )
-        setting3.value = "value3"
+        setting3 = integration.for_library(other_library.id, create=True)
+        DatabaseTransactionFixture.set_settings(
+            setting3, **{"other_library+integration setting": "value3"}
+        )
 
         # Now, disassociate one of the libraries from the collection.
         collection.disassociate_library(db.default_library())
@@ -681,17 +691,18 @@ class TestCollection:
         # Furthermore, ConfigurationSettings that configure that
         # Library's relationship to this Collection's
         # ExternalIntegration have been deleted.
-        all_settings = db.session.query(ConfigurationSetting).all()
-        assert setting2 not in all_settings
+        all_settings = db.session.query(IntegrationConfiguration).all()
+        all_library_settings = db.session.query(IntegrationLibraryConfiguration).all()
+        assert setting2 not in all_library_settings
 
         # The other library is unaffected.
         assert other_library in collection.libraries
         assert collection in other_library.collections
-        assert setting3 in all_settings
+        assert setting3 in all_library_settings
 
         # As is the library-independent configuration of this Collection's
         # ExternalIntegration.
-        assert setting1 in all_settings
+        assert integration in all_settings
 
         # Calling disassociate_library again is a no-op.
         collection.disassociate_library(db.default_library())
@@ -699,6 +710,13 @@ class TestCollection:
 
         # If you somehow manage to call disassociate_library on a Collection
         # that has no associated ExternalIntegration, an exception is raised.
+        collection.integration_configuration_id = None
+        with pytest.raises(ValueError) as excinfo:
+            collection.disassociate_library(other_library)
+        assert "No known integration library configuration for collection" in str(
+            excinfo.value
+        )
+
         collection.external_integration_id = None
         with pytest.raises(ValueError) as excinfo:
             collection.disassociate_library(other_library)
@@ -1119,28 +1137,3 @@ class TestCollectionForMetadataWrangler:
         db = example_collection_fixture.database_fixture
         collection = create(db.session, Collection, name="banana")[0]
         assert True == isinstance(collection, Collection)
-
-
-class TestCollectionConfigurationStorage:
-    def test_load(self, example_collection_fixture: ExampleCollectionFixture):
-        db = example_collection_fixture.database_fixture
-        # Arrange
-        lcp_collection = db.collection("Test Collection", DataSource.LCP)
-        external_integration = lcp_collection.external_integration
-        external_integration_association = create_autospec(
-            spec=HasExternalIntegrationPerCollection
-        )
-        external_integration_association.collection_external_integration = MagicMock(
-            return_value=external_integration
-        )
-        storage = CollectionConfigurationStorage(
-            external_integration_association, lcp_collection
-        )
-        setting_name = "Test"
-        expected_result = "Test"
-
-        # Act
-        storage.save(db.session, setting_name, expected_result)
-        result = storage.load(db.session, setting_name)
-
-        assert result == expected_result

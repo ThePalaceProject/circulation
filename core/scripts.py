@@ -907,6 +907,64 @@ class ConfigurationSettingScript(Script):
             obj.setting(key).value = value
 
 
+class RunSelfTestsScript(LibraryInputScript):
+    """Run the self-tests for every collection in the given library
+    where that's possible.
+    """
+
+    def __init__(self, _db=None, output=sys.stdout):
+        super().__init__(_db)
+        self.out = output
+
+    def do_run(self, *args, **kwargs):
+        from api.circulation import CirculationAPI
+
+        parsed = self.parse_command_line(self._db, *args, **kwargs)
+        for library in parsed.libraries:
+            api_map = CirculationAPI(self._db, library).default_api_map
+            api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
+            self.out.write("Testing %s\n" % library.name)
+            for collection in library.collections:
+                try:
+                    self.test_collection(collection, api_map)
+                except Exception as e:
+                    self.out.write("  Exception while running self-test: '%s'\n" % e)
+
+    def test_collection(self, collection, api_map, extra_args=None):
+        tester = api_map.get(collection.protocol)
+        if not tester:
+            self.out.write(
+                " Cannot find a self-test for %s, ignoring.\n" % collection.name
+            )
+            return
+
+        self.out.write(" Running self-test for %s.\n" % collection.name)
+        # Some HasSelfTests classes require extra arguments to their
+        # constructors.
+        extra_args = extra_args or {
+            OPDSImportMonitor: [OPDSImporter],
+        }
+        extra = extra_args.get(tester, [])
+        constructor_args = [self._db, collection] + list(extra)
+        results_dict, results_list = tester.run_self_tests(
+            self._db, None, *constructor_args
+        )
+        for result in results_list:
+            self.process_result(result)
+
+    def process_result(self, result):
+        """Process a single TestResult object."""
+        if result.success:
+            success = "SUCCESS"
+        else:
+            success = "FAILURE"
+        self.out.write(f"  {success} {result.name} ({result.duration:.1f}sec)\n")
+        if isinstance(result.result, (bytes, str)):
+            self.out.write("   Result: %s\n" % result.result)
+        if result.exception:
+            self.out.write("   Exception: '%s'\n" % result.exception)
+
+
 class ConfigureSiteScript(ConfigurationSettingScript):
     """View or update site-wide configuration."""
 
@@ -1191,19 +1249,27 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     'No collection called "%s". You can create it, but you must specify a protocol.'
                     % name
                 )
+        config = collection.integration_configuration
+        settings = config.settings.copy()
         integration = collection.external_integration
         if protocol:
+            config.protocol = protocol
             integration.protocol = protocol
         if args.external_account_id:
             collection.external_account_id = args.external_account_id
 
         if args.url:
-            integration.url = args.url
+            settings["url"] = args.url
         if args.username:
-            integration.username = args.username
+            settings["username"] = args.username
         if args.password:
-            integration.password = args.password
+            settings["password"] = args.password
         self.apply_settings(args.setting, integration)
+        if args.setting:
+            for setting in args.setting:
+                key, value = ConfigurationSettingScript._parse_setting(setting)
+                settings[key] = value
+        config.settings = settings
 
         if hasattr(args, "library"):
             for name in args.library:
@@ -1216,6 +1282,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     raise ValueError(message)
                 if collection not in library.collections:
                     library.collections.append(collection)
+                    config.for_library(library.id, create=True)
         site_configuration_has_changed(_db)
         _db.commit()
         output.write("Configuration settings stored.\n")

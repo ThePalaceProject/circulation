@@ -1,7 +1,10 @@
-from unittest.mock import PropertyMock, create_autospec
+from typing import Any
+from unittest.mock import PropertyMock, create_autospec, patch
 
 from api.admin.controller.collection_settings import CollectionSettingsController
 from api.controller import CirculationManager
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -20,8 +23,11 @@ class TestCollectionSettingsController:
             ]
 
         controller = CollectionSettingsController(manager)
-        controller.PROVIDER_APIS = [MockProviderAPI]
-        protocols = controller._get_collection_protocols()
+        with patch.object(
+            controller, "registry", IntegrationRegistry[Any](Goals.LICENSE_GOAL)
+        ) as registry:
+            registry.register(MockProviderAPI, canonical=MockProviderAPI.NAME)
+            protocols = controller._get_collection_protocols()
 
         k2_list = list(filter(lambda x: x["key"] == "k2", protocols[0]["settings"]))
         assert len(k2_list) == 1
@@ -37,8 +43,11 @@ class TestCollectionSettingsController:
                 dict(key="k2", value="v4"),  # Only this should remain
             ]
 
-        controller.PROVIDER_APIS = [MockProviderAPIMulti]
-        protocols = controller._get_collection_protocols()
+        with patch.object(
+            controller, "registry", IntegrationRegistry[Any](Goals.LICENSE_GOAL)
+        ) as registry:
+            registry.register(MockProviderAPIMulti, canonical=MockProviderAPIMulti.NAME)
+            protocols = controller._get_collection_protocols()
 
         k2_list = list(filter(lambda x: x["key"] == "k2", protocols[0]["settings"]))
         assert len(k2_list) == 1

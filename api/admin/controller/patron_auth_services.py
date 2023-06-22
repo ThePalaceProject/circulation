@@ -160,7 +160,13 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             goal=Goals.PATRON_AUTH_GOAL,
             name=name,
         )
-        return auth_service  # type: ignore[no-any-return]
+        if not auth_service:
+            raise ProblemError(
+                INTERNAL_SERVER_ERROR.detailed(
+                    "Could not create the Authentication integration."
+                )
+            )
+        return auth_service
 
     def remove_library_settings(
         self, library_settings: IntegrationLibraryConfiguration
@@ -187,7 +193,13 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             library=library,
             parent_id=auth_service.id,
         )
-        return library_settings  # type: ignore[no-any-return]
+        if not library_settings:
+            raise ProblemError(
+                INTERNAL_SERVER_ERROR.detailed(
+                    "Could not create the library configuration"
+                )
+            )
+        return library_settings
 
     def process_libraries(
         self,

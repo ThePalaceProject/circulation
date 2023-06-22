@@ -53,8 +53,9 @@ class TestOPDSImportCoverageProvider:
         # This means we need to mock the lookup client instead.
         lookup = MockSimplifiedOPDSLookup(db.fresh_url())
 
-        db.default_collection().external_integration.set_setting(
-            Collection.DATA_SOURCE_NAME_SETTING, DataSource.OA_CONTENT_SERVER
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: DataSource.OA_CONTENT_SERVER}
         )
         provider = TestProvider(db.default_collection(), lookup)
 
