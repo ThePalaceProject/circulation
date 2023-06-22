@@ -697,6 +697,10 @@ class TestCacheMARCFiles:
 
 
 class TestInstanceInitializationScript:
+    # These are some basic tests for the instance initialization script. It is tested
+    # more thoroughly as part of the migration tests, since migration tests are able
+    # to test the script's interaction with the database.
+
     def test_run_locks_database(self, db: DatabaseTransactionFixture):
         # The script locks the database with a PostgreSQL advisory lock
         with patch("scripts.SessionManager") as session_manager:

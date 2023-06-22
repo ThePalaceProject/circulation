@@ -64,22 +64,26 @@ class ApplicationFixture:
     """The ApplicationFixture is a representation of the state that must be set up in order to run the application for
     testing."""
 
-    @staticmethod
-    def create():
+    @classmethod
+    def drop_existing_schema(cls):
+        engine = SessionManager.engine()
+        metadata_obj = MetaData()
+        metadata_obj.reflect(bind=engine)
+        metadata_obj.drop_all(engine)
+        metadata_obj.clear()
+
+    @classmethod
+    def create(cls):
         # This will make sure we always connect to the test database.
         os.environ["TESTING"] = "true"
 
         # Ensure that the log configuration starts in a known state.
         LogConfiguration.initialize(None, testing=True)
 
-        # Drop any existing schema. It will be recreated when
-        # SessionManager.initialize() runs.
-        engine = SessionManager.engine()
-        metadata_obj = MetaData()
-        metadata_obj.reflect(bind=engine)
-        metadata_obj.drop_all(engine)
-        metadata_obj.clear()
-        return ApplicationFixture()
+        # Drop any existing schema. It will be recreated when the database is initialized.
+        _cls = cls()
+        _cls.drop_existing_schema()
+        return _cls
 
     def close(self):
         if "TESTING" in os.environ:

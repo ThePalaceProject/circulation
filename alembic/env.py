@@ -94,14 +94,15 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            # Acquire an application lock to ensure multiple migrations are queued and not concurrent.
+            # When alembic is run in the context of the application initialization script, the lock
+            # is acquired by the application itself, so we don't need to do it here. That is why we
+            # have the need_lock attribute, and why it defaults to True.
             lock_id = (
                 LOCK_ID_DB_INIT
                 if context.config.attributes.get("need_lock", True)
                 else None
             )
-            # Acquire an application lock to ensure multiple migrations are queued and not concurrent.
-            # Migrations are run as part of the application initialization script, so we use the
-            # same lock id.
             with pg_advisory_lock(connection, lock_id):
                 context.run_migrations()
 
