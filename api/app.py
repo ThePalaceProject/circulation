@@ -2,15 +2,27 @@ import logging
 import os
 import urllib.parse
 
+import flask_babel
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
+from sqlalchemy.orm import Session
 
 from api.config import Configuration
 from core.flask_sqlalchemy_session import flask_scoped_session
+from core.local_analytics_provider import LocalAnalyticsProvider
 from core.log import LogConfiguration
-from core.model import SessionManager
+from core.model import (
+    LOCK_ID_APP_INIT,
+    ConfigurationSetting,
+    SessionManager,
+    pg_advisory_lock,
+)
 from core.util import LanguageCodes
+from core.util.cache import CachedData
+from scripts import InstanceInitializationScript
 
+from .admin.controller import setup_admin_controllers
+from .controller import CirculationManager
 from .util.flask import PalaceFlask
 from .util.profilers import (
     PalaceCProfileProfiler,
@@ -42,27 +54,71 @@ PalaceCProfileProfiler.configure(app)
 PalaceXrayProfiler.configure(app)
 
 
-@app.before_first_request
-def initialize_database(autoinitialize=True):
-    testing = "TESTING" in os.environ
+def initialize_admin(_db=None):
+    if getattr(app, "manager", None) is not None:
+        setup_admin_controllers(app.manager)
+    _db = _db or app._db
+    # The secret key is used for signing cookies for admin login
+    app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+    # Create a default Local Analytics service if one does not
+    # already exist.
+    LocalAnalyticsProvider.initialize(_db)
 
-    db_url = Configuration.database_url()
-    if autoinitialize:
-        SessionManager.initialize(db_url)
-    session_factory = SessionManager.sessionmaker(db_url)
+
+def initialize_circulation_manager():
+    if os.environ.get("AUTOINITIALIZE") == "False":
+        # It's the responsibility of the importing code to set app.manager
+        # appropriately.
+        pass
+    else:
+        if getattr(app, "manager", None) is None:
+            try:
+                app.manager = CirculationManager(app._db)
+            except Exception:
+                logging.exception("Error instantiating circulation manager!")
+                raise
+            # Make sure that any changes to the database (as might happen
+            # on initial setup) are committed before continuing.
+            app.manager._db.commit()
+
+            # setup the cache data object
+            CachedData.initialize(app._db)
+
+
+def initialize_database():
+    session_factory = SessionManager.sessionmaker()
     _db = flask_scoped_session(session_factory, app)
     app._db = _db
 
-    log_level = LogConfiguration.initialize(_db, testing=testing)
+
+def initialize_logging(db: Session, app: PalaceFlask):
+    testing = "TESTING" in os.environ
+    log_level = LogConfiguration.initialize(db, testing=testing)
     debug = log_level == "DEBUG"
     app.config["DEBUG"] = debug
     app.debug = debug
-    _db.commit()
+    db.commit()
     logging.getLogger().info("Application debug mode==%r" % app.debug)
 
 
 from . import routes  # noqa
 from .admin import routes as admin_routes  # noqa
+
+
+def initialize_application() -> PalaceFlask:
+    with app.app_context(), flask_babel.force_locale("en"):
+        initialize_database()
+        # TODO: Remove this lock once our settings are moved to integration settings.
+        # We need this lock, so that only one instance of the application is
+        # initialized at a time. This prevents database conflicts when multiple
+        # CM instances try to create the same configurationsettings at the same
+        # time during initialization. This should be able to go away once we
+        # move our settings off the configurationsettings system.
+        with pg_advisory_lock(app._db, LOCK_ID_APP_INIT):
+            initialize_logging(app._db, app)
+            initialize_circulation_manager()
+            initialize_admin()
+    return app
 
 
 def run(url=None):
@@ -87,6 +143,11 @@ def run(url=None):
 
         socket.setdefaulttimeout(None)
 
+    # Setup database by initializing it or running migrations
+    InstanceInitializationScript().run()
+
+    initialize_application()
     logging.info("Starting app on %s:%s", host, port)
+
     sslContext = "adhoc" if scheme == "https" else None
     app.run(debug=debug, host=host, port=port, threaded=True, ssl_context=sslContext)

@@ -4,8 +4,9 @@ import json
 import logging
 import os
 import warnings
-from typing import Any, Dict, List, Literal, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, Generator, List, Literal, Tuple, Type, TypeVar, Union
 
+from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from pydantic.json import pydantic_encoder
@@ -28,6 +29,35 @@ from .constants import (
     LinkRelations,
     MediaTypes,
 )
+
+# This is the lock ID used to ensure that only one circulation manager
+# initializes or migrates the database at a time.
+LOCK_ID_DB_INIT = 1000000001
+
+# This is the lock ID used to ensure that only one circulation manager
+# initializes an application instance at a time.
+LOCK_ID_APP_INIT = 1000000002
+
+
+@contextmanager
+def pg_advisory_lock(
+    connection: Connection | Session, lock_id: int | None
+) -> Generator[None, None, None]:
+    """
+    Application wide locking based on Lock IDs
+
+    If lock_id is None, no lock is acquired.
+    """
+    if lock_id is None:
+        yield
+    else:
+        # Create the lock
+        connection.execute(text(f"SELECT pg_advisory_lock({lock_id});"))
+        try:
+            yield
+        finally:
+            # Close the lock
+            connection.execute(text(f"SELECT pg_advisory_unlock({lock_id});"))
 
 
 def flush(db):
@@ -320,8 +350,6 @@ class SessionManager:
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
-    engine_for_url: Dict[str, Engine] = {}
-
     @classmethod
     def engine(cls, url=None):
         url = url or Configuration.database_url()
@@ -358,85 +386,15 @@ class SessionManager:
         return os.path.join(base_path, "files")
 
     @classmethod
-    def initialize(cls, url, initialize_data=True, initialize_schema=True):
-        """Initialize the database.
-
-        This includes the schema, the custom functions, and the
-        initial content.
-        """
-        if url in cls.engine_for_url:
-            engine = cls.engine_for_url[url]
-            return engine, engine.connect()
-
-        engine = cls.engine(url)
-        if initialize_schema:
-            cls.initialize_schema(engine)
-        connection = engine.connect()
-
-        # Check if the recursive equivalents function exists already.
-        query = (
-            select([literal_column("proname")])
-            .select_from(table("pg_proc"))
-            .where(literal_column("proname") == "fn_recursive_equivalents")
-        )
-        result = connection.execute(query)
-        result = list(result)
-
-        # If it doesn't, create it.
-        if not result and initialize_data:
-            resource_file = os.path.join(
-                cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
-            )
-            if not os.path.exists(resource_file):
-                raise OSError(
-                    "Could not load recursive equivalents function from %s: file does not exist."
-                    % resource_file
-                )
-            sql = open(resource_file).read()
-            connection.execute(sql)
-
-        if initialize_data:
-            with cls.session_from_connection(connection) as session:
-                cls.initialize_data(session)
-
-        if connection:
-            connection.close()
-
-        if initialize_schema and initialize_data:
-            # Only cache the engine if all initialization has been performed.
-            #
-            # Some pieces of code (e.g. the script that runs
-            # migrations) have a legitimate need to bypass some of the
-            # initialization, but normal operation of the site
-            # requires that everything be initialized.
-            #
-            # Until someone tells this method to initialize
-            # everything, we can't short-circuit this method with a
-            # cache.
-            cls.engine_for_url[url] = engine
-        return engine, engine.connect()
-
-    @classmethod
     def initialize_schema(cls, engine):
         """Initialize the database schema."""
         # Use SQLAlchemy to create all the tables.
-        to_create = [
-            table_obj
-            for name, table_obj in list(Base.metadata.tables.items())
-            if not name.startswith("mv_")
-        ]
-        Base.metadata.create_all(engine, tables=to_create)
+        Base.metadata.create_all(engine)
 
     @classmethod
     def session(cls, url, initialize_data=True, initialize_schema=True):
-        engine = connection = 0
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=SAWarning)
-            engine, connection = cls.initialize(
-                url,
-                initialize_data=initialize_data,
-                initialize_schema=initialize_schema,
-            )
+        engine = cls.engine(url)
+        connection = engine.connect()
         return cls.session_from_connection(connection)
 
     @classmethod
@@ -446,7 +404,28 @@ class SessionManager:
         return session
 
     @classmethod
-    def initialize_data(cls, session, set_site_configuration=True):
+    def initialize_data(cls, session: Session):
+        # Check if the recursive equivalents function exists already.
+        query = (
+            select([literal_column("proname")])
+            .select_from(table("pg_proc"))
+            .where(literal_column("proname") == "fn_recursive_equivalents")
+        )
+        result = session.execute(query).all()
+
+        # If it doesn't, create it.
+        if not result:
+            resource_file = os.path.join(
+                cls.resource_directory(), cls.RECURSIVE_EQUIVALENTS_FUNCTION
+            )
+            if not os.path.exists(resource_file):
+                raise OSError(
+                    "Could not load recursive equivalents function from %s: file does not exist."
+                    % resource_file
+                )
+            sql = open(resource_file).read()
+            session.execute(text(sql))
+
         # Create initial content.
         from .classification import Genre
         from .datasource import DataSource
