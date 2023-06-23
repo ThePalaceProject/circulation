@@ -1020,8 +1020,8 @@ class TestWorkController:
                 identifier.type, identifier.identifier
             )
             assert 200 == response.status_code
-            assert "data:image/png;base64,%s" % base64.b64encode(image_data).decode(
-                "utf-8"
+            assert "data:image/png;base64,%r" % base64.b64encode(
+                image_data
             ) == response.get_data(as_text=True)
 
         work_fixture.admin.remove_role(

@@ -1597,7 +1597,7 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
-            assert isinstance(response, flask.Response)
+            assert isinstance(response, ProblemDetail)
             assert 400 == response.status_code
             # List was not created
             assert None == get_one(
@@ -1632,7 +1632,7 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
-            assert isinstance(response, flask.Response)
+            assert isinstance(response, ProblemDetail)
             assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
             assert 400 == response.status_code
 
