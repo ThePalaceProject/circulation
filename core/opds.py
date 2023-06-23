@@ -1773,9 +1773,11 @@ class AcquisitionFeed(OPDSFeed):
                 collection.default_loan_period(obj.library or obj.integration_client)
             )
         if loan:
+            print("In loan tags", loan, loan.license_pool)
             status = "available"
             since = loan.start
-            until = loan.until(default_loan_period)
+            if not loan.license_pool.unlimited_access:
+                until = loan.until(default_loan_period)
         elif hold:
             if not license_pool.open_access:
                 default_reservation_period = datetime.timedelta(

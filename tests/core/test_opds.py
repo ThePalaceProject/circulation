@@ -1998,6 +1998,18 @@ class TestAcquisitionFeed:
         assert ("holds" in tag.attrib) == False
         assert ("copies" in tag.attrib) == False
 
+    def test_unlimited_access_pool_loan(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+        feed = AcquisitionFeed(db.session, "title", "url", [], annotator=None)
+        work = db.work(unlimited_access=True, with_license_pool=True)
+        pool = work.active_license_pool()
+        loan, _ = pool.loan_to(patron)
+        tags: List[ET.Element] = feed.license_tags(pool, loan, None)
+
+        [tag] = tags
+        assert "since" in tag.attrib
+        assert "until" not in tag.attrib
+
     def test_license_tags_show_self_hosted_books(self, db: DatabaseTransactionFixture):
 
         # Arrange
