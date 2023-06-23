@@ -4,7 +4,7 @@ import logging
 import traceback
 from io import BytesIO
 from typing import TYPE_CHECKING, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import ParseResult, urljoin, urlparse
 
 import dateutil
 import feedparser
@@ -1661,6 +1661,8 @@ class OPDSImportMonitor(
         except AttributeError:
             self._max_retry_count = 0
 
+        parsed_url: ParseResult = urlparse(self.feed_url)
+        self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"
         super().__init__(_db, collection)
 
     def external_integration(self, _db):
@@ -1701,6 +1703,8 @@ class OPDSImportMonitor(
             max_retry_count=self._max_retry_count,
             allowed_response_codes=["2xx", "3xx"],
         )
+        if not url.startswith("http"):
+            url = urljoin(self._feed_base_url, url)
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
         return response.status_code, response.headers, response.content
 

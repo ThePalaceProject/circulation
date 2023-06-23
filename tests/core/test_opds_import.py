@@ -2383,6 +2383,39 @@ class TestOPDSImportMonitor:
             excinfo.value
         )
 
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration, "data_source", "OPDS"
+        )
+        db.default_collection().external_account_id = (
+            "https://opds.import.com/feed?size=100"
+        )
+        monitor = OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
+        assert monitor._feed_base_url == "https://opds.import.com/"
+
+    def test_get(self, db: DatabaseTransactionFixture):
+        session = db.session
+
+        ## Test whether relative urls work
+        DatabaseTransactionFixture.set_settings(
+            db.default_collection().integration_configuration, "data_source", "OPDS"
+        )
+        db.default_collection().external_account_id = (
+            "https://opds.import.com:9999/feed"
+        )
+        monitor = OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
+
+        with patch("core.opds_import.HTTP.get_with_timeout") as mock_get:
+            monitor._get("/absolute/path", {})
+            assert mock_get.call_args[0] == (
+                "https://opds.import.com:9999/absolute/path",
+            )
+
+            mock_get.reset_mock()
+            monitor._get("relative/path", {})
+            assert mock_get.call_args[0] == (
+                "https://opds.import.com:9999/relative/path",
+            )
+
     def test_external_integration(self, opds_importer_fixture: OPDSImporterFixture):
         data, transaction, session = (
             opds_importer_fixture,
