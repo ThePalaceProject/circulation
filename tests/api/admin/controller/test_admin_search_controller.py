@@ -43,7 +43,7 @@ class AdminSearchFixture:
         s2.genre = w.genres[0]
         s2.name = "subject 2"
         s2.audience = "Adult"
-        db.classification(w.presentation_edition.primary_identifier, s, gutenberg)
+        db.classification(w.presentation_edition.primary_identifier, s2, gutenberg)
 
         w = db.work(
             title="work3",
@@ -57,7 +57,7 @@ class AdminSearchFixture:
         s3.genre = w.genres[0]
         s3.name = "subject 3"
         s3.audience = "Adult"
-        db.classification(w.presentation_edition.primary_identifier, s, gutenberg)
+        db.classification(w.presentation_edition.primary_identifier, s3, gutenberg)
 
         for _ in range(10):
             w = db.work(
