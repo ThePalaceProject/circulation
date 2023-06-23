@@ -69,7 +69,7 @@ class OPDS2Annotator:
         if edition.imprint:
             result["imprint"] = {"name": edition.imprint}
         if work.last_update_time:
-            result["modified"] = work.last_update_time.date().isoformat()
+            result["modified"] = work.last_update_time.isoformat()
         if pool and pool.availability_time:
             result["published"] = pool.availability_time.date().isoformat()
         result["description"] = work.summary_text
