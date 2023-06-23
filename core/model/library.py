@@ -152,7 +152,6 @@ class Library(Base, HasSessionCache):
     lanes: Mapped[List[Lane]] = relationship(
         "Lane",
         back_populates="library",
-        foreign_keys=Lane.library_id,
         cascade="all, delete-orphan",
     )
 
