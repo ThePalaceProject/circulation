@@ -3,15 +3,12 @@ from __future__ import annotations
 import contextlib
 import datetime
 import json
-import logging
-from functools import partial
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy.exc import ProgrammingError
 
 from api.adobe_vendor_id import (
     AdobeVendorIDModel,
@@ -22,12 +19,17 @@ from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
-from core.external_search import MockExternalSearchIndex, mock_search_index
+from core.external_search import (
+    ExternalSearchIndex,
+    MockExternalSearchIndex,
+    mock_search_index,
+)
 from core.lane import Facets, FeaturedFacets, Pagination, WorkList
 from core.marc import MARCExporter
 from core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
 from core.mirror import MirrorUploader
 from core.model import (
+    LOCK_ID_DB_INIT,
     CachedMARCFile,
     ConfigurationSetting,
     Credential,
@@ -695,86 +697,83 @@ class TestCacheMARCFiles:
 
 
 class TestInstanceInitializationScript:
-    def test_run(self, db: DatabaseTransactionFixture):
-        # If the database has not been initialized, run() will detect
-        # this and call do_run().
+    # These are some basic tests for the instance initialization script. It is tested
+    # more thoroughly as part of the migration tests, since migration tests are able
+    # to test the script's interaction with the database.
 
-        # Simulate an uninitialized database by changing the test SQL
-        # to refer to a nonexistent table. Since this 'known' table
-        # doesn't exist, we must not have initialized the site,
-        # and do_run() will be called.
-        class Mock(InstanceInitializationScript):
-            TEST_SQL = "select * from nosuchtable"
+    def test_run_locks_database(self, db: DatabaseTransactionFixture):
+        # The script locks the database with a PostgreSQL advisory lock
+        with patch("scripts.SessionManager") as session_manager:
+            with patch("scripts.pg_advisory_lock") as advisory_lock:
+                script = InstanceInitializationScript()
+                script.initialize = MagicMock()
+                script.run()
 
-            def do_run(self, *args, **kwargs):
-                self.was_run = True
+                advisory_lock.assert_called_once_with(
+                    session_manager.engine().begin().__enter__(),
+                    LOCK_ID_DB_INIT,
+                )
+                advisory_lock().__enter__.assert_called_once()
+                advisory_lock().__exit__.assert_called_once()
 
-        script = Mock()
-        script.run()
-        assert script.was_run is True
+    def test_initialize(self, db: DatabaseTransactionFixture):
+        # Test that the script inspects the database and initializes or migrates the database
+        # as necessary.
+        with patch("scripts.inspect") as inspect:
+            script = InstanceInitializationScript()
+            script.migrate_database = MagicMock()
+            script.initialize_database = MagicMock()
 
-    def test_alembic_state(self, db: DatabaseTransactionFixture):
-        # Delete the table data, we should run the script
-        # using a session that is not locked into the current transaction (as the script does)
-        url = Configuration.database_url()
-        _db = SessionManager.session(
-            url, initialize_data=False, initialize_schema=False
-        )
-        try:
-            _db.execute("DELETE FROM alembic_version")
-            _db.commit()
-        except ProgrammingError as ex:
-            logging.getLogger().info(
-                "The alembic_version table does not exists yet!! Continuing... "
-            )
-            # If the table was not present, first testing run ever
-        finally:
-            _db.close()
+            # If the database is uninitialized, initialize_database() is called.
+            inspect().has_table.return_value = False
+            script.initialize(MagicMock())
+            script.initialize_database.assert_called_once()
+            script.migrate_database.assert_not_called()
 
-        script = InstanceInitializationScript(_db=db.session)
-        # Ensure search is skipped
-        script.do_run = partial(script.do_run, ignore_search=True)
-        # Mock the desired response from the DB
-        with patch("scripts.SessionManager") as manager:
-            manager.session().execute().first = MagicMock(return_value=None)
-            script.run()
+            # If the database is initialized, migrate_database() is called.
+            script.initialize_database.reset_mock()
+            script.migrate_database.reset_mock()
+            inspect().has_table.return_value = True
+            script.initialize(MagicMock())
+            script.initialize_database.assert_not_called()
+            script.migrate_database.assert_called_once()
 
-        # Alembic version got stamped
-        result = db.session.execute("select * from alembic_version")
-        assert result.first() is not None
+    def test_initialize_database(self, db: DatabaseTransactionFixture):
+        # Test that the script initializes the database.
+        script = InstanceInitializationScript()
+        mock_db = MagicMock()
 
-        # Re-running will not call the alembic functions
-        # Mock the do_run
-        script.do_run = MagicMock()
-        script.run()
-        assert script.do_run.call_count == 0
+        with patch(
+            "scripts.SessionManager", autospec=SessionManager
+        ) as session_manager:
+            with patch(
+                "scripts.ExternalSearchIndex", autospec=ExternalSearchIndex
+            ) as search_index:
+                with patch("scripts.command") as alemic_command:
+                    script.initialize_database(mock_db)
 
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        # Remove all secret keys, should they exist, before running the
-        # script.
-        secret_keys = db.session.query(ConfigurationSetting).filter(
-            ConfigurationSetting.key == Configuration.SECRET_KEY
-        )
-        [db.session.delete(secret_key) for secret_key in secret_keys]
+        session_manager.initialize_data.assert_called_once()
+        session_manager.initialize_schema.assert_called_once()
+        search_index.assert_called_once()
+        alemic_command.stamp.assert_called_once()
 
-        script = InstanceInitializationScript(_db=db.session)
-        script.do_run(ignore_search=True)
+    def test_migrate_database(self, db: DatabaseTransactionFixture):
+        script = InstanceInitializationScript()
+        mock_db = MagicMock()
 
-        # It creates a secret key.
-        assert 1 == secret_keys.count()
-        assert secret_keys.one().value == ConfigurationSetting.sitewide_secret(
-            db.session, Configuration.SECRET_KEY
-        )
+        with patch("scripts.command") as alemic_command:
+            script.migrate_database(mock_db)
+
+        alemic_command.upgrade.assert_called_once()
 
     def test_find_alembic_ini(self, db: DatabaseTransactionFixture):
         # Make sure we find alembic.ini for script command
-        with patch("scripts.command") as command:
-            script = InstanceInitializationScript(_db=db.session)
-            script.do_run(ignore_search=True)
-
-        command.stamp.assert_called()
-        filename = command.stamp.call_args.args[0].config_file_name
-        assert Path(filename).exists()
+        mock_connection = MagicMock()
+        conf = InstanceInitializationScript._get_alembic_config(mock_connection)
+        assert Path(conf.config_file_name).exists()
+        assert conf.config_file_name.endswith("alembic.ini")
+        assert conf.attributes["connection"] == mock_connection.engine
+        assert conf.attributes["configure_logger"] is False
 
 
 class TestLanguageListScript:

@@ -5,6 +5,11 @@ import sys
 import time
 from datetime import timedelta
 from pathlib import Path
+from typing import Optional
+
+from sqlalchemy import inspect
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Session
 
 from alembic import command, config
 from api.adobe_vendor_id import AuthdataUtility
@@ -29,6 +34,7 @@ from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, FeaturedFacets, Lane, Pagination
+from core.log import LogConfiguration
 from core.marc import MARCExporter
 from core.metadata_layer import (
     CirculationData,
@@ -39,6 +45,7 @@ from core.metadata_layer import (
 )
 from core.mirror import MirrorUploader
 from core.model import (
+    LOCK_ID_DB_INIT,
     CachedMARCFile,
     CirculationEvent,
     Collection,
@@ -59,6 +66,7 @@ from core.model import (
     RightsStatus,
     SessionManager,
     get_one,
+    pg_advisory_lock,
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
@@ -821,7 +829,7 @@ class CompileTranslationsScript(Script):
         os.system("pybabel compile -f -d translations")
 
 
-class InstanceInitializationScript(TimestampScript):
+class InstanceInitializationScript:
     """An idempotent script to initialize an instance of the Circulation Manager.
 
     This script is intended for use in servers, Docker containers, etc,
@@ -832,63 +840,84 @@ class InstanceInitializationScript(TimestampScript):
     remain idempotent.
     """
 
-    name = "Instance initialization"
+    def __init__(self) -> None:
+        self._log: Optional[logging.Logger] = None
+        LogConfiguration.initialize(None)
 
-    TEST_SQL = "SELECT * FROM pg_catalog.pg_tables where tablename='libraries';"
-
-    def run(self, *args, **kwargs):
-        # Create a special database session that doesn't initialize
-        # the ORM -- this could be fatal if there are migration
-        # scripts that haven't run yet.
-        #
-        # In fact, we don't even initialize the database schema,
-        # because that's the thing we're trying to check for.
-        url = Configuration.database_url()
-        _db = SessionManager.session(
-            url, initialize_data=False, initialize_schema=False
-        )
-
-        result = None
-        try:
-            # We need to check for the existence of a known table --
-            # this will demonstrate that this script has been run before --
-            # but we don't need to actually look at what we get from the
-            # database.
-            #
-            # Basically, if this succeeds, we can bail out and not run
-            # the rest of the script.
-            result = _db.execute(self.TEST_SQL).first()
-        except Exception as e:
-            # This did _not_ succeed, so the schema is probably not
-            # initialized and we do need to run this script.. This
-            # database session is useless now, but we'll create a new
-            # one during the super() call, and use that one to do the
-            # work.
-            _db.close()
-
-        if result is None:
-            super().run(*args, **kwargs)
-        else:
-            self.log.error(
-                "I think this site has already been initialized; doing nothing."
+    @property
+    def log(self) -> logging.Logger:
+        if self._log is None:
+            self._log = logging.getLogger(
+                f"{self.__module__}.{self.__class__.__name__}"
             )
+        return self._log
 
-    def do_run(self, ignore_search=False):
-        # Creates a "-current" alias on the Opensearch client.
-        if not ignore_search:
+    @staticmethod
+    def _get_alembic_config(connection: Connection) -> config.Config:
+        """Get the Alembic config object for the current app."""
+        conf = config.Config(str(Path(__file__).parent.absolute() / "alembic.ini"))
+        conf.attributes["configure_logger"] = False
+        conf.attributes["connection"] = connection.engine
+        conf.attributes["need_lock"] = False
+        return conf
+
+    def migrate_database(self, connection: Connection) -> None:
+        """Run our database migrations to make sure the database is up-to-date."""
+        alembic_conf = self._get_alembic_config(connection)
+        command.upgrade(alembic_conf, "head")
+
+    def initialize_database(self, connection: Connection) -> None:
+        """
+        Initialize the database, creating tables, loading default data and then
+        stamping the most recent migration as the current state of the DB.
+        """
+        SessionManager.initialize_schema(connection)
+
+        with Session(connection) as session:
+            # Initialize the database with default data
+            SessionManager.initialize_data(session)
+
+            # Create a secret key if one doesn't already exist.
+            ConfigurationSetting.sitewide_secret(session, Configuration.SECRET_KEY)
+
+            # Initialize the search client to create the "-current" alias.
             try:
-                search_client = ExternalSearchIndex(self._db)
-            except CannotLoadConfiguration as e:
+                ExternalSearchIndex(session)
+            except CannotLoadConfiguration:
                 # Opensearch isn't configured, so do nothing.
                 pass
 
         # Stamp the most recent migration as the current state of the DB
-        conf = config.Config(str(Path(__file__).parent.absolute() / "alembic.ini"))
-        conf.set_main_option("sqlalchemy.url", Configuration.database_url())
-        command.stamp(conf, "head")
+        alembic_conf = self._get_alembic_config(connection)
+        command.stamp(alembic_conf, "head")
 
-        # Create a secret key if one doesn't already exist.
-        ConfigurationSetting.sitewide_secret(self._db, Configuration.SECRET_KEY)
+    def initialize(self, connection: Connection):
+        """Initialize the database if necessary."""
+        inspector = inspect(connection)
+        if inspector.has_table("alembic_version"):
+            self.log.info("Database schema already exists. Running migrations.")
+            self.migrate_database(connection)
+            self.log.info("Migrations complete.")
+        else:
+            self.log.info("Database schema does not exist. Initializing.")
+            self.initialize_database(connection)
+            self.log.info("Initialization complete.")
+
+    def run(self) -> None:
+        """
+        Initialize the database if necessary. This script is idempotent, so it
+        can be run every time the app starts.
+
+        The script uses a PostgreSQL advisory lock to ensure that only one
+        instance of the script is running at a time. This prevents multiple
+        instances from trying to initialize the database at the same time.
+        """
+        engine = SessionManager.engine()
+        with engine.begin() as connection:
+            with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
+                self.initialize(connection)
+
+        engine.dispose()
 
 
 class LoanReaperScript(TimestampScript):
