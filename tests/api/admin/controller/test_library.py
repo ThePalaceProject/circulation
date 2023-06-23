@@ -461,6 +461,7 @@ class TestLibrarySettings:
         library = get_one(
             settings_ctrl_fixture.ctrl.db.session, Library, short_name="nypl"
         )
+        assert isinstance(library, Library)
         assert library.uuid == response.get_data(as_text=True)
         assert library.name == "The New York Public Library"
         assert library.short_name == "nypl"

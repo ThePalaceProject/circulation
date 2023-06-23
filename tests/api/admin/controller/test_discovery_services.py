@@ -115,6 +115,7 @@ class TestDiscoveryServices:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            assert isinstance(service.name, str)
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", service.name),
@@ -144,7 +145,7 @@ class TestDiscoveryServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
                 ]
             )
@@ -182,6 +183,7 @@ class TestDiscoveryServices:
             ExternalIntegration,
             goal=ExternalIntegration.DISCOVERY_GOAL,
         )
+        assert isinstance(service, ExternalIntegration)
         assert service.id == int(response.response[0])
         assert ExternalIntegration.OPDS_REGISTRATION == service.protocol
         assert "http://registry_url" == service.url
@@ -201,7 +203,7 @@ class TestDiscoveryServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
-                    ("id", discovery_service.id),
+                    ("id", str(discovery_service.id)),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
                     (ExternalIntegration.URL, "http://new_registry_url"),
                 ]

@@ -169,6 +169,7 @@ class TestAnalyticsServices:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            assert isinstance(service.name, str)
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", service.name),
@@ -192,7 +193,7 @@ class TestAnalyticsServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", "core.local_analytics_provider"),
                     ("url", "http://test"),
                 ]
@@ -205,7 +206,7 @@ class TestAnalyticsServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("name", "analytics name"),
                     ("protocol", GoogleAnalyticsProvider.__module__),
                     ("url", ""),
@@ -219,7 +220,7 @@ class TestAnalyticsServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", GoogleAnalyticsProvider.__module__),
                     ("name", "some other analytics name"),
                     (ExternalIntegration.URL, "http://test"),
@@ -241,7 +242,7 @@ class TestAnalyticsServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", GoogleAnalyticsProvider.__module__),
                     ("name", "some other name"),
                     (ExternalIntegration.URL, ""),
@@ -300,6 +301,7 @@ class TestAnalyticsServices:
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=GoogleAnalyticsProvider.__module__,
         )
+        assert isinstance(service, ExternalIntegration)
         assert service.id == int(response.get_data())
         assert GoogleAnalyticsProvider.__module__ == service.protocol
         assert "http://test" == service.url
@@ -367,7 +369,7 @@ class TestAnalyticsServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", ga_service.id),
+                    ("id", str(ga_service.id)),
                     ("name", "some other analytics name"),
                     ("protocol", GoogleAnalyticsProvider.__module__),
                     (ExternalIntegration.URL, "http://test"),

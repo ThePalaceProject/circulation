@@ -30,7 +30,10 @@ from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
-from core.integration.base import HasChildIntegrationConfiguration
+from core.integration.base import (
+    HasChildIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration,
+)
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
@@ -561,6 +564,7 @@ class TestSignInController:
                 sign_in_fixture.manager.admin_sign_in_controller.change_password()
             )
             assert 200 == response.status_code
+            assert isinstance(admin.email, str)
             assert admin == Admin.authenticate(
                 sign_in_fixture.ctrl.db.session, admin.email, "new"
             )
@@ -1397,9 +1401,11 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
+            assert isinstance(list, CustomList)
+            assert isinstance(list.name, str)
             form = ImmutableMultiDict(
                 [
-                    ("id", list.id),
+                    ("id", str(list.id)),
                     ("name", list.name),
                 ]
             )
@@ -1421,6 +1427,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
+            assert isinstance(list.name, str)
             form = ImmutableMultiDict(
                 [
                     ("name", list.name),
@@ -1451,9 +1458,10 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
+            assert isinstance(l1.name, str)
             form = ImmutableMultiDict(
                 [
-                    ("id", l2.id),
+                    ("id", str(l2.id)),
                     ("name", l1.name),
                 ]
             )
@@ -1684,6 +1692,7 @@ class TestCustomListsController:
         list.add_entry(work2)
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
@@ -1726,6 +1735,7 @@ class TestCustomListsController:
             list.add_entry(work)
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
@@ -1874,6 +1884,7 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
 
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
@@ -2070,6 +2081,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
@@ -2143,6 +2155,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
@@ -2648,7 +2661,8 @@ class TestLanesController:
             assert 201 == response.status_code
             lane_id = int(response.data)
 
-        lane: Lane = get_one(alm_fixture.ctrl.db.session, Lane, id=lane_id)
+        lane = get_one(alm_fixture.ctrl.db.session, Lane, id=lane_id)
+        assert isinstance(lane, Lane)
         assert lane.customlists == [list]
         assert lane.library == library
 
@@ -3506,20 +3520,38 @@ class TestSettingsController:
             key: str
             value: str
 
-        class Protocol1:
+        class Protocol1(HasLibraryIntegrationConfiguration):
             @classmethod
             def library_settings_class(cls):
                 return P1LibrarySettings
 
-        with pytest.raises(RuntimeError) as raised:
+            @classmethod
+            def label(cls):
+                pass
+
+            @classmethod
+            def description(cls):
+                pass
+
+            @classmethod
+            def settings_class(cls):
+                pass
+
+        with pytest.raises(RuntimeError) as runtime_error_raised:
             _set_configuration_library(
                 config, dict(short_name="not-short-name"), Protocol1
             )
-        assert str(raised.value) == "Could not find the configuration library"
+        assert (
+            str(runtime_error_raised.value)
+            == "Could not find the configuration library"
+        )
 
-        with pytest.raises(ProblemError) as raised:
+        with pytest.raises(ProblemError) as problem_error_raised:
             _set_configuration_library(config, dict(short_name="short-name"), Protocol1)
-        assert raised.value.problem_detail.detail == "Required field 'key' is missing."
+        assert (
+            problem_error_raised.value.problem_detail.detail
+            == "Required field 'key' is missing."
+        )
 
         config = _set_configuration_library(
             config, dict(short_name="short-name", key="key", value="value"), Protocol1

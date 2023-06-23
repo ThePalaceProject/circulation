@@ -47,6 +47,9 @@ class CustomList(Base):
     id = Column(Integer, primary_key=True)
     primary_language = Column(Unicode, index=True)
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="custom_lists"
+    )
     foreign_identifier = Column(Unicode, index=True)
     name = Column(Unicode, index=True)
     description = Column(Unicode)

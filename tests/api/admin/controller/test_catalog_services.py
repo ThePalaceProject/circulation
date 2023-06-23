@@ -123,7 +123,7 @@ class TestCatalogServicesController:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", ExternalIntegration.MARC_EXPORT),
                 ]
             )
@@ -135,7 +135,7 @@ class TestCatalogServicesController:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", service.name),
+                    ("name", str(service.name)),
                     ("protocol", ExternalIntegration.MARC_EXPORT),
                 ]
             )
@@ -157,7 +157,7 @@ class TestCatalogServicesController:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", ME.NAME),
                     ("mirror_integration_id", "1234"),
                 ]
@@ -180,9 +180,9 @@ class TestCatalogServicesController:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", ME.NAME),
-                    ("mirror_integration_id", s3.id),
+                    ("mirror_integration_id", str(s3.id)),
                 ]
             )
             response = (
@@ -197,7 +197,7 @@ class TestCatalogServicesController:
                 [
                     ("name", "new name"),
                     ("protocol", ME.NAME),
-                    ("mirror_integration_id", s3.id),
+                    ("mirror_integration_id", str(s3.id)),
                 ]
             )
             pytest.raises(
@@ -217,7 +217,7 @@ class TestCatalogServicesController:
                 [
                     ("name", "new name"),
                     ("protocol", ME.NAME),
-                    ("mirror_integration_id", s3.id),
+                    ("mirror_integration_id", str(s3.id)),
                     (
                         "libraries",
                         json.dumps(
@@ -255,7 +255,7 @@ class TestCatalogServicesController:
                 [
                     ("name", "exporter name"),
                     ("protocol", ME.NAME),
-                    ("mirror_integration_id", s3.id),
+                    ("mirror_integration_id", str(s3.id)),
                     (
                         "libraries",
                         json.dumps(
@@ -280,6 +280,7 @@ class TestCatalogServicesController:
             ExternalIntegration,
             goal=ExternalIntegration.CATALOG_GOAL,
         )
+        assert isinstance(service, ExternalIntegration)
         # There was one S3 integration and it was selected. The service has an
         # External Integration Link to the storage integration that is created
         # in a POST with purpose of ExternalIntegrationLink.MARC.
@@ -289,6 +290,7 @@ class TestCatalogServicesController:
             external_integration_id=service.id,
             purpose=ExternalIntegrationLink.MARC,
         )
+        assert isinstance(integration_link, ExternalIntegrationLink)
 
         assert service.id == int(response.get_data())
         assert ME.NAME == service.protocol
@@ -341,9 +343,9 @@ class TestCatalogServicesController:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
-                    ("id", service.id),
+                    ("id", str(service.id)),
                     ("protocol", ME.NAME),
-                    ("mirror_integration_id", s3.id),
+                    ("mirror_integration_id", str(s3.id)),
                     (
                         "libraries",
                         json.dumps(
@@ -369,6 +371,7 @@ class TestCatalogServicesController:
             external_integration_id=service.id,
             purpose=ExternalIntegrationLink.MARC,
         )
+        assert isinstance(integration_link, ExternalIntegrationLink)
         assert service.id == int(response.get_data())
         assert ME.NAME == service.protocol
         assert "exporter name" == service.name
@@ -419,7 +422,7 @@ class TestCatalogServicesController:
             )
             assert response.status_code == 200
 
-        service = get_one(
+        none_service = get_one(
             settings_ctrl_fixture.ctrl.db.session, ExternalIntegration, id=service.id
         )
-        assert None == service
+        assert none_service is None

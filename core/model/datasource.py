@@ -99,7 +99,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can generate many CustomLists.
     custom_lists: Mapped[List[CustomList]] = relationship(
-        "CustomList", backref="data_source"
+        "CustomList", back_populates="data_source"
     )
 
     # One DataSource can provide many LicensePoolDeliveryMechanisms.

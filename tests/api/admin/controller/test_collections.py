@@ -207,6 +207,7 @@ class TestCollectionSettings:
 
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
         c3.libraries += [l1, settings_ctrl_fixture.ctrl.db.default_library()]
+        assert isinstance(l1.id, int)
         l1_config = c3.integration_configuration.for_library(l1.id, create=True)
         DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
         # Commit the config changes
@@ -546,6 +547,7 @@ class TestCollectionSettings:
         collection = get_one(
             settings_ctrl_fixture.ctrl.db.session, Collection, name="New Collection"
         )
+        assert isinstance(collection, Collection)
         assert collection.id == int(response.response[0])
         assert "New Collection" == collection.name
         assert "acctid" == collection.external_account_id
@@ -568,13 +570,14 @@ class TestCollectionSettings:
             "1234"
             == collection.integration_configuration.settings["overdrive_website_id"]
         )
-
+        assert isinstance(l1.id, int)
         assert (
             "l1_ils"
             == collection.integration_configuration.for_library(l1.id).settings[
                 "ils_name"
             ]
         )
+        assert isinstance(l2.id, int)
         assert (
             "l2_ils"
             == collection.integration_configuration.for_library(l2.id).settings[
@@ -588,7 +591,7 @@ class TestCollectionSettings:
                 [
                     ("name", "Child Collection"),
                     ("protocol", "Overdrive"),
-                    ("parent_id", collection.id),
+                    ("parent_id", str(collection.id)),
                     (
                         "libraries",
                         json.dumps([{"short_name": "L3", "ils_name": "l3_ils"}]),
@@ -605,6 +608,7 @@ class TestCollectionSettings:
         child = get_one(
             settings_ctrl_fixture.ctrl.db.session, Collection, name="Child Collection"
         )
+        assert isinstance(child, Collection)
         assert child.id == int(response.response[0])
         assert "Child Collection" == child.name
         assert "child-acctid" == child.external_account_id
@@ -616,7 +620,7 @@ class TestCollectionSettings:
 
         # One library has access to the collection.
         assert [child] == l3.collections
-
+        assert isinstance(l3.id, int)
         assert (
             "l3_ils"
             == child.integration_configuration.for_library(l3.id).settings["ils_name"]
@@ -672,7 +676,7 @@ class TestCollectionSettings:
         assert "1234" == collection.integration_configuration.settings.get(
             "overdrive_website_id"
         )
-
+        assert isinstance(l1.id, int)
         assert "the_ils" == collection.integration_configuration.for_library(
             l1.id
         ).settings.get("ils_name")
@@ -779,6 +783,7 @@ class TestCollectionSettings:
                 ExternalIntegrationLink,
                 external_integration_id=collection.external_integration.id,
             )
+            assert isinstance(external_integration_link, ExternalIntegrationLink)
             assert storage.id == external_integration_link.other_integration_id
 
         # It's possible to unset the mirror integration.
@@ -878,6 +883,7 @@ class TestCollectionSettings:
             assert response.status_code == 200
 
         # Additional settings were set on the collection+library.
+        assert isinstance(l1.id, int)
         assert "14" == collection.integration_configuration.for_library(
             l1.id
         ).settings.get("ebook_loan_duration")
@@ -905,6 +911,7 @@ class TestCollectionSettings:
 
         # The settings associated with the collection+library were removed
         # when the connection between collection and library was deleted.
+        assert isinstance(l1.id, int)
         assert None == collection.integration_configuration.for_library(l1.id)
         assert [] == collection.libraries
 
