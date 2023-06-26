@@ -12,7 +12,6 @@ from werkzeug.datastructures import FileStorage, ImmutableMultiDict
 
 from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.exceptions import *
-from api.admin.geographic_validator import GeographicValidator
 from api.config import Configuration
 from core.facets import FacetConstants
 from core.model import AdminRole, ConfigurationSetting, Library, get_one

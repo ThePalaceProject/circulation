@@ -7,7 +7,6 @@ from core.classifier import Classifier
 from core.model import create, tuple_to_numericrange
 from core.model.credential import Credential
 from core.model.datasource import DataSource
-from core.model.library import Library
 from core.model.licensing import PolicyException
 from core.model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -74,7 +73,6 @@ class TestHold:
         patron = db.patron()
         edition = db.edition()
         pool = db.licensepool(edition)
-        db.default_library().setting(Library.ALLOW_HOLDS).value = True
         hold, is_new = pool.on_hold_to(patron, now, later, 4)
         assert True == is_new
         assert now == hold.start
@@ -106,11 +104,10 @@ class TestHold:
         assert hold != hold2
 
     def test_holds_not_allowed(self, db: DatabaseTransactionFixture):
-        patron = db.patron()
+        library = db.library(settings={"allow_holds": False})
+        patron = db.patron(library=library)
         edition = db.edition()
         pool = db.licensepool(edition)
-
-        db.default_library().setting(Library.ALLOW_HOLDS).value = False
         with pytest.raises(PolicyException) as excinfo:
             pool.on_hold_to(patron, utc_now(), 4)
         assert "Holds are disabled for this library." in str(excinfo.value)

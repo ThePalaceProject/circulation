@@ -3,7 +3,17 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, List, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from Crypto.PublicKey import RSA
 from expiringdict import ExpiringDict
@@ -17,15 +27,15 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, Query, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from core.model.hybrid import hybrid_property
 
-from ..config import Configuration
+from ..configuration.library import LibrarySettings
 from ..entrypoint import EntryPoint
-from ..facets import FacetConstants
 from . import Base, get_one
 from .announcements import Announcement
 from .customlist import customlist_sharedlibrary
@@ -47,6 +57,8 @@ if TYPE_CHECKING:
         ExternalIntegration,
         Patron,
     )
+
+    from ..lane import Lane
 
 
 class Library(Base, HasSessionCache):
@@ -133,14 +145,18 @@ class Library(Base, HasSessionCache):
         back_populates="libraries",
     )
 
-    # Any additional configuration information is stored as
-    # ConfigurationSettings.
-    settings: Mapped[List[ConfigurationSetting]] = relationship(
+    # This parameter is deprecated, and will be removed once all of our integrations
+    # are updated to use IntegrationSettings. New code shouldn't use it.
+    # TODO: Remove this column.
+    external_integration_settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         back_populates="library",
         lazy="joined",
         cascade="all, delete",
     )
+
+    # Any additional configuration information is stored as JSON on this column.
+    settings_dict: Dict[str, Any] = Column(JSONB, nullable=False, default=dict)
 
     # A Library may have many CirculationEvents
     circulation_events: Mapped[List[CirculationEvent]] = relationship(
@@ -156,11 +172,15 @@ class Library(Base, HasSessionCache):
     # A class-wide cache mapping library ID to the calculated value
     # used for Library.has_root_lane.  This is invalidated whenever
     # Lane configuration changes, and it will also expire on its own.
-    _has_root_lane_cache = ExpiringDict(max_len=1000, max_age_seconds=3600)
+    _has_root_lane_cache: Dict[Union[int, None], bool] = ExpiringDict(
+        max_len=1000, max_age_seconds=3600
+    )
 
+    # A Library can have many lanes
     lanes: Mapped[List[Lane]] = relationship(
         "Lane",
         back_populates="library",
+        foreign_keys="Lane.library_id",
         cascade="all, delete-orphan",
     )
 
@@ -182,20 +202,23 @@ class Library(Base, HasSessionCache):
     # Typing specific
     collections: List[Collection]
 
-    def __repr__(self):
+    # Cache of the libraries loaded settings object
+    _settings: Optional[LibrarySettings]
+
+    def __repr__(self) -> str:
         return (
             '<Library: name="%s", short name="%s", uuid="%s", library registry short name="%s">'
             % (self.name, self.short_name, self.uuid, self.library_registry_short_name)
         )
 
-    def cache_key(self):
+    def cache_key(self) -> Optional[str]:
         return self.short_name
 
     @classmethod
-    def lookup(cls, _db, short_name):
+    def lookup(cls, _db: Session, short_name: str) -> Optional[Library]:
         """Look up a library by short name."""
 
-        def _lookup():
+        def _lookup() -> Tuple[Optional[Library], bool]:
             library = get_one(_db, Library, short_name=short_name)
             return library, False
 
@@ -203,13 +226,13 @@ class Library(Base, HasSessionCache):
         return library
 
     @classmethod
-    def default(cls, _db):
+    def default(cls, _db: Session) -> Optional[Library]:
         """Find the default Library."""
         # If for some reason there are multiple default libraries in
         # the database, they're not actually interchangeable, but
         # raising an error here might make it impossible to fix the
         # problem.
-        defaults = (
+        defaults: List[Library] = (
             _db.query(Library)
             .filter(Library._is_default == True)
             .order_by(Library.id.asc())
@@ -219,7 +242,6 @@ class Library(Base, HasSessionCache):
             # This is the normal case.
             return defaults[0]
 
-        default_library = None
         if not defaults:
             # There is no current default. Find the library with the
             # lowest ID and make it the default.
@@ -242,7 +264,7 @@ class Library(Base, HasSessionCache):
                 % (default_library.short_name)
             )
         default_library.is_default = True
-        return default_library
+        return default_library  # type: ignore[no-any-return]
 
     @classmethod
     def generate_keypair(cls) -> Tuple[str, bytes]:
@@ -254,12 +276,12 @@ class Library(Base, HasSessionCache):
         return public_key_str, private_key_bytes
 
     @hybrid_property
-    def library_registry_short_name(self):
+    def library_registry_short_name(self) -> Optional[str]:
         """Gets library_registry_short_name from database"""
         return self._library_registry_short_name
 
     @library_registry_short_name.setter
-    def library_registry_short_name(self, value):
+    def library_registry_short_name(self, value: Optional[str]) -> None:
         """Uppercase the library registry short name on the way in."""
         if value:
             value = value.upper()
@@ -270,78 +292,51 @@ class Library(Base, HasSessionCache):
             value = str(value)
         self._library_registry_short_name = value
 
-    def setting(self, key):
-        """Find or create a ConfigurationSetting on this Library.
-        :param key: Name of the setting.
-        :return: A ConfigurationSetting
-        """
-        from .configuration import ConfigurationSetting
-
-        return ConfigurationSetting.for_library(key, self)
+    @property
+    def settings(self) -> LibrarySettings:
+        """Get the settings for this integration"""
+        settings = getattr(self, "_settings", None)
+        if settings is None:
+            if not isinstance(self.settings_dict, dict):
+                raise ValueError(
+                    "settings_dict for library %s is not a dict: %r"
+                    % (self.short_name, self.settings_dict)
+                )
+            settings = LibrarySettings(**self.settings_dict)
+            self._settings = settings
+        return settings
 
     @property
-    def all_collections(self):
+    def all_collections(self) -> Generator[Collection, None, None]:
         for collection in self.collections:
             yield collection
             yield from collection.parents
 
-    # Some specific per-library configuration settings.
-
-    # The name of the per-library regular expression used to derive a patron's
-    # external_type from their authorization_identifier.
-    EXTERNAL_TYPE_REGULAR_EXPRESSION = "external_type_regular_expression"
-
-    # The name of the per-library configuration policy that controls whether
-    # books may be put on hold.
-    ALLOW_HOLDS = Configuration.ALLOW_HOLDS
-
-    # Each facet group has two associated per-library keys: one
-    # configuring which facets are enabled for that facet group, and
-    # one configuring which facet is the default.
-    ENABLED_FACETS_KEY_PREFIX = Configuration.ENABLED_FACETS_KEY_PREFIX
-    DEFAULT_FACET_KEY_PREFIX = Configuration.DEFAULT_FACET_KEY_PREFIX
-
-    # Each library may set a minimum quality for the books that show
-    # up in the 'featured' lanes that show up on the front page.
-    MINIMUM_FEATURED_QUALITY = Configuration.MINIMUM_FEATURED_QUALITY
-
-    # Each library may configure the maximum number of books in the
-    # 'featured' lanes.
-    FEATURED_LANE_SIZE = Configuration.FEATURED_LANE_SIZE
+    # # The name of the per-library configuration policy that controls whether
+    # # books may be put on hold.
+    # ALLOW_HOLDS = Configuration.ALLOW_HOLDS
+    #
+    # # Each facet group has two associated per-library keys: one
+    # # configuring which facets are enabled for that facet group, and
+    # # one configuring which facet is the default.
+    # ENABLED_FACETS_KEY_PREFIX = Configuration.ENABLED_FACETS_KEY_PREFIX
+    # DEFAULT_FACET_KEY_PREFIX = Configuration.DEFAULT_FACET_KEY_PREFIX
+    #
+    # # Each library may set a minimum quality for the books that show
+    # # up in the 'featured' lanes that show up on the front page.
+    # MINIMUM_FEATURED_QUALITY = Configuration.MINIMUM_FEATURED_QUALITY
+    #
+    # # Each library may configure the maximum number of books in the
+    # # 'featured' lanes.
+    # FEATURED_LANE_SIZE = Configuration.FEATURED_LANE_SIZE
 
     @property
-    def allow_holds(self):
-        """Does this library allow patrons to put items on hold?"""
-        value = self.setting(self.ALLOW_HOLDS).bool_value
-        if value is None:
-            # If the library has not set a value for this setting,
-            # holds are allowed.
-            value = True
-        return value
-
-    @property
-    def minimum_featured_quality(self):
-        """The minimum quality a book must have to be 'featured'."""
-        value = self.setting(self.MINIMUM_FEATURED_QUALITY).float_value
-        if value is None:
-            value = 0.65
-        return value
-
-    @property
-    def featured_lane_size(self):
-        """The minimum quality a book must have to be 'featured'."""
-        value = self.setting(self.FEATURED_LANE_SIZE).int_value
-        if value is None:
-            value = 15
-        return value
-
-    @property
-    def entrypoints(self):
+    def entrypoints(self) -> Generator[Optional[Type[EntryPoint]], None, None]:
         """The EntryPoints enabled for this library."""
-        values = self.setting(EntryPoint.ENABLED_SETTING).json_value
-        if values is None:
-            # No decision has been made about enabled EntryPoints.
-            for cls in EntryPoint.DEFAULT_ENABLED:
+        values = self.settings.enabled_entry_points
+        for v in values:
+            cls = EntryPoint.BY_INTERNAL_NAME.get(v)
+            if cls:
                 yield cls
         else:
             # It's okay for `values` to be an empty list--that means
@@ -384,7 +379,7 @@ class Library(Base, HasSessionCache):
         return self.setting(key)
 
     @property
-    def has_root_lanes(self):
+    def has_root_lanes(self) -> bool:
         """Does this library have any lanes that act as the root
         lane for a certain patron type?
 
@@ -416,10 +411,10 @@ class Library(Base, HasSessionCache):
 
     def restrict_to_ready_deliverable_works(
         self,
-        query,
-        collection_ids=None,
-        show_suppressed=False,
-    ):
+        query: Query[Work],
+        collection_ids: Optional[List[int]] = None,
+        show_suppressed: bool = False,
+    ) -> Query[Work]:
         """Restrict a query to show only presentation-ready works present in
         an appropriate collection which the default client can
         fulfill.
@@ -433,15 +428,19 @@ class Library(Base, HasSessionCache):
         """
         from .collection import Collection
 
-        collection_ids = collection_ids or [x.id for x in self.all_collections]
-        return Collection.restrict_to_ready_deliverable_works(
+        collection_ids = collection_ids or [
+            x.id for x in self.all_collections if x.id is not None
+        ]
+        return Collection.restrict_to_ready_deliverable_works(  # type: ignore[no-any-return]
             query,
             collection_ids=collection_ids,
             show_suppressed=show_suppressed,
-            allow_holds=self.allow_holds,
+            allow_holds=self.settings.allow_holds,
         )
 
-    def estimated_holdings_by_language(self, include_open_access=True):
+    def estimated_holdings_by_language(
+        self, include_open_access: bool = True
+    ) -> Counter[str]:
         """Estimate how many titles this library has in various languages.
         The estimate is pretty good but should not be relied upon as
         exact.
@@ -460,23 +459,16 @@ class Library(Base, HasSessionCache):
         qu = self.restrict_to_ready_deliverable_works(qu)
         if not include_open_access:
             qu = qu.filter(LicensePool.open_access == False)
-        counter = Counter()
-        for language, count in qu:
-            counter[language] = count
+        counter: Counter[str] = Counter()
+        for language, count in qu:  # type: ignore[misc]
+            counter[language] = count  # type: ignore[has-type]
         return counter
 
-    def default_facet(self, group_name):
+    def default_facet(self, group_name: str) -> str:
         """Look up the default facet for a given facet group."""
-        value = self.default_facet_setting(group_name).value
-        if not value:
-            value = FacetConstants.DEFAULT_FACET.get(group_name)
-        return value
+        return getattr(self.settings, "facets_default_" + group_name)  # type: ignore[no-any-return]
 
-    def default_facet_setting(self, group_name):
-        key = self.DEFAULT_FACET_KEY_PREFIX + group_name
-        return self.setting(key)
-
-    def explain(self, include_secrets=False):
+    def explain(self, include_secrets: bool = False) -> List[str]:
         """Create a series of human-readable strings to explain a library's
         settings.
 
@@ -503,16 +495,13 @@ class Library(Base, HasSessionCache):
                 % self.library_registry_shared_secret
             )
 
-        # Find all ConfigurationSettings that are set on the library
-        # itself and are not on the library + an external integration.
-        settings = [x for x in self.settings if not x.external_integration]
-        if settings:
-            lines.append("")
-            lines.append("Configuration settings:")
-            lines.append("-----------------------")
-        for setting in settings:
-            if (include_secrets or not setting.is_secret) and setting.value is not None:
-                lines.append(f"{setting.key}='{setting.value}'")
+        # Find all settings that are set on the library
+        lines.append("")
+        lines.append("Configuration settings:")
+        lines.append("-----------------------")
+        for key, value in self.settings.dict(exclude_defaults=False).items():
+            if value is not None:
+                lines.append(f"{key}='{value}'")
 
         integrations = list(self.integrations)
         if integrations:
@@ -525,11 +514,11 @@ class Library(Base, HasSessionCache):
         return lines
 
     @property
-    def is_default(self):
+    def is_default(self) -> Optional[bool]:
         return self._is_default
 
     @is_default.setter
-    def is_default(self, new_is_default):
+    def is_default(self, new_is_default: bool) -> None:
         """Set this library, and only this library, as the default."""
         if self._is_default and not new_is_default:
             raise ValueError(

@@ -1,16 +1,17 @@
 import json
+from typing import Iterable, Optional, Tuple
 
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
+from money import Money
 
 from core.config import CannotLoadConfiguration  # noqa: autoflake
 from core.config import IntegrationException  # noqa: autoflake
 from core.config import Configuration as CoreConfiguration
-from core.model import ConfigurationSetting, announcements
+from core.model import ConfigurationSetting, Library
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
-from core.model.constants import LinkRelations
 from core.util import MoneyUtility
 
 
@@ -153,17 +154,6 @@ class Configuration(CoreConfiguration):
     # A library with fewer titles than that will be given a single
     # lane containing all books in that language.
 
-    # These are link relations that are valid in Authentication for
-    # OPDS documents but are not registered with IANA.
-    AUTHENTICATION_FOR_OPDS_LINKS = ["register", LinkRelations.PATRON_PASSWORD_RESET]
-
-    # We support three different ways of integrating help processes.
-    # All three of these will be sent out as links with rel='help'
-    HELP_EMAIL = "help-email"
-    HELP_WEB = "help-web"
-    HELP_URI = "help-uri"
-    HELP_LINKS = [HELP_EMAIL, HELP_WEB, HELP_URI]
-
     # Features of an OPDS client which a library may want to enable or
     # disable.
     RESERVATIONS_FEATURE = "https://librarysimplified.org/rel/policy/reservations"
@@ -226,338 +216,338 @@ class Configuration(CoreConfiguration):
     # Level 2 settings can be modified only by library managers and system admins (i.e. not by librarians).  Level 3 settings can be changed only by system admins.
     # If no level is specified, the setting will be treated as Level 1 by default.
 
-    LIBRARY_SETTINGS = CoreConfiguration.LIBRARY_SETTINGS + [
-        {
-            "key": LIBRARY_DESCRIPTION,
-            "label": _("A short description of this library"),
-            "description": _(
-                "This will be shown to people who aren't sure they've chosen the right library."
-            ),
-            "category": "Basic Information",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": announcements.SETTING_NAME,
-            "label": _("Scheduled announcements"),
-            "description": _(
-                "Announcements will be displayed to authenticated patrons."
-            ),
-            "category": "Announcements",
-            "type": "announcements",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": HELP_EMAIL,
-            "label": _("Patron support email address"),
-            "description": _(
-                "An email address a patron can use if they need help, e.g. 'simplyehelp@yourlibrary.org'."
-            ),
-            "category": "Basic Information",
-            "format": "email",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": HELP_WEB,
-            "label": _("Patron support web site"),
-            "description": _(
-                "A URL for patrons to get help. Either this field or patron support email address must be provided."
-            ),
-            "format": "url",
-            "category": "Basic Information",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": HELP_URI,
-            "label": _("Patron support custom integration URI"),
-            "description": _(
-                "A custom help integration like Helpstack, e.g. 'helpstack:nypl.desk.com'."
-            ),
-            "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": COPYRIGHT_DESIGNATED_AGENT_EMAIL,
-            "label": _("Copyright designated agent email"),
-            "description": _(
-                "Patrons of this library should use this email address to send a DMCA notification (or other copyright complaint) to the library.<br/>If no value is specified here, the general patron support address will be used."
-            ),
-            "format": "email",
-            "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": CONFIGURATION_CONTACT_EMAIL,
-            "label": _(
-                "A point of contact for the organization reponsible for configuring this library"
-            ),
-            "description": _(
-                "This email address will be shared as part of integrations that you set up through this interface. It will not be shared with the general public. This gives the administrator of the remote integration a way to contact you about problems with this library's use of that integration.<br/>If no value is specified here, the general patron support address will be used."
-            ),
-            "format": "email",
-            "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
-            "label": _("Write-only email address for vendor hold notifications"),
-            "description": _(
-                'This address must trash all email sent to it. Vendor hold notifications contain sensitive patron information, but <a href="https://confluence.nypl.org/display/SIM/About+Hold+Notifications" target="_blank">cannot be forwarded to patrons</a> because they contain vendor-specific instructions.<br/>The default address will work, but for greater security, set up your own address that trashes all incoming email.'
-            ),
-            "default": STANDARD_NOREPLY_EMAIL_ADDRESS,
-            "required": True,
-            "format": "email",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": COLOR_SCHEME,
-            "label": _("Mobile color scheme"),
-            "description": _(
-                "This tells mobile applications what color scheme to use when rendering this library's OPDS feed."
-            ),
-            "options": [
-                dict(key="amber", label=_("Amber")),
-                dict(key="black", label=_("Black")),
-                dict(key="blue", label=_("Blue")),
-                dict(key="bluegray", label=_("Blue Gray")),
-                dict(key="brown", label=_("Brown")),
-                dict(key="cyan", label=_("Cyan")),
-                dict(key="darkorange", label=_("Dark Orange")),
-                dict(key="darkpurple", label=_("Dark Purple")),
-                dict(key="green", label=_("Green")),
-                dict(key="gray", label=_("Gray")),
-                dict(key="indigo", label=_("Indigo")),
-                dict(key="lightblue", label=_("Light Blue")),
-                dict(key="orange", label=_("Orange")),
-                dict(key="pink", label=_("Pink")),
-                dict(key="purple", label=_("Purple")),
-                dict(key="red", label=_("Red")),
-                dict(key="teal", label=_("Teal")),
-            ],
-            "type": "select",
-            "default": DEFAULT_COLOR_SCHEME,
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": WEB_PRIMARY_COLOR,
-            "label": _("Web primary color"),
-            "description": _(
-                "This is the brand primary color for the web application. Must have sufficient contrast with white."
-            ),
-            "type": "color-picker",
-            "default": DEFAULT_WEB_PRIMARY_COLOR,
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": WEB_SECONDARY_COLOR,
-            "label": _("Web secondary color"),
-            "description": _(
-                "This is the brand secondary color for the web application. Must have sufficient contrast with white."
-            ),
-            "type": "color-picker",
-            "default": DEFAULT_WEB_SECONDARY_COLOR,
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": WEB_CSS_FILE,
-            "label": _("Custom CSS file for web"),
-            "description": _(
-                "Give web applications a CSS file to customize the catalog display."
-            ),
-            "format": "url",
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": WEB_HEADER_LINKS,
-            "label": _("Web header links"),
-            "description": _(
-                "This gives web applications a list of links to display in the header. Specify labels for each link in the same order under 'Web header labels'."
-            ),
-            "type": "list",
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": WEB_HEADER_LABELS,
-            "label": _("Web header labels"),
-            "description": _("Labels for each link under 'Web header links'."),
-            "type": "list",
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": LOGO,
-            "label": _("Logo image"),
-            "type": "image",
-            "description": _(
-                "The image should be in GIF, PNG, or JPG format, approximately square, no larger than "
-                f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
-                "and look good on a light or dark mode background. "
-                "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
-                f"the longest dimension does not exceed {LOGO_MAX_DIMENSION} pixels."
-            ),
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": HIDDEN_CONTENT_TYPES,
-            "label": _("Hidden content types"),
-            "type": "text",
-            "description": _(
-                'A list of content types to hide from all clients, e.g. <code>["application/pdf"]</code>. This can be left blank except to solve specific problems.'
-            ),
-            "category": "Client Interface Customization",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": LIBRARY_FOCUS_AREA,
-            "label": _("Focus area"),
-            "type": "list",
-            "description": _(
-                "The library focuses on serving patrons in this geographic area. In most cases this will be a city name like <code>Springfield, OR</code>."
-            ),
-            "category": "Geographic Areas",
-            "format": "geographic",
-            "instructions": AREA_INPUT_INSTRUCTIONS,
-            "capitalize": True,
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": LIBRARY_SERVICE_AREA,
-            "label": _("Service area"),
-            "type": "list",
-            "description": _(
-                "The full geographic area served by this library. In most cases this is the same as the focus area and can be left blank, but it may be a larger area such as a US state (which should be indicated by its abbreviation, like <code>OR</code>)."
-            ),
-            "category": "Geographic Areas",
-            "format": "geographic",
-            "instructions": AREA_INPUT_INSTRUCTIONS,
-            "capitalize": True,
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": MAX_OUTSTANDING_FINES,
-            "label": _(
-                "Maximum amount in fines a patron can have before losing lending privileges"
-            ),
-            "type": "number",
-            "category": "Loans, Holds, & Fines",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": LOAN_LIMIT,
-            "label": _("Maximum number of books a patron can have on loan at once"),
-            "description": _(
-                "(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"
-            ),
-            "type": "number",
-            "category": "Loans, Holds, & Fines",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": HOLD_LIMIT,
-            "label": _("Maximum number of books a patron can have on hold at once"),
-            "description": _(
-                "(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"
-            ),
-            "type": "number",
-            "category": "Loans, Holds, & Fines",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": TERMS_OF_SERVICE,
-            "label": _("Terms of Service URL"),
-            "format": "url",
-            "category": "Links",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": PRIVACY_POLICY,
-            "label": _("Privacy Policy URL"),
-            "format": "url",
-            "category": "Links",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": COPYRIGHT,
-            "label": _("Copyright URL"),
-            "format": "url",
-            "category": "Links",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": ABOUT,
-            "label": _("About URL"),
-            "format": "url",
-            "category": "Links",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": LICENSE,
-            "label": _("License URL"),
-            "format": "url",
-            "category": "Links",
-            "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
-        },
-        {
-            "key": REGISTER,
-            "label": _("Patron registration URL"),
-            "description": _(
-                "A URL where someone who doesn't have a library card yet can sign up for one."
-            ),
-            "format": "url",
-            "category": "Patron Support",
-            "allowed": ["nypl.card-creator:https://patrons.librarysimplified.org/"],
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": LinkRelations.PATRON_PASSWORD_RESET,
-            "label": _("Password Reset Link"),
-            "description": _(
-                "A link to a web page where a user can reset their virtual library card password"
-            ),
-            "format": "url",
-            "category": "Patron Support",
-            "level": CoreConfiguration.SYS_ADMIN_ONLY,
-        },
-        {
-            "key": LARGE_COLLECTION_LANGUAGES,
-            "label": _(
-                "The primary languages represented in this library's collection"
-            ),
-            "type": "list",
-            "format": "language-code",
-            "description": LANGUAGE_DESCRIPTION,
-            "optional": True,
-            "category": "Languages",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": SMALL_COLLECTION_LANGUAGES,
-            "label": _(
-                "Other major languages represented in this library's collection"
-            ),
-            "type": "list",
-            "format": "language-code",
-            "description": LANGUAGE_DESCRIPTION,
-            "optional": True,
-            "category": "Languages",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-        {
-            "key": TINY_COLLECTION_LANGUAGES,
-            "label": _("Other languages in this library's collection"),
-            "type": "list",
-            "format": "language-code",
-            "description": LANGUAGE_DESCRIPTION,
-            "optional": True,
-            "category": "Languages",
-            "level": CoreConfiguration.ALL_ACCESS,
-        },
-    ]
+    # LIBRARY_SETTINGS = CoreConfiguration.LIBRARY_SETTINGS + [
+    #     {
+    #         "key": LIBRARY_DESCRIPTION,
+    #         "label": _("A short description of this library"),
+    #         "description": _(
+    #             "This will be shown to people who aren't sure they've chosen the right library."
+    #         ),
+    #         "category": "Basic Information",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": Announcements.SETTING_NAME,
+    #         "label": _("Scheduled announcements"),
+    #         "description": _(
+    #             "Announcements will be displayed to authenticated patrons."
+    #         ),
+    #         "category": "Announcements",
+    #         "type": "announcements",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": HELP_EMAIL,
+    #         "label": _("Patron support email address"),
+    #         "description": _(
+    #             "An email address a patron can use if they need help, e.g. 'simplyehelp@yourlibrary.org'."
+    #         ),
+    #         "category": "Basic Information",
+    #         "format": "email",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": HELP_WEB,
+    #         "label": _("Patron support web site"),
+    #         "description": _(
+    #             "A URL for patrons to get help. Either this field or patron support email address must be provided."
+    #         ),
+    #         "format": "url",
+    #         "category": "Basic Information",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": HELP_URI,
+    #         "label": _("Patron support custom integration URI"),
+    #         "description": _(
+    #             "A custom help integration like Helpstack, e.g. 'helpstack:nypl.desk.com'."
+    #         ),
+    #         "category": "Patron Support",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": COPYRIGHT_DESIGNATED_AGENT_EMAIL,
+    #         "label": _("Copyright designated agent email"),
+    #         "description": _(
+    #             "Patrons of this library should use this email address to send a DMCA notification (or other copyright complaint) to the library.<br/>If no value is specified here, the general patron support address will be used."
+    #         ),
+    #         "format": "email",
+    #         "category": "Patron Support",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": CONFIGURATION_CONTACT_EMAIL,
+    #         "label": _(
+    #             "A point of contact for the organization reponsible for configuring this library"
+    #         ),
+    #         "description": _(
+    #             "This email address will be shared as part of integrations that you set up through this interface. It will not be shared with the general public. This gives the administrator of the remote integration a way to contact you about problems with this library's use of that integration.<br/>If no value is specified here, the general patron support address will be used."
+    #         ),
+    #         "format": "email",
+    #         "category": "Patron Support",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
+    #         "label": _("Write-only email address for vendor hold notifications"),
+    #         "description": _(
+    #             'This address must trash all email sent to it. Vendor hold notifications contain sensitive patron information, but <a href="https://confluence.nypl.org/display/SIM/About+Hold+Notifications" target="_blank">cannot be forwarded to patrons</a> because they contain vendor-specific instructions.<br/>The default address will work, but for greater security, set up your own address that trashes all incoming email.'
+    #         ),
+    #         "default": STANDARD_NOREPLY_EMAIL_ADDRESS,
+    #         "required": True,
+    #         "format": "email",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": COLOR_SCHEME,
+    #         "label": _("Mobile color scheme"),
+    #         "description": _(
+    #             "This tells mobile applications what color scheme to use when rendering this library's OPDS feed."
+    #         ),
+    #         "options": [
+    #             dict(key="amber", label=_("Amber")),
+    #             dict(key="black", label=_("Black")),
+    #             dict(key="blue", label=_("Blue")),
+    #             dict(key="bluegray", label=_("Blue Gray")),
+    #             dict(key="brown", label=_("Brown")),
+    #             dict(key="cyan", label=_("Cyan")),
+    #             dict(key="darkorange", label=_("Dark Orange")),
+    #             dict(key="darkpurple", label=_("Dark Purple")),
+    #             dict(key="green", label=_("Green")),
+    #             dict(key="gray", label=_("Gray")),
+    #             dict(key="indigo", label=_("Indigo")),
+    #             dict(key="lightblue", label=_("Light Blue")),
+    #             dict(key="orange", label=_("Orange")),
+    #             dict(key="pink", label=_("Pink")),
+    #             dict(key="purple", label=_("Purple")),
+    #             dict(key="red", label=_("Red")),
+    #             dict(key="teal", label=_("Teal")),
+    #         ],
+    #         "type": "select",
+    #         "default": DEFAULT_COLOR_SCHEME,
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": WEB_PRIMARY_COLOR,
+    #         "label": _("Web primary color"),
+    #         "description": _(
+    #             "This is the brand primary color for the web application. Must have sufficient contrast with white."
+    #         ),
+    #         "type": "color-picker",
+    #         "default": DEFAULT_WEB_PRIMARY_COLOR,
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": WEB_SECONDARY_COLOR,
+    #         "label": _("Web secondary color"),
+    #         "description": _(
+    #             "This is the brand secondary color for the web application. Must have sufficient contrast with white."
+    #         ),
+    #         "type": "color-picker",
+    #         "default": DEFAULT_WEB_SECONDARY_COLOR,
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": WEB_CSS_FILE,
+    #         "label": _("Custom CSS file for web"),
+    #         "description": _(
+    #             "Give web applications a CSS file to customize the catalog display."
+    #         ),
+    #         "format": "url",
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": WEB_HEADER_LINKS,
+    #         "label": _("Web header links"),
+    #         "description": _(
+    #             "This gives web applications a list of links to display in the header. Specify labels for each link in the same order under 'Web header labels'."
+    #         ),
+    #         "type": "list",
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": WEB_HEADER_LABELS,
+    #         "label": _("Web header labels"),
+    #         "description": _("Labels for each link under 'Web header links'."),
+    #         "type": "list",
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": LOGO,
+    #         "label": _("Logo image"),
+    #         "type": "image",
+    #         "description": _(
+    #             "The image should be in GIF, PNG, or JPG format, approximately square, no larger than "
+    #             f"{LOGO_MAX_DIMENSION}x{LOGO_MAX_DIMENSION} pixels, "
+    #             "and look good on a light or dark mode background. "
+    #             "Larger images will be accepted, but scaled down (maintaining aspect ratio) such that "
+    #             f"the longest dimension does not exceed {LOGO_MAX_DIMENSION} pixels."
+    #         ),
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": HIDDEN_CONTENT_TYPES,
+    #         "label": _("Hidden content types"),
+    #         "type": "text",
+    #         "description": _(
+    #             'A list of content types to hide from all clients, e.g. <code>["application/pdf"]</code>. This can be left blank except to solve specific problems.'
+    #         ),
+    #         "category": "Client Interface Customization",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": LIBRARY_FOCUS_AREA,
+    #         "label": _("Focus area"),
+    #         "type": "list",
+    #         "description": _(
+    #             "The library focuses on serving patrons in this geographic area. In most cases this will be a city name like <code>Springfield, OR</code>."
+    #         ),
+    #         "category": "Geographic Areas",
+    #         "format": "geographic",
+    #         "instructions": AREA_INPUT_INSTRUCTIONS,
+    #         "capitalize": True,
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": LIBRARY_SERVICE_AREA,
+    #         "label": _("Service area"),
+    #         "type": "list",
+    #         "description": _(
+    #             "The full geographic area served by this library. In most cases this is the same as the focus area and can be left blank, but it may be a larger area such as a US state (which should be indicated by its abbreviation, like <code>OR</code>)."
+    #         ),
+    #         "category": "Geographic Areas",
+    #         "format": "geographic",
+    #         "instructions": AREA_INPUT_INSTRUCTIONS,
+    #         "capitalize": True,
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": MAX_OUTSTANDING_FINES,
+    #         "label": _(
+    #             "Maximum amount in fines a patron can have before losing lending privileges"
+    #         ),
+    #         "type": "number",
+    #         "category": "Loans, Holds, & Fines",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": LOAN_LIMIT,
+    #         "label": _("Maximum number of books a patron can have on loan at once"),
+    #         "description": _(
+    #             "(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"
+    #         ),
+    #         "type": "number",
+    #         "category": "Loans, Holds, & Fines",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": HOLD_LIMIT,
+    #         "label": _("Maximum number of books a patron can have on hold at once"),
+    #         "description": _(
+    #             "(Note: depending on distributor settings, a patron may be able to exceed the limit by checking out books directly from a distributor's app. They may also get a limit exceeded error before they reach these limits if a distributor has a smaller limit.)"
+    #         ),
+    #         "type": "number",
+    #         "category": "Loans, Holds, & Fines",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": TERMS_OF_SERVICE,
+    #         "label": _("Terms of Service URL"),
+    #         "format": "url",
+    #         "category": "Links",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": PRIVACY_POLICY,
+    #         "label": _("Privacy Policy URL"),
+    #         "format": "url",
+    #         "category": "Links",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": COPYRIGHT,
+    #         "label": _("Copyright URL"),
+    #         "format": "url",
+    #         "category": "Links",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": ABOUT,
+    #         "label": _("About URL"),
+    #         "format": "url",
+    #         "category": "Links",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": LICENSE,
+    #         "label": _("License URL"),
+    #         "format": "url",
+    #         "category": "Links",
+    #         "level": CoreConfiguration.SYS_ADMIN_OR_MANAGER,
+    #     },
+    #     {
+    #         "key": REGISTER,
+    #         "label": _("Patron registration URL"),
+    #         "description": _(
+    #             "A URL where someone who doesn't have a library card yet can sign up for one."
+    #         ),
+    #         "format": "url",
+    #         "category": "Patron Support",
+    #         "allowed": ["nypl.card-creator:https://patrons.librarysimplified.org/"],
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": LinkRelations.PATRON_PASSWORD_RESET,
+    #         "label": _("Password Reset Link"),
+    #         "description": _(
+    #             "A link to a web page where a user can reset their virtual library card password"
+    #         ),
+    #         "format": "url",
+    #         "category": "Patron Support",
+    #         "level": CoreConfiguration.SYS_ADMIN_ONLY,
+    #     },
+    #     {
+    #         "key": LARGE_COLLECTION_LANGUAGES,
+    #         "label": _(
+    #             "The primary languages represented in this library's collection"
+    #         ),
+    #         "type": "list",
+    #         "format": "language-code",
+    #         "description": LANGUAGE_DESCRIPTION,
+    #         "optional": True,
+    #         "category": "Languages",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": SMALL_COLLECTION_LANGUAGES,
+    #         "label": _(
+    #             "Other major languages represented in this library's collection"
+    #         ),
+    #         "type": "list",
+    #         "format": "language-code",
+    #         "description": LANGUAGE_DESCRIPTION,
+    #         "optional": True,
+    #         "category": "Languages",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    #     {
+    #         "key": TINY_COLLECTION_LANGUAGES,
+    #         "label": _("Other languages in this library's collection"),
+    #         "type": "list",
+    #         "format": "language-code",
+    #         "description": LANGUAGE_DESCRIPTION,
+    #         "optional": True,
+    #         "category": "Languages",
+    #         "level": CoreConfiguration.ALL_ACCESS,
+    #     },
+    # ]
 
     ANNOUNCEMENT_SETTINGS = [
         {
@@ -607,11 +597,10 @@ class Configuration(CoreConfiguration):
         return cls._collection_languages(library, cls.TINY_COLLECTION_LANGUAGES)
 
     @classmethod
-    def max_outstanding_fines(cls, library):
-        max_fines = ConfigurationSetting.for_library(cls.MAX_OUTSTANDING_FINES, library)
-        if max_fines.value is None:
+    def max_outstanding_fines(cls, library: Library) -> Optional[Money]:
+        if library.settings.max_outstanding_fines is None:
             return None
-        return MoneyUtility.parse(max_fines.value)
+        return MoneyUtility.parse(library.settings.max_outstanding_fines)
 
     @classmethod
     def estimate_language_collections_for_library(cls, library):
@@ -680,49 +669,38 @@ class Configuration(CoreConfiguration):
         return "mailto:%s" % value
 
     @classmethod
-    def help_uris(cls, library):
+    def help_uris(cls, library: Library) -> Iterable[Tuple[Optional[str], str]]:
         """Find all the URIs that might help patrons get help from
         this library.
 
         :yield: A sequence of 2-tuples (media type, URL)
         """
-        for name in cls.HELP_LINKS:
-            setting = ConfigurationSetting.for_library(name, library)
-            value = setting.value
-            if not value:
-                continue
-            type = None
-            if name == cls.HELP_EMAIL:
-                value = cls._as_mailto(value)
-            if name == cls.HELP_WEB:
-                type = "text/html"
-            yield type, value
+        if library.settings.help_email:
+            yield None, cls._as_mailto(library.settings.help_email)
+        if library.settings.help_web:
+            yield "text/html", library.settings.help_web
 
     @classmethod
-    def _email_uri_with_fallback(cls, library, key):
-        """Try to find a certain email address configured for the given
-        purpose. If not available, use the general patron support
-        address.
+    def copyright_designated_agent_uri(cls, library: Library) -> Optional[str]:
+        if library.settings.copyright_designated_agent_email_address:
+            email = library.settings.copyright_designated_agent_email_address
+        elif library.settings.help_email:
+            email = library.settings.help_email
+        else:
+            return None
 
-        :param key: The specific email address to look for.
-        """
-        for setting in [key, Configuration.HELP_EMAIL]:
-            value = ConfigurationSetting.for_library(setting, library).value
-            if not value:
-                continue
-            return cls._as_mailto(value)
+        return cls._as_mailto(email)
 
     @classmethod
-    def copyright_designated_agent_uri(cls, library):
-        return cls._email_uri_with_fallback(
-            library, Configuration.COPYRIGHT_DESIGNATED_AGENT_EMAIL
-        )
+    def configuration_contact_uri(cls, library: Library) -> Optional[str]:
+        if library.settings.configuration_contact_email_address:
+            email = library.settings.configuration_contact_email_address
+        elif library.settings.help_email:
+            email = library.settings.help_email
+        else:
+            return None
 
-    @classmethod
-    def configuration_contact_uri(cls, library):
-        return cls._email_uri_with_fallback(
-            library, Configuration.CONFIGURATION_CONTACT_EMAIL
-        )
+        return cls._as_mailto(email)
 
     @classmethod
     def cipher(cls, key: bytes) -> PKCS1OAEP_Cipher:

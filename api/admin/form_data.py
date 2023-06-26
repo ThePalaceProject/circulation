@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Type, TypeVar
 
 from werkzeug.datastructures import ImmutableMultiDict
@@ -54,6 +55,8 @@ class ProcessFormData:
                 return_data[field.name] = cls._process_list(field.name, form_data)
             elif form_item.type == ConfigurationFormItemType.MENU:
                 return_data[field.name] = cls._process_menu(field.name, form_data)
+            elif form_item.type == ConfigurationFormItemType.ANNOUNCEMENTS:
+                return_data[field.name] = json.loads(form_data.get(field.name, "[]"))
             else:
                 data = form_data.get(field.name)
                 if data is not None:

@@ -190,7 +190,6 @@ class TestConfigurationSetting:
         assert [] == integration.settings
 
         library = db.default_library()
-        assert [] == library.settings
 
         # Create four different ConfigurationSettings with the same key.
         cs = ConfigurationSetting

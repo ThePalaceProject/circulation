@@ -563,7 +563,7 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
         default_entrypoint = entrypoints[0]
         for entrypoint in entrypoints:
             facets = FeaturedFacets(
-                minimum_featured_quality=library.minimum_featured_quality,
+                minimum_featured_quality=library.settings.minimum_featured_quality,
                 uses_customlists=lane.uses_customlists,
                 entrypoint=entrypoint,
                 entrypoint_is_default=(top_level and entrypoint is default_entrypoint),

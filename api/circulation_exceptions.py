@@ -140,25 +140,17 @@ class LimitReached(CirculationException):
     This exception cannot be used on its own. It must be subclassed and the following constants defined:
         * `BASE_DOC`: A ProblemDetail, used as the basis for conversion of this exception into a
            problem detail document.
-        * `SETTING_NAME`: Then name of the library-specific ConfigurationSetting whose numeric
-          value is the limit that cannot be exceeded.
         * `MESSAGE_WITH_LIMIT` A string containing the interpolation value "%(limit)s", which
           offers a more specific explanation of the limit exceeded.
     """
 
     status_code = 403
     BASE_DOC: Optional[ProblemDetail] = None
-    SETTING_NAME: Optional[str] = None
     MESSAGE_WITH_LIMIT = None
 
-    def __init__(self, message=None, debug_info=None, library=None, limit=None):
+    def __init__(self, message=None, debug_info=None, limit=None):
         super().__init__(message=message, debug_info=debug_info)
-        if library:
-            self.limit = library.setting(self.SETTING_NAME).int_value
-        elif limit:
-            self.limit = limit
-        else:
-            self.limit = None
+        self.limit = limit if limit else None
 
     def as_problem_detail_document(self, debug=False):
         """Return a suitable problem detail document."""
@@ -186,7 +178,6 @@ class CannotHold(CirculationException):
 class PatronHoldLimitReached(CannotHold, LimitReached):
     BASE_DOC = HOLD_LIMIT_REACHED
     MESSAGE_WITH_LIMIT = SPECIFIC_HOLD_LIMIT_MESSAGE
-    SETTING_NAME = Configuration.HOLD_LIMIT
 
 
 class CannotReleaseHold(CirculationException):

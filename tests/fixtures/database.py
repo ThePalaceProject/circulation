@@ -8,7 +8,7 @@ import tempfile
 import time
 import uuid
 from textwrap import dedent
-from typing import Callable, Generator, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -252,7 +252,10 @@ class DatabaseTransactionFixture:
         return str(self.fresh_id())
 
     def library(
-        self, name: Optional[str] = None, short_name: Optional[str] = None
+        self,
+        name: Optional[str] = None,
+        short_name: Optional[str] = None,
+        settings: Optional[Dict[str, Any]] = None,
     ) -> Library:
         # Just a dummy key used for testing.
         key_string = """\
@@ -274,6 +277,14 @@ class DatabaseTransactionFixture:
 
         name = name or self.fresh_str()
         short_name = short_name or self.fresh_str()
+        settings = settings or {}
+
+        # Make sure we have defaults for settings that are required
+        if "website" not in settings:
+            settings["website"] = "http://library.com"
+        if "help_web" not in settings and "help_email" not in settings:
+            settings["help_web"] = "http://library.com/support"
+
         library, ignore = get_one_or_create(
             self.session,
             Library,
@@ -283,6 +294,7 @@ class DatabaseTransactionFixture:
                 uuid=str(uuid.uuid4()),
                 public_key=public_key.export_key("PEM").decode("utf-8"),
                 private_key=private_key.export_key("DER"),
+                settings_dict=settings,
             ),
         )
         return library

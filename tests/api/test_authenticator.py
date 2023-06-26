@@ -9,7 +9,7 @@ import os
 import re
 from decimal import Decimal
 from functools import partial
-from typing import TYPE_CHECKING, Callable, Literal, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Callable, Literal, Tuple, cast
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import flask
@@ -17,6 +17,7 @@ import pytest
 from flask import url_for
 from freezegun import freeze_time
 from money import Money
+from pydantic import EmailStr, HttpUrl, parse_obj_as
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -40,18 +41,17 @@ from api.config import CannotLoadConfiguration, Configuration
 from api.custom_patron_catalog import CustomPatronCatalog
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
-from api.opds import LibraryAnnotator
 from api.problem_details import *
 from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from api.util.patron import PatronUtility
 from core.analytics import Analytics
+from core.configuration.library import LibrarySettings
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import CirculationEvent, ConfigurationSetting, Library, Patron
-from core.model.constants import LinkRelations
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -959,6 +959,10 @@ class TestLibraryAuthenticator:
         mock_basic: MockBasicFixture,
         announcement_fixture: AnnouncementFixture,
     ):
+        class MockLibrarySettings(LibrarySettings):
+            class Config(LibrarySettings.Config):
+                allow_mutation = True
+
         class MockAuthenticator(LibraryAuthenticator):
             """Mock the _geographic_areas method."""
 
@@ -969,6 +973,7 @@ class TestLibraryAuthenticator:
                 return cls.AREAS
 
         library = db.default_library()
+        library._settings = MockLibrarySettings(**library.settings_dict)
         basic = mock_basic()
         library.name = "A Fabulous Library"
         authenticator = MockAuthenticator(
@@ -996,54 +1001,36 @@ class TestLibraryAuthenticator:
         del os.environ["AUTOINITIALIZE"]
 
         # Set up configuration settings for links.
-        link_config = {
-            LibraryAnnotator.TERMS_OF_SERVICE: "http://terms",
-            LibraryAnnotator.PRIVACY_POLICY: "http://privacy",
-            LibraryAnnotator.COPYRIGHT: "http://copyright",
-            LibraryAnnotator.ABOUT: "http://about",
-            LibraryAnnotator.LICENSE: "http://license/",
-            LibraryAnnotator.REGISTER: "custom-registration-hook://library/",
-            LinkRelations.PATRON_PASSWORD_RESET: "https://example.org/reset",
-            Configuration.WEB_CSS_FILE: "http://style.css",
-        }
-
-        for rel, value in link_config.items():
-            ConfigurationSetting.for_library(rel, db.default_library()).value = value
+        library._settings.terms_of_service = parse_obj_as(HttpUrl, "http://terms.com")
+        library._settings.privacy_policy = parse_obj_as(HttpUrl, "http://privacy.com")
+        library._settings.copyright = parse_obj_as(HttpUrl, "http://copyright.com")
+        library._settings.license = parse_obj_as(HttpUrl, "http://license.ca/")
+        library._settings.about = parse_obj_as(HttpUrl, "http://about.io")
+        library._settings.registration_url = parse_obj_as(
+            HttpUrl, "https://library.org/register"
+        )
+        library._settings.patron_password_reset = parse_obj_as(
+            HttpUrl, "https://example.org/reset"
+        )
+        library._settings.web_css_file = parse_obj_as(HttpUrl, "http://style.css")
 
         db.default_library().logo = LibraryLogo(content=b"image data")
 
-        ConfigurationSetting.for_library(
-            Configuration.LIBRARY_DESCRIPTION, library
-        ).value = "Just the best."
+        library._settings.library_description = "Just the best."
 
         # Set the URL to the library's web page.
-        ConfigurationSetting.for_library(
-            Configuration.WEBSITE_URL, library
-        ).value = "http://library/"
+        library._settings.website = parse_obj_as(HttpUrl, "http://library.org/")
 
         # Set the color scheme a mobile client should use.
-        ConfigurationSetting.for_library(
-            Configuration.COLOR_SCHEME, library
-        ).value = "plaid"
+        library._settings.color_scheme = "plaid"
 
         # Set the colors a web client should use.
-        ConfigurationSetting.for_library(
-            Configuration.WEB_PRIMARY_COLOR, library
-        ).value = "#012345"
-        ConfigurationSetting.for_library(
-            Configuration.WEB_SECONDARY_COLOR, library
-        ).value = "#abcdef"
+        library._settings.web_primary_color = "#012345"
+        library._settings.web_secondary_color = "#abcdef"
 
         # Configure the various ways a patron can get help.
-        ConfigurationSetting.for_library(
-            Configuration.HELP_EMAIL, library
-        ).value = "help@library"
-        ConfigurationSetting.for_library(
-            Configuration.HELP_WEB, library
-        ).value = "http://library.help/"
-        ConfigurationSetting.for_library(
-            Configuration.HELP_URI, library
-        ).value = "custom:uri"
+        library._settings.help_email = parse_obj_as(EmailStr, "help@library.org")
+        library._settings.help_web = parse_obj_as(HttpUrl, "http://library.help/")
 
         base_url = ConfigurationSetting.sitewide(db.session, Configuration.BASE_URL_KEY)
         base_url.value = "http://circulation-manager/"
@@ -1109,18 +1096,12 @@ class TestLibraryAuthenticator:
             assert "#012345" == doc["web_color_scheme"]["primary"]
             assert "#abcdef" == doc["web_color_scheme"]["secondary"]
 
-            # _geographic_areas was called and provided the library's
-            # focus area and service area.
-            assert "focus area" == doc["focus_area"]
-            assert "service area" == doc["service_area"]
-
             # We also need to test that the links got pulled in
             # from the configuration.
             (
                 about,
                 alternate,
                 copyright,
-                help_uri,
                 help_web,
                 help_email,
                 copyright_agent,
@@ -1135,11 +1116,11 @@ class TestLibraryAuthenticator:
                 stylesheet,
                 terms_of_service,
             ) = sorted(doc["links"], key=lambda x: (x["rel"], x["href"]))
-            assert "http://terms" == terms_of_service["href"]
-            assert "http://privacy" == privacy_policy["href"]
-            assert "http://copyright" == copyright["href"]
-            assert "http://about" == about["href"]
-            assert "http://license/" == license["href"]
+            assert "http://terms.com" == terms_of_service["href"]
+            assert "http://privacy.com" == privacy_policy["href"]
+            assert "http://copyright.com" == copyright["href"]
+            assert "http://about.io" == about["href"]
+            assert "http://license.ca/" == license["href"]
             assert "data:image/png;base64,image data" == logo["href"]
             assert "http://style.css" == stylesheet["href"]
 
@@ -1164,21 +1145,18 @@ class TestLibraryAuthenticator:
             # Most of the other links have type='text/html'
             assert "text/html" == about["type"]
 
-            # The registration link doesn't have a type, because it
-            # uses a non-HTTP URI scheme.
-            assert "type" not in register
-            assert "custom-registration-hook://library/" == register["href"]
+            # The registration link
+            assert "https://library.org/register" == register["href"]
 
             assert "https://example.org/reset" == reset_link["href"]
 
             # The logo link has type "image/png".
             assert "image/png" == logo["type"]
 
-            # We have three help links.
-            assert "custom:uri" == help_uri["href"]
+            # We have two help links.
             assert "http://library.help/" == help_web["href"]
             assert "text/html" == help_web["type"]
-            assert "mailto:help@library" == help_email["href"]
+            assert "mailto:help@library.org" == help_email["href"]
 
             # Since no special address was given for the copyright
             # designated agent, the help address was reused.
@@ -1186,7 +1164,7 @@ class TestLibraryAuthenticator:
                 "http://librarysimplified.org/rel/designated-agent/copyright"
             )
             assert copyright_rel == copyright_agent["rel"]
-            assert "mailto:help@library" == copyright_agent["href"]
+            assert "mailto:help@library.org" == copyright_agent["href"]
 
             # The public key is correct.
             assert authenticator.library is not None
@@ -1197,7 +1175,7 @@ class TestLibraryAuthenticator:
             # The library's web page shows up as an HTML alternate
             # to the OPDS server.
             assert (
-                dict(rel="alternate", type="text/html", href="http://library/")
+                dict(rel="alternate", type="text/html", href="http://library.org/")
                 == alternate
             )
 
@@ -1216,9 +1194,9 @@ class TestLibraryAuthenticator:
             # If a separate copyright designated agent is configured,
             # that email address is used instead of the default
             # patron support address.
-            ConfigurationSetting.for_library(
-                Configuration.COPYRIGHT_DESIGNATED_AGENT_EMAIL, library
-            ).value = "mailto:dmca@library.org"
+            library._settings.copyright_designated_agent_email_address = parse_obj_as(
+                EmailStr, "mailto:dmca@library.org"
+            )
             doc = json.loads(authenticator.create_authentication_document())
             [agent] = [x for x in doc["links"] if x["rel"] == copyright_rel]
             assert "mailto:dmca@library.org" == agent["href"]
@@ -1277,65 +1255,6 @@ class TestLibraryAuthenticator:
             )
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
-
-    def test__geographic_areas(self, db: DatabaseTransactionFixture):
-        """Test the _geographic_areas helper method."""
-
-        class Mock(LibraryAuthenticator):
-            called_with: Optional[Library] = None
-
-            values = {
-                Configuration.LIBRARY_FOCUS_AREA: "focus",
-                Configuration.LIBRARY_SERVICE_AREA: "service",
-            }
-
-            @classmethod
-            def _geographic_area(cls, key, library):
-                cls.called_with = library
-                return cls.values.get(key)
-
-        # _geographic_areas calls _geographic_area twice and
-        # returns the results in a 2-tuple.
-        m = Mock._geographic_areas
-        library = object()
-        assert ("focus", "service") == m(library)  # type: ignore
-        assert library == Mock.called_with
-
-        # If only one value is provided, the same value is given for both
-        # areas.
-        del Mock.values[Configuration.LIBRARY_FOCUS_AREA]
-        assert ("service", "service") == m(library)  # type: ignore
-
-        Mock.values[Configuration.LIBRARY_FOCUS_AREA] = "focus"
-        del Mock.values[Configuration.LIBRARY_SERVICE_AREA]
-        assert ("focus", "focus") == m(library)  # type: ignore
-
-    def test__geographic_area(self, db: DatabaseTransactionFixture):
-        """Test the _geographic_area helper method."""
-        library = db.default_library()
-        key = "a key"
-        setting = ConfigurationSetting.for_library(key, library)
-
-        def m():
-            return LibraryAuthenticator._geographic_area(key, library)
-
-        # A missing value is returned as None.
-        assert m() is None
-
-        # The literal string "everywhere" is returned as is.
-        setting.value = "everywhere"
-        assert "everywhere" == m()
-
-        # A string that makes sense as JSON is returned as its JSON
-        # equivalent.
-        two_states = ["NY", "NJ"]
-        setting.value = json.dumps(two_states)
-        assert two_states == m()
-
-        # A string that does not make sense as JSON is put in a
-        # single-element list.
-        setting.value = "Arvin, CA"
-        assert ["Arvin, CA"] == m()
 
 
 class TestBasicAuthenticationProvider:

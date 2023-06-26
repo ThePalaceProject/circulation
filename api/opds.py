@@ -6,7 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import Any, List
+from typing import Any, List, Optional
 
 from flask import url_for
 
@@ -22,10 +22,10 @@ from core.lcp.exceptions import LCPError
 from core.model import (
     CirculationEvent,
     Collection,
-    ConfigurationSetting,
     DeliveryMechanism,
     Edition,
     Hold,
+    Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Loan,
@@ -563,20 +563,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     LICENSE = Configuration.LICENSE
     REGISTER = Configuration.REGISTER
 
-    CONFIGURATION_LINKS = [
-        TERMS_OF_SERVICE,
-        PRIVACY_POLICY,
-        COPYRIGHT,
-        ABOUT,
-        LICENSE,
-    ]
-
-    HELP_LINKS = [
-        Configuration.HELP_EMAIL,
-        Configuration.HELP_WEB,
-        Configuration.HELP_URI,
-    ]
-
     def __init__(
         self,
         circulation,
@@ -615,7 +601,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             test_mode=test_mode,
         )
         self.circulation = circulation
-        self.library = library
+        self.library: Library = library
         self.patron = patron
         self.lanes_by_work = defaultdict(list)
         self.facet_view = facet_view
@@ -625,7 +611,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self.facets = facets or None
 
     @classmethod
-    def _hidden_content_types(self, library):
+    def _hidden_content_types(self, library: Optional[Library]) -> List[str]:
         """Find all content types which this library should not be
         presenting to patrons.
 
@@ -634,19 +620,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if not library:
             # This shouldn't happen, but we shouldn't crash if it does.
             return []
-        setting = library.setting(Configuration.HIDDEN_CONTENT_TYPES)
-        if not setting or not setting.value:
-            return []
-        try:
-            hidden_types = setting.json_value
-        except ValueError:
-            hidden_types = setting.value
-        hidden_types = hidden_types or []
-        if isinstance(hidden_types, str):
-            hidden_types = [hidden_types]
-        elif not isinstance(hidden_types, list):
-            hidden_types = list(hidden_types)
-        return hidden_types
+        return library.settings.hidden_content_types
 
     def top_level_title(self):
         return self._top_level_title
@@ -1040,28 +1014,63 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 link = OPDSFeed.link(**l)
                 feed.append(link)
 
-        for rel in self.CONFIGURATION_LINKS:
-            setting = ConfigurationSetting.for_library(rel, self.library)
-            if setting.value:
-                d = dict(href=setting.value, type="text/html", rel=rel)
-                _add_link(d)
-
-        navigation_urls = ConfigurationSetting.for_library(
-            Configuration.WEB_HEADER_LINKS, self.library
-        ).json_value
-        if navigation_urls:
-            navigation_labels = ConfigurationSetting.for_library(
-                Configuration.WEB_HEADER_LABELS, self.library
-            ).json_value
-            for url, label in zip(navigation_urls, navigation_labels):
-                d = dict(
-                    href=url,
-                    title=label,
+        library = self.library
+        if library.settings.terms_of_service:
+            _add_link(
+                dict(
+                    rel="terms-of-service",
+                    href=library.settings.terms_of_service,
                     type="text/html",
-                    rel="related",
-                    role="navigation",
                 )
-                _add_link(d)
+            )
+
+        if library.settings.privacy_policy:
+            _add_link(
+                dict(
+                    rel="privacy-policy",
+                    href=library.settings.privacy_policy,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.copyright:
+            _add_link(
+                dict(
+                    rel="copyright",
+                    href=library.settings.copyright,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.about:
+            _add_link(
+                dict(
+                    rel="about",
+                    href=library.settings.about,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.license:
+            _add_link(
+                dict(
+                    rel="license",
+                    href=library.settings.license,
+                    type="text/html",
+                )
+            )
+
+        navigation_urls = self.library.settings.web_header_links
+        navigation_labels = self.library.settings.web_header_labels
+        for url, label in zip(navigation_urls, navigation_labels):
+            d = dict(
+                href=url,
+                title=label,
+                type="text/html",
+                rel="related",
+                role="navigation",
+            )
+            _add_link(d)
 
         for type, value in Configuration.help_uris(self.library):
             d = dict(href=value, rel="help")
@@ -1136,7 +1145,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             active_fulfillment,
             feed,
             identifier,
-            can_hold=self.library.allow_holds,
+            can_hold=self.library.settings.allow_holds,
             can_revoke_hold=(
                 active_hold
                 and (

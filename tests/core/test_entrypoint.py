@@ -1,7 +1,8 @@
-import json
+from unittest.mock import Mock
 
 import pytest
 
+from core.configuration.library import LibrarySettings
 from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
@@ -131,20 +132,15 @@ class TestLibrary:
     def test_enabled_entrypoints(self, db: DatabaseTransactionFixture):
         l = db.default_library()
 
-        setting = l.setting(EntryPoint.ENABLED_SETTING)
-
         # When the value is not set, the default is used.
-        assert EntryPoint.DEFAULT_ENABLED == list(l.entrypoints)
-        setting.value = None
         assert EntryPoint.DEFAULT_ENABLED == list(l.entrypoints)
 
         # Names that don't correspond to registered entry points are
         # ignored. Names that do are looked up.
-        setting.value = json.dumps(
-            ["no such entry point", AudiobooksEntryPoint.INTERNAL_NAME]
-        )
+        l._settings = Mock(spec=LibrarySettings)
+        l.settings.enabled_entry_points = ["no such entry point", AudiobooksEntryPoint.INTERNAL_NAME]  # type: ignore[misc]
         assert [AudiobooksEntryPoint] == list(l.entrypoints)
 
         # An empty list is a valid value.
-        setting.value = json.dumps([])
+        l.settings.enabled_entry_points = []  # type: ignore[misc]
         assert [] == list(l.entrypoints)

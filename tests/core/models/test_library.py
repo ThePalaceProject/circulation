@@ -174,6 +174,32 @@ Name: "The Library"
 Short name: "Short"
 Short name (for library registry): "SHORT"
 
+Configuration settings:
+-----------------------
+website='http://library.com'
+allow_holds='True'
+enabled_entry_points='['Book']'
+featured_lane_size='15'
+minimum_featured_quality='0.65'
+facets_enabled_order='['author', 'title', 'added']'
+facets_default_order='author'
+facets_enabled_available='['all', 'now', 'always']'
+facets_default_available='all'
+facets_enabled_collection='['full', 'featured']'
+facets_default_collection='full'
+announcements='[]'
+help_web='http://library.com/support'
+default_notification_email_address='noreply@thepalaceproject.org'
+color_scheme='blue'
+web_primary_color='#377F8B'
+web_secondary_color='#D53F34'
+web_header_links='[]'
+web_header_labels='[]'
+hidden_content_types='[]'
+large_collection_languages='[]'
+small_collection_languages='[]'
+tiny_collection_languages='[]'
+
 External integrations:
 ----------------------
 ID: %s

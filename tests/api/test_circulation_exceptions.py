@@ -40,28 +40,19 @@ class TestLimitReached:
             "You exceeded the limit, but I don't know what the limit was."
         )
         pd = ProblemDetail("http://uri/", 403, _("Limit exceeded."), generic_message)
-        setting = "some setting"
 
         class Mock(LimitReached):
             BASE_DOC = pd
-            SETTING_NAME = setting
             MESSAGE_WITH_LIMIT = _("The limit was %(limit)d.")
 
         # No limit -> generic message.
-        ex = Mock(library=db.default_library())
-        pd = ex.as_problem_detail_document()
-        assert None == ex.limit
-        assert generic_message == pd.detail
-
-        # Limit but no library -> generic message.
-        db.default_library().setting(setting).value = 14
         ex = Mock()
-        assert None == ex.limit
         pd = ex.as_problem_detail_document()
+        assert ex.limit is None
         assert generic_message == pd.detail
 
-        # Limit and library -> specific message.
-        ex = Mock(library=db.default_library())
+        # Limit -> specific message.
+        ex = Mock(limit=14)
         assert 14 == ex.limit
         pd = ex.as_problem_detail_document()
         assert "The limit was 14." == pd.detail

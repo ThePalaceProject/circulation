@@ -584,7 +584,7 @@ class Facets(FacetsWithEntryPoint):
 
         if (
             availability == self.AVAILABLE_ALL
-            and (library and not library.allow_holds)
+            and (library and not library.settings.allow_holds)
             and (
                 self.AVAILABLE_NOW
                 in self.available_facets(library, self.AVAILABILITY_FACET_GROUP_NAME)
@@ -755,7 +755,9 @@ class Facets(FacetsWithEntryPoint):
         super().modify_search_filter(filter)
 
         if self.library:
-            filter.minimum_featured_quality = self.library.minimum_featured_quality
+            filter.minimum_featured_quality = (
+                self.library.settings.minimum_featured_quality
+            )
 
         filter.availability = self.availability
         filter.subcollection = self.collection
@@ -832,7 +834,9 @@ class Facets(FacetsWithEntryPoint):
         elif self.collection == self.COLLECTION_FEATURED:
             # Exclude books with a quality of less than the library's
             # minimum featured quality.
-            qu = qu.filter(Work.quality >= self.library.minimum_featured_quality)
+            qu = qu.filter(
+                Work.quality >= self.library.settings.minimum_featured_quality
+            )
 
         return qu
 
@@ -990,7 +994,7 @@ class FeaturedFacets(FacetsWithEntryPoint):
                 library = lane.library
 
         if library:
-            quality = library.minimum_featured_quality
+            quality = library.settings.minimum_featured_quality
         else:
             quality = Configuration.DEFAULT_MINIMUM_FEATURED_QUALITY
         return cls(quality, **kwargs)
@@ -2108,7 +2112,7 @@ class WorkList:
             # the featured lane size, but we'll ask for a few extra
             # works for each lane, to reduce the risk that we end up
             # reusing a book in two different lanes.
-            target_size = library.featured_lane_size
+            target_size = library.settings.featured_lane_size
 
             # We ask for a few extra works for each lane, to reduce the
             # risk that we'll end up reusing a book in two different
@@ -2688,7 +2692,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     __tablename__ = "lanes"
     id = Column(Integer, primary_key=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
-    library: Mapped[Library] = relationship("Library", back_populates="lanes")
+    library: Mapped[Library] = relationship(Library, back_populates="lanes")
 
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
     priority = Column(Integer, index=True, nullable=False, default=0)
@@ -3268,10 +3272,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             works each child of this WorkList may contribute.
         :param facets: A FeaturedFacets object.
         """
-        clauses = []
-        library = self.get_library(_db)
-        target_size = library.featured_lane_size
-
         if self.include_self_in_grouped_feed:
             relevant_lanes = [self]
         else:

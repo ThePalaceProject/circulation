@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from abc import ABC
-from typing import Dict, Iterable, List, Literal, Optional, Tuple, Type
+from typing import Dict, Iterable, List, Optional, Tuple, Type
 
 import flask
 import jwt
@@ -20,7 +20,6 @@ from api.authentication.base import AuthenticationProvider
 from api.authentication.basic import BasicAuthenticationProvider
 from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.custom_patron_catalog import CustomPatronCatalog
-from api.opds import LibraryAnnotator
 from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
@@ -562,22 +561,70 @@ class LibraryAuthenticator:
         links = []
         library = self.library
 
-        # Add the same links that we would show in an OPDS feed, plus
-        # some extra like 'registration' that are specific to Authentication
-        # For OPDS.
-        for rel in (
-            LibraryAnnotator.CONFIGURATION_LINKS
-            + Configuration.AUTHENTICATION_FOR_OPDS_LINKS
-        ):
-            value = ConfigurationSetting.for_library(rel, library).value
-            if not value:
-                continue
-            link = dict(rel=rel, href=value)
-            if any(value.startswith(x) for x in ("http:", "https:")):
-                # We assume that HTTP URLs lead to HTML, but we don't
-                # assume anything about other URL schemes.
-                link["type"] = "text/html"
-            links.append(link)
+        # Add the same links that we would show in an OPDS feed.
+        if library.settings.terms_of_service:
+            links.append(
+                dict(
+                    rel="terms-of-service",
+                    href=library.settings.terms_of_service,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.privacy_policy:
+            links.append(
+                dict(
+                    rel="privacy-policy",
+                    href=library.settings.privacy_policy,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.copyright:
+            links.append(
+                dict(
+                    rel="copyright",
+                    href=library.settings.copyright,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.about:
+            links.append(
+                dict(
+                    rel="about",
+                    href=library.settings.about,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.license:
+            links.append(
+                dict(
+                    rel="license",
+                    href=library.settings.license,
+                    type="text/html",
+                )
+            )
+
+        # Plus some extra like 'registration' that are specific to Authentication For OPDS.
+        if library.settings.registration_url:
+            links.append(
+                dict(
+                    rel="register",
+                    href=library.settings.registration_url,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.patron_password_reset:
+            links.append(
+                dict(
+                    rel="http://librarysimplified.org/terms/rel/patron-password-reset",
+                    href=library.settings.patron_password_reset,
+                    type="text/html",
+                )
+            )
 
         # Add a rel="start" link pointing to the root OPDS feed.
         index_url = url_for(
@@ -625,9 +672,7 @@ class LibraryAuthenticator:
             links.append(dict(rel="help", href=uri, type=type))
 
         # Add a link to the web page of the library itself.
-        library_uri = ConfigurationSetting.for_library(
-            Configuration.WEBSITE_URL, library
-        ).value
+        library_uri = library.settings.website
         if library_uri:
             links.append(dict(rel="alternate", type="text/html", href=library_uri))
 
@@ -636,9 +681,7 @@ class LibraryAuthenticator:
             links.append(dict(rel="logo", type="image/png", href=library.logo.data_url))
 
         # Add the library's custom CSS file, if it has one.
-        css_file = ConfigurationSetting.for_library(
-            Configuration.WEB_CSS_FILE, library
-        ).value
+        css_file = library.settings.web_css_file
         if css_file:
             links.append(dict(rel="stylesheet", type="text/css", href=css_file))
 
@@ -652,19 +695,13 @@ class LibraryAuthenticator:
         ).to_dict(self._db)
 
         # Add the library's mobile color scheme, if it has one.
-        description = ConfigurationSetting.for_library(
-            Configuration.COLOR_SCHEME, library
-        ).value
-        if description:
-            doc["color_scheme"] = description
+        color_scheme = library.settings.color_scheme
+        if color_scheme:
+            doc["color_scheme"] = color_scheme
 
         # Add the library's web colors, if it has any.
-        primary = ConfigurationSetting.for_library(
-            Configuration.WEB_PRIMARY_COLOR, library
-        ).value
-        secondary = ConfigurationSetting.for_library(
-            Configuration.WEB_SECONDARY_COLOR, library
-        ).value
+        primary = library.settings.web_primary_color
+        secondary = library.settings.web_secondary_color
         if primary or secondary:
             doc["web_color_scheme"] = dict(
                 primary=primary,
@@ -675,19 +712,9 @@ class LibraryAuthenticator:
 
         # Add the description of the library as the OPDS feed's
         # service_description.
-        description = ConfigurationSetting.for_library(
-            Configuration.LIBRARY_DESCRIPTION, library
-        ).value
+        description = library.settings.library_description
         if description:
             doc["service_description"] = description
-
-        # Add the library's focus area and service area, if either is
-        # specified.
-        focus_area, service_area = self._geographic_areas(library)
-        if focus_area:
-            doc["focus_area"] = focus_area
-        if service_area:
-            doc["service_area"] = service_area
 
         # Add the library's public key.
         if self.library and self.library.public_key:
@@ -706,7 +733,7 @@ class LibraryAuthenticator:
         # offer.
         enabled: List[str] = []
         disabled: List[str] = []
-        if library and library.allow_holds:
+        if library and library.settings.allow_holds:
             bucket = enabled
         else:
             bucket = disabled
@@ -729,57 +756,6 @@ class LibraryAuthenticator:
             )
 
         return json.dumps(doc)
-
-    @classmethod
-    def _geographic_areas(
-        cls, library: Optional[Library]
-    ) -> Tuple[
-        Literal["everywhere"] | List[str] | None,
-        Literal["everywhere"] | List[str] | None,
-    ]:
-        """Determine the library's focus area and service area.
-
-        :param library: A Library
-        :return: A 2-tuple (focus_area, service_area)
-        """
-        if not library:
-            return None, None
-
-        focus_area = cls._geographic_area(Configuration.LIBRARY_FOCUS_AREA, library)
-        service_area = cls._geographic_area(Configuration.LIBRARY_SERVICE_AREA, library)
-
-        # If only one value is provided, both values are considered to
-        # be the same.
-        if focus_area and not service_area:
-            service_area = focus_area
-        if service_area and not focus_area:
-            focus_area = service_area
-        return focus_area, service_area
-
-    @classmethod
-    def _geographic_area(
-        cls, key: str, library: Library
-    ) -> Literal["everywhere"] | List[str] | None:
-        """Extract a geographic area from a ConfigurationSetting
-        for the given `library`.
-
-        See https://github.com/NYPL-Simplified/Simplified/wiki/Authentication-For-OPDS-Extensions#service_area and #focus_area
-        """
-        setting = ConfigurationSetting.for_library(key, library).value
-        if not setting:
-            return setting
-        if setting == "everywhere":
-            # This literal string may be served as is.
-            return setting
-        try:
-            # If we can load the setting as JSON, it is either a list
-            # of place names or a GeoJSON object.
-            setting = json.loads(setting)
-        except (ValueError, TypeError) as e:
-            # The most common outcome -- treat the value as a single place
-            # name by turning it into a list.
-            setting = [setting]
-        return setting
 
     def create_authentication_headers(self) -> Headers:
         """Create the HTTP headers to return with the OPDS

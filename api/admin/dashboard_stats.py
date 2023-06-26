@@ -198,7 +198,11 @@ class Statistics:
                 patron_statistics=patron_stats_by_library[lib.short_name],
                 inventory_summary=inventory_by_library[lib.short_name],
                 collection_ids=sorted(
-                    [c.id for c in authorized_collections_by_library[lib.short_name]]
+                    [
+                        c.id
+                        for c in authorized_collections_by_library[lib.short_name]
+                        if c.id is not None
+                    ]
                 ),
             )
             for lib in authorized_libraries

@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration
 from api.registration.constants import RegistrationConstants
 from core.model import ConfigurationSetting, ExternalIntegration, Library
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -37,7 +36,6 @@ class VendorIDFixture:
 
         # The library given to this fixture will be setup to be able to generate
         # Short Client Tokens.
-        library_uri = self.db.fresh_url()
         assert vendor_id_library.short_name is not None
         short_name = vendor_id_library.short_name + "token"
         secret = vendor_id_library.short_name + " token secret"
@@ -59,8 +57,6 @@ class VendorIDFixture:
             vendor_id_library,
             self.registry,
         ).value = RegistrationConstants.SUCCESS_STATUS
-
-        vendor_id_library.setting(Configuration.WEBSITE_URL).value = library_uri
 
     def __init__(self, db: DatabaseTransactionFixture):
         assert isinstance(db, DatabaseTransactionFixture)

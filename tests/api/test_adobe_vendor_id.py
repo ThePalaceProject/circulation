@@ -6,7 +6,6 @@ import pytest
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration
 from api.registration.constants import RegistrationConstants
 from core.config import CannotLoadConfiguration
 from core.model import ConfigurationSetting, ExternalIntegration
@@ -67,7 +66,7 @@ class TestAuthdataUtility:
     ):
         library = vendor_id_fixture.db.default_library()
         vendor_id_fixture.initialize_adobe(library)
-        library_url = library.setting(Configuration.WEBSITE_URL).value
+        library_url = library.settings.website
 
         utility = AuthdataUtility.from_config(library)
         assert utility is not None
@@ -133,11 +132,10 @@ class TestAuthdataUtility:
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
         setting.value = old_short_name
 
-        setting = library.setting(Configuration.WEBSITE_URL)
-        old_value = setting.value
-        setting.value = None
+        library._settings = MagicMock()
+        library._settings.website = None
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
-        setting.value = old_value
+        library._settings = None
 
         setting = ConfigurationSetting.for_library_and_externalintegration(
             vendor_id_fixture.db.session,

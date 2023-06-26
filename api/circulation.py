@@ -26,7 +26,6 @@ from core.mirror import MirrorUploader
 from core.model import (
     CirculationEvent,
     Collection,
-    ConfigurationSetting,
     DeliveryMechanism,
     ExternalIntegration,
     ExternalIntegrationLink,
@@ -44,7 +43,6 @@ from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 
 from .circulation_exceptions import *
-from .config import Configuration
 from .util.patron import PatronUtility
 
 
@@ -606,17 +604,19 @@ class BaseCirculationAPI(
         return internal_format
 
     @classmethod
-    def default_notification_email_address(self, library_or_patron, pin):
+    def default_notification_email_address(
+        self, library_or_patron: Library | Patron, pin: str
+    ) -> str:
         """What email address should be used to notify this library's
         patrons of changes?
 
         :param library_or_patron: A Library or a Patron.
         """
         if isinstance(library_or_patron, Patron):
-            library_or_patron = library_or_patron.library
-        return ConfigurationSetting.for_library(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS, library_or_patron
-        ).value
+            library = library_or_patron.library
+        else:
+            library = library_or_patron
+        return library.settings.default_notification_email_address
 
     @classmethod
     def _library_authenticator(self, library):
@@ -1369,7 +1369,7 @@ class CirculationAPI:
             # This patron can neither take out a loan or place a hold.
             # Raise PatronLoanLimitReached for the most understandable
             # error message.
-            raise PatronLoanLimitReached(library=patron.library)
+            raise PatronLoanLimitReached(limit=patron.library.settings.loan_limit)
 
         # At this point it's important that we get up-to-date
         # availability information about this LicensePool, to reduce
@@ -1380,11 +1380,11 @@ class CirculationAPI:
 
         currently_available = pool.licenses_available > 0
         if currently_available and at_loan_limit:
-            raise PatronLoanLimitReached(library=patron.library)
+            raise PatronLoanLimitReached(limit=patron.library.settings.loan_limit)
         if not currently_available and at_hold_limit:
-            raise PatronHoldLimitReached(library=patron.library)
+            raise PatronHoldLimitReached(limit=patron.library.settings.hold_limit)
 
-    def patron_at_loan_limit(self, patron):
+    def patron_at_loan_limit(self, patron: Patron) -> bool:
         """Is the given patron at their loan limit?
 
         This doesn't belong in Patron because the loan limit is not core functionality.
@@ -1392,7 +1392,7 @@ class CirculationAPI:
 
         :param patron: A Patron.
         """
-        loan_limit = patron.library.setting(Configuration.LOAN_LIMIT).int_value
+        loan_limit = patron.library.settings.loan_limit
         if loan_limit is None:
             return False
 
@@ -1413,7 +1413,7 @@ class CirculationAPI:
 
         :param patron: A Patron.
         """
-        hold_limit = patron.library.setting(Configuration.HOLD_LIMIT).int_value
+        hold_limit = patron.library.settings.hold_limit
         if hold_limit is None:
             return False
         return hold_limit and len(patron.holds) >= hold_limit

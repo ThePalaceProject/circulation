@@ -481,7 +481,10 @@ class TestCacheOPDSGroupFeedPerLane:
         for facets in (audio_facets, ebook_facets):
             # The FeaturedFacets objects knows to feature works at the
             # library's minimum quality level.
-            assert library.minimum_featured_quality == facets.minimum_featured_quality
+            assert (
+                library.settings.minimum_featured_quality
+                == facets.minimum_featured_quality
+            )
 
         # The first entry point is treated as the default only for WorkLists
         # that have no parent. When the WorkList has a parent, the selected

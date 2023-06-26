@@ -1,75 +1,73 @@
+from __future__ import annotations
+
 import base64
-import json
 import uuid
 from io import BytesIO
-from typing import Optional
+from typing import Optional, Tuple
 
 import flask
-import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
 from PIL.Image import Resampling
 from werkzeug.datastructures import FileStorage
 
-from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.admin.geographic_validator import GeographicValidator
 from api.admin.problem_details import *
-from api.config import Configuration
 from api.lanes import create_default_lanes
-from core.model import ConfigurationSetting, Library, create, get_one
+from core.configuration.library import LibrarySettings
+from core.model import (
+    Library,
+    create,
+    get_one,
+    json_serializer,
+    site_configuration_has_changed,
+)
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
 from core.model.announcements import Announcement
 from core.model.library import LibraryLogo
-from core.util import LanguageCodes
 from core.util.problem_detail import ProblemDetail, ProblemError
 
+from ...config import Configuration
+from ..form_data import ProcessFormData
 from . import SettingsController
 
 
 class LibrarySettingsController(SettingsController):
-    def process_libraries(self):
-        if flask.request.method == "GET":
-            return self.process_get()
-        else:
-            return self.process_post()
+    def process_libraries(self) -> Response | ProblemDetail:
+        try:
+            if flask.request.method == "GET":
+                return self.process_get()
+            else:
+                return self.process_post()
+        except ProblemError as e:
+            self._db.rollback()
+            return e.problem_detail
 
-    def process_get(self):
-        response = []
+    def process_get(self) -> Response:
+        libraries_response = []
         libraries = self._db.query(Library).order_by(Library.name).all()
-        ConfigurationSetting.cache_warm(self._db)
 
         for library in libraries:
             # Only include libraries this admin has librarian access to.
-            if not flask.request.admin or not flask.request.admin.is_librarian(library):
+            if not flask.request.admin or not flask.request.admin.is_librarian(library):  # type: ignore[attr-defined]
                 continue
 
-            settings = dict()
-            for setting in Configuration.LIBRARY_SETTINGS:
-                if setting.get("type") == "announcements":
-                    db_announcements = (
-                        self._db.execute(Announcement.library_announcements(library))
-                        .scalars()
-                        .all()
-                    )
-                    announcements = [x.to_data().as_dict() for x in db_announcements]
-                    if announcements:
-                        value = json.dumps(announcements)
-                    else:
-                        value = None
-                elif setting.get("type") == "list":
-                    value = ConfigurationSetting.for_library(
-                        setting.get("key"), library
-                    ).json_value
-                    if value and setting.get("format") == "geographic":
-                        value = self.get_extra_geographic_information(value)
-                else:
-                    value = self.current_value(setting, library)
+            settings = library.settings_dict
 
-                if value:
-                    settings[setting.get("key")] = value
+            # TODO: It would be nice to make this more sane in the future, but right now the admin interface
+            #  is expecting the "announcements" field to be a JSON string, within the JSON document we send,
+            #  so it ends up being double-encoded. This is a quick fix to make it work without modifying the
+            #  admin interface.
+            db_announcements = (
+                self._db.execute(Announcement.library_announcements(library))
+                .scalars()
+                .all()
+            )
+            announcements = [x.to_data().as_dict() for x in db_announcements]
+            if announcements:
+                settings["announcements"] = json.dumps(announcements)
 
-            response += [
+            libraries_response += [
                 dict(
                     uuid=library.uuid,
                     name=library.name,
@@ -77,44 +75,68 @@ class LibrarySettingsController(SettingsController):
                     settings=settings,
                 )
             ]
-        return dict(libraries=response, settings=Configuration.LIBRARY_SETTINGS)
+        return Response(
+            json_serializer(
+                {
+                    "libraries": libraries_response,
+                    "settings": LibrarySettings.configuration_form(self._db),
+                }
+            ),
+            status=200,
+            mimetype="application/json",
+        )
 
-    def process_post(self, validators_by_type=None):
+    def process_post(self) -> Response:
         is_new = False
-        if validators_by_type is None:
-            validators_by_type = dict()
-            validators_by_type["geographic"] = GeographicValidator()
+        form_data = flask.request.form
 
-        library_uuid = flask.request.form.get("uuid")
-        library = self.get_library_from_uuid(library_uuid)
-        if isinstance(library, ProblemDetail):
-            return library
+        library_uuid = form_data.get("uuid")
+        if library_uuid:
+            library = self.get_library_from_uuid(library_uuid)
+        else:
+            library = None
 
-        short_name = flask.request.form.get("short_name")
-        short_name_not_unique = self.check_short_name_unique(library, short_name)
-        if short_name_not_unique:
-            return short_name_not_unique
+        name = form_data.get("name", "").strip()
+        if name == "":
+            raise ProblemError(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    "Required field 'Name' is missing."
+                )
+            )
 
-        error = self.validate_form_fields()
-        if error:
-            return error
+        short_name = form_data.get("short_name", "").strip()
+        if short_name == "":
+            raise ProblemError(
+                problem_detail=INCOMPLETE_CONFIGURATION.detailed(
+                    "Required field 'Short name' is missing."
+                )
+            )
+
+        validated_settings = ProcessFormData.get_settings(LibrarySettings, form_data)
+        self.check_short_name_unique(library, short_name)
 
         if not library:
             # Everyone can modify an existing library, but only a system admin can create a new one.
             self.require_system_admin()
-            (library, is_new) = self.create_library(short_name, library_uuid)
+            library, is_new = self.create_library(short_name)
 
-        name = flask.request.form.get("name")
-        if name:
-            library.name = name
-        if short_name:
-            library.short_name = short_name
+        library.name = name
+        library.short_name = short_name
+        library.settings_dict = validated_settings.dict()
 
-        configuration_settings = self.library_configuration_settings(
-            library, validators_by_type
-        )
-        if isinstance(configuration_settings, ProblemDetail):
-            return configuration_settings
+        # Validate and scale logo
+        logo_file = flask.request.files.get("logo")
+        if logo_file:
+            logo = self.validate_and_scale_logo(logo_file)
+            if library.logo:
+                library.logo.content = logo
+            else:
+                library.logo = LibraryLogo(
+                    content=logo,
+                )
+
+        # Trigger a site configuration change
+        site_configuration_has_changed(self._db)
 
         self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
 
@@ -144,7 +166,7 @@ class LibrarySettingsController(SettingsController):
         else:
             return Response(str(library.uuid), 200)
 
-    def create_library(self, short_name, library_uuid):
+    def create_library(self, short_name: str) -> Tuple[Library, bool]:
         self.require_system_admin()
         public_key, private_key = Library.generate_keypair()
         library, is_new = create(
@@ -157,280 +179,38 @@ class LibrarySettingsController(SettingsController):
         )
         return library, is_new
 
-    def process_delete(self, library_uuid):
+    def process_delete(self, library_uuid: str) -> Response:
         self.require_system_admin()
         library = self.get_library_from_uuid(library_uuid)
         self._db.delete(library)
         return Response(str(_("Deleted")), 200)
 
-    # Validation methods:
-
-    def validate_form_fields(self):
-        settings = Configuration.LIBRARY_SETTINGS
-        validations = [
-            self.check_for_missing_fields,
-            self.check_web_color_contrast,
-            self.check_header_links,
-            self.validate_formats,
-        ]
-        for validation in validations:
-            result = validation(settings)
-            if isinstance(result, ProblemDetail):
-                return result
-
-    def check_for_missing_fields(self, settings):
-        if not flask.request.form.get("short_name"):
-            return MISSING_LIBRARY_SHORT_NAME
-
-        error = self.check_for_missing_settings(settings)
-        if error:
-            return error
-
-    def check_for_missing_settings(self, settings):
-        email_label = None
-        website_label = None
-        email_or_website = None
-        for s in Configuration.LIBRARY_SETTINGS:
-            key = s.get("key")
-            if s.get("required") and not s.get("default"):
-                if not flask.request.form.get(key):
-                    return INCOMPLETE_CONFIGURATION.detailed(
-                        _(
-                            "The configuration is missing a required setting: %(setting)s",
-                            setting=s.get("label"),
-                        )
-                    )
-            # Either email or website is present
-            if key == Configuration.HELP_EMAIL:
-                email_or_website = email_or_website or flask.request.form.get(key)
-                email_label = s.get("label")
-            elif key == Configuration.HELP_WEB:
-                email_or_website = email_or_website or flask.request.form.get(key)
-                website_label = s.get("label")
-
-        if not email_or_website:
-            return INCOMPLETE_CONFIGURATION.detailed(
-                _(
-                    "The configuration is missing a required setting: %(setting)s",
-                    setting=f"{email_label} or {website_label}",
-                )
-            )
-
-    def check_web_color_contrast(self, settings):
-        """
-        Verify that the web primary and secondary color both contrast
-        well on white, as these colors will serve as button backgrounds with
-        white test, as well as text color on white backgrounds.
-        """
-        primary = flask.request.form.get(
-            Configuration.WEB_PRIMARY_COLOR, Configuration.DEFAULT_WEB_PRIMARY_COLOR
+    def get_library_from_uuid(self, library_uuid: str) -> Library:
+        # Library UUID is required when editing an existing library
+        # from the admin interface, and isn't present for new libraries.
+        library = get_one(
+            self._db,
+            Library,
+            uuid=library_uuid,
         )
-        secondary = flask.request.form.get(
-            Configuration.WEB_SECONDARY_COLOR, Configuration.DEFAULT_WEB_SECONDARY_COLOR
-        )
-
-        def hex_to_rgb(hex):
-            hex = hex.lstrip("#")
-            return tuple(int(hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
-
-        primary_passes = wcag_contrast_ratio.passes_AA(
-            wcag_contrast_ratio.rgb(hex_to_rgb(primary), hex_to_rgb("#ffffff"))
-        )
-        secondary_passes = wcag_contrast_ratio.passes_AA(
-            wcag_contrast_ratio.rgb(hex_to_rgb(secondary), hex_to_rgb("#ffffff"))
-        )
-        if not (primary_passes and secondary_passes):
-            primary_check_url = (
-                "https://contrast-ratio.com/#%23"
-                + secondary[1:]
-                + "-on-%23"
-                + "#ffffff"[1:]
-            )
-            secondary_check_url = (
-                "https://contrast-ratio.com/#%23"
-                + secondary[1:]
-                + "-on-%23"
-                + "#ffffff"[1:]
-            )
-            return INVALID_CONFIGURATION_OPTION.detailed(
-                _(
-                    "The web primary and secondary colors don't have enough contrast to pass the WCAG 2.0 AA guidelines and will be difficult for some patrons to read. Check contrast for primary <a href='%(primary_check_url)s' target='_blank'>here</a> and secondary <a href='%(primary_check_url)s' target='_blank'>here</a>.",
-                    primary_check_url=primary_check_url,
-                    secondary_check_url=secondary_check_url,
-                )
-            )
-
-    def check_header_links(self, settings):
-        """Verify that header links and labels are the same length."""
-        header_links = flask.request.form.getlist(Configuration.WEB_HEADER_LINKS)
-        header_labels = flask.request.form.getlist(Configuration.WEB_HEADER_LABELS)
-        if len(header_links) != len(header_labels):
-            return INVALID_CONFIGURATION_OPTION.detailed(
-                _(
-                    "There must be the same number of web header links and web header labels."
-                )
-            )
-
-    def get_library_from_uuid(self, library_uuid):
-        if library_uuid:
-            # Library UUID is required when editing an existing library
-            # from the admin interface, and isn't present for new libraries.
-            library = get_one(
-                self._db,
-                Library,
-                uuid=library_uuid,
-            )
-            if library:
-                return library
-            else:
-                return LIBRARY_NOT_FOUND.detailed(
+        if library:
+            return library  # type: ignore[no-any-return]
+        else:
+            raise ProblemError(
+                problem_detail=LIBRARY_NOT_FOUND.detailed(
                     _("The specified library uuid does not exist.")
                 )
+            )
 
-    def check_short_name_unique(self, library, short_name):
-        if not library or short_name != library.short_name:
+    def check_short_name_unique(
+        self, library: Optional[Library], short_name: Optional[str]
+    ) -> None:
+        if not library or (short_name and short_name != library.short_name):
             # If you're adding a new short_name, either by editing an
             # existing library or creating a new library, it must be unique.
             library_with_short_name = get_one(self._db, Library, short_name=short_name)
             if library_with_short_name:
-                return LIBRARY_SHORT_NAME_ALREADY_IN_USE
-
-    # Configuration settings:
-
-    def get_extra_geographic_information(self, value):
-        validator = GeographicValidator()
-
-        for country in value:
-            zips = [x for x in value[country] if validator.is_zip(x, country)]
-            other = [x for x in value[country] if not x in zips]
-            zips_with_extra_info = []
-            for zip in zips:
-                info = validator.look_up_zip(zip, country, formatted=True)
-                zips_with_extra_info.append(info)
-            value[country] = zips_with_extra_info + other
-
-        return value
-
-    def library_configuration_settings(
-        self, library, validators_by_format, settings=None
-    ):
-        """Validate and update a library's configuration settings based on incoming new
-        values.
-
-        :param library: A Library
-        :param validators_by_format: A dictionary mapping the 'format' field from a setting
-           configuration to a corresponding validator object.
-        :param settings: A list of setting configurations to use in tests instead of
-           Configuration.LIBRARY_SETTINGS
-        """
-        settings = settings or Configuration.LIBRARY_SETTINGS
-        for setting in settings:
-            if setting.get("key") == ANNOUNCEMENT_SETTING_NAME:
-                # Announcement is a special case -- it's not a library setting
-                # but stored in its own table in the database.
-                continue
-
-            # Validate the incoming value.
-            validator = None
-            if "format" in setting:
-                validator = validators_by_format.get(setting["format"])
-            elif "type" in setting:
-                validator = validators_by_format.get(setting["type"])
-            validated_value = self._validate_setting(library, setting, validator)
-
-            if isinstance(validated_value, ProblemDetail):
-                # Validation failed -- return a ProblemDetail.
-                return validated_value
-
-            # Validation succeeded -- set the new value.
-            ConfigurationSetting.for_library(
-                setting["key"], library
-            ).value = self._format_validated_value(validated_value, validator)
-
-    def _validate_setting(self, library, setting, validator=None):
-        """Validate the incoming value for a single library setting.
-
-        :param library: A Library
-        :param setting: Configuration data for one of the library's settings.
-        :param validator: A validation object for data of this type.
-        """
-        # TODO: there are some opportunities for improvement here:
-        # * There's no standard interface for validators.
-        # * We can handle settings that are lists of certain types (language codes,
-        #   geographic areas), but not settings that are a single value of that type
-        #   (_one_ language code or geographic area). Sometimes there's even an implication
-        #   that a certain data type ('geographic') _must_ mean a list.
-        # * A list value is returned as a JSON-encoded string. It
-        #   would be better to keep that as a list for longer in case
-        #   controller code needs to look at it.
-        format = setting.get("format")
-        type = setting.get("type")
-
-        # In some cases, if there is no incoming value we can use a
-        # default value or the current value.
-        #
-        # When the configuration item is a list, we can't do this
-        # because an empty list may be a valid value.
-        current_value = self.current_value(setting, library)
-        default_value = setting.get("default") or current_value
-
-        if format == "geographic":
-            value = self.list_setting(setting)
-            value = validator.validate_geographic_areas(value, self._db)
-        elif type == "announcements":
-            value = self.list_setting(setting, json_objects=True)
-            value = validator.validate_announcements(value)
-        elif type == "list":
-            value = self.list_setting(setting)
-            if format == "language-code":
-                value = json.dumps(
-                    [
-                        LanguageCodes.string_to_alpha_3(language)
-                        for language in json.loads(value)
-                    ]
-                )
-        else:
-            value = self.scalar_setting(setting)
-            # An empty "" value or 0 value is valid, hence check for None
-            value = default_value if value is None else value
-        return value
-
-    def scalar_setting(self, setting):
-        """Retrieve the single value of the given setting from the current HTTP request."""
-        return flask.request.form.get(setting["key"])
-
-    def list_setting(self, setting, json_objects=False):
-        """Retrieve the list of values for the given setting from the current HTTP request.
-
-        :param json_objects: If this is True, the incoming settings are JSON-encoded objects and not
-           regular strings.
-
-        :return: A JSON-encoded string encoding the list of values set for the given setting in the
-           current request.
-        """
-        if setting.get("options"):
-            # Restrict to the values in 'options'.
-            value = []
-            for option in setting.get("options"):
-                if setting["key"] + "_" + option["key"] in flask.request.form:
-                    value += [option["key"]]
-        else:
-            # Allow any entered values.
-            value = []
-            if setting.get("type") == "list":
-                inputs = flask.request.form.getlist(setting.get("key"))
-            else:
-                inputs = flask.request.form.get(setting.get("key"))
-
-            if json_objects and inputs:
-                inputs = json.loads(inputs)
-            if inputs:
-                for i in inputs:
-                    if not isinstance(i, list):
-                        i = [i]
-                    value.extend(i)
-
-        return json.dumps([_f for _f in value if _f])
+                raise ProblemError(problem_detail=LIBRARY_SHORT_NAME_ALREADY_IN_USE)
 
     @staticmethod
     def _process_image(image: Image.Image, _format="PNG") -> bytes:
@@ -465,15 +245,3 @@ class LibrarySettingsController(SettingsController):
             library.logo.content = image_data
         else:
             library.logo = LibraryLogo(content=image_data)
-
-    def current_value(self, setting, library):
-        """Retrieve the current value of the given setting from the database."""
-        return ConfigurationSetting.for_library(setting["key"], library).value
-
-    @classmethod
-    def _format_validated_value(cls, value, validator=None):
-        """Convert a validated value to a string that can be stored in ConfigurationSetting.value"""
-        if not validator:
-            # Assume the value is already a string.
-            return value
-        return validator.format_as_string(value)

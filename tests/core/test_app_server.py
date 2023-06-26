@@ -21,7 +21,7 @@ from core.app_server import (
     load_pagination_from_request,
 )
 from core.config import Configuration
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.lane import Facets, Pagination, SearchFacets, WorkList
 from core.log import LogConfiguration
 from core.model import ConfigurationSetting, Identifier
@@ -343,20 +343,25 @@ class TestLoadMethods:
         fixture, data = load_methods_fixture, load_methods_fixture.transaction
 
         # The library has two EntryPoints enabled.
-        data.default_library().setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
-            [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
+        library = data.library(
+            settings={
+                "enabled_entry_points": [
+                    EbooksEntryPoint.INTERNAL_NAME,
+                    AudiobooksEntryPoint.INTERNAL_NAME,
+                ]
+            }
         )
 
         with fixture.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
-            flask.request.library = data.default_library()  # type: ignore[attr-defined]
+            flask.request.library = library
             facets = load_facets_from_request()
             assert Facets.ORDER_TITLE == facets.order
             # Enabled facets are passed in to the newly created Facets,
             # in case the load method received a custom config.
-            assert facets.facets_enabled_at_init != None
+            assert facets.facets_enabled_at_init is not None
 
         with fixture.app.test_request_context("/?order=bad_facet"):
-            flask.request.library = data.default_library()  # type: ignore[attr-defined]
+            flask.request.library = library
             problemdetail = load_facets_from_request()
             assert INVALID_INPUT.uri == problemdetail.uri
 
@@ -364,23 +369,23 @@ class TestLoadMethods:
         # into the Facets object, assuming the EntryPoint is
         # configured on the present library.
         worklist = WorkList()
-        worklist.initialize(data.default_library())
+        worklist.initialize(library)
         with fixture.app.test_request_context("/?entrypoint=Audio"):
-            flask.request.library = data.default_library()  # type: ignore[attr-defined]
+            flask.request.library = library
             facets = load_facets_from_request(worklist=worklist)
             assert AudiobooksEntryPoint == facets.entrypoint
-            assert False == facets.entrypoint_is_default
+            assert facets.entrypoint_is_default is False
 
         # If the requested EntryPoint not configured, the default
         # EntryPoint is used.
         with fixture.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
-            flask.request.library = data.default_library()  # type: ignore[attr-defined]
+            flask.request.library = library
             default_entrypoint = object()
             facets = load_facets_from_request(
                 worklist=worklist, default_entrypoint=default_entrypoint
             )
             assert default_entrypoint == facets.entrypoint
-            assert True == facets.entrypoint_is_default
+            assert facets.entrypoint_is_default is True
 
         # Load a SearchFacets object that pulls information from an
         # HTTP header.
