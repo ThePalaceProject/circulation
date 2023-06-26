@@ -1773,7 +1773,6 @@ class AcquisitionFeed(OPDSFeed):
                 collection.default_loan_period(obj.library or obj.integration_client)
             )
         if loan:
-            print("In loan tags", loan, loan.license_pool)
             status = "available"
             since = loan.start
             if not loan.license_pool.unlimited_access:
