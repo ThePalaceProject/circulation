@@ -335,20 +335,17 @@ class OPDSForDistributorsImporter(OPDSImporter):
         return OPDSForDistributorsSettings
 
     def update_work_for_edition(self, *args, **kwargs):
-        """After importing a LicensePool, set its availability
-        appropriately. Books imported through OPDS For Distributors are
-        not open-access, but a library that can perform this import has
-        a license for the title and can distribute unlimited copies.
+        """After importing a LicensePool, set its availability appropriately.
+
+        Books imported through OPDS For Distributors can be designated as
+        either Open Access (handled elsewhere) or licensed (handled here). For
+        licensed content, a library that can perform this import is deemed to
+        have a license for the title and can distribute unlimited copies.
         """
         pool, work = super().update_work_for_edition(
             *args, is_open_access=False, **kwargs
         )
-        pool.update_availability(
-            new_licenses_owned=1,
-            new_licenses_available=1,
-            new_licenses_reserved=0,
-            new_patrons_in_hold_queue=0,
-        )
+        pool.unlimited_access = True
         return pool, work
 
     @classmethod
@@ -435,7 +432,7 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
             .join(Identifier)
             .filter(LicensePool.collection_id == self.collection.id)
             .filter(~Identifier.id.in_(identifier_ids))
-            .filter(LicensePool.licenses_available > 0)
+            .filter(LicensePool.licenses_available == LicensePool.UNLIMITED_ACCESS)
         )
         pools_reaped = qu.count()
         self.log.info(
@@ -444,8 +441,8 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
         )
 
         for pool in qu:
-            pool.licenses_available = 0
-            pool.licenses_owned = 0
+            pool.unlimited_access = False
+
         self._db.commit()
         achievements = "License pools removed: %d." % pools_reaped
         return TimestampData(achievements=achievements)

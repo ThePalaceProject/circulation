@@ -21,6 +21,7 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    LicensePool,
     Loan,
     MediaTypes,
     Representation,
@@ -580,8 +581,8 @@ class TestOPDSForDistributorsImporter:
                 DeliveryMechanism.BEARER_TOKEN
                 == pool.delivery_mechanisms[0].delivery_mechanism.drm_scheme
             )
-            assert 1 == pool.licenses_owned
-            assert 1 == pool.licenses_available
+            assert LicensePool.UNLIMITED_ACCESS == pool.licenses_owned
+            assert LicensePool.UNLIMITED_ACCESS == pool.licenses_available
             assert (pool.work.last_update_time - now).total_seconds() <= 2
 
         [camelot_acquisition_link] = [
@@ -752,8 +753,8 @@ class TestOPDSForDistributorsReaperMonitor:
             with_license_pool=True,
             collection=collection,
         )
-        now_gone.licenses_owned = 1
-        now_gone.licenses_available = 1
+        now_gone.licenses_owned = LicensePool.UNLIMITED_ACCESS
+        now_gone.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         edition, still_there = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
@@ -762,8 +763,8 @@ class TestOPDSForDistributorsReaperMonitor:
             with_license_pool=True,
             collection=collection,
         )
-        still_there.licenses_owned = 1
-        still_there.licenses_available = 1
+        still_there.licenses_owned = LicensePool.UNLIMITED_ACCESS
+        still_there.licenses_available = LicensePool.UNLIMITED_ACCESS
 
         progress = monitor.run_once(monitor.timestamp().to_data())
 
@@ -772,8 +773,8 @@ class TestOPDSForDistributorsReaperMonitor:
         assert 0 == now_gone.licenses_available
 
         # The other is still around.
-        assert 1 == still_there.licenses_owned
-        assert 1 == still_there.licenses_available
+        assert LicensePool.UNLIMITED_ACCESS == still_there.licenses_owned
+        assert LicensePool.UNLIMITED_ACCESS == still_there.licenses_available
 
         # The TimestampData returned by run_once() describes its
         # achievements.
