@@ -2,7 +2,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
+from typing import Iterable, Optional
 
 import opensearchpy.helpers
 from opensearchpy import NotFoundError, OpenSearch, RequestError
@@ -65,7 +65,7 @@ class SearchMigratorClientService(ABC):
         """Atomically set the read pointer to the empty index for the base name."""
 
     @abstractmethod
-    def create_index(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
         """Atomically create an index for the given base name and revision."""
 
     @abstractmethod
@@ -75,17 +75,24 @@ class SearchMigratorClientService(ABC):
         """Return True if the index for the given base name and revision has been populated."""
 
     @abstractmethod
-    def populate_index(
+    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
+        """Set the schema mappings for the given index."""
+
+    @abstractmethod
+    def index_submit_documents(
         self,
-        base_name: str,
-        revision: SearchSchemaRevision,
-        documents: Callable[[], Iterable[dict]],
+        pointer: str,
+        documents: Iterable[dict],
     ) -> None:
-        pass
+        """Submit search documents to the given index."""
 
     @abstractmethod
     def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
         """Atomically set the write pointer to the index for the given revision and base name."""
+
+    @abstractmethod
+    def refresh(self):
+        """Synchronously refresh the service and wait for changes to be completed."""
 
 
 class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
@@ -156,7 +163,7 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
         )
         self._client.indices.update_aliases(body=action)
 
-    def create_index(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
         try:
             index_name = revision.name_for_index(base_name)
             self._logger.debug(f"creating index {index_name}")
@@ -176,18 +183,16 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
             name=revision.name_for_indexed_pointer(base_name)
         )
 
-    def populate_index(
-        self,
-        base_name: str,
-        revision: SearchSchemaRevision,
-        documents: Callable[[], Iterable[dict]],
-    ) -> None:
+    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
         data = {"properties": revision.mapping_document().serialize_properties()}
         index_name = revision.name_for_index(base_name)
-        self._logger.debug(f"populating index {index_name}")
+        self._logger.debug(f"setting mappings for index {index_name}")
         self._client.indices.put_mapping(index=index_name, body=data)
-        document_list = documents()
-        opensearchpy.helpers.bulk(client=self._client, actions=document_list)
+
+    def index_submit_documents(self, pointer: str, documents: Iterable[dict]) -> None:
+        opensearchpy.helpers.bulk(client=self._client, actions=documents)
+
+    def refresh(self):
         self._logger.debug(f"waiting for indexes to become ready")
         self._client.indices.refresh()
 
@@ -219,6 +224,9 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
 class SearchMigratorClientServiceNull(SearchMigratorClientService):
     """A search service that does nothing."""
 
+    def refresh(self):
+        return
+
     def read_pointer_name(self, base_name: str) -> str:
         return f"{base_name}-search-read"
 
@@ -240,7 +248,7 @@ class SearchMigratorClientServiceNull(SearchMigratorClientService):
     def read_pointer_set_empty(self, base_name: str) -> None:
         return None
 
-    def create_index(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
         return None
 
     def index_is_populated(
@@ -248,13 +256,11 @@ class SearchMigratorClientServiceNull(SearchMigratorClientService):
     ) -> bool:
         return True
 
-    def populate_index(
-        self,
-        base_name: str,
-        revision: SearchSchemaRevision,
-        documents: Callable[[], Iterable[dict]],
-    ) -> None:
-        return None
+    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
+        pass
+
+    def index_submit_documents(self, pointer: str, documents: Iterable[dict]) -> None:
+        pass
 
     def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
         return None

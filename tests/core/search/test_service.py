@@ -54,8 +54,8 @@ class TestService:
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)
-        service.create_index("base", revision)
-        service.create_index("base", revision)
+        service.index_create("base", revision)
+        service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
         external_search_fixture.indexes.append("base-v23")
@@ -84,7 +84,7 @@ class TestService:
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)
-        service.create_index("base", revision)
+        service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
         external_search_fixture.indexes.append("base-v23")
@@ -113,7 +113,7 @@ class TestService:
             client=TestService.get_client(external_search_fixture)
         )
         revision = BasicMutableRevision(23)
-        service.create_index("base", revision)
+        service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
         external_search_fixture.indexes.append("base-v23")
@@ -161,13 +161,12 @@ class TestService:
             },
         ]
 
-        service.create_index("base", revision)
+        service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
         external_search_fixture.indexes.append("base-v23")
-
-        service.populate_index("base", revision, lambda: documents)
-        service.populate_index("base", revision, lambda: documents)
+        service.index_submit_documents("base-v23", documents)
+        service.index_submit_documents("base-v23", documents)
 
         indices = external_search_fixture.search.indices.client.indices  # type: ignore
         assert indices is not None

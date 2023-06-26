@@ -594,7 +594,9 @@ class TestMARCExporter:
         w2 = db.work(genre="Mystery", with_open_access_download=True)
 
         search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([w1, w2])
+        docs = search_engine.start_updating_search_documents()
+        docs.add_documents(search_engine.create_search_documents_from_works([w1, w2]))
+        docs.finish()
 
         # If there's a storage protocol but not corresponding storage integration,
         # it raises an exception.

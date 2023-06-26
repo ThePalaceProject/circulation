@@ -49,7 +49,13 @@ class TestOPDS2Feed:
         work = transaction.work(
             with_open_access_download=True, authors="Author Name", fiction=True
         )
-        data.search_engine.bulk_update([work])
+
+        docs = data.search_engine.start_updating_search_documents()
+        docs.add_documents(
+            data.search_engine.create_search_documents_from_works([work])
+        )
+        docs.finish()
+
         result = AcquisitonFeedOPDS2.publications(
             session,
             data.fiction,
@@ -96,7 +102,11 @@ class TestOPDS2Feed:
                 fiction=True,
             ),
         ]
-        data.search_engine.bulk_update(works)
+
+        docs = data.search_engine.start_updating_search_documents()
+        docs.add_documents(data.search_engine.create_search_documents_from_works(works))
+        docs.finish()
+
         annotator = OPDS2Annotator(
             "/",
             Facets.default(transaction.default_library()),
@@ -210,7 +220,12 @@ class TestOPDS2Annotator:
             edition.data_source,
             media_type="image/png",
         )
-        data.search_engine.bulk_update([work])
+
+        docs = data.search_engine.start_updating_search_documents()
+        docs.add_documents(
+            data.search_engine.create_search_documents_from_works([work])
+        )
+        docs.finish()
         result = data.annotator.metadata_for_work(work)
         assert isinstance(result, dict)
 
@@ -246,7 +261,11 @@ class TestOPDS2Annotator:
         edition.series = "A series"
         edition.series_position = 4
 
-        data.search_engine.bulk_update([work])
+        docs = data.search_engine.start_updating_search_documents()
+        docs.add_documents(
+            data.search_engine.create_search_documents_from_works([work])
+        )
+        docs.finish()
         result = data.annotator.metadata_for_work(work)
         assert isinstance(result, dict)
 

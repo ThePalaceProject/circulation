@@ -4096,7 +4096,9 @@ class TestLane:
 
         lane = db.lane()
         search_client = MockExternalSearchIndex()
-        search_client.bulk_update([work])
+        docs = search_client.start_updating_search_documents()
+        docs.add_documents(search_client.create_search_documents_from_works([work]))
+        docs.finish()
 
         pagination = Pagination(offset=0, size=1)
 

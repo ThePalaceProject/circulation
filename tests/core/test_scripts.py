@@ -1832,7 +1832,10 @@ class TestWhereAreMyBooksScript:
         search = MockExternalSearchIndex()
         work = db.work(with_license_pool=True)
         work.presentation_ready = True
-        search.bulk_update([work])
+
+        docs = search.start_updating_search_documents()
+        docs.add_documents(search.create_search_documents_from_works([work]))
+        docs.finish()
 
         # This MockExternalSearchIndex will always claim there is one
         # result.

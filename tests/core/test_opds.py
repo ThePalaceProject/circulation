@@ -1243,7 +1243,11 @@ class TestOPDS:
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
         search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work1, work2])
+        docs = search_engine.start_updating_search_documents()
+        docs.add_documents(
+            search_engine.create_search_documents_from_works([work1, work2])
+        )
+        docs.finish()
 
         facets = Facets.default(db.default_library())
         pagination = Pagination(size=1)
@@ -1318,7 +1322,11 @@ class TestOPDS:
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
         search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work1, work2])
+        docs = search_engine.start_updating_search_documents()
+        docs.add_documents(
+            search_engine.create_search_documents_from_works([work1, work2])
+        )
+        docs.finish()
 
         facets = Facets.default(db.default_library())
         pagination = Pagination(size=1)
@@ -1469,7 +1477,9 @@ class TestOPDS:
         # so it'll show up in the OPDS feed.
         work = db.work(title="An epic tome", with_open_access_download=True)
         search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work])
+        docs = search_engine.start_updating_search_documents()
+        docs.add_documents(search_engine.create_search_documents_from_works([work]))
+        docs.finish()
 
         # The lane setup does matter a lot -- that's what controls
         # how many times the search functionality is invoked.
@@ -1603,7 +1613,11 @@ class TestOPDS:
 
         pagination = Pagination(size=1)
         search_client = MockExternalSearchIndex()
-        search_client.bulk_update([work1, work2])
+        docs = search_client.start_updating_search_documents()
+        docs.add_documents(
+            search_client.create_search_documents_from_works([work1, work2])
+        )
+        docs.finish()
         facets = SearchFacets(order="author", min_score=10)
 
         private = object()
@@ -1690,7 +1704,9 @@ class TestOPDS:
         fantasy_lane = data.fantasy
 
         search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work1])
+        docs = search_engine.start_updating_search_documents()
+        docs.add_documents(search_engine.create_search_documents_from_works([work1]))
+        docs.finish()
 
         def make_page():
             return AcquisitionFeed.page(
@@ -1714,7 +1730,9 @@ class TestOPDS:
             genre=Epic_Fantasy,
             with_open_access_download=True,
         )
-        search_engine.bulk_update([work2])
+        docs = search_engine.start_updating_search_documents()
+        docs.add_documents(search_engine.create_search_documents_from_works([work2]))
+        docs.finish()
 
         # The new work does not show up in the feed because
         # we get the old cached version.

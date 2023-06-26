@@ -1,5 +1,8 @@
-from typing import Callable, Iterable
+import logging
+from abc import ABC, abstractmethod
+from typing import Iterable, Optional
 
+from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import SearchMigratorClientService
 
@@ -7,8 +10,81 @@ from core.search.service import SearchMigratorClientService
 class SearchMigrationException(Exception):
     """The type of exceptions raised by the search migrator."""
 
-    def __init__(self, message: str):
+    def __init__(self, fatal: bool, message: str):
         super().__init__(message)
+        self.fatal = fatal
+
+
+class SearchDocumentReceiverType(ABC):
+    """A receiver of search documents."""
+
+    @abstractmethod
+    def add_documents(self, documents: Iterable[dict]):
+        """Submit documents to be indexed."""
+
+    @abstractmethod
+    def finish(self) -> None:
+        """Make sure all changes are committed."""
+
+
+class SearchDocumentReceiver(SearchDocumentReceiverType):
+    """A receiver of search documents."""
+
+    def __init__(self, pointer: str, service: SearchMigratorClientService):
+        self._logger = logging.getLogger(SearchDocumentReceiver.__name__)
+        self._pointer = pointer
+        self._service = service
+
+    @property
+    def pointer(self) -> str:
+        """The name of the index that will receive search documents."""
+        return self._pointer
+
+    def add_documents(self, documents: Iterable[dict]):
+        """Submit documents to be indexed."""
+        self._service.index_submit_documents(pointer=self._pointer, documents=documents)
+
+    def finish(self) -> None:
+        """Make sure all changes are committed."""
+        self._service.refresh()
+
+
+class SearchMigrationInProgress(SearchDocumentReceiverType):
+    """A migration in progress. Documents are being submitted, and the migration must be
+    explicitly finished or cancelled to take effect (or not!)."""
+
+    def __init__(
+        self,
+        base_name: str,
+        revision: SearchSchemaRevision,
+        service: SearchMigratorClientService,
+    ):
+        self._logger = logging.getLogger(SearchMigrationInProgress.__name__)
+        self._base_name = base_name
+        self._revision = revision
+        self._service = service
+        self._receiver = SearchDocumentReceiver(
+            pointer=self._revision.name_for_index(base_name), service=self._service
+        )
+
+    def add_documents(self, documents: Iterable[dict]):
+        """Submit documents to be indexed."""
+        self._receiver.add_documents(documents)
+
+    def finish(self) -> None:
+        """Finish the migration."""
+        self._logger.info(f"Completing migration to {self._revision.version}")
+        # Make sure all changes are committed.
+        self._receiver.finish()
+        # Update the write pointer to point to the now-populated index.
+        self._service.write_pointer_set(self._base_name, self._revision)
+        # Set the read pointer to point at the now-populated index
+        self._service.read_pointer_set(self._base_name, self._revision)
+
+    def cancel(self) -> None:
+        """Cancel the migration, leaving the read and write pointers untouched."""
+        self._logger.info(f"Cancelling migration to {self._revision.version}")
+        return None
 
 
 class SearchMigrator:
@@ -21,45 +97,62 @@ class SearchMigrator:
         self._service = service
 
     def migrate(
-        self, base_name: str, version: int, documents: Callable[[], Iterable[dict]]
-    ):
+        self, base_name: str, version: int
+    ) -> Optional[SearchMigrationInProgress]:
         """
-        Migrate to the given version using the given base name (such as 'circulation-works').
+        Migrate to the given version using the given base name (such as 'circulation-works'). The function returns
+        a generator that expects to receive batches of search documents used to populate any new index. When all
+        the batches of documents have been sent to the generator, callers must send `[]` to indicate to the search
+        migrator that no more documents are coming. Only at this point will the migrator consider the new index to be
+        "populated".
 
         :arg base_name: The base name used for indices (such as 'circulation-works').
         :arg version: The version number to which we are migrating
-        :arg documents: A function that returns documents to be indexed. This is used to populate an index when
-             upgrading to a new version. The function will only be called if an index actually needs to be
-             populated with documents.
+
+        :raises SearchMigrationException: On errors, but always leaves the system in a usable state.
         """
 
-        target = self._revisions.available.get(version)
-        if target is None:
-            raise SearchMigrationException(
-                f"No support is available for schema version {version}"
+        try:
+            target = self._revisions.available.get(version)
+            if target is None:
+                raise SearchMigrationException(
+                    fatal=True,
+                    message=f"No support is available for schema version {version}",
+                )
+
+            # Does the empty index exist? Create it if not.
+            self._service.create_empty_index(base_name)
+
+            # Does the read pointer exist? Point it at the empty index if not.
+            read = self._service.read_pointer(base_name)
+            if read is None:
+                self._service.read_pointer_set_empty(base_name)
+
+            # We're probably going to have to do a migration. We might end up returning
+            # this instance so that users can submit documents for indexing.
+            in_progress = SearchMigrationInProgress(
+                base_name=base_name, revision=target, service=self._service
             )
 
-        # Does the empty index exist? Create it if not.
-        self._service.create_empty_index(base_name)
+            # Does the write pointer exist?
+            write = self._service.write_pointer(base_name)
+            if write is None or (not write.version == version):
+                # Either the write pointer didn't exist, or it's pointing at a version
+                # other than the one we want. Create a new index for the version we want.
+                self._service.index_create(base_name, target)
+                self._service.index_set_mapping(base_name, target)
 
-        # Does the read pointer exist? Point it at the empty index if not.
-        read = self._service.read_pointer(base_name)
-        if read is None:
-            self._service.read_pointer_set_empty(base_name)
+                # The index now definitely exists, but it might not be populated. Populate it if necessary.
+                if not self._service.index_is_populated(base_name, target):
+                    return in_progress
 
-        # Does the write pointer exist?
-        write = self._service.write_pointer(base_name)
-        if write is None or (not write.version == version):
-            # Either the write pointer didn't exist, or it's pointing at a version
-            # other than the one we want. Create a new index for the version we want.
-            self._service.create_index(base_name, target)
-
-            # The index now definitely exists, but it might not be populated. Populate it if necessary.
-            if not self._service.index_is_populated(base_name, target):
-                self._service.populate_index(base_name, target, documents)
-
-            # Update the write pointer to point to the now-populated index.
-            self._service.write_pointer_set(base_name, target)
-
-        # Set the read pointer to point at the now-populated index
-        self._service.read_pointer_set(base_name, target)
+            # If we didn't need to return the migration, finish it here. This will
+            # update the read and write pointers appropriately.
+            in_progress.finish()
+            return None
+        except SearchMigrationException:
+            raise
+        except Exception as e:
+            raise SearchMigrationException(
+                fatal=True, message=f"Service raised exception: {repr(e)}"
+            )

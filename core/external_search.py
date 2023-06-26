@@ -5,7 +5,8 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Optional, Union
+from unittest.mock import MagicMock
 
 from attr import define
 from flask_babel import lazy_gettext as _
@@ -30,6 +31,7 @@ from spellchecker import SpellChecker
 
 from core.util import Values
 from core.util.languages import LanguageNames
+from tests.core.search.test_migrator import EmptyRevision
 
 from .classifier import (
     AgeClassifier,
@@ -56,7 +58,14 @@ from .model import (
     numericrange_to_tuple,
 )
 from .problem_details import INVALID_INPUT
-from .search.migrator import SearchMigrator
+from .search.document import SearchMappingDocument
+from .search.migrator import (
+    SearchDocumentReceiver,
+    SearchDocumentReceiverType,
+    SearchMigrationException,
+    SearchMigrationInProgress,
+    SearchMigrator,
+)
 from .search.revision import SearchSchemaRevision
 from .search.revision_directory import SearchRevisionDirectory
 from .search.service import (
@@ -154,9 +163,10 @@ class ExternalSearchIndex(HasSelfTests):
     _revision: SearchSchemaRevision
     _revision_base_name: str
     _revision_directory: SearchRevisionDirectory
-    _search_read_pointer: str
     _search: Search
+    _search_migrator: SearchMigrator
     _search_migrator_service: SearchMigratorClientService
+    _search_read_pointer: str
     _test_search_term: str
 
     def __init__(
@@ -228,7 +238,12 @@ class ExternalSearchIndex(HasSelfTests):
         self._revision_base_name = integration.setting(
             ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
         ).value
+
+        # Get references to the read and write pointers.
         self._search_read_pointer = self._search_migrator_service.read_pointer_name(
+            self._revision_base_name
+        )
+        self._search_write_pointer = self._search_migrator_service.write_pointer_name(
             self._revision_base_name
         )
 
@@ -246,22 +261,45 @@ class ExternalSearchIndex(HasSelfTests):
         self._bulk = bulk
 
         # Try to perform a migration to the requested schema version. This might be a no-op if everything
-        # is already up-to-date, or if we're downgrading to an already-populated index.
+        # is already up-to-date, or if we're downgrading to an already-populated index. It also might fail
+        # if we're upgrading to a new schema version; it'll go as far as it can and leave the system in
+        # a good state, but we'll have to submit new search documents and re-run the migration later to fully
+        # upgrade.
+
+        self._search_migrator = SearchMigrator(
+            revisions=self._revision_directory,
+            service=self._search_migrator_service,
+        )
+
         try:
-            migrator = SearchMigrator(
-                revisions=self._revision_directory,
-                service=self._search_migrator_service,
+            migration = self._search_migrator.migrate(
+                base_name=self._revision_base_name, version=self._revision.version
             )
-            migrator.migrate(
-                base_name=self._revision_base_name,
-                version=self._revision.version,
-                documents=lambda: self._create_search_documents(_db),
-            )
+            if migration:
+                migration.cancel()
+        except SearchMigrationException as e:
+            # Search migration exceptions might indicate that migration can be resumed. This
+            # can happen if we're attempting to migrate to a new version that is not yet indexed;
+            # the migrator will leave the system in a good state to prevent downtime, but we'll
+            # need to submit new search documents and run the migration again.
+            if e.fatal:
+                raise CannotLoadConfiguration(
+                    "Error migrating search index: %s" % repr(e)
+                )
         except Exception as e:
             raise CannotLoadConfiguration("Error migrating search index: %s" % repr(e))
 
-    def _create_search_documents(self, _db) -> List[dict]:
-        return []
+    def start_migration(self) -> Optional[SearchMigrationInProgress]:
+        """Update to the latest schema, indexing the given works."""
+        return self._search_migrator.migrate(
+            base_name=self._revision_base_name, version=self._revision.version
+        )
+
+    def start_updating_search_documents(self) -> SearchDocumentReceiver:
+        """Start submitting search documents for whatever is the current write pointer."""
+        return SearchDocumentReceiver(
+            pointer=self._search_write_pointer, service=self._search_migrator_service
+        )
 
     def prime_query_values(self, _db):
         JSONQuery.data_sources = _db.query(DataSource).all()
@@ -400,7 +438,33 @@ class ExternalSearchIndex(HasSelfTests):
         )
         return qu.count()
 
-    def bulk_update(self, works, retry_on_batch_failure=True):
+    def create_search_documents_from_works(
+        self, works: Iterable[Work]
+    ) -> Iterable[dict]:
+        """Create search documents for all the given works."""
+        if not works:
+            # There's nothing to do. Don't bother making any requests
+            # to the search index.
+            return []
+
+        time1 = time.time()
+        needs_add = []
+        for work in works:
+            needs_add.append(work)
+
+        # Add/update any works that need adding/updating.
+        docs = Work.to_search_documents(needs_add)
+
+        for doc in docs:
+            doc["_index"] = self._search_write_pointer
+        time2 = time.time()
+
+        self.log.info(
+            "Created %i search documents in %.2f seconds" % (len(docs), time2 - time1)
+        )
+        return docs
+
+    def _bulk_update(self, works, retry_on_batch_failure=True):
         """Upload a batch of works to the search index at once."""
 
         if not works:
@@ -432,7 +496,7 @@ class ExternalSearchIndex(HasSelfTests):
         if len(errors) == len(docs):
             if retry_on_batch_failure:
                 self.log.info("Opensearch bulk update timed out, trying again.")
-                return self.bulk_update(needs_add, retry_on_batch_failure=False)
+                return self._bulk_update(needs_add, retry_on_batch_failure=False)
             else:
                 docs = []
 
@@ -2808,16 +2872,26 @@ class WorkSearchResult:
 
 
 class MockExternalSearchIndex(ExternalSearchIndex):
+    class EmptyRevision(SearchSchemaRevision):
+        def __init__(self, version: int):
+            super().__init__(version)
+
+        def mapping_document(self) -> SearchMappingDocument:
+            return SearchMappingDocument()
+
     def __init__(self, url=None):
         self.url = url
         self.docs = {}
-        self.works_index = "works"
-        self.works_alias = "works-current"
         self.log = logging.getLogger("Mock external search index")
         self.queries = []
         self.search = list(self.docs.keys())
         self.test_search_term = "a search term"
-        self._search_read_pointer = "works-search-read"
+        self._revision_base_name = "works"
+        self._revision = EmptyRevision(version=1)
+        self._search_read_pointer = f"{self._revision_base_name}-search-read"
+        self._search_write_pointer = f"{self._revision_base_name}-search-write"
+        self._search_migrator = MagicMock()
+        self._search_migrator_service = MagicMock()
 
     def _key(self, index, id):
         return (index, id)
@@ -2946,10 +3020,37 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
         super().__init__(*args, **kwargs)
         self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
 
+        #
+        # Try to migrate to the latest schema. If the function returns None, it means
+        # that no migration is necessary, and we're already at the latest version. If
+        # we're already at the latest version, then simply upload search documents instead.
+        # This can happen if we've migrated to the latest version, but then run `bin/search_index_clear`
+        # and are now trying to run `bin/search_index_refresh`.
+        #
+        self.migration: Optional[
+            SearchMigrationInProgress
+        ] = self.search_index_client.start_migration()
+        if self.migration is None:
+            self.receiver: SearchDocumentReceiver = (
+                self.search_index_client.update_search_documents()
+            )
+
+    def on_completely_finished(self):
+        super().on_completely_finished()
+        # Tell the search migrator that no more documents are going to show up.
+        target: SearchDocumentReceiverType = self.migration or self.receiver
+        target.finish()
+
     def process_batch(self, works):
         """
         :return: a mixed list of Works and CoverageFailure objects.
         """
+
+        target: SearchDocumentReceiverType = self.migration or self.receiver
+        target.add_documents(
+            documents=self.search_index_client.create_search_documents_from_works(works)
+        )
+
         successes, failures = self.search_index_client.bulk_update(works)
 
         records = list(successes)
