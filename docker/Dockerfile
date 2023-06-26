@@ -29,7 +29,6 @@ COPY --chown=simplified:simplified . /var/www/circulation
 
 FROM common AS exec
 
-ENV SIMPLIFIED_DB_TASK "ignore"
 ENV SIMPLIFIED_SCRIPT_NAME ""
 
 VOLUME /var/log
@@ -44,7 +43,6 @@ CMD ["/sbin/my_init", "--skip-runit", "--quiet", "--", \
 
 FROM common AS scripts
 
-ENV SIMPLIFIED_DB_TASK "auto"
 # Set the local timezone and setup cron
 ENV TZ=US/Eastern
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
@@ -63,8 +61,6 @@ CMD ["/sbin/my_init"]
 ###############################################################################
 
 FROM common AS webapp
-
-ENV SIMPLIFIED_DB_TASK "ignore"
 
 # Setup nginx
 COPY docker/services/nginx /etc/nginx/

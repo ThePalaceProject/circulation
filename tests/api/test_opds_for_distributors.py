@@ -59,7 +59,7 @@ def authentication_document() -> Callable[[str], str]:
             "authentication": [
                 {
                     **{"type": "http://opds-spec.org/auth/oauth/client_credentials"},
-                    **links,  # type: ignore
+                    **links,
                 },
             ]
         }

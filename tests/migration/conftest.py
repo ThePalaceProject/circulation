@@ -10,7 +10,6 @@ import pytest
 import pytest_alembic
 from pytest_alembic.config import Config
 
-from core.model import SessionManager
 from tests.fixtures.database import ApplicationFixture, DatabaseFixture
 
 if TYPE_CHECKING:
@@ -21,17 +20,21 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(scope="function")
-def database() -> Generator[DatabaseFixture, None, None]:
+def application() -> Generator[ApplicationFixture, None, None]:
+    app = ApplicationFixture.create()
+    yield app
+    app.close()
+
+
+@pytest.fixture(scope="function")
+def database(application: ApplicationFixture) -> Generator[DatabaseFixture, None, None]:
     # This is very similar to the normal database fixture and uses the same object,
     # but because these tests are done outside a transaction, we need this fixture
     # to have function scope, so the database schema is completely reset between
     # tests.
-    app = ApplicationFixture.create()
     db = DatabaseFixture.create()
     yield db
     db.close()
-    app.close()
-    SessionManager.engine_for_url = {}
 
 
 @pytest.fixture
