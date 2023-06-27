@@ -75,9 +75,9 @@ class TestScopedSession:
 
         fixture = controller_fixture_without_cm
         with fixture.app.test_request_context(*args) as ctx:
-            transaction = current_session.begin_nested()
+            transaction = current_session.begin_nested()  # type: ignore[attr-defined]
             fixture.app.manager = fixture.circulation_manager_setup_with_session(
-                session=current_session,
+                session=current_session,  # type: ignore[arg-type]
                 overrides=ControllerFixtureSetupOverrides(
                     make_default_libraries=scoped.make_default_libraries,
                     make_default_collection=scoped.make_default_collection,

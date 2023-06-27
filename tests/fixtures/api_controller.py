@@ -68,7 +68,7 @@ class ControllerFixture:
     english_adult_fiction: Lane
     libraries: list[Library]
     library: Library
-    manager: CirculationManager
+    manager: MockCirculationManager
     vendor_ids: VendorIDFixture
 
     # Authorization headers that will succeed (or fail) against the
@@ -165,7 +165,7 @@ class ControllerFixture:
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.
-        self.manager.d_circulation = self.manager.circulation_apis[self.library.id]  # type: ignore
+        self.manager.d_circulation = self.manager.circulation_apis[self.library.id]
         self.manager.d_top_level_lane = self.manager.top_level_lanes[self.library.id]  # type: ignore
         self.controller = CirculationManagerController(self.manager)
 

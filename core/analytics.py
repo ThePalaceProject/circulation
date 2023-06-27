@@ -1,7 +1,7 @@
 import importlib
 import logging
 from collections import defaultdict
-from typing import Any, Dict, Set
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy.orm.session import Session
 
@@ -23,7 +23,7 @@ class Analytics:
     _singleton_instance = None
     log = logging.getLogger("core.analytics.Analytics")
 
-    GLOBAL_ENABLED = None
+    GLOBAL_ENABLED: Optional[bool] = None
     LIBRARY_ENABLED: Set[int] = set()
 
     def __new__(cls, _db, refresh=False) -> "Analytics":

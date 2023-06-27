@@ -40,6 +40,8 @@ class OdiloFixture:
     PIN = "c4ca4238a0b923820dcc509a6f75849b"
     RECORD_ID = "00010982"
 
+    api: MockOdiloAPI
+
     def sample_data(self, filename):
         return self.files.sample_data(filename)
 
@@ -66,7 +68,7 @@ class OdiloFixture:
         self.circulation = CirculationAPI(
             db.session, library, api_map={ExternalIntegration.ODILO: MockOdiloAPI}
         )
-        self.api = self.circulation.api_for_collection[self.collection.id]
+        self.api = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         self.edition, self.licensepool = db.edition(
             data_source_name=DataSource.ODILO,
             identifier_type=Identifier.ODILO_ID,
@@ -311,7 +313,7 @@ class TestOdiloAPI:
         def explode(*args, **kwargs):
             raise Exception("Failure!")
 
-        odilo.api.check_creds = explode
+        odilo.api.check_creds = explode  # type: ignore[method-assign]
 
         # Only one test will be run.
         [check_creds] = odilo.api._run_self_tests(odilo.db.session)
@@ -333,7 +335,7 @@ class TestOdiloCirculationAPI:
         patron = odilo.db.patron()
         patron.authorization_identifier = "no such patron"
         pytest.raises(
-            PatronNotFoundOnRemote,  # type: ignore
+            PatronNotFoundOnRemote,
             odilo.api.checkout,
             patron,
             odilo.PIN,
@@ -351,7 +353,7 @@ class TestOdiloCirculationAPI:
 
         odilo.licensepool.identifier.identifier = "12345678"
         pytest.raises(
-            NotFoundOnRemote,  # type: ignore
+            NotFoundOnRemote,
             odilo.api.checkout,
             odilo.patron,
             odilo.PIN,
@@ -380,7 +382,7 @@ class TestOdiloCirculationAPI:
     def test_11_checkout_fake_format(self, odilo: OdiloFixture):
         odilo.api.queue_response(400, content="")
         pytest.raises(
-            NoAcceptableFormat,  # type: ignore
+            NoAcceptableFormat,
             odilo.api.checkout,
             odilo.patron,
             odilo.PIN,
@@ -479,7 +481,7 @@ class TestOdiloCirculationAPI:
         odilo.api.queue_response(403, content=already_on_hold_json)
 
         pytest.raises(
-            AlreadyOnHold,  # type: ignore
+            AlreadyOnHold,
             odilo.api.place_hold,
             odilo.patron,
             odilo.PIN,
@@ -510,7 +512,7 @@ class TestOdiloCirculationAPI:
         odilo.api.queue_response(404, content=patron_not_found_json)
 
         pytest.raises(
-            PatronNotFoundOnRemote, odilo.api.patron_activity, odilo.patron, odilo.PIN  # type: ignore
+            PatronNotFoundOnRemote, odilo.api.patron_activity, odilo.patron, odilo.PIN
         )
 
         odilo.api.log.info("Test patron activity --> invalid patron ok!")
@@ -539,7 +541,7 @@ class TestOdiloCirculationAPI:
         odilo.api.queue_response(404, content=patron_not_found_json)
 
         pytest.raises(
-            PatronNotFoundOnRemote,  # type: ignore
+            PatronNotFoundOnRemote,
             odilo.api.checkin,
             odilo.patron,
             odilo.PIN,
@@ -555,7 +557,7 @@ class TestOdiloCirculationAPI:
         odilo.api.queue_response(404, content=checkout_not_found_json)
 
         pytest.raises(
-            NotCheckedOut, odilo.api.checkin, odilo.patron, odilo.PIN, odilo.licensepool  # type: ignore
+            NotCheckedOut, odilo.api.checkin, odilo.patron, odilo.PIN, odilo.licensepool
         )
 
         odilo.api.log.info("Test checkin --> invalid checkout ok!")
@@ -592,7 +594,7 @@ class TestOdiloCirculationAPI:
         odilo.api.queue_response(404, content=patron_not_found_json)
 
         pytest.raises(
-            PatronNotFoundOnRemote,  # type: ignore
+            PatronNotFoundOnRemote,
             odilo.api.release_hold,
             odilo.patron,
             odilo.PIN,

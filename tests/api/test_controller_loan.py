@@ -189,7 +189,7 @@ class TestLoanController:
             loan = get_one(
                 loan_fixture.db.session, Loan, license_pool=loan_fixture.pool
             )
-            assert loan != None
+            assert loan is not None
             # The loan has yet to be fulfilled.
             assert None == loan.fulfillment
 
@@ -231,6 +231,7 @@ class TestLoanController:
             assert loan_fixture.mech1.resource.representation.url is not None  # type: ignore
 
             # Now let's try to fulfill the loan using the first delivery mechanism.
+            assert isinstance(loan_fixture.pool.id, int)
             response = loan_fixture.manager.loans.fulfill(
                 loan_fixture.pool.id,
                 fulfillable_mechanism.delivery_mechanism.id,
@@ -255,9 +256,9 @@ class TestLoanController:
 
             fulfillment = FulfillmentInfo(
                 loan_fixture.pool.collection,
-                loan_fixture.pool.data_source,  # type: ignore
-                loan_fixture.pool.identifier.type,  # type: ignore
-                loan_fixture.pool.identifier.identifier,  # type: ignore
+                loan_fixture.pool.data_source,
+                loan_fixture.pool.identifier.type,
+                loan_fixture.pool.identifier.identifier,
                 content_link=fulfillable_mechanism.resource.url,  # type: ignore
                 content_type=fulfillable_mechanism.resource.representation.media_type,  # type: ignore
                 content=None,
@@ -343,7 +344,7 @@ class TestLoanController:
 
             # A loan has been created for this license pool.
             loan = get_one(loan_fixture.db.session, Loan, license_pool=pool)
-            assert loan != None
+            assert loan is not None
             # The loan has yet to be fulfilled.
             assert None == loan.fulfillment
 
@@ -706,6 +707,7 @@ class TestLoanController:
             loan, ignore = loan_fixture.pool.loan_to(authenticated)
 
             # Try to fulfill a certain part of the loan.
+            assert isinstance(loan_fixture.pool.id, int)
             part = "part 1 million"
             controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id, part
@@ -793,6 +795,7 @@ class TestLoanController:
             loan, ignore = loan_fixture.pool.loan_to(authenticated)
 
             # Fulfill the loan.
+            assert isinstance(loan_fixture.pool.id, int)
             result = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
@@ -811,10 +814,11 @@ class TestLoanController:
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
             controller.authenticated_patron_from_request()
+            assert isinstance(loan_fixture.pool.id, int)
             response = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
-
+            assert isinstance(response, ProblemDetail)
             assert NO_ACTIVE_LOAN.uri == response.uri
 
         # ...or it might be because there is no authenticated patron.
@@ -832,13 +836,13 @@ class TestLoanController:
         def mock_authenticated_patron():
             return INTEGRATION_ERROR
 
-        controller.authenticated_patron_from_request = mock_authenticated_patron
+        controller.authenticated_patron_from_request = mock_authenticated_patron  # type: ignore[method-assign]
         with loan_fixture.request_context_with_library("/"):
             problem = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
             assert INTEGRATION_ERROR == problem
-        controller.authenticated_patron_from_request = old_authenticated_patron
+        controller.authenticated_patron_from_request = old_authenticated_patron  # type: ignore[method-assign]
 
         # However, if can_fulfill_without_loan returns True, then
         # fulfill() will be called. If fulfill() returns a
@@ -864,12 +868,13 @@ class TestLoanController:
         # Now we're able to fulfill the book even without
         # authenticating a patron.
         with loan_fixture.request_context_with_library("/"):
-            controller.can_fulfill_without_loan = mock_can_fulfill_without_loan
+            controller.can_fulfill_without_loan = mock_can_fulfill_without_loan  # type: ignore[method-assign]
             controller.circulation.fulfill = mock_fulfill
             response = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
 
+            assert isinstance(response, Response)
             assert "here's your book" == response.get_data(as_text=True)
             assert [] == loan_fixture.db.session.query(Loan).all()
 
@@ -895,6 +900,7 @@ class TestLoanController:
                     DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
                 )
 
+                assert isinstance(loan_fixture.pool.id, int)
                 response = controller.fulfill(
                     loan_fixture.pool.id, loan_fixture.mech1.delivery_mechanism.id
                 )
@@ -930,15 +936,15 @@ class TestLoanController:
             loan_fixture.db.default_collection(),
             DataSource.OVERDRIVE,
             "overdrive",
-            pool.identifier.identifier,  # type: ignore
+            pool.identifier.identifier,
             "https://example.org/redirect_to_epub",
             MediaTypes.EPUB_MEDIA_TYPE,
             "",
             None,
             content_link_redirect=True,
         )
-        controller.can_fulfill_without_loan = MagicMock(return_value=False)
-        controller.authenticated_patron_from_request = MagicMock(return_value=patron)
+        controller.can_fulfill_without_loan = MagicMock(return_value=False)  # type: ignore[method-assign]
+        controller.authenticated_patron_from_request = MagicMock(return_value=patron)  # type: ignore[method-assign]
 
         with loan_fixture.request_context_with_library(
             "/",
@@ -953,8 +959,10 @@ class TestLoanController:
             controller.circulation.api_for_collection[
                 loan_fixture.db.default_collection().id
             ] = api
+            assert isinstance(pool.id, int)
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
+        assert isinstance(response, Response)
         assert response.status_code == 302
         assert response.location == "https://example.org/redirect_to_epub"
 
@@ -973,6 +981,7 @@ class TestLoanController:
             }
         )
         api.fulfill.return_value = axis360_ff
+        assert isinstance(pool.id, int)
         with loan_fixture.request_context_with_library(
             "/",
             library=loan_fixture.db.default_library(),
@@ -980,6 +989,7 @@ class TestLoanController:
         ):
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
+        assert isinstance(response, Response)
         assert response.status_code == 200
         assert response.json == {"book_vault_uuid": "Vault ID", "isbn": "ISBN ID"}
 
@@ -1127,7 +1137,7 @@ class TestLoanController:
         original_handle_conditional_request = (
             loan_fixture.controller.handle_conditional_request
         )
-        loan_fixture.manager.loans.handle_conditional_request = (
+        loan_fixture.manager.loans.handle_conditional_request = (  # type: ignore[method-assign]
             handle_conditional_request
         )
 
@@ -1166,7 +1176,7 @@ class TestLoanController:
         # the course of this test, but it will not notice any more
         # conditional requests -- the detailed behavior of
         # handle_conditional_request is tested elsewhere.
-        loan_fixture.manager.loans.handle_conditional_request = (
+        loan_fixture.manager.loans.handle_conditional_request = (  # type: ignore[method-assign]
             original_handle_conditional_request
         )
 
@@ -1442,9 +1452,11 @@ class TestLoanController:
             )
 
             if collection_default_loan_period:
+                library_id = loan_fixture.db.default_library().id
+                assert isinstance(library_id, int)
                 DatabaseTransactionFixture.set_settings(
                     collection.integration_configuration.for_library(
-                        loan_fixture.db.default_library().id, create=True
+                        library_id, create=True
                     ),
                     collection.loan_period_key(),
                     collection_default_loan_period,

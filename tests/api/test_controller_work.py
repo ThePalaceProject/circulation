@@ -61,7 +61,7 @@ class WorkFixture(CirculationControllerFixture):
         [self.lp] = self.english_1.license_pools
         self.edition = self.lp.presentation_edition
         self.datasource = self.lp.data_source.name  # type: ignore
-        self.identifier = self.lp.identifier  # type: ignore
+        self.identifier = self.lp.identifier
 
 
 @pytest.fixture(scope="function")
@@ -495,8 +495,8 @@ class TestWorkController:
         # external service.
         [self.lp] = work_fixture.english_1.license_pools
         self.edition = self.lp.presentation_edition
-        self.datasource = self.lp.data_source.name  # type: ignore
-        self.identifier = self.lp.identifier  # type: ignore
+        self.datasource = self.lp.data_source.name
+        self.identifier = self.lp.identifier
 
         # Prep an empty recommendation.
         source = DataSource.lookup(work_fixture.db.session, self.datasource)
@@ -504,7 +504,7 @@ class TestWorkController:
         mock_api = MockNoveListAPI(work_fixture.db.session)
 
         args = [self.identifier.type, self.identifier.identifier]
-        kwargs = dict(novelist_api=mock_api)
+        kwargs: dict[str, Any] = dict(novelist_api=mock_api)
 
         # We get a 400 response if the pagination data is bad.
         with work_fixture.request_context_with_library("/?size=abc"):
@@ -529,9 +529,7 @@ class TestWorkController:
 
         # If no NoveList API is configured, the lane does not exist.
         with work_fixture.request_context_with_library("/"):
-            response = work_fixture.manager.work_controller.recommendations(
-                *args, novelist_api=None
-            )
+            response = work_fixture.manager.work_controller.recommendations(*args)
         assert 404 == response.status_code
         assert "http://librarysimplified.org/terms/problem/unknown-lane" == response.uri
         assert "Recommendations not available" == response.detail
@@ -835,6 +833,7 @@ class TestWorkController:
         work: Work = db.work(with_license_pool=True)
         identifier = work.presentation_edition.primary_identifier
         pool = get_one(db.session, LicensePool, work_id=work.id)
+        assert isinstance(pool, LicensePool)
         pool.work_id = None
         db.session.commit()
 

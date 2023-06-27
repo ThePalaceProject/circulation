@@ -481,6 +481,7 @@ class TestBibliothecaAPI:
         )
 
         api = circulation.api_for_collection[bibliotheca_fixture.collection.id]
+        assert isinstance(api, MockBibliothecaAPI)
         api.queue_response(
             200, content=bibliotheca_fixture.files.sample_data("checkouts.xml")
         )

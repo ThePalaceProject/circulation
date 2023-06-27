@@ -23,7 +23,7 @@ from ..util.datetime_helpers import utc_now
 from . import Base, get_one, get_one_or_create
 
 if TYPE_CHECKING:
-    from core.model import Patron
+    from core.model import DataSource, Patron
 
 
 class Credential(Base):
@@ -32,6 +32,9 @@ class Credential(Base):
     __tablename__ = "credentials"
     id = Column(Integer, primary_key=True)
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="credentials"
+    )
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
     collection_id = Column(Integer, ForeignKey("collections.id"), index=True)
     type = Column(String(255), index=True)

@@ -277,7 +277,7 @@ class TestLaneCreation:
         create_default_lanes(db.session, db.default_library())
         lanes = (
             db.session.query(Lane)
-            .filter(Lane.library == library)  # type: ignore
+            .filter(Lane.library == library)
             .filter(Lane.parent_id == None)
             .all()
         )
@@ -636,7 +636,9 @@ class TestRelatedBooksLane:
         result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert 2 == len(result.children)
         sublane_contributors = list()
-        [sublane_contributors.append(c.contributor) for c in result.children]
+
+        for c in result.children:
+            sublane_contributors.append(c.contributor)
         assert {lane, original} == set(sublane_contributors)
 
         # When there are no AUTHOR_ROLES present, contributors in
@@ -980,6 +982,8 @@ class TestCrawlableCollectionBasedLane:
         # affiliation.
         lane = CrawlableCollectionBasedLane()
         lane.initialize([unused_collection, other_library_collection])
+        assert isinstance(unused_collection.name, str)
+        assert isinstance(other_library_collection.name, str)
         assert (
             "Crawlable feed: %s / %s"
             % tuple(sorted([unused_collection.name, other_library_collection.name]))

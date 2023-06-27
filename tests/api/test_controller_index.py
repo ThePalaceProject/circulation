@@ -40,7 +40,7 @@ class TestIndexController:
             assert lane == None
             return mock_annotator
 
-        circulation_fixture.manager.annotator = make_mock_annotator
+        circulation_fixture.manager.annotator = make_mock_annotator  # type: ignore
 
         # Make a request, and the custom index is invoked.
         with circulation_fixture.request_context_with_library(

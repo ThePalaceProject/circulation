@@ -151,7 +151,7 @@ class TestRemoteRegistry:
 
         # If the result is a problem detail document, that document is
         # the return value of fetch_catalog().
-        problem = REMOTE_INTEGRATION_FAILED.detailed("oops")  # type: ignore
+        problem = REMOTE_INTEGRATION_FAILED.detailed("oops")
         client.responses.append(problem)
         registry = Mock(remote_registry_fixture.integration)
         result = registry.fetch_catalog(do_get=client.do_get)
@@ -214,7 +214,7 @@ class TestRemoteRegistry:
 
         # Non-OPDS document.
         result = extract("plain text here", "text/plain")
-        assert REMOTE_INTEGRATION_FAILED.uri == result.uri  # type: ignore
+        assert REMOTE_INTEGRATION_FAILED.uri == result.uri
         assert "The service at http://url/ did not return OPDS." == result.detail
 
     def test_fetch_registration_document(
@@ -241,12 +241,12 @@ class TestRemoteRegistry:
         # But the fetch_catalog method returned a problem detail,
         # which became the return value of
         # fetch_registration_document.
-        assert REMOTE_INTEGRATION_FAILED == result  # type: ignore
+        assert REMOTE_INTEGRATION_FAILED == result
 
         # Test the case where we get the catalog document but we can't
         # get the registration document.
         client = DummyHTTPClient()
-        client.responses.append(REMOTE_INTEGRATION_FAILED)  # type: ignore
+        client.responses.append(REMOTE_INTEGRATION_FAILED)
 
         class Mock1(RemoteRegistry):
             def fetch_catalog(self, do_get):
@@ -256,20 +256,20 @@ class TestRemoteRegistry:
                 self._extract_registration_information_called_with = response
                 return "TOS link", "TOS HTML data"
 
-        registry = Mock1(object())
-        result = registry.fetch_registration_document(client.do_get)
+        registry1 = Mock1(object())
+        result = registry1.fetch_registration_document(client.do_get)
         # A request was made to the registration URL mentioned in the catalog.
         assert "http://register-here/" == client.requests.pop()
         assert [] == client.requests
 
         # But the request returned a problem detail, which became the
         # return value of the method.
-        assert REMOTE_INTEGRATION_FAILED == result  # type: ignore
+        assert REMOTE_INTEGRATION_FAILED == result
 
         # Finally, test the case where we can get both documents.
 
         client.queue_requests_response(200, content="a registration document")
-        result = registry.fetch_registration_document(client.do_get)
+        result = registry1.fetch_registration_document(client.do_get)
 
         # Another request was made to the registration URL.
         assert "http://register-here/" == client.requests.pop()
@@ -277,7 +277,7 @@ class TestRemoteRegistry:
 
         # Our mock of _extract_registration_information was called
         # with the mock response to that request.
-        response = registry._extract_registration_information_called_with
+        response = registry1._extract_registration_information_called_with
         assert b"a registration document" == response.content
 
         # The return value of _extract_registration_information was
@@ -297,6 +297,8 @@ class TestRemoteRegistry:
             return dict(rel="terms-of-service", href=f"data:{type};base64,{encoded}")
 
         class Mock(RemoteRegistry):
+            decoded: str
+
             @classmethod
             def _decode_data_url(cls, url):
                 cls.decoded = url
@@ -602,7 +604,7 @@ class TestRegistration:
         result = registration.push(
             "no such stage", url_for, catalog_url, do_get, do_post
         )
-        assert INVALID_INPUT.uri == result.uri  # type: ignore
+        assert INVALID_INPUT.uri == result.uri
         assert "'no such stage' is not a valid registration stage" == result.detail
 
         # Now in reverse order, let's replace the mocked methods so
@@ -738,7 +740,7 @@ class TestRegistration:
         )
         result = m(url, headers, payload, mock.do_post)
         assert isinstance(result, ProblemDetail)
-        assert REMOTE_INTEGRATION_FAILED.uri == result.uri  # type: ignore
+        assert REMOTE_INTEGRATION_FAILED.uri == result.uri
         assert 'Remote service returned: "this is a problem detail"' == result.detail
 
         # The remote sends some other kind of 401 response.
@@ -749,7 +751,7 @@ class TestRegistration:
         )
         result = m(url, headers, payload, mock.do_post)
         assert isinstance(result, ProblemDetail)
-        assert REMOTE_INTEGRATION_FAILED.uri == result.uri  # type: ignore
+        assert REMOTE_INTEGRATION_FAILED.uri == result.uri
         assert 'Remote service returned: "log in why don\'t you"' == result.detail
 
     def test__decrypt_shared_secret(self, registration_fixture: RegistrationFixture):
@@ -772,7 +774,7 @@ class TestRegistration:
         # returned explaining the problem.
         problem = m(encryptor2, encrypted_secret)
         assert isinstance(problem, ProblemDetail)
-        assert SHARED_SECRET_DECRYPTION_ERROR.uri == problem.uri  # type: ignore
+        assert SHARED_SECRET_DECRYPTION_ERROR.uri == problem.uri
         assert encrypted_secret.decode("utf-8") in problem.detail
 
     def test__process_registration_result(
@@ -784,7 +786,7 @@ class TestRegistration:
 
         # Result must be a dictionary.
         result = m("not a dictionary", None, None)
-        assert INTEGRATION_ERROR.uri == result.uri  # type: ignore
+        assert INTEGRATION_ERROR.uri == result.uri
         assert (
             "Remote service served 'not a dictionary', which I can't make sense of as an OPDS document."
             == result.detail
@@ -842,7 +844,7 @@ class TestRegistration:
         result = reg._process_registration_result(
             catalog, encryptor, "another new stage"
         )
-        assert SHARED_SECRET_DECRYPTION_ERROR == result  # type: ignore
+        assert SHARED_SECRET_DECRYPTION_ERROR == result
 
 
 class TestLibraryRegistrationScript:
@@ -933,22 +935,24 @@ class TestLibraryRegistrationScript:
             def push(self, stage, url_for):
                 raise Exception("boo")
 
-        registration = FailsWithException(registry, library)
+        registration_fail_exception = FailsWithException(registry, library)
         # We get False rather than the exception being propagated.
         # Useful information about the exception is added to the logs,
         # where someone actually running the script will see it.
-        assert False == script.process_library(registration, stage, url_for)
+        assert False == script.process_library(
+            registration_fail_exception, stage, url_for
+        )
 
         # Next, simulate push() returning a problem detail document.
         class FailsWithProblemDetail(Registration):
             def push(self, stage, url_for):
                 return INVALID_INPUT.detailed("oops")
 
-        registration = FailsWithProblemDetail(registry, library)
-        result = script.process_library(registration, stage, url_for)
+        registration_fail_problem = FailsWithProblemDetail(registry, library)
+        result = script.process_library(registration_fail_problem, stage, url_for)
 
         # The problem document is returned. Useful information about
         # the exception is also added to the logs, where someone
         # actually running the script will see it.
-        assert INVALID_INPUT.uri == result.uri  # type: ignore
+        assert INVALID_INPUT.uri == result.uri
         assert "oops" == result.detail

@@ -1,5 +1,7 @@
+import datetime
 import json
 from time import mktime
+from typing import Union
 from wsgiref.handlers import format_date_time
 
 import pytest
@@ -87,6 +89,7 @@ class TestAnnotationController:
             assert AnnotationWriter.CONTENT_TYPE == response.headers["Content-Type"]
             expected_etag = 'W/"%s"' % annotation.timestamp
             assert expected_etag == response.headers["ETag"]
+            assert isinstance(annotation.timestamp, datetime.datetime)
             expected_time = format_date_time(mktime(annotation.timestamp.timetuple()))
             assert expected_time == response.headers["Last-Modified"]
 
@@ -136,11 +139,12 @@ class TestAnnotationController:
             assert AnnotationWriter.CONTENT_TYPE == response.headers["Content-Type"]
             expected_etag = 'W/"%s"' % annotation.timestamp
             assert expected_etag == response.headers["ETag"]
+            assert isinstance(annotation.timestamp, datetime.datetime)
             expected_time = format_date_time(mktime(annotation.timestamp.timetuple()))
             assert expected_time == response.headers["Last-Modified"]
 
     def test_post_to_container(self, annotation_fixture: AnnotationFixture):
-        data = dict()
+        data: dict[str, Union[str, dict]] = dict()
         data["@context"] = AnnotationWriter.JSONLD_CONTEXT
         data["type"] = "Annotation"
         data["motivation"] = Annotation.IDLING
@@ -190,6 +194,7 @@ class TestAnnotationController:
                 .get("http://www.w3.org/ns/oa#hasSelector")[0]
                 .get("@id")
             )
+            assert isinstance(data["target"], dict)
             assert data["target"]["selector"] == selector
 
             # The response contains the annotation in the db.

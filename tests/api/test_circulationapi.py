@@ -31,6 +31,7 @@ from core.model import (
     Hold,
     Hyperlink,
     Identifier,
+    Library,
     Loan,
     MediaTypes,
     Representation,
@@ -137,7 +138,7 @@ class TestCirculationAPI:
         assert CirculationEvent.CM_CHECKOUT == circulation_api.analytics.event_type
 
         # Try to 'borrow' the same book again.
-        circulation_api.remote.queue_checkout(AlreadyCheckedOut())  # type: ignore
+        circulation_api.remote.queue_checkout(AlreadyCheckedOut())
         loan, hold, is_new = self.borrow(circulation_api)
         assert False == is_new
         assert loaninfo.external_identifier == loan.external_identifier
@@ -187,7 +188,7 @@ class TestCirculationAPI:
 
         # Reset the API map, this book belongs to the "basic" collection,
         # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)  # type: ignore[method-assign]
 
         # Mark the book as unlimited access.
         circulation_api.pool.unlimited_access = True
@@ -218,7 +219,7 @@ class TestCirculationAPI:
             self.IN_TWO_WEEKS,
         )
 
-        circulation_api.remote.queue_checkout(AlreadyCheckedOut())  # type: ignore
+        circulation_api.remote.queue_checkout(AlreadyCheckedOut())
         now = utc_now()
         loan, hold, is_new = self.borrow(circulation_api)
 
@@ -253,7 +254,7 @@ class TestCirculationAPI:
             10,
         )
 
-        circulation_api.remote.queue_checkout(AlreadyOnHold())  # type: ignore
+        circulation_api.remote.queue_checkout(AlreadyOnHold())
         now = utc_now()
         loan, hold, is_new = self.borrow(circulation_api)
 
@@ -293,8 +294,8 @@ class TestCirculationAPI:
 
         # This is the expected behavior in most cases--you tried to
         # renew the loan and failed because it's not time yet.
-        circulation_api.remote.queue_checkout(CannotRenew())  # type: ignore
-        with pytest.raises(CannotRenew) as excinfo:  # type: ignore
+        circulation_api.remote.queue_checkout(CannotRenew())
+        with pytest.raises(CannotRenew) as excinfo:
             self.borrow(circulation_api)
         assert "CannotRenew" in str(excinfo.value)
 
@@ -323,8 +324,8 @@ class TestCirculationAPI:
         #
         # Contrast with the way NoAvailableCopies is handled in
         # test_loan_becomes_hold_if_no_available_copies.
-        circulation_api.remote.queue_checkout(NoAvailableCopies())  # type: ignore
-        with pytest.raises(CannotRenew) as excinfo:  # type: ignore
+        circulation_api.remote.queue_checkout(NoAvailableCopies())
+        with pytest.raises(CannotRenew) as excinfo:
             self.borrow(circulation_api)
         assert "You cannot renew a loan if other patrons have the work on hold." in str(
             excinfo.value
@@ -334,7 +335,7 @@ class TestCirculationAPI:
         self, circulation_api: CirculationAPIFixture
     ):
         # We want to borrow this book but there are no copies.
-        circulation_api.remote.queue_checkout(NoAvailableCopies())  # type: ignore
+        circulation_api.remote.queue_checkout(NoAvailableCopies())
         holdinfo = HoldInfo(
             circulation_api.pool.collection,
             circulation_api.pool.data_source,
@@ -384,7 +385,7 @@ class TestCirculationAPI:
     ):
         # Attempting to borrow a book will trigger a vendor-side loan
         # limit.
-        circulation_api.remote.queue_checkout(PatronLoanLimitReached())  # type: ignore
+        circulation_api.remote.queue_checkout(PatronLoanLimitReached())
 
         # But the point is moot because the book isn't even available.
         # Attempting to place a hold will succeed.
@@ -412,21 +413,21 @@ class TestCirculationAPI:
     ):
         # Attempting to borrow a book will trigger a vendor-side loan
         # limit.
-        circulation_api.remote.queue_checkout(PatronLoanLimitReached())  # type: ignore
+        circulation_api.remote.queue_checkout(PatronLoanLimitReached())
 
         # Attempting to place a hold will fail because the book is
         # available. (As opposed to the previous test, where the book
         # was _not_ available and hold placement succeeded.) This
         # indicates that we should have raised PatronLoanLimitReached
         # in the first place.
-        circulation_api.remote.queue_hold(CurrentlyAvailable())  # type: ignore
+        circulation_api.remote.queue_hold(CurrentlyAvailable())
 
         assert len(circulation_api.remote.responses["checkout"]) == 1
         assert len(circulation_api.remote.responses["hold"]) == 1
 
         # The exception raised is PatronLoanLimitReached, the first
         # one we encountered...
-        pytest.raises(PatronLoanLimitReached, lambda: self.borrow(circulation_api))  # type: ignore
+        pytest.raises(PatronLoanLimitReached, lambda: self.borrow(circulation_api))
 
         # ...but we made both requests and have no more responses
         # queued.
@@ -434,7 +435,7 @@ class TestCirculationAPI:
         assert not circulation_api.remote.responses["hold"]
 
     def test_hold_sends_analytics_event(self, circulation_api: CirculationAPIFixture):
-        circulation_api.remote.queue_checkout(NoAvailableCopies())  # type: ignore
+        circulation_api.remote.queue_checkout(NoAvailableCopies())
         holdinfo = HoldInfo(
             circulation_api.pool.collection,
             circulation_api.pool.data_source,
@@ -459,7 +460,7 @@ class TestCirculationAPI:
         assert CirculationEvent.CM_HOLD_PLACE == circulation_api.analytics.event_type
 
         # Try to 'borrow' the same book again.
-        circulation_api.remote.queue_checkout(AlreadyOnHold())  # type: ignore
+        circulation_api.remote.queue_checkout(AlreadyOnHold())
         loan, hold, is_new = self.borrow(circulation_api)
         assert False == is_new
 
@@ -476,7 +477,7 @@ class TestCirculationAPI:
 
         # But no longer! What's more, other patrons have taken all the
         # copies!
-        circulation_api.remote.queue_checkout(NoAvailableCopies())  # type: ignore
+        circulation_api.remote.queue_checkout(NoAvailableCopies())
         holdinfo = HoldInfo(
             circulation_api.pool.collection,
             circulation_api.pool.data_source,
@@ -524,7 +525,7 @@ class TestCirculationAPI:
         yesterday = now - timedelta(days=1)
         circulation_api.patron.authorization_expires = yesterday
 
-        pytest.raises(AuthorizationExpired, lambda: self.borrow(circulation_api))  # type: ignore
+        pytest.raises(AuthorizationExpired, lambda: self.borrow(circulation_api))
         circulation_api.patron.authorization_expires = old_expires
 
     def test_borrow_with_outstanding_fines(
@@ -546,15 +547,15 @@ class TestCirculationAPI:
         old_fines = circulation_api.patron.fines
         circulation_api.patron.fines = 1000
         setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, circulation_api.db.default_library()  # type: ignore
+            Configuration.MAX_OUTSTANDING_FINES, circulation_api.db.default_library()
         )
         setting.value = "$0.50"
 
-        pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))  # type: ignore
+        pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
         # Test the case where any amount of fines are too much.
         setting.value = "$0"
-        pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))  # type: ignore
+        pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
         # Remove the fine policy, and borrow succeeds.
         setting.value = None
@@ -578,7 +579,7 @@ class TestCirculationAPI:
 
         # ...except the patron is blocked
         circulation_api.patron.block_reason = "some reason"
-        pytest.raises(AuthorizationBlocked, lambda: self.borrow(circulation_api))  # type: ignore
+        pytest.raises(AuthorizationBlocked, lambda: self.borrow(circulation_api))
         circulation_api.patron.block_reason = None
 
     def test_no_licenses_prompts_availability_update(
@@ -586,11 +587,11 @@ class TestCirculationAPI:
     ):
         # Once the library offered licenses for this book, but
         # the licenses just expired.
-        circulation_api.remote.queue_checkout(NoLicenses())  # type: ignore
+        circulation_api.remote.queue_checkout(NoLicenses())
         assert [] == circulation_api.remote.availability_updated_for
 
         # We're not able to borrow the book...
-        pytest.raises(NoLicenses, lambda: self.borrow(circulation_api))  # type: ignore
+        pytest.raises(NoLicenses, lambda: self.borrow(circulation_api))
 
         # But the availability of the book gets immediately updated,
         # so that we don't keep offering the book.
@@ -626,7 +627,7 @@ class TestCirculationAPI:
                 # Always return the same mock MockVendorAPI.
                 return api
 
-        circulation_api.circulation = MockCirculationAPI(
+        circulation_api.circulation = MockCirculationAPI(  # type: ignore[assignment]
             circulation_api.db.session, circulation_api.db.default_library()
         )
 
@@ -636,11 +637,11 @@ class TestCirculationAPI:
         # But before that happened, enforce_limits was called once.
         assert [
             (circulation_api.patron, circulation_api.pool)
-        ] == circulation_api.circulation.enforce_limits_calls
+        ] == circulation_api.circulation.enforce_limits_calls  # type: ignore[attr-defined]
 
     def test_patron_at_loan_limit(self, circulation_api: CirculationAPIFixture):
         # The loan limit is a per-library setting.
-        setting = circulation_api.patron.library.setting(Configuration.LOAN_LIMIT)  # type: ignore
+        setting = circulation_api.patron.library.setting(Configuration.LOAN_LIMIT)
 
         future = utc_now() + timedelta(hours=1)
 
@@ -684,12 +685,12 @@ class TestCirculationAPI:
 
         # Another library's setting doesn't affect your limit.
         other_library = circulation_api.db.library()
-        other_library.setting(Configuration.LOAN_LIMIT).value = 1  # type: ignore
+        other_library.setting(Configuration.LOAN_LIMIT).value = 1
         assert False == m(patron)
 
     def test_patron_at_hold_limit(self, circulation_api: CirculationAPIFixture):
         # The hold limit is a per-library setting.
-        setting = circulation_api.patron.library.setting(Configuration.HOLD_LIMIT)  # type: ignore
+        setting = circulation_api.patron.library.setting(Configuration.HOLD_LIMIT)
 
         # Unlike the loan limit, it's pretty simple -- every hold counts towards your limit.
         patron = circulation_api.patron
@@ -720,7 +721,7 @@ class TestCirculationAPI:
 
         # Another library's setting doesn't affect your limit.
         other_library = circulation_api.db.library()
-        other_library.setting(Configuration.HOLD_LIMIT).value = 1  # type: ignore
+        other_library.setting(Configuration.HOLD_LIMIT).value = 1
         assert False == m(patron)
 
     def test_enforce_limits(self, circulation_api: CirculationAPIFixture):
@@ -743,10 +744,10 @@ class TestCirculationAPI:
         # Both limits are set to the same value for the sake of
         # convenience in testing.
         circulation_api.db.default_library().setting(
-            Configuration.LOAN_LIMIT  # type: ignore
+            Configuration.LOAN_LIMIT
         ).value = 12
         circulation_api.db.default_library().setting(
-            Configuration.HOLD_LIMIT  # type: ignore
+            Configuration.HOLD_LIMIT
         ).value = 12
 
         api = MockVendorAPI()
@@ -823,7 +824,7 @@ class TestCirculationAPI:
                 # problem detail document.
                 assert 12 == e.limit
 
-        assert_enforce_limits_raises(PatronLoanLimitReached)  # type: ignore
+        assert_enforce_limits_raises(PatronLoanLimitReached)
 
         # We were able to deduce that the patron can't do anything
         # with this book, without having to ask the API about
@@ -842,7 +843,7 @@ class TestCirculationAPI:
 
         # If the book is available, we get PatronLoanLimitReached
         pool.licenses_available = 1  # type: ignore
-        assert_enforce_limits_raises(PatronLoanLimitReached)  # type: ignore
+        assert_enforce_limits_raises(PatronLoanLimitReached)
 
         # Reaching this conclusion required checking both patron
         # limits and asking the remote API for updated availability
@@ -866,7 +867,7 @@ class TestCirculationAPI:
 
         # If the book is not available, we get PatronHoldLimitReached
         pool.licenses_available = 0  # type: ignore
-        assert_enforce_limits_raises(PatronHoldLimitReached)  # type: ignore
+        assert_enforce_limits_raises(PatronHoldLimitReached)
 
         # Reaching this conclusion required checking both patron
         # limits and asking the remote API for updated availability
@@ -889,7 +890,7 @@ class TestCirculationAPI:
         # NOTE: This is redundant except as an end-to-end test.
 
         # The hold limit is 1, and the patron has a previous hold.
-        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 1  # type: ignore
+        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 1
         other_pool = circulation_api.db.licensepool(None)
         other_pool.open_access = False
         other_pool.on_hold_to(circulation_api.patron)
@@ -901,12 +902,12 @@ class TestCirculationAPI:
         except Exception as e:
             # The result is a PatronHoldLimitReached configured with the
             # library's hold limit.
-            assert isinstance(e, PatronHoldLimitReached)  # type: ignore
+            assert isinstance(e, PatronHoldLimitReached)
             assert 1 == e.limit
 
         # If we increase the limit, borrow succeeds.
-        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 2  # type: ignore
-        circulation_api.remote.queue_checkout(NoAvailableCopies())  # type: ignore
+        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 2
+        circulation_api.remote.queue_checkout(NoAvailableCopies())
         now = utc_now()
         holdinfo = HoldInfo(
             circulation_api.pool.collection,
@@ -937,14 +938,14 @@ class TestCirculationAPI:
         # fulfill_open_access() and fulfill() will both raise
         # FormatNotAvailable.
         pytest.raises(
-            FormatNotAvailable,  # type: ignore
+            FormatNotAvailable,
             circulation_api.circulation.fulfill_open_access,
             circulation_api.pool,
             i_want_an_epub,
         )
 
         pytest.raises(
-            FormatNotAvailable,  # type: ignore
+            FormatNotAvailable,
             circulation_api.circulation.fulfill,
             circulation_api.patron,
             "1234",
@@ -972,7 +973,7 @@ class TestCirculationAPI:
         # Representation.
         assert None == link.resource.representation
         pytest.raises(
-            FormatNotAvailable,  # type: ignore
+            FormatNotAvailable,
             circulation_api.circulation.fulfill_open_access,
             circulation_api.pool,
             i_want_an_epub,
@@ -1026,7 +1027,7 @@ class TestCirculationAPI:
         )
         working_lpdm.delivery_mechanism = irrelevant_delivery_mechanism
         pytest.raises(
-            FormatNotAvailable,  # type: ignore
+            FormatNotAvailable,
             circulation_api.circulation.fulfill_open_access,
             circulation_api.pool,
             i_want_an_epub,
@@ -1040,7 +1041,7 @@ class TestCirculationAPI:
         are fulfilled in the same way as OA and self-hosted books."""
         # Reset the API map, this book belongs to the "basic" collection,
         # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)  # type: ignore[method-assign]
 
         # Mark the book as unlimited access.
         circulation_api.pool.unlimited_access = True
@@ -1122,14 +1123,14 @@ class TestCirculationAPI:
                 circulation_api.pool.delivery_mechanisms[0],
             )
 
-        pytest.raises(NoActiveLoan, try_to_fulfill)  # type: ignore
+        pytest.raises(NoActiveLoan, try_to_fulfill)
 
         # However, if CirculationAPI.can_fulfill_without_loan() says it's
         # okay, the title will be fulfilled anyway.
         def yes_we_can(*args, **kwargs):
             return True
 
-        circulation_api.circulation.can_fulfill_without_loan = yes_we_can
+        circulation_api.circulation.can_fulfill_without_loan = yes_we_can  # type: ignore[method-assign]
         result = try_to_fulfill()
         assert fulfillment == result
 
@@ -1206,7 +1207,7 @@ class TestCirculationAPI:
         lp1 = circulation_api.db.licensepool(edition=None)
         lp2 = circulation_api.db.licensepool(edition=None)
 
-        api = CirculationAPI(circulation_api.db.session, l1, analytics)
+        api = CirculationAPI(circulation_api.db.session, l1, analytics)  # type: ignore[arg-type]
 
         def assert_event(inp, outp):
             # Assert that passing `inp` into the mock _collect_event
@@ -1363,12 +1364,12 @@ class TestCirculationAPI:
                 # the patron has any loans or holds.
                 return [], [], False
 
-        circulation = IncompleteCirculationAPI(
+        incomplete_circulation = IncompleteCirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
             api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
         )
-        circulation.sync_bookshelf(circulation_api.patron, "1234")
+        incomplete_circulation.sync_bookshelf(circulation_api.patron, "1234")
 
         # The loan is still in the db, since there was an
         # error from one of the remote APIs and we don't have
@@ -1556,6 +1557,7 @@ class TestCirculationAPI:
             api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
         )
         mock_bibliotheca = circulation.api_for_collection[circulation_api.collection.id]
+        assert isinstance(mock_bibliotheca, MockBibliothecaAPI)
         data = api_bibliotheca_files_fixture.sample_data("checkouts.xml")
         mock_bibliotheca.queue_response(200, content=data)
 
@@ -1611,7 +1613,7 @@ class TestBaseCirculationAPI:
         # Test the ability to get the default notification email address
         # for a patron or a library.
         db.default_library().setting(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS  # type: ignore
+            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS
         ).value = "help@library"
         m = BaseCirculationAPI.default_notification_email_address
         assert "help@library" == m(db.default_library(), None)
@@ -1630,6 +1632,9 @@ class TestBaseCirculationAPI:
         # Test the method that looks up a patron's actual email address
         # (the one they shared with the library) on demand.
         class Mock(MockBaseCirculationAPI):
+            _library_authenticator_called_with: Library
+            _library_authenticator_returned: LibraryAuthenticator
+
             @classmethod
             def _library_authenticator(self, library):
                 self._library_authenticator_called_with = library
@@ -1655,7 +1660,7 @@ class TestBaseCirculationAPI:
         # Now we're going to pass in our own LibraryAuthenticator,
         # which we've populated with mock authentication providers,
         # into a real BaseCirculationAPI.
-        api = MockBaseCirculationAPI(db.session, db.default_collection())
+        base_circ_api = MockBaseCirculationAPI(db.session, db.default_collection())
         authenticator = LibraryAuthenticator(_db=db.session, library=library)
 
         # This basic authentication provider _does_ implement
@@ -1668,8 +1673,8 @@ class TestBaseCirculationAPI:
 
         basic: Union[MockBasic, "MockBasic2"] = MockBasic()
 
-        authenticator.register_basic_auth_provider(basic)
-        assert None == api.patron_email_address(
+        authenticator.register_basic_auth_provider(basic)  # type: ignore[arg-type]
+        assert None == base_circ_api.patron_email_address(
             patron, library_authenticator=authenticator
         )
         assert patron == basic.called_with  # type: ignore
@@ -1682,8 +1687,8 @@ class TestBaseCirculationAPI:
                 return PatronData(email_address="me@email")
 
         basic = MockBasic2()
-        authenticator.basic_auth_provider = basic
-        assert "me@email" == api.patron_email_address(
+        authenticator.basic_auth_provider = basic  # type: ignore[assignment]
+        assert "me@email" == base_circ_api.patron_email_address(
             patron, library_authenticator=authenticator
         )
         assert patron == basic.called_with
@@ -1778,7 +1783,7 @@ class TestConfigurationFailures:
         circulation = CirculationAPI(
             db.session,
             db.default_library(),
-            api_map=api_map,
+            api_map=api_map,  # type: ignore[arg-type]
         )
 
         # Although the CirculationAPI was created, it has no functioning

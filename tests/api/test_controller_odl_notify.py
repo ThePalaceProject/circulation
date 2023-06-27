@@ -55,7 +55,7 @@ class ODLFixture:
             checkouts_available=1,
             terms_concurrency=1,
         )
-        self.license.setup = types.MethodType(setup, self.license)
+        types.MethodType(setup, self.license)
         self.pool.update_availability_from_licenses()
         self.patron = self.db.patron()
 
@@ -102,7 +102,7 @@ class TestODLNotificationController:
                 }
             )
             data = bytes(text, "utf-8")
-            flask.request.data = data  # type: ignore
+            flask.request.data = data
             response = controller_fixture.manager.odl_notification_controller.notify(
                 loan.id
             )

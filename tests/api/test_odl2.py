@@ -87,7 +87,7 @@ class TestODL2Importer(TestODLImporter):
         return i
 
     @pytest.fixture()
-    def importer(
+    def importer(  # type: ignore[override]
         self,
         db: DatabaseTransactionFixture,
         odl_test_fixture: ODLTestFixture,
@@ -191,8 +191,8 @@ class TestODL2Importer(TestODLImporter):
 
         [moby_dick_license_pool] = pools
         assert isinstance(moby_dick_license_pool, LicensePool)
-        assert moby_dick_license_pool.identifier.identifier == "978-3-16-148410-0"  # type: ignore
-        assert moby_dick_license_pool.identifier.type == "ISBN"  # type: ignore
+        assert moby_dick_license_pool.identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_license_pool.identifier.type == "ISBN"
         assert not moby_dick_license_pool.open_access
         assert 30 == moby_dick_license_pool.licenses_owned
         assert 10 == moby_dick_license_pool.licenses_available
@@ -414,9 +414,9 @@ class TestODL2API:
             == odl2api.work.presentation_edition.primary_identifier.identifier
         )
 
-        response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
         # Hold was successful
-        assert response.hold_position == 1
+        assert hold_response.hold_position == 1
         create(db.session, Hold, patron_id=odl2api.patron.id, license_pool=pool)
 
         # Second work should fail for the test patron due to the hold limit

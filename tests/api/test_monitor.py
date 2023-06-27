@@ -163,8 +163,8 @@ class TestLoanlikeReaperMonitor:
         assert 2 == len(current_patron.holds)
 
         # Now fire up the hold reaper.
-        monitor = HoldReaper(db.session)
-        monitor.run()
+        hold_monitor = HoldReaper(db.session)
+        hold_monitor.run()
 
         # All of the inactive patron's holds have been reaped,
         # except for the one from the source-of-truth collection.

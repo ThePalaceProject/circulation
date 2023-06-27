@@ -322,6 +322,7 @@ class VendorIDModelFixture:
             test_identifier="validpatron", test_password="password"
         )
         library_settings = BasicAuthProviderLibrarySettings()
+        assert isinstance(library.id, int)
         self.authenticator = SimpleAuthenticationProvider(
             library_id=library.id,
             # Integration ID isn't used in these tests, so we can
@@ -341,10 +342,13 @@ class VendorIDModelFixture:
             vendor_id_fixture.db.session, DataSource.ADOBE
         )
 
-        self.bob_patron = self.authenticator.authenticated_patron(
+        authenticated_patron = self.authenticator.authenticated_patron(
             vendor_id_fixture.db.session,
             dict(username="validpatron", password="password"),
         )
+        assert isinstance(authenticated_patron, Patron)
+
+        self.bob_patron = authenticated_patron
 
 
 @pytest.fixture(scope="function")
@@ -853,6 +857,7 @@ class TestAuthdataUtility:
             ExternalIntegration.DISCOVERY_GOAL,
             library=library,
         )
+        assert isinstance(library.short_name, str)
         assert (
             library.short_name + "token"
             == ConfigurationSetting.for_library_and_externalintegration(
@@ -879,6 +884,8 @@ class TestAuthdataUtility:
             library_url: "%s token secret" % library.short_name,
         } == utility.secrets_by_library_uri
 
+        assert isinstance(library.short_name, str)
+        assert isinstance(library2.short_name, str)
         assert {
             "%sTOKEN" % library.short_name.upper(): library_url,
             "%sTOKEN" % library2.short_name.upper(): library2_url,
@@ -945,6 +952,7 @@ class TestAuthdataUtility:
         assert {
             library_url: "%s token secret" % library.short_name
         } == authdata.secrets_by_library_uri
+        assert isinstance(library.short_name, str)
         assert {
             "%sTOKEN" % library.short_name.upper(): library_url
         } == authdata.library_uris_by_short_name
