@@ -762,7 +762,7 @@ class TestOPDS:
         def link_for_facets(facets):
             return [x for x in facet_links if facets.query_string in x["href"]]
 
-        facets = Facets(library, None, None, None)
+        facets = Facets(library, None, None, None, None)
         for i1, i2, new_facets, selected in facets.facet_groups:
             links = link_for_facets(new_facets)
             if selected:

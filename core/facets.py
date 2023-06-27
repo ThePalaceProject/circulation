@@ -60,6 +60,9 @@ class FacetConstants:
     # these dates should be ordered descending by default (new->old).
     ORDER_DESCENDING_BY_DEFAULT = [ORDER_ADDED_TO_COLLECTION, ORDER_LAST_UPDATE]
 
+    DISTRIBUTOR_FACETS_GROUP_NAME = "distributor"
+    DISTRIBUTOR_ALL = "All"
+
     FACETS_BY_GROUP = {
         COLLECTION_FACET_GROUP_NAME: COLLECTION_FACETS,
         AVAILABILITY_FACET_GROUP_NAME: AVAILABILITY_FACETS,
@@ -70,12 +73,14 @@ class FacetConstants:
         ORDER_FACET_GROUP_NAME: _("Sort by"),
         AVAILABILITY_FACET_GROUP_NAME: _("Availability"),
         COLLECTION_FACET_GROUP_NAME: _("Collection"),
+        DISTRIBUTOR_FACETS_GROUP_NAME: _("Distributor"),
     }
 
     GROUP_DESCRIPTIONS = {
         ORDER_FACET_GROUP_NAME: _("Allow patrons to sort by"),
         AVAILABILITY_FACET_GROUP_NAME: _("Allow patrons to filter availability to"),
         COLLECTION_FACET_GROUP_NAME: _("Allow patrons to filter collection to"),
+        DISTRIBUTOR_FACETS_GROUP_NAME: _("Allow patrons to filter by distributor"),
     }
 
     FACET_DISPLAY_TITLES = {
@@ -92,6 +97,11 @@ class FacetConstants:
         COLLECTION_FEATURED: _("Popular Books"),
     }
 
+    # For titles generated based on some runtime value
+    FACET_DISPLAY_TITLES_DYNAMIC = {
+        DISTRIBUTOR_FACETS_GROUP_NAME: lambda facet: facet.distributor,
+    }
+
     # Unless a library offers an alternate configuration, patrons will
     # see these facet groups.
     DEFAULT_ENABLED_FACETS = {
@@ -102,6 +112,7 @@ class FacetConstants:
             AVAILABLE_OPEN_ACCESS,
         ],
         COLLECTION_FACET_GROUP_NAME: [COLLECTION_FULL, COLLECTION_FEATURED],
+        DISTRIBUTOR_FACETS_GROUP_NAME: [DISTRIBUTOR_ALL],
     }
 
     # Unless a library offers an alternate configuration, these
@@ -110,6 +121,7 @@ class FacetConstants:
         ORDER_FACET_GROUP_NAME: ORDER_AUTHOR,
         AVAILABILITY_FACET_GROUP_NAME: AVAILABLE_ALL,
         COLLECTION_FACET_GROUP_NAME: COLLECTION_FULL,
+        DISTRIBUTOR_FACETS_GROUP_NAME: DISTRIBUTOR_ALL,
     }
 
     SORT_ORDER_TO_OPENSEARCH_FIELD_NAME = {

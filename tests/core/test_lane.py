@@ -365,21 +365,24 @@ class TestFacets:
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             Facets.ORDER_TITLE,
+            Facets.DISTRIBUTOR_ALL,
         )
         assert None == facets.max_cache_age
 
     def test_facet_groups(self, db: DatabaseTransactionFixture):
+        db.default_collection().data_source = DataSource.AMAZON
         facets = Facets(
             db.default_library(),
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             Facets.ORDER_TITLE,
+            Facets.DISTRIBUTOR_ALL,
         )
         all_groups = list(facets.facet_groups)
 
-        # By default, there are 8 facet transitions: two groups of three
-        # and one group of two.
-        assert 8 == len(all_groups)
+        # By default, there are 10 facet transitions: two groups of three
+        # and one group of two and 2 datasource groups
+        assert 10 == len(all_groups)
 
         # available=all, collection=full, and order=title are the selected
         # facets.
@@ -387,9 +390,11 @@ class TestFacets:
         assert [
             ("available", "all"),
             ("collection", "full"),
+            ("distributor", "All"),
             ("order", "title"),
         ] == selected
 
+        # Distributor facets are generated at runtime, they are not a setting value
         test_enabled_facets = {
             Facets.ORDER_FACET_GROUP_NAME: [Facets.ORDER_WORK_ID, Facets.ORDER_TITLE],
             Facets.COLLECTION_FACET_GROUP_NAME: [Facets.COLLECTION_FEATURED],
@@ -403,14 +408,19 @@ class TestFacets:
         library = db.default_library()
         self._configure_facets(library, test_enabled_facets, test_default_facets)
 
-        facets = Facets(db.default_library(), None, None, Facets.ORDER_TITLE)
+        facets = Facets(db.default_library(), None, None, Facets.ORDER_TITLE, None)
         all_groups = list(facets.facet_groups)
         # We have disabled almost all the facets, so the list of
         # facet transitions includes only two items.
         #
         # 'Sort by title' was selected, and it shows up as the selected
         # item in this facet group.
-        expect = [["order", "title", True], ["order", "work_id", False]]
+        expect = [
+            ["distributor", "All", False],
+            ["distributor", DataSource.AMAZON, False],
+            ["order", "title", True],
+            ["order", "work_id", False],
+        ]
         assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
 
     def test_default(self, db: DatabaseTransactionFixture):
@@ -424,7 +434,13 @@ class TestFacets:
         facets = Mock.default(db.default_library())
         assert db.default_library() == facets.library
         assert (
-            dict(collection=None, availability=None, order=None, entrypoint=None)
+            dict(
+                collection=None,
+                availability=None,
+                order=None,
+                distributor=None,
+                entrypoint=None,
+            )
             == facets.kwargs
         )
 
@@ -487,13 +503,13 @@ class TestFacets:
         }
         library = db.default_library()
         self._configure_facets(library, test_enabled_facets, test_default_facets)
-        facets = Facets(library, None, None, None)
+        facets = Facets(library, None, None, None, None)
         assert Facets.AVAILABLE_ALL == facets.availability
 
         # However, if the library does not allow holds, we only show
         # books that are currently available.
         library.setting(Library.ALLOW_HOLDS).value = False
-        facets = Facets(library, None, None, None)
+        facets = Facets(library, None, None, None, None)
         assert Facets.AVAILABLE_NOW == facets.availability
 
         # Unless 'now' is not one of the enabled facets - then we keep
@@ -502,7 +518,7 @@ class TestFacets:
             Facets.AVAILABLE_ALL
         ]
         self._configure_facets(library, test_enabled_facets, test_default_facets)
-        facets = Facets(library, None, None, None)
+        facets = Facets(library, None, None, None, None)
         assert Facets.AVAILABLE_ALL == facets.availability
 
     def test_facets_can_be_enabled_at_initialization(
@@ -526,6 +542,7 @@ class TestFacets:
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_OPEN_ACCESS,
             Facets.ORDER_TITLE,
+            Facets.DISTRIBUTOR_ALL,
             enabled_facets=enabled_facets,
         )
         all_groups = list(facets.facet_groups)
@@ -547,6 +564,7 @@ class TestFacets:
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_OPEN_ACCESS,
             Facets.ORDER_TITLE,
+            Facets.DISTRIBUTOR_ALL,
             enabled_facets=enabled_facets,
         )
         all_groups = list(facets.facet_groups)
@@ -562,11 +580,13 @@ class TestFacets:
             Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             Facets.ORDER_TITLE,
+            Facets.DISTRIBUTOR_ALL,
             entrypoint=AudiobooksEntryPoint,
         )
         assert [
             ("available", Facets.AVAILABLE_ALL),
             ("collection", Facets.COLLECTION_FULL),
+            ("distributor", Facets.DISTRIBUTOR_ALL),
             ("entrypoint", AudiobooksEntryPoint.INTERNAL_NAME),
             ("order", Facets.ORDER_TITLE),
         ] == sorted(facets.items())
@@ -579,6 +599,7 @@ class TestFacets:
                 collection=Facets.COLLECTION_FULL,
                 availability=Facets.AVAILABLE_ALL,
                 order=order,
+                distributor=Facets.DISTRIBUTOR_ALL,
             )
             assert True == f.order_ascending
 
@@ -593,6 +614,7 @@ class TestFacets:
                 collection=Facets.COLLECTION_FULL,
                 availability=Facets.AVAILABLE_ALL,
                 order=order,
+                distributor=Facets.DISTRIBUTOR_ALL,
             )
             assert False == f.order_ascending
 
@@ -608,6 +630,7 @@ class TestFacets:
             F.COLLECTION_FULL,
             F.AVAILABLE_ALL,
             F.ORDER_TITLE,
+            Facets.DISTRIBUTOR_ALL,
             entrypoint=ebooks,
         )
 
@@ -724,6 +747,7 @@ class TestFacets:
                 order=[Facets.ORDER_TITLE],
                 available=[Facets.AVAILABLE_OPEN_ACCESS],
                 collection=[Facets.COLLECTION_FULL],
+                distributor=[Facets.DISTRIBUTOR_ALL],
             )
 
             @classmethod
@@ -739,19 +763,21 @@ class TestFacets:
         library = db.default_library()
         result = Mock.from_request(library, library, {}.get, {}.get, None)
 
-        order, available, collection = Mock.available_facets_calls
+        order, available, collection, distributor = Mock.available_facets_calls
         # available_facets was called three times, to ask the Mock class what it thinks
         # the options for order, availability, and collection should be.
         assert (library, "order") == order
         assert (library, "available") == available
         assert (library, "collection") == collection
+        assert (library, "distributor") == distributor
 
         # default_facet was called three times, to ask the Mock class what it thinks
         # the default order, availability, and collection should be.
-        order_d, available_d, collection_d = Mock.default_facet_calls
+        order_d, available_d, collection_d, distributor_d = Mock.default_facet_calls
         assert (library, "order") == order_d
         assert (library, "available") == available_d
         assert (library, "collection") == collection_d
+        assert (library, "distributor") == distributor_d
 
         # Finally, verify that the return values from the mocked methods were actually used.
 
@@ -763,11 +789,17 @@ class TestFacets:
         assert Facets.ORDER_TITLE == result.order
         assert Facets.AVAILABLE_OPEN_ACCESS == result.availability
         assert Facets.COLLECTION_FULL == result.collection
+        assert Facets.DISTRIBUTOR_ALL == result.distributor
 
     def test_modify_search_filter(self, db: DatabaseTransactionFixture):
         # Test superclass behavior -- filter is modified by entrypoint.
         facets = Facets(
-            db.default_library(), None, None, None, entrypoint=AudiobooksEntryPoint
+            db.default_library(),
+            None,
+            None,
+            None,
+            None,
+            entrypoint=AudiobooksEntryPoint,
         )
         filter = Filter()
         facets.modify_search_filter(filter)
@@ -779,6 +811,7 @@ class TestFacets:
             "some collection",
             "some availability",
             order=Facets.ORDER_ADDED_TO_COLLECTION,
+            distributor=DataSource.OVERDRIVE,
             order_ascending="yep",
         )
         facets.modify_search_filter(filter)
@@ -793,6 +826,9 @@ class TestFacets:
         # validation.
         assert "some availability" == filter.availability
         assert "some collection" == filter.subcollection
+        assert [
+            DataSource.lookup(db.session, DataSource.OVERDRIVE).id
+        ] == filter.license_datasources
 
         # The sort order constant is converted to the name of an
         # Opensearch field.
@@ -804,7 +840,7 @@ class TestFacets:
 
         # Specifying an invalid sort order doesn't cause a crash, but you
         # don't get a sort order.
-        facets = Facets(db.default_library(), None, None, "invalid order")
+        facets = Facets(db.default_library(), None, None, "invalid order", None)
         filter = Filter()
         facets.modify_search_filter(filter)
         assert None == filter.order
@@ -853,7 +889,7 @@ class TestFacets:
             (Facets.AVAILABLE_NOT_NOW, [not_available]),
         ]:
 
-            facets = Facets(db.default_library(), None, availability, None)
+            facets = Facets(db.default_library(), None, availability, None, None)
             modified = facets.modify_database_query(db.session, qu)
             assert (availability, sorted(x.title for x in modified)) == (
                 availability,
@@ -870,7 +906,7 @@ class TestFacets:
             (Facets.COLLECTION_FEATURED, [open_access]),
         ]:
             facets = Facets(
-                db.default_library(), collection, Facets.AVAILABLE_NOW, None
+                db.default_library(), collection, Facets.AVAILABLE_NOW, None, None
             )
             modified = facets.modify_database_query(db.session, qu)
             assert (collection, sorted(x.title for x in modified)) == (
@@ -1034,6 +1070,7 @@ class TestDatabaseBackedFacets:
                 collection=Facets.COLLECTION_FULL,
                 availability=Facets.AVAILABLE_ALL,
                 order=facet,
+                distributor=None,
                 order_ascending=ascending,
             )
             return f.order_by()[0]
@@ -1113,7 +1150,9 @@ class TestDatabaseBackedFacets:
             available=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
         ):
-            f = DatabaseBackedFacets(db.default_library(), collection, available, order)
+            f = DatabaseBackedFacets(
+                db.default_library(), collection, available, order, None
+            )
             return f.modify_database_query(db.session, qu)
 
         # When holds are allowed, we can find all works by asking
@@ -2248,7 +2287,9 @@ class TestWorkList:
         # Here's a WorkList.
         wl = MockWorkList()
         wl.initialize(db.default_library(), languages=["eng"])
-        facets = Facets(db.default_library(), None, None, order=Facets.ORDER_TITLE)
+        facets = Facets(
+            db.default_library(), None, None, order=Facets.ORDER_TITLE, distributor=None
+        )
         mock_pagination = object()
         mock_debug = object()
         search_client = MockSearchClient()
@@ -2803,6 +2844,7 @@ class TestDatabaseBackedWorkList:
             collection=Facets.COLLECTION_FULL,
             availability=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
+            distributor=None,
         )
         pagination = Pagination(offset=1, size=1)
         assert [oliver_twist] == wl.works_from_database(
@@ -4194,6 +4236,7 @@ class TestWorkListGroupsEndToEnd:
             collection=Facets.COLLECTION_FULL,
             availability=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
+            distributor=None,
         )
         for lane in [
             fiction,

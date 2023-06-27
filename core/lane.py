@@ -394,13 +394,20 @@ class Facets(FacetsWithEntryPoint):
 
     @classmethod
     def default(
-        cls, library, collection=None, availability=None, order=None, entrypoint=None
+        cls,
+        library,
+        collection=None,
+        availability=None,
+        order=None,
+        entrypoint=None,
+        distributor=None,
     ):
         return cls(
             library,
             collection=collection,
             availability=availability,
             order=order,
+            distributor=distributor,
             entrypoint=entrypoint,
         )
 
@@ -471,16 +478,30 @@ class Facets(FacetsWithEntryPoint):
                 400,
             )
 
+        g = Facets.DISTRIBUTOR_FACETS_GROUP_NAME
+        distributor = get_argument(g, cls.default_facet(config, g))
+        distributor_facets = cls.available_facets(config, g)
+        if distributor and distributor not in distributor_facets:
+            return INVALID_INPUT.detailed(
+                _(
+                    "I don't understand what '%(distributor)s' refers to.",
+                    distributor=distributor,
+                ),
+                400,
+            )
+
         enabled = {
             Facets.ORDER_FACET_GROUP_NAME: order_facets,
             Facets.AVAILABILITY_FACET_GROUP_NAME: availability_facets,
             Facets.COLLECTION_FACET_GROUP_NAME: collection_facets,
+            Facets.DISTRIBUTOR_FACETS_GROUP_NAME: distributor_facets,
         }
 
         return dict(
             order=order,
             availability=availability,
             collection=collection,
+            distributor=distributor,
             enabled_facets=enabled,
         )
 
@@ -513,6 +534,7 @@ class Facets(FacetsWithEntryPoint):
         collection,
         availability,
         order,
+        distributor,
         order_ascending=None,
         enabled_facets=None,
         entrypoint=None,
@@ -559,6 +581,7 @@ class Facets(FacetsWithEntryPoint):
         self.collection = collection
         self.availability = availability
         self.order = order
+        self.distributor = distributor
         if order_ascending == self.ORDER_ASCENDING:
             order_ascending = True
         elif order_ascending == self.ORDER_DESCENDING:
@@ -566,13 +589,21 @@ class Facets(FacetsWithEntryPoint):
         self.order_ascending = order_ascending
         self.facets_enabled_at_init = enabled_facets
 
-    def navigate(self, collection=None, availability=None, order=None, entrypoint=None):
+    def navigate(
+        self,
+        collection=None,
+        availability=None,
+        order=None,
+        entrypoint=None,
+        distributor=None,
+    ):
         """Create a slightly different Facets object from this one."""
         return self.__class__(
             library=self.library,
             collection=collection or self.collection,
             availability=availability or self.availability,
             order=order or self.order,
+            distributor=distributor or self.distributor,
             enabled_facets=self.facets_enabled_at_init,
             entrypoint=(entrypoint or self.entrypoint),
             entrypoint_is_default=False,
@@ -587,6 +618,8 @@ class Facets(FacetsWithEntryPoint):
             yield (self.AVAILABILITY_FACET_GROUP_NAME, self.availability)
         if self.collection:
             yield (self.COLLECTION_FACET_GROUP_NAME, self.collection)
+        if self.distributor:
+            yield (self.DISTRIBUTOR_FACETS_GROUP_NAME, self.distributor)
 
     @property
     def enabled_facets(self):
@@ -603,6 +636,7 @@ class Facets(FacetsWithEntryPoint):
                 self.ORDER_FACET_GROUP_NAME,
                 self.AVAILABILITY_FACET_GROUP_NAME,
                 self.COLLECTION_FACET_GROUP_NAME,
+                self.DISTRIBUTOR_FACETS_GROUP_NAME,
             ]
             for facet_type in facet_types:
                 yield self.facets_enabled_at_init.get(facet_type, [])
@@ -612,6 +646,7 @@ class Facets(FacetsWithEntryPoint):
                 Facets.ORDER_FACET_GROUP_NAME,
                 Facets.AVAILABILITY_FACET_GROUP_NAME,
                 Facets.COLLECTION_FACET_GROUP_NAME,
+                Facets.DISTRIBUTOR_FACETS_GROUP_NAME,
             ):
                 yield self.available_facets(self.library, group_name)
 
@@ -625,7 +660,12 @@ class Facets(FacetsWithEntryPoint):
         which must be handled separately.
         """
 
-        order_facets, availability_facets, collection_facets = self.enabled_facets
+        (
+            order_facets,
+            availability_facets,
+            collection_facets,
+            distributor_facets,
+        ) = self.enabled_facets
 
         def dy(new_value):
             group = self.ORDER_FACET_GROUP_NAME
@@ -660,6 +700,13 @@ class Facets(FacetsWithEntryPoint):
             for facet in collection_facets:
                 yield dy(facet)
 
+        if len(distributor_facets) > 1:
+            for facet in distributor_facets:
+                group = self.DISTRIBUTOR_FACETS_GROUP_NAME
+                current_value = self.distributor
+                facets = self.navigate(distributor=facet)
+                yield (group, facet, facets, facet == current_value)
+
     def modify_search_filter(self, filter):
         """Modify the given external_search.Filter object
         so that it reflects the settings of this Facets object.
@@ -675,6 +722,17 @@ class Facets(FacetsWithEntryPoint):
 
         filter.availability = self.availability
         filter.subcollection = self.collection
+
+        if self.distributor and self.distributor != self.DISTRIBUTOR_ALL:
+            distributor = (
+                Session.object_session(self.library)
+                .query(DataSource)
+                .filter(DataSource.name == self.distributor)
+                .first()
+            )
+            if distributor:
+                prev_datasources = filter.license_datasources or []
+                filter.license_datasources = prev_datasources + [distributor.id]
 
         # No order and relevance order both signify the default and,
         # thus, either should leave `filter.order` unset.
@@ -945,6 +1003,7 @@ class SearchFacets(Facets):
         kwargs.setdefault("library", None)
         kwargs.setdefault("collection", None)
         kwargs.setdefault("availability", None)
+        kwargs.setdefault("distributor", None)
         order = kwargs.setdefault("order", None)
 
         if order in (None, self.ORDER_BY_RELEVANCE):
@@ -1005,7 +1064,6 @@ class SearchFacets(Facets):
         default_entrypoint=EverythingEntryPoint,
         **extra,
     ):
-
         values = cls._values_from_request(config, get_argument, get_header)
         if isinstance(values, ProblemDetail):
             return values
@@ -1132,7 +1190,6 @@ class SearchFacets(Facets):
 
 
 class Pagination:
-
     DEFAULT_SIZE = 50
     DEFAULT_SEARCH_SIZE = 10
     DEFAULT_FEATURED_SIZE = 10
@@ -1791,7 +1848,6 @@ class WorkList:
         debug=False,
         **kwargs,
     ):
-
         """Use a search engine to obtain Work or Work-like objects that belong
         in this WorkList.
 
@@ -2936,6 +2992,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
                 FacetConstants.COLLECTION_FULL,
                 FacetConstants.AVAILABLE_ALL,
                 order=FacetConstants.ORDER_WORK_ID,
+                distributor=FacetConstants.DISTRIBUTOR_ALL,
                 entrypoint=entrypoint,
             )
             filter = self.filter(_db, facets)

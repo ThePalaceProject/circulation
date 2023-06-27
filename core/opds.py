@@ -583,7 +583,6 @@ class VerboseAnnotator(Annotator):
 
 
 class AcquisitionFeed(OPDSFeed):
-
     FACET_REL = "http://opds-spec.org/facet"
 
     @classmethod
@@ -1230,6 +1229,9 @@ class AcquisitionFeed(OPDSFeed):
                 continue
             group_title = Facets.GROUP_DISPLAY_TITLES.get(group)
             facet_title = Facets.FACET_DISPLAY_TITLES.get(value)
+            if not facet_title:
+                display_lambda = Facets.FACET_DISPLAY_TITLES_DYNAMIC.get(group)
+                facet_title = display_lambda(new_facets) if display_lambda else None
             if not (group_title and facet_title):
                 # This facet group or facet, is not recognized by the
                 # system. It may be left over from an earlier version,
@@ -1977,7 +1979,6 @@ class NavigationFeed(OPDSFeed):
 
     @classmethod
     def _generate_navigation(cls, _db, title, url, worklist, annotator):
-
         feed = NavigationFeed(title, url)
 
         if not worklist.children:
