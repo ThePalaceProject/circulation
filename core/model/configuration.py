@@ -589,7 +589,7 @@ class ConfigurationSetting(Base, HasSessionCache):
     )
 
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
-    library: Library = relationship("Library", back_populates="settings")
+    library: Mapped[Library] = relationship("Library", back_populates="settings")
 
     key = Column(Unicode)
     _value = Column("value", Unicode)

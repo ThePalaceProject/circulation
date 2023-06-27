@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     Boolean,
@@ -350,11 +350,11 @@ class Classification(Base):
     __tablename__ = "classifications"
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    identifier: Identifier
+    identifier: Mapped[Optional[Identifier]]
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
     subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: DataSource
+    data_source: Mapped[Optional[DataSource]]
 
     # How much weight the data source gives to this classification.
     weight = Column(Integer)
