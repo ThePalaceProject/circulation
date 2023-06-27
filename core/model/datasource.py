@@ -111,11 +111,15 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     )
 
     list_lanes: Mapped[List[Lane]] = relationship(
-        "Lane", back_populates="_list_datasource"
+        "Lane",
+        back_populates="_list_datasource",
+        primaryjoin="DataSource.id==Lane._list_datasource_id",
     )
 
     license_lanes: Mapped[List[Lane]] = relationship(
-        "Lane", back_populates="license_datasource"
+        "Lane",
+        back_populates="license_datasource",
+        primaryjoin="DataSource.id==Lane.license_datasource_id",
     )
 
     def __repr__(self):

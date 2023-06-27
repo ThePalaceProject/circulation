@@ -2092,8 +2092,8 @@ class TestBasicAuthenticationProvider:
             settings=BasicAuthProviderSettings(
                 test_identifier="username",
                 test_password="pw",
-                identifier_regular_expression="idre",
-                password_regular_expression="pwre",
+                identifier_regular_expression=re.compile("idre"),
+                password_regular_expression=re.compile("pwre"),
             ),
         )
         assert isinstance(provider.identifier_re, re.Pattern)

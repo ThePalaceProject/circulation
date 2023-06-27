@@ -2646,7 +2646,9 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
     license_datasource: Mapped[DataSource] = relationship(
-        "DataSource", back_populates="license_lanes"
+        "DataSource",
+        back_populates="license_lanes",
+        foreign_keys=[license_datasource_id],
     )
 
     # Only books on one or more CustomLists obtained from this
@@ -2655,7 +2657,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
     _list_datasource: Mapped[DataSource] = relationship(
-        "DataSource", back_populates="list_lanes"
+        "DataSource", back_populates="list_lanes", foreign_keys=[_list_datasource_id]
     )
 
     # Only the books on these specific CustomLists will be shown.
