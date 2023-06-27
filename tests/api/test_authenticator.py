@@ -2226,8 +2226,8 @@ class TestBasicAuthenticationProvider:
     def test_server_side_validation(self, mock_basic: MockBasicFixture):
         provider = mock_basic(
             settings=BasicAuthProviderSettings(
-                identifier_regular_expression="foo",
-                password_regular_expression="bar",
+                identifier_regular_expression=re.compile("foo"),
+                password_regular_expression=re.compile("bar"),
             )
         )
         assert provider.server_side_validation("food", "barbecue") is True
@@ -2240,8 +2240,8 @@ class TestBasicAuthenticationProvider:
         # and the empty string.
         provider = mock_basic(
             settings=BasicAuthProviderSettings(
-                identifier_regular_expression="foo",
-                password_regular_expression="bar",
+                identifier_regular_expression=re.compile("foo"),
+                password_regular_expression=re.compile("bar"),
                 password_keyboard=Keyboards.NULL,
             )
         )
@@ -2263,8 +2263,8 @@ class TestBasicAuthenticationProvider:
         # Test maximum length of identifier and password.
         provider = mock_basic(
             settings=BasicAuthProviderSettings(
-                identifier_maximum_length="5",
-                password_maximum_length="10",
+                identifier_maximum_length=5,
+                password_maximum_length=10,
             )
         )
         assert provider.server_side_validation("a", "1234") is True
@@ -2519,8 +2519,8 @@ class TestBasicAuthenticationProviderAuthenticate:
         provider = mock_basic(
             patrondata=patrondata,
             settings=BasicAuthProviderSettings(
-                identifier_regular_expression="foo",
-                password_regular_expression="bar",
+                identifier_regular_expression=re.compile("foo"),
+                password_regular_expression=re.compile("bar"),
             ),
         )
 

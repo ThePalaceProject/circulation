@@ -82,8 +82,8 @@ class Statistics:
         )
 
         return CollectionInventory(
-            id=collection.id,
-            name=collection.name,
+            id=collection.id,  # type: ignore[arg-type]
+            name=collection.name,  # type: ignore[arg-type]
             inventory=InventoryStatistics(
                 titles=metered_license_title_count
                 + unlimited_license_title_count
@@ -193,7 +193,7 @@ class Statistics:
         }
         library_statistics = [
             LibraryStatistics(
-                key=lib.short_name,
+                key=lib.short_name,  # type: ignore[arg-type]
                 name=lib.name or "(missing library name)",
                 patron_statistics=patron_stats_by_library[lib.short_name],
                 inventory_summary=inventory_by_library[lib.short_name],
