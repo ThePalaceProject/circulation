@@ -320,6 +320,12 @@ class Library(Base, HasSessionCache):
                     enabled.append(collection.data_source.name)
             return list(set(enabled))
 
+        if group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME:
+            enabled = []
+            for collection in self.collections:
+                enabled.append(collection.name)
+            return enabled
+
         setting = self.enabled_facets_setting(group_name)
         value = None
 

@@ -63,6 +63,9 @@ class FacetConstants:
     DISTRIBUTOR_FACETS_GROUP_NAME = "distributor"
     DISTRIBUTOR_ALL = "All"
 
+    COLLECTION_NAME_FACETS_GROUP_NAME = "collectionName"
+    COLLECTION_NAME_ALL = "All"
+
     FACETS_BY_GROUP = {
         COLLECTION_FACET_GROUP_NAME: COLLECTION_FACETS,
         AVAILABILITY_FACET_GROUP_NAME: AVAILABILITY_FACETS,
@@ -74,6 +77,7 @@ class FacetConstants:
         AVAILABILITY_FACET_GROUP_NAME: _("Availability"),
         COLLECTION_FACET_GROUP_NAME: _("Collection"),
         DISTRIBUTOR_FACETS_GROUP_NAME: _("Distributor"),
+        COLLECTION_NAME_FACETS_GROUP_NAME: _("Collection Name"),
     }
 
     GROUP_DESCRIPTIONS = {
@@ -81,6 +85,9 @@ class FacetConstants:
         AVAILABILITY_FACET_GROUP_NAME: _("Allow patrons to filter availability to"),
         COLLECTION_FACET_GROUP_NAME: _("Allow patrons to filter collection to"),
         DISTRIBUTOR_FACETS_GROUP_NAME: _("Allow patrons to filter by distributor"),
+        COLLECTION_NAME_FACETS_GROUP_NAME: _(
+            "Allow patrons to filter by collection name"
+        ),
     }
 
     FACET_DISPLAY_TITLES = {
@@ -100,6 +107,7 @@ class FacetConstants:
     # For titles generated based on some runtime value
     FACET_DISPLAY_TITLES_DYNAMIC = {
         DISTRIBUTOR_FACETS_GROUP_NAME: lambda facet: facet.distributor,
+        COLLECTION_NAME_FACETS_GROUP_NAME: lambda facet: facet.collection_name,
     }
 
     # Unless a library offers an alternate configuration, patrons will
@@ -113,6 +121,7 @@ class FacetConstants:
         ],
         COLLECTION_FACET_GROUP_NAME: [COLLECTION_FULL, COLLECTION_FEATURED],
         DISTRIBUTOR_FACETS_GROUP_NAME: [DISTRIBUTOR_ALL],
+        COLLECTION_NAME_FACETS_GROUP_NAME: [COLLECTION_NAME_ALL],
     }
 
     # Unless a library offers an alternate configuration, these
@@ -122,6 +131,7 @@ class FacetConstants:
         AVAILABILITY_FACET_GROUP_NAME: AVAILABLE_ALL,
         COLLECTION_FACET_GROUP_NAME: COLLECTION_FULL,
         DISTRIBUTOR_FACETS_GROUP_NAME: DISTRIBUTOR_ALL,
+        COLLECTION_NAME_FACETS_GROUP_NAME: COLLECTION_NAME_ALL,
     }
 
     SORT_ORDER_TO_OPENSEARCH_FIELD_NAME = {

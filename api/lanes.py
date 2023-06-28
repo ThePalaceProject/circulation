@@ -1364,6 +1364,7 @@ class CrawlableFacets(Facets):
         Facets.AVAILABILITY_FACET_GROUP_NAME: Facets.AVAILABLE_ALL,
         Facets.COLLECTION_FACET_GROUP_NAME: Facets.COLLECTION_FULL,
         Facets.DISTRIBUTOR_FACETS_GROUP_NAME: Facets.DISTRIBUTOR_ALL,
+        Facets.COLLECTION_NAME_FACETS_GROUP_NAME: Facets.COLLECTION_NAME_ALL,
     }
 
     @classmethod

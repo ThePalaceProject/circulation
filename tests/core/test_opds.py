@@ -762,13 +762,13 @@ class TestOPDS:
         def link_for_facets(facets):
             return [x for x in facet_links if facets.query_string in x["href"]]
 
-        facets = Facets(library, None, None, None, None)
+        facets = Facets(library, None, None, None, None, None)
         for i1, i2, new_facets, selected in facets.facet_groups:
             links = link_for_facets(new_facets)
             if selected:
                 # This facet set is already selected, so it should
                 # show up three times--once for every facet group.
-                assert 3 == len(links)
+                assert 4 == len(links)
             else:
                 # This facet set is not selected, so it should have one
                 # transition link.
@@ -2946,9 +2946,7 @@ class TestEntrypointLinkInsertion:
         # The make_link function that was passed in calls
         # TestAnnotator.feed_url() when passed an EntryPoint. The
         # Facets object's other facet groups are propagated in this URL.
-        first_page_url = (
-            "http://wl/?available=all&collection=full&entrypoint=Book&order=author"
-        )
+        first_page_url = "http://wl/?available=all&collection=full&collectionName=All&distributor=All&entrypoint=Book&order=author"
         assert first_page_url == make_link(EbooksEntryPoint)
 
         # Pagination information is not propagated through entry point links
