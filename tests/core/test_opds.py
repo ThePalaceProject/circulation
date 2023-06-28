@@ -2918,6 +2918,7 @@ class TestEntrypointLinkInsertion:
                 data.annotator,
                 max_age=0,
                 facets=facets,
+                search_engine=external_search_fake_fixture.external_search,
             )
             return data.mock.called_with
 

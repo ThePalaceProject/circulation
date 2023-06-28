@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
 import opensearchpy.helpers
+from opensearch_dsl import Search
 from opensearchpy import NotFoundError, OpenSearch, RequestError
 
 from core.search.revision import SearchSchemaRevision
@@ -109,23 +110,18 @@ class SearchService(ABC):
     def index_clear_documents(self, pointer: str):
         """Clear all search documents in the given index."""
 
+    @abstractmethod
+    def search_client(self) -> Search:
+        """Return the underlying search client."""
+
 
 class SearchServiceOpensearch1(SearchService):
     """The real Opensearch 1.x service."""
 
-    def read_pointer_name(self, base_name: str) -> str:
-        return f"{base_name}-search-read"
-
-    def write_pointer_name(self, base_name: str) -> str:
-        return f"{base_name}-search-write"
-
-    @staticmethod
-    def _empty(base_name):
-        return f"{base_name}-empty"
-
     def __init__(self, client: OpenSearch):
         self._logger = logging.getLogger(SearchServiceOpensearch1.__name__)
         self._client = client
+        self._search = Search(using=self._client)
 
     def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
         try:
@@ -270,3 +266,16 @@ class SearchServiceOpensearch1(SearchService):
             return None
         except NotFoundError:
             return None
+
+    def search_client(self) -> Search:
+        return self._search
+
+    def read_pointer_name(self, base_name: str) -> str:
+        return f"{base_name}-search-read"
+
+    def write_pointer_name(self, base_name: str) -> str:
+        return f"{base_name}-search-write"
+
+    @staticmethod
+    def _empty(base_name):
+        return f"{base_name}-empty"

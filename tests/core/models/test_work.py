@@ -482,7 +482,7 @@ class TestWork:
         # This is how the work will be represented in the dummy search
         # index.
         index_key = (
-            search.works_index,
+            external_search_fake_fixture.write_index_name(),
             work.id,
         )
 
@@ -491,7 +491,7 @@ class TestWork:
         assert True == work.presentation_ready
 
         # The work has not been added to the search index.
-        assert [] == list(search.docs.keys())
+        assert [] == external_search_fake_fixture.search.documents_all()
 
         # But the work of adding it to the search engine has been
         # registered.

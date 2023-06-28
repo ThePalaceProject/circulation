@@ -286,7 +286,7 @@ class ExternalSearchIndex(HasSelfTests):
         else:
             query = Query(query_string, filter)
 
-        search = query.build(self._search, pagination)
+        search = query.build(self._search_service.search_client(), pagination)
         if debug:
             search = search.extra(explain=True)
 

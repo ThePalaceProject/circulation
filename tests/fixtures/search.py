@@ -243,6 +243,9 @@ class ExternalSearchFixtureFake:
     search: SearchServiceFake
     external_search: ExternalSearchIndex
 
+    def write_index_name(self) -> str:
+        return self.search.write_pointer_name(base_name="test_index")
+
 
 @pytest.fixture(scope="function")
 def external_search_fake_fixture(
