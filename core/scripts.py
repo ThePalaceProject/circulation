@@ -2463,7 +2463,9 @@ class WhereAreMyBooksScript(CollectionInputScript):
     is being configured.
     """
 
-    def __init__(self, _db=None, output=None, search=None):
+    def __init__(
+        self, _db=None, output=None, search: Optional[ExternalSearchIndex] = None
+    ):
         _db = _db or self._db
         super().__init__(_db)
         self.output = output or sys.stdout

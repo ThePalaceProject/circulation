@@ -3,14 +3,14 @@ from __future__ import annotations
 import datetime
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import quote
 
 from lxml import etree
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
-from core.external_search import QueryParseException
+from core.external_search import ExternalSearchIndex, QueryParseException
 from core.problem_details import INVALID_INPUT
 
 from .classifier import Classifier
@@ -741,7 +741,7 @@ class AcquisitionFeed(OPDSFeed):
         facets=None,
         pagination=None,
         max_age=None,
-        search_engine=None,
+        search_engine: Optional[ExternalSearchIndex] = None,
         search_debug=False,
         **response_kwargs,
     ):

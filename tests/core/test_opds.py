@@ -1794,6 +1794,7 @@ class TestAcquisitionFeed:
             MockAnnotator,
             max_age=10,
             private=private,
+            search_engine=external_search_fake_fixture.external_search,
         )
 
         # The result is an OPDSFeedResponse. The 'private' argument,
