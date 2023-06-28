@@ -990,7 +990,7 @@ class TestLoanController:
         ):
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
-        assert isinstance(response, Response)
+        assert isinstance(response, wkResponse)
         assert response.status_code == 200
         assert response.json == {"book_vault_uuid": "Vault ID", "isbn": "ISBN ID"}
 
