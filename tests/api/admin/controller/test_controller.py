@@ -26,7 +26,7 @@ from api.admin.password_admin_authentication_provider import (
 )
 from api.admin.problem_details import *
 from api.admin.validator import Validator
-from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
+from api.adobe_vendor_id import AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
@@ -1041,13 +1041,10 @@ class TestPatronController:
             assert "A Patron" == response["personal_name"]
 
     def test_reset_adobe_id(self, patron_controller_fixture: PatronControllerFixture):
-        # Here's a patron with two Adobe-relevant credentials.
+        # Here's a patron with an Adobe-relevant credential.
         patron = patron_controller_fixture.ctrl.db.patron()
         patron.authorization_identifier = patron_controller_fixture.ctrl.db.fresh_str()
 
-        patron_controller_fixture.ctrl.db.credential(
-            patron=patron, type=AdobeVendorIDModel.VENDOR_ID_UUID_TOKEN_TYPE
-        )
         patron_controller_fixture.ctrl.db.credential(
             patron=patron, type=AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER
         )

@@ -4,7 +4,7 @@ import datetime
 import json
 import logging
 from contextlib import contextmanager
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import flask
 import pytest
@@ -58,7 +58,7 @@ class ControllerFixture:
     """A test that requires a functional app server."""
 
     app: PalaceFlask
-    authdata: AuthdataUtility
+    authdata: Optional[AuthdataUtility]
     collection: Collection
     collections: list[Collection]
     controller: CirculationManagerController

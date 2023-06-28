@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -23,9 +23,15 @@ class VendorIDFixture:
     registry: ExternalIntegration
 
     def initialize_adobe(
-        self, vendor_id_library: Library, short_token_libraries: List[Library] = []
+        self,
+        vendor_id_library: Library,
+        short_token_libraries: Optional[List[Library]] = None,
     ):
-        short_token_libraries = list(short_token_libraries)
+        if short_token_libraries is None:
+            short_token_libraries = []
+        else:
+            short_token_libraries = list(short_token_libraries)
+
         if not vendor_id_library in short_token_libraries:
             short_token_libraries.append(vendor_id_library)
 

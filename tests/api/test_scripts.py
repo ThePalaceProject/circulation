@@ -10,11 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.adobe_vendor_id import (
-    AdobeVendorIDModel,
-    AuthdataUtility,
-    ShortClientTokenLibraryConfigurationScript,
-)
+from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
@@ -77,9 +73,7 @@ class TestAdobeAccountIDResetScript:
     def test_process_patron(self, db: DatabaseTransactionFixture):
         patron = db.patron()
 
-        # This patron has old-style and new-style Credentials that link
-        # them to Adobe account IDs (hopefully the same ID, though that
-        # doesn't matter here.
+        # This patron has a credential that links them to a Adobe account ID
         def set_value(credential):
             credential.value = "a credential"
 
@@ -87,10 +81,9 @@ class TestAdobeAccountIDResetScript:
         # of the appropriate type will be deleted.
         data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
-        # Create two Credentials that will be deleted and one that will be
+        # Create one Credential that will be deleted and one that will be
         # left alone.
         for type in (
-            AdobeVendorIDModel.VENDOR_ID_UUID_TOKEN_TYPE,
             AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
             "Some other type",
         ):
@@ -99,7 +92,7 @@ class TestAdobeAccountIDResetScript:
                 db.session, data_source, type, patron, set_value, True
             )
 
-        assert 3 == len(patron.credentials)
+        assert 2 == len(patron.credentials)
 
         # Run the patron through the script.
         script = AdobeAccountIDResetScript(db.session)
@@ -108,14 +101,14 @@ class TestAdobeAccountIDResetScript:
         script.delete = False
         script.process_patron(patron)
         db.session.commit()
-        assert 3 == len(patron.credentials)
+        assert 2 == len(patron.credentials)
 
         # Now try it for real.
         script.delete = True
         script.process_patron(patron)
         db.session.commit()
 
-        # The two Adobe-related credentials are gone. The other one remains.
+        # The Adobe-related credential is gone. The other one remains.
         [credential] = patron.credentials
         assert "Some other type" == credential.type
 
@@ -790,77 +783,6 @@ class TestLanguageListScript:
         # English is ignored because all its works are open-access.
         # Tagalog shows up with the correct estimate.
         assert ["tgl 1 (Tagalog)"] == output
-
-
-class ShortClientTokenLibraryConfigurationFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-        db.default_library().setting(Configuration.WEBSITE_URL).value = "http://foo/"
-        self.script = ShortClientTokenLibraryConfigurationScript(db.session)
-
-
-@pytest.fixture(scope="function")
-def short_client_token_fixture(
-    db: DatabaseTransactionFixture,
-) -> ShortClientTokenLibraryConfigurationFixture:
-    return ShortClientTokenLibraryConfigurationFixture(db)
-
-
-class TestShortClientTokenLibraryConfigurationScript:
-    def test_identify_library_by_url(
-        self, short_client_token_fixture: ShortClientTokenLibraryConfigurationFixture
-    ):
-        fixture, db = short_client_token_fixture, short_client_token_fixture.db
-        with pytest.raises(Exception) as excinfo:
-            fixture.script.set_secret(
-                db.session, "http://bar/", "vendorid", "libraryname", "secret", None
-            )
-        assert (
-            "Could not locate library with URL http://bar/. Available URLs: http://foo/"
-            in str(excinfo.value)
-        )
-
-    def test_set_secret(
-        self, short_client_token_fixture: ShortClientTokenLibraryConfigurationFixture
-    ):
-        fixture, db = short_client_token_fixture, short_client_token_fixture.db
-        assert [] == db.default_library().integrations
-
-        output = StringIO()
-        fixture.script.set_secret(
-            db.session, "http://foo/", "vendorid", "libraryname", "secret", output
-        )
-        assert (
-            "Current Short Client Token configuration for http://foo/:\n Vendor ID: vendorid\n Library name: libraryname\n Shared secret: secret\n"
-            == output.getvalue()
-        )
-        [integration] = db.default_library().integrations
-        assert [
-            ("password", "secret"),
-            ("username", "libraryname"),
-            ("vendor_id", "vendorid"),
-        ] == sorted((x.key, x.value) for x in integration.settings)
-
-        # We can modify an existing configuration.
-        output = StringIO()
-        fixture.script.set_secret(
-            db.session, "http://foo/", "newid", "newname", "newsecret", output
-        )
-        expect = "Current Short Client Token configuration for http://foo/:\n Vendor ID: newid\n Library name: newname\n Shared secret: newsecret\n"
-        assert expect == output.getvalue()
-        expect_settings = [
-            ("password", "newsecret"),
-            ("username", "newname"),
-            ("vendor_id", "newid"),
-        ]
-        assert expect_settings == sorted((x.key, x.value) for x in integration.settings)
-
-        # We can also just check on the existing configuration without
-        # changing anything.
-        output = StringIO()
-        fixture.script.set_secret(db.session, "http://foo/", None, None, None, output)
-        assert expect == output.getvalue()
-        assert expect_settings == sorted((x.key, x.value) for x in integration.settings)
 
 
 class MockDirectoryImportScript(DirectoryImportScript):

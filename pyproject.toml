@@ -75,6 +75,7 @@ module = [
     "api.admin.controller.patron_auth_services",
     "api.admin.form_data",
     "api.admin.model.dashboard_statistics",
+    "api.adobe_vendor_id",
     "api.integration.*",
     "core.integration.*",
     "core.model.hassessioncache",
