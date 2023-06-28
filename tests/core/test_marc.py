@@ -6,7 +6,7 @@ from freezegun import freeze_time
 from pymarc import MARCReader, Record
 
 from core.config import CannotLoadConfiguration
-from core.external_search import Filter, MockExternalSearchIndex
+from core.external_search import ExternalSearchIndex, Filter
 from core.lane import WorkList
 from core.marc import Annotator, MARCExporter, MARCExporterFacets
 from core.model import (
@@ -27,6 +27,8 @@ from core.model import (
 from core.s3 import MockS3Uploader
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import ExternalSearchFixtureFake
+from tests.mocks.search import SearchServiceFake
 
 
 class TestAnnotator:
@@ -584,7 +586,11 @@ class TestMARCExporter:
         new_record = MARCExporter.create_record(new_work, annotator)
         assert record.as_marc() == new_record.as_marc()
 
-    def test_records(self, db: DatabaseTransactionFixture):
+    def test_records(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         integration = self._integration(db)
         now = utc_now()
         exporter = MARCExporter.from_config(db.default_library())
@@ -593,7 +599,7 @@ class TestMARCExporter:
         w1 = db.work(genre="Mystery", with_open_access_download=True)
         w2 = db.work(genre="Mystery", with_open_access_download=True)
 
-        search_engine = MockExternalSearchIndex()
+        search_engine = external_search_fake_fixture.external_search
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(search_engine.create_search_documents_from_works([w1, w2]))
         docs.finish()
@@ -739,7 +745,9 @@ class TestMARCExporter:
         # If the search engine returns no contents for the lane,
         # nothing will be mirrored, but a CachedMARCFile is still
         # created to track that we checked for updates.
-        empty_search_engine = MockExternalSearchIndex()
+        empty_search_engine = ExternalSearchIndex(
+            _db=db, custom_client_service=SearchServiceFake()
+        )
 
         mirror = MockS3Uploader()
         exporter.records(

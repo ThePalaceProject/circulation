@@ -7,7 +7,6 @@ from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
 from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
-from core.external_search import MockExternalSearchIndex
 from core.model import get_one_or_create, tuple_to_numericrange
 from core.model.classification import Genre, Subject
 from core.model.contributor import Contributor
@@ -21,6 +20,7 @@ from core.model.work import Work, WorkGenre
 from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
+from tests.fixtures.search import ExternalSearchFixtureFake
 
 
 class TestWork:
@@ -95,7 +95,11 @@ class TestWork:
         # Because the work's license_pool isn't suppressed, it isn't returned.
         assert [] == result
 
-    def test_calculate_presentation(self, db: DatabaseTransactionFixture):
+    def test_calculate_presentation(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         # Test that:
         # - work coverage records are made on work creation and primary edition selection.
         # - work's presentation information (author, title, etc. fields) does a proper job
@@ -221,7 +225,7 @@ class TestWork:
 
         work.last_update_time = None
         work.presentation_ready = True
-        index = MockExternalSearchIndex()
+        index = external_search_fake_fixture.external_search
 
         work.calculate_presentation(search_index_client=index)
 
@@ -258,7 +262,7 @@ class TestWork:
         assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)  # type: ignore[unreachable]
 
         # The index has not been updated.
-        assert [] == list(index.docs.items())
+        assert [] == external_search_fake_fixture.search.documents_all()
 
         # The Work now has a complete set of WorkCoverageRecords
         # associated with it, reflecting all the operations that
@@ -468,11 +472,13 @@ class TestWork:
         assert l1.resource.representation.content.decode("utf-8") == w.summary_text
 
     def test_set_presentation_ready_based_on_content(
-        self, db: DatabaseTransactionFixture
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         work = db.work(with_license_pool=True)
 
-        search = MockExternalSearchIndex()
+        search = external_search_fake_fixture.external_search
         # This is how the work will be represented in the dummy search
         # index.
         index_key = (
@@ -845,6 +851,7 @@ class TestWork:
         self,
         db,
         sample_covers_fixture: SampleCoversFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         edition, lp = db.edition(with_open_access_download=True)
 
@@ -913,7 +920,7 @@ class TestWork:
                 assert url in work.verbose_opds_entry
 
         # Suppressing the cover removes the cover from the work.
-        index = MockExternalSearchIndex()
+        index = external_search_fake_fixture.external_search
         Work.reject_covers(db.session, [work], search_index_client=index)
         assert has_no_cover(work)
         reset_cover()
@@ -1578,13 +1585,17 @@ class TestWork:
             record = find_record(work)
             assert registered == record.status
 
-    def test_reset_coverage(self, db: DatabaseTransactionFixture):
+    def test_reset_coverage(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         # Test the methods that reset coverage for works, indicating
         # that some task needs to be performed again.
         WCR = WorkCoverageRecord
         work = db.work()
         work.presentation_ready = True
-        index = MockExternalSearchIndex()
+        index = external_search_fake_fixture.external_search
 
         # Calling _reset_coverage when there is no coverage creates
         # a new WorkCoverageRecord in the REGISTERED state
@@ -1616,7 +1627,7 @@ class TestWork:
         # The work was not added to the search index when we called
         # external_index_needs_updating. That happens later, when the
         # WorkCoverageRecord is processed.
-        assert [] == list(index.docs.values())
+        assert [] == external_search_fake_fixture.search.documents_all()
 
     def test_for_unchecked_subjects(self, db: DatabaseTransactionFixture):
         w1 = db.work(with_license_pool=True)

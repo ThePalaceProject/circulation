@@ -1,19 +1,13 @@
-import logging
 import os
-from typing import Any, Iterable, List, Optional
-from unittest import mock
+from typing import Any, Iterable, List
 
 import pytest
+from opensearchpy import OpenSearch
 
-from core import external_search
-from core.external_search import (
-    ExternalSearchIndex,
-    MockExternalSearchIndex,
-    SearchIndexCoverageProvider,
-)
+from core.external_search import ExternalSearchIndex, SearchIndexCoverageProvider
 from core.model import ExternalIntegration, Work
-from tests.core.mock import SearchClientForTesting
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.mocks.search import SearchServiceFake
 
 
 class ExternalSearchFixture:
@@ -28,15 +22,14 @@ class ExternalSearchFixture:
 
     indexes: List[Any]
     integration: ExternalIntegration
-    search: Optional[SearchClientForTesting]
     db: DatabaseTransactionFixture
+    search: OpenSearch
 
     @classmethod
     def create(cls, db: DatabaseTransactionFixture) -> "ExternalSearchFixture":
         fixture = ExternalSearchFixture()
         fixture.db = db
         fixture.indexes = []
-
         fixture.integration = db.external_integration(
             ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
@@ -46,15 +39,7 @@ class ExternalSearchFixture:
                 ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
             },
         )
-
-        try:
-            fixture.search = SearchClientForTesting(db.session)
-        except Exception as e:
-            fixture.search = None
-            logging.error(
-                "Unable to set up opensearch index, search tests will be skipped.",
-                exc_info=e,
-            )
+        fixture.search = OpenSearch(fixture.url, use_ssl=False, timeout=20, maxsize=25)
         return fixture
 
     @property
@@ -65,17 +50,12 @@ class ExternalSearchFixture:
         return env
 
     def close(self):
-        if self.search:
-            # Delete any other indexes created over the course of the test.
-            for index in self.indexes:
-                self.search.indices.delete(index, ignore=[404])
-
-            self.search.indices.delete_alias(index="_all", name="_all", ignore=[404])
-            ExternalSearchIndex.reset()
+        for index in self.indexes:
+            self.search.indices.delete(index)
 
     def setup_index(self, new_index):
         """Create an index and register it to be destroyed during teardown."""
-        self.search.setup_index(new_index=new_index)
+        self.search.indices.create(new_index)
         self.indexes.append(new_index)
 
     def default_work(self, *args, **kwargs):
@@ -106,11 +86,13 @@ class EndToEndSearchFixture:
 
     """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
     external_search: ExternalSearchFixture
+    external_search_index: ExternalSearchIndex
 
     @classmethod
     def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
         data = EndToEndSearchFixture()
         data.external_search = ExternalSearchFixture.create(transaction)
+        data.external_search_index = ExternalSearchIndex(transaction.session)
         return data
 
     def populate_search_index(self):
@@ -124,7 +106,7 @@ class EndToEndSearchFixture:
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
             self.external_search.db.session,
-            search_index_client=self.external_search.search,
+            search_index_client=self.external_search_index,
         ).run_once_and_update_timestamp()
         self.external_search.search.indices.refresh()
 
@@ -255,31 +237,30 @@ def end_to_end_search_fixture(
     data.close()
 
 
-class ExternalSearchPatchFixture:
-    """A class that represents the fact that the external search class has been patched with a mock."""
-
-    search_mock: Any
+class ExternalSearchFixtureFake:
+    integration: ExternalIntegration
+    db: DatabaseTransactionFixture
+    search: SearchServiceFake
+    external_search: ExternalSearchIndex
 
 
 @pytest.fixture(scope="function")
-def external_search_patch_fixture(request) -> Iterable[ExternalSearchPatchFixture]:
-    """Ask for the external search class to be patched with a mock."""
-    fixture = ExternalSearchPatchFixture()
-
-    # Only setup the opensearch mock if the opensearch mark isn't set
-    opensearch_mark = request.node.get_closest_marker("opensearch")
-    if opensearch_mark is not None:
-        raise RuntimeError(
-            "This fixture should not be combined with @pytest.mark.opensearch"
-        )
-
-    fixture.search_mock = mock.patch(
-        external_search.__name__ + ".ExternalSearchIndex",
-        MockExternalSearchIndex,
+def external_search_fake_fixture(
+    db: DatabaseTransactionFixture,
+) -> ExternalSearchFixtureFake:
+    """Ask for an external search system that can be populated with data for end-to-end tests."""
+    data = ExternalSearchFixtureFake()
+    data.integration = db.external_integration(
+        ExternalIntegration.OPENSEARCH,
+        goal=ExternalIntegration.SEARCH_GOAL,
+        url="http://does-not-exist.com/",
+        settings={
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
+            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+        },
     )
-    fixture.search_mock.start()
-
-    yield fixture
-
-    if fixture.search_mock:
-        fixture.search_mock.stop()
+    data.search = SearchServiceFake()
+    data.external_search = ExternalSearchIndex(
+        _db=db.session, custom_client_service=data.search
+    )
+    return data

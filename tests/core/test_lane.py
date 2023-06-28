@@ -16,12 +16,7 @@ from core.entrypoint import (
     EntryPoint,
     EverythingEntryPoint,
 )
-from core.external_search import (
-    Filter,
-    MockExternalSearchIndex,
-    WorkSearchResult,
-    mock_search_index,
-)
+from core.external_search import Filter, WorkSearchResult, mock_search_index
 from core.lane import (
     DatabaseBackedFacets,
     DatabaseBackedWorkList,
@@ -57,7 +52,7 @@ from core.util.opds_writer import OPDSFeed
 from tests.core.mock import LogCaptureHandler
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 
 
 class TestFacetsWithEntryPoint:
@@ -2271,7 +2266,7 @@ class TestWorkList:
     def test_groups(
         self,
         db: DatabaseTransactionFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         w1 = MockWork(1)
         w2 = MockWork(2)
@@ -4086,7 +4081,11 @@ class TestLane:
         ] == target.audiences
         assert [Edition.BOOK_MEDIUM] == target.media
 
-    def test_search(self, db: DatabaseTransactionFixture):
+    def test_search(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         # Searching a Lane calls search() on its search_target.
         #
         # TODO: This test could be trimmed down quite a bit with
@@ -4095,7 +4094,7 @@ class TestLane:
         work = db.work(with_license_pool=True)
 
         lane = db.lane()
-        search_client = MockExternalSearchIndex()
+        search_client = external_search_fake_fixture.external_search
         docs = search_client.start_updating_search_documents()
         docs.add_documents(search_client.create_search_documents_from_works([work]))
         docs.finish()
@@ -4606,7 +4605,7 @@ class TestWorkListGroups:
         self,
         db: DatabaseTransactionFixture,
         random_seed_fixture: RandomSeedFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         # Verify that _groups_for_lanes gives each of a WorkList's
         # non-queryable children the opportunity to adapt the incoming

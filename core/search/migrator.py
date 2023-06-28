@@ -1,10 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
-from core.search.service import SearchMigratorClientService
+from core.search.service import SearchService, SearchServiceFailedDocument
 
 
 class SearchMigrationException(Exception):
@@ -19,7 +19,9 @@ class SearchDocumentReceiverType(ABC):
     """A receiver of search documents."""
 
     @abstractmethod
-    def add_documents(self, documents: Iterable[dict]):
+    def add_documents(
+        self, documents: Iterable[dict]
+    ) -> List[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
 
     @abstractmethod
@@ -30,7 +32,7 @@ class SearchDocumentReceiverType(ABC):
 class SearchDocumentReceiver(SearchDocumentReceiverType):
     """A receiver of search documents."""
 
-    def __init__(self, pointer: str, service: SearchMigratorClientService):
+    def __init__(self, pointer: str, service: SearchService):
         self._logger = logging.getLogger(SearchDocumentReceiver.__name__)
         self._pointer = pointer
         self._service = service
@@ -40,9 +42,13 @@ class SearchDocumentReceiver(SearchDocumentReceiverType):
         """The name of the index that will receive search documents."""
         return self._pointer
 
-    def add_documents(self, documents: Iterable[dict]):
+    def add_documents(
+        self, documents: Iterable[dict]
+    ) -> List[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
-        self._service.index_submit_documents(pointer=self._pointer, documents=documents)
+        return self._service.index_submit_documents(
+            pointer=self._pointer, documents=documents
+        )
 
     def finish(self) -> None:
         """Make sure all changes are committed."""
@@ -57,7 +63,7 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
         self,
         base_name: str,
         revision: SearchSchemaRevision,
-        service: SearchMigratorClientService,
+        service: SearchService,
     ):
         self._logger = logging.getLogger(SearchMigrationInProgress.__name__)
         self._base_name = base_name
@@ -90,9 +96,7 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
 class SearchMigrator:
     """A search migrator. This moves a search service to the targeted schema version."""
 
-    def __init__(
-        self, revisions: SearchRevisionDirectory, service: SearchMigratorClientService
-    ):
+    def __init__(self, revisions: SearchRevisionDirectory, service: SearchService):
         self._revisions = revisions
         self._service = service
 

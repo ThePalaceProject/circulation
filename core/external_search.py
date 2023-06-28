@@ -5,8 +5,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, Optional, Union
-from unittest.mock import MagicMock
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 
 from attr import define
 from flask_babel import lazy_gettext as _
@@ -26,12 +25,10 @@ from opensearch_dsl.query import (
 from opensearch_dsl.query import Query as BaseQuery
 from opensearch_dsl.query import Range, Regexp, Term, Terms
 from opensearchpy import OpenSearch
-from opensearchpy.helpers import bulk as opensearch_bulk
 from spellchecker import SpellChecker
 
 from core.util import Values
 from core.util.languages import LanguageNames
-from tests.core.search.test_migrator import EmptyRevision
 
 from .classifier import (
     AgeClassifier,
@@ -58,7 +55,6 @@ from .model import (
     numericrange_to_tuple,
 )
 from .problem_details import INVALID_INPUT
-from .search.document import SearchMappingDocument
 from .search.migrator import (
     SearchDocumentReceiver,
     SearchDocumentReceiverType,
@@ -68,10 +64,7 @@ from .search.migrator import (
 )
 from .search.revision import SearchSchemaRevision
 from .search.revision_directory import SearchRevisionDirectory
-from .search.service import (
-    SearchMigratorClientService,
-    SearchMigratorClientServiceOpensearch1,
-)
+from .search.service import SearchService, SearchServiceOpensearch1
 from .selftest import HasSelfTests
 from .util.cache import CachedData
 from .util.datetime_helpers import from_timestamp
@@ -105,9 +98,6 @@ class ExternalSearchIndex(HasSelfTests):
 
     TEST_SEARCH_TERM_KEY = "test_search_term"
     DEFAULT_TEST_SEARCH_TERM = "test"
-
-    __client = None
-
     CURRENT_ALIAS_SUFFIX = "current"
 
     SETTINGS = [
@@ -137,15 +127,6 @@ class ExternalSearchIndex(HasSelfTests):
     SITEWIDE = True
 
     @classmethod
-    def reset(cls):
-        """Resets the __client object to None so a new configuration
-        can be applied during object initialization.
-
-        This method is only intended for use in testing.
-        """
-        cls.__client = None
-
-    @classmethod
     def search_integration(cls, _db) -> Optional[ExternalIntegration]:
         """Look up the ExternalIntegration for Opensearch."""
         return ExternalIntegration.lookup(
@@ -165,7 +146,7 @@ class ExternalSearchIndex(HasSelfTests):
     _revision_directory: SearchRevisionDirectory
     _search: Search
     _search_migrator: SearchMigrator
-    _search_migrator_service: SearchMigratorClientService
+    _search_service: SearchService
     _search_read_pointer: str
     _test_search_term: str
 
@@ -176,6 +157,7 @@ class ExternalSearchIndex(HasSelfTests):
         test_search_term: Optional[str] = None,
         revision_directory: Optional[SearchRevisionDirectory] = None,
         version: Optional[int] = None,
+        custom_client_service: Optional[SearchService] = None,
     ):
         """Constructor
 
@@ -211,18 +193,13 @@ class ExternalSearchIndex(HasSelfTests):
             raise CannotLoadConfiguration("No URL configured to the search server.")
 
         # Create the necessary search client, and the service used by the schema migrator.
-        use_ssl = url.startswith("https://")
-        self.log.info("Connecting to the search cluster at %s", url)
-        new_client = OpenSearch(url, use_ssl=use_ssl, timeout=20, maxsize=25)
-        ExternalSearchIndex.__client = new_client
-        self.indices = new_client.indices
-        self.index = new_client.index
-        self.delete = new_client.delete
-        self.exists = new_client.exists
-        self.put_script = new_client.put_script
-        self._search_migrator_service = SearchMigratorClientServiceOpensearch1(
-            ExternalSearchIndex.__client
-        )
+        if custom_client_service:
+            self._search_service = custom_client_service
+        else:
+            use_ssl = url.startswith("https://")
+            self.log.info("Connecting to the search cluster at %s", url)
+            new_client = OpenSearch(url, use_ssl=use_ssl, timeout=20, maxsize=25)
+            self._search_service = SearchServiceOpensearch1(new_client)
 
         # Locate the revision of the search index that we're going to use.
         # This will fail fast if the requested version isn't available.
@@ -240,10 +217,10 @@ class ExternalSearchIndex(HasSelfTests):
         ).value
 
         # Get references to the read and write pointers.
-        self._search_read_pointer = self._search_migrator_service.read_pointer_name(
+        self._search_read_pointer = self._search_service.read_pointer_name(
             self._revision_base_name
         )
-        self._search_write_pointer = self._search_migrator_service.write_pointer_name(
+        self._search_write_pointer = self._search_service.write_pointer_name(
             self._revision_base_name
         )
 
@@ -251,14 +228,6 @@ class ExternalSearchIndex(HasSelfTests):
         CachedData.initialize(_db)
 
         self._test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
-
-        # Create a search client.
-        self._search = Search(using=self.__client, index=self._search_read_pointer)
-
-        def bulk(docs, **kwargs):
-            return opensearch_bulk(self.__client, docs, **kwargs)
-
-        self._bulk = bulk
 
         # Try to perform a migration to the requested schema version. This might be a no-op if everything
         # is already up-to-date, or if we're downgrading to an already-populated index. It also might fail
@@ -268,7 +237,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         self._search_migrator = SearchMigrator(
             revisions=self._revision_directory,
-            service=self._search_migrator_service,
+            service=self._search_service,
         )
 
         try:
@@ -289,6 +258,10 @@ class ExternalSearchIndex(HasSelfTests):
         except Exception as e:
             raise CannotLoadConfiguration("Error migrating search index: %s" % repr(e))
 
+    def search_service(self) -> SearchService:
+        """Get the underlying search service."""
+        return self._search_service
+
     def start_migration(self) -> Optional[SearchMigrationInProgress]:
         """Update to the latest schema, indexing the given works."""
         return self._search_migrator.migrate(
@@ -298,8 +271,11 @@ class ExternalSearchIndex(HasSelfTests):
     def start_updating_search_documents(self) -> SearchDocumentReceiver:
         """Start submitting search documents for whatever is the current write pointer."""
         return SearchDocumentReceiver(
-            pointer=self._search_write_pointer, service=self._search_migrator_service
+            pointer=self._search_write_pointer, service=self._search_service
         )
+
+    def clear_search_documents(self) -> None:
+        self._search_service.index_clear_documents(pointer=self._search_write_pointer)
 
     def prime_query_values(self, _db):
         JSONQuery.data_sources = _db.query(DataSource).all()
@@ -464,106 +440,11 @@ class ExternalSearchIndex(HasSelfTests):
         )
         return docs
 
-    def _bulk_update(self, works, retry_on_batch_failure=True):
-        """Upload a batch of works to the search index at once."""
-
-        if not works:
-            # There's nothing to do. Don't bother making any requests
-            # to the search index.
-            return [], []
-
-        time1 = time.time()
-        needs_add = []
-        successes = []
-        for work in works:
-            needs_add.append(work)
-
-        # Add/update any works that need adding/updating.
-        docs = Work.to_search_documents(needs_add)
-
-        for doc in docs:
-            doc["_index"] = self._search_read_pointer
-        time2 = time.time()
-
-        success_count, errors = self._bulk(
-            docs,
-            raise_on_error=False,
-            raise_on_exception=False,
-        )
-
-        # If the entire update failed, try it one more time before
-        # giving up on the batch.
-        if len(errors) == len(docs):
-            if retry_on_batch_failure:
-                self.log.info("Opensearch bulk update timed out, trying again.")
-                return self._bulk_update(needs_add, retry_on_batch_failure=False)
-            else:
-                docs = []
-
-        time3 = time.time()
-        self.log.info(
-            "Created %i search documents in %.2f seconds" % (len(docs), time2 - time1)
-        )
-        self.log.info(
-            "Uploaded %i search documents in  %.2f seconds" % (len(docs), time3 - time2)
-        )
-
-        doc_ids = [d["_id"] for d in docs]
-
-        # We weren't able to create search documents for these works, maybe
-        # because they don't have presentation editions yet.
-        def get_error_id(error):
-            return error.get("data", {}).get("_id", None) or error.get("index", {}).get(
-                "_id", None
-            )
-
-        error_ids = [get_error_id(error) for error in errors]
-
-        missing_works = [
-            work
-            for work in works
-            if work.id not in doc_ids
-            and work.id not in error_ids
-            and work not in successes
-        ]
-
-        successes.extend(
-            [work for work in works if work.id in doc_ids and work.id not in error_ids]
-        )
-
-        failures = []
-        for missing in missing_works:
-            failures.append((missing, "Work not indexed"))
-
-        for error in errors:
-
-            error_id = get_error_id(error)
-            work = None
-            works_with_error = [work for work in works if work.id == error_id]
-            if works_with_error:
-                work = works_with_error[0]
-
-            exception = error.get("exception", None)
-            error_message = error.get("error", None)
-            if not error_message:
-                error_message = error.get("index", {}).get("error", None)
-
-            failures.append((work, error_message))
-
-        self.log.info(
-            "Successfully indexed %i documents, failed to index %i."
-            % (success_count, len(failures))
-        )
-
-        return successes, failures
-
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
         args = dict(index=self._search_read_pointer, id=work.id)
         args["doc_type"] = "_doc"
-
-        if self.exists(**args):
-            self.delete(**args)
+        raise NotImplementedError()
 
     def _run_self_tests(self, _db, in_testing=False):
         # Helper methods for setting up the self-tests:
@@ -585,7 +466,7 @@ class ExternalSearchIndex(HasSelfTests):
             return titles
 
         yield self.run_test(
-            ("Search results for '%s':" % (self._test_search_term)), _search_for_term
+            ("Search results for '%s':" % self._test_search_term), _search_for_term
         )
 
         def _get_raw_doc():
@@ -2871,139 +2752,6 @@ class WorkSearchResult:
         return getattr(self._work, k)
 
 
-class MockExternalSearchIndex(ExternalSearchIndex):
-    class EmptyRevision(SearchSchemaRevision):
-        def __init__(self, version: int):
-            super().__init__(version)
-
-        def mapping_document(self) -> SearchMappingDocument:
-            return SearchMappingDocument()
-
-    def __init__(self, url=None):
-        self.url = url
-        self.docs = {}
-        self.log = logging.getLogger("Mock external search index")
-        self.queries = []
-        self.search = list(self.docs.keys())
-        self.test_search_term = "a search term"
-        self._revision_base_name = "works"
-        self._revision = EmptyRevision(version=1)
-        self._search_read_pointer = f"{self._revision_base_name}-search-read"
-        self._search_write_pointer = f"{self._revision_base_name}-search-write"
-        self._search_migrator = MagicMock()
-        self._search_migrator_service = MagicMock()
-
-    def _key(self, index, id):
-        return (index, id)
-
-    def index(self, index, id, body):
-        self.docs[self._key(index, id)] = body
-        self.search = list(self.docs.keys())
-
-    def delete(self, index, id):
-        key = self._key(index, id)
-        if key in self.docs:
-            del self.docs[key]
-
-    def exists(self, index, id, doc_type=None):
-        return self._key(index, id) in self.docs
-
-    def create_search_doc(
-        self, query_string, filter=None, pagination=None, debug=False
-    ):
-        return list(self.docs.values())
-
-    def query_works(self, query_string, filter, pagination, debug=False):
-        self.queries.append((query_string, filter, pagination, debug))
-
-        # During a test we always sort works by the order in which the
-        # work was created.
-
-        def sort_key(x):
-            # This needs to work with either a MockSearchResult or a
-            # dictionary representing a raw search result.
-            if isinstance(x, MockSearchResult):
-                return x.work_id
-            else:
-                return x["_id"]
-
-        docs = sorted(list(self.docs.values()), key=sort_key)
-        if pagination:
-            start_at = 0
-            if isinstance(pagination, SortKeyPagination):
-                # Figure out where the previous page ended by looking
-                # for the corresponding work ID.
-                if pagination.last_item_on_previous_page:
-                    look_for = pagination.last_item_on_previous_page[-1]
-                    for i, x in enumerate(docs):
-                        if x["_id"] == look_for:
-                            start_at = i + 1
-                            break
-            else:
-                start_at = pagination.offset
-            stop = start_at + pagination.size
-            docs = docs[start_at:stop]
-
-        results = []
-        for x in docs:
-            if isinstance(x, MockSearchResult):
-                results.append(x)
-            else:
-                results.append(MockSearchResult(x["title"], x["author"], {}, x["_id"]))
-
-        if pagination:
-            pagination.page_loaded(results)
-        return results
-
-    def query_works_multi(self, queries, debug=False):
-        # Implement query_works_multi by calling query_works several
-        # times. This is the opposite of what happens in the
-        # non-mocked ExternalSearchIndex, because it's easier to mock
-        # the simple case and performance isn't an issue.
-        for (query_string, filter, pagination) in queries:
-            yield self.query_works(query_string, filter, pagination, debug)
-
-    def count_works(self, filter):
-        return len(self.docs)
-
-    def _bulk(self, docs, **kwargs):
-        for doc in docs:
-            self.index(doc["_index"], doc["_id"], doc)
-        return len(docs), []
-
-
-class MockMeta(dict):
-    """Mock the .meta object associated with an Opensearch search
-    result.  This is necessary to get SortKeyPagination to work with
-    MockExternalSearchIndex.
-    """
-
-    @property
-    def sort(self):
-        return self["_sort"]
-
-
-class MockSearchResult:
-    def __init__(self, sort_title, sort_author, meta, id):
-        self.sort_title = sort_title
-        self.sort_author = sort_author
-        meta["id"] = id
-        meta["_sort"] = [sort_title, sort_author, id]
-        self.meta = MockMeta(meta)
-        self.work_id = id
-
-    def __contains__(self, k):
-        return False
-
-    def to_dict(self):
-        return {
-            "title": self.sort_title,
-            "author": self.sort_author,
-            "id": self.meta["id"],
-            "meta": self.meta,
-        }
-
-
 class SearchIndexCoverageProvider(WorkPresentationProvider):
     """Make sure all Works have up-to-date representation in the
     search index.
@@ -3032,7 +2780,7 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
         ] = self.search_index_client.start_migration()
         if self.migration is None:
             self.receiver: SearchDocumentReceiver = (
-                self.search_index_client.update_search_documents()
+                self.search_index_client.start_updating_search_documents()
             )
 
     def on_completely_finished(self):
@@ -3041,22 +2789,26 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
         target: SearchDocumentReceiverType = self.migration or self.receiver
         target.finish()
 
-    def process_batch(self, works):
-        """
-        :return: a mixed list of Works and CoverageFailure objects.
-        """
-
+    def process_batch(self, works) -> List[Work | CoverageFailure]:
         target: SearchDocumentReceiverType = self.migration or self.receiver
-        target.add_documents(
+        failures = target.add_documents(
             documents=self.search_index_client.create_search_documents_from_works(works)
         )
 
-        successes, failures = self.search_index_client.bulk_update(works)
+        # Maintain a dictionary of works so that we can efficiently remove failed works later.
+        work_map: Dict[int, Work] = {}
+        for work in works:
+            work_map[work.id] = work
 
-        records = list(successes)
-        for (work, error) in failures:
-            if not isinstance(error, (bytes, str)):
-                error = repr(error)
-            records.append(CoverageFailure(work, error))
+        # Remove all the works that failed and create failure records for them.
+        results: List[Work | CoverageFailure] = []
+        for failure in failures:
+            work = work_map[failure.id]
+            del work_map[failure.id]
+            results.append(CoverageFailure(work, repr(failure)))
 
-        return records
+        # Append all the remaining works that didn't fail.
+        for work in work_map.values():
+            results.append(work)
+
+        return results

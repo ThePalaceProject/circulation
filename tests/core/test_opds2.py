@@ -7,8 +7,9 @@ import pytest
 from api.app import app
 from api.opds2 import OPDS2PublicationsAnnotator
 from core.classifier import Classifier
-from core.external_search import MockExternalSearchIndex, SortKeyPagination
+from core.external_search import ExternalSearchIndex, SortKeyPagination
 from core.lane import Facets, Lane, Pagination, SearchFacets
+from core.model import ExternalIntegration
 from core.model.classification import Subject
 from core.model.datasource import DataSource
 from core.model.edition import Edition
@@ -17,11 +18,12 @@ from core.model.resource import Hyperlink
 from core.opds2 import AcquisitonFeedOPDS2, OPDS2Annotator
 from core.util.flask_util import OPDSFeedResponse
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.mocks.search import SearchServiceFake
 
 
 class TestOPDS2FeedFixture:
     transaction: DatabaseTransactionFixture
-    search_engine: MockExternalSearchIndex
+    search_engine: ExternalSearchIndex
     fiction: Lane
 
 
@@ -31,7 +33,18 @@ def opds2_feed_fixture(
 ) -> TestOPDS2FeedFixture:
     data = TestOPDS2FeedFixture()
     data.transaction = db
-    data.search_engine = MockExternalSearchIndex()
+    data.search_integration = db.external_integration(
+        ExternalIntegration.OPENSEARCH,
+        goal=ExternalIntegration.SEARCH_GOAL,
+        url="http://does-not-matter.com",  # It doesn't matter what URL we specify, because the search service is fake
+        settings={
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
+            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+        },
+    )
+    data.search_engine = ExternalSearchIndex(
+        _db=db.session, custom_client_service=SearchServiceFake()
+    )
     data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
@@ -158,7 +171,7 @@ class TestOPDS2Feed:
 
 class TestOPDS2AnnotatorFixture:
     transaction: DatabaseTransactionFixture
-    search_engine: MockExternalSearchIndex
+    search_engine: ExternalSearchIndex
     fiction: Lane
     annotator: OPDS2Annotator
 
@@ -169,7 +182,18 @@ def opds2_annotator_fixture(
 ) -> TestOPDS2AnnotatorFixture:
     data = TestOPDS2AnnotatorFixture()
     data.transaction = db
-    data.search_engine = MockExternalSearchIndex()
+    data.search_integration = db.external_integration(
+        ExternalIntegration.OPENSEARCH,
+        goal=ExternalIntegration.SEARCH_GOAL,
+        url="http://does-not-matter.com",  # It doesn't matter what URL we specify, because the search service is fake
+        settings={
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
+            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+        },
+    )
+    data.search_engine = ExternalSearchIndex(
+        _db=db.session, custom_client_service=SearchServiceFake()
+    )
     data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]

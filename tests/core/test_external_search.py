@@ -29,8 +29,6 @@ from core.external_search import (
     ExternalSearchIndex,
     Filter,
     JSONQuery,
-    MockExternalSearchIndex,
-    MockSearchResult,
     Query,
     QueryParseException,
     QueryParser,
@@ -38,7 +36,6 @@ from core.external_search import (
     SearchIndexCoverageProvider,
     SortKeyPagination,
     WorkSearchResult,
-    mock_search_index,
 )
 from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.metadata_layer import ContributorData, IdentifierData
@@ -67,41 +64,12 @@ from tests.fixtures.database import (
 )
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
+from tests.mocks.search import SearchServiceFake
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
 
 class TestExternalSearch:
-    def test_load(self, external_search_fixture: ExternalSearchFixture):
-        session = external_search_fixture.db.session
-
-        # Normally, load() returns a brand new ExternalSearchIndex
-        # object.
-        loaded = ExternalSearchIndex.load(session, in_testing=True)
-        assert isinstance(loaded, ExternalSearchIndex)
-
-        # However, inside the mock_search_index context manager,
-        # load() returns whatever object was mocked.
-        mock = object()
-        with mock_search_index(mock):
-            assert mock == ExternalSearchIndex.load(session, in_testing=True)
-
-    def test_constructor(self, external_search_fixture: ExternalSearchFixture):
-        session = external_search_fixture.db.session
-
-        # The configuration of the search ExternalIntegration becomes the
-        # configuration of the ExternalSearchIndex.
-        #
-        # This basically just verifies that the test search term is taken
-        # from the ExternalIntegration.
-        class MockIndex(ExternalSearchIndex):
-            def set_works_index_and_alias(self, _db):
-                self.set_works_index_and_alias_called_with = _db
-
-        index = MockIndex(session)
-        assert session == index.set_works_index_and_alias_called_with
-        assert "test_search_term" == index._test_search_term
-
     # TODO: would be good to check the put_script calls, but the
     # current constructor makes put_script difficult to mock.
 
@@ -4757,12 +4725,16 @@ class TestBulkUpdate:
         w2 = db.work()
         w2.set_presentation_ready()
         w3 = db.work()
-        index = MockExternalSearchIndex()
-        successes, failures = index.bulk_update([w1, w2, w3])
+        index = ExternalSearchIndex(_db=db, custom_client_service=SearchServiceFake())
+
+        docs = index.start_updating_search_documents()
+        failures = docs.add_documents(
+            index.create_search_documents_from_works([w1, w2, w3])
+        )
+        docs.finish()
 
         # All three works are regarded as successes, because their
         # state was successfully mirrored to the index.
-        assert {w1, w2, w3} == set(successes)
         assert [] == failures
 
         # All three works were inserted into the index, even the one
@@ -4773,9 +4745,12 @@ class TestBulkUpdate:
         # If a work stops being presentation-ready, it is kept in the
         # index.
         w2.presentation_ready = False
-        successes, failures = index.bulk_update([w1, w2, w3])
+        docs = index.start_updating_search_documents()
+        failures = docs.add_documents(
+            index.create_search_documents_from_works([w1, w2, w3])
+        )
+        docs.finish()
         assert {w1.id, w2.id, w3.id} == {x[-1] for x in list(index.docs.keys())}
-        assert {w1, w2, w3} == set(successes)
         assert [] == failures
 
 
@@ -4875,7 +4850,7 @@ class TestWorkSearchResult:
 
 class TestSearchIndexCoverageProvider:
     def test_operation(self, db: DatabaseTransactionFixture):
-        index = MockExternalSearchIndex()
+        index = ExternalSearchIndex(_db=db, custom_client_service=SearchServiceFake())
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
@@ -4982,7 +4957,7 @@ class TestSearchIndexCoverageProvider:
     def test_success(self, db: DatabaseTransactionFixture):
         work = db.work()
         work.set_presentation_ready()
-        index = MockExternalSearchIndex()
+        index = ExternalSearchIndex(_db=db, custom_client_service=SearchServiceFake())
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
 
@@ -4993,7 +4968,7 @@ class TestSearchIndexCoverageProvider:
         assert 1 == len(index.docs)
 
     def test_failure(self, db: DatabaseTransactionFixture):
-        class DoomedExternalSearchIndex(MockExternalSearchIndex):
+        class DoomedExternalSearchIndex:
             """All documents sent to this index will fail."""
 
             def bulk(self, docs, **kwargs):

@@ -2,7 +2,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 import opensearchpy.helpers
 from opensearchpy import NotFoundError, OpenSearch, RequestError
@@ -33,8 +33,19 @@ class SearchServiceException(Exception):
         super().__init__(message)
 
 
-class SearchMigratorClientService(ABC):
-    """The interface we need from services like Opensearch when dealing with migrations."""
+@dataclass
+class SearchServiceFailedDocument:
+    """An error indicating that a document failed to index."""
+
+    id: int
+    error_message: str
+    error_status: int
+    error_exception: str
+
+
+class SearchService(ABC):
+    """The interface we need from services like Opensearch. Essentially, it provides the operations we want with
+    sensible types, rather than the untyped pile of JSON the actual search client provides."""
 
     @abstractmethod
     def read_pointer_name(self, base_name: str) -> str:
@@ -83,7 +94,7 @@ class SearchMigratorClientService(ABC):
         self,
         pointer: str,
         documents: Iterable[dict],
-    ) -> None:
+    ) -> List[SearchServiceFailedDocument]:
         """Submit search documents to the given index."""
 
     @abstractmethod
@@ -94,8 +105,12 @@ class SearchMigratorClientService(ABC):
     def refresh(self):
         """Synchronously refresh the service and wait for changes to be completed."""
 
+    @abstractmethod
+    def index_clear_documents(self, pointer: str):
+        """Clear all search documents in the given index."""
 
-class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
+
+class SearchServiceOpensearch1(SearchService):
     """The real Opensearch 1.x service."""
 
     def read_pointer_name(self, base_name: str) -> str:
@@ -109,9 +124,7 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
         return f"{base_name}-empty"
 
     def __init__(self, client: OpenSearch):
-        self._logger = logging.getLogger(
-            SearchMigratorClientServiceOpensearch1.__name__
-        )
+        self._logger = logging.getLogger(SearchServiceOpensearch1.__name__)
         self._client = client
 
     def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
@@ -189,8 +202,46 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
         self._logger.debug(f"setting mappings for index {index_name}")
         self._client.indices.put_mapping(index=index_name, body=data)
 
-    def index_submit_documents(self, pointer: str, documents: Iterable[dict]) -> None:
-        opensearchpy.helpers.bulk(client=self._client, actions=documents)
+    def index_submit_documents(
+        self, pointer: str, documents: Iterable[dict]
+    ) -> List[SearchServiceFailedDocument]:
+        # See: Sources for "streaming_bulk":
+        # https://github.com/opensearch-project/opensearch-py/blob/db972e615b9156b4e364091d6a893d64fb3ef4f3/opensearchpy/helpers/actions.py#L267
+        # The documentation is incredibly vague about what the function actually returns, but these
+        # parameters _should_ cause it to return a tuple containing the number of successfully documents
+        # and a list of documents that failed. Unfortunately, the type checker disagrees and the documentation
+        # gives no hint as to what an "int" might mean for errors.
+        (success_count, errors) = opensearchpy.helpers.bulk(
+            client=self._client,
+            actions=documents,
+            raise_on_error=False,
+            max_retries=3,
+            max_backoff=30,
+            yield_ok=False,
+        )
+
+        error_results: List[SearchServiceFailedDocument] = []
+        if isinstance(errors, list):
+            for error in errors:
+                error_results.append(
+                    SearchServiceFailedDocument(
+                        id=int(error.id),
+                        error_status=error.status,
+                        error_message=error.error,
+                        error_exception=error.exception,
+                    )
+                )
+        else:
+            raise SearchServiceException(
+                f"Opensearch returned {errors} instead of a list of errors."
+            )
+
+        return error_results
+
+    def index_clear_documents(self, pointer: str):
+        self._client.delete_by_query(
+            index=pointer, body={"query": {"match_all": {}}}, wait_for_completion=True
+        )
 
     def refresh(self):
         self._logger.debug(f"waiting for indexes to become ready")
@@ -219,48 +270,3 @@ class SearchMigratorClientServiceOpensearch1(SearchMigratorClientService):
             return None
         except NotFoundError:
             return None
-
-
-class SearchMigratorClientServiceNull(SearchMigratorClientService):
-    """A search service that does nothing."""
-
-    def refresh(self):
-        return
-
-    def read_pointer_name(self, base_name: str) -> str:
-        return f"{base_name}-search-read"
-
-    def write_pointer_name(self, base_name: str) -> str:
-        return f"{base_name}-search-write"
-
-    def read_pointer(self, base_name: str) -> Optional[str]:
-        return None
-
-    def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
-        return None
-
-    def create_empty_index(self, base_name: str) -> None:
-        return None
-
-    def read_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
-        return None
-
-    def read_pointer_set_empty(self, base_name: str) -> None:
-        return None
-
-    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
-        return None
-
-    def index_is_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> bool:
-        return True
-
-    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
-        pass
-
-    def index_submit_documents(self, pointer: str, documents: Iterable[dict]) -> None:
-        pass
-
-    def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
-        return None

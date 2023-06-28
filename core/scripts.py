@@ -2636,6 +2636,11 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
 
 class UpdateLaneSizeScript(LaneSweeperScript):
+    def __init__(self, _db, *args, **kwargs):
+        super().__init__(_db, *args, **kwargs)
+        search = kwargs.get("search_index_client", None)
+        self._search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
+
     def should_process_lane(self, lane):
         """We don't want to process generic WorkLists -- there's nowhere
         to store the data.
@@ -2652,7 +2657,7 @@ class UpdateLaneSizeScript(LaneSweeperScript):
         # This is done because calling site_configuration_has_changed repeatedly
         # was causing performance problems, when we have lots of lanes to update.
         lane._suppress_before_flush_listeners = True
-        lane.update_size(self._db)
+        lane.update_size(self._db, search_engine=self._search)
         self.log.info("%s: %d", lane.full_identifier, lane.size)
 
     def do_run(self, *args, **kwargs):
@@ -2702,13 +2707,13 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
 
     def __init__(self, *args, **kwargs):
         search = kwargs.get("search_index_client", None)
-        self.search = search or ExternalSearchIndex(self._db)
+        self.search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
         super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
 
     def do_run(self):
         # Calling setup_index will destroy the index and recreate it
         # empty.
-        self.search.setup_index()
+        self.search.clear_search_documents()
 
         # Remove all search coverage records so the
         # SearchIndexCoverageProvider will start from scratch.

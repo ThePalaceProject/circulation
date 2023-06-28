@@ -19,7 +19,6 @@ from core.entrypoint import (
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from core.external_search import MockExternalSearchIndex
 from core.facets import FacetConstants
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import (
@@ -54,7 +53,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
-from tests.fixtures.search import ExternalSearchPatchFixture
+from tests.fixtures.search import ExternalSearchFixtureFake
 
 
 class TestBaseAnnotator:
@@ -736,7 +735,7 @@ class TestOPDS:
     def test_lane_feed_contains_facet_links(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         data, db, session = (
             opds_fixture,
@@ -1229,7 +1228,11 @@ class TestOPDS:
         )
         assert "<entry>foo</entry>" in feed
 
-    def test_page_feed(self, opds_fixture: TestOPDSFixture):
+    def test_page_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1242,7 +1245,7 @@ class TestOPDS:
         work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
-        search_engine = MockExternalSearchIndex()
+        search_engine = external_search_fake_fixture.external_search
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
@@ -1308,7 +1311,11 @@ class TestOPDS:
             assert lane.display_name == links[i + 1].get("title")
             assert MockAnnotator.lane_url(lane) == links[i + 1].get("href")
 
-    def test_page_feed_for_worklist(self, opds_fixture: TestOPDSFixture):
+    def test_page_feed_for_worklist(
+        self,
+        opds_fixture: TestOPDSFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1321,7 +1328,7 @@ class TestOPDS:
         work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
-        search_engine = MockExternalSearchIndex()
+        search_engine = external_search_fake_fixture.external_search
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
@@ -1457,7 +1464,11 @@ class TestOPDS:
         assert 1 == len(parsed["entries"])
         assert [] == self._links(parsed, "next")
 
-    def test_groups_feed(self, opds_fixture: TestOPDSFixture):
+    def test_groups_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1476,7 +1487,7 @@ class TestOPDS:
         # of the work don't matter. It just needs to have a LicensePool
         # so it'll show up in the OPDS feed.
         work = db.work(title="An epic tome", with_open_access_download=True)
-        search_engine = MockExternalSearchIndex()
+        search_engine = external_search_fake_fixture.external_search
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(search_engine.create_search_documents_from_works([work]))
         docs.finish()
@@ -1553,7 +1564,11 @@ class TestOPDS:
             assert lane.display_name == links[i + 1].get("title")
             assert annotator.lane_url(lane) == links[i + 1].get("href")
 
-    def test_empty_groups_feed(self, opds_fixture: TestOPDSFixture):
+    def test_empty_groups_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1566,7 +1581,7 @@ class TestOPDS:
         test_lane = db.lane("Test Lane", genres=["Mystery"])
 
         # Mock search index and Annotator.
-        search_engine = MockExternalSearchIndex()
+        search_engine = external_search_fake_fixture.external_search
 
         class Mock(MockAnnotator):
             def annotate_feed(self, feed, worklist):
@@ -1598,7 +1613,11 @@ class TestOPDS:
         # but our mock Annotator got a chance to modify the feed in place.
         assert True == annotator.called
 
-    def test_search_feed(self, opds_fixture: TestOPDSFixture):
+    def test_search_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1612,7 +1631,7 @@ class TestOPDS:
         work2 = db.work(genre=Epic_Fantasy, with_open_access_download=True)
 
         pagination = Pagination(size=1)
-        search_client = MockExternalSearchIndex()
+        search_client = external_search_fake_fixture.external_search
         docs = search_client.start_updating_search_documents()
         docs.add_documents(
             search_client.create_search_documents_from_works([work1, work2])
@@ -1689,7 +1708,11 @@ class TestOPDS:
         breadcrumbs = root.find("{%s}breadcrumbs" % AtomFeed.SIMPLIFIED_NS)
         assert None == breadcrumbs
 
-    def test_cache(self, opds_fixture: TestOPDSFixture):
+    def test_cache(
+        self,
+        opds_fixture: TestOPDSFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1703,7 +1726,7 @@ class TestOPDS:
         )
         fantasy_lane = data.fantasy
 
-        search_engine = MockExternalSearchIndex()
+        search_engine = external_search_fake_fixture.external_search
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(search_engine.create_search_documents_from_works([work1]))
         docs.finish()
@@ -1754,7 +1777,7 @@ class TestAcquisitionFeed:
     def test_page(
         self,
         db,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         session = db.session
 
@@ -2870,7 +2893,7 @@ class TestEntrypointLinkInsertion:
     def test_groups(
         self,
         entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         data, db, session = (
             entrypoint_link_insertion_fixture,

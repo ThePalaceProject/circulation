@@ -8,7 +8,6 @@ from core.coverage import (
     IdentifierCoverageProvider,
     WorkCoverageProvider,
 )
-from core.external_search import ExternalSearchIndex
 from core.model import DataSource, ExternalIntegration
 
 
@@ -67,17 +66,6 @@ class LogCaptureHandler(logging.Handler):
 
     def __getattr__(self, item):
         return self.__getitem__(item)
-
-
-class SearchClientForTesting(ExternalSearchIndex):
-    """When creating an index, limit it to a single shard and disable
-    replicas.
-
-    This makes search results more predictable.
-    """
-
-    def setup_index(self, new_index=None):
-        return super().setup_index(new_index, number_of_shards=1, number_of_replicas=0)
 
 
 class MockCoverageProvider:

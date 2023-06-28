@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from api.lanes import create_default_lanes
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
-from core.external_search import Filter, MockExternalSearchIndex
+from core.external_search import ExternalSearchIndex, Filter
 from core.lane import Lane, WorkList
 from core.metadata_layer import TimestampData
 from core.model import (
@@ -95,7 +95,8 @@ from tests.core.mock import (
     AlwaysSuccessfulWorkCoverageProvider,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.mocks.search import SearchServiceFake
 
 
 class TestScript:
@@ -1601,7 +1602,9 @@ class MockWhereAreMyBooks(WhereAreMyBooksScript):
         output = output or []
 
         # In most tests an empty mock will do for `search`.
-        search = search or MockExternalSearchIndex()
+        search = search or ExternalSearchIndex(
+            _db=_db, custom_client_service=SearchServiceFake()
+        )
 
         super().__init__(_db, output, search)
         self.output = []
@@ -1827,9 +1830,13 @@ class TestWhereAreMyBooksScript:
         work.license_pools[0].licenses_owned = 0
         self.check_explanation(not_owned=1, db=db)
 
-    def test_search_engine(self, db: DatabaseTransactionFixture):
+    def test_search_engine(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         output = StringIO()
-        search = MockExternalSearchIndex()
+        search = external_search_fake_fixture.external_search
         work = db.work(with_license_pool=True)
         work.presentation_ready = True
 
@@ -2003,17 +2010,12 @@ class TestListCollectionMetadataIdentifiersScript:
 
 
 class TestRebuildSearchIndexScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        class MockSearchIndex:
-            def setup_index(self):
-                # This is where the search index is deleted and recreated.
-                self.setup_index_called = True
-
-            def bulk_update(self, works):
-                self.bulk_update_called_with = list(works)
-                return works, []
-
-        index = MockSearchIndex()
+    def test_do_run(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
+        index = external_search_fake_fixture.external_search
         work = db.work(with_license_pool=True)
         work2 = db.work(with_license_pool=True)
         wcr = WorkCoverageRecord
@@ -2082,20 +2084,24 @@ class TestSearchIndexCoverageRemover:
 
 
 class TestUpdateLaneSizeScript:
-    def test_do_run(
-        self,
-        db,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
-    ):
+    def test_do_run(self, db, external_search_fake_fixture: ExternalSearchFixtureFake):
         lane = db.lane()
         lane.size = 100
-        UpdateLaneSizeScript(db.session).do_run(cmd_args=[])
+        UpdateLaneSizeScript(
+            db.session, search_index_client=external_search_fake_fixture.external_search
+        ).do_run(cmd_args=[])
         assert 0 == lane.size
 
-    def test_should_process_lane(self, db: DatabaseTransactionFixture):
+    def test_should_process_lane(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         """Only Lane objects can have their size updated."""
         lane = db.lane()
-        script = UpdateLaneSizeScript(db.session)
+        script = UpdateLaneSizeScript(
+            db.session, search_index_client=external_search_fake_fixture.external_search
+        )
         assert True == script.should_process_lane(lane)
 
         worklist = WorkList()
@@ -2104,14 +2110,16 @@ class TestUpdateLaneSizeScript:
     def test_site_configuration_has_changed(
         self,
         db: DatabaseTransactionFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         library = db.default_library()
         lane1 = db.lane()
         lane2 = db.lane()
 
         # Run the script to create all the default config settings.
-        UpdateLaneSizeScript(db.session).do_run(cmd_args=[])
+        UpdateLaneSizeScript(
+            db.session, search_index_client=external_search_fake_fixture.external_search
+        ).do_run(cmd_args=[])
 
         # Set the lane sizes
         lane1.size = 100
