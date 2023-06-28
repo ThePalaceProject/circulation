@@ -8,6 +8,7 @@ import feedparser
 import pytest
 from flask import Response as FlaskResponse
 from flask import url_for
+from werkzeug import Response as wkResponse
 
 from api.axis import Axis360FulfillmentInfo
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
@@ -874,7 +875,7 @@ class TestLoanController:
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
 
-            assert isinstance(response, Response)
+            assert isinstance(response, wkResponse)
             assert "here's your book" == response.get_data(as_text=True)
             assert [] == loan_fixture.db.session.query(Loan).all()
 
@@ -962,7 +963,7 @@ class TestLoanController:
             assert isinstance(pool.id, int)
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
-        assert isinstance(response, Response)
+        assert isinstance(response, wkResponse)
         assert response.status_code == 302
         assert response.location == "https://example.org/redirect_to_epub"
 
