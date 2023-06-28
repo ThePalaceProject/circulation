@@ -219,9 +219,9 @@ class TestOPDS2Annotator:
         assert meta["@type"] == "http://schema.org/EBook"
         assert meta["title"] == work.title
         assert meta["subtitle"] == work.subtitle
-        assert meta["identifier"] == idn.identifier
+        assert meta["identifier"] == idn.urn
         assert meta["modified"] == modified.isoformat()
-        assert meta["published"] == modified.isoformat()
+        assert meta["published"] == modified.date().isoformat()
         assert meta["language"] == "en"
         assert meta["sortAs"] == work.sort_title
         assert meta["author"] == {"name": "Author Person"}
