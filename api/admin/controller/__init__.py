@@ -1110,7 +1110,7 @@ class CustomListsController(AdminCirculationManagerController):
         id: Optional[int] = None,
         auto_update: Optional[bool] = None,
         auto_update_query: Optional[dict[str, str]] = None,
-        auto_update_facets: Optional[str] = None,
+        auto_update_facets: Optional[dict[str, str]] = None,
     ) -> Union[ProblemDetail, Response]:
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
