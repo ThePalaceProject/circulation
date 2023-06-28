@@ -1433,6 +1433,7 @@ class OPDS2FeedController(CirculationManagerController):
             flask.request.url, params.facets, params.pagination, params.library
         )
         lane = self.load_lane(None)
+        max_age = flask.request.args.get("max_age")
         feed = AcquisitonFeedOPDS2.publications(
             self._db,
             lane,
@@ -1440,6 +1441,7 @@ class OPDS2FeedController(CirculationManagerController):
             params.pagination,
             self.search_engine,
             annotator,
+            max_age=int(max_age) if max_age is not None else None,
         )
 
         return Response(

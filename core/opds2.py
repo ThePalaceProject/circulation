@@ -43,7 +43,7 @@ class OPDS2Annotator:
         result["@type"] = Edition.medium_to_additional_type.get(str(edition.medium))
         result["title"] = edition.title
         result["subtitle"] = edition.subtitle
-        result["identifier"] = edition.primary_identifier.identifier
+        result["identifier"] = edition.primary_identifier.urn
         result["sortAs"] = edition.sort_title
         result.update(self._contributors(edition))
         result["language"] = edition.language_code
@@ -71,7 +71,7 @@ class OPDS2Annotator:
         if work.last_update_time:
             result["modified"] = work.last_update_time.isoformat()
         if pool and pool.availability_time:
-            result["published"] = pool.availability_time.isoformat()
+            result["published"] = pool.availability_time.date().isoformat()
         result["description"] = work.summary_text
 
         belongs_to = {}
