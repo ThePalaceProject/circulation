@@ -8,6 +8,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class ExampleMeasurementDataFixture:
     data_source: DataSource
     transaction: DatabaseTransactionFixture
+    SOURCE_NAME: str
 
     @classmethod
     def create(

@@ -242,10 +242,10 @@ class TestHasFullTableCacheDatabase:
         db_setting2.value = setting_new_value
 
         # Now let's make sure that the cached value has also been updated.
-        assert (
-            ConfigurationSetting.by_id(db.session, setting_id)._value
-            == setting_new_value
-        )
+        assert isinstance(setting_id, int)
+        config_setting_by_id = ConfigurationSetting.by_id(db.session, setting_id)
+        assert isinstance(config_setting_by_id, HasSessionCache)
+        assert config_setting_by_id._value == setting_new_value
 
     def test_cached_value_deleted(self, db: DatabaseTransactionFixture):
         # Get setting

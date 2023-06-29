@@ -18,6 +18,7 @@ class TestDeviceToken:
         )
 
         new_device = db.session.query(DeviceToken).get(device.id)
+        assert isinstance(new_device, DeviceToken)
         assert new_device.device_token == "xxxx"
         assert new_device.token_type == DeviceTokenTypes.FCM_ANDROID
 

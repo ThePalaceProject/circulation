@@ -138,7 +138,7 @@ class Collection(Base, HasSessionCache):
 
     # A Collection can have many associated Credentials.
     credentials: Mapped[List[Credential]] = relationship(
-        "Credential", backref="collection", cascade="delete"
+        "Credential", back_populates="collection", cascade="delete"
     )
 
     # A Collection can be monitored by many Monitors, each of which

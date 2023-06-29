@@ -137,7 +137,7 @@ class TestTimestamp:
             Timestamp.SCRIPT_TYPE,
             collection=db.default_collection(),
             counter=10,
-            achivements="a",
+            achievements="a",
         )
         data = stamp.to_data()
         assert isinstance(data, TimestampData)
@@ -221,6 +221,7 @@ class TestBaseCoverageRecord:
 
         # But if we pass in a time one second later, the 'success'
         # record no longer counts as covered.
+        assert isinstance(success_record.timestamp, datetime.datetime)
         one_second_after = success_record.timestamp + datetime.timedelta(seconds=1)
         check_not_covered(
             [success, no_coverage, transient],
@@ -360,6 +361,8 @@ class TestCoverageRecord:
         assert existing in resulting_records
         assert covered not in ignored_identifiers
         assert CoverageRecord.SUCCESS == existing.status
+        assert isinstance(existing.timestamp, datetime.datetime)
+        assert isinstance(original_timestamp, datetime.datetime)
         assert existing.timestamp > original_timestamp
         assert None == existing.exception
 
@@ -411,6 +414,8 @@ class TestCoverageRecord:
         # The existing record has been updated.
         assert existing in resulting_records
         assert CoverageRecord.SUCCESS == existing.status
+        assert isinstance(existing.timestamp, datetime.datetime)
+        assert isinstance(original_timestamp, datetime.datetime)
         assert existing.timestamp > original_timestamp
         assert None == existing.exception
 

@@ -403,6 +403,8 @@ class TestWork:
         # calculate_presentation().
 
         class Mock(Work):
+            the_summary: str
+
             def set_summary(self, summary):
                 if isinstance(summary, Resource):
                     self.summary_text = summary.representation.unicode_content
@@ -951,6 +953,7 @@ class TestWork:
 
         # But if we disqualify coverage records created before a
         # certain time, it might need coverage again.
+        assert isinstance(record.timestamp, datetime.datetime)
         cutoff = record.timestamp + datetime.timedelta(seconds=1)
 
         assert [work] == Work.missing_coverage_from(
@@ -1374,7 +1377,7 @@ class TestWork:
 
         # Otherwise, this method is a simple passthrough for
         # Patron.work_is_age_appropriate.
-        patron.work_is_age_appropriate = MagicMock(return_value="value")
+        patron.work_is_age_appropriate = MagicMock(return_value="value")  # type: ignore[method-assign]
 
         assert "value" == work.age_appropriate_for_patron(patron)
         patron.work_is_age_appropriate.assert_called_with(
@@ -1675,8 +1678,6 @@ class TestWork:
         entries.
         """
         work = db.work()
-        work.simple_opds_entry = None
-        work.verbose_opds_entry = None
 
         work.calculate_opds_entries(verbose=False)
         simple_entry = work.simple_opds_entry
@@ -1695,7 +1696,6 @@ class TestWork:
 
     def test_calculate_marc_record(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
-        work.marc_record = None
 
         work.calculate_marc_record()
         assert work.title in work.marc_record
