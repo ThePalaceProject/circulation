@@ -73,7 +73,9 @@ class OPDSForDistributorsAPIFixture:
         self, db: DatabaseTransactionFixture, files: OPDSForDistributorsFilesFixture
     ):
         self.db = db
-        self.collection = MockOPDSForDistributorsAPI.mock_collection(db.session)
+        self.collection = MockOPDSForDistributorsAPI.mock_collection(
+            db.session, db.default_library()
+        )
         self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
         self.files = files
 
@@ -252,7 +254,9 @@ class TestOPDSForDistributorsAPI:
 
         # Getting a token for a collection should result in a cached credential.
         collection1 = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session, name="Collection 1"
+            opds_dist_api_fixture.db.session,
+            opds_dist_api_fixture.db.default_library(),
+            name="Collection 1",
         )
         api1 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection1)
         token1 = opds_dist_api_fixture.db.fresh_str()
@@ -270,7 +274,9 @@ class TestOPDSForDistributorsAPI:
         # Getting a token for a second collection should result in an
         # additional cached credential.
         collection2 = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session, name="Collection 2"
+            opds_dist_api_fixture.db.session,
+            opds_dist_api_fixture.db.default_library(),
+            name="Collection 2",
         )
         api2 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection2)
         token2 = opds_dist_api_fixture.db.fresh_str()
@@ -535,7 +541,7 @@ class TestOPDSForDistributorsImporter:
             opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
         )
         collection = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session
+            opds_dist_api_fixture.db.session, opds_dist_api_fixture.db.default_library()
         )
         DatabaseTransactionFixture.set_settings(
             collection.integration_configuration,
@@ -664,7 +670,9 @@ class TestOPDSForDistributorsImporter:
 
         def setup_collection(*, name: str, datasource: DataSource) -> Collection:
             collection = MockOPDSForDistributorsAPI.mock_collection(
-                opds_dist_api_fixture.db.session, name=name
+                opds_dist_api_fixture.db.session,
+                opds_dist_api_fixture.db.default_library(),
+                name=name,
             )
             DatabaseTransactionFixture.set_settings(
                 collection.integration_configuration,
@@ -734,7 +742,8 @@ class TestOPDSForDistributorsReaperMonitor:
             opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
         )
         collection = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session
+            opds_dist_api_fixture.db.session,
+            opds_dist_api_fixture.db.default_library(),
         )
         DatabaseTransactionFixture.set_settings(
             collection.integration_configuration,

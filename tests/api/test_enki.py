@@ -38,7 +38,7 @@ class EnkiTestFixure:
     def __init__(self, db: DatabaseTransactionFixture, files: EnkiFilesFixture):
         self.db = db
         self.files = files
-        self.api = MockEnkiAPI(db.session)
+        self.api = MockEnkiAPI(db.session, db.default_library())
         self.collection = self.api.collection
 
 
@@ -119,7 +119,7 @@ class TestEnkiAPI:
                 self.patron_activity_called_with.append((patron, pin))
                 yield 1
 
-        api = Mock(db.session)
+        api = Mock(db.session, db.default_library())
 
         # Now let's make sure two Libraries have access to the
         # Collection used in the API -- one library with a default
@@ -938,7 +938,7 @@ class TestEnkiImport:
             }
         }
 
-        api = MockEnkiAPI(db.session)
+        api = MockEnkiAPI(db.session, db.default_library())
         api.queue_response(200, content=json.dumps(circ_data))
         api.queue_response(200, content=json.dumps(bib_data))
 

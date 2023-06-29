@@ -1,22 +1,25 @@
+from sqlalchemy.orm import Session
+
 from api.opds_for_distributors import OPDSForDistributorsAPI
-from core.model import get_one_or_create
+from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.db import make_default_library
 
 
 class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
     @classmethod
     def mock_collection(
-        self, _db, name="Test OPDS For Distributors Collection"
+        self,
+        _db: Session,
+        library: Library,
+        name: str = "Test OPDS For Distributors Collection",
     ) -> Collection:
         """Create a mock OPDS For Distributors collection to use in tests.
 
         :param _db: Database session.
         :param name: A name for the collection.
         """
-        library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,

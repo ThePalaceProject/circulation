@@ -64,7 +64,7 @@ class OdiloFixture:
         self.db = db
         self.patron = db.patron()
         self.patron.authorization_identifier = "0001000265"
-        self.collection = MockOdiloAPI.mock_collection(db.session)
+        self.collection = MockOdiloAPI.mock_collection(db.session, db.default_library())
         self.circulation = CirculationAPI(
             db.session, library, api_map={ExternalIntegration.ODILO: MockOdiloAPI}
         )

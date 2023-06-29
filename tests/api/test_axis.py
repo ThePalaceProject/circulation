@@ -114,7 +114,9 @@ class Axis360Fixture:
     def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
         self.db = db
         self.files = files
-        self.collection = MockAxis360API.mock_collection(db.session)
+        self.collection = MockAxis360API.mock_collection(
+            db.session, db.default_library()
+        )
         self.api = MockAxis360API(db.session, self.collection)
 
     def sample_data(self, filename):
@@ -917,7 +919,9 @@ class TestCirculationMonitor:
         assert 1 == len(records)
 
         # Now, another collection with the same book shows up.
-        collection2 = MockAxis360API.mock_collection(axis360.db.session, "coll2")
+        collection2 = MockAxis360API.mock_collection(
+            axis360.db.session, axis360.db.default_library(), "coll2"
+        )
         monitor = Axis360CirculationMonitor(
             axis360.db.session,
             collection2,

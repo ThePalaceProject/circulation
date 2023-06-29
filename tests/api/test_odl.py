@@ -2357,7 +2357,9 @@ class SharedODLAPIFixture:
     ):
         self.db = db
         self.files = api_odl_files_fixture
-        self.collection = MockSharedODLAPI.mock_collection(db.session)
+        self.collection = MockSharedODLAPI.mock_collection(
+            db.session, db.default_library()
+        )
         DatabaseTransactionFixture.set_settings(
             self.collection.integration_configuration,
             **{Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks"},
@@ -2400,6 +2402,7 @@ class TestSharedODLAPI:
         # Once the library registers, it gets a shared secret that is included
         # in request headers.
         config = shared_odl.collection.integration_configuration
+        assert shared_odl.patron.library.id is not None
         DatabaseTransactionFixture.set_settings(
             config.for_library(shared_odl.patron.library.id, create=True),
             password="secret",
@@ -2972,7 +2975,7 @@ class TestSharedODLImporter:
     ):
         feed = api_odl_files_fixture.sample_data("shared_collection_feed.opds")
         data_source = DataSource.lookup(db.session, "DPLA Exchange", autocreate=True)
-        collection = MockSharedODLAPI.mock_collection(db.session)
+        collection = MockSharedODLAPI.mock_collection(db.session, db.default_library())
         DatabaseTransactionFixture.set_settings(
             collection.integration_configuration,
             **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},

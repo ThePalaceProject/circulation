@@ -1,16 +1,18 @@
+from sqlalchemy.orm import Session
+
 from api.axis import Axis360API
-from core.model import get_one_or_create
+from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
-from tests.fixtures.db import make_default_library
 
 
 class MockAxis360API(Axis360API):
     @classmethod
-    def mock_collection(cls, _db, name="Test Axis 360 Collection"):
+    def mock_collection(
+        cls, _db: Session, library: Library, name: str = "Test Axis 360 Collection"
+    ) -> Collection:
         """Create a mock Axis 360 collection for use in tests."""
-        library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,

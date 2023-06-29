@@ -40,7 +40,8 @@ class TestCollectionSelfTests:
             settings_ctrl_fixture.mock_prior_test_results,
         )
         collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session
+            settings_ctrl_fixture.ctrl.db.session,
+            settings_ctrl_fixture.ctrl.db.default_library(),
         )
 
         # Make sure that HasSelfTest.prior_test_results() was called and that
@@ -74,7 +75,8 @@ class TestCollectionSelfTests:
         )
 
         collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session
+            settings_ctrl_fixture.ctrl.db.session,
+            settings_ctrl_fixture.ctrl.db.default_library(),
         )
 
         # Failed to run self tests
@@ -123,7 +125,8 @@ class TestCollectionSelfTests:
             assert run_self_tests_args[3] == collection
 
         collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session
+            settings_ctrl_fixture.ctrl.db.session,
+            settings_ctrl_fixture.ctrl.db.default_library(),
         )
         # Successfully ran new self tests
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -144,7 +147,8 @@ class TestCollectionSelfTests:
             assert run_self_tests_args[3] == collection
 
         collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session
+            settings_ctrl_fixture.ctrl.db.session,
+            settings_ctrl_fixture.ctrl.db.default_library(),
         )
         collection.protocol = "Non existing protocol"
         # clearing out previous call to mocked run_self_tests
