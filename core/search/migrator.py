@@ -73,9 +73,11 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
             pointer=self._revision.name_for_index(base_name), service=self._service
         )
 
-    def add_documents(self, documents: Iterable[dict]):
+    def add_documents(
+        self, documents: Iterable[dict]
+    ) -> List[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
-        self._receiver.add_documents(documents)
+        return self._receiver.add_documents(documents)
 
     def finish(self) -> None:
         """Finish the migration."""
@@ -97,6 +99,7 @@ class SearchMigrator:
     """A search migrator. This moves a search service to the targeted schema version."""
 
     def __init__(self, revisions: SearchRevisionDirectory, service: SearchService):
+        self._logger = logging.getLogger(SearchMigrator.__name__)
         self._revisions = revisions
         self._service = service
 
@@ -115,6 +118,8 @@ class SearchMigrator:
 
         :raises SearchMigrationException: On errors, but always leaves the system in a usable state.
         """
+
+        self._logger.info(f"starting migration to {base_name} {version}")
 
         try:
             target = self._revisions.available.get(version)

@@ -223,21 +223,6 @@ class TestExternalSearch:
         result = json.loads(test_results[5].result)
         assert {collection.name: 1} == result
 
-    def test_update_mapping(self, external_search_fixture: ExternalSearchFixture):
-        search = external_search_fixture.search
-
-        search.mapping.add_properties({"long": ["new_long_property"]})
-        put_mapping = search._update_index_mapping(dry_run=True)
-        assert "new_long_property" in put_mapping
-        put_mapping = search._update_index_mapping(dry_run=False)
-        assert "new_long_property" in put_mapping
-        put_mapping = search._update_index_mapping(dry_run=True)
-        assert "new_long_property" not in put_mapping
-
-        new_mapping = search.indices.get_mapping(search.works_index)
-        new_mapping = new_mapping[search.works_index]["mappings"]
-        assert "new_long_property" in new_mapping["properties"]
-
 
 class TestSearchV5:
     def test_character_filters(self):
@@ -552,7 +537,7 @@ class TestExternalSearchWithWorks:
 
         # Set up convenient aliases for methods we'll be calling a
         # lot.
-        query = fixture.external_search.search.query_works
+        query = fixture.external_search_index.query_works
         expect = fixture.expect_results
 
         # First, test pagination.
@@ -1135,8 +1120,8 @@ class TestExternalSearchWithWorks:
         search = end_to_end_search_fixture.external_search.search
         data = self._populate_works(end_to_end_search_fixture)
         end_to_end_search_fixture.populate_search_index()
-        search.remove_work(data.moby_dick)
-        search.remove_work(data.moby_duck)
+        end_to_end_search_fixture.external_search_index.remove_work(data.moby_dick)
+        end_to_end_search_fixture.external_search_index.remove_work(data.moby_duck)
 
         # Immediately querying never works, the search index needs to refresh its cache/index/data
         search.indices.refresh()
@@ -1190,7 +1175,7 @@ class TestFacetFilters:
 
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
-            session, search_index_client=fixture.external_search.search
+            session, search_index_client=fixture.external_search_index
         ).run_once_and_update_timestamp()
 
         # Sleep to give the index time to catch up.
@@ -2083,7 +2068,7 @@ class TestFeaturedFacets:
 
         def works(worklist, facets):
             return worklist.works(
-                session, facets, None, fixture.external_search.search, debug=True
+                session, facets, None, search_engine=fixture.external_search, debug=True
             )
 
         def assert_featured(description, worklist, facets, expect):
@@ -4725,7 +4710,9 @@ class TestBulkUpdate:
         w2 = db.work()
         w2.set_presentation_ready()
         w3 = db.work()
-        index = ExternalSearchIndex(_db=db, custom_client_service=SearchServiceFake())
+        index = ExternalSearchIndex(
+            _db=db.session, custom_client_service=SearchServiceFake()
+        )
 
         docs = index.start_updating_search_documents()
         failures = docs.add_documents(
@@ -4850,7 +4837,9 @@ class TestWorkSearchResult:
 
 class TestSearchIndexCoverageProvider:
     def test_operation(self, db: DatabaseTransactionFixture):
-        index = ExternalSearchIndex(_db=db, custom_client_service=SearchServiceFake())
+        index = ExternalSearchIndex(
+            _db=db.session, custom_client_service=SearchServiceFake()
+        )
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
@@ -4957,7 +4946,9 @@ class TestSearchIndexCoverageProvider:
     def test_success(self, db: DatabaseTransactionFixture):
         work = db.work()
         work.set_presentation_ready()
-        index = ExternalSearchIndex(_db=db, custom_client_service=SearchServiceFake())
+        index = ExternalSearchIndex(
+            _db=db.session, custom_client_service=SearchServiceFake()
+        )
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
 
@@ -5401,7 +5392,7 @@ class TestExternalSearchJSONQuery:
         works,
     ):
         query = dict(query=partial_query)
-        resp = fixture.external_search.search.query_works(query, data.filter)
+        resp = fixture.external_search_index.query_works(query, data.filter)
 
         assert len(resp.hits) == len(works)
 

@@ -107,7 +107,7 @@ class EndToEndSearchFixture:
         SearchIndexCoverageProvider(
             self.external_search.db.session,
             search_index_client=self.external_search_index,
-        ).run_once_and_update_timestamp()
+        ).run()
         self.external_search.search.indices.refresh()
 
     @staticmethod
@@ -162,7 +162,7 @@ class EndToEndSearchFixture:
         if isinstance(expect, Work):
             expect = [expect]
         should_be_ordered = kwargs.pop("ordered", True)
-        hits = self.external_search.search.query_works(
+        hits = self.external_search_index.query_works(
             query_string, filter, pagination, debug=True, **kwargs
         )
 
@@ -185,7 +185,7 @@ class EndToEndSearchFixture:
         """
         should_be_ordered = kwargs.pop("ordered", True)
         resultset = list(
-            self.external_search.search.query_works_multi(queries, debug=True, **kwargs)
+            self.external_search_index.query_works_multi(queries, debug=True, **kwargs)
         )
         for i, expect_one_query in enumerate(expect):
             hits = resultset[i]
@@ -220,7 +220,7 @@ class EndToEndSearchFixture:
             # filter into count_works() we'll get all the results we
             # got from query_works(). Take the opportunity to verify
             # that count_works() gives the right answer.
-            count = self.external_search.search.count_works(filter)
+            count = self.external_search_index.count_works(filter)
             assert count == len(expect)
 
     def close(self):

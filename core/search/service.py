@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
 import opensearchpy.helpers
-from opensearch_dsl import Search
+from opensearch_dsl import MultiSearch, Search
 from opensearchpy import NotFoundError, OpenSearch, RequestError
 
 from core.search.revision import SearchSchemaRevision
@@ -114,6 +114,14 @@ class SearchService(ABC):
     def search_client(self) -> Search:
         """Return the underlying search client."""
 
+    @abstractmethod
+    def search_multi_client(self) -> MultiSearch:
+        """Return the underlying search client."""
+
+    @abstractmethod
+    def index_remove_document(self, pointer: str, id: int):
+        """Remove a specific document from the given index."""
+
 
 class SearchServiceOpensearch1(SearchService):
     """The real Opensearch 1.x service."""
@@ -122,6 +130,7 @@ class SearchServiceOpensearch1(SearchService):
         self._logger = logging.getLogger(SearchServiceOpensearch1.__name__)
         self._client = client
         self._search = Search(using=self._client)
+        self._multi_search = MultiSearch(using=self._client)
 
     def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
         try:
@@ -201,6 +210,11 @@ class SearchServiceOpensearch1(SearchService):
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]
     ) -> List[SearchServiceFailedDocument]:
+        self._logger.info(f"submitting documents to index {pointer}")
+
+        for document in documents:
+            document["_index"] = pointer
+
         # See: Sources for "streaming_bulk":
         # https://github.com/opensearch-project/opensearch-py/blob/db972e615b9156b4e364091d6a893d64fb3ef4f3/opensearchpy/helpers/actions.py#L267
         # The documentation is incredibly vague about what the function actually returns, but these
@@ -270,6 +284,9 @@ class SearchServiceOpensearch1(SearchService):
     def search_client(self) -> Search:
         return self._search
 
+    def search_multi_client(self) -> MultiSearch:
+        return self._multi_search
+
     def read_pointer_name(self, base_name: str) -> str:
         return f"{base_name}-search-read"
 
@@ -279,3 +296,6 @@ class SearchServiceOpensearch1(SearchService):
     @staticmethod
     def _empty(base_name):
         return f"{base_name}-empty"
+
+    def index_remove_document(self, pointer: str, id: int):
+        self._client.delete(index=pointer, id=id, doc_type="_doc")

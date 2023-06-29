@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 
 from attr import define
 from flask_babel import lazy_gettext as _
-from opensearch_dsl import SF, MultiSearch, Search
+from opensearch_dsl import SF, Search
 from opensearch_dsl.query import (
     Bool,
     DisMax,
@@ -356,7 +356,7 @@ class ExternalSearchIndex(HasSelfTests):
             (query string, Filter, Pagination) 3-tuple.
         """
         # Create a MultiSearch.
-        multi = MultiSearch(using=self.__client)
+        multi = self._search_service.search_multi_client()
 
         # Give it a Search object for every query definition passed in
         # as part of `queries`.
@@ -430,9 +430,6 @@ class ExternalSearchIndex(HasSelfTests):
 
         # Add/update any works that need adding/updating.
         docs = Work.to_search_documents(needs_add)
-
-        for doc in docs:
-            doc["_index"] = self._search_write_pointer
         time2 = time.time()
 
         self.log.info(
@@ -442,9 +439,9 @@ class ExternalSearchIndex(HasSelfTests):
 
     def remove_work(self, work):
         """Remove the search document for `work` from the search index."""
-        args = dict(index=self._search_read_pointer, id=work.id)
-        args["doc_type"] = "_doc"
-        raise NotImplementedError()
+        self._search_service.index_remove_document(
+            pointer=self._search_read_pointer, id=work.id
+        )
 
     def _run_self_tests(self, _db, in_testing=False):
         # Helper methods for setting up the self-tests:
