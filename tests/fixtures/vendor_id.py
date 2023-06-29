@@ -12,7 +12,11 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class VendorIDFixture:
-    """A fixture that knows how to set up an Adobe Vendor ID integration."""
+    """
+    A fixture that knows how to set up a registry that provides an
+    Adobe vendor id, and allows libraries to generate short client
+    tokens for verification by the registry.
+    """
 
     TEST_VENDOR_ID = "vendor id"
 
