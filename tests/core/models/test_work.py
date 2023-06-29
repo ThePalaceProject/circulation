@@ -252,10 +252,10 @@ class TestWork:
 
         # The summary has now been chosen.
         assert chosen_summary == work.summary.representation.content.decode("utf-8")
-
+        assert work.last_update_time is not None
         # The last update time has been set.
         # Updating availability also modified work.last_update_time.
-        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)  # type: ignore[unreachable]
 
         # The index has not been updated.
         assert [] == list(index.docs.items())

@@ -111,6 +111,7 @@ class TestCachedFeed:
 
         # The timestamp is recent.
         timestamp1 = result1.timestamp
+        assert timestamp1 is not None
         assert (now - timestamp1).total_seconds() < 2
 
         # Relevant information from the named tuple returned by

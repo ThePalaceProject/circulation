@@ -666,6 +666,7 @@ class TestLibraryAnnotator:
         # the secret.
         token = token.text
         authdata = AuthdataUtility.from_config(library)
+        assert authdata is not None
         decoded = authdata.decode_short_client_token(token)
         expected_url = ConfigurationSetting.for_library(
             Configuration.WEBSITE_URL, library
@@ -1241,6 +1242,7 @@ class TestLibraryAnnotator:
         # last_loan_activity_sync is tracked at the millisecond level
         # and Last-Modified is tracked at the second level.)
 
+        assert response.last_modified is not None
         assert (
             patron.last_loan_activity_sync - response.last_modified
         ).total_seconds() < 1
