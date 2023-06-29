@@ -2068,7 +2068,11 @@ class TestFeaturedFacets:
 
         def works(worklist, facets):
             return worklist.works(
-                session, facets, None, search_engine=fixture.external_search, debug=True
+                session,
+                facets,
+                None,
+                search_engine=fixture.external_search_index,
+                debug=True,
             )
 
         def assert_featured(description, worklist, facets, expect):
@@ -2120,7 +2124,7 @@ class TestFeaturedFacets:
         # available books will show up before all of the unavailable
         # books.
         only_availability_matters = worklist.works(
-            session, facets, None, fixture.external_search.search, debug=True
+            session, facets, None, fixture.external_search_index, debug=True
         )
         assert 5 == len(only_availability_matters)
         last_two = only_availability_matters[-2:]
