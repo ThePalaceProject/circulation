@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional, Tuple
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
+from api.circulation import LoanInfo
 from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from core.model import (
@@ -171,7 +172,7 @@ class ODLTestFixture:
         pool: LicensePool,
         db: DatabaseTransactionFixture,
         loan_url: str,
-    ) -> Callable[[], Tuple[Loan, Any]]:
+    ) -> Callable[[], Tuple[LoanInfo, Any]]:
         """Create a function that, when evaluated, performs a checkout."""
 
         def c():
@@ -229,7 +230,7 @@ class ODLAPITestFixture:
         self.collection = collection
         self.work = work
         self.license = license
-        self.api: ODLAPI = api
+        self.api = api
         self.patron = patron
         self.pool = license.license_pool  # type: ignore
         self.client = client
@@ -246,7 +247,7 @@ class ODLAPITestFixture:
         loan_url: Optional[str] = None,
         patron: Optional[Patron] = None,
         pool: Optional[LicensePool] = None,
-    ) -> Tuple[Loan, Any]:
+    ) -> Tuple[LoanInfo, Any]:
         patron = patron or self.patron
         pool = pool or self.pool
         loan_url = loan_url or self.db.fresh_url()

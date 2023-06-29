@@ -62,7 +62,7 @@ class OverdriveAPIFixture:
             library,
             api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI},
         )
-        self.api: OverdriveAPI = self.circulation.api_for_collection[self.collection.id]
+        self.api: MockOverdriveAPI = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         os.environ[
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
         ] = "TestingKey"
@@ -232,7 +232,7 @@ class TestOverdriveAPI:
         def explode(*args, **kwargs):
             raise Exception("Failure!")
 
-        overdrive_api_fixture.api.check_creds = explode
+        overdrive_api_fixture.api.check_creds = explode  # type: ignore[method-assign]
 
         # Only one test will be run.
         [check_creds] = overdrive_api_fixture.api._run_self_tests(
@@ -392,7 +392,7 @@ class TestOverdriveAPI:
         # However, if _process_checkout_error is able to recover from
         # the error and ends up returning something, the return value
         # is propagated from checkout().
-        api.PROCESS_CHECKOUT_ERROR_RESULT = "Actually, I was able to recover"
+        api.PROCESS_CHECKOUT_ERROR_RESULT = "Actually, I was able to recover"  # type: ignore[assignment]
         api.queue_response(400, content=api_response)
         assert "Actually, I was able to recover" == api.checkout(
             patron, pin, pool, "internal format is ignored"
@@ -446,26 +446,26 @@ class TestOverdriveAPI:
             return m(patron, pin, pool, error)
 
         # Errors not specifically known become generic CannotLoan exceptions.
-        with pytest.raises(CannotLoan) as excinfo:  # type: ignore
+        with pytest.raises(CannotLoan) as excinfo:
             with_error_code("WeirdError")
         assert "WeirdError" in str(excinfo.value)
 
         # If the data passed in to _process_checkout_error is not what
         # the real Overdrive API would send, the error is even more
         # generic.
-        with pytest.raises(CannotLoan) as excinfo:  # type: ignore
+        with pytest.raises(CannotLoan) as excinfo:
             m(patron, pin, pool, "Not a dict")
         assert "Unknown Error" in str(excinfo.value)
-        with pytest.raises(CannotLoan) as excinfo:  # type: ignore
+        with pytest.raises(CannotLoan) as excinfo:
             m(patron, pin, pool, dict(errorCodePresent=False))
         assert "Unknown Error" in str(excinfo.value)
 
         # Some known errors become specific subclasses of CannotLoan.
         pytest.raises(
-            PatronLoanLimitReached, with_error_code, "PatronHasExceededCheckoutLimit"  # type: ignore
+            PatronLoanLimitReached, with_error_code, "PatronHasExceededCheckoutLimit"
         )
         pytest.raises(
-            PatronLoanLimitReached,  # type: ignore
+            PatronLoanLimitReached,
             with_error_code,
             "PatronHasExceededCheckoutLimit_ForCPC",
         )
@@ -476,7 +476,7 @@ class TestOverdriveAPI:
         # First, if the error is "NoCopiesAvailable", we know we have
         # out-of-date availability information and we need to call
         # update_licensepool before raising NoAvailbleCopies().
-        pytest.raises(NoAvailableCopies, with_error_code, "NoCopiesAvailable")  # type: ignore
+        pytest.raises(NoAvailableCopies, with_error_code, "NoCopiesAvailable")
         assert identifier.identifier == api.update_licensepool_called_with.pop()
 
         # If the error is "TitleAlreadyCheckedOut", then the problem
@@ -643,25 +643,25 @@ class TestOverdriveAPI:
             return api.process_place_hold_response(response, None, None, None)
 
         # Some error messages result in specific CirculationExceptions.
-        pytest.raises(CannotRenew, process_error_response, "NotWithinRenewalWindow")  # type: ignore
+        pytest.raises(CannotRenew, process_error_response, "NotWithinRenewalWindow")
         pytest.raises(
-            PatronHoldLimitReached, process_error_response, "PatronExceededHoldLimit"  # type: ignore
+            PatronHoldLimitReached, process_error_response, "PatronExceededHoldLimit"
         )
 
         # An unrecognized error message results in a generic
         # CannotHold.
-        pytest.raises(CannotHold, process_error_response, "SomeOtherError")  # type: ignore
+        pytest.raises(CannotHold, process_error_response, "SomeOtherError")
 
         # Same if the error message is missing or the response can't be
         # processed.
-        pytest.raises(CannotHold, process_error_response, dict())  # type: ignore
-        pytest.raises(CannotHold, process_error_response, None)  # type: ignore
+        pytest.raises(CannotHold, process_error_response, dict())
+        pytest.raises(CannotHold, process_error_response, None)
 
         # Same if the error code isn't in the 4xx or 2xx range
         # (which shouldn't happen in real life).
         response = MockRequestsResponse(999)
         pytest.raises(
-            CannotHold, api.process_place_hold_response, response, None, None, None  # type: ignore
+            CannotHold, api.process_place_hold_response, response, None, None, None
         )
 
         # At this point patron and book details become important --
@@ -932,7 +932,7 @@ class TestOverdriveAPI:
         )
         overdrive_api_fixture.api.queue_response(400, content=over_hold_limit)
         pytest.raises(
-            PatronHoldLimitReached,  # type: ignore
+            PatronHoldLimitReached,
             overdrive_api_fixture.api.place_hold,
             db.patron(),
             "pin",
@@ -1035,7 +1035,7 @@ class TestOverdriveAPI:
 
         # Trying to get a fulfillment link raises an exception.
         pytest.raises(
-            FormatNotAvailable,  # type: ignore
+            FormatNotAvailable,
             overdrive_api_fixture.api.get_fulfillment_link,
             db.patron(),
             "pin",
@@ -1062,7 +1062,7 @@ class TestOverdriveAPI:
         overdrive_api_fixture.api.queue_response(200, content=bibliographic)
 
         pytest.raises(
-            FormatNotAvailable,  # type: ignore
+            FormatNotAvailable,
             overdrive_api_fixture.api.fulfill,
             db.patron(),
             "pin",
@@ -1665,8 +1665,8 @@ class TestOverdriveAPI:
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         # but mock the request methods
-        od_api._do_post = MagicMock()
-        od_api._do_get = MagicMock()
+        od_api._do_post = MagicMock()  # type: ignore[method-assign]
+        od_api._do_get = MagicMock()  # type: ignore[method-assign]
         response_credential = od_api.refresh_patron_access_token(
             credential, patron, "a pin", is_fulfillment=True
         )
@@ -1702,11 +1702,11 @@ class TestOverdriveAPI:
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
-        od_api.get_download_link = MagicMock(return_value=None)
+        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})  # type: ignore[method-assign]
+        od_api.get_download_link = MagicMock(return_value=None)  # type: ignore[method-assign]
 
         exc = pytest.raises(
-            CannotFulfill,  # type: ignore
+            CannotFulfill,
             od_api.get_fulfillment_link,
             *(patron, "pin", "odid", "audiobook-overdrive-manifest"),
         )
@@ -1716,7 +1716,7 @@ class TestOverdriveAPI:
         os.environ.pop(
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
         )
-        with pytest.raises(CannotFulfill):  # type: ignore
+        with pytest.raises(CannotFulfill):
             od_api.fulfillment_authorization_header
 
     def test_no_drm_fulfillment(self, overdrive_api_fixture: OverdriveAPIFixture):
@@ -1746,14 +1746,14 @@ class TestOverdriveAPI:
             api_data = json.load(fp)
 
         # Mock out the flow
-        od_api.get_loan = MagicMock(return_value=api_data["loan"])
+        od_api.get_loan = MagicMock(return_value=api_data["loan"])  # type: ignore[method-assign]
 
         mock_lock_in_response = create_autospec(Response)
         mock_lock_in_response.status_code = 200
         mock_lock_in_response.json.return_value = api_data["lock_in"]
-        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
+        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)  # type: ignore[method-assign]
 
-        od_api.get_fulfillment_link_from_download_link = MagicMock(
+        od_api.get_fulfillment_link_from_download_link = MagicMock(  # type: ignore[method-assign]
             return_value=(
                 "https://example.org/epub-redirect",
                 "application/epub+zip",
@@ -1852,7 +1852,7 @@ class TestOverdriveAPICredentials:
             db.session, library, api_map={ExternalIntegration.OVERDRIVE: MockAPI}
         )
         od_apis = {
-            api.collection.name: api
+            api.collection.name: api  # type: ignore[union-attr]
             for api in list(circulation.api_for_collection.values())
         }
 
@@ -1863,7 +1863,7 @@ class TestOverdriveAPICredentials:
         for name in list(expected_credentials.keys()) + list(
             reversed(list(expected_credentials.keys()))
         ):
-            credential = od_apis[name].get_patron_credential(patron, pin)
+            credential = od_apis[name].get_patron_credential(patron, pin)  # type: ignore[union-attr]
             assert expected_credentials[name] == credential.credential
 
     def test_fulfillment_credentials_testing_keys(
@@ -1929,7 +1929,7 @@ class TestExtractData:
         )
 
         pytest.raises(
-            NoAcceptableFormat,  # type: ignore
+            NoAcceptableFormat,
             MockOverdriveAPI.get_download_link,
             json,
             "no-such-format",
@@ -1943,7 +1943,7 @@ class TestExtractData:
             "checkout_response_book_fulfilled_on_kindle.json"
         )
         pytest.raises(
-            FulfilledOnIncompatiblePlatform,  # type: ignore
+            FulfilledOnIncompatiblePlatform,
             MockOverdriveAPI.get_download_link,
             json,
             "ebook-epub-adobe",

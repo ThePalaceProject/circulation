@@ -781,7 +781,7 @@ class CirculationAPI:
         db: Session,
         library: Library,
         analytics: Optional[Analytics] = None,
-        api_map: Optional[Dict[int, Type[BaseCirculationAPI]]] = None,
+        api_map: Optional[Dict[str, Type[BaseCirculationAPI]]] = None,
         fulfillment_post_processors_map: Optional[
             Dict[int, Type[CirculationFulfillmentPostProcessor]]
         ] = None,

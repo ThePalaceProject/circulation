@@ -46,6 +46,8 @@ class TestOPDSImportCoverageProvider:
             SERVICE_NAME = "Test provider"
             DATA_SOURCE_NAME = DataSource.OA_CONTENT_SERVER
 
+            mapping: dict
+
             # Mock the identifier mapping
             def create_identifier_mapping(self, batch):
                 return self.mapping

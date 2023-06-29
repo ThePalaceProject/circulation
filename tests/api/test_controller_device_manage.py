@@ -1,7 +1,7 @@
 import pytest
 from flask import url_for
 
-from api.adobe_vendor_id import AuthdataUtility
+from api.adobe_vendor_id import AuthdataUtility, DeviceManagementProtocolController
 from api.problem_details import INVALID_CREDENTIALS
 from core.model import DataSource
 from core.util.problem_detail import ProblemDetail
@@ -30,7 +30,7 @@ class DeviceManagementFixture(ControllerFixture):
 
         # Now the controller is enabled and we can use it in this
         # test.
-        self.controller = self.manager.adobe_device_management
+        self.controller: DeviceManagementProtocolController = self.manager.adobe_device_management  # type: ignore[assignment]
 
 
 @pytest.fixture(scope="function")
@@ -93,12 +93,12 @@ class TestDeviceManagementProtocolController:
             # We just registered a new device with the patron. This
             # automatically created an appropriate Credential for
             # them.
-            [credential] = device_fixture.default_patron.credentials  # type: ignore
-            assert DataSource.INTERNAL_PROCESSING == credential.data_source.name  # type: ignore
-            assert AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER == credential.type  # type: ignore
+            [credential] = device_fixture.default_patron.credentials
+            assert DataSource.INTERNAL_PROCESSING == credential.data_source.name
+            assert AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER == credential.type
 
             assert ["device"] == [
-                x.device_identifier for x in credential.drm_device_identifiers  # type: ignore
+                x.device_identifier for x in credential.drm_device_identifiers
             ]
 
     def test_device_id_list_handler_get_success(

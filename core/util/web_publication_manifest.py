@@ -39,7 +39,10 @@ class Manifest(JSONable):
 
     DEFAULT_CONTEXT = "http://readium.org/webpub/default.jsonld"
     DEFAULT_TYPE = BOOK_TYPE
+
     links: list = []
+    readingOrder: list = []
+    resources: list = []
 
     def __init__(self, context=None, type=None):
         self.context = context or self.DEFAULT_CONTEXT

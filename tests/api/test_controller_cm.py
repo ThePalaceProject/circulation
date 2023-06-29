@@ -31,10 +31,8 @@ class TestCirculationManager:
         # which are about to be reloaded.
         manager._external_search = object()
         manager.adobe_device_management = object()
-        manager.oauth_controller = object()
         manager.auth = object()
         manager.shared_collection_api = object()
-        manager.new_custom_index_views = object()
         manager.patron_web_domains = object()
 
         # But some fields are _not_ about to be reloaded
@@ -67,7 +65,7 @@ class TestCirculationManager:
             return None
 
         old_for_library = CustomIndexView.for_library
-        CustomIndexView.for_library = mock_for_library
+        CustomIndexView.for_library = mock_for_library  # type: ignore[method-assign]
 
         # We also set up some configuration settings that will
         # be loaded.
@@ -155,7 +153,7 @@ class TestCirculationManager:
         } == manager.patron_web_domains
 
         # Restore the CustomIndexView.for_library implementation
-        CustomIndexView.for_library = old_for_library
+        CustomIndexView.for_library = old_for_library  # type: ignore[method-assign]
 
     def test_exception_during_external_search_initialization_is_stored(
         self, circulation_fixture: CirculationControllerFixture
@@ -332,7 +330,7 @@ class TestCirculationManager:
         admin = Admin()
         controller = MockAdminSignInController()
 
-        circulation_fixture.manager.admin_sign_in_controller = controller
+        circulation_fixture.manager.admin_sign_in_controller = controller  # type: ignore[assignment]
 
         with circulation_fixture.request_context_with_library("/"):
             # If you don't specify a max cache age, nothing happens,
@@ -404,4 +402,4 @@ class TestCirculationManager:
             # Because the patron didn't ask for a specific title, we
             # respond that the lane doesn't exist rather than saying
             # they've been denied access to age-inappropriate content.
-            assert NO_SUCH_LANE.uri == facets.uri  # type: ignore
+            assert NO_SUCH_LANE.uri == facets.uri

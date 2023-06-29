@@ -33,9 +33,10 @@ class TestJWEProvider:
             hours=1
         )
         assert header["typ"] == "JWE"
-        assert header["kid"] == PatronJWEAccessTokenProvider.get_current_key(
-            db.session
-        ).get("kid")
+
+        current_key = PatronJWEAccessTokenProvider.get_current_key(db.session)
+        assert isinstance(current_key, jwk.JWK)
+        assert header["kid"] == current_key.get("kid")
 
     def test_get_current_key(self, db: DatabaseTransactionFixture):
         key1 = PatronJWEAccessTokenProvider.get_current_key(db.session)
@@ -45,6 +46,7 @@ class TestJWEProvider:
         with pytest.raises(ValueError):
             PatronJWEAccessTokenProvider.get_current_key(db.session, kid="not-the-kid")
 
+        assert isinstance(key1, jwk.JWK)
         assert (
             PatronJWEAccessTokenProvider.get_current_key(
                 db.session, kid=key1.get("kid")
@@ -58,6 +60,7 @@ class TestJWEProvider:
             db.session, patron, "password"
         )
         decoded = PatronJWEAccessTokenProvider.decode_token(db.session, token)
+        assert isinstance(decoded, dict)
         assert decoded["id"] == patron.id
         assert decoded["pwd"] == "password"
         assert decoded["typ"] == "patron"

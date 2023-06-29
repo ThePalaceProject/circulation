@@ -706,7 +706,7 @@ class TestInstanceInitializationScript:
         with patch("scripts.SessionManager") as session_manager:
             with patch("scripts.pg_advisory_lock") as advisory_lock:
                 script = InstanceInitializationScript()
-                script.initialize = MagicMock()
+                script.initialize = MagicMock()  # type: ignore[method-assign]
                 script.run()
 
                 advisory_lock.assert_called_once_with(
@@ -721,8 +721,8 @@ class TestInstanceInitializationScript:
         # as necessary.
         with patch("scripts.inspect") as inspect:
             script = InstanceInitializationScript()
-            script.migrate_database = MagicMock()
-            script.initialize_database = MagicMock()
+            script.migrate_database = MagicMock()  # type: ignore[method-assign]
+            script.initialize_database = MagicMock()  # type: ignore[method-assign]
 
             # If the database is uninitialized, initialize_database() is called.
             inspect().has_table.return_value = False
@@ -770,6 +770,7 @@ class TestInstanceInitializationScript:
         # Make sure we find alembic.ini for script command
         mock_connection = MagicMock()
         conf = InstanceInitializationScript._get_alembic_config(mock_connection)
+        assert isinstance(conf.config_file_name, str)
         assert Path(conf.config_file_name).exists()
         assert conf.config_file_name.endswith("alembic.ini")
         assert conf.attributes["connection"] == mock_connection.engine
@@ -1490,7 +1491,7 @@ class TestNovelistSnapshotScript:
             pass
 
         oldNovelistConfig = NoveListAPI.from_config
-        NoveListAPI.from_config = self.mockNoveListAPI
+        NoveListAPI.from_config = self.mockNoveListAPI  # type: ignore[method-assign]
 
         l1 = db.library()
         cmd_args = [l1.name]
@@ -1501,7 +1502,7 @@ class TestNovelistSnapshotScript:
 
         assert params[0] == l1
 
-        NoveListAPI.from_config = oldNovelistConfig
+        NoveListAPI.from_config = oldNovelistConfig  # type: ignore[method-assign]
 
 
 class TestLocalAnalyticsExportScript:

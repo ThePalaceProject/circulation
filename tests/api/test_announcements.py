@@ -17,8 +17,8 @@ class TestAnnouncements:
         l = db.default_library()
 
         # By default, a library has no announcements.
-        announcements = Announcements.for_library(l)
-        assert [] == announcements.announcements
+        library_announcements = Announcements.for_library(l)
+        assert [] == library_announcements.announcements
 
         # Give the library an announcement by setting its
         # "announcements" ConfigurationSetting.

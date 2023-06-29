@@ -212,6 +212,8 @@ class MockSharedCollectionAPI(SharedCollectionAPI):
 
 
 class MockCirculationManager(CirculationManager):
+    d_circulation: MockCirculationAPI
+
     def setup_search(self):
         """Set up a search client."""
         return MockExternalSearchIndex()

@@ -95,7 +95,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can have many associated Credentials.
     credentials: Mapped[List[Credential]] = relationship(
-        "Credential", backref="data_source"
+        "Credential", back_populates="data_source"
     )
 
     # One DataSource can generate many CustomLists.

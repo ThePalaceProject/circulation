@@ -31,7 +31,7 @@ class TestIndex:
 
     def test_authentication_document(self, fixture: RouteTestFixture):
         url = "/authentication_document"
-        fixture.assert_request_calls(url, fixture.controller.authentication_document)
+        fixture.assert_request_calls(url, fixture.controller.authentication_document)  # type: ignore[union-attr]
 
 
 class TestOPDSFeed:
@@ -46,7 +46,7 @@ class TestOPDSFeed:
     def test_acquisition_groups(self, fixture: RouteTestFixture):
         # An incoming lane identifier is passed in to the groups()
         # method.
-        method = fixture.controller.groups
+        method = fixture.controller.groups  # type: ignore[union-attr]
         fixture.assert_request_calls("/groups", method, None)
         fixture.assert_request_calls(
             "/groups/<lane_identifier>", method, "<lane_identifier>"
@@ -56,28 +56,28 @@ class TestOPDSFeed:
         # An incoming lane identifier is passed in to the feed()
         # method.
         url = "/feed"
-        fixture.assert_request_calls(url, fixture.controller.feed, None)
+        fixture.assert_request_calls(url, fixture.controller.feed, None)  # type: ignore[union-attr]
         url = "/feed/<lane_identifier>"
-        fixture.assert_request_calls(url, fixture.controller.feed, "<lane_identifier>")
+        fixture.assert_request_calls(url, fixture.controller.feed, "<lane_identifier>")  # type: ignore[union-attr]
 
     def test_navigation_feed(self, fixture: RouteTestFixture):
         # An incoming lane identifier is passed in to the navigation_feed()
         # method.
         url = "/navigation"
-        fixture.assert_request_calls(url, fixture.controller.navigation, None)
+        fixture.assert_request_calls(url, fixture.controller.navigation, None)  # type: ignore[union-attr]
         url = "/navigation/<lane_identifier>"
         fixture.assert_request_calls(
-            url, fixture.controller.navigation, "<lane_identifier>"
+            url, fixture.controller.navigation, "<lane_identifier>"  # type: ignore[union-attr]
         )
 
     def test_crawlable_library_feed(self, fixture: RouteTestFixture):
         url = "/crawlable"
-        fixture.assert_request_calls(url, fixture.controller.crawlable_library_feed)
+        fixture.assert_request_calls(url, fixture.controller.crawlable_library_feed)  # type: ignore[union-attr]
 
     def test_crawlable_list_feed(self, fixture: RouteTestFixture):
         url = "/lists/<list_name>/crawlable"
         fixture.assert_request_calls(
-            url, fixture.controller.crawlable_list_feed, "<list_name>"
+            url, fixture.controller.crawlable_list_feed, "<list_name>"  # type: ignore[union-attr]
         )
 
     def test_crawlable_collection_feed(self, fixture: RouteTestFixture):
@@ -90,21 +90,21 @@ class TestOPDSFeed:
 
     def test_lane_search(self, fixture: RouteTestFixture):
         url = "/search"
-        fixture.assert_request_calls(url, fixture.controller.search, None)
+        fixture.assert_request_calls(url, fixture.controller.search, None)  # type: ignore[union-attr]
 
         url = "/search/<lane_identifier>"
         fixture.assert_request_calls(
-            url, fixture.controller.search, "<lane_identifier>"
+            url, fixture.controller.search, "<lane_identifier>"  # type: ignore[union-attr]
         )
 
     def test_qa_feed(self, fixture: RouteTestFixture):
         url = "/feed/qa"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.qa_feed)
+        fixture.assert_authenticated_request_calls(url, fixture.controller.qa_feed)  # type: ignore[union-attr]
 
     def test_qa_series_feed(self, fixture: RouteTestFixture):
         url = "/feed/qa/series"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.qa_series_feed
+            url, fixture.controller.qa_series_feed  # type: ignore[union-attr]
         )
 
 
@@ -118,7 +118,7 @@ class TestMARCRecord:
 
     def test_marc_page(self, fixture: RouteTestFixture):
         url = "/marc"
-        fixture.assert_request_calls(url, fixture.controller.download_page)
+        fixture.assert_request_calls(url, fixture.controller.download_page)  # type: ignore[union-attr]
 
 
 class TestSharedCollection:
@@ -132,12 +132,12 @@ class TestSharedCollection:
 
     def test_shared_collection_info(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>"
-        fixture.assert_request_calls(url, fixture.controller.info, "<collection_name>")
+        fixture.assert_request_calls(url, fixture.controller.info, "<collection_name>")  # type: ignore[union-attr]
 
     def test_shared_collection_register(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/register"
         fixture.assert_request_calls(
-            url, fixture.controller.register, "<collection_name>", http_method="POST"
+            url, fixture.controller.register, "<collection_name>", http_method="POST"  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "POST")
 
@@ -145,7 +145,7 @@ class TestSharedCollection:
         url = "/collections/<collection_name>/<identifier_type>/<identifier>/borrow"
         fixture.assert_request_calls_method_using_identifier(
             url,
-            fixture.controller.borrow,
+            fixture.controller.borrow,  # type: ignore[union-attr]
             "<collection_name>",
             "<identifier_type>",
             "<identifier>",
@@ -156,33 +156,33 @@ class TestSharedCollection:
     def test_shared_collection_borrow_hold_id(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/holds/<hold_id>/borrow"
         fixture.assert_request_calls(
-            url, fixture.controller.borrow, "<collection_name>", None, None, "<hold_id>"
+            url, fixture.controller.borrow, "<collection_name>", None, None, "<hold_id>"  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
     def test_shared_collection_loan_info(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/loans/<loan_id>"
         fixture.assert_request_calls(
-            url, fixture.controller.loan_info, "<collection_name>", "<loan_id>"
+            url, fixture.controller.loan_info, "<collection_name>", "<loan_id>"  # type: ignore[union-attr]
         )
 
     def test_shared_collection_revoke_loan(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/loans/<loan_id>/revoke"
         fixture.assert_request_calls(
-            url, fixture.controller.revoke_loan, "<collection_name>", "<loan_id>"
+            url, fixture.controller.revoke_loan, "<collection_name>", "<loan_id>"  # type: ignore[union-attr]
         )
 
     def test_shared_collection_fulfill_no_mechanism(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/loans/<loan_id>/fulfill"
         fixture.assert_request_calls(
-            url, fixture.controller.fulfill, "<collection_name>", "<loan_id>", None
+            url, fixture.controller.fulfill, "<collection_name>", "<loan_id>", None  # type: ignore[union-attr]
         )
 
     def test_shared_collection_fulfill_with_mechanism(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/loans/<loan_id>/fulfill/<mechanism_id>"
         fixture.assert_request_calls(
             url,
-            fixture.controller.fulfill,
+            fixture.controller.fulfill,  # type: ignore[union-attr]
             "<collection_name>",
             "<loan_id>",
             "<mechanism_id>",
@@ -191,13 +191,13 @@ class TestSharedCollection:
     def test_shared_collection_hold_info(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/holds/<hold_id>"
         fixture.assert_request_calls(
-            url, fixture.controller.hold_info, "<collection_name>", "<hold_id>"
+            url, fixture.controller.hold_info, "<collection_name>", "<hold_id>"  # type: ignore[union-attr]
         )
 
     def test_shared_collection_revoke_hold(self, fixture: RouteTestFixture):
         url = "/collections/<collection_name>/holds/<hold_id>/revoke"
         fixture.assert_request_calls(
-            url, fixture.controller.revoke_hold, "<collection_name>", "<hold_id>"
+            url, fixture.controller.revoke_hold, "<collection_name>", "<hold_id>"  # type: ignore[union-attr]
         )
 
 
@@ -214,7 +214,7 @@ class TestProfileController:
         url = "/patrons/me"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.protocol,
+            fixture.controller.protocol,  # type: ignore[union-attr]
         )
 
 
@@ -231,7 +231,7 @@ class TestLoansController:
         url = "/loans"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.sync,
+            fixture.controller.sync,  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "GET", "HEAD")
 
@@ -239,7 +239,7 @@ class TestLoansController:
         url = "/works/<identifier_type>/<identifier>/borrow"
         fixture.assert_request_calls_method_using_identifier(
             url,
-            fixture.controller.borrow,
+            fixture.controller.borrow,  # type: ignore[union-attr]
             "<identifier_type>",
             "<identifier>",
             None,
@@ -250,7 +250,7 @@ class TestLoansController:
         url = "/works/<identifier_type>/<identifier>/borrow/<mechanism_id>"
         fixture.assert_request_calls_method_using_identifier(
             url,
-            fixture.controller.borrow,
+            fixture.controller.borrow,  # type: ignore[union-attr]
             "<identifier_type>",
             "<identifier>",
             "<mechanism_id>",
@@ -264,18 +264,18 @@ class TestLoansController:
         # open-access titles.
         url = "/works/<license_pool_id>/fulfill"
         fixture.assert_request_calls(
-            url, fixture.controller.fulfill, "<license_pool_id>", None, None
+            url, fixture.controller.fulfill, "<license_pool_id>", None, None  # type: ignore[union-attr]
         )
 
         url = "/works/<license_pool_id>/fulfill/<mechanism_id>"
         fixture.assert_request_calls(
-            url, fixture.controller.fulfill, "<license_pool_id>", "<mechanism_id>", None
+            url, fixture.controller.fulfill, "<license_pool_id>", "<mechanism_id>", None  # type: ignore[union-attr]
         )
 
         url = "/works/<license_pool_id>/fulfill/<mechanism_id>/<part>"
         fixture.assert_request_calls(
             url,
-            fixture.controller.fulfill,
+            fixture.controller.fulfill,  # type: ignore[union-attr]
             "<license_pool_id>",
             "<mechanism_id>",
             "<part>",
@@ -284,7 +284,7 @@ class TestLoansController:
     def test_revoke_loan_or_hold(self, fixture: RouteTestFixture):
         url = "/loans/<license_pool_id>/revoke"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.revoke, "<license_pool_id>"
+            url, fixture.controller.revoke, "<license_pool_id>"  # type: ignore[union-attr]
         )
 
         # TODO: DELETE shouldn't be in here, but "DELETE
@@ -297,7 +297,7 @@ class TestLoansController:
         url = "/loans/<identifier_type>/<identifier>"
         fixture.assert_request_calls_method_using_identifier(
             url,
-            fixture.controller.detail,
+            fixture.controller.detail,  # type: ignore[union-attr]
             "<identifier_type>",
             "<identifier>",
             authenticated=True,
@@ -316,13 +316,13 @@ class TestAnnotationsController:
 
     def test_annotations(self, fixture: RouteTestFixture):
         url = "/annotations/"
-        fixture.assert_authenticated_request_calls(url, fixture.controller.container)
+        fixture.assert_authenticated_request_calls(url, fixture.controller.container)  # type: ignore[union-attr]
         fixture.assert_supported_methods(url, "HEAD", "GET", "POST")
 
     def test_annotation_detail(self, fixture: RouteTestFixture):
         url = "/annotations/<annotation_id>"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.detail, "<annotation_id>"
+            url, fixture.controller.detail, "<annotation_id>"  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "HEAD", "GET", "DELETE")
 
@@ -330,7 +330,7 @@ class TestAnnotationsController:
         url = "/annotations/<identifier_type>/<identifier>"
         fixture.assert_request_calls_method_using_identifier(
             url,
-            fixture.controller.container_for_work,
+            fixture.controller.container_for_work,  # type: ignore[union-attr]
             "<identifier_type>",
             "<identifier>",
             authenticated=True,
@@ -349,7 +349,7 @@ class TestURNLookupController:
 
     def test_work(self, fixture: RouteTestFixture):
         url = "/works"
-        fixture.assert_request_calls(url, fixture.controller.work_lookup, "work")
+        fixture.assert_request_calls(url, fixture.controller.work_lookup, "work")  # type: ignore[union-attr]
 
 
 class TestWorkController:
@@ -364,14 +364,14 @@ class TestWorkController:
     def test_contributor(self, fixture: RouteTestFixture):
         url = "/works/contributor/<contributor_name>"
         fixture.assert_request_calls(
-            url, fixture.controller.contributor, "<contributor_name>", None, None
+            url, fixture.controller.contributor, "<contributor_name>", None, None  # type: ignore[union-attr]
         )
 
     def test_contributor_language(self, fixture: RouteTestFixture):
         url = "/works/contributor/<contributor_name>/<languages>"
         fixture.assert_request_calls(
             url,
-            fixture.controller.contributor,
+            fixture.controller.contributor,  # type: ignore[union-attr]
             "<contributor_name>",
             "<languages>",
             None,
@@ -381,7 +381,7 @@ class TestWorkController:
         url = "/works/contributor/<contributor_name>/<languages>/<audiences>"
         fixture.assert_request_calls(
             url,
-            fixture.controller.contributor,
+            fixture.controller.contributor,  # type: ignore[union-attr]
             "<contributor_name>",
             "<languages>",
             "<audiences>",
@@ -390,20 +390,20 @@ class TestWorkController:
     def test_series(self, fixture: RouteTestFixture):
         url = "/works/series/<series_name>"
         fixture.assert_request_calls(
-            url, fixture.controller.series, "<series_name>", None, None
+            url, fixture.controller.series, "<series_name>", None, None  # type: ignore[union-attr]
         )
 
     def test_series_language(self, fixture: RouteTestFixture):
         url = "/works/series/<series_name>/<languages>"
         fixture.assert_request_calls(
-            url, fixture.controller.series, "<series_name>", "<languages>", None
+            url, fixture.controller.series, "<series_name>", "<languages>", None  # type: ignore[union-attr]
         )
 
     def test_series_language_audience(self, fixture: RouteTestFixture):
         url = "/works/series/<series_name>/<languages>/<audiences>"
         fixture.assert_request_calls(
             url,
-            fixture.controller.series,
+            fixture.controller.series,  # type: ignore[union-attr]
             "<series_name>",
             "<languages>",
             "<audiences>",
@@ -412,19 +412,19 @@ class TestWorkController:
     def test_permalink(self, fixture: RouteTestFixture):
         url = "/works/<identifier_type>/<identifier>"
         fixture.assert_request_calls_method_using_identifier(
-            url, fixture.controller.permalink, "<identifier_type>", "<identifier>"
+            url, fixture.controller.permalink, "<identifier_type>", "<identifier>"  # type: ignore[union-attr]
         )
 
     def test_recommendations(self, fixture: RouteTestFixture):
         url = "/works/<identifier_type>/<identifier>/recommendations"
         fixture.assert_request_calls_method_using_identifier(
-            url, fixture.controller.recommendations, "<identifier_type>", "<identifier>"
+            url, fixture.controller.recommendations, "<identifier_type>", "<identifier>"  # type: ignore[union-attr]
         )
 
     def test_related_books(self, fixture: RouteTestFixture):
         url = "/works/<identifier_type>/<identifier>/related_books"
         fixture.assert_request_calls_method_using_identifier(
-            url, fixture.controller.related, "<identifier_type>", "<identifier>"
+            url, fixture.controller.related, "<identifier_type>", "<identifier>"  # type: ignore[union-attr]
         )
 
 
@@ -443,7 +443,7 @@ class TestAnalyticsController:
         # unauthenticated.
         fixture.assert_request_calls_method_using_identifier(
             url,
-            fixture.controller.track_event,
+            fixture.controller.track_event,  # type: ignore[union-attr]
             "<identifier_type>",
             "<identifier>",
             "<event_type>",
@@ -465,22 +465,22 @@ class TestAdobeVendorID:
         url = "/AdobeAuth/authdata"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.create_authdata_handler,
-            fixture.controller.AUTHENTICATED_PATRON,
+            fixture.controller.create_authdata_handler,  # type: ignore[union-attr]
+            fixture.controller.AUTHENTICATED_PATRON,  # type: ignore[union-attr]
         )
         # TODO: test what happens when vendor ID is not configured.
 
     def test_adobe_vendor_id_signin(self, fixture: RouteTestFixture):
         url = "/AdobeAuth/SignIn"
         fixture.assert_request_calls(
-            url, fixture.controller.signin_handler, http_method="POST"
+            url, fixture.controller.signin_handler, http_method="POST"  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "POST")
 
     def test_adobe_vendor_id_accountinfo(self, fixture: RouteTestFixture):
         url = "/AdobeAuth/AccountInfo"
         fixture.assert_request_calls(
-            url, fixture.controller.userinfo_handler, http_method="POST"
+            url, fixture.controller.userinfo_handler, http_method="POST"  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "POST")
 
@@ -488,7 +488,7 @@ class TestAdobeVendorID:
         url = "/AdobeAuth/Status"
         fixture.assert_request_calls(
             url,
-            fixture.controller.status_handler,
+            fixture.controller.status_handler,  # type: ignore[union-attr]
         )
 
 
@@ -503,7 +503,7 @@ class TestAdobeDeviceManagement:
     def test_adobe_drm_devices(self, fixture: RouteTestFixture):
         url = "/AdobeAuth/devices"
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.device_id_list_handler
+            url, fixture.controller.device_id_list_handler  # type: ignore[union-attr]
         )
         fixture.assert_supported_methods(url, "GET", "POST")
 
@@ -511,7 +511,7 @@ class TestAdobeDeviceManagement:
         url = "/AdobeAuth/devices/<device_id>"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.device_id_handler,
+            fixture.controller.device_id_handler,  # type: ignore[union-attr]
             "<device_id>",
             http_method="DELETE",
         )
@@ -528,7 +528,7 @@ class TestODLNotificationController:
 
     def test_odl_notify(self, fixture: RouteTestFixture):
         url = "/odl_notify/<loan_id>"
-        fixture.assert_request_calls(url, fixture.controller.notify, "<loan_id>")
+        fixture.assert_request_calls(url, fixture.controller.notify, "<loan_id>")  # type: ignore[union-attr]
         fixture.assert_supported_methods(url, "GET", "POST")
 
 
@@ -542,7 +542,7 @@ class TestApplicationVersionController:
 
     def test_heartbeat(self, fixture: RouteTestFixture):
         url = "/version.json"
-        fixture.assert_request_calls(url, fixture.controller.version)
+        fixture.assert_request_calls(url, fixture.controller.version)  # type: ignore[union-attr]
 
 
 class TestHealthCheck:
@@ -573,7 +573,7 @@ class TestExceptionHandler:
                 self.handled = exception
                 return Response("handled it", 500)
 
-        routes.h = MockErrorHandler()
+        routes.h: MockErrorHandler = MockErrorHandler()  # type: ignore[misc]
 
         # Simulate a request that causes an unhandled exception.
         with route_test.controller_fixture.app.test_request_context():

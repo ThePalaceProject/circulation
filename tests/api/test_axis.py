@@ -386,7 +386,7 @@ class TestAxis360API:
         axis360.api.queue_response(200, content=data)
         patron = axis360.db.patron()
         patron.authorization_identifier = axis360.db.fresh_str()
-        pytest.raises(NotFoundOnRemote, axis360.api.checkin, patron, "pin", pool)  # type: ignore
+        pytest.raises(NotFoundOnRemote, axis360.api.checkin, patron, "pin", pool)
 
     def test_place_hold(self, axis360: Axis360Fixture):
         edition, pool = axis360.db.edition(
@@ -430,7 +430,7 @@ class TestAxis360API:
         # an attempt to fulfill that title will fail with NoActiveLoan.
         data = axis360.sample_data("availability_with_audiobook_fulfillment.xml")
         axis360.api.queue_response(200, content=data)
-        pytest.raises(NoActiveLoan, fulfill)  # type: ignore
+        pytest.raises(NoActiveLoan, fulfill)
 
         # If an ebook is checked out and we're not asking for it to be
         # fulfilled through AxisNow, we get a regular FulfillmentInfo
@@ -461,7 +461,7 @@ class TestAxis360API:
         pool.identifier.identifier = "0015176429"
         data = axis360.sample_data("availability_without_fulfillment.xml")
         axis360.api.queue_response(200, content=data)
-        pytest.raises(CannotFulfill, fulfill)  # type: ignore
+        pytest.raises(CannotFulfill, fulfill)
 
         # If we ask to fulfill an audiobook, we get an AudiobookFulfillmentInfo.
         #
@@ -1229,7 +1229,7 @@ class TestRaiseExceptionOnError:
     def test_internal_server_error(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("internal_server_error.xml")
         parser = HoldReleaseResponseParser(None)
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.process_all(data)
         assert "Internal Server Error" in str(excinfo.value)
 
@@ -1253,14 +1253,14 @@ class TestRaiseExceptionOnError:
     def test_internal_server_error2(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("invalid_error_code.xml")
         parser = HoldReleaseResponseParser(None)
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.process_all(data)
         assert "Invalid response code from Axis 360: abcd" in str(excinfo.value)
 
     def test_missing_error_code(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("missing_error_code.xml")
         parser = HoldReleaseResponseParser(None)
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.process_all(data)
         assert "No status code!" in str(excinfo.value)
 
@@ -1280,7 +1280,7 @@ class TestCheckinResponseParser:
     def test_parse_checkin_failure(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("checkin_failure.xml")
         parser = CheckinResponseParser(axis360parsers.default_collection)
-        pytest.raises(NotFoundOnRemote, parser.process_all, data)  # type: ignore
+        pytest.raises(NotFoundOnRemote, parser.process_all, data)
 
 
 class TestCheckoutResponseParser:
@@ -1302,12 +1302,12 @@ class TestCheckoutResponseParser:
     def test_parse_already_checked_out(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_checked_out.xml")
         parser = CheckoutResponseParser(None)
-        pytest.raises(AlreadyCheckedOut, parser.process_all, data)  # type: ignore
+        pytest.raises(AlreadyCheckedOut, parser.process_all, data)
 
     def test_parse_not_found_on_remote(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("not_found_on_remote.xml")
         parser = CheckoutResponseParser(None)
-        pytest.raises(NotFoundOnRemote, parser.process_all, data)  # type: ignore
+        pytest.raises(NotFoundOnRemote, parser.process_all, data)
 
 
 class TestHoldResponseParser:
@@ -1325,7 +1325,7 @@ class TestHoldResponseParser:
     def test_parse_already_on_hold(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_on_hold.xml")
         parser = HoldResponseParser(None)
-        pytest.raises(AlreadyOnHold, parser.process_all, data)  # type: ignore
+        pytest.raises(AlreadyOnHold, parser.process_all, data)
 
 
 class TestHoldReleaseResponseParser:
@@ -1337,7 +1337,7 @@ class TestHoldReleaseResponseParser:
     def test_failure(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("release_hold_failure.xml")
         parser = HoldReleaseResponseParser(None)
-        pytest.raises(NotOnHold, parser.process_all, data)  # type: ignore
+        pytest.raises(NotOnHold, parser.process_all, data)
 
 
 class TestAvailabilityResponseParser:
@@ -1571,14 +1571,14 @@ class TestAxis360FulfillmentInfoResponseParser:
         ):
             missing_field = get_data()
             del missing_field[field]
-            with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+            with pytest.raises(RemoteInitiatedServerError) as excinfo:
                 m(missing_field, pool)
             assert "Required key %s not present" % field in str(excinfo.value)
 
         # Try with a bad expiration date.
         bad_date = get_data()
         bad_date["ExpirationDate"] = "not-a-date"
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             m(bad_date, pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
 
@@ -1614,7 +1614,7 @@ class TestAxis360FulfillmentInfoResponseParser:
         # Try with a bad expiration date.
         bad_date = get_data()
         bad_date["ExpirationDate"] = "not-a-date"
-        with pytest.raises(RemoteInitiatedServerError) as excinfo:  # type: ignore
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
             m(bad_date, pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
 

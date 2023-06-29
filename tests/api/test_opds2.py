@@ -6,6 +6,7 @@ from urllib.parse import quote
 import pytest
 from requests import Response
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
+from werkzeug import Response as wkResponse
 
 from api.app import app
 from api.circulation import FulfillmentInfo
@@ -182,7 +183,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
         mock_http.get_with_timeout.return_value = resp
 
         processor = TokenAuthenticationFulfillmentProcessor(collection)
-        ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
+        ff_info = processor.fulfill(patron, "", work.license_pools[0], None, ff_info)
 
         assert mock_http.get_with_timeout.call_count == 1
         assert (
@@ -198,7 +199,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
 
         # Alternative templating
         ff_info.content_link = "http://example.org/11234/fulfill{?authentication_token}"
-        ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
+        ff_info = processor.fulfill(patron, "", work.license_pools[0], None, ff_info)
 
         assert (
             ff_info.content_link
@@ -216,7 +217,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
         mock_http.reset_mock()
         mock_http.get_with_timeout.return_value = resp
         with pytest.raises(CannotFulfill):
-            processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
+            processor.fulfill(patron, "", work.license_pools[0], None, ff_info)
 
         ## Pass through cases
         # No templating in the url
@@ -224,7 +225,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
             "http://example.org/11234/fulfill?authToken=authentication_token"
         )
         ff_info.content_link_redirect = False
-        ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
+        ff_info = processor.fulfill(patron, "", work.license_pools[0], None, ff_info)
         assert ff_info.content_link_redirect == False
 
         # No token endpoint config
@@ -234,7 +235,7 @@ class TestTokenAuthenticationFulfillmentProcessor:
         DatabaseTransactionFixture.set_settings(
             collection.integration_configuration, ExternalIntegration.TOKEN_AUTH, None
         )
-        ff_info = processor.fulfill(patron, None, work.license_pools[0], None, ff_info)
+        ff_info = processor.fulfill(patron, "", work.license_pools[0], None, ff_info)
         assert ff_info.content_link_redirect == False
 
     @patch("api.opds2.HTTP")
@@ -299,12 +300,13 @@ class TestOPDS2WithTokens:
             ctx.request.patron = patron
             manager.loans.borrow(identifier.type, identifier.identifier)
 
-        loans = controller_fixture.db.session.query(Loan).filter(Loan.patron == patron)  # type: ignore
+        loans = controller_fixture.db.session.query(Loan).filter(Loan.patron == patron)
         assert loans.count() == 1
 
         loan = loans.first()
+        assert isinstance(loan, Loan)
         mechanism_id = loan.license_pool.delivery_mechanisms[0].delivery_mechanism.id
-        manager.loans.authenticated_patron_from_request = lambda: patron
+        manager.loans.authenticated_patron_from_request = lambda: patron  # type: ignore[method-assign]
 
         # Fulfill (Download) the book, should redirect to an authenticated URL
         with controller_fixture.request_context_with_library("/") as ctx, patch.object(
@@ -312,7 +314,9 @@ class TestOPDS2WithTokens:
         ) as mock_auth:
             ctx.request.patron = patron
             mock_auth.return_value = "plaintext-token"
+            assert isinstance(loan.license_pool.id, int)
             response = manager.loans.fulfill(loan.license_pool.id, mechanism_id)
 
+        assert isinstance(response, wkResponse)
         assert response.status_code == 302
         assert "authToken=plaintext-token" in response.location
