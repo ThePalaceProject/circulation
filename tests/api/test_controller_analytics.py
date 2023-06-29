@@ -7,23 +7,18 @@ from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import CirculationEvent, ExternalIntegration, create, get_one
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class AnalyticsFixture(CirculationControllerFixture):
-    def __init__(
-        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-    ):
-        super().__init__(db, vendor_id_fixture)
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db)
         [self.lp] = self.english_1.license_pools
         self.identifier = self.lp.identifier
 
 
 @pytest.fixture(scope="function")
-def analytics_fixture(
-    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-):
-    return AnalyticsFixture(db, vendor_id_fixture)
+def analytics_fixture(db: DatabaseTransactionFixture):
+    return AnalyticsFixture(db)
 
 
 class TestAnalyticsController:

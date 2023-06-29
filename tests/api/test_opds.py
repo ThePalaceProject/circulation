@@ -59,7 +59,6 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import AtomFeed, OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.vendor_id import VendorIDFixture
 
 _strftime = AtomFeed._strftime
 
@@ -356,7 +355,7 @@ class TestCirculationManagerAnnotator:
 
 
 class LibraryAnnotatorFixture:
-    def __init__(self, db: DatabaseTransactionFixture, vendor_id: VendorIDFixture):
+    def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.vendor_id = vendor_id
         self.work = db.work(with_open_access_download=True)
@@ -384,10 +383,8 @@ class LibraryAnnotatorFixture:
 
 
 @pytest.fixture(scope="function")
-def annotator_fixture(
-    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-) -> LibraryAnnotatorFixture:
-    return LibraryAnnotatorFixture(db, vendor_id_fixture)
+def annotator_fixture(db: DatabaseTransactionFixture) -> LibraryAnnotatorFixture:
+    return LibraryAnnotatorFixture(db)
 
 
 class TestLibraryAnnotator:

@@ -38,7 +38,6 @@ from core.model.integration import (
 from core.util.string_helpers import base64
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class ControllerFixtureSetupOverrides:
@@ -69,7 +68,6 @@ class ControllerFixture:
     libraries: list[Library]
     library: Library
     manager: MockCirculationManager
-    vendor_ids: VendorIDFixture
 
     # Authorization headers that will succeed (or fail) against the
     # SimpleAuthenticationProvider set up in ControllerTest.setup().
@@ -83,10 +81,8 @@ class ControllerFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        vendor_id_fixture: VendorIDFixture,
         setup_cm: bool,
     ):
-        self.vendor_ids = vendor_id_fixture
         self.db = db
         self.app = app
         self.patron_auth_registry = PatronAuthRegistry()
@@ -252,11 +248,9 @@ class ControllerFixture:
 
 
 @pytest.fixture(scope="function")
-def controller_fixture(
-    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-):
+def controller_fixture(db: DatabaseTransactionFixture):
     time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, vendor_id_fixture, setup_cm=True)
+    fixture = ControllerFixture(db, setup_cm=True)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("controller init took %s", time_diff)
@@ -264,11 +258,9 @@ def controller_fixture(
 
 
 @pytest.fixture(scope="function")
-def controller_fixture_without_cm(
-    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-):
+def controller_fixture_without_cm(db: DatabaseTransactionFixture):
     time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, vendor_id_fixture, setup_cm=False)
+    fixture = ControllerFixture(db, setup_cm=False)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("controller init took %s", time_diff)
@@ -309,10 +301,8 @@ class CirculationControllerFixture(ControllerFixture):
         )
     ]
 
-    def __init__(
-        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-    ):
-        super().__init__(db, vendor_id_fixture, setup_cm=True)
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db, setup_cm=True)
         self.works = []
         self.add_works(self.BOOKS)
 
@@ -368,11 +358,9 @@ class CirculationControllerFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def circulation_fixture(
-    db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-):
+def circulation_fixture(db: DatabaseTransactionFixture):
     time_then = datetime.datetime.now()
-    fixture = CirculationControllerFixture(db, vendor_id_fixture)
+    fixture = CirculationControllerFixture(db)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("circulation controller init took %s", time_diff)
