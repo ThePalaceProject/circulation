@@ -6,6 +6,7 @@ from api.admin.controller.announcement_service import AnnouncementSettings
 from api.announcements import Announcements
 from core.model.configuration import ConfigurationSetting
 from core.problem_details import INVALID_INPUT
+from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.api_admin import AdminControllerFixture
 
@@ -30,6 +31,7 @@ class TestAnnouncementService:
 
         with admin_ctrl_fixture.request_context_with_admin("/", method="GET") as ctx:
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+        assert isinstance(response, dict)
 
         assert set(response.keys()) == {"settings", "announcements"}
         announcements_in_response = response["announcements"]
@@ -74,4 +76,5 @@ class TestAnnouncementService:
                 [("announcements", json.dumps([{"id": "xxx"}]))]
             )
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+            assert isinstance(response, ProblemDetail)
             assert "Missing required field: content" == response.detail

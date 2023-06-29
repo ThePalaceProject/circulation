@@ -172,7 +172,7 @@ class ControllerFixture:
         # Set a convenient default lane.
         [self.english_adult_fiction] = [
             x
-            for x in self.library.lanes  # type: ignore
+            for x in self.library.lanes
             if x.display_name == "Fiction" and x.languages == ["eng"]
         ]
 

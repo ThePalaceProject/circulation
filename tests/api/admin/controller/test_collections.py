@@ -2,7 +2,7 @@ import json
 
 import flask
 import pytest
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.exceptions import *
 from api.selftest import HasCollectionSelfTests
@@ -44,7 +44,11 @@ class TestCollectionSettings:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
+        setattr(
+            HasSelfTests,
+            "prior_test_results",
+            settings_ctrl_fixture.mock_prior_test_results,
+        )
 
         l1 = settings_ctrl_fixture.ctrl.db.default_library()
         [c1] = l1.collections
@@ -155,16 +159,18 @@ class TestCollectionSettings:
                 ]
                 assert expect_protected_books == use_protected_books_mirror
 
-        HasSelfTests.prior_test_results = old_prior_test_results
+        setattr(HasSelfTests, "prior_test_results", old_prior_test_results)
 
     def test_collections_get_collections_with_multiple_collections(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        old_prior_test_results = HasCollectionSelfTests.prior_test_results
-        HasCollectionSelfTests.prior_test_results = (
-            settings_ctrl_fixture.mock_prior_test_results
-        )
 
+        old_prior_test_results = HasSelfTests.prior_test_results
+        setattr(
+            HasCollectionSelfTests,
+            "prior_test_results",
+            settings_ctrl_fixture.mock_prior_test_results,
+        )
         session = settings_ctrl_fixture.ctrl.db.session
 
         [c1] = settings_ctrl_fixture.ctrl.db.default_library().collections
@@ -201,6 +207,7 @@ class TestCollectionSettings:
 
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
         c3.libraries += [l1, settings_ctrl_fixture.ctrl.db.default_library()]
+        assert isinstance(l1.id, int)
         l1_config = c3.integration_configuration.for_library(l1.id, create=True)
         DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
         # Commit the config changes
@@ -297,13 +304,13 @@ class TestCollectionSettings:
             assert "L1" == coll3_libraries[0].get("short_name")
             assert "14" == coll3_libraries[0].get("ebook_loan_duration")
 
-        HasCollectionSelfTests.prior_test_results = old_prior_test_results
+        setattr(HasCollectionSelfTests, "prior_test_results", old_prior_test_results)
 
     def test_collections_post_errors(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("protocol", "Overdrive"),
                 ]
@@ -314,7 +321,7 @@ class TestCollectionSettings:
             assert response == MISSING_COLLECTION_NAME
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection"),
                 ]
@@ -325,7 +332,7 @@ class TestCollectionSettings:
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection"),
                     ("protocol", "Unknown"),
@@ -337,7 +344,7 @@ class TestCollectionSettings:
             assert response == UNKNOWN_PROTOCOL
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", "123456789"),
                     ("name", "collection"),
@@ -354,7 +361,7 @@ class TestCollectionSettings:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Collection 1"),
                     ("protocol", "Bibliotheca"),
@@ -367,9 +374,9 @@ class TestCollectionSettings:
 
         settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", "Overdrive"),
                 ]
@@ -381,9 +388,9 @@ class TestCollectionSettings:
 
         settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", "Bibliotheca"),
                 ]
@@ -394,7 +401,7 @@ class TestCollectionSettings:
             assert response == CANNOT_CHANGE_PROTOCOL
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Collection 2"),
                     ("protocol", "Bibliotheca"),
@@ -407,7 +414,7 @@ class TestCollectionSettings:
             assert response == PROTOCOL_DOES_NOT_SUPPORT_PARENTS
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Collection 2"),
                     ("protocol", "Overdrive"),
@@ -420,7 +427,7 @@ class TestCollectionSettings:
             assert response == MISSING_PARENT
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection"),
                     ("protocol", "OPDS Import"),
@@ -435,7 +442,7 @@ class TestCollectionSettings:
             assert response.uri == NO_SUCH_LIBRARY.uri
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection1"),
                     ("protocol", "OPDS Import"),
@@ -447,7 +454,7 @@ class TestCollectionSettings:
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection1"),
                     ("protocol", "Overdrive"),
@@ -462,7 +469,7 @@ class TestCollectionSettings:
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection1"),
                     ("protocol", "Bibliotheca"),
@@ -476,7 +483,7 @@ class TestCollectionSettings:
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "collection1"),
                     ("protocol", "Axis 360"),
@@ -512,7 +519,7 @@ class TestCollectionSettings:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "New Collection"),
                     ("protocol", "Overdrive"),
@@ -540,6 +547,7 @@ class TestCollectionSettings:
         collection = get_one(
             settings_ctrl_fixture.ctrl.db.session, Collection, name="New Collection"
         )
+        assert isinstance(collection, Collection)
         assert collection.id == int(response.response[0])
         assert "New Collection" == collection.name
         assert "acctid" == collection.external_account_id
@@ -562,13 +570,14 @@ class TestCollectionSettings:
             "1234"
             == collection.integration_configuration.settings["overdrive_website_id"]
         )
-
+        assert isinstance(l1.id, int)
         assert (
             "l1_ils"
             == collection.integration_configuration.for_library(l1.id).settings[
                 "ils_name"
             ]
         )
+        assert isinstance(l2.id, int)
         assert (
             "l2_ils"
             == collection.integration_configuration.for_library(l2.id).settings[
@@ -578,11 +587,11 @@ class TestCollectionSettings:
 
         # This collection will be a child of the first collection.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Child Collection"),
                     ("protocol", "Overdrive"),
-                    ("parent_id", collection.id),
+                    ("parent_id", str(collection.id)),
                     (
                         "libraries",
                         json.dumps([{"short_name": "L3", "ils_name": "l3_ils"}]),
@@ -599,6 +608,7 @@ class TestCollectionSettings:
         child = get_one(
             settings_ctrl_fixture.ctrl.db.session, Collection, name="Child Collection"
         )
+        assert isinstance(child, Collection)
         assert child.id == int(response.response[0])
         assert "Child Collection" == child.name
         assert "child-acctid" == child.external_account_id
@@ -610,7 +620,7 @@ class TestCollectionSettings:
 
         # One library has access to the collection.
         assert [child] == l3.collections
-
+        assert isinstance(l3.id, int)
         assert (
             "l3_ils"
             == child.integration_configuration.for_library(l3.id).settings["ils_name"]
@@ -632,9 +642,9 @@ class TestCollectionSettings:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.OVERDRIVE),
                     ("external_account_id", "1234"),
@@ -666,15 +676,15 @@ class TestCollectionSettings:
         assert "1234" == collection.integration_configuration.settings.get(
             "overdrive_website_id"
         )
-
+        assert isinstance(l1.id, int)
         assert "the_ils" == collection.integration_configuration.for_library(
             l1.id
         ).settings.get("ils_name")
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.OVERDRIVE),
                     ("external_account_id", "1234"),
@@ -709,12 +719,12 @@ class TestCollectionSettings:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.OVERDRIVE),
-                    ("parent_id", parent.id),
+                    ("parent_id", str(parent.id)),
                     ("external_account_id", "1234"),
                     ("libraries", json.dumps([])),
                 ]
@@ -732,7 +742,7 @@ class TestCollectionSettings:
     def _base_collections_post_request(self, collection):
         """A template for POST requests to the collections controller."""
         return [
-            ("id", collection.id),
+            ("id", str(collection.id)),
             ("name", "Collection 1"),
             ("protocol", ExternalIntegration.AXIS_360),
             ("external_account_id", "1234"),
@@ -758,10 +768,9 @@ class TestCollectionSettings:
         # collection for either a books or covers mirror.
         base_request = self._base_collections_post_request(collection)
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            request = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 base_request + [("books_mirror_integration_id", storage.id)]
             )
-            flask.request.form = request
             response = (
                 settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
@@ -774,12 +783,13 @@ class TestCollectionSettings:
                 ExternalIntegrationLink,
                 external_integration_id=collection.external_integration.id,
             )
+            assert isinstance(external_integration_link, ExternalIntegrationLink)
             assert storage.id == external_integration_link.other_integration_id
 
         # It's possible to unset the mirror integration.
         controller = settings_ctrl_fixture.manager.admin_collection_settings_controller
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            request = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 base_request
                 + [
                     (
@@ -788,7 +798,6 @@ class TestCollectionSettings:
                     )
                 ]
             )
-            flask.request.form = request
             response = controller.process_collections()
             assert response.status_code == 200
             external_integration_link = get_one(
@@ -800,8 +809,9 @@ class TestCollectionSettings:
 
         # Providing a nonexistent integration ID gives an error.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            request = MultiDict(base_request + [("books_mirror_integration_id", -200)])
-            flask.request.form = request
+            flask.request.form = ImmutableMultiDict(
+                base_request + [("books_mirror_integration_id", -200)]
+            )
             response = (
                 settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
@@ -827,11 +837,10 @@ class TestCollectionSettings:
         # the collection's mirror integration gives an error.
         base_request = self._base_collections_post_request(collection)
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            request = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 base_request
                 + [("books_mirror_integration_id", collection.external_integration.id)]
             )
-            flask.request.form = request
             response = (
                 settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
             )
@@ -853,9 +862,9 @@ class TestCollectionSettings:
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.AXIS_360),
                     ("external_account_id", "1234"),
@@ -874,15 +883,16 @@ class TestCollectionSettings:
             assert response.status_code == 200
 
         # Additional settings were set on the collection+library.
+        assert isinstance(l1.id, int)
         assert "14" == collection.integration_configuration.for_library(
             l1.id
         ).settings.get("ebook_loan_duration")
 
         # Remove the connection between collection and library.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", collection.id),
+                    ("id", str(collection.id)),
                     ("name", "Collection 1"),
                     ("protocol", ExternalIntegration.AXIS_360),
                     ("external_account_id", "1234"),
@@ -901,6 +911,7 @@ class TestCollectionSettings:
 
         # The settings associated with the collection+library were removed
         # when the connection between collection and library was deleted.
+        assert isinstance(l1.id, int)
         assert None == collection.integration_configuration.for_library(l1.id)
         assert [] == collection.libraries
 

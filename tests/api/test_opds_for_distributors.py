@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Callable
+from typing import Callable, Union
 from unittest.mock import patch
 
 import pytest
@@ -55,7 +55,7 @@ def authentication_document() -> Callable[[str], str]:
             if not without_links
             else {}
         )
-        doc = {
+        doc: dict[str, list[dict[str, Union[str, list]]]] = {
             "authentication": [
                 {
                     **{"type": "http://opds-spec.org/auth/oauth/client_credentials"},

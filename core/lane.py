@@ -2580,6 +2580,8 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     __tablename__ = "lanes"
     id = Column(Integer, primary_key=True)
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
+    library: Mapped[Library] = relationship("Library", back_populates="lanes")
+
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
     priority = Column(Integer, index=True, nullable=False, default=0)
 
@@ -2611,7 +2613,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # okay for this to be duplicated within a library, but it's not
     # okay to have two lanes with the same parent and the same display
     # name -- that would be confusing.
-    display_name = Column(Unicode)
+    display_name: str = Column(Unicode)
 
     # True = Fiction only
     # False = Nonfiction only
@@ -2643,11 +2645,19 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     license_datasource_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
+    license_datasource: Mapped[DataSource] = relationship(
+        "DataSource",
+        back_populates="license_lanes",
+        foreign_keys=[license_datasource_id],
+    )
 
     # Only books on one or more CustomLists obtained from this
     # DataSource will be shown.
     _list_datasource_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
+    )
+    _list_datasource: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="list_lanes", foreign_keys=[_list_datasource_id]
     )
 
     # Only the books on these specific CustomLists will be shown.
@@ -3209,20 +3219,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         lines.append("Priority: %s" % self.priority)
         lines.append("Display name: %s" % self.display_name)
         return lines
-
-
-Library.lanes = relationship(
-    "Lane",
-    backref="library",
-    foreign_keys=Lane.library_id,
-    cascade="all, delete-orphan",
-)
-DataSource.list_lanes = relationship(
-    "Lane", backref="_list_datasource", foreign_keys=Lane._list_datasource_id
-)
-DataSource.license_lanes = relationship(
-    "Lane", backref="license_datasource", foreign_keys=Lane.license_datasource_id
-)
 
 
 lanes_customlists = Table(

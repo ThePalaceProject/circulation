@@ -2,6 +2,7 @@ import pytest
 
 from core.model.classification import Subject
 from core.model.datasource import DataSource
+from core.model.licensing import LicensePool
 from core.model.work import Work
 from tests.fixtures.api_admin import AdminControllerFixture
 
@@ -38,11 +39,11 @@ class AdminSearchFixture:
             with_license_pool=True,
         )
         w.presentation_edition.publisher = "Publisher 1"
-        s: Subject = db.subject("subject2", "subjectid2")
-        s.genre = w.genres[0]
-        s.name = "subject 2"
-        s.audience = "Adult"
-        db.classification(w.presentation_edition.primary_identifier, s, gutenberg)
+        s2: Subject = db.subject("subject2", "subjectid2")
+        s2.genre = w.genres[0]
+        s2.name = "subject 2"
+        s2.audience = "Adult"
+        db.classification(w.presentation_edition.primary_identifier, s2, gutenberg)
 
         w = db.work(
             title="work3",
@@ -52,11 +53,11 @@ class AdminSearchFixture:
             with_license_pool=True,
         )
         w.presentation_edition.publisher = "Publisher 1"
-        s: Subject = db.subject("subject3", "subjectid3")
-        s.genre = w.genres[0]
-        s.name = "subject 3"
-        s.audience = "Adult"
-        db.classification(w.presentation_edition.primary_identifier, s, gutenberg)
+        s3: Subject = db.subject("subject3", "subjectid3")
+        s3.genre = w.genres[0]
+        s3.name = "subject 3"
+        s3.audience = "Adult"
+        db.classification(w.presentation_edition.primary_identifier, s3, gutenberg)
 
         for _ in range(10):
             w = db.work(
@@ -67,11 +68,11 @@ class AdminSearchFixture:
                 with_license_pool=True,
             )
             w.presentation_edition.publisher = "Publisher 10"
-            s: Subject = db.subject("subject10", "subjectid10")
-            s.genre = w.genres[0]
-            s.name = "subject 10"
-            s.audience = "Young Adult"
-            db.classification(w.presentation_edition.primary_identifier, s, gutenberg)
+            s10: Subject = db.subject("subject10", "subjectid10")
+            s10.genre = w.genres[0]
+            s10.name = "subject 10"
+            s10.audience = "Young Adult"
+            db.classification(w.presentation_edition.primary_identifier, s10, gutenberg)
 
 
 @pytest.fixture(scope="function")
@@ -105,7 +106,7 @@ class TestAdminSearchController:
 
     def test_different_license_types(self, admin_search_fixture: AdminSearchFixture):
         # Remove the cache
-        admin_search_fixture.manager.admin_search_controller.__class__._search_field_values_cached.ttls = (
+        admin_search_fixture.manager.admin_search_controller.__class__._search_field_values_cached.ttls = (  # type: ignore
             0
         )
 
@@ -114,7 +115,10 @@ class TestAdminSearchController:
             .filter(Work.presentation_edition.has(title="work3"))
             .first()
         )
+        assert isinstance(w, Work)
+
         pool = w.active_license_pool()
+        assert isinstance(pool, LicensePool)
 
         # A pool without licenses should not attribute to the count
         pool.licenses_owned = 0

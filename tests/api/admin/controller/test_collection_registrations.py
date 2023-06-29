@@ -1,7 +1,9 @@
+from typing import Tuple
+
 import flask
 import pytest
 from flask import url_for
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.exceptions import *
 from api.odl import SharedODLAPI
@@ -96,7 +98,7 @@ class TestCollectionRegistration:
 
         # The collection ID doesn't correspond to any real collection.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict([("collection_id", "1234")])
+            flask.request.form = ImmutableMultiDict([("collection_id", "1234")])
             response = m()
             assert MISSING_COLLECTION == response
 
@@ -105,9 +107,9 @@ class TestCollectionRegistration:
         collection.external_account_id = "collection url"
 
         # Oops, the collection doesn't actually support registration.
-        form = MultiDict(
+        form = ImmutableMultiDict(
             [
-                ("collection_id", collection.id),
+                ("collection_id", str(collection.id)),
                 ("library_short_name", "not-a-library"),
             ]
         )
@@ -129,40 +131,41 @@ class TestCollectionRegistration:
         # The push() implementation might return a ProblemDetail for any
         # number of reasons.
         library = settings_ctrl_fixture.ctrl.db.default_library()
-        form = MultiDict(
+        assert isinstance(library.short_name, str)
+        form = ImmutableMultiDict(
             [
-                ("collection_id", collection.id),
+                ("collection_id", str(collection.id)),
                 ("library_short_name", library.short_name),
             ]
         )
 
-        class Mock(Registration):
+        class MockFail(Registration):
             def push(self, *args, **kwargs):
                 return REMOTE_INTEGRATION_FAILED
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = form
-            assert REMOTE_INTEGRATION_FAILED == m(registration_class=Mock)
+            assert REMOTE_INTEGRATION_FAILED == m(registration_class=MockFail)
 
         # But if that doesn't happen, success!
-        class Mock(Registration):
+        class MockSuccess(Registration):
             """When asked to push a registration, do nothing and say it
             worked.
             """
 
-            called_with = None
+            called_with: Tuple[list, dict]
 
             def push(self, *args, **kwargs):
-                Mock.called_with = (args, kwargs)
+                MockSuccess.called_with = (args, kwargs)
                 return True
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = form
-            result = m(registration_class=Mock)
+            result = m(registration_class=MockSuccess)
             assert 200 == result.status_code
 
             # push() was called with the arguments we would expect.
-            args, kwargs = Mock.called_with
+            args, kwargs = MockSuccess.called_with
             assert (Registration.PRODUCTION_STAGE, url_for) == args
 
             # We would have made real HTTP requests.

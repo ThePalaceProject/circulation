@@ -32,6 +32,7 @@ from .licensing import LicensePool
 from .work import Work
 
 if TYPE_CHECKING:
+    from core.lane import Lane
     from core.model import (  # noqa: autoflake
         AdminRole,
         CachedFeed,
@@ -133,7 +134,7 @@ class Library(Base, HasSessionCache):
     # ConfigurationSettings.
     settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
-        backref="library",
+        back_populates="library",
         lazy="joined",
         cascade="all, delete",
     )
@@ -147,6 +148,12 @@ class Library(Base, HasSessionCache):
     # used for Library.has_root_lane.  This is invalidated whenever
     # Lane configuration changes, and it will also expire on its own.
     _has_root_lane_cache = ExpiringDict(max_len=1000, max_age_seconds=3600)
+
+    lanes: Mapped[List[Lane]] = relationship(
+        "Lane",
+        back_populates="library",
+        cascade="all, delete-orphan",
+    )
 
     # Typing specific
     collections: List[Collection]

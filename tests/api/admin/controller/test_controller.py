@@ -3,7 +3,6 @@ import datetime
 import json
 import re
 from datetime import timedelta
-from io import StringIO
 from typing import Any, Optional
 from unittest import mock
 
@@ -11,8 +10,9 @@ import feedparser
 import flask
 import pytest
 from attrs import define
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import FileStorage, ImmutableMultiDict
 from werkzeug.http import dump_cookie
+from werkzeug.wrappers import Response as WerkzeugResponse
 
 from api.admin.controller import (
     AdminAnnotator,
@@ -30,7 +30,10 @@ from api.adobe_vendor_id import AdobeVendorIDModel, AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
 from core.classifier import genres
-from core.integration.base import HasChildIntegrationConfiguration
+from core.integration.base import (
+    HasChildIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration,
+)
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
@@ -158,7 +161,7 @@ class TestViewController:
             # The CSRF token value is random, but the cookie and the html have the same value.
             html_csrf_re = re.compile('csrfToken: "([^"]*)"')
             match = html_csrf_re.search(html)
-            assert match != None
+            assert match is not None
             csrf = match.groups(0)[0]
             assert csrf in response.headers.get("Set-Cookie")
             assert "HttpOnly" in response.headers.get("Set-Cookie")
@@ -473,11 +476,14 @@ class TestSignInController:
         )
         admin.password = "password"
 
+        admin_email = sign_in_fixture.admin.email
+        assert isinstance(admin_email, str)
+
         # Returns an error if there's no admin with the provided email.
         with sign_in_fixture.ctrl.app.test_request_context(
             "/admin/sign_in_with_password", method="POST"
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("email", "notanadmin@nypl.org"),
                     ("password", "password"),
@@ -494,9 +500,9 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context(
             "/admin/sign_in_with_password", method="POST"
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("email", sign_in_fixture.admin.email),
+                    ("email", admin_email),
                     ("password", "notthepassword"),
                     ("redirect", "foo"),
                 ]
@@ -510,9 +516,9 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context(
             "/admin/sign_in_with_password", method="POST"
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("email", sign_in_fixture.admin.email),
+                    ("email", admin_email),
                     ("password", "password"),
                     ("redirect", "foo"),
                 ]
@@ -527,9 +533,9 @@ class TestSignInController:
         with sign_in_fixture.ctrl.app.test_request_context(
             "/admin/sign_in_with_password", method="POST"
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("email", sign_in_fixture.admin.email),
+                    ("email", admin_email),
                     ("password", "password"),
                     ("redirect", "http://www.example.com/passwordstealer"),
                 ]
@@ -549,7 +555,7 @@ class TestSignInController:
         with sign_in_fixture.request_context_with_admin(
             "/admin/change_password", admin=admin
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("password", "new"),
                 ]
@@ -558,6 +564,7 @@ class TestSignInController:
                 sign_in_fixture.manager.admin_sign_in_controller.change_password()
             )
             assert 200 == response.status_code
+            assert isinstance(admin.email, str)
             assert admin == Admin.authenticate(
                 sign_in_fixture.ctrl.db.session, admin.email, "new"
             )
@@ -593,6 +600,7 @@ class TestResetPasswordController:
             assert [] == reset_password_ctrl.admin_auth_providers
 
             response = reset_password_ctrl.forgot_password()
+            assert isinstance(response, ProblemDetail)
 
             assert response.status_code == 500
             assert response.uri == ADMIN_AUTH_NOT_CONFIGURED.uri
@@ -601,13 +609,15 @@ class TestResetPasswordController:
         admin_ctrl_fixture.admin.password = "password"
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/forgot_password"):
             response = reset_password_ctrl.forgot_password()
+            assert not isinstance(response, ProblemDetail)
 
             assert response.status_code == 200
             assert "Send reset password email" in response.get_data(as_text=True)
 
+        assert isinstance(admin_ctrl_fixture.admin.email, str)
         # If admin is already signed in it gets redirected since it can use regular reset password flow
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/forgot_password"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("email", admin_ctrl_fixture.admin.email),
                     ("password", "password"),
@@ -624,8 +634,12 @@ class TestResetPasswordController:
 
             response = reset_password_ctrl.forgot_password()
             assert response.status_code == 302
+            assert not isinstance(response, ProblemDetail)
 
-            assert "admin/web" in response.headers.get("Location")
+            location = response.headers.get("Location")
+            assert isinstance(location, str)
+
+            assert "admin/web" in location
 
     def test_forgot_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
@@ -634,9 +648,11 @@ class TestResetPasswordController:
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/forgot_password", method="POST"
         ):
-            flask.request.form = MultiDict([])
+            flask.request.form = ImmutableMultiDict([])
 
             response = reset_password_ctrl.forgot_password()
+            assert isinstance(response, WerkzeugResponse)
+
             assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
             assert str(INVALID_ADMIN_CREDENTIALS.detail) in response.get_data(
                 as_text=True
@@ -646,9 +662,11 @@ class TestResetPasswordController:
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/forgot_password", method="POST"
         ):
-            flask.request.form = MultiDict([("email", "fake@admin.com")])
+            flask.request.form = ImmutableMultiDict([("email", "fake@admin.com")])
 
             response = reset_password_ctrl.forgot_password()
+            assert isinstance(response, WerkzeugResponse)
+
             assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
             assert str(INVALID_ADMIN_CREDENTIALS.detail) in response.get_data(
                 as_text=True
@@ -661,11 +679,14 @@ class TestResetPasswordController:
             with admin_ctrl_fixture.ctrl.app.test_request_context(
                 "/admin/forgot_password", method="POST"
             ):
-                flask.request.form = MultiDict(
-                    [("email", admin_ctrl_fixture.admin.email)]
-                )
+                admin_email = admin_ctrl_fixture.admin.email
+                assert isinstance(admin_email, str)
+
+                flask.request.form = ImmutableMultiDict([("email", admin_email)])
 
                 response = reset_password_ctrl.forgot_password()
+                assert isinstance(response, WerkzeugResponse)
+
                 assert response.status_code == 200
                 assert "Email successfully sent" in response.get_data(as_text=True)
 
@@ -678,20 +699,22 @@ class TestResetPasswordController:
                 _, receivers = call_args
 
                 assert len(receivers) == 1
-                assert receivers[0] == admin_ctrl_fixture.admin.email
+                assert receivers[0] == admin_email
 
     def test_reset_password_get(self, admin_ctrl_fixture: AdminControllerFixture):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
         token = "token"
+
+        admin_id = admin_ctrl_fixture.admin.id
+        assert isinstance(admin_id, int)
 
         # If there is no admin with password then there is no auth providers and we should get error response
         admin_ctrl_fixture.admin.password_hashed = None
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
             assert [] == reset_password_ctrl.admin_auth_providers
 
-            response = reset_password_ctrl.reset_password(
-                token, admin_ctrl_fixture.admin.id
-            )
+            response = reset_password_ctrl.reset_password(token, admin_id)
+            assert isinstance(response, WerkzeugResponse)
 
             assert (
                 response.status_code == ADMIN_AUTH_MECHANISM_NOT_CONFIGURED.status_code
@@ -702,10 +725,14 @@ class TestResetPasswordController:
 
         # If admin is already signed in it gets redirected since it can use regular reset password flow
         admin_ctrl_fixture.admin.password = "password"
+
+        admin_email = admin_ctrl_fixture.admin.email
+        assert isinstance(admin_email, str)
+
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("email", admin_ctrl_fixture.admin.email),
+                    ("email", admin_email),
                     ("password", "password"),
                     ("redirect", "foo"),
                 ]
@@ -718,27 +745,32 @@ class TestResetPasswordController:
             assert sign_in_response.status_code == 302
             assert "foo" == sign_in_response.headers["Location"]
 
-            response = reset_password_ctrl.reset_password(
-                token, admin_ctrl_fixture.admin.id
-            )
+            response = reset_password_ctrl.reset_password(token, admin_id)
+            assert isinstance(response, WerkzeugResponse)
+
             assert response.status_code == 302
-            assert "admin/web" in response.headers.get("Location")
+
+            location = response.headers.get("Location")
+            assert isinstance(location, str)
+            assert "admin/web" in location
 
         # If we use bad token we get an error response with "Try again" button
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
-            response = reset_password_ctrl.reset_password(
-                token, admin_ctrl_fixture.admin.id
-            )
+            response = reset_password_ctrl.reset_password(token, admin_id)
+            assert isinstance(response, WerkzeugResponse)
 
             assert response.status_code == 401
+
             assert "Try again" in response.get_data(as_text=True)
 
         # If we use bad admin id we get an error response with "Try again" button
-        bad_admin_id = admin_ctrl_fixture.admin.id + 1
+        bad_admin_id = admin_id + 1
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
             response = reset_password_ctrl.reset_password(token, bad_admin_id)
+            assert isinstance(response, WerkzeugResponse)
 
             assert response.status_code == 401
+
             assert "Try again" in response.get_data(as_text=True)
 
         # Finally, if we use good token we get back view with the form for the new password
@@ -749,12 +781,12 @@ class TestResetPasswordController:
             with admin_ctrl_fixture.ctrl.app.test_request_context(
                 "/admin/forgot_password", method="POST"
             ):
-                flask.request.form = MultiDict(
-                    [("email", admin_ctrl_fixture.admin.email)]
-                )
+                flask.request.form = ImmutableMultiDict([("email", admin_email)])
 
-                response = reset_password_ctrl.forgot_password()
-                assert response.status_code == 200
+                forgot_password_response = reset_password_ctrl.forgot_password()
+                assert isinstance(forgot_password_response, WerkzeugResponse)
+
+                assert forgot_password_response.status_code == 200
 
                 call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
                 mail_text = call_kwargs["text"]
@@ -767,7 +799,9 @@ class TestResetPasswordController:
                 )
 
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
+            assert isinstance(admin_id, int)
             response = reset_password_ctrl.reset_password(token, admin_id)
+            assert isinstance(response, WerkzeugResponse)
 
             assert response.status_code == 200
 
@@ -788,6 +822,9 @@ class TestResetPasswordController:
     def test_reset_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
+        admin_email = admin_ctrl_fixture.admin.email
+        assert isinstance(admin_email, str)
+
         # Let's get valid token first
         with mock.patch(
             "api.admin.password_admin_authentication_provider.EmailManager"
@@ -795,9 +832,7 @@ class TestResetPasswordController:
             with admin_ctrl_fixture.ctrl.app.test_request_context(
                 "/admin/forgot_password", method="POST"
             ):
-                flask.request.form = MultiDict(
-                    [("email", admin_ctrl_fixture.admin.email)]
-                )
+                flask.request.form = ImmutableMultiDict([("email", admin_email)])
 
                 response = reset_password_ctrl.forgot_password()
                 assert response.status_code == 200
@@ -816,49 +851,73 @@ class TestResetPasswordController:
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/reset_password", method="POST"
         ):
-            response = reset_password_ctrl.reset_password("bad_token", admin_id)
+            reset_password_response = reset_password_ctrl.reset_password(
+                "bad_token", admin_id
+            )
+            assert isinstance(reset_password_response, WerkzeugResponse)
 
-            assert response.status_code == 401
-            assert "Try again" in response.get_data(as_text=True)
+            assert reset_password_response.status_code == 401
+            assert "Try again" in reset_password_response.get_data(as_text=True)
 
         # If we use bad admin id we get an error response with "Try again" button
-        bad_admin_id = admin_ctrl_fixture.admin.id + 1
+        bad_admin_id = admin_id + 1
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/reset_password", method="POST"
         ):
-            response = reset_password_ctrl.reset_password(token, admin_id + 1)
+            reset_password_response = reset_password_ctrl.reset_password(
+                token, bad_admin_id
+            )
+            assert isinstance(reset_password_response, WerkzeugResponse)
 
-            assert response.status_code == 401
-            assert "Try again" in response.get_data(as_text=True)
+            assert reset_password_response.status_code == 401
+            assert "Try again" in reset_password_response.get_data(as_text=True)
 
         # If there is no passwords we get an error
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/reset_password", method="POST"
         ):
-            flask.request.form = MultiDict([])
+            flask.request.form = ImmutableMultiDict([])
 
-            response = reset_password_ctrl.reset_password(token, admin_id)
-            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+            reset_password_response = reset_password_ctrl.reset_password(
+                token, admin_id
+            )
+            assert isinstance(reset_password_response, WerkzeugResponse)
+            assert (
+                reset_password_response.status_code
+                == INVALID_ADMIN_CREDENTIALS.status_code
+            )
 
         # If there is only one password we get an error
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/reset_password", method="POST"
         ):
-            flask.request.form = MultiDict([("password", "only_one")])
+            flask.request.form = ImmutableMultiDict([("password", "only_one")])
 
-            response = reset_password_ctrl.reset_password(token, admin_id)
-            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+            reset_password_response = reset_password_ctrl.reset_password(
+                token, admin_id
+            )
+            assert isinstance(reset_password_response, WerkzeugResponse)
+            assert (
+                reset_password_response.status_code
+                == INVALID_ADMIN_CREDENTIALS.status_code
+            )
 
         # If there are both passwords but they do not match we also get an error
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/reset_password", method="POST"
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [("password", "something"), ("confirm_password", "something_different")]
             )
 
-            response = reset_password_ctrl.reset_password(token, admin_id)
-            assert response.status_code == INVALID_ADMIN_CREDENTIALS.status_code
+            reset_password_response = reset_password_ctrl.reset_password(
+                token, admin_id
+            )
+            assert isinstance(reset_password_response, WerkzeugResponse)
+            assert (
+                reset_password_response.status_code
+                == INVALID_ADMIN_CREDENTIALS.status_code
+            )
 
         # Finally, let's change that password!
         # Check current password
@@ -868,12 +927,15 @@ class TestResetPasswordController:
         with admin_ctrl_fixture.ctrl.app.test_request_context(
             "/admin/reset_password", method="POST"
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [("password", new_password), ("confirm_password", new_password)]
             )
 
-            response = reset_password_ctrl.reset_password(token, admin_id)
-            assert response.status_code == 200
+            reset_password_response = reset_password_ctrl.reset_password(
+                token, admin_id
+            )
+            assert isinstance(reset_password_response, WerkzeugResponse)
+            assert reset_password_response.status_code == 200
 
             assert admin_ctrl_fixture.admin.has_password(new_password)
 
@@ -910,7 +972,7 @@ class TestPatronController:
         auth_provider = MockAuthenticationProvider({})
         identifier = "Patron"
 
-        form = MultiDict([("identifier", identifier)])
+        form = ImmutableMultiDict([("identifier", identifier)])
         m = patron_controller_fixture.manager.admin_patron_controller._load_patrondata
 
         # User doesn't have admin permission
@@ -968,7 +1030,6 @@ class TestPatronController:
 
         authenticator = object()
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
-            flask.request.form = MultiDict([("identifier", object())])
             response = controller.lookup_patron(authenticator)
             # The authenticator was passed into _load_patrondata()
             assert authenticator == controller.called_with
@@ -994,7 +1055,7 @@ class TestPatronController:
         # This PatronController will always return a specific
         # PatronData object, no matter what is asked for.
         class MockPatronController(PatronController):
-            mock_patrondata = None
+            mock_patrondata: Optional[PatronData] = None
 
             def _load_patrondata(self, authenticator):
                 self.called_with = authenticator
@@ -1008,7 +1069,7 @@ class TestPatronController:
         # We reset their Adobe ID.
         authenticator = object()
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
-            form = MultiDict([("identifier", patron.authorization_identifier)])
+            form = ImmutableMultiDict([("identifier", patron.authorization_identifier)])
             flask.request.form = form
 
             response = controller.reset_adobe_id(authenticator)
@@ -1265,8 +1326,12 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
-            assert 2 == len(response.get("custom_lists"))
+            assert isinstance(response, dict)
+
             lists = response.get("custom_lists")
+            assert isinstance(lists, list)
+            assert 2 == len(lists)
+
             [l1, l2] = sorted(lists, key=lambda l: l.get("id"))
 
             assert one_entry.id == l1.get("id")
@@ -1308,7 +1373,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("id", "4"),
                     ("name", "name"),
@@ -1336,9 +1401,11 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            assert isinstance(list, CustomList)
+            assert isinstance(list.name, str)
+            form = ImmutableMultiDict(
                 [
-                    ("id", list.id),
+                    ("id", str(list.id)),
                     ("name", list.name),
                 ]
             )
@@ -1360,7 +1427,8 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            assert isinstance(list.name, str)
+            form = ImmutableMultiDict(
                 [
                     ("name", list.name),
                 ]
@@ -1390,9 +1458,10 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            assert isinstance(l1.name, str)
+            form = ImmutableMultiDict(
                 [
-                    ("id", l2.id),
+                    ("id", str(l2.id)),
                     ("name", l1.name),
                 ]
             )
@@ -1407,7 +1476,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("name", "name"),
                     ("collections", json.dumps([12345])),
@@ -1428,8 +1497,8 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_admin(
             "/", method="POST", admin=admin
         ):
-            flask.request.library = library
-            form = MultiDict(
+            flask.request.library = library  # type: ignore[attr-defined]
+            form = ImmutableMultiDict(
                 [
                     ("name", "name"),
                     ("collections", json.dumps([])),
@@ -1451,7 +1520,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("name", "name"),
                     ("collections", json.dumps([collection.id])),
@@ -1473,7 +1542,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("name", "List"),
                     (
@@ -1492,6 +1561,7 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
+            assert isinstance(response, flask.Response)
             assert 201 == response.status_code
 
             [list] = admin_librarian_fixture.ctrl.db.session.query(CustomList).all()
@@ -1509,7 +1579,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("name", "400List"),
                     (
@@ -1517,7 +1587,7 @@ class TestCustomListsController:
                         "[]",
                     ),
                     ("collections", "[]"),
-                    ("auto_update", True),
+                    ("auto_update", "True"),
                 ]
             )
             add_request_context(
@@ -1527,6 +1597,7 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
+            assert isinstance(response, ProblemDetail)
             assert 400 == response.status_code
             # List was not created
             assert None == get_one(
@@ -1536,7 +1607,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("name", "400List"),
                     (
@@ -1546,7 +1617,7 @@ class TestCustomListsController:
                         ),
                     ),
                     ("collections", json.dumps([collection.id])),
-                    ("auto_update", True),
+                    ("auto_update", "True"),
                     (
                         "auto_update_query",
                         json.dumps({"query": {"key": "title", "value": "A Title"}}),
@@ -1561,6 +1632,7 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
+            assert isinstance(response, ProblemDetail)
             assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
             assert 400 == response.status_code
 
@@ -1568,11 +1640,11 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ), mock.patch("api.admin.controller.CustomListQueries") as mock_query:
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("name", "200List"),
                     ("collections", json.dumps([collection.id])),
-                    ("auto_update", True),
+                    ("auto_update", "True"),
                     (
                         "auto_update_query",
                         json.dumps({"query": {"key": "title", "value": "A Title"}}),
@@ -1587,6 +1659,7 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
+            assert isinstance(response, flask.Response)
             assert 201 == response.status_code
             [list] = (
                 admin_librarian_fixture.ctrl.db.session.query(CustomList)
@@ -1619,9 +1692,11 @@ class TestCustomListsController:
         list.add_entry(work2)
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
+            assert isinstance(response, flask.Response)
             feed = feedparser.parse(response.get_data())
 
             assert list.name == feed.feed.title
@@ -1660,9 +1735,11 @@ class TestCustomListsController:
             list.add_entry(work)
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
+            assert isinstance(response, flask.Response)
             feed = feedparser.parse(response.get_data())
 
             assert list.name == feed.feed.title
@@ -1794,7 +1871,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("id", str(list.id)),
                     ("name", "new name"),
@@ -1807,9 +1884,11 @@ class TestCustomListsController:
                 flask.request, CustomListsController.CustomListPostRequest, form=form
             )
 
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
+            assert isinstance(response, flask.Response)
 
         # The works associated with the list in ES should have changed, though the total
         # number of documents in the index should be the same.
@@ -1845,7 +1924,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("id", str(list.id)),
                     ("name", "new name"),
@@ -1873,7 +1952,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("id", str(list.id)),
                     ("name", "another new name"),
@@ -1902,7 +1981,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
-            form = MultiDict(
+            form = ImmutableMultiDict(
                 [
                     ("id", str(list.id)),
                     ("name", "new name"),
@@ -2002,9 +2081,11 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
+            assert isinstance(response, flask.Response)
             assert 200 == response.status_code
 
         # The first CustomList and all of its entries have been removed.
@@ -2074,6 +2155,7 @@ class TestCustomListsController:
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
+            assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
             )
@@ -2118,22 +2200,6 @@ class TestCustomListsController:
             "/", library=library, method="POST"
         ):
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
-                customlist.id
-            )
-        return response
-
-    def _share_locally_with_collection(
-        self, customlist, collection, admin_librarian_fixture: AdminLibrarianFixture
-    ):
-        with admin_librarian_fixture.request_context_with_library_and_admin(
-            "/", method="POST"
-        ) as c:
-            flask.request.form = MultiDict(
-                [
-                    ("collection", collection.id),
-                ]
-            )
-            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally_with_library_collection(
                 customlist.id
             )
         return response
@@ -2202,6 +2268,8 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
+            assert isinstance(response, dict)
+
             assert len(response["custom_lists"]) == 1
             collections = [
                 dict(id=c.id, name=c.name, protocol=c.protocol)
@@ -2256,6 +2324,7 @@ class TestCustomListsController:
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
                 s.list.id
             )
+            assert isinstance(response, flask.Response)
             assert response.status_code == 204
 
         assert s.list.shared_locally_with_libraries == []
@@ -2277,6 +2346,7 @@ class TestCustomListsController:
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
                 s.list.id
             )
+            assert isinstance(response, flask.Response)
             assert response.status_code == 204
 
         assert s.list.shared_locally_with_libraries == []
@@ -2293,6 +2363,7 @@ class TestCustomListsController:
         custom_list.auto_update_status = CustomList.UPDATED
         admin_librarian_fixture.ctrl.db.session.commit()
 
+        assert isinstance(custom_list.name, str)
         response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
             custom_list.library,
             custom_list.name,
@@ -2371,7 +2442,7 @@ class TestLanesController:
         lane_for_list.size = 1
 
         with alm_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             # The admin is not a librarian for this library.
             pytest.raises(
                 AdminNotAuthorized,
@@ -2422,12 +2493,12 @@ class TestLanesController:
 
     def test_lanes_post_errors(self, alm_fixture: AdminLibraryManagerFixture):
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict([])
+            flask.request.form = ImmutableMultiDict([])
             response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert NO_DISPLAY_NAME_FOR_LANE == response
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                 ]
@@ -2441,7 +2512,7 @@ class TestLanesController:
         list.library = alm_fixture.ctrl.db.default_library()
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", "12345"),
                     ("display_name", "lane"),
@@ -2453,8 +2524,8 @@ class TestLanesController:
 
         library = alm_fixture.ctrl.db.library()
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.library = library
-            flask.request.form = MultiDict(
+            flask.request.library = library  # type: ignore[attr-defined]
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -2470,7 +2541,7 @@ class TestLanesController:
         lane1.customlists += [list]
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", lane1.id),
                     ("display_name", "lane2"),
@@ -2481,7 +2552,7 @@ class TestLanesController:
             assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane2"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -2491,7 +2562,7 @@ class TestLanesController:
             assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("parent_id", "12345"),
                     ("display_name", "lane"),
@@ -2502,7 +2573,7 @@ class TestLanesController:
             assert MISSING_LANE.uri == response.uri
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("parent_id", lane1.id),
                     ("display_name", "lane"),
@@ -2523,7 +2594,7 @@ class TestLanesController:
         sibling = alm_fixture.ctrl.db.lane("sibling", parent=parent)
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("parent_id", parent.id),
                     ("display_name", "lane"),
@@ -2561,7 +2632,7 @@ class TestLanesController:
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST", library=library
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -2579,7 +2650,7 @@ class TestLanesController:
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST", library=library
         ):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -2590,7 +2661,8 @@ class TestLanesController:
             assert 201 == response.status_code
             lane_id = int(response.data)
 
-        lane: Lane = get_one(alm_fixture.ctrl.db.session, Lane, id=lane_id)
+        lane = get_one(alm_fixture.ctrl.db.session, Lane, id=lane_id)
+        assert isinstance(lane, Lane)
         assert lane.customlists == [list]
         assert lane.library == library
 
@@ -2619,7 +2691,7 @@ class TestLanesController:
         )
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(lane.id)),
                     ("display_name", "new name"),
@@ -2643,7 +2715,7 @@ class TestLanesController:
         lane: Lane = alm_fixture.ctrl.db.lane("default")
         customlist, _ = alm_fixture.ctrl.db.customlist()
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(lane.id)),
                     ("parent_id", "12345"),
@@ -2680,7 +2752,7 @@ class TestLanesController:
         )
 
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert 200 == response.status_code
 
@@ -2716,7 +2788,7 @@ class TestLanesController:
         )
 
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert 200 == response.status_code
 
@@ -2744,7 +2816,7 @@ class TestLanesController:
         lane = alm_fixture.ctrl.db.lane("lane")
         library = alm_fixture.ctrl.db.library()
         with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             pytest.raises(
                 AdminNotAuthorized,
                 alm_fixture.manager.admin_lanes_controller.lane,
@@ -2816,7 +2888,7 @@ class TestLanesController:
         old_lane = alm_fixture.ctrl.db.lane("old lane", library=library)
 
         with alm_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             pytest.raises(
                 AdminNotAuthorized,
                 alm_fixture.manager.admin_lanes_controller.reset,
@@ -2860,8 +2932,8 @@ class TestLanesController:
         ]
 
         with alm_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = library
-            flask.request.data = json.dumps(new_order)
+            flask.request.library = library  # type: ignore[attr-defined]
+            flask.request.data = json.dumps(new_order).encode()
 
             pytest.raises(
                 AdminNotAuthorized,
@@ -2927,7 +2999,7 @@ class TestDashboardController:
                 dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
             )
             url = AdminAnnotator(
-                dashboard_fixture.manager.d_circulation,
+                dashboard_fixture.manager.d_circulation,  # type: ignore
                 dashboard_fixture.ctrl.db.default_library(),
             ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
 
@@ -2944,7 +3016,7 @@ class TestDashboardController:
                 dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
             )
             url = AdminAnnotator(
-                dashboard_fixture.manager.d_circulation,
+                dashboard_fixture.manager.d_circulation,  # type: ignore
                 dashboard_fixture.ctrl.db.default_library(),
             ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
 
@@ -3194,7 +3266,7 @@ class TestSettingsController:
         validator = MockValidator()
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
@@ -3206,7 +3278,9 @@ class TestSettingsController:
                     (Configuration.HELP_EMAIL, "help@example.com"),
                 ]
             )
-            flask.request.files = MultiDict([(Configuration.LOGO, StringIO())])
+            flask.request.files = ImmutableMultiDict(
+                [(Configuration.LOGO, FileStorage())]
+            )
             response = settings_ctrl_fixture.manager.admin_settings_controller.validate_formats(
                 Configuration.LIBRARY_SETTINGS, validator
             )
@@ -3218,7 +3292,7 @@ class TestSettingsController:
                 "form": flask.request.form,
             }
 
-            validator.validate = validator.validate_error
+            setattr(validator, "validate", validator.validate_error)
             # If the validator returns an problem detail, validate_formats returns it.
             response = settings_ctrl_fixture.manager.admin_settings_controller.validate_formats(
                 Configuration.LIBRARY_SETTINGS, validator
@@ -3311,11 +3385,10 @@ class TestSettingsController:
         m = settings_ctrl_fixture.manager.admin_settings_controller.check_url_unique
 
         # Here's an ExternalIntegration.
-        protocol = "a protocol"
-        goal = "a goal"
         original = settings_ctrl_fixture.ctrl.db.external_integration(
-            url="http://service/", protocol=protocol, goal=goal
+            url="http://service/", protocol="a protocol", goal="a goal"
         )
+        assert isinstance(original, ExternalIntegration)
         protocol = original.protocol
         goal = original.goal
 
@@ -3447,20 +3520,38 @@ class TestSettingsController:
             key: str
             value: str
 
-        class Protocol1:
+        class Protocol1(HasLibraryIntegrationConfiguration):
             @classmethod
             def library_settings_class(cls):
                 return P1LibrarySettings
 
-        with pytest.raises(RuntimeError) as raised:
+            @classmethod
+            def label(cls):
+                pass
+
+            @classmethod
+            def description(cls):
+                pass
+
+            @classmethod
+            def settings_class(cls):
+                pass
+
+        with pytest.raises(RuntimeError) as runtime_error_raised:
             _set_configuration_library(
                 config, dict(short_name="not-short-name"), Protocol1
             )
-        assert str(raised.value) == "Could not find the configuration library"
+        assert (
+            str(runtime_error_raised.value)
+            == "Could not find the configuration library"
+        )
 
-        with pytest.raises(ProblemError) as raised:
+        with pytest.raises(ProblemError) as problem_error_raised:
             _set_configuration_library(config, dict(short_name="short-name"), Protocol1)
-        assert raised.value.problem_detail.detail == "Required field 'key' is missing."
+        assert (
+            problem_error_raised.value.problem_detail.detail
+            == "Required field 'key' is missing."
+        )
 
         config = _set_configuration_library(
             config, dict(short_name="short-name", key="key", value="value"), Protocol1
