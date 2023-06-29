@@ -59,6 +59,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import AtomFeed, OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.vendor_id import VendorIDFixture
 
 _strftime = AtomFeed._strftime
 
@@ -357,7 +358,6 @@ class TestCirculationManagerAnnotator:
 class LibraryAnnotatorFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
-        self.vendor_id = vendor_id
         self.work = db.work(with_open_access_download=True)
         parent = db.lane(display_name="Fiction", languages=["eng"], fiction=True)
         self.lane = db.lane(display_name="Fantasy", languages=["eng"])
@@ -568,15 +568,15 @@ class TestLibraryAnnotator:
     # test is being performed.
     @freeze_time("1867-07-01")
     def test_fulfill_link_includes_device_registration_tags(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        vendor_id_fixture: VendorIDFixture,
     ):
         """Verify that when Adobe Vendor ID delegation is included, the
         fulfill link for an Adobe delivery mechanism includes instructions
         on how to get a Vendor ID.
         """
-        annotator_fixture.vendor_id.initialize_adobe(
-            annotator_fixture.db.default_library()
-        )
+        vendor_id_fixture.initialize_adobe(annotator_fixture.db.default_library())
         [pool] = annotator_fixture.work.license_pools
         identifier = pool.identifier
         patron = annotator_fixture.db.patron()
@@ -638,7 +638,9 @@ class TestLibraryAnnotator:
         assert [] == annotator_fixture.annotator.adobe_id_tags("patron identifier")
 
     def test_adobe_id_tags_when_vendor_id_configured(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        vendor_id_fixture: VendorIDFixture,
     ):
         """When vendor ID delegation is configured, adobe_id_tags()
         returns a list containing a single tag. The tag contains
@@ -646,13 +648,13 @@ class TestLibraryAnnotator:
         DRM Device Management Protocol endpoint.
         """
         library = annotator_fixture.db.default_library()
-        annotator_fixture.vendor_id.initialize_adobe(library)
+        vendor_id_fixture.initialize_adobe(library)
         patron_identifier = "patron identifier"
         [element] = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
         assert "{http://librarysimplified.org/terms/drm}licensor" == element.tag
 
         key = "{http://librarysimplified.org/terms/drm}vendor"
-        assert annotator_fixture.vendor_id.TEST_VENDOR_ID == element.attrib[key]
+        assert vendor_id_fixture.TEST_VENDOR_ID == element.attrib[key]
 
         [token, device_management_link] = element
 
@@ -695,7 +697,7 @@ class TestLibraryAnnotator:
             annotator_fixture.db.session,
             ExternalIntegration.USERNAME,
             library,
-            annotator_fixture.vendor_id.registry,
+            vendor_id_fixture.registry,
         )
         annotator_fixture.db.session.delete(setting)
         assert [] == annotator_fixture.annotator.adobe_id_tags("new identifier")
@@ -1214,10 +1216,12 @@ class TestLibraryAnnotator:
         [entry] = feed.entries
         assert annotation_rel not in [x["rel"] for x in entry["links"]]
 
-    def test_active_loan_feed(self, annotator_fixture: LibraryAnnotatorFixture):
-        annotator_fixture.vendor_id.initialize_adobe(
-            annotator_fixture.db.default_library()
-        )
+    def test_active_loan_feed(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        vendor_id_fixture: VendorIDFixture,
+    ):
+        vendor_id_fixture.initialize_adobe(annotator_fixture.db.default_library())
         patron = annotator_fixture.db.patron()
         patron.last_loan_activity_sync = utc_now()
         cls = LibraryLoanAndHoldAnnotator
@@ -1275,7 +1279,7 @@ class TestLibraryAnnotator:
         # The DRM licensing information includes the Adobe vendor ID
         # and the patron's patron identifier for Adobe purposes.
         assert (
-            annotator_fixture.vendor_id.TEST_VENDOR_ID
+            vendor_id_fixture.TEST_VENDOR_ID
             == licensor.attrib["{http://librarysimplified.org/terms/drm}vendor"]
         )
         [client_token, device_management_link] = licensor
@@ -1283,7 +1287,7 @@ class TestLibraryAnnotator:
             annotator_fixture.db.session,
             ExternalIntegration.USERNAME,
             annotator_fixture.db.default_library(),
-            annotator_fixture.vendor_id.registry,
+            vendor_id_fixture.registry,
         ).value.upper()
         assert client_token.text.startswith(expected)
         assert adobe_patron_identifier in client_token.text
@@ -1714,15 +1718,15 @@ class TestLibraryAnnotator:
         assert "http://streaming_link" == fulfill_links[0]["href"]
 
     def test_drm_device_registration_feed_tags(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        vendor_id_fixture: VendorIDFixture,
     ):
         """Check that drm_device_registration_feed_tags returns
         a generic drm:licensor tag, except with the drm:scheme attribute
         set.
         """
-        annotator_fixture.vendor_id.initialize_adobe(
-            annotator_fixture.db.default_library()
-        )
+        vendor_id_fixture.initialize_adobe(annotator_fixture.db.default_library())
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
         )
