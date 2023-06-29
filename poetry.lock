@@ -1547,18 +1547,18 @@ protobuf = ">=4.21.6"
 
 [[package]]
 name = "html-sanitizer"
-version = "1.9.3"
+version = "2.0.0"
 description = "HTML sanitizer"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.8"
 files = [
-    {file = "html_sanitizer-1.9.3-py3-none-any.whl", hash = "sha256:a2e084d0963f38116ba140e8992280acc78874044cf288f037f2ec4ba586ebe6"},
-    {file = "html_sanitizer-1.9.3.tar.gz", hash = "sha256:125c5e09b154cab598b6c11731902dcbdd9d0ede72311814ee040fe6ddef82e0"},
+    {file = "html_sanitizer-2.0.0-py3-none-any.whl", hash = "sha256:5fee0be013b355a32a107b0b0c482863b715b6357d4a904b88a6d2b05560fc6a"},
+    {file = "html_sanitizer-2.0.0.tar.gz", hash = "sha256:5ee79f3636c34c16faf61cec1c6c77c2ec0747bd06e56379031af946f82372ac"},
 ]
 
 [package.dependencies]
 beautifulsoup4 = "*"
-lxml = ">=4.6.5"
+lxml = ">=4.9.1"
 
 [[package]]
 name = "httplib2"
@@ -3124,13 +3124,13 @@ testing = ["argcomplete", "attrs (>=19.2.0)", "hypothesis (>=3.56)", "mock", "no
 
 [[package]]
 name = "pytest-alembic"
-version = "0.10.5"
+version = "0.10.6"
 description = "A pytest plugin for verifying alembic migrations."
 optional = false
 python-versions = ">=3.6,<4"
 files = [
-    {file = "pytest_alembic-0.10.5-py3-none-any.whl", hash = "sha256:b273eedc46d521e02ea8ee6481353af072b533dd2aa93ade1113d87f57a3dd94"},
-    {file = "pytest_alembic-0.10.5.tar.gz", hash = "sha256:69f96a6e1cd3217e46e4df9f797e08e17a162c4a071e027bef43ebab961e7a53"},
+    {file = "pytest_alembic-0.10.6-py3-none-any.whl", hash = "sha256:49da41c8f1b0304f274ebeeac78090290d6cda9c503e1d02540df89b2b9dfc8d"},
+    {file = "pytest_alembic-0.10.6.tar.gz", hash = "sha256:b00360f793333a00c5cc916b661087fdc810b811e78feecd37c12110fd012f86"},
 ]
 
 [package.dependencies]
@@ -3862,13 +3862,13 @@ files = [
 
 [[package]]
 name = "types-flask-cors"
-version = "3.0.10.5"
+version = "4.0.0.0"
 description = "Typing stubs for Flask-Cors"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-Flask-Cors-3.0.10.5.tar.gz", hash = "sha256:6c8f1e62a3dd8001f08cfe39258101e879eccafb8c0a8342b617f11a7884e3db"},
-    {file = "types_Flask_Cors-3.0.10.5-py3-none-any.whl", hash = "sha256:ccfabd36bde7df3f5465c42d776d7bebc3f2ba5f2bf2d2b055850869755b78b2"},
+    {file = "types-Flask-Cors-4.0.0.0.tar.gz", hash = "sha256:91cba0f784ab339d253a46e107c1c90d401ebd3b8b8d07959c5f0ad7c572a066"},
+    {file = "types_Flask_Cors-4.0.0.0-py3-none-any.whl", hash = "sha256:49c86dc7eee1c5bbe8216222d8af3af350b3de4d0b7f3ab6356ec0cb6c49df57"},
 ]
 
 [package.dependencies]
@@ -4263,4 +4263,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "72c8f28b09127a51c7dbd7734a1c7ef0da0fae7ba586ca37fed83dc69cd67e70"
+content-hash = "b89326dfe0eb87ccd8f40fa8995538b6352c0af4e5125678fe064c7d31357b37"
