@@ -1250,17 +1250,22 @@ class TestSearchFacets:
         assert None == defaults.media
         assert m.ORDER_BY_RELEVANCE == defaults.order
         assert None == defaults.min_score
+        assert False == defaults._language_from_query
 
         mock_entrypoint = object()
 
         # If you pass in a single value for medium or language
         # they are turned into a list.
         with_single_value = m(
-            entrypoint=mock_entrypoint, media=Edition.BOOK_MEDIUM, languages="eng"
+            entrypoint=mock_entrypoint,
+            media=Edition.BOOK_MEDIUM,
+            languages="eng",
+            language_from_query=True,
         )
         assert mock_entrypoint == with_single_value.entrypoint
         assert [Edition.BOOK_MEDIUM] == with_single_value.media
         assert ["eng"] == with_single_value.languages
+        assert True == with_single_value._language_from_query
 
         # If you pass in a list of values, it's left alone.
         media = [Edition.BOOK_MEDIUM, Edition.AUDIO_MEDIUM]
@@ -1319,7 +1324,9 @@ class TestSearchFacets:
             )
 
         facets = from_request(extra="value")
-        assert dict(extra="value") == facets.constructor_kwargs
+        assert (
+            dict(extra="value", language_from_query=False) == facets.constructor_kwargs
+        )
 
         # The superclass's from_request implementation pulled the
         # requested EntryPoint out of the request.
@@ -1339,6 +1346,7 @@ class TestSearchFacets:
         # The SearchFacets implementation turned the 'Accept-Language'
         # header into a set of language codes.
         assert ["dan", "eng"] == facets.languages
+        assert False == facets._language_from_query
 
         # Try again with bogus media, languages, and minimum score.
         arguments["media"] = "Unknown Media"
@@ -1351,16 +1359,19 @@ class TestSearchFacets:
         assert None == facets.languages
         assert None == facets.min_score
 
-        # Reading the language query with acceptable Accept-Language header
-        # but not passing that value through.
+        # Reading the language from the query, with a search type
         arguments["language"] = "all"
+        arguments["search_type"] = "json"
         headers["Accept-Language"] = "da, en-gb;q=0.8"
 
         facets = from_request()
-        assert None == facets.languages
+        assert ["all"] == facets.languages
+        assert True == facets._language_from_query
+        assert "json" == facets.search_type
 
         # Try again with no information.
         del arguments["media"]
+        del arguments["language"]
         del headers["Accept-Language"]
 
         facets = from_request()
@@ -1457,7 +1468,16 @@ class TestSearchFacets:
             (Facets.COLLECTION_FACET_GROUP_NAME, Facets.COLLECTION_FULL),
             ("media", Edition.BOOK_MEDIUM),
             ("min_score", "123"),
+            ("search_type", "default"),
         ] == list(facets.items())
+
+        # In case the language came from a query argument
+        facets = SearchFacets(
+            languages=["eng"],
+            language_from_query=True,
+        )
+
+        assert dict(facets.items())["language"] == ["eng"]
 
     def test_navigation(self):
         """Navigating from one SearchFacets to another gives a new
@@ -1526,6 +1546,12 @@ class TestSearchFacets:
         filter = Filter(languages=None)
         facets.modify_search_filter(filter)
         assert None == filter.languages
+
+        # We don't interfere with the languages filter when languages is ["all"]
+        facets = SearchFacets(languages="all")
+        filter = Filter(languages=["spa"])
+        facets.modify_search_filter(filter)
+        assert ["spa"] == filter.languages
 
     def test_modify_search_filter_accepts_relevance_order(self):
         # By default, Opensearch orders by relevance, so if order

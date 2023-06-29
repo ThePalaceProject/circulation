@@ -3019,9 +3019,7 @@ class TestEntrypointLinkInsertion:
 
         # The make_link function that was passed in calls
         # TestAnnotator.search_url() when passed an EntryPoint.
-        first_page_url = (
-            "http://wl/?available=all&collection=full&entrypoint=Book&order=relevance"
-        )
+        first_page_url = "http://wl/?available=all&collection=full&entrypoint=Book&order=relevance&search_type=default"
         assert first_page_url == make_link(EbooksEntryPoint)
 
         # Pagination information is not propagated through entry point links
