@@ -901,6 +901,10 @@ class GenreData:
             )
 
 
+Fantasy: GenreData
+Romance: GenreData
+Science_Fiction: GenreData
+
 genres = dict()
 GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)
 

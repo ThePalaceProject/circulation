@@ -1372,7 +1372,7 @@ class TestAuthdataUtility:
 
         # This patron has a Credential containing their Adobe ID
         data_source = DataSource.lookup(vendor_id_fixture.db.session, DataSource.ADOBE)
-        adobe_id = Credential(  # type: ignore
+        adobe_id = Credential(
             patron=patron,
             data_source=data_source,
             type=AdobeVendorIDModel.VENDOR_ID_UUID_TOKEN_TYPE,

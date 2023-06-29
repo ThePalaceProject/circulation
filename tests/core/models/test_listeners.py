@@ -56,7 +56,7 @@ class ExampleSiteConfigurationHasChangedFixture:
         )
         data.mock = MockSiteConfigurationHasChanged()
         for module in model.listeners, lane:
-            module.site_configuration_has_changed = data.mock.run
+            module.site_configuration_has_changed = data.mock.run  # type: ignore[attr-defined]
         return data
 
     def close(self):

@@ -30,6 +30,7 @@ def admin_fixture(db: DatabaseTransactionFixture) -> AdminFixture:
 class TestAdmin:
     def test_password_hashed(self, admin_fixture: AdminFixture):
         pytest.raises(NotImplementedError, lambda: admin_fixture.admin.password)
+        assert isinstance(admin_fixture.admin.password_hashed, str)
         assert admin_fixture.admin.password_hashed.startswith("$2b$")
 
     def test_with_password(self, admin_fixture: AdminFixture):
@@ -186,11 +187,13 @@ class TestAdmin:
         admin = admin_fixture.admin
         db_session = admin_fixture.db.session
         secret_key = "secret"
+        admin_id = admin.id
+        assert isinstance(admin_id, int)
 
         # Random manually generated token - unsuccessful validation
         random_token = "random"
         invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
-            random_token, admin.id, db_session, secret_key
+            random_token, admin_id, db_session, secret_key
         )
         assert isinstance(invalid_token, ProblemDetail)
         assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
@@ -198,7 +201,7 @@ class TestAdmin:
         # Generated valid token but manually changed - unsuccessful validation
         tampered_token = f"tampered-{admin.generate_reset_password_token(secret_key)}"
         invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
-            tampered_token, admin.id, db_session, secret_key
+            tampered_token, admin_id, db_session, secret_key
         )
         assert isinstance(invalid_token, ProblemDetail)
         assert invalid_token == INVALID_RESET_PASSWORD_TOKEN
@@ -209,7 +212,7 @@ class TestAdmin:
             utc_now() + timedelta(seconds=Admin.RESET_PASSWORD_TOKEN_MAX_AGE + 1)
         ):
             expired_token = Admin.validate_reset_password_token_and_fetch_admin(
-                valid_token, admin.id, db_session, secret_key
+                valid_token, admin_id, db_session, secret_key
             )
             assert isinstance(expired_token, ProblemDetail)
             assert expired_token.uri == INVALID_RESET_PASSWORD_TOKEN.uri
@@ -217,7 +220,7 @@ class TestAdmin:
 
         # Valid token but invalid admin id - unsuccessful validation
         valid_token = admin.generate_reset_password_token(secret_key)
-        invalid_admin_id = admin.id + 1
+        invalid_admin_id = admin_id + 1
         invalid_token = Admin.validate_reset_password_token_and_fetch_admin(
             valid_token, invalid_admin_id, db_session, secret_key
         )
@@ -227,7 +230,7 @@ class TestAdmin:
         # Valid token but the admin email has changed in the meantime - strange situation - unsuccessful validation
         admin.email = "changed@email.com"
         invalid_email = Admin.validate_reset_password_token_and_fetch_admin(
-            valid_token, admin.id, db_session, secret_key
+            valid_token, admin_id, db_session, secret_key
         )
         assert isinstance(invalid_email, ProblemDetail)
         assert invalid_email == INVALID_RESET_PASSWORD_TOKEN
@@ -235,7 +238,7 @@ class TestAdmin:
         # Valid token - admin is successfully extracted from token
         valid_token = admin.generate_reset_password_token(secret_key)
         extracted_admin = Admin.validate_reset_password_token_and_fetch_admin(
-            valid_token, admin.id, db_session, secret_key
+            valid_token, admin_id, db_session, secret_key
         )
         assert isinstance(extracted_admin, Admin)
         assert extracted_admin == admin

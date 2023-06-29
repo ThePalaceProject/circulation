@@ -16,7 +16,7 @@ class TestDataSource:
         assert key == gutenberg.cache_key()
 
         # Object has been loaded into cache.
-        assert (gutenberg, False) == DataSource.by_cache_key(db.session, key, None)
+        assert (gutenberg, False) == DataSource.by_cache_key(db.session, key, None)  # type: ignore[arg-type]
 
         # Now try creating a new data source.
         key = "New data source"
@@ -28,7 +28,7 @@ class TestDataSource:
         assert key == new_source.name
         assert True == new_source.offers_licenses
 
-        assert (new_source, False) == DataSource.by_cache_key(db.session, key, None)
+        assert (new_source, False) == DataSource.by_cache_key(db.session, key, None)  # type: ignore[arg-type]
 
     def test_lookup_by_deprecated_name(self, db: DatabaseTransactionFixture):
         session = db.session

@@ -23,7 +23,7 @@ from ..util.datetime_helpers import utc_now
 from . import Base, get_one, get_one_or_create
 
 if TYPE_CHECKING:
-    from core.model import DataSource, Patron
+    from core.model import Collection, DataSource, Patron
 
 
 class Credential(Base):
@@ -36,7 +36,11 @@ class Credential(Base):
         "DataSource", back_populates="credentials"
     )
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron: Mapped[Patron] = relationship("Patron", back_populates="credentials")
     collection_id = Column(Integer, ForeignKey("collections.id"), index=True)
+    collection: Mapped[Collection] = relationship(
+        "Collection", back_populates="credentials"
+    )
     type = Column(String(255), index=True)
     credential = Column(String)
     expires = Column(DateTime(timezone=True), index=True)

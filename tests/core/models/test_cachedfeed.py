@@ -35,6 +35,10 @@ class TestCachedFeed:
             # Mock all of the helper methods, which are tested
             # separately below.
 
+            _prepare_keys_called_with: tuple
+            max_cache_age_called_with: tuple
+            _should_refresh_called_with: tuple
+
             @classmethod
             def _prepare_keys(cls, *args):
                 cls._prepare_keys_called_with = args
@@ -629,7 +633,7 @@ class TestCachedFeed:
         # When a WorkList is associated with a specific .work,
         # that information is included as keys.work.
         work = object()
-        worklist.work = work
+        worklist.work = work  # type: ignore[attr-defined]
         keys = m(db.session, worklist, None, None)
         assert work == keys.work
 

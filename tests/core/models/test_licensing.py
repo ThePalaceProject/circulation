@@ -561,7 +561,8 @@ class TestLicensePool:
         assert [] == qu.all()
 
         # Let's delete it.
-        [db.session.delete(x) for x in pool.delivery_mechanisms]
+        for x in pool.delivery_mechanisms:
+            db.session.delete(x)
         assert [pool] == qu.all()
 
     def test_no_license_pool_for_non_primary_identifier(

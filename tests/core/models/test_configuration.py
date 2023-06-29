@@ -348,22 +348,22 @@ nonsecret_setting='2'"""
 class TestUniquenessConstraints:
     def test_duplicate_sitewide_setting(self, db: DatabaseTransactionFixture):
         # You can't create two sitewide settings with the same key.
-        c1 = ConfigurationSetting(key="key", value="value1")
+        c1 = ConfigurationSetting(key="key", _value="value1")
         db.session.add(c1)
         db.session.flush()
-        c2 = ConfigurationSetting(key="key", value="value2")
+        c2 = ConfigurationSetting(key="key", _value="value2")
         db.session.add(c2)
         pytest.raises(IntegrityError, db.session.flush)
 
     def test_duplicate_library_setting(self, db: DatabaseTransactionFixture):
         # A library can't have two settings with the same key.
         c1 = ConfigurationSetting(
-            key="key", value="value1", library=db.default_library()
+            key="key", _value="value1", library=db.default_library()
         )
         db.session.add(c1)
         db.session.flush()
         c2 = ConfigurationSetting(
-            key="key", value="value2", library=db.default_library()
+            key="key", _value="value2", library=db.default_library()
         )
         db.session.add(c2)
         pytest.raises(IntegrityError, db.session.flush)
@@ -373,12 +373,12 @@ class TestUniquenessConstraints:
         # same key.
         integration = db.external_integration(db.fresh_str())
         c1 = ConfigurationSetting(
-            key="key", value="value1", external_integration=integration
+            key="key", _value="value1", external_integration=integration
         )
         db.session.add(c1)
         db.session.flush()
         c2 = ConfigurationSetting(
-            key="key", value="value1", external_integration=integration
+            key="key", _value="value1", external_integration=integration
         )
         db.session.add(c2)
         pytest.raises(IntegrityError, db.session.flush)
@@ -391,7 +391,7 @@ class TestUniquenessConstraints:
         integration = db.external_integration(db.fresh_str())
         c1 = ConfigurationSetting(
             key="key",
-            value="value1",
+            _value="value1",
             library=db.default_library(),
             external_integration=integration,
         )
@@ -399,7 +399,7 @@ class TestUniquenessConstraints:
         db.session.flush()
         c2 = ConfigurationSetting(
             key="key",
-            value="value1",
+            _value="value1",
             library=db.default_library(),
             external_integration=integration,
         )

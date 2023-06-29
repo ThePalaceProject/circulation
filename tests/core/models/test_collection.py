@@ -280,14 +280,17 @@ class TestCollection:
 
         # Trying to change the Bibliotheca collection's data_source does nothing.
         bibliotheca.data_source = DataSource.AXIS_360
+        assert isinstance(bibliotheca.data_source, DataSource)
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 
         # Trying to change the opds collection's data_source is fine.
         opds.data_source = DataSource.PLYMPTON
+        assert isinstance(opds.data_source, DataSource)
         assert DataSource.PLYMPTON == opds.data_source.name
 
         # Resetting it to something else is fine.
         opds.data_source = DataSource.OA_CONTENT_SERVER
+        assert isinstance(opds.data_source, DataSource)
         assert DataSource.OA_CONTENT_SERVER == opds.data_source.name
 
         # Resetting it to None is fine.
@@ -302,6 +305,7 @@ class TestCollection:
 
         library = db.default_library()
         library.collections.append(test_collection)
+        assert isinstance(library.id, int)
         test_collection.integration_configuration.for_library(library.id, create=True)
 
         ebook = Edition.BOOK_MEDIUM
@@ -407,7 +411,8 @@ class TestCollection:
 
         # Let's delete all the delivery mechanisms.
         for pool in (pool1, pool2):
-            [session.delete(x) for x in pool.delivery_mechanisms]
+            for x in pool.delivery_mechanisms:
+                session.delete(x)
 
         # Now the query matches LicensePools if they are in the
         # appropriate collection.
@@ -450,9 +455,9 @@ class TestCollection:
 
         # If the collection is the child of another collection,
         # its parent is mentioned.
-        child = Collection(
-            name="Child", parent=test_collection, external_account_id="id2"
-        )
+        child = Collection(name="Child", external_account_id="id2")
+        child.parent = test_collection
+
         child.create_external_integration(protocol=ExternalIntegration.OVERDRIVE)
         child.create_integration_configuration(protocol=ExternalIntegration.OVERDRIVE)
         data = child.explain()
@@ -503,6 +508,7 @@ class TestCollection:
             protocol=ExternalIntegration.OPDS_IMPORT,
             external_account_id=(db.fresh_url() + "/"),
         )
+        assert isinstance(opds.external_account_id, str)
         expected = build_expected(
             ExternalIntegration.OPDS_IMPORT, opds.external_account_id[:-1]
         )

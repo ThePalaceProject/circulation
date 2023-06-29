@@ -179,7 +179,7 @@ class Patron(Base):
 
     # One Patron can have many associated Credentials.
     credentials: Mapped[List[Credential]] = relationship(
-        "Credential", backref="patron", cascade="delete"
+        "Credential", back_populates="patron", cascade="delete"
     )
 
     device_tokens: list[DeviceToken]
