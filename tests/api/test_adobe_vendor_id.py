@@ -1,6 +1,5 @@
 import base64
 import datetime
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,6 +11,7 @@ from api.registration.constants import RegistrationConstants
 from core.config import CannotLoadConfiguration
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.util.datetime_helpers import datetime_utc, utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 
 
@@ -22,7 +22,6 @@ def authdata() -> AuthdataUtility:
         library_uri="http://my-library.org/",
         library_short_name="MyLibrary",
         secret="My library secret",
-        other_libraries={"http://your-library.org/": ("you", "Your library secret")},
     )
 
 
@@ -67,15 +66,12 @@ class TestAuthdataUtility:
         self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
     ):
         library = vendor_id_fixture.db.default_library()
-        library2 = vendor_id_fixture.db.library()
-        vendor_id_fixture.initialize_adobe(library, [library2])
+        vendor_id_fixture.initialize_adobe(library)
         library_url = library.setting(Configuration.WEBSITE_URL).value
-        library2_url = library2.setting(Configuration.WEBSITE_URL).value
 
         utility = AuthdataUtility.from_config(library)
         assert utility is not None
         assert library.short_name is not None
-        assert library2.short_name is not None
 
         registry = ExternalIntegration.lookup(
             vendor_id_fixture.db.session,
@@ -104,15 +100,6 @@ class TestAuthdataUtility:
 
         assert VendorIDFixture.TEST_VENDOR_ID == utility.vendor_id
         assert library_url == utility.library_uri
-        assert {
-            library2_url: "%s token secret" % library2.short_name,
-            library_url: "%s token secret" % library.short_name,
-        } == utility.secrets_by_library_uri
-
-        assert {
-            "%sTOKEN" % library.short_name.upper(): library_url,
-            "%sTOKEN" % library2.short_name.upper(): library2_url,
-        } == utility.library_uris_by_short_name
 
         # If the Library object is disconnected from its database
         # session, as may happen in production...
@@ -129,13 +116,8 @@ class TestAuthdataUtility:
 
         # ...unless a database session is provided in the constructor.
         authdata_2 = AuthdataUtility.from_config(library, vendor_id_fixture.db.session)
-        assert authdata_2 is not None
-        assert {
-            "%sTOKEN" % library.short_name.upper(): library_url,
-            "%sTOKEN" % library2.short_name.upper(): library2_url,
-        } == authdata_2.library_uris_by_short_name
+        assert isinstance(authdata_2, AuthdataUtility)
         library = vendor_id_fixture.db.session.merge(library)
-        assert library.short_name is not None
         vendor_id_fixture.db.session.commit()
 
         # If an integration is set up but incomplete, from_config
@@ -168,41 +150,13 @@ class TestAuthdataUtility:
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
         setting.value = old_secret
 
-        # If other libraries are not configured, that's fine. We'll
-        # only have a configuration for ourselves.
-        vendor_id_fixture.adobe_vendor_id.set_setting(
-            AuthdataUtility.OTHER_LIBRARIES_KEY, None
-        )
-        authdata_3 = AuthdataUtility.from_config(library)
-        assert authdata_3 is not None
-        assert {
-            library_url: "%s token secret" % library.short_name
-        } == authdata_3.secrets_by_library_uri
-        assert {
-            "%sTOKEN" % library.short_name.upper(): library_url
-        } == authdata_3.library_uris_by_short_name
-
-        # Short library names are case-insensitive. If the
-        # configuration has the same library short name twice, you
-        # can't create an AuthdataUtility.
-        vendor_id_fixture.adobe_vendor_id.set_setting(
-            AuthdataUtility.OTHER_LIBRARIES_KEY,
-            json.dumps(
-                {
-                    "http://a/": ("a", "secret1"),
-                    "http://b/": ("A", "secret2"),
-                }
-            ),
-        )
-        pytest.raises(ValueError, AuthdataUtility.from_config, library)
-
         # If there is no Adobe Vendor ID integration set up,
         # from_config() returns None.
         vendor_id_fixture.db.session.delete(registry)
         assert AuthdataUtility.from_config(library) is None
 
     def test_short_client_token_for_patron(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
+        self, authdata: AuthdataUtility, db: DatabaseTransactionFixture
     ):
         class MockAuthdataUtility(AuthdataUtility):
             def __init__(self):
@@ -218,7 +172,7 @@ class TestAuthdataUtility:
 
         # A patron is passed in; we get their identifier for Adobe ID purposes,
         # and generate a short client token based on it
-        patron = vendor_id_fixture.db.patron()
+        patron = db.patron()
         authdata = MockAuthdataUtility()
         sct = authdata.short_client_token_for_patron(patron)
         assert patron == authdata.patron_identifier_called_with
@@ -229,9 +183,7 @@ class TestAuthdataUtility:
         assert sct == ("a", "b")
         assert authdata.encode_sct_called_with == "identifier for Adobe ID purposes"
 
-    def test_decode_round_trip(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_decode_round_trip(self, authdata: AuthdataUtility):
         patron_identifier = "Patron identifier"
         vendor_id, authdata_bytes = authdata.encode(patron_identifier)
         assert "The Vendor ID" == vendor_id
@@ -241,7 +193,7 @@ class TestAuthdataUtility:
         assert ("http://my-library.org/", "Patron identifier") == decoded
 
     def test_decode_round_trip_with_intermediate_mischief(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
+        self, authdata: AuthdataUtility
     ):
         patron_identifier = "Patron identifier"
         vendor_id, authdata_bytes = authdata.encode(patron_identifier)
@@ -255,9 +207,7 @@ class TestAuthdataUtility:
         decoded = authdata.decode(authdata_other_bytes)
         assert ("http://my-library.org/", "Patron identifier") == decoded
 
-    def test_encode(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_encode(self, authdata: AuthdataUtility):
         # Test that _encode gives a known value with known input.
         patron_identifier = "Patron identifier"
         now = datetime_utc(2016, 1, 1, 12, 0, 0)
@@ -272,37 +222,7 @@ class TestAuthdataUtility:
             == authdata_encoded
         )
 
-    def test_decode_from_another_library(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
-
-        # Here's the AuthdataUtility used by another library.
-        foreign_authdata = AuthdataUtility(
-            vendor_id="The Vendor ID",
-            library_uri="http://your-library.org/",
-            library_short_name="you",
-            secret="Your library secret",
-        )
-
-        patron_identifier = "Patron identifier"
-        vendor_id, authdata_bytes = foreign_authdata.encode(patron_identifier)
-
-        # Because we know the other library's secret, we're able to
-        # decode the authdata.
-        decoded = authdata.decode(authdata_bytes)
-        assert ("http://your-library.org/", "Patron identifier") == decoded
-
-        # If our secret doesn't match the other library's secret,
-        # we can't decode the authdata
-        foreign_authdata.secret = "A new secret"
-        vendor_id, authdata_other_bytes = foreign_authdata.encode(patron_identifier)
-        with pytest.raises(DecodeError) as excinfo:
-            authdata.decode(authdata_other_bytes)
-        assert "Signature verification failed" in str(excinfo.value)
-
-    def test_decode_from_unknown_library_fails(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_decode_from_unknown_library_fails(self, authdata: AuthdataUtility):
         # Here's the AuthdataUtility used by a library we don't know
         # about.
         foreign_authdata = AuthdataUtility(
@@ -317,30 +237,22 @@ class TestAuthdataUtility:
             authdata.decode(authdata_bytes)
         assert "Unknown library: http://some-other-library.org/" in str(excinfo.value)
 
-    def test_cannot_decode_token_from_future(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_cannot_decode_token_from_future(self, authdata: AuthdataUtility):
         future = utc_now() + datetime.timedelta(days=365)
         authdata_bytes = authdata._encode("Patron identifier", iat=future)
         pytest.raises(InvalidIssuedAtError, authdata.decode, authdata_bytes)
 
-    def test_cannot_decode_expired_token(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_cannot_decode_expired_token(self, authdata: AuthdataUtility):
         expires = datetime_utc(2016, 1, 1, 12, 0, 0)
         authdata_bytes = authdata._encode("Patron identifier", exp=expires)
         pytest.raises(ExpiredSignatureError, authdata.decode, authdata_bytes)
 
-    def test_cannot_encode_null_patron_identifier(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_cannot_encode_null_patron_identifier(self, authdata: AuthdataUtility):
         with pytest.raises(ValueError) as excinfo:
             authdata.encode(None)
         assert "No patron identifier specified" in str(excinfo.value)
 
-    def test_cannot_decode_null_patron_identifier(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_cannot_decode_null_patron_identifier(self, authdata: AuthdataUtility):
         authdata_bytes = authdata._encode(
             authdata.library_uri,
             None,
@@ -349,9 +261,7 @@ class TestAuthdataUtility:
             authdata.decode(authdata_bytes)
         assert "No subject specified" in str(excinfo.value)
 
-    def test_short_client_token_round_trip(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_short_client_token_round_trip(self, authdata: AuthdataUtility):
         # Encoding a token and immediately decoding it gives the expected
         # result.
         vendor_id, token = authdata.encode_short_client_token("a patron")
@@ -361,9 +271,7 @@ class TestAuthdataUtility:
         assert authdata.library_uri == library_uri
         assert "a patron" == patron
 
-    def test_short_client_token_encode_known_value(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_short_client_token_encode_known_value(self, authdata: AuthdataUtility):
         # Verify that the encoding algorithm gives a known value on known
         # input.
         value = authdata._encode_short_client_token(
@@ -432,37 +340,7 @@ class TestAuthdataUtility:
         )
         assert token.split("|")[0:-1] == ["YOU", "1620187200", "Patron identifier"]
 
-    def test_decode_short_client_token_from_another_library(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
-        # Here's the AuthdataUtility used by another library.
-        foreign_authdata = AuthdataUtility(
-            vendor_id="The Vendor ID",
-            library_uri="http://your-library.org/",
-            library_short_name="you",
-            secret="Your library secret",
-        )
-
-        patron_identifier = "Patron identifier"
-        vendor_id, token = foreign_authdata.encode_short_client_token(patron_identifier)
-
-        # Because we know the other library's secret, we're able to
-        # decode the authdata.
-        decoded = authdata.decode_short_client_token(token)
-        assert ("http://your-library.org/", "Patron identifier") == decoded
-
-        # If our secret for a library doesn't match the other
-        # library's short token signing key, we can't decode the
-        # authdata.
-        foreign_authdata.short_token_signing_key = b"A new secret"
-        vendor_id, token = foreign_authdata.encode_short_client_token(patron_identifier)
-        with pytest.raises(ValueError) as excinfo:
-            authdata.decode_short_client_token(token)
-        assert "Invalid signature for" in str(excinfo.value)
-
-    def test_decode_client_token_errors(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
-    ):
+    def test_decode_client_token_errors(self, authdata: AuthdataUtility):
         # Test various token errors
         m = authdata._decode_short_client_token
 
@@ -485,14 +363,6 @@ class TestAuthdataUtility:
         with pytest.raises(ValueError) as excinfo:
             m("library|1234|patron", b"signature")
         assert 'I don\'t know how to handle tokens from library "LIBRARY"' in str(
-            excinfo.value
-        )
-
-        # We must have the shared secret for the given library.
-        authdata.library_uris_by_short_name["LIBRARY"] = "http://a-library.com/"
-        with pytest.raises(ValueError) as excinfo:
-            m("library|1234|patron", b"signature")
-        assert "I don't know the secret for library http://a-library.com/" in str(
             excinfo.value
         )
 
@@ -528,7 +398,7 @@ class TestAuthdataUtility:
         assert value == AuthdataUtility.adobe_base64_decode(encoded).decode("utf-8")
 
     def test__encode_short_client_token_uses_adobe_base64_encoding(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
+        self, authdata: AuthdataUtility
     ):
         MockSigner = MagicMock()
         # Always return the same signature, crafted to contain a

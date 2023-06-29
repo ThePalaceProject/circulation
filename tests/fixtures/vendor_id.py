@@ -1,5 +1,6 @@
-import json
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import List
 
 import pytest
 
@@ -11,59 +12,33 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class VendorIDFixture:
-    """A fixture that knows how to set up an Adobe Vendor ID
-    integration.
-    """
+    """A fixture that knows how to set up an Adobe Vendor ID integration."""
 
     TEST_VENDOR_ID = "vendor id"
-    TEST_NODE_VALUE = 114740953091845
 
     db: DatabaseTransactionFixture
-    adobe_vendor_id: ExternalIntegration
     registry: ExternalIntegration
 
     def initialize_adobe(
         self,
-        vendor_id_library: Library,
-        short_token_libraries: Optional[List[Library]] = None,
+        vendor_id_libraries: Library | List[Library],
     ):
-        if short_token_libraries is None:
-            short_token_libraries = []
-        else:
-            short_token_libraries = list(short_token_libraries)
+        if isinstance(vendor_id_libraries, Library):
+            vendor_id_libraries = [vendor_id_libraries]
 
-        if not vendor_id_library in short_token_libraries:
-            short_token_libraries.append(vendor_id_library)
-
-        # The first library acts as an Adobe Vendor ID server.
-        self.adobe_vendor_id = self.db.external_integration(
-            ExternalIntegration.ADOBE_VENDOR_ID,
-            ExternalIntegration.DRM_GOAL,
-            username=VendorIDFixture.TEST_VENDOR_ID,
-            libraries=[vendor_id_library],
-        )
-
-        # The other libraries will share a registry integration.
+        # The libraries will share a registry integration.
         self.registry = self.db.external_integration(
             ExternalIntegration.OPDS_REGISTRATION,
             ExternalIntegration.DISCOVERY_GOAL,
-            libraries=short_token_libraries,
+            libraries=vendor_id_libraries,
         )
 
-        # The integration knows which Adobe Vendor ID server it
-        # gets its Adobe IDs from.
-        self.registry.set_setting(
-            AuthdataUtility.VENDOR_ID_KEY, self.adobe_vendor_id.username
-        )
+        # The integration knows which Adobe Vendor ID server it gets its Adobe IDs from.
+        self.registry.set_setting(AuthdataUtility.VENDOR_ID_KEY, self.TEST_VENDOR_ID)
 
-        # As we give libraries their Short Client Token settings,
-        # we build the 'other_libraries' setting we'll apply to the
-        # Adobe Vendor ID integration.
-        other_libraries = dict()
-
-        # Every library in the system can generate Short Client
-        # Tokens.
-        for library in short_token_libraries:
+        # Every library given to this fixture will be setup to be able to generate
+        # Short Client Tokens.
+        for library in vendor_id_libraries:
             # Each library will get a slightly different short
             # name and secret for generating Short Client Tokens.
             library_uri = self.db.fresh_url()
@@ -84,17 +59,6 @@ class VendorIDFixture:
             ).value = RegistrationConstants.SUCCESS_STATUS
 
             library.setting(Configuration.WEBSITE_URL).value = library_uri
-
-            # Each library's Short Client Token configuration will be registered
-            # with that Adobe Vendor ID server.
-            if library != vendor_id_library:
-                other_libraries[library_uri] = (short_name, secret)
-
-        # Tell the Adobe Vendor ID server about the other libraries.
-        other_libraries_str = json.dumps(other_libraries)
-        self.adobe_vendor_id.set_setting(
-            AuthdataUtility.OTHER_LIBRARIES_KEY, other_libraries_str
-        )
 
     def __init__(self, db: DatabaseTransactionFixture):
         assert isinstance(db, DatabaseTransactionFixture)

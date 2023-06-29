@@ -655,9 +655,7 @@ class TestLibraryAnnotator:
         assert "{http://librarysimplified.org/terms/drm}licensor" == element.tag
 
         key = "{http://librarysimplified.org/terms/drm}vendor"
-        assert (
-            annotator_fixture.vendor_id.adobe_vendor_id.username == element.attrib[key]
-        )
+        assert annotator_fixture.vendor_id.TEST_VENDOR_ID == element.attrib[key]
 
         [token, device_management_link] = element
 
@@ -1280,7 +1278,7 @@ class TestLibraryAnnotator:
         # The DRM licensing information includes the Adobe vendor ID
         # and the patron's patron identifier for Adobe purposes.
         assert (
-            annotator_fixture.vendor_id.adobe_vendor_id.username
+            annotator_fixture.vendor_id.TEST_VENDOR_ID
             == licensor.attrib["{http://librarysimplified.org/terms/drm}vendor"]
         )
         [client_token, device_management_link] = licensor

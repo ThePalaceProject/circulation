@@ -61,7 +61,6 @@ class AuthdataUtility:
         library_uri: str,
         library_short_name: str,
         secret: str,
-        other_libraries: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> None:
         """Basic constructor.
 
@@ -80,12 +79,6 @@ class AuthdataUtility:
         which must be as short as possible (thus the name).
 
         :param secret: A secret used to sign this library's authdata.
-
-        :param other_libraries: A dictionary mapping other libraries'
-        canonical URIs to their (short name, secret) 2-tuples. An
-        instance of this class will be able to decode an authdata from
-        any library in this dictionary (plus the library it was
-        initialized for).
         """
         self.vendor_id = vendor_id
 
@@ -99,35 +92,14 @@ class AuthdataUtility:
         # This is used to encode both JWTs and short client tokens.
         self.secret = secret
 
-        # This is used by the delegation authority to _decode_ JWTs.
-        self.secrets_by_library_uri = {}
-        self.secrets_by_library_uri[self.library_uri] = secret
-
-        # This is used by the delegation authority to _decode_ short
-        # client tokens.
-        self.library_uris_by_short_name = {}
-        self.library_uris_by_short_name[self.short_name] = self.library_uri
-
-        # Fill in secrets_by_library_uri and library_uris_by_short_name
-        # for other libraries.
-        other_libraries = other_libraries or {}
-        for uri, v in list(other_libraries.items()):
-            short_name, secret = v
-            short_name = short_name.upper()
-            if short_name in self.library_uris_by_short_name:
-                # This can happen if the same library is in the list
-                # twice, capitalized differently.
-                raise ValueError("Duplicate short name: %s" % short_name)
-            self.library_uris_by_short_name[short_name] = uri
-            self.secrets_by_library_uri[uri] = secret
-
-        self.log = logging.getLogger("Adobe authdata utility")
+        self.log = logging.getLogger(
+            f"{self.__class__.__module__}.{self.__class__.__name__}"
+        )
 
         self.short_token_signer = HMACAlgorithm(HMACAlgorithm.SHA256)
         self.short_token_signing_key = self.short_token_signer.prepare_key(self.secret)
 
     VENDOR_ID_KEY = "vendor_id"
-    OTHER_LIBRARIES_KEY = "other_libraries"
 
     @classmethod
     def from_config(
@@ -196,19 +168,6 @@ class AuthdataUtility:
             _db, ExternalIntegration.PASSWORD, library, integration
         ).value
 
-        other_libraries = None
-        adobe_integration = ExternalIntegration.lookup(
-            _db,
-            ExternalIntegration.ADOBE_VENDOR_ID,
-            ExternalIntegration.DRM_GOAL,
-            library=library,
-        )
-        if adobe_integration:
-            other_libraries = adobe_integration.setting(
-                cls.OTHER_LIBRARIES_KEY
-            ).json_value
-        other_libraries = other_libraries or dict()
-
         if not vendor_id or not library_uri or not library_short_name or not secret:
             raise CannotLoadConfiguration(
                 "Short Client Token configuration is incomplete. "
@@ -220,7 +179,7 @@ class AuthdataUtility:
             raise CannotLoadConfiguration(
                 "Library short name cannot contain the pipe character."
             )
-        return cls(vendor_id, library_uri, library_short_name, secret, other_libraries)
+        return cls(vendor_id, library_uri, library_short_name, secret)
 
     @classmethod
     def adobe_relevant_credentials(self, patron: Patron) -> Query[Credential]:
@@ -320,7 +279,6 @@ class AuthdataUtility:
             pass
 
         exceptions = []
-        library_uri = subject = None
         for authdata in potential_tokens:
             try:
                 return self._decode(authdata)
@@ -347,14 +305,14 @@ class AuthdataUtility:
 
         # This lets us get the library URI, which lets us get the secret.
         library_uri = decoded.get("iss")
-        if library_uri not in self.secrets_by_library_uri:
+        if library_uri != self.library_uri:
             # The request came in without a library specified
             # or with an unknown library specified.
             raise jwt.exceptions.DecodeError("Unknown library: %s" % library_uri)
 
         # We know the secret for this library, so we can re-decode the
         # secret and require signature validation this time.
-        secret = self.secrets_by_library_uri[library_uri]
+        secret = self.secret
         decoded = jwt.decode(authdata_str, secret, algorithms=[self.ALGORITHM])
         if "sub" not in decoded:
             raise jwt.exceptions.DecodeError("No subject specified.")
@@ -486,15 +444,11 @@ class AuthdataUtility:
         if not patron_identifier:
             raise ValueError("Token %s has empty patron identifier" % token)
 
-        if not library_short_name in self.library_uris_by_short_name:
+        if library_short_name != self.short_name:
             raise ValueError(
                 'I don\'t know how to handle tokens from library "%s"'
                 % library_short_name
             )
-        library_uri = self.library_uris_by_short_name[library_short_name]
-        if not library_uri in self.secrets_by_library_uri:
-            raise ValueError("I don't know the secret for library %s" % library_uri)
-        secret = self.secrets_by_library_uri[library_uri]
 
         # Don't bother checking an expired token.
         now = utc_now()
@@ -505,13 +459,13 @@ class AuthdataUtility:
             )
 
         # Sign the token and check against the provided signature.
-        key = self.short_token_signer.prepare_key(secret)
+        key = self.short_token_signer.prepare_key(self.secret)
         actual_signature = self.short_token_signer.sign(token.encode("utf-8"), key)
 
         if actual_signature != supposed_signature:
             raise ValueError("Invalid signature for %s." % token)
 
-        return library_uri, patron_identifier
+        return self.library_uri, patron_identifier
 
     EPOCH = datetime_utc(1970, 1, 1)
 
