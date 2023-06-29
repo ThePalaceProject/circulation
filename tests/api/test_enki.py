@@ -879,7 +879,12 @@ class TestEnkiImport:
         now = utc_now()
         one_hour_ago = now - datetime.timedelta(hours=1)
         three_hours_ago = now - datetime.timedelta(hours=3)
-        monitor = Mock(db.session, enki_test_fixture.collection, api_class=MockEnkiAPI)
+        mock_api = MockEnkiAPI(
+            db.session,
+            enki_test_fixture.db.default_library(),
+            enki_test_fixture.collection,
+        )
+        monitor = Mock(db.session, enki_test_fixture.collection, api_class=mock_api)
         assert 3 == monitor.update_circulation(three_hours_ago)
 
         # slice_timespan() sliced up the timeline into two-hour
