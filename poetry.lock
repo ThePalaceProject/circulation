@@ -1547,13 +1547,13 @@ protobuf = ">=4.21.6"
 
 [[package]]
 name = "html-sanitizer"
-version = "2.0.0"
+version = "2.1.0"
 description = "HTML sanitizer"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "html_sanitizer-2.0.0-py3-none-any.whl", hash = "sha256:5fee0be013b355a32a107b0b0c482863b715b6357d4a904b88a6d2b05560fc6a"},
-    {file = "html_sanitizer-2.0.0.tar.gz", hash = "sha256:5ee79f3636c34c16faf61cec1c6c77c2ec0747bd06e56379031af946f82372ac"},
+    {file = "html_sanitizer-2.1.0-py3-none-any.whl", hash = "sha256:f24efaac044f24a8c940d0112461495df708bf3abea0f3da57a058e2a3ad2e45"},
+    {file = "html_sanitizer-2.1.0.tar.gz", hash = "sha256:2d906def0a1d821021e503a8f1fbf543a96ee604ea41b8da7df3d716a3ef234a"},
 ]
 
 [package.dependencies]
@@ -4263,4 +4263,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "b89326dfe0eb87ccd8f40fa8995538b6352c0af4e5125678fe064c7d31357b37"
+content-hash = "6fb645736d86ff13eefdb9caf0ed5cffd4c2fe54d7b59e72e8c2a15b103eff21"
