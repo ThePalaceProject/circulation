@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# Credential, DRMDeviceIdentifier, DelegatedPatronIdentifier
 import datetime
 import uuid
 from typing import TYPE_CHECKING
