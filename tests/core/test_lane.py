@@ -2296,7 +2296,7 @@ class TestWorkList:
         # 2-tuples; one for each work featured by one of its children
         # WorkLists. Note that the same work appears twice, through two
         # different children.
-        [wwl1, wwl2, wwl3] = wl.groups(db.session)
+        [wwl1, wwl2, wwl3] = wl.groups(db.session, search_engine=external_search_fake_fixture.external_search)
         assert (w1, child1) == wwl1
         assert (w2, child2) == wwl2
         assert (w1, child2) == wwl3
