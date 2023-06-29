@@ -56,7 +56,8 @@ class TestOverdriveCoreAPI:
         mock_web_server: MockAPIServer,
     ):
         session = overdrive_with_api_fixture.overdrive.transaction.session
-        collection = MockOverdriveCoreAPI.mock_collection(session)
+        library = overdrive_with_api_fixture.overdrive.transaction.default_library()
+        collection = MockOverdriveCoreAPI.mock_collection(session, library)
 
         # Enqueue a response for the request that the server will make for a token.
         _r = MockAPIServerResponse()
@@ -100,9 +101,10 @@ class TestOverdriveCoreAPI:
         self, overdrive_with_api_fixture: OverdriveWithAPIFixture
     ):
         session = overdrive_with_api_fixture.overdrive.transaction.session
+        library = overdrive_with_api_fixture.overdrive.transaction.default_library()
         # Invoking the OverdriveCoreAPI constructor does not, by itself,
         # make any HTTP requests.
-        collection = MockOverdriveCoreAPI.mock_collection(session)
+        collection = MockOverdriveCoreAPI.mock_collection(session, library)
 
         class NoRequests(OverdriveCoreAPI):
             MSG = "This is a unit test, you can't make HTTP requests!"
