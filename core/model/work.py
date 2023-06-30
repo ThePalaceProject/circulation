@@ -139,7 +139,7 @@ class Work(Base):
 
     # One Work may have many associated WorkCoverageRecords.
     coverage_records: Mapped[List[WorkCoverageRecord]] = relationship(
-        "WorkCoverageRecord", backref="work", cascade="all, delete-orphan"
+        "WorkCoverageRecord", back_populates="work", cascade="all, delete-orphan"
     )
 
     # One Work may be associated with many CustomListEntries.
@@ -152,7 +152,7 @@ class Work(Base):
     # One Work may have multiple CachedFeeds, and if a CachedFeed
     # loses its Work, it ceases to exist.
     cached_feeds: Mapped[List[CachedFeed]] = relationship(
-        "CachedFeed", backref="work", cascade="all, delete-orphan"
+        "CachedFeed", back_populates="work", cascade="all, delete-orphan"
     )
 
     # One Work may participate in many WorkGenre assignments.

@@ -604,22 +604,22 @@ class TestOverdriveRepresentationExtractor:
         # TODO: It would probably be better not to return a
         # CirculationData object at all, but this shouldn't happen in
         # a real scenario.
-        class MockAPI:
+        class MockAPI2:
             # Pretend to be an API for an Overdrive Advantage collection with
             # library ID 62.
             advantage_library_id = 62
 
-        extractor = OverdriveRepresentationExtractor(MockAPI())
+        extractor = OverdriveRepresentationExtractor(MockAPI2())
         advantage_data = extractor.book_info_to_circulation(info)
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
 
-        class MockAPI:
+        class MockAPI3:
             # Pretend to be an API for an Overdrive Advantage collection with
             # library ID 63 which contains shared copies.
             advantage_library_id = 63
 
-        extractor = OverdriveRepresentationExtractor(MockAPI())
+        extractor = OverdriveRepresentationExtractor(MockAPI3())
         advantage_data = extractor.book_info_to_circulation(info)
         # since these copies are shared and counted as part of the main
         # context we do not count them here.

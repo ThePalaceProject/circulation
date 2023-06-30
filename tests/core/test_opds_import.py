@@ -1,5 +1,6 @@
 import random
 from io import StringIO
+from typing import Optional
 from unittest.mock import patch
 
 import pytest
@@ -447,7 +448,7 @@ class TestOPDSImporter:
     def test_extract_metadata_from_elementtree(
         self, opds_importer_fixture: OPDSImporterFixture
     ):
-        data, transaction, session = (
+        fixture, transaction, session = (
             opds_importer_fixture,
             opds_importer_fixture.transaction,
             opds_importer_fixture.transaction.session,
@@ -456,7 +457,7 @@ class TestOPDSImporter:
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
 
         data, failures = OPDSImporter.extract_metadata_from_elementtree(
-            data.content_server_feed, data_source
+            fixture.content_server_feed, data_source
         )
 
         # There are 76 entries in the feed, and we got metadata for
@@ -1286,8 +1287,8 @@ class TestOPDSImporter:
         )
         # If a link turns out to be a dud, consolidate_links()
         # gets rid of it.
-        links = [None, None]
-        assert [] == OPDSImporter.consolidate_links(links)
+        none_links = [None, None]
+        assert [] == OPDSImporter.consolidate_links(none_links)
 
         links = [
             LinkData(href=transaction.fresh_url(), rel=rel, media_type="image/jpeg")
@@ -1535,7 +1536,7 @@ class TestOPDSImporter:
 
             # Set this variable to control whether any open-access links
             # are "found" in the OPDS feed.
-            open_access_links = None
+            open_access_links: Optional[list] = None
 
             extract_feed_data_called_with = None
             _is_open_access_link_called_with = []
@@ -1589,9 +1590,11 @@ class TestOPDSImporter:
                 ),
             ]
 
-        importer = BadLinks(session, None, do_get)
+        bad_links_importer = BadLinks(session, None, do_get)
         with pytest.raises(IntegrationException) as excinfo:
-            importer.assert_importable_content("feed", "url", max_get_attempts=2)
+            bad_links_importer.assert_importable_content(
+                "feed", "url", max_get_attempts=2
+            )
         assert (
             "Was unable to GET supposedly open-access content such as url2 (tried 2 times)"
             in str(excinfo.value)
@@ -1602,7 +1605,7 @@ class TestOPDSImporter:
         #
         # We didn't bother with the third link because max_get_attempts was
         # set to 2.
-        try1, try2 = importer._is_open_access_link_called_with
+        try1, try2 = bad_links_importer._is_open_access_link_called_with
         assert ("url1", "text/html") == try1
         assert ("url2", "application/json") == try2
 
@@ -1624,13 +1627,15 @@ class TestOPDSImporter:
                     return False
                 return "this is a book"
 
-        importer = GoodLink(session, None, do_get)
-        result = importer.assert_importable_content("feed", "url", max_get_attempts=5)
+        good_link_importer = GoodLink(session, None, do_get)
+        result = good_link_importer.assert_importable_content(
+            "feed", "url", max_get_attempts=5
+        )
         assert "this is a book" == result
 
         # The first link didn't work, but the second one did,
         # so we didn't try the third one.
-        try1, try2 = importer._is_open_access_link_called_with
+        try1, try2 = good_link_importer._is_open_access_link_called_with
         assert ("bad", "text/html") == try1
         assert ("good", "application/json") == try2
 
@@ -2355,7 +2360,7 @@ class TestOPDSImportMonitor:
         session = db.session
 
         with pytest.raises(ValueError) as excinfo:
-            OPDSImportMonitor(session, None, OPDSImporter)
+            OPDSImportMonitor(session, None, OPDSImporter)  # type: ignore[arg-type]
         assert (
             "OPDSImportMonitor can only be run in the context of a Collection."
             in str(excinfo.value)

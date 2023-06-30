@@ -829,7 +829,7 @@ class ReaperMonitor(Monitor):
 
     MODEL_CLASS: type[Base]
     TIMESTAMP_FIELD: str | None = None
-    MAX_AGE: datetime.timedelta | int
+    MAX_AGE: datetime.timedelta | int | float
     BATCH_SIZE: int = 1000
 
     REGISTRY: list[type[ReaperMonitor]] = []

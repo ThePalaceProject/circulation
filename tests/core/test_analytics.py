@@ -100,13 +100,12 @@ class TestAnalytics:
         # ... we will see the updated configuration.
         assert analytics3 == analytics
         assert Analytics.GLOBAL_ENABLED is False
-        assert {l2.id} == Analytics.LIBRARY_ENABLED
+        assert {l2.id} == Analytics.LIBRARY_ENABLED  # type: ignore
 
     def test_is_configured(self, db: DatabaseTransactionFixture):
         # If the Analytics constructor has not been called, then
         # is_configured() calls it so that the values are populated.
         Analytics.GLOBAL_ENABLED = None
-        Analytics.LIBRARY_ENABLED = object()
         library = db.default_library()
         assert False == Analytics.is_configured(library)
         assert False == Analytics.GLOBAL_ENABLED
@@ -121,6 +120,7 @@ class TestAnalytics:
         # in LIBRARY_ENABLED.
         Analytics.GLOBAL_ENABLED = False
         assert False == Analytics.is_configured(library)
+        assert isinstance(library.id, int)
         Analytics.LIBRARY_ENABLED.add(library.id)
         assert True == Analytics.is_configured(library)
 

@@ -38,6 +38,8 @@ class TestInitializeLocalAnalyticsProvider:
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
 
+        assert isinstance(local_analytics, ExternalIntegration)
+        assert isinstance(local_analytics_2, ExternalIntegration)
         assert local_analytics_2.id == local_analytics.id
         assert local_analytics_2.name == local_analytics.name
 

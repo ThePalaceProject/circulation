@@ -5,7 +5,7 @@ from typing import Iterable
 
 import flask
 import pytest
-from flask import Flask, make_response
+from flask import Flask, Response, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 
@@ -348,7 +348,7 @@ class TestLoadMethods:
         )
 
         with fixture.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
-            flask.request.library = data.default_library()
+            flask.request.library = data.default_library()  # type: ignore[attr-defined]
             facets = load_facets_from_request()
             assert Facets.ORDER_TITLE == facets.order
             # Enabled facets are passed in to the newly created Facets,
@@ -356,7 +356,7 @@ class TestLoadMethods:
             assert facets.facets_enabled_at_init != None
 
         with fixture.app.test_request_context("/?order=bad_facet"):
-            flask.request.library = data.default_library()
+            flask.request.library = data.default_library()  # type: ignore[attr-defined]
             problemdetail = load_facets_from_request()
             assert INVALID_INPUT.uri == problemdetail.uri
 
@@ -366,7 +366,7 @@ class TestLoadMethods:
         worklist = WorkList()
         worklist.initialize(data.default_library())
         with fixture.app.test_request_context("/?entrypoint=Audio"):
-            flask.request.library = data.default_library()
+            flask.request.library = data.default_library()  # type: ignore[attr-defined]
             facets = load_facets_from_request(worklist=worklist)
             assert AudiobooksEntryPoint == facets.entrypoint
             assert False == facets.entrypoint_is_default
@@ -374,7 +374,7 @@ class TestLoadMethods:
         # If the requested EntryPoint not configured, the default
         # EntryPoint is used.
         with fixture.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
-            flask.request.library = data.default_library()
+            flask.request.library = data.default_library()  # type: ignore[attr-defined]
             default_entrypoint = object()
             facets = load_facets_from_request(
                 worklist=worklist, default_entrypoint=default_entrypoint
@@ -385,7 +385,7 @@ class TestLoadMethods:
         # Load a SearchFacets object that pulls information from an
         # HTTP header.
         with fixture.app.test_request_context("/", headers={"Accept-Language": "ja"}):
-            flask.request.library = data.default_library()
+            flask.request.library = data.default_library()  # type: ignore[attr-defined]
             facets = load_facets_from_request(base_class=SearchFacets)
             assert ["jpn"] == facets.languages
 
@@ -399,6 +399,8 @@ class TestLoadMethods:
         fixture, data = load_methods_fixture, load_methods_fixture.transaction
 
         class MockFacets:
+            called_with: dict
+
             @classmethod
             def from_request(*args, **kwargs):
                 facets = MockFacets()
@@ -407,7 +409,7 @@ class TestLoadMethods:
 
         kwargs = dict(some_arg="some value")
         with fixture.app.test_request_context(""):
-            flask.request.library = data.default_library()
+            flask.request.library = data.default_library()  # type: ignore[attr-defined]
             facets = load_facets_from_request(
                 None, None, base_class=MockFacets, base_class_constructor_kwargs=kwargs
             )
@@ -424,6 +426,7 @@ class TestLoadMethods:
         # default.)
         class Mock:
             DEFAULT_SIZE = 22
+            called_with: tuple
 
             @classmethod
             def from_request(cls, get_arg, default_size, **kwargs):
@@ -495,7 +498,7 @@ def error_handler_fixture(
     data = ErrorHandlerFixture()
     data.transaction = db
     data.app = Flask(ErrorHandlerFixture.__name__)
-    data.app.manager = MockManager()
+    data.app.manager = MockManager()  # type: ignore[attr-defined]
     Babel(data.app)
     return data
 
@@ -521,6 +524,7 @@ class TestErrorHandler:
                 self.raise_exception()
             except Exception as exception:
                 response = handler.handle(exception)
+            assert isinstance(response, Response)
             assert 500 == response.status_code
             assert "An internal error occured" == response.data.decode("utf8")
 
@@ -536,6 +540,7 @@ class TestErrorHandler:
                 self.raise_exception()
             except Exception as exception:
                 response = handler.handle(exception)
+            assert isinstance(response, Response)
             assert 500 == response.status_code
             assert response.data.startswith(b"Traceback (most recent call last)")
 
