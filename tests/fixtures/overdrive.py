@@ -23,7 +23,9 @@ class OverdriveFixture:
         fix._base_path = str(Path(__file__).parent.parent)
         fix._resource_path = os.path.join(fix._base_path, "core", "files", "overdrive")
         fix.transaction = transaction
-        fix.collection = MockOverdriveCoreAPI.mock_collection(transaction.session)
+        fix.collection = MockOverdriveCoreAPI.mock_collection(
+            transaction.session, transaction.default_library()
+        )
         return fix
 
     def sample_json(self, filename):

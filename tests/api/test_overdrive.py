@@ -56,7 +56,9 @@ class OverdriveAPIFixture:
         self.db = db
         self.data = data
         library = db.default_library()
-        self.collection = MockOverdriveAPI.mock_collection(db.session)
+        self.collection = MockOverdriveAPI.mock_collection(
+            db.session, db.default_library()
+        )
         self.circulation = CirculationAPI(
             db.session,
             library,
@@ -1844,7 +1846,7 @@ class TestOverdriveAPICredentials:
 
         # Add the collections.
         collections = [
-            MockAPI.mock_collection(db.session, **props)
+            MockAPI.mock_collection(db.session, **props)  # type: ignore[arg-type]
             for props in library_collection_properties
         ]
 

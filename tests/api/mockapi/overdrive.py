@@ -1,32 +1,31 @@
 import json
 
+from sqlalchemy.orm import Session
+
 from api.overdrive import OverdriveAPI
-from core.model import get_one_or_create
+from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.overdrive import OverdriveConstants, OverdriveCoreAPI
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.db import make_default_library
 
 
 class MockOverdriveCoreAPI(OverdriveCoreAPI):
     @classmethod
     def mock_collection(
         self,
-        _db,
-        library=None,
-        name="Test Overdrive Collection",
-        client_key="a",
-        client_secret="b",
-        library_id="c",
-        website_id="d",
-        ils_name="e",
+        _db: Session,
+        library: Library,
+        name: str = "Test Overdrive Collection",
+        client_key: str = "a",
+        client_secret: str = "b",
+        library_id: str = "c",
+        website_id: str = "d",
+        ils_name: str = "e",
     ):
         """Create a mock Overdrive collection for use in tests."""
-        if library is None:
-            library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,

@@ -1,18 +1,18 @@
+from sqlalchemy.orm import Session
+
 from api.odl import SharedODLAPI
-from core.model import get_one_or_create
+from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.db import make_default_library
 
 
 class MockSharedODLAPI(SharedODLAPI):
     """Mock API for tests that overrides _get and tracks requests."""
 
     @classmethod
-    def mock_collection(cls, _db):
+    def mock_collection(cls, _db: Session, library: Library) -> Collection:
         """Create a mock ODL collection to use in tests."""
-        library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,

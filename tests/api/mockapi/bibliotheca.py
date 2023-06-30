@@ -1,19 +1,21 @@
 from datetime import datetime
 
+from sqlalchemy.orm import Session
+
 from api.bibliotheca import BibliothecaAPI
-from core.model import get_one_or_create
+from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.db import make_default_library
 
 
 class MockBibliothecaAPI(BibliothecaAPI):
     @classmethod
-    def mock_collection(self, _db, name="Test Bibliotheca Collection"):
+    def mock_collection(
+        self, _db: Session, library: Library, name: str = "Test Bibliotheca Collection"
+    ) -> Collection:
         """Create a mock Bibliotheca collection for use in tests."""
-        library = make_default_library(_db)
         collection, ignore = get_one_or_create(
             _db,
             Collection,

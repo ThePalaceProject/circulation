@@ -86,7 +86,9 @@ class BibliothecaAPITestFixture:
     def __init__(self, db: DatabaseTransactionFixture, files: BibliothecaFilesFixture):
         self.files = files
         self.db = db
-        self.collection = MockBibliothecaAPI.mock_collection(db.session)
+        self.collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
         self.api = MockBibliothecaAPI(db.session, self.collection)
 
 
@@ -1119,7 +1121,9 @@ class TestBibliothecaPurchaseMonitor:
     @pytest.fixture()
     def initialized_monitor(self, db: DatabaseTransactionFixture):
         collection = MockBibliothecaAPI.mock_collection(
-            db.session, name="Initialized Purchase Monitor Collection"
+            db.session,
+            db.default_library(),
+            name="Initialized Purchase Monitor Collection",
         )
         monitor = BibliothecaPurchaseMonitor(
             db.session, collection, api_class=MockBibliothecaAPI
@@ -1607,7 +1611,7 @@ class TestBibliothecaEventMonitor:
     @pytest.fixture()
     def initialized_monitor(self, db: DatabaseTransactionFixture):
         collection = MockBibliothecaAPI.mock_collection(
-            db.session, name="Initialized Monitor Collection"
+            db.session, db.default_library(), name="Initialized Monitor Collection"
         )
         monitor = BibliothecaEventMonitor(
             db.session, collection, api_class=MockBibliothecaAPI
@@ -1786,8 +1790,12 @@ class TestBibliothecaPurchaseMonitorWhenMultipleCollections:
         # Start with multiple collections that have timestamps
         # because they've run before.
         collections = [
-            MockBibliothecaAPI.mock_collection(db.session, name="Collection 1"),
-            MockBibliothecaAPI.mock_collection(db.session, name="Collection 2"),
+            MockBibliothecaAPI.mock_collection(
+                db.session, db.default_library(), name="Collection 1"
+            ),
+            MockBibliothecaAPI.mock_collection(
+                db.session, db.default_library(), name="Collection 2"
+            ),
         ]
         for c in collections:
             Timestamp.stamp(

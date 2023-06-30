@@ -1,12 +1,13 @@
 import json
 
+from sqlalchemy.orm import Session
+
 from api.odilo import OdiloAPI
-from core.model import get_one_or_create
+from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.db import make_default_library
 
 
 class MockOdiloAPI(OdiloAPI):
@@ -23,8 +24,7 @@ class MockOdiloAPI(OdiloAPI):
         return response
 
     @classmethod
-    def mock_collection(cls, _db):
-        library = make_default_library(_db)
+    def mock_collection(cls, _db: Session, library: Library) -> Collection:
         collection, ignore = get_one_or_create(
             _db,
             Collection,

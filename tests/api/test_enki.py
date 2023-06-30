@@ -38,7 +38,7 @@ class EnkiTestFixure:
     def __init__(self, db: DatabaseTransactionFixture, files: EnkiFilesFixture):
         self.db = db
         self.files = files
-        self.api = MockEnkiAPI(db.session)
+        self.api = MockEnkiAPI(db.session, db.default_library())
         self.collection = self.api.collection
 
 
@@ -119,7 +119,7 @@ class TestEnkiAPI:
                 self.patron_activity_called_with.append((patron, pin))
                 yield 1
 
-        api = Mock(db.session)
+        api = Mock(db.session, db.default_library())
 
         # Now let's make sure two Libraries have access to the
         # Collection used in the API -- one library with a default
@@ -879,7 +879,12 @@ class TestEnkiImport:
         now = utc_now()
         one_hour_ago = now - datetime.timedelta(hours=1)
         three_hours_ago = now - datetime.timedelta(hours=3)
-        monitor = Mock(db.session, enki_test_fixture.collection, api_class=MockEnkiAPI)
+        mock_api = MockEnkiAPI(
+            db.session,
+            enki_test_fixture.db.default_library(),
+            enki_test_fixture.collection,
+        )
+        monitor = Mock(db.session, enki_test_fixture.collection, api_class=mock_api)
         assert 3 == monitor.update_circulation(three_hours_ago)
 
         # slice_timespan() sliced up the timeline into two-hour
@@ -938,7 +943,7 @@ class TestEnkiImport:
             }
         }
 
-        api = MockEnkiAPI(db.session)
+        api = MockEnkiAPI(db.session, db.default_library())
         api.queue_response(200, content=json.dumps(circ_data))
         api.queue_response(200, content=json.dumps(bib_data))
 

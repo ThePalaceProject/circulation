@@ -48,7 +48,9 @@ from ..fixtures.database import DatabaseTransactionFixture
 class CirculationAPIFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
-        self.collection = MockBibliothecaAPI.mock_collection(db.session)
+        self.collection = MockBibliothecaAPI.mock_collection(
+            db.session, db.default_library()
+        )
         edition, self.pool = db.edition(
             data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.BIBLIOTHECA_ID,
