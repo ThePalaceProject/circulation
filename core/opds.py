@@ -1775,7 +1775,8 @@ class AcquisitionFeed(OPDSFeed):
         if loan:
             status = "available"
             since = loan.start
-            until = loan.until(default_loan_period)
+            if not loan.license_pool.unlimited_access:
+                until = loan.until(default_loan_period)
         elif hold:
             if not license_pool.open_access:
                 default_reservation_period = datetime.timedelta(
