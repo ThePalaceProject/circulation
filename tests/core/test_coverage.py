@@ -723,7 +723,7 @@ class TestIdentifierCoverageProvider:
         with pytest.raises(ValueError) as excinfo:
             MockProvider4(db.session)
         assert (
-            "MockProvider must define INPUT_IDENTIFIER_TYPES, even if the value is None."
+            "MockProvider4 must define INPUT_IDENTIFIER_TYPES, even if the value is None."
             in str(excinfo.value)
         )
 
