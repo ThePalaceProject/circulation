@@ -1296,7 +1296,7 @@ class TestOPDS:
 
         # There's one breadcrumb link for each parent Lane, plus one for
         # the top-level.
-        assert isinstance(links, etree._Element)
+        assert isinstance(links, ET.Element)
         assert len(parentage) + 1 == len(links)
         assert MockAnnotator.top_level_title() == links[0].get("title")
         assert MockAnnotator.default_lane_url() == links[0].get("href")
@@ -1535,7 +1535,7 @@ class TestOPDS:
         root = ET.fromstring(cached_groups.data)
         breadcrumbs = root.find("{%s}breadcrumbs" % AtomFeed.SIMPLIFIED_NS)
         links = breadcrumbs
-        assert isinstance(links, etree._Element)
+        assert isinstance(links, ET.Element)
         assert len(ancestors) + 1 == len(links)
         assert annotator.top_level_title() == links[0].get("title")
         assert annotator.default_lane_url() == links[0].get("href")
