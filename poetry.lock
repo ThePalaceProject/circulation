@@ -1547,13 +1547,13 @@ protobuf = ">=4.21.6"
 
 [[package]]
 name = "html-sanitizer"
-version = "2.1.0"
+version = "2.2.0"
 description = "HTML sanitizer"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "html_sanitizer-2.1.0-py3-none-any.whl", hash = "sha256:f24efaac044f24a8c940d0112461495df708bf3abea0f3da57a058e2a3ad2e45"},
-    {file = "html_sanitizer-2.1.0.tar.gz", hash = "sha256:2d906def0a1d821021e503a8f1fbf543a96ee604ea41b8da7df3d716a3ef234a"},
+    {file = "html_sanitizer-2.2.0-py3-none-any.whl", hash = "sha256:4413983a8a917f933cf88256dfce7a7c7e87b3c6e2c4ad07b99aeca65bf2e5bf"},
+    {file = "html_sanitizer-2.2.0.tar.gz", hash = "sha256:e04e5bfdfb1940f634aaa44ab208bd189feb005ff035037057e579072321e915"},
 ]
 
 [package.dependencies]
