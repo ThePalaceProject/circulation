@@ -691,15 +691,15 @@ class WorkController(AdminCirculationManagerController):
             padding = image_width / 40
 
             max_line_width = 0
-            bold_char_width = bold_font.getsize("n")[0]
+            bold_char_width = bold_font.getlength("n")
             bold_char_count = image_width / bold_char_width
-            regular_char_width = regular_font.getsize("n")[0]
+            regular_char_width = regular_font.getlength("n")
             regular_char_count = image_width / regular_char_width
             title_lines = textwrap.wrap(title, bold_char_count)
             author_lines = textwrap.wrap(author, regular_char_count)
             for lines, font in [(title_lines, bold_font), (author_lines, regular_font)]:
                 for line in lines:
-                    line_width, ignore = font.getsize(line)
+                    line_width = font.getlength(line)
                     if line_width > max_line_width:
                         max_line_width = line_width
 
@@ -730,7 +730,7 @@ class WorkController(AdminCirculationManagerController):
             current_y = start_y + line_height / 2
             for lines, font in [(title_lines, bold_font), (author_lines, regular_font)]:
                 for line in lines:
-                    line_width, ignore = font.getsize(line)
+                    line_width = font.getlength(line)
                     draw.text(
                         (start_x + (rectangle_width - line_width) / 2, current_y),
                         line,
