@@ -56,7 +56,6 @@ from core.model import (
     CustomList,
     DataSource,
     DeliveryMechanism,
-    ExternalIntegration,
     Hold,
     Identifier,
     IntegrationClient,
@@ -86,11 +85,6 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail, ProblemError
 from core.util.string_helpers import base64
 
-from .adobe_vendor_id import (
-    AdobeVendorIDController,
-    AuthdataUtility,
-    DeviceManagementProtocolController,
-)
 from .annotations import AnnotationParser, AnnotationWriter
 from .authenticator import Authenticator, CirculationPatronProfileStorage
 from .base_controller import BaseCirculationManagerController
@@ -355,11 +349,6 @@ class CirculationManager:
                     library, self.analytics
                 )
 
-        with elapsed_time_logging(
-            log_method=self.log.debug, message_prefix="Configure device management"
-        ):
-            self.adobe_device_management = self._dev_mgmt_from_libraries(libraries)
-
         self.top_level_lanes = new_top_level_lanes
         self.circulation_apis = new_circulation_apis
         self.custom_index_views = new_custom_index_views
@@ -408,20 +397,6 @@ class CirculationManager:
         self.authentication_for_opds_documents = ExpiringDict(
             max_len=1000, max_age_seconds=authentication_document_cache_time
         )
-
-    def _dev_mgmt_from_libraries(
-        self, libraries: list[Library]
-    ) -> DeviceManagementProtocolController | None:
-        """Return a DeviceManagementProtocolController in any library uses Adobe Vendor IDs."""
-
-        for library in libraries:
-            authdata = self.setup_adobe_vendor_id(self._db, library)
-            if authdata:
-                device_management = DeviceManagementProtocolController(self)
-                break
-        else:
-            device_management = None
-        return device_management
 
     @property
     def external_search(self):
@@ -503,87 +478,6 @@ class CirculationManager:
         configuration changes.
         """
         self.saml_controller = SAMLController(self, self.auth)
-
-    @log_elapsed_time(log_method=log.debug, message_prefix="setup_adobe_vendor_id")
-    def setup_adobe_vendor_id(self, _db, library):
-        """If this Library has an Adobe Vendor ID integration,
-        configure the controller for it.
-
-        :return: An Authdata object for `library`, if one could be created.
-        """
-        short_client_token_initialization_exceptions = {}
-        with elapsed_time_logging(
-            log_method=self.log.debug,
-            skip_start=True,
-            message_prefix="Lookup Adobe Vendor ID integrations",
-        ):
-            adobe = ExternalIntegration.lookup(
-                _db,
-                ExternalIntegration.ADOBE_VENDOR_ID,
-                ExternalIntegration.DRM_GOAL,
-                library=library,
-            )
-        warning = (
-            "Adobe Vendor ID controller is disabled due to missing or"
-            " incomplete configuration. This is probably nothing to"
-            " worry about."
-        )
-
-        new_adobe_vendor_id = None
-        if adobe:
-            # Relatively few libraries will have this setup.
-            vendor_id = adobe.username
-            node_value = adobe.password
-            if vendor_id and node_value:
-                if new_adobe_vendor_id:
-                    self.log.warning(
-                        "Multiple libraries define an Adobe Vendor ID integration. This is not supported and the last library seen will take precedence."
-                    )
-                new_adobe_vendor_id = AdobeVendorIDController(
-                    _db, library, vendor_id, node_value, self.auth
-                )
-            else:
-                self.log.warning(
-                    "Adobe Vendor ID controller is disabled due to missing or incomplete configuration. This is probably nothing to worry about."
-                )
-        if new_adobe_vendor_id:
-            self.adobe_vendor_id = new_adobe_vendor_id
-
-        # But almost all libraries will have a Short Client Token
-        # setup. We're not setting anything up here, but this is useful
-        # information for the calling code to have so it knows
-        # whether or not we should support the Device Management Protocol.
-        with elapsed_time_logging(
-            log_method=self.log.debug,
-            skip_start=True,
-            message_prefix="Lookup registry integrations",
-        ):
-            registry = ExternalIntegration.lookup(
-                _db,
-                ExternalIntegration.OPDS_REGISTRATION,
-                ExternalIntegration.DISCOVERY_GOAL,
-                library=library,
-            )
-        authdata = None
-        if registry:
-            try:
-                with elapsed_time_logging(
-                    log_method=self.log.debug,
-                    skip_start=True,
-                    message_prefix="setup_adobe_vendor_id - fetch authdata utility",
-                ):
-                    authdata = AuthdataUtility.from_config(library, _db)
-            except CannotLoadConfiguration as e:
-                short_client_token_initialization_exceptions[library.id] = e
-                self.log.error(
-                    "Short Client Token configuration for %s is present but not working. This may be cause for concern. Original error: %s",
-                    library.name,
-                    str(e),
-                )
-        self.short_client_token_initialization_exceptions = (
-            short_client_token_initialization_exceptions
-        )
-        return authdata
 
     def annotator(self, lane, facets=None, *args, **kwargs):
         """Create an appropriate OPDS annotator for the given lane.
@@ -1069,6 +963,7 @@ class OPDSFeedController(CirculationManagerController):
         )
 
         annotator = self.manager.annotator(lane, facets=facets)
+        max_age = flask.request.args.get("max_age")
         return feed_class.page(
             _db=self._db,
             title=lane.display_name,
@@ -1078,6 +973,7 @@ class OPDSFeedController(CirculationManagerController):
             facets=facets,
             pagination=pagination,
             search_engine=search_engine,
+            max_age=int(max_age) if max_age else None,
         )
 
     def navigation(self, lane_identifier):

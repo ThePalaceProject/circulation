@@ -469,6 +469,8 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
                             library=library,
                             collection=collection,
                             availability=availability,
+                            distributor=None,  # All distributors always
+                            collection_name=None,  # All collections
                             entrypoint=entrypoint,
                             entrypoint_is_default=(
                                 top_level

@@ -64,7 +64,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can generate many CoverageRecords.
     coverage_records: Mapped[List[CoverageRecord]] = relationship(
-        "CoverageRecord", backref="data_source"
+        "CoverageRecord", back_populates="data_source"
     )
 
     # One DataSource can generate many IDEquivalencies.

@@ -554,7 +554,7 @@ from .configuration import (
 )
 from .contributor import Contribution, Contributor
 from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverageRecord
-from .credential import Credential, DelegatedPatronIdentifier, DRMDeviceIdentifier
+from .credential import Credential
 from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
 from .devicetokens import DeviceToken

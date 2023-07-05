@@ -1,7 +1,7 @@
 import io
 import json
 from unittest.mock import patch
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
 from requests import Response
@@ -117,6 +117,26 @@ class TestOPDS2PublicationAnnotator:
                 )
                 == link["href"]
             )
+
+    def test_facet_url(
+        self, opds2_publication_annotator: OPDS2PublicationAnnotatorFixture
+    ):
+        db = opds2_publication_annotator.db
+        facet = Facets(
+            db.default_library(), Facets.COLLECTION_FEATURED, None, None, None, None
+        )
+        with app.test_request_context("/"):
+            link = opds2_publication_annotator.annotator.facet_url(facet)
+        parsed = urlparse(link)
+        assert parsed.hostname == "localhost"
+        assert parsed.path == f"/{db.default_library().short_name}/opds2/publications"
+        assert parse_qs(parsed.query) == dict(
+            order=["author"],
+            available=["all"],
+            collection=["featured"],
+            distributor=["All"],
+            collectionName=["All"],
+        )
 
 
 class OPDS2NavigationAnnotatorFixture:

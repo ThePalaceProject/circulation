@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
@@ -11,6 +12,8 @@ from core.model.edition import Edition
 from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink
 from core.model.work import Work
+from core.opds import AcquisitionFeed
+from core.opds_import import OPDSXMLParser
 
 
 class OPDS2Feed:
@@ -200,6 +203,11 @@ class OPDS2Annotator:
             "itemsPerPage": self.pagination.size,
         }
 
+    @classmethod
+    def facet_url(cls, facets):
+        """Should be overwritten in the OPDS2PublicationsAnnottator"""
+        return None
+
 
 class FeedTypes:
     """The types of feeds supported for OPDS2"""
@@ -261,23 +269,26 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
             _db,
             publications,
             annotator,
+            facets,
         )
 
     @classmethod
     def navigation(cls, _db, annotator: OPDS2Annotator):
         """The navigation feed"""
-        return cls(_db, [], annotator, feed_type=FeedTypes.NAVIGATION)
+        return cls(_db, [], annotator, None, feed_type=FeedTypes.NAVIGATION)
 
     def __init__(
         self,
         _db,
         works: List[Work],
         annotator: OPDS2Annotator,
+        facets: Optional[Facets],
         feed_type=FeedTypes.PUBLICATIONS,
     ):
         self._db = _db
         self.works = works
         self.annotator = annotator
+        self.facets = facets
         self.feed_type = feed_type
 
     def json(self):
@@ -305,8 +316,36 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
 
         result["publications"] = entries
         result["links"] = self.annotator.feed_links()
+        result["facets"] = self._facet_links()
         result["metadata"] = self.annotator.feed_metadata()
         return result
+
+    def _facet_links(self) -> List:
+        """Reuse the AcquisitionFeed.facet_links method to create the available facets meta"""
+        links: Dict = AcquisitionFeed.facet_links(self.annotator, self.facets)
+        facet_meta = []
+        group_meta = defaultdict(list)
+
+        # The AcquisitionFeed adds the OPDS namespace to the keys, so must read them as such
+        ns = OPDSXMLParser.NAMESPACES["opds"]
+
+        for link in links:
+            meta = {
+                "href": link["href"],
+                "title": link["title"],
+                "type": "application/opds+json",
+            }
+
+            # If this is the active facet, set the rel to "self"
+            if link.get(f"{{{ns}}}activeFacet") == "true":
+                meta["rel"] = "self"
+
+            # Grouped by the facet group name
+            group_meta[link[f"{{{ns}}}facetGroup"]].append(meta)
+
+        for name, facet_links in group_meta.items():
+            facet_meta.append({"metadata": {"title": name}, "links": facet_links})
+        return facet_meta
 
     def __str__(self):
         """Make the serialized OPDS2 feed"""

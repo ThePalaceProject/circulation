@@ -10,14 +10,15 @@ import pytz
 # https://docs.python.org/3/library/datetime.html#aware-and-naive-objects
 
 
-def datetime_utc(*args, **kwargs):
+def datetime_utc(*args, **kwargs) -> datetime.datetime:
     """Return a datetime object but with UTC information from pytz.
     :return: datetime object
     """
-    return datetime.datetime(*args, **kwargs, tzinfo=pytz.UTC)
+    kwargs["tzinfo"] = pytz.UTC
+    return datetime.datetime(*args, **kwargs)
 
 
-def from_timestamp(ts):
+def from_timestamp(ts) -> datetime.datetime:
     """Return a UTC datetime object from a timestamp.
 
     :return: datetime object
@@ -25,7 +26,7 @@ def from_timestamp(ts):
     return datetime.datetime.fromtimestamp(ts, tz=pytz.UTC)
 
 
-def utc_now():
+def utc_now() -> datetime.datetime:
     """Get the current time in UTC.
 
     :return: datetime object

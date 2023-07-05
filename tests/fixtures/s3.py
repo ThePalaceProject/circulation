@@ -1,6 +1,6 @@
 import functools
 import os
-from typing import Iterable
+from typing import Any, Iterable
 from urllib.parse import urlsplit
 
 import boto3
@@ -112,7 +112,7 @@ class S3UploaderIntegrationFixture(S3UploaderFixture):
         SIMPLIFIED_TEST_MINIO_ENDPOINT_URL
     )
 
-    minio_s3_client = None
+    minio_s3_client: Any
     """boto3 client connected to locally running MinIO instance"""
 
     s3_client_class = None

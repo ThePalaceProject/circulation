@@ -320,6 +320,19 @@ class Library(Base, HasSessionCache):
 
     def enabled_facets(self, group_name):
         """Look up the enabled facets for a given facet group."""
+        if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
+            enabled = []
+            for collection in self.collections:
+                if collection.data_source and collection.data_source.name:
+                    enabled.append(collection.data_source.name)
+            return list(set(enabled))
+
+        if group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME:
+            enabled = []
+            for collection in self.collections:
+                enabled.append(collection.name)
+            return enabled
+
         setting = self.enabled_facets_setting(group_name)
         value = None
 

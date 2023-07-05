@@ -1004,7 +1004,7 @@ class TestS3Uploader:
                 Message="Bad credentials",
             )
         )
-        uploader.client.fail_with = ClientError(response, "SomeOperation")
+        uploader.client.fail_with = ClientError(response, "SomeOperation")  # type: ignore[arg-type]
         uploader.mirror_one(epub_rep, transaction.fresh_url())
         assert None == epub_rep.mirrored_at
         assert None == epub_rep.mirror_exception
@@ -1322,7 +1322,7 @@ class TestS3UploaderIntegration:
 
         # Arrange
         book_title = "1234567890"
-        book_content = "1234567890"
+        book_content = b"1234567890"
         identifier = Identifier(type=Identifier.ISBN, identifier=book_title)
         representation = Representation(
             content=book_content, media_type=Representation.EPUB_MEDIA_TYPE

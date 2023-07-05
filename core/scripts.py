@@ -3159,6 +3159,9 @@ class LoanNotificationsScript(Script):
             return
 
         now = utc_now()
+        if loan.end is None:
+            self.log.warning(f"Loan: {loan.id} has no end date, skipping")
+            return
         delta: datetime.timedelta = loan.end - now
         # We assume this script runs ONCE A DAY
         # else this will send notifications multiple times for

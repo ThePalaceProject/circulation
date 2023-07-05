@@ -22,6 +22,8 @@ from ..util.datetime_helpers import utc_now
 from . import Base, SessionBulkOperation, get_one, get_one_or_create
 
 if TYPE_CHECKING:
+    from core.model import Collection, DataSource, Identifier, Work
+
     from . import Equivalency
 
 
@@ -130,6 +132,9 @@ class Timestamp(Base):
     # run separately on a number of collections.
     collection_id = Column(
         Integer, ForeignKey("collections.id"), index=True, nullable=True
+    )
+    collection: Mapped[Collection] = relationship(
+        "Collection", back_populates="timestamps"
     )
 
     # The last time the service _started_ running.
@@ -318,10 +323,16 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", back_populates="coverage_records"
+    )
 
     # If applicable, this is the ID of the data source that took the
     # Identifier as input.
     data_source_id = Column(Integer, ForeignKey("datasources.id"))
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="coverage_records"
+    )
     operation = Column(String(255), default=None)
 
     timestamp = Column(DateTime(timezone=True), index=True)
@@ -611,6 +622,7 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
 
     id = Column(Integer, primary_key=True)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    work: Mapped[Work] = relationship("Work", back_populates="coverage_records")
     operation = Column(String(255), index=True, default=None)
 
     timestamp = Column(DateTime(timezone=True), index=True)

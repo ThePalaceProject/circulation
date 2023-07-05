@@ -670,8 +670,10 @@ class TestLicensePool:
         assert 2 == pool.licenses_reserved
         assert 0 == pool.patrons_in_hold_queue
 
+        assert work.last_update_time is not None
+
         # Updating availability also modified work.last_update_time.
-        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)  # type: ignore[unreachable]
 
     def test_update_availability_does_nothing_if_given_no_data(
         self, db: DatabaseTransactionFixture

@@ -3,7 +3,6 @@ from functools import update_wrapper, wraps
 
 import flask
 from flask import Response, make_response, request
-from flask_babel import lazy_gettext as _
 from flask_cors.core import get_cors_options, set_cors_headers
 from flask_pydantic_spec import Response as SpecResponse
 from werkzeug.exceptions import HTTPException
@@ -15,7 +14,6 @@ from core.util.problem_detail import ProblemDetail
 
 from .app import api_spec, app, babel
 from .config import Configuration
-from .problem_details import REMOTE_INTEGRATION_FAILED
 
 
 @babel.localeselector
@@ -672,55 +670,6 @@ def track_analytics_event(identifier_type, identifier, event_type):
     return app.manager.analytics_controller.track_event(
         identifier_type, identifier, event_type
     )
-
-
-# Adobe Vendor ID implementation
-@library_route("/AdobeAuth/authdata")
-@has_library
-@requires_auth
-@returns_problem_detail
-def adobe_vendor_id_get_token():
-    if not app.manager.adobe_vendor_id:
-        return REMOTE_INTEGRATION_FAILED.detailed(
-            _("This server does not have an Adobe Vendor ID server configured.")
-        )
-    return app.manager.adobe_vendor_id.create_authdata_handler(flask.request.patron)
-
-
-@library_route("/AdobeAuth/SignIn", methods=["POST"])
-@has_library
-@returns_problem_detail
-def adobe_vendor_id_signin():
-    return app.manager.adobe_vendor_id.signin_handler()
-
-
-@app.route("/AdobeAuth/AccountInfo", methods=["POST"])
-@returns_problem_detail
-def adobe_vendor_id_accountinfo():
-    return app.manager.adobe_vendor_id.userinfo_handler()
-
-
-@app.route("/AdobeAuth/Status")
-@returns_problem_detail
-def adobe_vendor_id_status():
-    return app.manager.adobe_vendor_id.status_handler()
-
-
-# DRM Device Management Protocol implementation for ACS.
-@library_route("/AdobeAuth/devices", methods=["GET", "POST"])
-@has_library
-@requires_auth
-@returns_problem_detail
-def adobe_drm_devices():
-    return app.manager.adobe_device_management.device_id_list_handler()
-
-
-@library_route("/AdobeAuth/devices/<device_id>", methods=["DELETE"])
-@has_library
-@requires_auth
-@returns_problem_detail
-def adobe_drm_device(device_id):
-    return app.manager.adobe_device_management.device_id_handler(device_id)
 
 
 # Route that redirects to the authentication URL for a SAML provider

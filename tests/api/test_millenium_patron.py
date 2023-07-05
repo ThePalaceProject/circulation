@@ -569,6 +569,7 @@ class TestMilleniumPatronAPI:
         p2 = provider.authenticated_patron(db.session, auth)
         assert isinstance(p2, Patron)
         assert p2 == p
+        assert p2.last_external_sync is not None
 
         # Since the sync was performed, last_external_sync was updated.
         assert p2.last_external_sync > one_hour_ago

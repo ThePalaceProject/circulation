@@ -1365,7 +1365,7 @@ class OverdriveRepresentationExtractor:
 class OverdriveAdvantageAccount:
     """Holder and parser for data associated with Overdrive Advantage."""
 
-    def __init__(self, parent_library_id: int, library_id: int, name: str, token: str):
+    def __init__(self, parent_library_id: str, library_id: str, name: str, token: str):
         """Constructor.
 
         :param parent_library_id: The library ID of the parent Overdrive

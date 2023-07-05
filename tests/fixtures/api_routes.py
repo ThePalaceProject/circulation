@@ -9,7 +9,7 @@ from api import routes
 from api.controller import CirculationManagerController
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
-from tests.fixtures.vendor_id import VendorIDFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockApp:
@@ -121,20 +121,12 @@ class RouteTestFixture:
     REAL_CIRCULATION_MANAGER = None
 
     def __init__(
-        self, vendor_id: VendorIDFixture, controller_fixture: ControllerFixture
+        self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
     ):
-        self.db = vendor_id.db
+        self.db = db
         self.controller_fixture = controller_fixture
         self.setup_circulation_manager = False
         if not RouteTestFixture.REAL_CIRCULATION_MANAGER:
-            library = self.db.default_library()
-            # Set up the necessary configuration so that when we
-            # instantiate the CirculationManager it gets an
-            # adobe_vendor_id controller -- this wouldn't normally
-            # happen because most circulation managers don't need such a
-            # controller.
-            vendor_id.initialize_adobe(library, [library])
-            vendor_id.adobe_vendor_id.password = vendor_id.TEST_NODE_VALUE
             manager = MockCirculationManager(self.db.session)
             RouteTestFixture.REAL_CIRCULATION_MANAGER = manager
 
@@ -272,8 +264,8 @@ class RouteTestFixture:
 
 @pytest.fixture(scope="function")
 def route_test(
-    vendor_id_fixture: VendorIDFixture, controller_fixture: ControllerFixture
+    db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
 ) -> Generator[RouteTestFixture, Any, None]:
-    fix = RouteTestFixture(vendor_id_fixture, controller_fixture)
+    fix = RouteTestFixture(db, controller_fixture)
     yield fix
     fix.close()

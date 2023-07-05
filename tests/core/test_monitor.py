@@ -82,7 +82,7 @@ class MockMonitor(Monitor):
 class TestMonitor:
     def test_must_define_service_name(self, db: DatabaseTransactionFixture):
         class NoServiceName(MockMonitor):
-            SERVICE_NAME = None
+            SERVICE_NAME = None  # type: ignore[assignment]
 
         with pytest.raises(ValueError) as excinfo:
             NoServiceName(db.session)
@@ -158,8 +158,8 @@ class TestMonitor:
             DEFAULT_START_TIME = MockMonitor.ONE_YEAR_AGO
 
         # The Timestamp object is created, and its .timestamp is long ago.
-        m = RunLongAgoMonitor(db.session, db.default_collection())
-        timestamp = m.timestamp()
+        m2 = RunLongAgoMonitor(db.session, db.default_collection())
+        timestamp = m2.timestamp()
         now = utc_now()
         assert timestamp.start < now
 
@@ -226,8 +226,8 @@ class TestMonitor:
             def run_once(self, progress):
                 return TimestampData(exception="I'm also doomed")
 
-        m = AlsoDoomed(db.session, db.default_collection())
-        assert_run_sets_exception(m, "I'm also doomed")
+        m2 = AlsoDoomed(db.session, db.default_collection())
+        assert_run_sets_exception(m2, "I'm also doomed")
 
     def test_same_monitor_different_collections(self, db: DatabaseTransactionFixture):
         """A single Monitor has different Timestamps when run against
@@ -267,6 +267,8 @@ class TestMonitor:
 
         # But the second Monitor now has its own timestamp.
         [t2] = c2.timestamps
+        assert isinstance(t1.start, datetime.datetime)
+        assert isinstance(t2.start, datetime.datetime)
         assert t2.start > t1.start
 
 
@@ -839,21 +841,21 @@ class TestWorkSweepMonitors:
 
         # PresentationReadyWorkSweepMonitor is the same, but it excludes
         # works that are not presentation ready.
-        class Mock(PresentationReadyWorkSweepMonitor):
+        class Mock2(PresentationReadyWorkSweepMonitor):
             SERVICE_NAME = "Mock"
 
-        assert [w1, w4] == Mock(db.session).item_query().all()
-        assert [w1] == Mock(db.session, collection=c1).item_query().all()
-        assert [] == Mock(db.session, collection=c2).item_query().all()
+        assert [w1, w4] == Mock2(db.session).item_query().all()
+        assert [w1] == Mock2(db.session, collection=c1).item_query().all()
+        assert [] == Mock2(db.session, collection=c2).item_query().all()
 
         # NotPresentationReadyWorkSweepMonitor is the same, but it _only_
         # includes works that are not presentation ready.
-        class Mock(NotPresentationReadyWorkSweepMonitor):
+        class Mock3(NotPresentationReadyWorkSweepMonitor):
             SERVICE_NAME = "Mock"
 
-        assert [w2, w3] == Mock(db.session).item_query().all()
-        assert [] == Mock(db.session, collection=c1).item_query().all()
-        assert [w2] == Mock(db.session, collection=c2).item_query().all()
+        assert [w2, w3] == Mock3(db.session).item_query().all()
+        assert [] == Mock3(db.session, collection=c1).item_query().all()
+        assert [w2] == Mock3(db.session, collection=c2).item_query().all()
 
 
 class TestOPDSEntryCacheMonitor:
@@ -1089,7 +1091,9 @@ class TestReaperMonitor:
             days=PatronRecordReaper.MAX_AGE + 1
         )
         active = db.patron()
-        active.expires = now - datetime.timedelta(days=PatronRecordReaper.MAX_AGE - 1)
+        active.authorization_expires = now - datetime.timedelta(
+            days=PatronRecordReaper.MAX_AGE - 1
+        )
         result = m.run_once()
         assert "Items deleted: 1" == result.achievements
         remaining = db.session.query(Patron).all()

@@ -3,13 +3,16 @@
 import datetime
 import logging
 from collections import namedtuple
+from typing import Optional
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Unicode
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.sql.expression import and_
 
 from ..util.datetime_helpers import utc_now
 from ..util.flask_util import OPDSFeedResponse
 from . import Base, flush, get_one, get_one_or_create
+from .work import Work
 
 # This named tuple makes it easy to manage the return value of
 # CachedFeed._prepare_keys.
@@ -62,6 +65,7 @@ class CachedFeed(Base):
 
     # A feed may be associated with a Work.
     work_id = Column(Integer, ForeignKey("works.id"), nullable=True, index=True)
+    work: Mapped[Optional[Work]] = relationship("Work", back_populates="cached_feeds")
 
     # Distinct types of feeds that might be cached.
     GROUPS_TYPE = "groups"

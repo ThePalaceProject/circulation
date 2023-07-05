@@ -45,7 +45,6 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class WorkFixture(CirculationControllerFixture):
@@ -54,10 +53,8 @@ class WorkFixture(CirculationControllerFixture):
     datasource: DataSource
     edition: Edition
 
-    def __init__(
-        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-    ):
-        super().__init__(db, vendor_id_fixture)
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db)
         [self.lp] = self.english_1.license_pools
         self.edition = self.lp.presentation_edition
         self.datasource = self.lp.data_source.name  # type: ignore
@@ -65,8 +62,8 @@ class WorkFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def work_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
-    return WorkFixture(db, vendor_id_fixture)
+def work_fixture(db: DatabaseTransactionFixture):
+    return WorkFixture(db)
 
 
 class TestWorkController:
@@ -139,7 +136,7 @@ class TestWorkController:
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 8 == len(facet_links)
+        assert 10 == len(facet_links)
 
         # The feed was cached.
         cached = work_fixture.db.session.query(CachedFeed).one()
@@ -905,7 +902,7 @@ class TestWorkController:
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 9 == len(facet_links)
+        assert 11 == len(facet_links)
 
         # The facet link we care most about is the default sort order,
         # put into place by SeriesFacets.
