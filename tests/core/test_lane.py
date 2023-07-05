@@ -4253,7 +4253,7 @@ class TestWorkListGroupsEndToEnd:
         result.lq_sf = _w(title="LQ SF", genre="Science Fiction", fiction=True)
         result.lq_sf.quality = 0.1
         result.hq_ro = _w(title="HQ Romance", genre="Romance", fiction=True)
-        result.hq_ro.quality = 0.8
+        result.hq_ro.quality = 0.79
         result.mq_ro = _w(title="MQ Romance", genre="Romance", fiction=True)
         result.mq_ro.quality = 0.6
         # This work is in a different language -- necessary to run the
