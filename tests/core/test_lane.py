@@ -4231,13 +4231,13 @@ class TestWorkListGroupsEndToEnd:
 
         # Create children works.
         result.children_with_age = _w(
-            title="Children work with set target age",
+            title="Children work with target age",
             audience=Classifier.AUDIENCE_CHILDREN,
         )
-        result.children_with_age.target_age = (0, 3)
+        result.children_with_age.target_age = tuple_to_numericrange((0, 3))
 
         result.children_without_age = _w(
-            title="Children work without target age",
+            title="Children work with out target age",
             audience=Classifier.AUDIENCE_CHILDREN,
         )
 
@@ -4273,9 +4273,6 @@ class TestWorkListGroupsEndToEnd:
         result.staff_picks_list.add_entry(result.mq_sf)
         return result
 
-    # TODO: This test needs to be fixed. It fails roughly one out of five runs. For
-    #  now I'm just marking it so it doesn't fail our CI every time it fails.
-    @pytest.mark.xfail()
     def test_groups(
         self,
         end_to_end_search_fixture: EndToEndSearchFixture,
@@ -4285,8 +4282,6 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
-        if not fixture.external_search.search:
-            return
 
         # Tell the fixture to call our populate_works method.
         data = self.populate_works(fixture)
@@ -4320,7 +4315,8 @@ class TestWorkListGroupsEndToEnd:
 
         # "Children", which will contain one book, the one with audience children and defined target age.
         children = db.lane("Children")
-        children.audience = Classifier.AUDIENCE_CHILDREN
+        children.audiences = Classifier.AUDIENCE_CHILDREN
+        children.target_age = (0, 4)
 
         # Since we have a bunch of lanes and works, plus an
         # Opensearch index, let's take this opportunity to verify that
@@ -4466,9 +4462,7 @@ class TestWorkListGroupsEndToEnd:
         # When a lane's audience is "Children" we need work to have explicit target_age to be included in the lane
         assert_contents(
             make_groups(children),
-            [
-                (data.children_with_age, children),
-            ],
+            [(data.children_with_age, children)],
         )
 
         # If we make the lanes thirstier for content, we see slightly
