@@ -4,10 +4,13 @@ from unittest.mock import Mock
 
 import pytest
 
+from api.app import app
+from api.opds2 import OPDS2PublicationsAnnotator
 from core.classifier import Classifier
 from core.external_search import MockExternalSearchIndex, SortKeyPagination
 from core.lane import Facets, Lane, Pagination, SearchFacets
 from core.model.classification import Subject
+from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.resource import Hyperlink
@@ -50,7 +53,7 @@ class TestOPDS2Feed:
         result = AcquisitonFeedOPDS2.publications(
             session,
             data.fiction,
-            SearchFacets(),
+            SearchFacets(library=transaction.default_library()),
             Pagination.default(),
             data.search_engine,
             OPDS2Annotator(
@@ -59,7 +62,6 @@ class TestOPDS2Feed:
         )
 
         assert type(result) == OPDSFeedResponse
-        # assert result.works == [work]
 
     def test_publications_feed_json(self, opds2_feed_fixture: TestOPDS2FeedFixture):
         data, transaction, session = (
@@ -104,13 +106,44 @@ class TestOPDS2Feed:
         result: OPDSFeedResponse = AcquisitonFeedOPDS2.publications(
             session,
             data.fiction,
-            SearchFacets(),
+            SearchFacets(library=transaction.default_library()),
             Pagination.default(),
             data.search_engine,
             annotator,
         )
         result = json.loads(result.data)
         assert len(result["publications"]) == len(works)
+
+    def test_acquisition_facet_links(self, opds2_feed_fixture: TestOPDS2FeedFixture):
+        transaction, session = (
+            opds2_feed_fixture.transaction,
+            opds2_feed_fixture.transaction.session,
+        )
+
+        with app.test_request_context("/"):
+            transaction.default_collection().data_source = DataSource.AMAZON
+            facets = Facets.default(
+                transaction.default_library(), distributor=DataSource.AMAZON
+            )
+            publication = AcquisitonFeedOPDS2(
+                session,
+                [],
+                OPDS2PublicationsAnnotator(
+                    "/", facets, Pagination.default(), transaction.default_library()
+                ),
+                facets,
+            ).publications_json()
+
+            assert "facets" in publication
+            publication_facets = publication["facets"]
+            assert len(publication_facets) == 5
+            list(map(lambda x: x["metadata"]["title"], publication_facets)).sort() == [
+                "available",
+                "collection",
+                "collectionName",
+                "distributor",
+                "order",
+            ]
 
 
 class TestOPDS2AnnotatorFixture:

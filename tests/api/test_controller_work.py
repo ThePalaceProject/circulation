@@ -139,7 +139,7 @@ class TestWorkController:
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 8 == len(facet_links)
+        assert 10 == len(facet_links)
 
         # The feed was cached.
         cached = work_fixture.db.session.query(CachedFeed).one()
@@ -905,7 +905,7 @@ class TestWorkController:
         facet_links = [
             link for link in links if link["rel"] == "http://opds-spec.org/facet"
         ]
-        assert 9 == len(facet_links)
+        assert 11 == len(facet_links)
 
         # The facet link we care most about is the default sort order,
         # put into place by SeriesFacets.

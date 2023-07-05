@@ -1163,7 +1163,12 @@ class TestExternalSearchWithWorks:
             """
             pagination = SortKeyPagination(size=2)
             facets = Facets(
-                transaction.default_library(), None, None, order=Facets.ORDER_TITLE
+                transaction.default_library(),
+                None,
+                None,
+                order=Facets.ORDER_TITLE,
+                distributor=None,
+                collection_name=None,
             )
             pages = []
             while pagination:
@@ -1367,6 +1372,8 @@ class TestFacetFilters:
                 availability,
                 collection,
                 order=Facets.ORDER_TITLE,
+                distributor=None,
+                collection_name=None,
             )
             fixture.expect_results(works, None, Filter(facets=facets), ordered=False)
 
@@ -1642,6 +1649,8 @@ class TestSearchOrder:
                 Facets.COLLECTION_FULL,
                 Facets.AVAILABLE_ALL,
                 order=sort_field,
+                distributor=None,
+                collection_name=None,
                 order_ascending=True,
             )
             expect(order, None, Filter(facets=facets, **filter_kwargs))
@@ -2723,7 +2732,7 @@ class TestQuery:
             return built
 
         # When using the 'featured' collection...
-        built = from_facets(Facets.COLLECTION_FEATURED, None, None)
+        built = from_facets(Facets.COLLECTION_FEATURED, None, None, None, None)
 
         # There is no nested filter.
         assert [] == built.nested_filter_calls
@@ -2738,7 +2747,9 @@ class TestQuery:
         assert Q("bool", must=[quality_range], must_not=[RESEARCH]) == quality_filter
 
         # When using the AVAILABLE_OPEN_ACCESS availability restriction...
-        built = from_facets(Facets.COLLECTION_FULL, Facets.AVAILABLE_OPEN_ACCESS, None)
+        built = from_facets(
+            Facets.COLLECTION_FULL, Facets.AVAILABLE_OPEN_ACCESS, None, None, None
+        )
 
         # An additional nested filter is applied.
         [available_now] = built.nested_filter_calls
@@ -2751,7 +2762,9 @@ class TestQuery:
         assert nested_filter.to_dict() == {"bool": {"filter": [open_access]}}
 
         # When using the AVAILABLE_NOW restriction...
-        built = from_facets(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOW, None)
+        built = from_facets(
+            Facets.COLLECTION_FULL, Facets.AVAILABLE_NOW, None, None, None
+        )
 
         # An additional nested filter is applied.
         [available_now] = built.nested_filter_calls
@@ -2776,7 +2789,9 @@ class TestQuery:
         }
 
         # When using the AVAILABLE_NOT_NOW restriction...
-        built = from_facets(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, None)
+        built = from_facets(
+            Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, None, None, None
+        )
 
         # An additional nested filter is applied.
         [not_available_now] = built.nested_filter_calls
@@ -2797,6 +2812,34 @@ class TestQuery:
             }
         }
 
+        # Distributor builds
+        _id = DataSource.lookup(db.session, DataSource.OVERDRIVE).id
+        built = from_facets(
+            Facets.COLLECTION_FULL,
+            Facets.AVAILABLE_ALL,
+            None,
+            DataSource.OVERDRIVE,
+            None,
+        )
+        [datasource_only] = built.nested_filter_calls
+        nested_filter = datasource_only["query"]
+        assert nested_filter.to_dict() == {
+            "bool": {"filter": [{"terms": {"licensepools.data_source_id": [_id]}}]}
+        }
+
+        # Collection Name builds
+        collection = db.default_collection()
+        built = from_facets(
+            Facets.COLLECTION_FULL, Facets.AVAILABLE_ALL, None, None, collection.name
+        )
+        [collection_only] = built.nested_filter_calls
+        nested_filter = collection_only["query"]
+        assert nested_filter.to_dict() == {
+            "bool": {
+                "filter": [{"terms": {"licensepools.collection_id": [collection.id]}}]
+            }
+        }
+
         # If the Filter specifies script fields, those fields are
         # added to the Query through a call to script_fields()
         script_fields = dict(field1="Definition1", field2="Definition2")
@@ -2809,7 +2852,12 @@ class TestQuery:
         # used to convert it to appropriate Opensearch syntax, and
         # the MockSearch object is modified appropriately.
         built = from_facets(
-            None, None, order=Facets.ORDER_AUTHOR, order_ascending=False
+            None,
+            None,
+            order=Facets.ORDER_AUTHOR,
+            distributor=None,
+            collection_name=None,
+            order_ascending=False,
         )
 
         # We asked for sorting by author, and that's the primary
@@ -2846,7 +2894,6 @@ class TestQuery:
         # to find the most likely hypothesis for any given book.
 
         class Mock(Query):
-
             _match_phrase_called_with = []
             _boosts = {}
             _filters = {}

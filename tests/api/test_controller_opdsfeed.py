@@ -172,7 +172,8 @@ class TestOPDSFeedController:
 
         sort_key = ["sort", "pagination", "key"]
         with circulation_fixture.request_context_with_library(
-            "/?entrypoint=Audio&size=36&key=%s&order=added" % (json.dumps(sort_key))
+            "/?entrypoint=Audio&size=36&key=%s&order=added&max_age=10"
+            % (json.dumps(sort_key))
         ):
             response = circulation_fixture.manager.opds_feeds.feed(
                 circulation_fixture.english_adult_fiction.id, feed_class=Mock
@@ -223,6 +224,9 @@ class TestOPDSFeedController:
         assert circulation_fixture.manager.external_search == kwargs.pop(
             "search_engine"
         )
+
+        # max age
+        assert 10 == kwargs.pop("max_age")
 
         # No other arguments were passed into page().
         assert {} == kwargs

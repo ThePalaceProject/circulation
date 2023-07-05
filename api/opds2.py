@@ -8,6 +8,7 @@ from uritemplate import URITemplate
 
 from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
+from core.lane import Facets
 from core.model import ExternalIntegration
 from core.model.edition import Edition
 from core.model.identifier import Identifier
@@ -48,6 +49,16 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
             ),
             "rel": "self",
         }
+
+    @classmethod
+    def facet_url(cls, facets: Facets) -> str:
+        name = facets.library.short_name if facets.library else None
+        return url_for(
+            "opds2_publications",
+            _external=True,
+            library_short_name=name,
+            **dict(facets.items()),
+        )
 
 
 class OPDS2NavigationsAnnotator(OPDS2Annotator):
