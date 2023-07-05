@@ -1070,6 +1070,7 @@ class SearchFacets(Facets):
         self.media_argument = media
 
         self.languages = self._ensure_list(languages)
+        self._language_from_query = kwargs.pop("language_from_query", False)
 
     @classmethod
     def default_facet(cls, ignore, group_name):
@@ -1118,6 +1119,7 @@ class SearchFacets(Facets):
         # the client's Accept-Language header.
         language_header = get_header("Accept-Language")
         languages = get_argument("language") or None
+        extra["language_from_query"] = languages is not None
         if not languages:
             if language_header:
                 languages = parse_accept_language(language_header)
@@ -1125,6 +1127,7 @@ class SearchFacets(Facets):
                 languages = list(map(LanguageCodes.iso_639_2_for_locale, languages))
                 languages = [l for l in languages if l]
             languages = languages or None
+        extra["languages"] = languages
 
         # The client can request a minimum score for search results.
         min_score = get_argument("min_score", None)
@@ -1143,12 +1146,6 @@ class SearchFacets(Facets):
         if media not in EditionConstants.KNOWN_MEDIA:
             media = None
         extra["media"] = media
-        languageQuery = get_argument("language", None)
-        # Currently, the only value passed to the language query from the client is
-        # `all`. This will remove the default browser's Accept-Language header value
-        # in the search request.
-        if languageQuery != "all":
-            extra["languages"] = languages
 
         search_type = get_argument("search_type")
         if search_type:
@@ -1207,11 +1204,15 @@ class SearchFacets(Facets):
         # We don't rely solely on the SearchFacets languages because a
         # lot of people read in languages other than the one they've
         # set for their device UI.
-        all_languages = set()
-        for language_list in (self.languages, filter.languages):
-            for language in self._ensure_list(language_list) or []:
-                all_languages.add(language)
-        filter.languages = sorted(all_languages) or None
+        #
+        # We should only modify the langauges when we've not been asked to
+        # display "all" the languages
+        if self.languages != ["all"]:
+            all_languages = set()
+            for language_list in (self.languages, filter.languages):
+                for language in self._ensure_list(language_list) or []:
+                    all_languages.add(language)
+            filter.languages = sorted(all_languages) or None
 
     def items(self):
         """Yields a 2-tuple for every active facet setting.
@@ -1225,6 +1226,13 @@ class SearchFacets(Facets):
 
         if self.min_score is not None:
             yield ("min_score", str(self.min_score))
+
+        if self.search_type is not None:
+            yield ("search_type", self.search_type)
+
+        # Only a language that came in from the request query should be reproduced
+        if self._language_from_query and self.languages:
+            yield ("language", self.languages)
 
     def navigate(self, **kwargs):
         min_score = kwargs.pop("min_score", self.min_score)
