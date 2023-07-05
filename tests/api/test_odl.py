@@ -862,7 +862,8 @@ class TestODLAPI:
         odl_api_test_fixture.api._update_hold_end_date(
             info, hold.license_pool, library=library
         )
-        assert info.end_date < next_week
+        assert info.end_date is not None
+        assert info.end_date < next_week  # type: ignore[unreachable]
         assert info.end_date > now
 
         # Updating a hold that has an end date but just became reserved starts

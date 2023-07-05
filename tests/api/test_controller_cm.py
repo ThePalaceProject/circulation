@@ -1,15 +1,13 @@
 from unittest.mock import MagicMock
 
-from api.adobe_vendor_id import AuthdataUtility, DeviceManagementProtocolController
 from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
 from api.opds import CirculationManagerAnnotator, LibraryAnnotator
 from api.problem_details import *
-from api.registration.registry import Registration, RegistrationConstants
+from api.registration.registry import Registration
 from api.shared_collection import SharedCollectionAPI
-from core.config import CannotLoadConfiguration
 from core.external_search import MockExternalSearchIndex
 from core.lane import Facets, WorkList
 from core.model import Admin, CachedFeed, ConfigurationSetting, ExternalIntegration
@@ -30,7 +28,6 @@ class TestCirculationManager:
         # Certain fields of the CirculationManager have certain values
         # which are about to be reloaded.
         manager._external_search = object()
-        manager.adobe_device_management = object()
         manager.auth = object()
         manager.shared_collection_api = object()
         manager.patron_web_domains = object()
@@ -50,11 +47,6 @@ class TestCirculationManager:
         # Now let's create a brand new library, never before seen.
         library = circulation_fixture.db.library()
         circulation_fixture.library_setup(library)
-
-        # In addition to the setup performed by library_setup(), give it
-        # a registry integration with short client tokens so we can verify
-        # that the DeviceManagementProtocolController is recreated.
-        circulation_fixture.vendor_ids.initialize_adobe(library, [library])
 
         # We also register a CustomIndexView for this new library.
         mock_custom_view = object()
@@ -113,11 +105,6 @@ class TestCirculationManager:
         # The ExternalSearch object has been reset.
         assert isinstance(manager.external_search, MockExternalSearchIndex)
 
-        # So has the controller for the Device Management Protocol.
-        assert isinstance(
-            manager.adobe_device_management, DeviceManagementProtocolController
-        )
-
         # So has the SharecCollectionAPI.
         assert isinstance(manager.shared_collection_api, SharedCollectionAPI)
 
@@ -172,60 +159,6 @@ class TestCirculationManager:
         ex = circulation.external_search_initialization_exception
         assert isinstance(ex, Exception)
         assert "doomed!" == str(ex)
-
-    def test_exception_during_short_client_token_initialization_is_stored(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-
-        # Create an incomplete Short Client Token setup for our
-        # library.
-        registry_integration = circulation_fixture.db.external_integration(
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=ExternalIntegration.DISCOVERY_GOAL,
-            libraries=[circulation_fixture.library],
-        )
-        registry_integration.username = "something"
-        registry_integration.set_setting(AuthdataUtility.VENDOR_ID_KEY, "vendorid")
-        # Indicate that the library has successfully registered.
-        ConfigurationSetting.for_library_and_externalintegration(
-            circulation_fixture.db.session,
-            RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
-            circulation_fixture.library,
-            registry_integration,
-        ).value = RegistrationConstants.SUCCESS_STATUS
-
-        # Then try to set up the Adobe Vendor ID configuration for
-        # that library.
-        circulation_fixture.manager.setup_adobe_vendor_id(
-            circulation_fixture.db.session, circulation_fixture.library
-        )
-
-        # The exception caused when we tried to load the incomplete
-        # configuration was stored here.
-        ex = circulation_fixture.manager.short_client_token_initialization_exceptions[
-            circulation_fixture.library.id
-        ]
-        assert isinstance(ex, CannotLoadConfiguration)
-        assert str(ex).startswith("Short Client Token configuration is incomplete")
-
-    def test_setup_adobe_vendor_id_does_not_override_existing_configuration(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        # Our circulation manager is perfectly happy with its Adobe Vendor ID
-        # configuration, which it got from one of its libraries.
-        obj = object()
-        circulation_fixture.manager.adobe_vendor_id = obj
-
-        # This library wants to set up an Adobe Vendor ID but it doesn't
-        # actually have one configured.
-        circulation_fixture.manager.setup_adobe_vendor_id(
-            circulation_fixture.db.session, circulation_fixture.db.default_library()
-        )
-
-        # The sitewide Adobe Vendor ID configuration is not changed by
-        # the presence of another library that doesn't have a Vendor
-        # ID configuration.
-        assert obj == circulation_fixture.manager.adobe_vendor_id
 
     def test_annotator(self, circulation_fixture: CirculationControllerFixture):
         # Test our ability to find an appropriate OPDSAnnotator for

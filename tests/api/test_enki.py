@@ -766,7 +766,7 @@ class TestEnkiImport:
 
         passed_in = importer.incremental_import_called_with
         expect = a_while_ago - importer.OVERLAP
-        assert abs((passed_in - expect).total_seconds()) < 2
+        assert abs((passed_in - expect).total_seconds()) < 2  # type: ignore[operator]
 
         # full_import was not called.
         assert False == importer.full_import_called

@@ -9,13 +9,13 @@ from werkzeug.exceptions import MethodNotAllowed
 
 from api import routes as api_routes
 from api.admin import routes
-from api.admin.controller import AdminController, setup_admin_controllers
+from api.admin.controller import setup_admin_controllers
 from api.admin.problem_details import *
 from api.controller import CirculationManagerController
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
-from tests.fixtures.vendor_id import VendorIDFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockAdminApp:
@@ -72,22 +72,13 @@ class AdminRouteFixture:
     REAL_CIRCULATION_MANAGER = None
 
     def __init__(
-        self, vendor_id: VendorIDFixture, controller_fixture: ControllerFixture
+        self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
     ):
-        self.db = vendor_id.db
+        self.db = db
         self.controller_fixture = controller_fixture
         self.setup_circulation_manager = False
         if not self.REAL_CIRCULATION_MANAGER:
-            library = self.db.default_library()
-            # Set up the necessary configuration so that when we
-            # instantiate the CirculationManager it gets an
-            # adobe_vendor_id controller -- this wouldn't normally
-            # happen because most circulation managers don't need such a
-            # controller.
-            vendor_id.initialize_adobe(library, [library])
-            vendor_id.adobe_vendor_id.password = vendor_id.TEST_NODE_VALUE
             circ_manager = MockCirculationManager(self.db.session)
-            manager = AdminController(circ_manager)
             setup_admin_controllers(circ_manager)
             self.REAL_CIRCULATION_MANAGER = circ_manager
 
@@ -259,9 +250,9 @@ class AdminRouteFixture:
 
 @pytest.fixture(scope="function")
 def admin_route_fixture(
-    vendor_id_fixture: VendorIDFixture, controller_fixture: ControllerFixture
+    db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
 ) -> Generator[AdminRouteFixture, Any, None]:
-    fix = AdminRouteFixture(vendor_id_fixture, controller_fixture)
+    fix = AdminRouteFixture(db, controller_fixture)
     yield fix
     fix.close()
 

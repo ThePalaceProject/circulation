@@ -11,17 +11,14 @@ from core.user_profile import ProfileController, ProfileStorage
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class ProfileFixture(ControllerFixture):
     auth: dict[Any, Any]
     other_patron: Patron
 
-    def __init__(
-        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-    ):
-        super().__init__(db, vendor_id_fixture, setup_cm=True)
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db, setup_cm=True)
         # Nothing will happen to this patron. This way we can verify
         # that a patron can only see/modify their own profile.
         self.other_patron = db.patron()
@@ -30,8 +27,8 @@ class ProfileFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def profile_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
-    return ProfileFixture(db, vendor_id_fixture)
+def profile_fixture(db: DatabaseTransactionFixture):
+    return ProfileFixture(db)
 
 
 class TestProfileController:

@@ -4,11 +4,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from core.model import Collection, Patron
-from core.model.credential import (
-    Credential,
-    DelegatedPatronIdentifier,
-    DRMDeviceIdentifier,
-)
+from core.model.credential import Credential
 from core.model.datasource import DataSource
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -258,39 +254,6 @@ class TestCredentials:
         )
 
 
-class TestDelegatedPatronIdentifier:
-    def test_get_one_or_create(self, db: DatabaseTransactionFixture):
-        library_uri = db.fresh_url()
-        patron_identifier = db.fresh_str()
-        identifier_type = DelegatedPatronIdentifier.ADOBE_ACCOUNT_ID
-
-        def make_id():
-            return "id1"
-
-        identifier, is_new = DelegatedPatronIdentifier.get_one_or_create(
-            db.session, library_uri, patron_identifier, identifier_type, make_id
-        )
-        assert True == is_new
-        assert library_uri == identifier.library_uri
-        assert patron_identifier == identifier.patron_identifier
-        # id_1() was called.
-        assert "id1" == identifier.delegated_identifier
-
-        # Try the same thing again but provide a different create_function
-        # that raises an exception if called.
-        def explode():
-            raise Exception("I should never be called.")
-
-        identifier2, is_new = DelegatedPatronIdentifier.get_one_or_create(
-            db.session, library_uri, patron_identifier, identifier_type, explode
-        )
-        # The existing identifier was looked up.
-        assert False == is_new
-        assert identifier2.id == identifier.id
-        # id_2() was not called.
-        assert "id1" == identifier2.delegated_identifier
-
-
 class TestUniquenessConstraintsFixture:
     data_source: DataSource
     type: str
@@ -395,55 +358,3 @@ class TestUniquenessConstraints:
             data_source=data.data_source, type=data.type, collection=data.col1
         )
         pytest.raises(IntegrityError, session.flush)
-
-
-class TestDRMDeviceIdentifierFixture:
-    data_source: DataSource
-    patron: Patron
-    credential: Credential
-    transaction: DatabaseTransactionFixture
-
-
-@pytest.fixture()
-def test_drm_device_id_fixture(
-    db: DatabaseTransactionFixture,
-) -> TestDRMDeviceIdentifierFixture:
-    fix = TestDRMDeviceIdentifierFixture()
-    fix.transaction = db
-    fix.data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
-    fix.patron = db.patron()
-    c, ignore = Credential.persistent_token_create(
-        db.session, fix.data_source, "Some Credential", fix.patron
-    )
-    fix.credential = c
-    return fix
-
-
-class TestDRMDeviceIdentifier:
-    def test_devices_for_credential(
-        self, test_drm_device_id_fixture: TestDRMDeviceIdentifierFixture
-    ):
-        data = test_drm_device_id_fixture
-
-        device_id_1, new = data.credential.register_drm_device_identifier("foo")
-        assert "foo" == device_id_1.device_identifier
-        assert data.credential == device_id_1.credential
-        assert True == new
-
-        device_id_2, new = data.credential.register_drm_device_identifier("foo")
-        assert device_id_1 == device_id_2
-        assert False == new
-
-        device_id_3, new = data.credential.register_drm_device_identifier("bar")
-
-        assert {device_id_1, device_id_3} == set(data.credential.drm_device_identifiers)
-
-    def test_deregister(
-        self, test_drm_device_id_fixture: TestDRMDeviceIdentifierFixture
-    ):
-        data = test_drm_device_id_fixture
-
-        device, new = data.credential.register_drm_device_identifier("foo")
-        data.credential.deregister_drm_device_identifier("foo")
-        assert [] == data.credential.drm_device_identifiers
-        assert [] == data.transaction.session.query(DRMDeviceIdentifier).all()

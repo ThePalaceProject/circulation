@@ -53,7 +53,6 @@ from core.util.string_helpers import base64
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class SharedCollectionFixture(ControllerFixture):
@@ -63,10 +62,8 @@ class SharedCollectionFixture(ControllerFixture):
     pool: LicensePool
     delivery_mechanism: LicensePoolDeliveryMechanism
 
-    def __init__(
-        self, db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture
-    ):
-        super().__init__(db, vendor_id_fixture, setup_cm=False)
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db, setup_cm=False)
         from api.odl import ODLAPI
 
         self.collection = db.collection(protocol=ODLAPI.NAME)
@@ -88,8 +85,8 @@ class SharedCollectionFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def shared_fixture(db: DatabaseTransactionFixture, vendor_id_fixture: VendorIDFixture):
-    return SharedCollectionFixture(db, vendor_id_fixture)
+def shared_fixture(db: DatabaseTransactionFixture):
+    return SharedCollectionFixture(db)
 
 
 class TestSharedCollectionController:
