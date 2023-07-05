@@ -275,6 +275,9 @@ class TestCirculationData:
             checkouts_available=3,
         )
 
+        assert isinstance(old_license.identifier, str)
+        assert isinstance(old_license.checkout_url, str)
+        assert isinstance(old_license.status_url, str)
         license_data = LicenseData(
             identifier=old_license.identifier,
             expires=old_license.expires,
@@ -769,8 +772,10 @@ class TestMetaToModelUtility:
             links=[link_mirrored, link_unmirrored],
         )
         metadata.apply(edition, pool.collection, replace=policy)
+        mirror = mirrors[mirror_type]
+        assert isinstance(mirror, MockS3Uploader)
         # make sure the refactor is done right, and metadata does not upload
-        assert 0 == len(mirrors[mirror_type].uploaded)
+        assert 0 == len(mirror.uploaded)
 
         circulation_data = CirculationData(
             data_source=edition.data_source,
@@ -780,10 +785,10 @@ class TestMetaToModelUtility:
         circulation_data.apply(db.session, pool.collection, replace=policy)
 
         # make sure the refactor is done right, and circulation does upload
-        assert 1 == len(mirrors[mirror_type].uploaded)
+        assert 1 == len(mirror.uploaded)
 
         # Only the open-access link has been 'mirrored'.
-        [book] = mirrors[mirror_type].uploaded
+        [book] = mirror.uploaded
 
         # It's remained an open-access link.
         assert [Hyperlink.OPEN_ACCESS_DOWNLOAD] == [x.rel for x in book.resource.links]

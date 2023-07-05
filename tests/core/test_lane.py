@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 import random
-from typing import List
+from typing import List, Tuple
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -715,8 +715,8 @@ class TestFacets:
         default_availability = config.default_facet(
             Facets.AVAILABILITY_FACET_GROUP_NAME
         )
-        args = {}
-        headers = {}
+        args: dict[str, str] = {}
+        headers: dict = {}
         facets = m(library, library, args.get, headers.get, worklist)
         assert default_order == facets.order
         assert default_collection == facets.collection
@@ -775,8 +775,8 @@ class TestFacets:
         # available_facets() and default_facets() methods. This gives
         # subclasses a chance to add extra facets or change defaults.
         class Mock(Facets):
-            available_facets_calls = []
-            default_facet_calls = []
+            available_facets_calls: List[Tuple] = []
+            default_facet_calls: List[Tuple] = []
 
             # For whatever reason, this faceting object allows only a
             # single setting for each facet group.
@@ -2164,7 +2164,7 @@ class TestWorkList:
 
         # Now it depends on the return value of Patron.work_is_age_appropriate.
         # Mock that method.
-        patron.work_is_age_appropriate = MagicMock(return_value=False)
+        patron.work_is_age_appropriate = MagicMock(return_value=False)  # type: ignore[method-assign]
 
         # Since our mock returns false, so does accessible_to
         assert False == m(patron)
@@ -2178,7 +2178,7 @@ class TestWorkList:
         )
 
         # If we tell work_is_age_appropriate to always return true...
-        patron.work_is_age_appropriate = MagicMock(return_value=True)
+        patron.work_is_age_appropriate = MagicMock(return_value=True)  # type: ignore[method-assign]
 
         # ...accessible_to starts returning True.
         assert True == m(patron)
@@ -2231,17 +2231,17 @@ class TestWorkList:
         facets = SearchFacets()
         filter = wl.filter(db.session, facets)
         assert isinstance(filter, Filter)
-        assert True == filter.hook_called
+        assert True == filter.hook_called  # type: ignore[attr-defined]
 
         class NewFilter(WorkList):
             # A WorkList that returns a brand new Filter
             def modify_search_filter_hook(self, filter):
                 return "A brand new Filter"
 
-        wl = NewFilter()
-        wl.initialize(db.default_library())
+        new_filter = NewFilter()
+        new_filter.initialize(db.default_library())
         facets = SearchFacets()
-        filter = wl.filter(db.session, facets)
+        filter = new_filter.filter(db.session, facets)
         assert "A brand new Filter" == filter
 
     def test_groups(
@@ -2624,7 +2624,7 @@ class TestWorkList:
             library_id=db.default_library().id,
             external_integration_id=collection1.external_integration_id,
             key=ExternalIntegration.DISPLAY_RESERVES,
-            value="no",
+            _value="no",
         )
         db.session.add(cs1)
         db.session.commit()
@@ -2678,7 +2678,7 @@ class TestWorkList:
             library_id=db.default_library().id,
             external_integration_id=alternate_collection.external_integration_id,
             key=ExternalIntegration.DISPLAY_RESERVES,
-            value="no",
+            _value="no",
         )
         db.session.add(cs2)
         assert [[w2], []] == m(db.session, [[hit2], [hit1]])
@@ -2817,7 +2817,7 @@ class TestDatabaseBackedWorkList:
         # Now we're going to do a more complicated test, with
         # faceting, pagination, and a bibliographic_filter_clauses that
         # actually does something.
-        wl.bibliographic_filter_clauses = wl.active_bibliographic_filter_clauses
+        wl.bibliographic_filter_clauses = wl.active_bibliographic_filter_clauses  # type: ignore[method-assign]
 
         class MockFacets(DatabaseBackedFacets):
             def __init__(self, wl):
@@ -3651,7 +3651,6 @@ class TestLane:
         child_lane = db.lane(parent=lane)
         grandchild_lane = db.lane(parent=child_lane)
         unrelated = db.lane()
-        worklist.sublanes = [child_lane]
 
         # A WorkList has no parentage.
         assert [] == list(worklist.parentage)
@@ -4116,7 +4115,7 @@ class TestLane:
 
         old_lane_search_target = Lane.search_target
         old_wl_search = WorkList.search
-        Lane.search_target = mock
+        Lane.search_target = mock  # type: ignore[method-assign, assignment]
         facets = SearchFacets()
         lane.search(db.session, "query", None, facets=facets)
         assert facets == mock.called_with
@@ -4124,14 +4123,14 @@ class TestLane:
         # Now try the case where a lane is its own search target.  The
         # Facets object is propagated to the WorkList.search().
         mock.called_with = None
-        Lane.search_target = lane
-        WorkList.search = mock.search
+        Lane.search_target = lane  # type: ignore[method-assign]
+        WorkList.search = mock.search  # type: ignore[method-assign]
         lane.search(db.session, "query", None, facets=facets)
         assert facets == mock.called_with
 
         # Restore methods that were mocked.
-        Lane.search_target = old_lane_search_target
-        WorkList.search = old_wl_search
+        Lane.search_target = old_lane_search_target  # type: ignore[method-assign]
+        WorkList.search = old_wl_search  # type: ignore[method-assign]
 
     def test_explain(self, db: DatabaseTransactionFixture):
         parent = db.lane(display_name="Parent")
@@ -4163,12 +4162,12 @@ class TestLane:
             return []
 
         old_value = Lane._groups_for_lanes
-        Lane._groups_for_lanes = mock
+        Lane._groups_for_lanes = mock  # type: ignore[method-assign, assignment]
         lane = db.lane()
         facets = FeaturedFacets(0)
         lane.groups(db.session, facets=facets)
         assert facets == lane.called_with
-        Lane._groups_for_lanes = old_value
+        Lane._groups_for_lanes = old_value  # type: ignore[method-assign]
 
     def test_suppress(self, db: DatabaseTransactionFixture):
         lane1 = db.lane()
@@ -4510,9 +4509,9 @@ class TestWorkListGroupsEndToEnd:
 
         # There are no audiobooks in the system, so passing in a
         # FeaturedFacets scoped to the AudiobooksEntryPoint excludes everything.
-        facets = FeaturedFacets(0, entrypoint=AudiobooksEntryPoint)
+        fetured_facets = FeaturedFacets(0, entrypoint=AudiobooksEntryPoint)
         _db = session
-        assert [] == list(fiction.groups(session, facets=facets))
+        assert [] == list(fiction.groups(session, facets=fetured_facets))
 
         # Here's an entry point that applies a language filter
         # that only finds one book.
@@ -4523,11 +4522,11 @@ class TestWorkListGroupsEndToEnd:
             def modify_search_filter(cls, filter):
                 filter.languages = ["lan"]
 
-        facets = FeaturedFacets(
+        fetured_facets = FeaturedFacets(
             1, entrypoint=LQRomanceEntryPoint, random_seed=Filter.DETERMINISTIC
         )
         assert_contents(
-            make_groups(fiction, facets=facets),
+            make_groups(fiction, facets=fetured_facets),
             [
                 # The single recognized book shows up in both lanes
                 # that can show it.
@@ -4628,7 +4627,7 @@ class TestWorkListGroups:
         # We're going to make a grouped feed in which both children
         # are relevant, but neither one is queryable.
         relevant = parent.children
-        queryable = []
+        queryable: list = []
         pagination = Pagination(size=2)
         facets = FeaturedFacets(0)
         groups = list(

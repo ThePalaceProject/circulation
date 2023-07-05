@@ -536,13 +536,13 @@ class TestBaseCoverageProvider:
         e2, p2 = db.edition(with_license_pool=True)
         i2 = e2.primary_identifier
 
-        class MockProvider(AlwaysSuccessfulCoverageProvider):
+        class MockProvider1(AlwaysSuccessfulCoverageProvider):
             OPERATION = "i succeed"
 
             def finalize_batch(self):
                 self.finalized = True
 
-        success_provider = MockProvider(db.session)
+        success_provider = MockProvider1(db.session)
 
         batch = [i1, i2]
         counts, successes = success_provider.process_batch_and_handle_results(batch)
@@ -565,10 +565,10 @@ class TestBaseCoverageProvider:
 
         # Now try a different CoverageProvider which creates transient
         # failures.
-        class MockProvider(TransientFailureCoverageProvider):
+        class MockProvider2(TransientFailureCoverageProvider):
             OPERATION = "i fail transiently"
 
-        transient_failure_provider = MockProvider(db.session)
+        transient_failure_provider = MockProvider2(db.session)
         counts, failures = transient_failure_provider.process_batch_and_handle_results(
             batch
         )
@@ -582,10 +582,10 @@ class TestBaseCoverageProvider:
 
         # Another way of getting transient failures is to just ignore every
         # item you're told to process.
-        class MockProvider(TaskIgnoringCoverageProvider):
+        class MockProvider3(TaskIgnoringCoverageProvider):
             OPERATION = "i ignore"
 
-        task_ignoring_provider = MockProvider(db.session)
+        task_ignoring_provider = MockProvider3(db.session)
         counts, records = task_ignoring_provider.process_batch_and_handle_results(batch)
 
         assert (0, 2, 0) == counts
@@ -601,10 +601,10 @@ class TestBaseCoverageProvider:
         assert [None, None] == [x.exception for x in records]
 
         # Or you can go really bad and have persistent failures.
-        class MockProvider(NeverSuccessfulCoverageProvider):
+        class MockProvider4(NeverSuccessfulCoverageProvider):
             OPERATION = "i will always fail"
 
-        persistent_failure_provider = MockProvider(db.session)
+        persistent_failure_provider = MockProvider4(db.session)
         counts, results = persistent_failure_provider.process_batch_and_handle_results(
             batch
         )
@@ -693,37 +693,37 @@ class TestIdentifierCoverageProvider:
             SERVICE_NAME = "Test provider"
             DATA_SOURCE_NAME = DataSource.GUTENBERG
 
-        class MockProvider(Base):
+        class MockProvider1(Base):
             INPUT_IDENTIFIER_TYPES = None
 
-        provider = MockProvider(db.session)
+        provider = MockProvider1(db.session)
         assert None == provider.input_identifier_types
 
         # It's okay to set a single value.
-        class MockProvider(Base):
+        class MockProvider2(Base):
             INPUT_IDENTIFIER_TYPES = Identifier.ISBN
 
-        provider = MockProvider(db.session)
-        assert [Identifier.ISBN] == provider.input_identifier_types
+        provider2 = MockProvider2(db.session)
+        assert [Identifier.ISBN] == provider2.input_identifier_types
 
         # It's okay to set a list of values.
-        class MockProvider(Base):
+        class MockProvider3(Base):
             INPUT_IDENTIFIER_TYPES = [Identifier.ISBN, Identifier.OVERDRIVE_ID]
 
-        provider = MockProvider(db.session)
+        provider3 = MockProvider3(db.session)
         assert [
             Identifier.ISBN,
             Identifier.OVERDRIVE_ID,
-        ] == provider.input_identifier_types
+        ] == provider3.input_identifier_types
 
         # It's not okay to do nothing.
-        class MockProvider(Base):
+        class MockProvider4(Base):
             pass
 
         with pytest.raises(ValueError) as excinfo:
-            MockProvider(db.session)
+            MockProvider4(db.session)
         assert (
-            "MockProvider must define INPUT_IDENTIFIER_TYPES, even if the value is None."
+            "MockProvider4 must define INPUT_IDENTIFIER_TYPES, even if the value is None."
             in str(excinfo.value)
         )
 
@@ -1134,16 +1134,15 @@ class TestIdentifierCoverageProvider:
         assert [identifier] == provider.items_that_need_coverage().all()
 
         # Here's a provider that has no operation set.
-        provider = AlwaysSuccessfulCoverageProvider(db.session)
-        assert None == provider.OPERATION
+        successful_provider = AlwaysSuccessfulCoverageProvider(db.session)
+        assert None == successful_provider.OPERATION
 
         # For purposes of items_that_need_coverage, the identifier is
         # considered covered, because the operations match.
-        assert [] == provider.items_that_need_coverage().all()
+        assert [] == successful_provider.items_that_need_coverage().all()
 
     def test_run_on_specific_identifiers(self, db: DatabaseTransactionFixture):
         provider = AlwaysSuccessfulCoverageProvider(db.session)
-        provider.workset_size = 3
         to_be_tested = [db.identifier() for i in range(6)]
         not_to_be_tested = [db.identifier() for i in range(6)]
         counts, records = provider.run_on_specific_identifiers(to_be_tested)
@@ -2155,6 +2154,7 @@ class TestWorkCoverageProvider:
         # If we set a cutoff_time which is after the time the
         # WorkCoverageRecord was created, then that work starts
         # showing up again as needing coverage.
+        assert isinstance(record.timestamp, datetime.datetime)
         provider.cutoff_time = record.timestamp + datetime.timedelta(seconds=1)
         assert {w2, w3} == set(provider.items_that_need_coverage([i2, i3]).all())
 

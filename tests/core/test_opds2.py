@@ -111,8 +111,8 @@ class TestOPDS2Feed:
             data.search_engine,
             annotator,
         )
-        result = json.loads(result.data)
-        assert len(result["publications"]) == len(works)
+        result_dict = json.loads(result.data)
+        assert len(result_dict["publications"]) == len(works)
 
     def test_acquisition_facet_links(self, opds2_feed_fixture: TestOPDS2FeedFixture):
         transaction, session = (
@@ -212,6 +212,7 @@ class TestOPDS2Annotator:
         )
         data.search_engine.bulk_update([work])
         result = data.annotator.metadata_for_work(work)
+        assert isinstance(result, dict)
 
         assert "images" in result
         assert len(result["images"]) == 2
@@ -247,6 +248,7 @@ class TestOPDS2Annotator:
 
         data.search_engine.bulk_update([work])
         result = data.annotator.metadata_for_work(work)
+        assert isinstance(result, dict)
 
         meta = result["metadata"]
         assert meta["@type"] == "http://schema.org/EBook"

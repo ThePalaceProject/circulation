@@ -251,7 +251,7 @@ class TestEquivalentCoverage:
         )
 
         data.provider.update_missing_coverage_records()
-        batch = data.provider.items_that_need_coverage()
+        batch = list(data.provider.items_that_need_coverage())
         data.provider.process_batch(batch)
 
         all_records = session.query(EquivalencyCoverageRecord).all()
@@ -308,7 +308,7 @@ class TestEquivalentCoverage:
         )
 
         data.provider.update_missing_coverage_records()
-        batch = data.provider.items_that_need_coverage()
+        batch = list(data.provider.items_that_need_coverage())
         data.provider.process_batch(batch)
 
         records = EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
@@ -334,7 +334,7 @@ class TestEquivalentCoverage:
         self._drop_all_recursives(session)
 
         data.provider.update_missing_coverage_records()
-        batch = data.provider.items_that_need_coverage()
+        batch = list(data.provider.items_that_need_coverage())
         data.provider.process_batch(batch)
 
         missing = data.provider.update_identity_recursive_equivalents()

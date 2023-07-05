@@ -2,7 +2,7 @@ import datetime
 import logging
 import xml.etree.ElementTree as ET
 from io import StringIO
-from typing import Any, List
+from typing import Any, Callable, Generator, List, Type
 
 import feedparser
 import pytest
@@ -93,7 +93,7 @@ class TestBaseAnnotator:
         [pool] = work.license_pools
         pool.availability_time = datetime_utc(2015, 1, 1)
 
-        entry = []
+        entry: list = []
         # This will create four extra tags which could not be
         # generated in the cached entry because they depend on the
         # active LicensePool or identifier: the Atom ID, the distributor,
@@ -156,8 +156,8 @@ class TestAnnotators:
             annotators_fixture.session,
         )
 
-        data.work = db.work(genre="Fiction", with_open_access_download=True)
-        edition = data.work.presentation_edition
+        work = db.work(genre="Fiction", with_open_access_download=True)
+        edition = work.presentation_edition
         identifier = edition.primary_identifier
         source1 = DataSource.lookup(session, DataSource.GUTENBERG)
         source2 = DataSource.lookup(session, DataSource.OCLC)
@@ -182,21 +182,21 @@ class TestAnnotators:
         # Mock Work.all_identifier_ids (called by VerboseAnnotator.categories)
         # so we can track the value that was passed in for `cutoff`.
         def mock_all_identifier_ids(policy=None):
-            data.work.called_with_policy = policy
+            work.called_with_policy = policy
             # Do the actual work so that categories() gets the
             # correct information.
-            return data.work.original_all_identifier_ids(policy)
+            return work.original_all_identifier_ids(policy)
 
-        data.work.original_all_identifier_ids = data.work.all_identifier_ids
-        data.work.all_identifier_ids = mock_all_identifier_ids
-        category_tags = VerboseAnnotator.categories(data.work)
+        work.original_all_identifier_ids = work.all_identifier_ids
+        work.all_identifier_ids = mock_all_identifier_ids
+        category_tags = VerboseAnnotator.categories(work)
 
         # When we are generating subjects as part of an OPDS feed, by
         # default we set a cutoff of 100 equivalent identifiers. This
         # gives us reasonable worst-case performance at the cost of
         # not showing every single random subject under which an
         # extremely popular book is filed.
-        assert 100 == data.work.called_with_policy.equivalent_identifier_cutoff
+        assert 100 == work.called_with_policy.equivalent_identifier_cutoff
 
         ddc_uri = Subject.uri_lookup[Subject.DDC]
         rating_value = "{http://schema.org/}ratingValue"
@@ -362,6 +362,7 @@ class TestAnnotators:
             VerboseAnnotator,
         )
         tag = feed.create_entry(work, None)
+        assert isinstance(tag, etree._Element)
 
         nsmap = dict(schema="http://schema.org/")
         ratings = [
@@ -538,6 +539,8 @@ class TestOPDSFixture:
     romance: Lane
     contemporary_romance: Lane
     conf: WorkList
+    history: Lane
+    ya: Lane
 
 
 @pytest.fixture
@@ -551,7 +554,6 @@ def opds_fixture(db: DatabaseTransactionFixture) -> TestOPDSFixture:
     data.fantasy = db.lane("Fantasy", parent=data.fiction, genres="Fantasy")
     data.history = db.lane("History", genres="History")
     data.ya = db.lane("Young Adult")
-    data.ya.history = None
     data.ya.audiences = [Classifier.AUDIENCE_YOUNG_ADULT]
     data.romance = db.lane("Romance", genres="Romance")
     data.romance.fiction = True
@@ -951,8 +953,10 @@ class TestOPDS:
             w.calculate_opds_entries(verbose=False)
 
         works = session.query(Work)
-        with_publisher = AcquisitionFeed(session, "test", "url", works, MockAnnotator)
-        with_publisher = feedparser.parse(str(with_publisher))
+        feed_with_publisher = AcquisitionFeed(
+            session, "test", "url", works, MockAnnotator
+        )
+        with_publisher = feedparser.parse(str(feed_with_publisher))
         entries = sorted(with_publisher["entries"], key=lambda x: x["title"])
         assert "The Publisher" == entries[0]["dcterms_publisher"]
         assert "The Imprint" == entries[0]["bib_publisherimprint"]
@@ -984,9 +988,8 @@ class TestOPDS:
             w.calculate_opds_entries(verbose=False)
 
         works = session.query(Work)
-        with_audience = AcquisitionFeed(session, "test", "url", works)
-        u = str(with_audience)
-        with_audience = feedparser.parse(u)
+        feed_with_audience = AcquisitionFeed(session, "test", "url", works)
+        with_audience = feedparser.parse(str(feed_with_audience))
         ya, children, no_audience, adult = sorted(
             with_audience["entries"], key=lambda x: int(x["title"])
         )
@@ -1041,8 +1044,8 @@ class TestOPDS:
 
         session.commit()
         works = session.query(Work)
-        feed = AcquisitionFeed(session, "test", "url", works)
-        feed = feedparser.parse(str(feed))
+        acq_feed = AcquisitionFeed(session, "test", "url", works)
+        feed = feedparser.parse(str(acq_feed))
         entries = sorted(feed["entries"], key=lambda x: int(x["title"]))
 
         tags = entries[0]["tags"]
@@ -1082,8 +1085,8 @@ class TestOPDS:
 
         session.commit()
         works = session.query(Work)
-        feed = AcquisitionFeed(session, "test", "url", works)
-        feed = feedparser.parse(str(feed))
+        acq_feed = AcquisitionFeed(session, "test", "url", works)
+        feed = feedparser.parse(str(acq_feed))
         entries = sorted(feed["entries"], key=lambda x: int(x["title"]))
 
         scheme = "http://librarysimplified.org/terms/fiction/"
@@ -1113,8 +1116,8 @@ class TestOPDS:
 
         session.commit()
         works = session.query(Work)
-        feed = AcquisitionFeed(session, "test", "url", works)
-        feed = feedparser.parse(str(feed))
+        acq_feed = AcquisitionFeed(session, "test", "url", works)
+        feed = feedparser.parse(str(acq_feed))
         entries = sorted(feed["entries"], key=lambda x: int(x["title"]))
 
         scheme = Subject.SIMPLIFIED_GENRE
@@ -1193,10 +1196,11 @@ class TestOPDS:
             OPDSMessage("urn:foo", 400, _("msg1")),
             OPDSMessage("urn:bar", 500, _("msg2")),
         ]
-        feed = AcquisitionFeed(
-            session, "test", "http://the-url.com/", [], precomposed_entries=messages
+        feed = str(
+            AcquisitionFeed(
+                session, "test", "http://the-url.com/", [], precomposed_entries=messages
+            )
         )
-        feed = str(feed)
         for m in messages:
             assert m.urn in feed
             assert str(m.status_code) in feed
@@ -1214,14 +1218,15 @@ class TestOPDS:
 
         entry = AcquisitionFeed.E.entry()
         entry.text = "foo"
-        feed = AcquisitionFeed(
-            session,
-            "test",
-            "http://the-url.com/",
-            works=[],
-            precomposed_entries=[entry],
+        feed = str(
+            AcquisitionFeed(
+                session,
+                "test",
+                "http://the-url.com/",
+                works=[],
+                precomposed_entries=[entry],
+            )
         )
-        feed = str(feed)
         assert "<entry>foo</entry>" in feed
 
     def test_page_feed(self, opds_fixture: TestOPDSFixture):
@@ -1291,6 +1296,7 @@ class TestOPDS:
 
         # There's one breadcrumb link for each parent Lane, plus one for
         # the top-level.
+        assert isinstance(links, ET.Element)
         assert len(parentage) + 1 == len(links)
         assert MockAnnotator.top_level_title() == links[0].get("title")
         assert MockAnnotator.default_lane_url() == links[0].get("href")
@@ -1529,6 +1535,7 @@ class TestOPDS:
         root = ET.fromstring(cached_groups.data)
         breadcrumbs = root.find("{%s}breadcrumbs" % AtomFeed.SIMPLIFIED_NS)
         links = breadcrumbs
+        assert isinstance(links, ET.Element)
         assert len(ancestors) + 1 == len(links)
         assert annotator.top_level_title() == links[0].get("title")
         assert annotator.default_lane_url() == links[0].get("href")
@@ -1571,6 +1578,7 @@ class TestOPDS:
         # A grouped feed was cached for the lane, but there were no
         # relevant works found,.
         cached = get_one(session, CachedFeed, lane=test_lane)
+        assert isinstance(cached, CachedFeed)
         assert CachedFeed.GROUPS_TYPE == cached.type
 
         # So the feed contains no entries.
@@ -1698,6 +1706,7 @@ class TestOPDS:
         response1 = make_page()
         assert work1.title in str(response1)
         cached = get_one(session, CachedFeed, lane=fantasy_lane)
+        assert isinstance(cached, CachedFeed)
         old_timestamp = cached.timestamp
 
         work2 = db.work(
@@ -1717,6 +1726,8 @@ class TestOPDS:
         # we get a brand new page with the new work.
         fantasy_lane.MAX_CACHE_AGE = 0
         response3 = make_page()
+        assert isinstance(cached.timestamp, datetime.datetime)
+        assert isinstance(old_timestamp, datetime.datetime)
         assert cached.timestamp > old_timestamp
         assert work2.title in str(response3)
 
@@ -2798,13 +2809,14 @@ class TestEntrypointLinkInsertionFixture:
     entrypoints: List[MediumEntryPoint]
     wl: WorkList
     lane: Lane
-    annotator: MockAnnotator
+    annotator: Type[MockAnnotator]
+    old_add_entrypoint_links: Callable
 
 
 @pytest.fixture()
 def entrypoint_link_insertion_fixture(
     db,
-) -> TestEntrypointLinkInsertionFixture:
+) -> Generator[TestEntrypointLinkInsertionFixture, None, None]:
     data = TestEntrypointLinkInsertionFixture()
     data.db = db
 
@@ -2821,7 +2833,7 @@ def entrypoint_link_insertion_fixture(
 
     # A WorkList with two EntryPoints -- may call the mock method
     # depending on circumstances.
-    data.entrypoints = [AudiobooksEntryPoint, EbooksEntryPoint]
+    data.entrypoints = [AudiobooksEntryPoint, EbooksEntryPoint]  # type: ignore[list-item]
     data.wl = WorkList()
     # The WorkList must have at least one child, or we won't generate
     # a real groups feed for it.
@@ -2839,15 +2851,14 @@ def entrypoint_link_insertion_fixture(
         """
         return []
 
-    data.no_eps.works = works
-    data.wl.works = works
+    data.no_eps.works = works  # type: ignore[method-assign, assignment]
+    data.wl.works = works  # type: ignore[method-assign, assignment]
 
     data.annotator = MockAnnotator
     data.old_add_entrypoint_links = AcquisitionFeed.add_entrypoint_links
-
-    AcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links
+    AcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links  # type: ignore[method-assign]
     yield data
-    AcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links
+    AcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links  # type: ignore[method-assign]
 
 
 class TestEntrypointLinkInsertion:
@@ -3001,8 +3012,8 @@ class TestEntrypointLinkInsertion:
         def mock_search(self, *args, **kwargs):
             return []
 
-        data.no_eps.search = mock_search
-        data.wl.search = mock_search
+        data.no_eps.search = mock_search  # type: ignore[method-assign, assignment]
+        data.wl.search = mock_search  # type: ignore[method-assign, assignment]
 
         # This WorkList has no entry points, so the mock method is not
         # even called.
@@ -3135,6 +3146,8 @@ class TestNavigationFeed:
 
         # The feed was cached.
         cached = get_one(session, CachedFeed)
+        assert isinstance(cached, CachedFeed)
+        assert isinstance(cached.content, str)
         assert "http://%s/" % data.fantasy.id in cached.content
 
     def test_navigation_without_sublanes(

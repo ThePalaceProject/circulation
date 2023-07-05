@@ -144,7 +144,7 @@ class Collection(Base, HasSessionCache):
     # A Collection can be monitored by many Monitors, each of which
     # will have its own Timestamp.
     timestamps: Mapped[List[Timestamp]] = relationship(
-        "Timestamp", backref="collection"
+        "Timestamp", back_populates="collection"
     )
 
     catalog: Mapped[List[Identifier]] = relationship(

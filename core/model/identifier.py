@@ -254,7 +254,7 @@ class Identifier(Base, IdentifierConstants):
 
     # One Identifier may have many associated CoverageRecords.
     coverage_records: Mapped[List[CoverageRecord]] = relationship(
-        "CoverageRecord", backref="identifier"
+        "CoverageRecord", back_populates="identifier"
     )
 
     def __repr__(self):

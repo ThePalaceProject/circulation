@@ -259,12 +259,12 @@ class TestMetadataImporter:
             links=[image, not_a_thumbnail], data_source=edition.data_source
         )
         metadata.apply(edition, None)
-        [image, description] = sorted(
+        [hyperlink_image, description] = sorted(
             edition.primary_identifier.links, key=lambda x: x.rel
         )
         assert Hyperlink.DESCRIPTION == description.rel
         assert b"A great book" == description.resource.representation.content
-        assert [] == image.resource.representation.thumbnails
+        assert [] == hyperlink_image.resource.representation.thumbnails
         assert None == description.resource.representation.thumbnail_of
 
     def test_image_and_thumbnail_are_the_same(self, db: DatabaseTransactionFixture):
@@ -376,7 +376,9 @@ class TestMetadataImporter:
         metadata.apply(edition, pool.collection, replace=policy)
 
         # Two Representations were 'mirrored'.
-        image, thumbnail = mirrors[ExternalIntegrationLink.COVERS].uploaded
+        mirror = mirrors[ExternalIntegrationLink.COVERS]
+        assert isinstance(mirror, MockS3Uploader)
+        image, thumbnail = mirror.uploaded
 
         # The image...
         [image_link] = image.resource.links
@@ -523,7 +525,9 @@ class TestMetadataImporter:
         # Since we got a 404 error, the cover image was not mirrored.
         assert 404 == link_obj.resource.representation.status_code
         assert None == link_obj.resource.representation.mirror_url
-        assert [] == mirrors[mirror_type].uploaded
+        mirror = mirrors[mirror_type]
+        assert isinstance(mirror, MockS3Uploader)
+        assert [] == mirror.uploaded
 
     def test_mirror_open_access_link_mirror_failure(
         self,
@@ -1661,8 +1665,8 @@ class TestCirculationData:
         class MockLicensePool:
             # A LicensePool-like object that tracks how its
             # update_availability() method was called.
-            delivery_mechanisms = []
-            licenses = []
+            delivery_mechanisms: list = []
+            licenses: list = []
             work = None
 
             def calculate_work(self):
