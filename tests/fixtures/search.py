@@ -253,6 +253,7 @@ def external_search_fake_fixture(
 ) -> ExternalSearchFixtureFake:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
     data = ExternalSearchFixtureFake()
+    data.db = db
     data.integration = db.external_integration(
         ExternalIntegration.OPENSEARCH,
         goal=ExternalIntegration.SEARCH_GOAL,

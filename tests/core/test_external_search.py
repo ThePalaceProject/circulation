@@ -145,10 +145,12 @@ class TestExternalSearch:
         assert pagination.offset == default.offset
         assert pagination.size == default.size
 
-    def test__run_self_tests(self, external_search_fixture: ExternalSearchFixture):
-        transaction = external_search_fixture.db
+    def test__run_self_tests(
+        self, external_search_fake_fixture: ExternalSearchFixtureFake
+    ):
+        transaction = external_search_fake_fixture.db
         session = transaction.session
-        index = MockExternalSearchIndex()
+        index = external_search_fake_fixture.external_search
 
         # First, see what happens when the search returns no results.
         test_results = [x for x in index._run_self_tests(session, in_testing=True)]
@@ -4707,16 +4709,16 @@ class TestSortKeyPagination:
 
 class TestBulkUpdate:
     def test_works_not_presentation_ready_kept_in_index(
-        self, db: DatabaseTransactionFixture
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         w1 = db.work()
         w1.set_presentation_ready()
         w2 = db.work()
         w2.set_presentation_ready()
         w3 = db.work()
-        index = ExternalSearchIndex(
-            _db=db.session, custom_client_service=SearchServiceFake()
-        )
+        index = external_search_fake_fixture.external_search
 
         docs = index.start_updating_search_documents()
         failures = docs.add_documents(
@@ -4730,7 +4732,9 @@ class TestBulkUpdate:
 
         # All three works were inserted into the index, even the one
         # that's not presentation-ready.
-        ids = {x[-1] for x in list(index.docs.keys())}
+        ids = set(
+            map(lambda d: d["_id"], external_search_fake_fixture.search.documents_all())
+        )
         assert {w1.id, w2.id, w3.id} == ids
 
         # If a work stops being presentation-ready, it is kept in the
@@ -4741,7 +4745,9 @@ class TestBulkUpdate:
             index.create_search_documents_from_works([w1, w2, w3])
         )
         docs.finish()
-        assert {w1.id, w2.id, w3.id} == {x[-1] for x in list(index.docs.keys())}
+        assert {w1.id, w2.id, w3.id} == set(
+            map(lambda d: d["_id"], external_search_fake_fixture.search.documents_all())
+        )
         assert [] == failures
 
 
@@ -4840,10 +4846,12 @@ class TestWorkSearchResult:
 
 
 class TestSearchIndexCoverageProvider:
-    def test_operation(self, db: DatabaseTransactionFixture):
-        index = ExternalSearchIndex(
-            _db=db.session, custom_client_service=SearchServiceFake()
-        )
+    def test_operation(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
+        index = external_search_fake_fixture.external_search
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
@@ -4995,7 +5003,7 @@ class TestSearchIndexCoverageProvider:
         [record] = results
         assert work == record.obj
         assert True == record.transient
-        assert "There was an error!" == record.exception
+        assert "There was an error!" in record.exception
 
 
 class TestJSONQuery:
