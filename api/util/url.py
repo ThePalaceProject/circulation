@@ -1,4 +1,7 @@
+import re
 from urllib.parse import ParseResult, urlencode, urlparse
+
+from core.config import Configuration
 
 
 class URLUtility:
@@ -28,3 +31,18 @@ class URLUtility:
         )
 
         return result.geturl()
+
+
+class CDNUtils:
+    @classmethod
+    def replace_host(cls, url: str) -> str:
+        cdn_url = Configuration.cdn_base_url()
+        if url.startswith("http") and cdn_url:
+            # Find the hostname to replace
+            replace = re.compile("(^https?://.*?)/")
+            matches = replace.match(url)
+            if matches:
+                # Replace the group
+                url = url.replace(matches.group(1), cdn_url)
+
+        return url

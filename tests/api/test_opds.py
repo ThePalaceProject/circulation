@@ -1,9 +1,10 @@
 import datetime
 import json
+import os
 import re
 from collections import defaultdict
 from typing import Any, Dict, List
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import dateutil
 import feedparser
@@ -12,6 +13,7 @@ from freezegun import freeze_time
 from lxml import etree
 
 from api.adobe_vendor_id import AuthdataUtility
+from api.app import app
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
 from api.config import Configuration
 from api.lanes import ContributorLane
@@ -353,6 +355,23 @@ class TestCirculationManagerAnnotator:
         # and not to be cached.
         assert 0 == response.max_age
         assert True == response.private
+
+    def test_cdn_urls(self, circulation_fixture: CirculationManagerAnnotatorFixture):
+        cdn_host = "http://cdn.localhost"
+        with patch.object(os, "environ", dict()):
+            os.environ[Configuration.CDN_BASE_URL_ENVIRONMENT_VARIABLE] = cdn_host
+            os.environ[Configuration.CDN_OPDS1_ENABLED_ENVIRONMENT_VARIABLE] = "True"
+            annotator = CirculationManagerAnnotator(MagicMock())
+            assert annotator._cdn_enabled == True
+
+            # The annotator should provide a CDN'd url now
+            with app.test_request_context("/"):
+                assert f"{cdn_host}/feed" == annotator.url_for(
+                    "feed", _external=True, cdn=True
+                )
+
+                # Different url methods should also comply
+                assert annotator.feed_url(circulation_fixture.lane).startswith(cdn_host)
 
 
 class LibraryAnnotatorFixture:

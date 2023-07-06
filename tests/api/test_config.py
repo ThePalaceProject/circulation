@@ -261,3 +261,41 @@ class TestConfiguration:
             match=r"Cannot parse value of FCM credential environment variable .* as JSON.",
         ):
             Configuration.fcm_credentials()
+
+    def test_cdn_config(self):
+        with patch.object(os, "environ", new=dict()):
+            os.environ[
+                Configuration.CDN_BASE_URL_ENVIRONMENT_VARIABLE
+            ] = "http://cdn.localhost"
+            os.environ[Configuration.CDN_OPDS1_ENABLED_ENVIRONMENT_VARIABLE] = "true"
+            assert Configuration.cdn_base_url() == "http://cdn.localhost"
+            assert Configuration.cdn_enabled("OPDS1") == True
+
+            Configuration.cdn_base_url.cache_clear()
+            Configuration.cdn_enabled.cache_clear()
+
+            os.environ[Configuration.CDN_OPDS1_ENABLED_ENVIRONMENT_VARIABLE] = "True"
+            assert Configuration.cdn_enabled("OPDS1") == True
+
+            Configuration.cdn_enabled.cache_clear()
+
+            os.environ[Configuration.CDN_OPDS2_ENABLED_ENVIRONMENT_VARIABLE] = "True"
+            assert Configuration.cdn_enabled("OPDS2") == True
+
+            Configuration.cdn_enabled.cache_clear()
+
+            os.environ[
+                Configuration.CDN_OPDS1_ENABLED_ENVIRONMENT_VARIABLE
+            ] = "Not True"
+            assert Configuration.cdn_enabled("OPDS1") == False
+
+            Configuration.cdn_enabled.cache_clear()
+
+            del os.environ[Configuration.CDN_OPDS1_ENABLED_ENVIRONMENT_VARIABLE]
+            assert Configuration.cdn_enabled("OPDS1") == False
+
+            Configuration.cdn_base_url.cache_clear()
+            Configuration.cdn_enabled.cache_clear()
+
+            del os.environ[Configuration.CDN_BASE_URL_ENVIRONMENT_VARIABLE]
+            assert Configuration.cdn_base_url() == None

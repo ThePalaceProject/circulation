@@ -12,6 +12,7 @@ from flask import url_for
 
 from api.lanes import DynamicLane
 from api.problem_details import NOT_FOUND_ON_REMOTE
+from api.util.url import CDNUtils
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.entrypoint import EverythingEntryPoint
@@ -70,6 +71,7 @@ class CirculationManagerAnnotator(Annotator):
         self.active_fulfillments_by_work = active_fulfillments_by_work
         self.hidden_content_types = hidden_content_types
         self.test_mode = test_mode
+        self._cdn_enabled = Configuration.cdn_enabled("OPDS1")
 
     def is_work_entry_solo(self, work):
         """Return a boolean value indicating whether the work's OPDS catalog entry is served by itself,
@@ -105,7 +107,7 @@ class CirculationManagerAnnotator(Annotator):
     def lane_url(self, lane):
         return self.feed_url(lane)
 
-    def url_for(self, *args, **kwargs):
+    def url_for(self, *args, cdn=False, **kwargs):
         if self.test_mode:
             new_kwargs = {}
             for k, v in list(kwargs.items()):
@@ -113,7 +115,10 @@ class CirculationManagerAnnotator(Annotator):
                     new_kwargs[k] = v
             return self.test_url_for(False, *args, **new_kwargs)
         else:
-            return url_for(*args, **kwargs)
+            url = url_for(*args, **kwargs)
+            if self._cdn_enabled and cdn is True:
+                url = CDNUtils.replace_host(url)
+            return url
 
     def test_url_for(self, cdn=False, *args, **kwargs):
         # Generate a plausible-looking URL that doesn't depend on Flask
@@ -156,7 +161,7 @@ class CirculationManagerAnnotator(Annotator):
             kwargs.update(dict(list(pagination.items())))
         if extra_kwargs:
             kwargs.update(extra_kwargs)
-        return self.url_for(route, _external=True, **kwargs)
+        return self.url_for(route, _external=True, cdn=True, **kwargs)
 
     def navigation_url(self, lane):
         return self.url_for(
@@ -164,6 +169,7 @@ class CirculationManagerAnnotator(Annotator):
             lane_identifier=self._lane_identifier(lane),
             library_short_name=lane.library.short_name,
             _external=True,
+            cdn=True,
         )
 
     def active_licensepool_for(self, work, library=None):
@@ -673,6 +679,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             lane_identifier=lane_identifier,
             library_short_name=self.library.short_name,
             _external=True,
+            cdn=True,
             **kwargs,
         )
 
@@ -697,6 +704,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             lane_identifier=lane_identifier,
             library_short_name=self.library.short_name,
             _external=True,
+            cdn=True,
             **kwargs,
         )
 
@@ -782,6 +790,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     identifier_type=identifier.type,
                     identifier=identifier.identifier,
                     library_short_name=self.library.short_name,
+                    cdn=True,
                     _external=True,
                 ),
             )
@@ -798,6 +807,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     identifier_type=identifier.type,
                     identifier=identifier.identifier,
                     library_short_name=self.library.short_name,
+                    cdn=True,
                     _external=True,
                 ),
             )
@@ -901,6 +911,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     languages=languages,
                     audiences=audiences,
                     library_short_name=self.library.short_name,
+                    cdn=True,
                     _external=True,
                 ),
             )
@@ -929,6 +940,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             languages=languages,
             audiences=audiences,
             library_short_name=self.library.short_name,
+            cdn=True,
             _external=True,
         )
         feed.add_link_to_entry(
@@ -969,6 +981,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 lane_identifier=lane_identifier,
                 library_short_name=self.library.short_name,
                 _external=True,
+                cdn=True,
                 **search_facet_kwargs,
             )
             search_link = dict(
@@ -1018,6 +1031,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     "crawlable_list_feed",
                     list_name=name,
                     library_short_name=self.library.short_name,
+                    cdn=True,
                     _external=True,
                 )
                 crawlable_link = dict(
@@ -1422,6 +1436,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             href=self.url_for(
                 "authentication_document",
                 library_short_name=self.library.short_name,
+                cdn=True,
                 _external=True,
             ),
         )

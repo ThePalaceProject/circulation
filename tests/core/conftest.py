@@ -1,4 +1,5 @@
 pytest_plugins = [
+    "tests.fixtures.environment",
     "tests.fixtures.api_config",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",

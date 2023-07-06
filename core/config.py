@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
-from typing import Dict
+from functools import lru_cache
+from typing import Dict, Literal
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
@@ -67,6 +70,11 @@ class Configuration(ConfigurationConstants):
 
     # Environment variable for SirsiDynix Auth
     SIRSI_DYNIX_APP_ID = "SIMPLIFIED_SIRSI_DYNIX_APP_ID"
+
+    # CDN Environment variables
+    CDN_BASE_URL_ENVIRONMENT_VARIABLE = "SIMPLIFIED_CDN_BASE_URL"
+    CDN_OPDS1_ENABLED_ENVIRONMENT_VARIABLE = "SIMPLIFIED_CDN_OPDS1_ENABLED"
+    CDN_OPDS2_ENABLED_ENVIRONMENT_VARIABLE = "SIMPLIFIED_CDN_OPDS2_ENABLED"
 
     # ConfigurationSetting key for the base url of the app.
     BASE_URL_KEY = "base_url"
@@ -415,6 +423,22 @@ class Configuration(ConfigurationConstants):
         if not key:
             raise CannotLoadConfiguration("Invalid fulfillment credentials.")
         return {"key": key, "secret": secret}
+
+    @classmethod
+    @lru_cache
+    def cdn_base_url(cls) -> str | None:
+        """Get the base url of the CDN, if it does not exist assume the CDN is not available"""
+        return os.environ.get(cls.CDN_BASE_URL_ENVIRONMENT_VARIABLE)
+
+    @classmethod
+    @lru_cache
+    def cdn_enabled(cls, protocol: Literal["OPDS1"] | Literal["OPDS2"]) -> bool:
+        """Check whether the CDN is enabled for a certain protocol"""
+        key = getattr(cls, f"CDN_{protocol}_ENABLED_ENVIRONMENT_VARIABLE", None)
+        if not key:
+            return False
+        value = os.environ.get(key, "")
+        return value.lower() == cls.TRUE
 
     @classmethod
     def localization_languages(cls):
