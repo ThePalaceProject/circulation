@@ -86,16 +86,8 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
         self._receiver.finish()
         # Update the write pointer to point to the now-populated index.
         self._service.write_pointer_set(self._base_name, self._revision)
-        self._logger.info(
-            f"Write pointer {self._service.write_pointer_name(self._base_name)} "
-            f"-> {self._service.write_pointer(self._base_name).target_name}"
-        )
         # Set the read pointer to point at the now-populated index
         self._service.read_pointer_set(self._base_name, self._revision)
-        self._logger.info(
-            f"Read pointer {self._service.read_pointer_name(self._base_name)} "
-            f"-> {self._service.read_pointer(self._base_name)}"
-        )
         self._logger.info(f"Completed migration to {self._revision.version}")
 
     def cancel(self) -> None:

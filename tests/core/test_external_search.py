@@ -4983,23 +4983,12 @@ class TestSearchIndexCoverageProvider:
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
-        class DoomedExternalSearchIndex:
-            """All documents sent to this index will fail."""
-
-            def bulk(self, docs, **kwargs):
-                return 0, [
-                    dict(
-                        data=dict(_id=failing_work["_id"]),
-                        error="There was an error!",
-                        exception="Exception",
-                    )
-                    for failing_work in docs
-                ]
-
         work = db.work()
         work.set_presentation_ready()
         index = external_search_fake_fixture.external_search
-        external_search_fake_fixture.search.set_failing_mode()
+        external_search_fake_fixture.search.set_failing_mode(
+            SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS
+        )
 
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
