@@ -524,10 +524,6 @@ class TestRegistration:
                 )
                 return "all done!"
 
-        # If there is no preexisting key pair set up for the library,
-        # registration fails. (This normally won't happen because the
-        # key pair is set up when the LibraryAuthenticator is
-        # initialized.)
         library = db.default_library()
         registry = MockRegistry(registration_fixture.integration)
         registration = MockRegistration(registry, library)
@@ -540,9 +536,9 @@ class TestRegistration:
         def push():
             return registration.push(stage, url_for, catalog_url, do_get, do_post)
 
+        # Kick off the registration process, and make sure we get expected return.
         result = push()
-        expect = "Library %s has no key pair set." % library.short_name
-        assert expect == result.detail
+        assert "all done!" == result
 
         # But there were many steps towards this result.
 
@@ -588,7 +584,7 @@ class TestRegistration:
         results = registration._process_registration_result_called_with
         message, cipher, actual_stage = results
         assert "you did it!" == message
-        assert cipher._key.export_key() == library.private_key
+        assert cipher._key.export_key("DER") == library.private_key
         assert actual_stage == stage
 
         # If a nonexistent stage is provided a ProblemDetail is the result.
