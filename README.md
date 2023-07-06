@@ -180,6 +180,18 @@ export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 The FCM credentials can be downloaded once a Google Service account has been created.
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
+##### CDN caching
+
+OPDS1 and OPDS2 feeds can have cacheable links using the following variables
+
+```sh
+export SIMPLIFIED_CDN_BASE_URL=https://cdn.host.tld
+export SIMPLIFIED_CDN_OPDS1_ENABLED=TRUE
+export SIMPLIFIED_CDN_OPDS2_ENABLED=TRUE
+```
+
+Any value that is not a case-variant of "TRUE" indicates a False to the application.
+
 ### Email sending
 
 To use the features that require sending emails, for example to reset the password for logged-out users, you will need
