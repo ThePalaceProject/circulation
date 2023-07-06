@@ -111,6 +111,8 @@ class LibrarySettingsController(SettingsController):
         if isinstance(configuration_settings, ProblemDetail):
             return configuration_settings
 
+        self.scale_and_store_logo(library)
+
         if is_new:
             # Now that the configuration settings are in place, create
             # a default set of lanes.
