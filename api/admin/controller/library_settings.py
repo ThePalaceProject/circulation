@@ -2,6 +2,7 @@ import base64
 import json
 import uuid
 from io import BytesIO
+from typing import Optional
 
 import flask
 import wcag_contrast_ratio
@@ -9,6 +10,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
 from PIL.Image import Resampling
+from werkzeug.datastructures import FileStorage
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.geographic_validator import GeographicValidator
@@ -111,7 +113,7 @@ class LibrarySettingsController(SettingsController):
         if isinstance(configuration_settings, ProblemDetail):
             return configuration_settings
 
-        self.scale_and_store_logo(library)
+        self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
 
         if is_new:
             # Now that the configuration settings are in place, create
@@ -405,12 +407,9 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image.Image, _format="PNG") -> bytes:
-        """Produce the `data` URL for the setting's uploaded image file.
-
-        :param image: A Pillow Image.
-        :param _format: A valid Pillow image format.
-        :return: The `data` URL for the image.
+    def _process_image(image: Image.Image, _format="PNG") -> bytes:
+        """Convert PIL image to RGBA if necessary and return it
+        as base64 encoded bytes.
         """
         buffer = BytesIO()
         # If the image is not RGB, RGBA or P convert it
@@ -420,19 +419,22 @@ class LibrarySettingsController(SettingsController):
         image.save(buffer, format=_format)
         return base64.b64encode(buffer.getvalue())
 
+    @classmethod
     def scale_and_store_logo(
-        self, library: Library, max_dimension=Configuration.LOGO_MAX_DIMENSION
+        cls,
+        library: Library,
+        image_file: Optional[FileStorage],
+        max_dimension=Configuration.LOGO_MAX_DIMENSION,
     ) -> None:
-        image_file = flask.request.files.get(Configuration.LOGO)
         if not image_file:
             return None
 
-        image = Image.open(image_file)
+        image = Image.open(image_file.stream)
         width, height = image.size
         if width > max_dimension or height > max_dimension:
             image.thumbnail((max_dimension, max_dimension), Resampling.LANCZOS)
 
-        image_data = self._data_url_for_image(image)
+        image_data = cls._process_image(image)
         if library.logo:
             library.logo.content = image_data
         else:
