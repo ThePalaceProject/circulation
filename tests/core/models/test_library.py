@@ -1,4 +1,5 @@
 import pytest
+from Crypto.PublicKey.RSA import RsaKey, import_key
 
 from core.model.configuration import ConfigurationSetting
 from core.model.library import Library
@@ -190,3 +191,15 @@ username='someuser'
         with_secrets = library.explain(True)
         assert 'Shared secret (for library registry): "secret"' in with_secrets
         assert "password='somepass'" in with_secrets
+
+    def test_generate_keypair(self, db: DatabaseTransactionFixture):
+        # Test the ability to create a public/private key pair
+
+        # If you pass in a ConfigurationSetting that is missing its
+        # value, or whose value is not a public key pair, a new key
+        # pair is created.
+        public_key, private_key = Library.generate_keypair()
+        assert "BEGIN PUBLIC KEY" in public_key
+        key = import_key(private_key)
+        assert isinstance(key, RsaKey)
+        assert public_key == key.public_key().export_key().decode("utf-8")

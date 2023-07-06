@@ -9,7 +9,6 @@ pytest_plugins = [
     "tests.fixtures.api_admin",
     "tests.fixtures.api_axis_files",
     "tests.fixtures.api_bibliotheca_files",
-    "tests.fixtures.api_config",
     "tests.fixtures.api_controller",
     "tests.fixtures.api_enki_files",
     "tests.fixtures.api_feedbooks_files",

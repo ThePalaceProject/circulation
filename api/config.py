@@ -1,6 +1,7 @@
 import json
 
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
 
@@ -167,12 +168,6 @@ class Configuration(CoreConfiguration):
     # Features of an OPDS client which a library may want to enable or
     # disable.
     RESERVATIONS_FEATURE = "https://librarysimplified.org/rel/policy/reservations"
-
-    # Name of the library-wide public key configuration setting for
-    # negotiating a shared secret with a library registry. The setting
-    # is automatically generated and not editable by admins.
-    #
-    KEY_PAIR = "key-pair"
 
     SITEWIDE_SETTINGS = CoreConfiguration.SITEWIDE_SETTINGS + [
         {
@@ -731,36 +726,7 @@ class Configuration(CoreConfiguration):
         )
 
     @classmethod
-    def key_pair(cls, setting):
-        """Look up a public-private key pair in a ConfigurationSetting.
-
-        If the value is missing or incorrect, a new key pair is
-        created and stored.
-
-        TODO: This could go into ConfigurationSetting or core Configuration.
-
-        :param public_setting: A ConfigurationSetting for the public key.
-        :param private_setting: A ConfigurationSetting for the private key.
-
-        :return: A 2-tuple (public key, private key)
-        """
-        public = None
-        private = None
-
-        try:
-            public, private = setting.json_value
-        except Exception as e:
-            pass
-
-        if not public or not private:
-            key = RSA.generate(2048)
-            public = key.publickey().exportKey().decode("utf8")
-            private = key.exportKey().decode("utf8")
-            setting.value = json.dumps([public, private])
-        return public, private
-
-    @classmethod
-    def cipher(cls, key):
+    def cipher(cls, key: bytes) -> PKCS1OAEP_Cipher:
         """Create a Cipher for a public or private key.
 
         This just wraps some hard-to-remember Crypto code.

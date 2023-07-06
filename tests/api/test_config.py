@@ -22,32 +22,6 @@ def notifications_files_fixture() -> FilesFixture:
 
 
 class TestConfiguration:
-    def test_key_pair(self, db: DatabaseTransactionFixture):
-        # Test the ability to create, replace, or look up a
-        # public/private key pair in a ConfigurationSetting.
-        setting = ConfigurationSetting.sitewide(db.session, Configuration.KEY_PAIR)
-        setting.value = "nonsense"
-
-        # If you pass in a ConfigurationSetting that is missing its
-        # value, or whose value is not a public key pair, a new key
-        # pair is created.
-        public_key, private_key = Configuration.key_pair(setting)
-        assert "BEGIN PUBLIC KEY" in public_key
-        assert "BEGIN RSA PRIVATE KEY" in private_key
-        assert [public_key, private_key] == setting.json_value
-
-        setting.value = None
-        public_key, private_key = Configuration.key_pair(setting)
-        assert "BEGIN PUBLIC KEY" in public_key
-        assert "BEGIN RSA PRIVATE KEY" in private_key
-        assert [public_key, private_key] == setting.json_value
-
-        # If the setting has a good value already, the key pair is
-        # returned as is.
-        new_public, new_private = Configuration.key_pair(setting)
-        assert new_public == public_key
-        assert new_private == private_key
-
     def test_cipher(self, db: DatabaseTransactionFixture):
         # Test the cipher() helper method.
 

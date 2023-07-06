@@ -5,6 +5,7 @@ from io import BytesIO
 
 import flask
 import pytest
+from Crypto.PublicKey.RSA import RsaKey, import_key
 from PIL import Image
 from werkzeug import Response
 from werkzeug.datastructures import ImmutableMultiDict
@@ -504,6 +505,17 @@ class TestLibrarySettings:
                 Configuration.LIBRARY_FOCUS_AREA, library
             ).value
         )
+
+        # Make sure public and private key were generated and stored.
+        assert library.private_key is not None
+        assert library.public_key is not None
+        assert "BEGIN PUBLIC KEY" in library.public_key
+        private_key = import_key(library.private_key)
+        assert isinstance(private_key, RsaKey)
+        public_key = import_key(library.public_key)
+        assert isinstance(public_key, RsaKey)
+        expected_public = private_key.public_key().export_key().decode("utf-8")
+        assert library.public_key == expected_public
 
         # Announcements were validated.
         assert announcement_validator.was_called == True

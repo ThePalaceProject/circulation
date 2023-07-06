@@ -544,15 +544,6 @@ class TestRegistration:
         expect = "Library %s has no key pair set." % library.short_name
         assert expect == result.detail
 
-        # When a key pair is present, registration is kicked off, and
-        # in this case it succeeds.
-        key_pair_setting = ConfigurationSetting.for_library(
-            Configuration.KEY_PAIR, library
-        )
-        public_key, private_key = Configuration.key_pair(key_pair_setting)
-        result = push()
-        assert "all done!" == result
-
         # But there were many steps towards this result.
 
         # First, MockRegistry.fetch_catalog() was called, in an attempt
@@ -597,7 +588,7 @@ class TestRegistration:
         results = registration._process_registration_result_called_with
         message, cipher, actual_stage = results
         assert "you did it!" == message
-        assert cipher._key.exportKey().decode("utf-8") == private_key
+        assert cipher._key.export_key() == library.private_key
         assert actual_stage == stage
 
         # If a nonexistent stage is provided a ProblemDetail is the result.

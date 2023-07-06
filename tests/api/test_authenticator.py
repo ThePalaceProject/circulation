@@ -1204,7 +1204,9 @@ class TestLibraryAuthenticator:
             assert "mailto:help@library" == copyright_agent["href"]
 
             # The public key is correct.
-            assert authenticator.public_key == doc["public_key"]["value"]
+            assert authenticator.library is not None
+            assert authenticator.library.public_key is not None
+            assert authenticator.library.public_key == doc["public_key"]["value"]
             assert "RSA" == doc["public_key"]["type"]
 
             # The library's web page shows up as an HTML alternate
@@ -1289,35 +1291,6 @@ class TestLibraryAuthenticator:
             )
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
-
-    def test_key_pair(self, db: DatabaseTransactionFixture):
-        """Test the public/private key pair associated with a library."""
-        library = db.default_library()
-
-        # Initially, the KEY_PAIR setting is not set.
-        def keys():
-            return ConfigurationSetting.for_library(
-                Configuration.KEY_PAIR, library
-            ).json_value
-
-        assert None == keys()
-
-        # Instantiating a LibraryAuthenticator for a library automatically
-        # generates a public/private key pair.
-        auth = LibraryAuthenticator.from_config(db.session, library)
-        public, private = keys()
-        assert "BEGIN PUBLIC KEY" in public
-        assert "BEGIN RSA PRIVATE KEY" in private
-
-        # The public key is stored in the
-        # LibraryAuthenticator.public_key property.
-        assert public == auth.public_key
-
-        # The private key is not stored in the LibraryAuthenticator
-        # object, but it can be obtained from the database by
-        # using the key_pair property.
-        assert not hasattr(auth, "private_key")
-        assert (public, private) == auth.key_pair
 
     def test_key_pair_per_library(self, db: DatabaseTransactionFixture):
         # Ensure that each library obtains its own key pair.

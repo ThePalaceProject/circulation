@@ -3,14 +3,16 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Tuple
 
+from Crypto.PublicKey import RSA
 from expiringdict import ExpiringDict
 from sqlalchemy import (
     Boolean,
     Column,
     ForeignKey,
     Integer,
+    LargeBinary,
     Table,
     Unicode,
     UniqueConstraint,
@@ -155,6 +157,12 @@ class Library(Base, HasSessionCache):
         cascade="all, delete-orphan",
     )
 
+    # The libraries public / private key-pair.
+    # The public key is stored in PEM format.
+    public_key = Column(Unicode, nullable=False)
+    # The private key is stored in DER binary format.
+    private_key = Column(LargeBinary, nullable=False)
+
     # Typing specific
     collections: List[Collection]
 
@@ -219,6 +227,15 @@ class Library(Base, HasSessionCache):
             )
         default_library.is_default = True
         return default_library
+
+    @classmethod
+    def generate_keypair(cls) -> Tuple[str, bytes]:
+        """Generate a public / private keypair for a library."""
+        private_key = RSA.generate(2048)
+        public_key = private_key.public_key()
+        public_key_str = public_key.export_key("PEM").decode("utf-8")
+        private_key_bytes = private_key.export_key("DER")
+        return public_key_str, private_key_bytes
 
     @hybrid_property
     def library_registry_short_name(self):
