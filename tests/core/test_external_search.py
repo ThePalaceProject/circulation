@@ -63,7 +63,7 @@ from tests.fixtures.database import (
     PerfTimer,
 )
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture, ExternalSearchFixtureFake
 from tests.mocks.search import SearchServiceFake
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
@@ -4947,12 +4947,14 @@ class TestSearchIndexCoverageProvider:
         assert result["title"] == None
         assert result["target_age"]["lower"] == None
 
-    def test_success(self, db: DatabaseTransactionFixture):
+    def test_success(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         work = db.work()
         work.set_presentation_ready()
-        index = ExternalSearchIndex(
-            _db=db.session, custom_client_service=SearchServiceFake()
-        )
+        index = external_search_fake_fixture.external_search
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
 
@@ -4960,9 +4962,14 @@ class TestSearchIndexCoverageProvider:
         assert [work] == results
 
         # The work was added to the search index.
-        assert 1 == len(index.docs)
+        search_service = external_search_fake_fixture.search
+        assert 1 == len(search_service.documents_all())
 
-    def test_failure(self, db: DatabaseTransactionFixture):
+    def test_failure(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         class DoomedExternalSearchIndex:
             """All documents sent to this index will fail."""
 
@@ -4978,7 +4985,9 @@ class TestSearchIndexCoverageProvider:
 
         work = db.work()
         work.set_presentation_ready()
-        index = DoomedExternalSearchIndex()
+        index = external_search_fake_fixture.external_search
+        external_search_fake_fixture.search.set_failing_mode()
+
         provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
         results = provider.process_batch([work])
 

@@ -748,11 +748,12 @@ class TestOPDS:
 
         cached_feed = AcquisitionFeed.page(
             session,
-            "title", "http://the-url.com/",
+            "title",
+            "http://the-url.com/",
             lane,
             MockAnnotator,
             facets=facets,
-            search_engine=external_search_fake_fixture.external_search
+            search_engine=external_search_fake_fixture.external_search,
         )
 
         u = str(cached_feed)
