@@ -3,6 +3,10 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
+from flask import url_for
+
+from api.util.url import CDNUtils
+from core.config import Configuration
 from core.external_search import ExternalSearchIndex
 from core.lane import Facets, Pagination, WorkList
 from core.model.cachedfeed import CachedFeed
@@ -31,6 +35,7 @@ class OPDS2Annotator:
         self.library = library
         self.title = title
         self.pagination = pagination or Pagination()
+        self._cdn_enabled = Configuration.cdn_enabled("OPDS2")
 
     def metadata_for_work(self, work: Work) -> Optional[Dict[str, Any]]:
         """Create the metadata json for a work item
@@ -179,8 +184,11 @@ class OPDS2Annotator:
 
     def feed_links(self):
         """Create links for a publication feed"""
+        url = self.url
+        if self._cdn_enabled:
+            url = CDNUtils.replace_host(url)
         links = [
-            {"href": self.url, "rel": "self", "type": self.OPDS2_TYPE},
+            {"href": url, "rel": "self", "type": self.OPDS2_TYPE},
         ]
         # If another page is present, then add the next link
         if self.pagination.has_next_page:
@@ -191,7 +199,7 @@ class OPDS2Annotator:
                 },
                 doseq=True,
             )
-            next_url = self.url.split("?", 1)[0] + "?" + next_query_string
+            next_url = url.split("?", 1)[0] + "?" + next_query_string
             links.append({"href": next_url, "rel": "next", "type": self.OPDS2_TYPE})
 
         return links
@@ -203,10 +211,15 @@ class OPDS2Annotator:
             "itemsPerPage": self.pagination.size,
         }
 
-    @classmethod
-    def facet_url(cls, facets):
-        """Should be overwritten in the OPDS2PublicationsAnnottator"""
+    def facet_url(self, facets):
+        """Should be overwritten in the OPDS2PublicationsAnnotator"""
         return None
+
+    def url_for(self, *args, cdn=False, **kwargs):
+        url = url_for(*args, **kwargs)
+        if self._cdn_enabled and cdn is True:
+            url = CDNUtils.replace_host(url)
+        return url
 
 
 class FeedTypes:

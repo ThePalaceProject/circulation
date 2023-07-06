@@ -1,12 +1,14 @@
 import json
+import os
 from datetime import datetime
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
 from api.app import app
 from api.opds2 import OPDS2PublicationsAnnotator
 from core.classifier import Classifier
+from core.config import Configuration
 from core.external_search import MockExternalSearchIndex, SortKeyPagination
 from core.lane import Facets, Lane, Pagination, SearchFacets
 from core.model.classification import Subject
@@ -187,6 +189,29 @@ class TestOPDS2Annotator:
             "type": "application/opds+json",
         }
         assert "key=%5B%22Item%22%5D" in links[1]["href"]
+
+        with patch.object(os, "environ", {}):
+            cdn_host = "http://cdn.localhost"
+            os.environ[Configuration.CDN_BASE_URL_ENVIRONMENT_VARIABLE] = cdn_host
+            os.environ[
+                Configuration.CDN_OPDS2_ENABLED_ENVIRONMENT_VARIABLE
+            ] = Configuration.TRUE
+            Configuration.cdn_enabled.cache_clear()
+            Configuration.cdn_base_url.cache_clear()
+
+            library = opds2_annotator_fixture.transaction.default_library()
+            annotator = OPDS2PublicationsAnnotator(
+                "http://localhost/publications",
+                Facets.default(library),
+                Pagination.default(),
+                library,
+            )
+
+            assert annotator._cdn_enabled == True
+            links = annotator.feed_links()
+            assert len(links) == 2
+            assert links[0]["href"].startswith(cdn_host)
+            assert links[1]["href"].startswith(cdn_host)
 
     def test_image_links(self, opds2_annotator_fixture: TestOPDS2AnnotatorFixture):
         data, transaction, session = (

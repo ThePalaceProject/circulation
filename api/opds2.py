@@ -29,7 +29,7 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
     def loan_link(self, edition: Edition) -> dict:
         identifier: Identifier = edition.primary_identifier
         return {
-            "href": url_for(
+            "href": self.url_for(
                 "borrow",
                 identifier_type=identifier.type,
                 identifier=identifier.identifier,
@@ -41,7 +41,7 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
     def self_link(self, edition: Edition) -> dict:
         identifier: Identifier = edition.primary_identifier
         return {
-            "href": url_for(
+            "href": self.url_for(
                 "permalink",
                 identifier_type=identifier.type,
                 identifier=identifier.identifier,
@@ -50,12 +50,12 @@ class OPDS2PublicationsAnnotator(OPDS2Annotator):
             "rel": "self",
         }
 
-    @classmethod
-    def facet_url(cls, facets: Facets) -> str:
+    def facet_url(self, facets: Facets) -> str:
         name = facets.library.short_name if facets.library else None
-        return url_for(
+        return self.url_for(
             "opds2_publications",
             _external=True,
+            cdn=True,
             library_short_name=name,
             **dict(facets.items()),
         )
