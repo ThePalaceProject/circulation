@@ -9,6 +9,7 @@ import wcag_contrast_ratio
 from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
+from PIL.Image import Resampling
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.geographic_validator import GeographicValidator
@@ -433,7 +434,7 @@ class LibrarySettingsController(SettingsController):
         image = Image.open(image_file)
         width, height = image.size
         if width > max_dimension or height > max_dimension:
-            image.thumbnail((max_dimension, max_dimension), Image.ANTIALIAS)
+            image.thumbnail((max_dimension, max_dimension), Resampling.LANCZOS)
         return self._data_url_for_image(image)
 
     def current_value(self, setting, library):
