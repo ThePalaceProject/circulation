@@ -163,6 +163,15 @@ class Library(Base, HasSessionCache):
     # The private key is stored in DER binary format.
     private_key = Column(LargeBinary, nullable=False)
 
+    # The libraries logo image, stored as a base64 encoded string.
+    logo: Mapped[LibraryLogo] = relationship(
+        "LibraryLogo",
+        back_populates="library",
+        cascade="all, delete-orphan",
+        lazy="select",
+        uselist=False,
+    )
+
     # Typing specific
     collections: List[Collection]
 
@@ -526,6 +535,32 @@ class Library(Base, HasSessionCache):
                 library._is_default = True
             else:
                 library._is_default = False
+
+
+class LibraryLogo(Base):
+    """
+    A logo for a library. Stored in a separate table so that it can be
+    loaded lazily.
+
+    TODO: It would be nice to just store these in S3, so they don't have
+          to hit the database at all.
+    """
+
+    __tablename__ = "libraries_logos"
+    library_id = Column(Integer, ForeignKey("libraries.id"), primary_key=True)
+    library: Mapped[Library] = relationship(
+        "Library", back_populates="logo", uselist=False
+    )
+
+    # The logo stored as a base-64 encoded png.
+    content = Column(LargeBinary, nullable=False)
+
+    @property
+    def data_url(self) -> str:
+        """The logo stored as a data URL."""
+        if self.content is None:
+            raise RuntimeError("Logo content is None")
+        return f"data:image/png;base64,{self.content.decode('utf8')}"
 
 
 externalintegrations_libraries: Table = Table(

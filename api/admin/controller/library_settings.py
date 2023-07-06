@@ -2,7 +2,6 @@ import base64
 import json
 import uuid
 from io import BytesIO
-from typing import Dict, Optional
 
 import flask
 import wcag_contrast_ratio
@@ -17,6 +16,7 @@ from api.admin.problem_details import *
 from api.config import Configuration
 from api.lanes import create_default_lanes
 from core.model import ConfigurationSetting, Library, create, get_one
+from core.model.library import LibraryLogo
 from core.util import LanguageCodes
 from core.util.problem_detail import ProblemDetail
 
@@ -360,12 +360,9 @@ class LibrarySettingsController(SettingsController):
                     ]
                 )
         else:
-            if type == "image":
-                value = self.image_setting(setting) or default_value
-            else:
-                value = self.scalar_setting(setting)
-                # An empty "" value or 0 value is valid, hence check for None
-                value = default_value if value is None else value
+            value = self.scalar_setting(setting)
+            # An empty "" value or 0 value is valid, hence check for None
+            value = default_value if value is None else value
         return value
 
     def scalar_setting(self, setting):
@@ -406,7 +403,7 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image.Image, _format="PNG") -> str:
+    def _data_url_for_image(image: Image.Image, _format="PNG") -> bytes:
         """Produce the `data` URL for the setting's uploaded image file.
 
         :param image: A Pillow Image.
@@ -419,21 +416,12 @@ class LibrarySettingsController(SettingsController):
         if image.mode not in ("RGB", "RGBA", "P"):
             image = image.convert("RGBA")
         image.save(buffer, format=_format)
-        b64 = base64.b64encode(buffer.getvalue())
-        return "data:image/png;base64,%s" % b64.decode("utf-8")
+        return base64.b64encode(buffer.getvalue())
 
-    def image_setting(
-        self, setting: Dict[str, str], max_dimension=Configuration.LOGO_MAX_DIMENSION
-    ) -> Optional[str]:
-        """Retrieve an uploaded image file for the setting and return its data URL.
-
-        If the image is too large, scale it down to the `max_dimension`
-        while retaining its aspect ratio.
-
-        :param image: A Python Image Library image object.
-        :return: The `data` URL for the image file, if it was uploaded, else None.
-        """
-        image_file = flask.request.files.get(setting.get("key", ""))
+    def scale_and_store_logo(
+        self, library: Library, max_dimension=Configuration.LOGO_MAX_DIMENSION
+    ) -> None:
+        image_file = flask.request.files.get(Configuration.LOGO)
         if not image_file:
             return None
 
@@ -441,7 +429,12 @@ class LibrarySettingsController(SettingsController):
         width, height = image.size
         if width > max_dimension or height > max_dimension:
             image.thumbnail((max_dimension, max_dimension), Resampling.LANCZOS)
-        return self._data_url_for_image(image)
+
+        image_data = self._data_url_for_image(image)
+        if library.logo:
+            library.logo.content = image_data
+        else:
+            library.logo = LibraryLogo(content=image_data)
 
     def current_value(self, setting, library):
         """Retrieve the current value of the given setting from the database."""
