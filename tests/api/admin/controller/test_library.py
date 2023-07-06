@@ -17,13 +17,7 @@ from api.admin.geographic_validator import GeographicValidator
 from api.announcements import Announcement, Announcements
 from api.config import Configuration
 from core.facets import FacetConstants
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    Library,
-    get_one,
-    get_one_or_create,
-)
+from core.model import AdminRole, ConfigurationSetting, Library, get_one
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 
@@ -240,9 +234,7 @@ class TestLibrarySettings:
             )
             assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
-        bpl, ignore = get_one_or_create(
-            settings_ctrl_fixture.ctrl.db.session, Library, short_name="bpl"
-        )
+        bpl = settings_ctrl_fixture.ctrl.db.library(short_name="bpl")
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [

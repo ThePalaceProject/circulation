@@ -35,7 +35,9 @@ class ScopedHolder:
         libraries = []
         for i in range(2):
             name = self.fresh_id() + " (library for scoped session)"
-            library, ignore = create(session, Library, short_name=name)
+            library, ignore = create(
+                session, Library, short_name=name, public_key="x", private_key=b"y"
+            )
             libraries.append(library)
         return libraries
 

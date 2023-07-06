@@ -53,7 +53,7 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
-    default_library = db.library("Default Library", "default")
+    default_library = db.default_library()
 
     # At first, there are no patrons in the database.
     response = session.get_statistics()
@@ -146,7 +146,7 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
 
     admin.add_role(AdminRole.SYSTEM_ADMIN)
 
-    default_library = db.library("Default Library", "default")
+    default_library = db.default_library()
 
     # At first, there are no titles in the database.
     response = session.get_statistics()

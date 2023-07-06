@@ -7,13 +7,7 @@ from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
 from api.registration.registry import Registration, RemoteRegistry
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    ExternalIntegration,
-    Library,
-    create,
-)
+from core.model import AdminRole, ConfigurationSetting, ExternalIntegration, create
 from core.util.http import HTTP
 from tests.core.mock import DummyHTTPClient
 
@@ -36,9 +30,7 @@ class TestLibraryRegistration:
         discovery_service.setting(ExternalIntegration.URL).value = "http://service-url/"
 
         # We successfully registered this library with the service.
-        succeeded, ignore = create(
-            db.session,
-            Library,
+        succeeded = db.library(
             name="Library 1",
             short_name="L1",
         )
@@ -52,9 +44,7 @@ class TestLibraryRegistration:
         config(
             db.session, "library-registration-stage", succeeded, discovery_service
         ).value = "production"
-        failed, ignore = create(
-            db.session,
-            Library,
+        failed = db.library(
             name="Library 2",
             short_name="L2",
         )
@@ -72,9 +62,7 @@ class TestLibraryRegistration:
         ).value = "testing"
 
         # We've never tried to register this library with the service.
-        unregistered, ignore = create(
-            db.session,
-            Library,
+        unregistered = db.library(
             name="Library 3",
             short_name="L3",
         )

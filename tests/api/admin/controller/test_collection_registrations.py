@@ -8,7 +8,7 @@ from werkzeug.datastructures import ImmutableMultiDict
 from api.admin.exceptions import *
 from api.odl import SharedODLAPI
 from api.registration.registry import Registration
-from core.model import AdminRole, ConfigurationSetting, Library, create
+from core.model import AdminRole, ConfigurationSetting
 from core.util.http import HTTP
 from tests.fixtures.api_admin import SettingsControllerFixture
 
@@ -21,36 +21,30 @@ class TestCollectionRegistration:
     def test_collection_library_registrations_get(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        db = settings_ctrl_fixture.ctrl.db.session
+        db = settings_ctrl_fixture.ctrl.db
 
         collection = settings_ctrl_fixture.ctrl.db.default_collection()
-        succeeded, ignore = create(
-            db,
-            Library,
+        succeeded = db.library(
             name="Library 1",
             short_name="L1",
         )
         ConfigurationSetting.for_library_and_externalintegration(
-            db,
+            db.session,
             "library-registration-status",
             succeeded,
             collection.external_integration,
         ).value = "success"
-        failed, ignore = create(
-            db,
-            Library,
+        failed = db.library(
             name="Library 2",
             short_name="L2",
         )
         ConfigurationSetting.for_library_and_externalintegration(
-            db,
+            db.session,
             "library-registration-status",
             failed,
             collection.external_integration,
         ).value = "failure"
-        unregistered, ignore = create(
-            db,
-            Library,
+        unregistered = db.library(
             name="Library 3",
             short_name="L3",
         )
@@ -73,7 +67,7 @@ class TestCollectionRegistration:
             assert expected == libraryInfo
 
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            db.flush()
+            db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
                 settings_ctrl_fixture.manager.admin_collection_library_registrations_controller.process_collection_library_registrations,

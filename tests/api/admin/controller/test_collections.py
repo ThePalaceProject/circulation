@@ -11,7 +11,6 @@ from core.model import (
     AdminRole,
     Collection,
     ExternalIntegration,
-    Library,
     create,
     get_one,
 )
@@ -499,21 +498,16 @@ class TestCollectionSettings:
     def test_collections_post_create(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        l1, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        db = settings_ctrl_fixture.ctrl.db
+        l1 = db.library(
             name="Library 1",
             short_name="L1",
         )
-        l2, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l2 = db.library(
             name="Library 2",
             short_name="L2",
         )
-        l3, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l3 = db.library(
             name="Library 3",
             short_name="L3",
         )
@@ -634,9 +628,7 @@ class TestCollectionSettings:
             name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
         )
 
-        l1, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l1 = settings_ctrl_fixture.ctrl.db.library(
             name="Library 1",
             short_name="L1",
         )
@@ -854,9 +846,7 @@ class TestCollectionSettings:
             name="Collection 1", protocol=ExternalIntegration.AXIS_360
         )
 
-        l1, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l1 = settings_ctrl_fixture.ctrl.db.library(
             name="Library 1",
             short_name="L1",
         )

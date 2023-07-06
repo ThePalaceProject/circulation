@@ -8,7 +8,7 @@ from api.admin.controller.metadata_services import MetadataServicesController
 from api.admin.exceptions import *
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
-from core.model import AdminRole, ExternalIntegration, Library, create, get_one
+from core.model import AdminRole, ExternalIntegration, create, get_one
 
 
 class TestMetadataServices:
@@ -184,9 +184,7 @@ class TestMetadataServices:
 
     def test_metadata_services_post_create(self, settings_ctrl_fixture):
         controller = settings_ctrl_fixture.manager.admin_metadata_services_controller
-        library, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        library = settings_ctrl_fixture.ctrl.db.library(
             name="Library",
             short_name="L",
         )
@@ -217,15 +215,11 @@ class TestMetadataServices:
         assert [library] == service.libraries
 
     def test_metadata_services_post_edit(self, settings_ctrl_fixture):
-        l1, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l1 = settings_ctrl_fixture.ctrl.db.library(
             name="Library 1",
             short_name="L1",
         )
-        l2, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l2 = settings_ctrl_fixture.ctrl.db.library(
             name="Library 2",
             short_name="L2",
         )
@@ -285,9 +279,7 @@ class TestMetadataServices:
         assert None == m(existing_service, "new name")
 
     def test_metadata_service_delete(self, settings_ctrl_fixture):
-        l1, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            Library,
+        l1 = settings_ctrl_fixture.ctrl.db.library(
             name="Library 1",
             short_name="L1",
         )
