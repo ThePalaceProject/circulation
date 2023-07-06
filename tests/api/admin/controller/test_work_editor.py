@@ -2,16 +2,14 @@ import base64
 import json
 import logging
 import math
-import operator
 import os
 import tempfile
-from functools import reduce
 from io import BytesIO
 
 import feedparser
 import flask
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.controller import CustomListsController
@@ -955,18 +953,16 @@ class TestWorkController:
         original.save(fp=tmpfile_before.name, format="PNG")
         processed.save(fp=tmpfile_after.name, format="PNG")
 
-        image_histogram = original.histogram()
-        expected_histogram = processed.histogram()
-
-        root_mean_square = math.sqrt(
-            reduce(
-                operator.add,
-                list(
-                    map(lambda a, b: (a - b) ** 2, image_histogram, expected_histogram)
-                ),
-            )
-            / len(image_histogram)
+        # RMS difference between the two images should be less than 12.
+        # This function was taken from https://stackoverflow.com/a/40176818
+        histogram = ImageChops.difference(original, processed).histogram()
+        sum_of_squares = sum(
+            (value * ((idx % 256) ** 2) for idx, value in enumerate(histogram))
         )
+        root_mean_square = math.sqrt(
+            sum_of_squares / float(original.size[0] * original.size[1])
+        )
+
         assert root_mean_square < 12
 
         # Remove temporary files if we've gotten this far. Assertion failures should leave
