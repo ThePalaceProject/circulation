@@ -8,7 +8,7 @@ import pytest
 from Crypto.PublicKey.RSA import RsaKey, import_key
 from PIL import Image
 from werkzeug import Response
-from werkzeug.datastructures import ImmutableMultiDict
+from werkzeug.datastructures import FileStorage, ImmutableMultiDict
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.controller.library_settings import LibrarySettingsController
@@ -345,9 +345,6 @@ class TestLibrarySettings:
         settings_ctrl_fixture,
         announcement_fixture: AnnouncementFixture,
     ):
-        class TestFileUpload(BytesIO):
-            headers = {"Content-Type": "image/png"}
-
         # Pull needed properties from logo fixture
         image_data, expected_logo_data_url, image = (
             logo_properties[key] for key in ("raw_bytes", "data_url", "image")
@@ -432,9 +429,13 @@ class TestLibrarySettings:
                 ]
             )
             flask.request.files = ImmutableMultiDict(
-                [
-                    (Configuration.LOGO, TestFileUpload(image_data)),  # type: ignore[list-item]
-                ]
+                {
+                    Configuration.LOGO: FileStorage(
+                        stream=BytesIO(image_data),
+                        content_type="image/png",
+                        filename="logo.png",
+                    )
+                }
             )
             geographic_validator = MockGeographicValidator()
             announcement_validator = MockAnnouncementListValidator()
