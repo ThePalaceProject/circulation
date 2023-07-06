@@ -2090,8 +2090,9 @@ class TestRebuildSearchIndexScript:
         [progress] = script.do_run()
 
         # The mock methods were called with the values we expect.
-        assert True == index.setup_index_called
-        assert {work, work2} == set(index.bulk_update_called_with)
+        assert {work.id, work2.id} == set(
+            map(lambda d: d["_id"], external_search_fake_fixture.search.documents_all())
+        )
 
         # The script returned a list containing a single
         # CoverageProviderProgress object containing accurate

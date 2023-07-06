@@ -2713,8 +2713,6 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
         super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
 
     def do_run(self):
-        # Calling setup_index will destroy the index and recreate it
-        # empty.
         self.search.clear_search_documents()
 
         # Remove all search coverage records so the
