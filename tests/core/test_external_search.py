@@ -20,7 +20,6 @@ from opensearch_dsl.query import (
 )
 from opensearch_dsl.query import Query as opensearch_dsl_query
 from opensearch_dsl.query import Range, Term, Terms
-from opensearchpy.exceptions import OpenSearchException
 from psycopg2.extras import NumericRange
 
 from core.classifier import Classifier
@@ -46,6 +45,7 @@ from core.model import (
     CustomList,
     DataSource,
     Edition,
+    ExternalIntegration,
     Genre,
     LicensePool,
     WorkCoverageRecord,
@@ -64,7 +64,7 @@ from tests.fixtures.database import (
 )
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture, ExternalSearchFixtureFake
-from tests.mocks.search import SearchServiceFake
+from tests.mocks.search import SearchServiceFailureMode, SearchServiceFake
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
@@ -74,26 +74,31 @@ class TestExternalSearch:
     # current constructor makes put_script difficult to mock.
 
     def test_opensearch_error_in_constructor_becomes_cannotloadconfiguration(
-        self, external_search_fixture: ExternalSearchFixture
+        self, db: DatabaseTransactionFixture
     ):
-        session = external_search_fixture.db.session
+        integration = db.external_integration(
+            ExternalIntegration.OPENSEARCH,
+            goal=ExternalIntegration.SEARCH_GOAL,
+            url="http://does-not-exist.com/",
+            settings={
+                ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
+                ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "a search term",
+            },
+        )
+
+        search = SearchServiceFake()
+        search.set_failing_mode(SearchServiceFailureMode.FAIL_ENTIRELY)
 
         """If we're unable to establish a connection to the Opensearch
         server, CannotLoadConfiguration (which the circulation manager can
         understand) is raised instead of an Opensearch-specific exception.
         """
 
-        # Unlike other tests in this module, this one runs even if no
-        # OpenSearch server is running, since it's testing what
-        # happens if there's a problem communicating with that server.
-        class Mock(ExternalSearchIndex):
-            def set_works_index_and_alias(self, _db):
-                raise OpenSearchException("very bad")
-
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            Mock(session)
-        assert "Exception communicating with Search server: " in str(excinfo.value)
-        assert "very bad" in str(excinfo.value)
+            ExternalSearchIndex(_db=db.session, custom_client_service=search)
+
+        assert "Error migrating search index: " in str(excinfo.value)
+        assert "Search index is on fire." in str(excinfo.value)
 
     def test_query_works(self):
         # Verify that query_works operates by calling query_works_multi.

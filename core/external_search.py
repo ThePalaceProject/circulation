@@ -96,7 +96,7 @@ class ExternalSearchIndex(HasSelfTests):
     WORKS_INDEX_PREFIX_KEY = "works_index_prefix"
     DEFAULT_WORKS_INDEX_PREFIX = "circulation-works"
 
-    TEST_SEARCH_TERM_KEY = "test_search_term"
+    TEST_SEARCH_TERM_KEY = "a search term"
     DEFAULT_TEST_SEARCH_TERM = "test"
     CURRENT_ALIAS_SUFFIX = "current"
 
@@ -189,6 +189,8 @@ class ExternalSearchIndex(HasSelfTests):
             url = url or integration.url
             test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
 
+        self._test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
+
         if not url:
             raise CannotLoadConfiguration("No URL configured to the search server.")
 
@@ -216,18 +218,8 @@ class ExternalSearchIndex(HasSelfTests):
             ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
         ).value
 
-        # Get references to the read and write pointers.
-        self._search_read_pointer = self._search_service.read_pointer_name(
-            self._revision_base_name
-        )
-        self._search_write_pointer = self._search_service.write_pointer_name(
-            self._revision_base_name
-        )
-
         # initialize the cached data if not already done so
         CachedData.initialize(_db)
-
-        self._test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
 
         # Try to perform a migration to the requested schema version. This might be a no-op if everything
         # is already up-to-date, or if we're downgrading to an already-populated index. It also might fail
@@ -235,12 +227,18 @@ class ExternalSearchIndex(HasSelfTests):
         # a good state, but we'll have to submit new search documents and re-run the migration later to fully
         # upgrade.
 
-        self._search_migrator = SearchMigrator(
-            revisions=self._revision_directory,
-            service=self._search_service,
-        )
-
         try:
+            # Get references to the read and write pointers.
+            self._search_read_pointer = self._search_service.read_pointer_name(
+                self._revision_base_name
+            )
+            self._search_write_pointer = self._search_service.write_pointer_name(
+                self._revision_base_name
+            )
+            self._search_migrator = SearchMigrator(
+                revisions=self._revision_directory,
+                service=self._search_service,
+            )
             migration = self._search_migrator.migrate(
                 base_name=self._revision_base_name, version=self._revision.version
             )

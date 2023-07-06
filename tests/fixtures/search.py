@@ -260,7 +260,7 @@ def external_search_fake_fixture(
         url="http://does-not-exist.com/",
         settings={
             ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
-            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "a search term",
         },
     )
     data.search = SearchServiceFake()
