@@ -701,6 +701,15 @@ class LibraryAuthenticator:
         # Add the library's public key.
         if self.library and self.library.public_key:
             doc["public_key"] = dict(type="RSA", value=self.library.public_key)
+        else:
+            error_library = (
+                self.library.short_name
+                if self.library
+                else f'Library ID "{self.library_id}"'
+            )
+            self.log.error(
+                f"{error_library} has no public key to include in auth document."
+            )
 
         # Add feature flags to signal to clients what features they should
         # offer.
