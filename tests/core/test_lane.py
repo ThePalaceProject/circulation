@@ -4086,7 +4086,7 @@ class TestLane:
     def test_search(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # Searching a Lane calls search() on its search_target.
         #
@@ -4096,8 +4096,8 @@ class TestLane:
         work = db.work(with_license_pool=True)
 
         lane = db.lane()
-        search_client = external_search_fake_fixture.external_search
-        docs = search_client.start_updating_search_documents()
+        search_client = end_to_end_search_fixture.external_search_index
+        docs = end_to_end_search_fixture.external_search_index.start_migration()
         docs.add_documents(search_client.create_search_documents_from_works([work]))
         docs.finish()
 
@@ -4302,6 +4302,9 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
+
+        # Migrate to the latest search schema.
+        end_to_end_search_fixture.external_search_index.start_migration().finish()
 
         # Tell the fixture to call our populate_works method.
         # In this library, the groups feed includes at most two books
@@ -4605,10 +4608,11 @@ def random_seed_fixture() -> RandomSeedFixture:
 class TestWorkListGroups:
     def test_groups_for_lanes_adapts_facets(
         self,
-        db: DatabaseTransactionFixture,
         random_seed_fixture: RandomSeedFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
+        db = external_search_fake_fixture.db
+
         # Verify that _groups_for_lanes gives each of a WorkList's
         # non-queryable children the opportunity to adapt the incoming
         # FeaturedFacets objects to its own needs.
