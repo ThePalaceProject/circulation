@@ -4303,9 +4303,6 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db.session,
         )
 
-        # Migrate to the latest search schema.
-        end_to_end_search_fixture.external_search_index.start_migration().finish()
-
         # Tell the fixture to call our populate_works method.
         # In this library, the groups feed includes at most two books
         # for each lane.
