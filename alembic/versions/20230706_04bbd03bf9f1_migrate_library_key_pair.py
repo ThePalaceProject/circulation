@@ -41,7 +41,7 @@ def upgrade() -> None:
     for library in libraries:
         setting = connection.execute(
             "select cs.value from configurationsettings cs "
-            "where cs.library_id = (%s) and cs.key = 'key-pair'",
+            "where cs.library_id = (%s) and cs.key = 'key-pair' and cs.external_integration_id IS NULL",
             (library.id,),
         ).fetchone()
         if setting and setting.value:

@@ -157,7 +157,7 @@ class Library(Base, HasSessionCache):
         cascade="all, delete-orphan",
     )
 
-    # The libraries public / private key-pair.
+    # The library's public / private RSA key-pair.
     # The public key is stored in PEM format.
     public_key = Column(Unicode, nullable=False)
     # The private key is stored in DER binary format.
