@@ -1055,13 +1055,14 @@ class ConfigureLibraryScript(ConfigurationSettingScript):
                 raise ValueError("Could not locate library '%s'" % args.short_name)
         else:
             # No existing library. Make one.
-            library, ignore = get_one_or_create(
+            public_key, private_key = Library.generate_keypair()
+            library, ignore = create(
                 _db,
                 Library,
-                create_method_kwargs=dict(
-                    uuid=str(uuid.uuid4()),
-                    short_name=args.short_name,
-                ),
+                uuid=str(uuid.uuid4()),
+                short_name=args.short_name,
+                public_key=public_key,
+                private_key=private_key,
             )
 
         if args.name:

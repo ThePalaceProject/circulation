@@ -36,7 +36,6 @@ from core.model import (
     Timestamp,
     Work,
     WorkCoverageRecord,
-    create,
     get_one,
     get_one_or_create,
 )
@@ -927,16 +926,9 @@ class TestShowLibrariesScript:
         assert "No libraries found.\n" == output.getvalue()
 
     def test_with_multiple_libraries(self, db: DatabaseTransactionFixture):
-        l1, ignore = create(
-            db.session,
-            Library,
-            name="Library 1",
-            short_name="L1",
-        )
+        l1 = db.library(name="Library 1", short_name="L1")
         l1.library_registry_shared_secret = "a"
-        l2, ignore = create(
-            db.session,
-            Library,
+        l2 = db.library(
             name="Library 2",
             short_name="L2",
         )
@@ -1039,9 +1031,7 @@ class TestConfigureSiteScript:
 class TestConfigureLibraryScript:
     def test_bad_arguments(self, db: DatabaseTransactionFixture):
         script = ConfigureLibraryScript()
-        library, ignore = create(
-            db.session,
-            Library,
+        library = db.library(
             name="Library 1",
             short_name="L1",
         )
@@ -1083,9 +1073,7 @@ class TestConfigureLibraryScript:
 
     def test_reconfigure_library(self, db: DatabaseTransactionFixture):
         # The library exists.
-        library, ignore = create(
-            db.session,
-            Library,
+        library = db.library(
             name="Library 1",
             short_name="L1",
         )
@@ -1155,9 +1143,7 @@ class TestShowCollectionsScript:
 class TestConfigureCollectionScript:
     def test_bad_arguments(self, db: DatabaseTransactionFixture):
         script = ConfigureCollectionScript()
-        library, ignore = create(
-            db.session,
-            Library,
+        db.library(
             name="Library 1",
             short_name="L1",
         )
@@ -1198,24 +1184,9 @@ class TestConfigureCollectionScript:
 
     def test_success(self, db: DatabaseTransactionFixture):
         script = ConfigureCollectionScript()
-        l1, ignore = create(
-            db.session,
-            Library,
-            name="Library 1",
-            short_name="L1",
-        )
-        l2, ignore = create(
-            db.session,
-            Library,
-            name="Library 2",
-            short_name="L2",
-        )
-        l3, ignore = create(
-            db.session,
-            Library,
-            name="Library 3",
-            short_name="L3",
-        )
+        l1 = db.library(name="Library 1", short_name="L1")
+        l2 = db.library(name="Library 2", short_name="L2")
+        l3 = db.library(name="Library 3", short_name="L3")
 
         # Create a collection, set all its attributes, set a custom
         # setting, and associate it with two libraries.

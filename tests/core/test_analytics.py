@@ -1,7 +1,7 @@
 from core.analytics import Analytics
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, Library, create
+from core.model import CirculationEvent, ExternalIntegration, create
 
 # We can't import mock_analytics_provider from within a test,
 # and we can't tell Analytics to do so either. We need to tell
@@ -39,8 +39,8 @@ class TestAnalytics:
         )
 
         # Two library-specific integrations
-        l1, ignore = create(db.session, Library, short_name="L1")
-        l2, ignore = create(db.session, Library, short_name="L2")
+        l1 = db.library(short_name="L1")
+        l2 = db.library(short_name="L2")
 
         library_integration1, ignore = create(
             db.session,
@@ -143,7 +143,7 @@ class TestAnalytics:
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=MOCK_PROTOCOL,
         )
-        library, ignore = create(db.session, Library, short_name="library")
+        library = db.library(short_name="library")
         library_integration.libraries += [library]
 
         work = db.work(title="title", with_license_pool=True)

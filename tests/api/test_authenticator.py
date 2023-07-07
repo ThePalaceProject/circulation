@@ -51,7 +51,7 @@ from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import CirculationEvent, ConfigurationSetting, Library, Patron, create
+from core.model import CirculationEvent, ConfigurationSetting, Library, Patron
 from core.model.constants import LinkRelations
 from core.model.integration import (
     IntegrationConfiguration,
@@ -487,7 +487,7 @@ class TestAuthenticator:
         l1.short_name = "l1"
 
         # This library uses Millenium Patron.
-        l2, ignore = create(db.session, Library, short_name="l2")
+        l2 = db.library(short_name="l2")
         create_millenium_auth_integration(l2)
 
         db.session.flush()
@@ -551,15 +551,15 @@ class TestAuthenticator:
             def decode_bearer_token(self, *args, **kwargs):
                 return "decoded bearer token for %s" % self.name
 
-        l1, ignore = create(db.session, Library, short_name="l1")
-        l2, ignore = create(db.session, Library, short_name="l2")
+        l1 = db.library(short_name="l1")
+        l2 = db.library(short_name="l2")
 
         auth = Authenticator(db.session, db.session.query(Library))
         auth.library_authenticators["l1"] = MockLibraryAuthenticator("l1")
         auth.library_authenticators["l2"] = MockLibraryAuthenticator("l2")
 
         # This new library isn't in the authenticator.
-        l3, ignore = create(db.session, Library, short_name="l3")
+        l3 = db.library(short_name="l3")
 
         with app.test_request_context("/"):
             flask.request.library = l3  # type:ignore
@@ -1204,7 +1204,9 @@ class TestLibraryAuthenticator:
             assert "mailto:help@library" == copyright_agent["href"]
 
             # The public key is correct.
-            assert authenticator.public_key == doc["public_key"]["value"]
+            assert authenticator.library is not None
+            assert authenticator.library.public_key is not None
+            assert authenticator.library.public_key == doc["public_key"]["value"]
             assert "RSA" == doc["public_key"]["type"]
 
             # The library's web page shows up as an HTML alternate
@@ -1289,52 +1291,6 @@ class TestLibraryAuthenticator:
             )
             headers = real_authenticator.create_authentication_headers()
             assert "WWW-Authenticate" not in headers
-
-    def test_key_pair(self, db: DatabaseTransactionFixture):
-        """Test the public/private key pair associated with a library."""
-        library = db.default_library()
-
-        # Initially, the KEY_PAIR setting is not set.
-        def keys():
-            return ConfigurationSetting.for_library(
-                Configuration.KEY_PAIR, library
-            ).json_value
-
-        assert None == keys()
-
-        # Instantiating a LibraryAuthenticator for a library automatically
-        # generates a public/private key pair.
-        auth = LibraryAuthenticator.from_config(db.session, library)
-        public, private = keys()
-        assert "BEGIN PUBLIC KEY" in public
-        assert "BEGIN RSA PRIVATE KEY" in private
-
-        # The public key is stored in the
-        # LibraryAuthenticator.public_key property.
-        assert public == auth.public_key
-
-        # The private key is not stored in the LibraryAuthenticator
-        # object, but it can be obtained from the database by
-        # using the key_pair property.
-        assert not hasattr(auth, "private_key")
-        assert (public, private) == auth.key_pair
-
-    def test_key_pair_per_library(self, db: DatabaseTransactionFixture):
-        # Ensure that each library obtains its own key pair.
-        library1 = db.default_library()
-        library2 = db.library()
-
-        # We mock the key_pair function here, and make sure its called twice, with
-        # different settings because the get_mock_config_key_pair mock always returns
-        # the same key. So we need to do a bit more work to verify that different
-        # libraries get different keys.
-        with patch.object(Configuration, "key_pair") as patched:
-            patched.return_value = ("public", "private")
-            LibraryAuthenticator.from_config(db.session, library1)
-            assert patched.call_count == 1
-            LibraryAuthenticator.from_config(db.session, library2)
-            assert patched.call_count == 2
-            assert patched.call_args_list[0] != patched.call_args_list[1]
 
     def test__geographic_areas(self, db: DatabaseTransactionFixture):
         """Test the _geographic_areas helper method."""

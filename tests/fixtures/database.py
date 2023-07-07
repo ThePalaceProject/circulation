@@ -7,10 +7,12 @@ import shutil
 import tempfile
 import time
 import uuid
+from textwrap import dedent
 from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
+from Crypto.PublicKey.RSA import import_key
 from sqlalchemy import MetaData
 from sqlalchemy.engine import Connection, Engine, Transaction
 from sqlalchemy.orm import Session
@@ -57,7 +59,6 @@ from core.model.integration import (
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.util.datetime_helpers import utc_now
 from core.util.string_helpers import random_string
-from tests.fixtures.api_config import KeyPairFixture
 
 
 class ApplicationFixture:
@@ -167,15 +168,7 @@ class DatabaseTransactionFixture:
 
     def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
-        library, ignore = get_one_or_create(
-            self._session,
-            Library,
-            create_method_kwargs=dict(
-                uuid=str(uuid.uuid4()),
-                name="default",
-            ),
-            short_name="default",
-        )
+        library = self.library("default", "default")
         collection, ignore = get_one_or_create(
             self._session, Collection, name="Default Collection"
         )
@@ -261,6 +254,24 @@ class DatabaseTransactionFixture:
     def library(
         self, name: Optional[str] = None, short_name: Optional[str] = None
     ) -> Library:
+        # Just a dummy key used for testing.
+        key_string = """\
+            -----BEGIN RSA PRIVATE KEY-----
+            MIIBOQIBAAJBALFOBYf91uHhGQufTEOCZ9/L/Ge0/Lw4DRDuFBh9p+BpOxQJE9gi
+            4FaJc16Wh53Sg5vQTOZMEGgjjTaP7K6NWgECAwEAAQJAEsR4b2meCjDCbumAsBCo
+            oBa+c9fDfMTOFUGuHN2IHIe5zObxWAKD3xq73AO+mpeEl+KpeLeq2IJNqCZdf1yK
+            MQIhAOGeurU6vgn/yA9gXECzvWYaxiAzHsOeW4RDhb/+14u1AiEAyS3VWo6jPt0i
+            x8oiahujtCqaKLy611rFHQuK+yKNfJ0CIFuQVIuaNGfQc3uyCp6Dk3jtoryMoo6X
+            JOLvmEdMAGQFAiB4D+psiQPT2JWRNokjWitwspweA8ReEcXhd6oSBqT54QIgaVc5
+            wNybPDDs9mU+du+r0U+5iXaZzS5StYZpo9B4KjA=
+            -----END RSA PRIVATE KEY-----
+        """
+        # Because key generation takes a significant amount of time, and we
+        # create a lot of new libraries in our tests, we just use the same
+        # dummy key for all of them.
+        private_key = import_key(dedent(key_string))
+        public_key = private_key.public_key()
+
         name = name or self.fresh_str()
         short_name = short_name or self.fresh_str()
         library, ignore = get_one_or_create(
@@ -268,7 +279,11 @@ class DatabaseTransactionFixture:
             Library,
             name=name,
             short_name=short_name,
-            create_method_kwargs=dict(uuid=str(uuid.uuid4())),
+            create_method_kwargs=dict(
+                uuid=str(uuid.uuid4()),
+                public_key=public_key.export_key("PEM").decode("utf-8"),
+                private_key=private_key.export_key("DER"),
+            ),
         )
         return library
 
@@ -975,7 +990,7 @@ def temporary_directory_configuration() -> Iterable[
 
 
 @pytest.fixture(scope="session")
-def application(mock_config_key_pair: KeyPairFixture) -> Iterable[ApplicationFixture]:
+def application() -> Iterable[ApplicationFixture]:
     app = ApplicationFixture.create()
     yield app
     app.close()

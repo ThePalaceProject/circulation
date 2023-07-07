@@ -121,8 +121,14 @@ class LibrarySettingsController(SettingsController):
 
     def create_library(self, short_name, library_uuid):
         self.require_system_admin()
+        public_key, private_key = Library.generate_keypair()
         library, is_new = create(
-            self._db, Library, short_name=short_name, uuid=str(uuid.uuid4())
+            self._db,
+            Library,
+            short_name=short_name,
+            uuid=str(uuid.uuid4()),
+            public_key=public_key,
+            private_key=private_key,
         )
         return library, is_new
 
