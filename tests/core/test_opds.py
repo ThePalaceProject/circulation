@@ -3,6 +3,7 @@ import logging
 import xml.etree.ElementTree as ET
 from io import StringIO
 from typing import Any, Callable, Generator, List, Type
+from unittest.mock import MagicMock, Mock
 
 import feedparser
 import pytest
@@ -1786,6 +1787,16 @@ class TestAcquisitionFeed:
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         session = db.session
+        client = external_search_fake_fixture.search.search_multi_client()
+
+        # The search client is supposed to return a set of result sets.
+        fake_work = MagicMock()
+        fake_work.work_id = 23
+        client.execute = Mock(return_value=[[fake_work]])
+        # The code calls "add" on the search client, which is supposed to return a new
+        # search client with the old search client embedded into it. We don't do that
+        # here as we're completely faking the search results anyway.
+        client.add = Mock(return_value=client)
 
         # Verify that AcquisitionFeed.page() returns an appropriate OPDSFeedResponse
 

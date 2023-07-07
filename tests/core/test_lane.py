@@ -4364,8 +4364,17 @@ class TestWorkListGroupsEndToEnd:
             discredited_nonfiction,
             children,
         ]:
-            t1 = [x.id for x in lane.works(session, facets)]
+            t1 = [
+                x.id
+                for x in lane.works(
+                    session,
+                    facets,
+                    search_engine=end_to_end_search_fixture.external_search_index,
+                )
+            ]
             t2 = [x.id for x in lane.works_from_database(session, facets)]
+            print(f"t1: {t1}")
+            print(f"t2: {t2}")
             assert t1 == t2
 
         def assert_contents(g, expect):
