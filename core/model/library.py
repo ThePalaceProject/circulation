@@ -27,6 +27,7 @@ from ..config import Configuration
 from ..entrypoint import EntryPoint
 from ..facets import FacetConstants
 from . import Base, get_one
+from .announcements import Announcement
 from .customlist import customlist_sharedlibrary
 from .edition import Edition
 from .hassessioncache import HasSessionCache
@@ -144,6 +145,11 @@ class Library(Base, HasSessionCache):
     # A Library may have many CirculationEvents
     circulation_events: Mapped[List[CirculationEvent]] = relationship(
         "CirculationEvent", backref="library", cascade="all, delete-orphan"
+    )
+
+    announcements: Mapped[List[Announcement]] = relationship(
+        "Announcement",
+        primaryjoin="or_(Library.id==Announcement.library_id, Announcement.library_id==None)",
     )
 
     # A class-wide cache mapping library ID to the calculated value
