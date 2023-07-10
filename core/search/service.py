@@ -222,8 +222,12 @@ class SearchServiceOpensearch1(SearchService):
     ) -> List[SearchServiceFailedDocument]:
         self._logger.info(f"submitting documents to index {pointer}")
 
+        # Specifically override the target in all documents to the target pointer
+        # Add a hard requirement that the target be an alias (this prevents documents from implicitly creating
+        # indexes).
         for document in documents:
             document["_index"] = pointer
+            document["_require_alias"] = True
 
         # See: Sources for "streaming_bulk":
         # https://github.com/opensearch-project/opensearch-py/blob/db972e615b9156b4e364091d6a893d64fb3ef4f3/opensearchpy/helpers/actions.py#L267

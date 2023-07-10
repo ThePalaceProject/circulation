@@ -479,13 +479,6 @@ class TestWork:
         work = db.work(with_license_pool=True)
 
         search = external_search_fake_fixture.external_search
-        # This is how the work will be represented in the dummy search
-        # index.
-        index_key = (
-            external_search_fake_fixture.write_index_name(),
-            work.id,
-        )
-
         presentation = work.presentation_edition
         work.set_presentation_ready_based_on_content(search_index_client=search)
         assert True == work.presentation_ready
