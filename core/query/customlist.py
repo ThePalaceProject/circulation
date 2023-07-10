@@ -9,8 +9,8 @@ from api.admin.problem_details import (
     CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
     CUSTOMLIST_SOURCE_COLLECTION_MISSING,
 )
-from core.external_search import ExternalSearchIndex
-from core.lane import Pagination, SearchFacets, WorkList
+from core.external_search import ExternalSearchIndex, SortKeyPagination
+from core.lane import SearchFacets, WorkList
 from core.model.customlist import CustomList, CustomListEntry
 from core.model.library import Library
 from core.model.licensing import LicensePool
@@ -54,7 +54,7 @@ class CustomListQueries:
         _db: Session,
         custom_list: CustomList,
         start_page: int = 1,
-        max_pages: int = 1000,
+        max_pages: int = 100000,
         page_size: int = 100,
         json_query: dict | None = None,
     ) -> int:
@@ -64,7 +64,8 @@ class CustomListQueries:
         :param start_page: Offset of the search will be used from here (based on page_size)
         :param max_pages: Maximum number of pages to search through
         :param page_size: Page size to use for the search iteration
-        :param json_query: If provided, use this json query rather than that of the custom list"""
+        :param json_query: If provided, use this json query rather than that of the custom list
+        """
 
         log = logging.getLogger("Auto Update Custom List")
         search = ExternalSearchIndex(_db)
@@ -79,19 +80,22 @@ class CustomListQueries:
             json_query = json.loads(custom_list.auto_update_query)
 
         if custom_list.auto_update_facets:
+            facet_data = json.loads(custom_list.auto_update_facets)
+            facet_data.setdefault("order", SearchFacets.ORDER_TITLE)
             facets = SearchFacets(
-                search_type="json", **json.loads(custom_list.auto_update_facets)
+                search_type="json",
+                **facet_data,
             )
         else:
-            facets = SearchFacets(search_type="json")
+            facets = SearchFacets(search_type="json", order=SearchFacets.ORDER_TITLE)
 
         total_works_updated = 0
         start_page -= 1  # 0 based offset, so page 1 == 0
-        for page_num in range(start_page, start_page + max_pages):
+        pagination = SortKeyPagination(size=page_size)
+        wl = WorkList()
+        wl.initialize(custom_list.library)
+        for page_num in range(0, start_page + max_pages):
             ## Query for the works with the search query
-            pagination = Pagination(offset=page_size * page_num, size=page_size)
-            wl = WorkList()
-            wl.initialize(custom_list.library)
             works = wl.search(
                 _db, json_query, search, pagination=pagination, facets=facets
             )
@@ -102,6 +106,13 @@ class CustomListQueries:
                     f"{custom_list.name} customlist updated with {total_works_updated} works, moving on..."
                 )
                 break
+
+            # Set the next page
+            pagination = pagination.next_page
+            # If we have not yet arrived at the page we need to start from, we should skip the update
+            # and just page again
+            if page_num < start_page:
+                continue
 
             total_works_updated += len(works)
 
