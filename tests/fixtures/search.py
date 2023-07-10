@@ -1,5 +1,6 @@
+import logging
 import os
-from typing import Any, Iterable, List
+from typing import Iterable, List
 
 import pytest
 from opensearchpy import OpenSearch
@@ -20,16 +21,19 @@ class ExternalSearchFixture:
     to ensure that it works well overall, with a realistic index.
     """
 
-    indexes: List[Any]
     integration: ExternalIntegration
     db: DatabaseTransactionFixture
     search: OpenSearch
+    _indexes_created: List[str]
+
+    def __init__(self):
+        self._indexes_created = []
+        self._logger = logging.getLogger(ExternalSearchFixture.__name__)
 
     @classmethod
     def create(cls, db: DatabaseTransactionFixture) -> "ExternalSearchFixture":
         fixture = ExternalSearchFixture()
         fixture.db = db
-        fixture.indexes = []
         fixture.integration = db.external_integration(
             ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
@@ -49,14 +53,19 @@ class ExternalSearchFixture:
             raise OSError("SIMPLIFIED_TEST_OPENSEARCH is not defined.")
         return env
 
-    def close(self):
-        for index in self.indexes:
-            self.search.indices.delete(index)
+    def record_index(self, name: str):
+        self._logger.info(f"Recording index {name} for deletion")
+        self._indexes_created.append(name)
 
-    def setup_index(self, new_index):
-        """Create an index and register it to be destroyed during teardown."""
-        self.search.indices.create(new_index)
-        self.indexes.append(new_index)
+    def close(self):
+        for index in self._indexes_created:
+            try:
+                self._logger.info(f"Deleting index {index}")
+                self.search.indices.delete(index)
+            except Exception as e:
+                self._logger.info(f"Failed to delete index {index}: {e}")
+
+        return None
 
     def default_work(self, *args, **kwargs):
         """Convenience method to create a work with a license pool in the default collection."""
@@ -64,7 +73,7 @@ class ExternalSearchFixture:
             *args,
             with_license_pool=True,
             collection=self.db.default_collection(),
-            **kwargs
+            **kwargs,
         )
         work.set_presentation_ready()
         return work
@@ -87,6 +96,9 @@ class EndToEndSearchFixture:
     """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
     external_search: ExternalSearchFixture
     external_search_index: ExternalSearchIndex
+
+    def __init__(self):
+        self._logger = logging.getLogger(EndToEndSearchFixture.__name__)
 
     @classmethod
     def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
@@ -224,6 +236,9 @@ class EndToEndSearchFixture:
             assert count == len(expect)
 
     def close(self):
+        for index in self.external_search_index.search_service().indexes_created():
+            self.external_search.record_index(index)
+
         self.external_search.close()
 
 

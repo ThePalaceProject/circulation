@@ -81,6 +81,10 @@ class SearchService(ABC):
         """Atomically create an index for the given base name and revision."""
 
     @abstractmethod
+    def indexes_created(self) -> List[str]:
+        """A log of all the indexes that have been created by this client service."""
+
+    @abstractmethod
     def index_is_populated(
         self, base_name: str, revision: SearchSchemaRevision
     ) -> bool:
@@ -131,6 +135,10 @@ class SearchServiceOpensearch1(SearchService):
         self._client = client
         self._search = Search(using=self._client)
         self._multi_search = MultiSearch(using=self._client)
+        self._indexes_created: List[str] = []
+
+    def indexes_created(self) -> List[str]:
+        return self._indexes_created
 
     def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
         try:
@@ -150,6 +158,7 @@ class SearchServiceOpensearch1(SearchService):
             index_name = self._empty(base_name)
             self._logger.debug(f"creating empty index {index_name}")
             self._client.indices.create(index=index_name)
+            self._indexes_created.append(index_name)
         except RequestError as e:
             if e.error == "resource_already_exists_exception":
                 return
@@ -189,6 +198,7 @@ class SearchServiceOpensearch1(SearchService):
                 index=index_name,
                 body=revision.mapping_document().serialize(),
             )
+            self._indexes_created.append(index_name)
         except RequestError as e:
             if e.error == "resource_already_exists_exception":
                 return

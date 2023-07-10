@@ -28,7 +28,7 @@ class TestService:
         service.create_empty_index("base")
 
         # Log the index so that the fixture cleans it up afterward.
-        external_search_fixture.indexes.append("base-empty")
+        external_search_fixture.record_index("base-empty")
 
         service.create_empty_index("base")
 
@@ -46,7 +46,7 @@ class TestService:
         service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
-        external_search_fixture.indexes.append("base-v23")
+        external_search_fixture.record_index("base-v23")
 
         indices = external_search_fixture.search.indices.client.indices
         assert indices is not None
@@ -69,7 +69,7 @@ class TestService:
         service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
-        external_search_fixture.indexes.append("base-v23")
+        external_search_fixture.record_index("base-v23")
 
         service.read_pointer_set("base", revision)
         assert "base-v23" == service.read_pointer("base")
@@ -82,7 +82,7 @@ class TestService:
         service.create_empty_index("base")
 
         # Log the index so that the fixture cleans it up afterward.
-        external_search_fixture.indexes.append("base-empty")
+        external_search_fixture.record_index("base-empty")
 
         service.read_pointer_set_empty("base")
         assert "base-empty" == service.read_pointer("base")
@@ -94,7 +94,7 @@ class TestService:
         service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
-        external_search_fixture.indexes.append("base-v23")
+        external_search_fixture.record_index("base-v23")
 
         service.write_pointer_set("base", revision)
 
@@ -140,7 +140,7 @@ class TestService:
         service.index_create("base", revision)
 
         # Log the index so that the fixture cleans it up afterward.
-        external_search_fixture.indexes.append("base-v23")
+        external_search_fixture.record_index("base-v23")
         service.index_submit_documents("base-v23", documents)
         service.index_submit_documents("base-v23", documents)
 

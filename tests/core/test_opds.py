@@ -54,7 +54,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
-from tests.fixtures.search import ExternalSearchFixtureFake
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 
 
 class TestBaseAnnotator:
@@ -1718,7 +1718,7 @@ class TestOPDS:
     def test_cache(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -1733,7 +1733,7 @@ class TestOPDS:
         )
         fantasy_lane = data.fantasy
 
-        search_engine = external_search_fake_fixture.external_search
+        search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(search_engine.create_search_documents_from_works([work1]))
         docs.finish()
