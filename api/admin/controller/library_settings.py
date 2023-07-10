@@ -2,7 +2,7 @@ import base64
 import json
 import uuid
 from io import BytesIO
-from typing import Dict, Optional
+from typing import Optional
 
 import flask
 import wcag_contrast_ratio
@@ -10,6 +10,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image
 from PIL.Image import Resampling
+from werkzeug.datastructures import FileStorage
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.geographic_validator import GeographicValidator
@@ -17,6 +18,7 @@ from api.admin.problem_details import *
 from api.config import Configuration
 from api.lanes import create_default_lanes
 from core.model import ConfigurationSetting, Library, create, get_one
+from core.model.library import LibraryLogo
 from core.util import LanguageCodes
 from core.util.problem_detail import ProblemDetail
 
@@ -110,6 +112,8 @@ class LibrarySettingsController(SettingsController):
         )
         if isinstance(configuration_settings, ProblemDetail):
             return configuration_settings
+
+        self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
 
         if is_new:
             # Now that the configuration settings are in place, create
@@ -360,12 +364,9 @@ class LibrarySettingsController(SettingsController):
                     ]
                 )
         else:
-            if type == "image":
-                value = self.image_setting(setting) or default_value
-            else:
-                value = self.scalar_setting(setting)
-                # An empty "" value or 0 value is valid, hence check for None
-                value = default_value if value is None else value
+            value = self.scalar_setting(setting)
+            # An empty "" value or 0 value is valid, hence check for None
+            value = default_value if value is None else value
         return value
 
     def scalar_setting(self, setting):
@@ -406,12 +407,9 @@ class LibrarySettingsController(SettingsController):
         return json.dumps([_f for _f in value if _f])
 
     @staticmethod
-    def _data_url_for_image(image: Image.Image, _format="PNG") -> str:
-        """Produce the `data` URL for the setting's uploaded image file.
-
-        :param image: A Pillow Image.
-        :param _format: A valid Pillow image format.
-        :return: The `data` URL for the image.
+    def _process_image(image: Image.Image, _format="PNG") -> bytes:
+        """Convert PIL image to RGBA if necessary and return it
+        as base64 encoded bytes.
         """
         buffer = BytesIO()
         # If the image is not RGB, RGBA or P convert it
@@ -419,29 +417,28 @@ class LibrarySettingsController(SettingsController):
         if image.mode not in ("RGB", "RGBA", "P"):
             image = image.convert("RGBA")
         image.save(buffer, format=_format)
-        b64 = base64.b64encode(buffer.getvalue())
-        return "data:image/png;base64,%s" % b64.decode("utf-8")
+        return base64.b64encode(buffer.getvalue())
 
-    def image_setting(
-        self, setting: Dict[str, str], max_dimension=Configuration.LOGO_MAX_DIMENSION
-    ) -> Optional[str]:
-        """Retrieve an uploaded image file for the setting and return its data URL.
-
-        If the image is too large, scale it down to the `max_dimension`
-        while retaining its aspect ratio.
-
-        :param image: A Python Image Library image object.
-        :return: The `data` URL for the image file, if it was uploaded, else None.
-        """
-        image_file = flask.request.files.get(setting.get("key", ""))
+    @classmethod
+    def scale_and_store_logo(
+        cls,
+        library: Library,
+        image_file: Optional[FileStorage],
+        max_dimension=Configuration.LOGO_MAX_DIMENSION,
+    ) -> None:
         if not image_file:
             return None
 
-        image = Image.open(image_file)
+        image = Image.open(image_file.stream)
         width, height = image.size
         if width > max_dimension or height > max_dimension:
             image.thumbnail((max_dimension, max_dimension), Resampling.LANCZOS)
-        return self._data_url_for_image(image)
+
+        image_data = cls._process_image(image)
+        if library.logo:
+            library.logo.content = image_data
+        else:
+            library.logo = LibraryLogo(content=image_data)
 
     def current_value(self, setting, library):
         """Retrieve the current value of the given setting from the database."""

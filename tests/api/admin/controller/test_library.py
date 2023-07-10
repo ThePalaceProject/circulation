@@ -8,7 +8,7 @@ import pytest
 from Crypto.PublicKey.RSA import RsaKey, import_key
 from PIL import Image
 from werkzeug import Response
-from werkzeug.datastructures import ImmutableMultiDict
+from werkzeug.datastructures import FileStorage, ImmutableMultiDict
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.controller.library_settings import LibrarySettingsController
@@ -322,26 +322,22 @@ class TestLibrarySettings:
             )
             assert response.uri == INVALID_CONFIGURATION_OPTION.uri
 
-    def test__data_url_for_image(self, logo_properties, settings_ctrl_fixture):
-        image, expected_data_url = (
-            logo_properties[key] for key in ("image", "data_url")
+    def test__process_image(self, logo_properties, settings_ctrl_fixture):
+        image, expected_encoded_image = (
+            logo_properties[key] for key in ("image", "base64_bytes")
         )
-        data_url = LibrarySettingsController._data_url_for_image(image)
-        assert expected_data_url == data_url
+        processed_image = LibrarySettingsController._process_image(image)
+        assert processed_image == expected_encoded_image
 
-        # A non PNG mode should work as RGBA
+        # CMYK should be converted to RGBA
         image = logo_properties["image"].convert("CMYK")
         assert image.mode == "CMYK"
 
-        data_url = LibrarySettingsController._data_url_for_image(image)
+        processed_image = LibrarySettingsController._process_image(image)
         rgba_image = image.convert("RGBA")
         bio = BytesIO()
         rgba_image.save(bio, "PNG")
-        bio.seek(0)
-        expected_data_url = "data:image/png;base64," + base64.b64encode(
-            bio.read()
-        ).decode("utf-8")
-        assert expected_data_url == data_url
+        assert processed_image == base64.b64encode(bio.getvalue())
 
     def test_libraries_post_create(
         self,
@@ -349,9 +345,6 @@ class TestLibrarySettings:
         settings_ctrl_fixture,
         announcement_fixture: AnnouncementFixture,
     ):
-        class TestFileUpload(BytesIO):
-            headers = {"Content-Type": "image/png"}
-
         # Pull needed properties from logo fixture
         image_data, expected_logo_data_url, image = (
             logo_properties[key] for key in ("raw_bytes", "data_url", "image")
@@ -436,9 +429,13 @@ class TestLibrarySettings:
                 ]
             )
             flask.request.files = ImmutableMultiDict(
-                [
-                    (Configuration.LOGO, TestFileUpload(image_data)),  # type: ignore[list-item]
-                ]
+                {
+                    Configuration.LOGO: FileStorage(
+                        stream=BytesIO(image_data),
+                        content_type="image/png",
+                        filename="logo.png",
+                    )
+                }
             )
             geographic_validator = MockGeographicValidator()
             announcement_validator = MockAnnouncementListValidator()
@@ -480,10 +477,8 @@ class TestLibrarySettings:
                 library,
             ).value
         )
-        assert (
-            expected_logo_data_url
-            == ConfigurationSetting.for_library(Configuration.LOGO, library).value
-        )
+        assert library.logo is not None
+        assert expected_logo_data_url == library.logo.data_url
         assert geographic_validator.was_called == True
         assert (
             '{"US": ["06759", "everywhere", "MD", "Boston, MA"], "CA": []}'
@@ -881,16 +876,6 @@ class TestLibrarySettings:
         # so we have to use the default associated with the setting configuration.
         assert "a default value" == m(
             library, dict(key="some_other_value", default="a default value")
-        )
-
-        # An uploaded image is (from the perspective of this method) also simple.
-
-        # Here, a new image was uploaded.
-        assert "some image data" == m(library, dict(key="image_setting", type="image"))
-
-        # Here, no image was uploaded so we use the currently stored database value.
-        assert "an old image" == m(
-            library, dict(key="previously_uploaded_image", type="image")
         )
 
         # There are some lists which are more complex, but a normal list is

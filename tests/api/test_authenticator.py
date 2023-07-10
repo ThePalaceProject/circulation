@@ -57,6 +57,7 @@ from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
+from core.model.library import LibraryLogo
 from core.opds import OPDSFeed
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
@@ -1006,12 +1007,13 @@ class TestLibraryAuthenticator:
             LibraryAnnotator.LICENSE: "http://license/",
             LibraryAnnotator.REGISTER: "custom-registration-hook://library/",
             LinkRelations.PATRON_PASSWORD_RESET: "https://example.org/reset",
-            Configuration.LOGO: "image data",
             Configuration.WEB_CSS_FILE: "http://style.css",
         }
 
         for rel, value in link_config.items():
             ConfigurationSetting.for_library(rel, db.default_library()).value = value
+
+        db.default_library().logo = LibraryLogo(content=b"image data")
 
         ConfigurationSetting.for_library(
             Configuration.LIBRARY_DESCRIPTION, library
@@ -1155,7 +1157,7 @@ class TestLibraryAuthenticator:
             assert "http://copyright" == copyright["href"]
             assert "http://about" == about["href"]
             assert "http://license/" == license["href"]
-            assert "image data" == logo["href"]
+            assert "data:image/png;base64,image data" == logo["href"]
             assert "http://style.css" == stylesheet["href"]
 
             assert "/loans" in loans["href"]

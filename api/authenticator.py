@@ -640,9 +640,8 @@ class LibraryAuthenticator:
             links.append(dict(rel="alternate", type="text/html", href=library_uri))
 
         # Add the library's logo, if it has one.
-        logo = ConfigurationSetting.for_library(Configuration.LOGO, library).value
-        if logo:
-            links.append(dict(rel="logo", type="image/png", href=logo))
+        if library and library.logo:
+            links.append(dict(rel="logo", type="image/png", href=library.logo.data_url))
 
         # Add the library's custom CSS file, if it has one.
         css_file = ConfigurationSetting.for_library(
