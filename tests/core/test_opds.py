@@ -736,7 +736,7 @@ class TestOPDS:
     def test_lane_feed_contains_facet_links(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -754,7 +754,7 @@ class TestOPDS:
             lane,
             MockAnnotator,
             facets=facets,
-            search_engine=external_search_fake_fixture.external_search,
+            search_engine=end_to_end_search_fixture.external_search_index,
         )
 
         u = str(cached_feed)
@@ -1238,7 +1238,7 @@ class TestOPDS:
     def test_page_feed(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -1252,7 +1252,7 @@ class TestOPDS:
         work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
-        search_engine = external_search_fake_fixture.external_search
+        search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
@@ -1321,7 +1321,7 @@ class TestOPDS:
     def test_page_feed_for_worklist(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -1335,7 +1335,7 @@ class TestOPDS:
         work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
-        search_engine = external_search_fake_fixture.external_search
+        search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_updating_search_documents()
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
@@ -1623,7 +1623,7 @@ class TestOPDS:
     def test_search_feed(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -1638,7 +1638,7 @@ class TestOPDS:
         work2 = db.work(genre=Epic_Fantasy, with_open_access_download=True)
 
         pagination = Pagination(size=1)
-        search_client = external_search_fake_fixture.external_search
+        search_client = end_to_end_search_fixture.external_search_index
         docs = search_client.start_updating_search_documents()
         docs.add_documents(
             search_client.create_search_documents_from_works([work1, work2])

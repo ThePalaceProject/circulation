@@ -1634,7 +1634,7 @@ class TestWhereAreMyBooksScript:
     def test_overall_structure(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # Verify that run() calls the methods we expect.
 
@@ -1701,7 +1701,7 @@ class TestWhereAreMyBooksScript:
     def test_check_library(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # Give the default library a collection and a lane.
         library = db.default_library()
@@ -1709,7 +1709,7 @@ class TestWhereAreMyBooksScript:
         lane = db.lane(library=library)
 
         script = MockWhereAreMyBooks(
-            _db=db.session, search=external_search_fake_fixture.external_search
+            _db=db.session, search=end_to_end_search_fixture.external_search_index
         )
         script.check_library(library)
 
@@ -1730,7 +1730,7 @@ class TestWhereAreMyBooksScript:
     def test_delete_cached_feeds(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         groups = CachedFeed(type=CachedFeed.GROUPS_TYPE, pagination="")
         db.session.add(groups)
@@ -1740,7 +1740,7 @@ class TestWhereAreMyBooksScript:
         assert 2 == db.session.query(CachedFeed).count()
 
         script = MockWhereAreMyBooks(
-            _db=db.session, search=external_search_fake_fixture.search
+            _db=db.session, search=end_to_end_search_fixture.external_search_index
         )
         script.delete_cached_feeds()
         how_many, theyre_gone = script.output
@@ -1763,7 +1763,7 @@ class TestWhereAreMyBooksScript:
     @staticmethod
     def check_explanation(
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
         presentation_ready=1,
         not_presentation_ready=0,
         no_delivery_mechanisms=0,
@@ -1775,7 +1775,7 @@ class TestWhereAreMyBooksScript:
         """Runs explain_collection() and verifies expected output."""
         script = MockWhereAreMyBooks(
             _db=db.session,
-            search=external_search_fake_fixture.external_search,
+            search=end_to_end_search_fixture.external_search_index,
             **kwargs,
         )
         script.explain_collection(db.default_collection())
@@ -1821,16 +1821,16 @@ class TestWhereAreMyBooksScript:
     def test_no_presentation_ready_works(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # This work is not presentation-ready.
         work = db.work(with_license_pool=True)
         work.presentation_ready = False
         script = MockWhereAreMyBooks(
-            _db=db.session, search=external_search_fake_fixture.external_search
+            _db=db.session, search=end_to_end_search_fixture.external_search_index
         )
         self.check_explanation(
-            external_search_fake_fixture=external_search_fake_fixture,
+            end_to_end_search_fixture=end_to_end_search_fixture,
             presentation_ready=0,
             not_presentation_ready=1,
             db=db,
@@ -1839,7 +1839,7 @@ class TestWhereAreMyBooksScript:
     def test_no_delivery_mechanisms(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # This work has a license pool, but no delivery mechanisms.
         work = db.work(with_license_pool=True)
@@ -1848,13 +1848,13 @@ class TestWhereAreMyBooksScript:
         self.check_explanation(
             no_delivery_mechanisms=1,
             db=db,
-            external_search_fake_fixture=external_search_fake_fixture,
+            end_to_end_search_fixture=end_to_end_search_fixture,
         )
 
     def test_suppressed_pool(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # This work has a license pool, but it's suppressed.
         work = db.work(with_license_pool=True)
@@ -1862,13 +1862,13 @@ class TestWhereAreMyBooksScript:
         self.check_explanation(
             suppressed=1,
             db=db,
-            external_search_fake_fixture=external_search_fake_fixture,
+            end_to_end_search_fixture=end_to_end_search_fixture,
         )
 
     def test_no_licenses(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # This work has a license pool, but no licenses owned.
         work = db.work(with_license_pool=True)
@@ -1876,16 +1876,16 @@ class TestWhereAreMyBooksScript:
         self.check_explanation(
             not_owned=1,
             db=db,
-            external_search_fake_fixture=external_search_fake_fixture,
+            end_to_end_search_fixture=end_to_end_search_fixture,
         )
 
     def test_search_engine(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         output = StringIO()
-        search = external_search_fake_fixture.external_search
+        search = end_to_end_search_fixture.external_search_index
         work = db.work(with_license_pool=True)
         work.presentation_ready = True
 
@@ -1899,7 +1899,7 @@ class TestWhereAreMyBooksScript:
             search=search,
             in_search_index=1,
             db=db,
-            external_search_fake_fixture=external_search_fake_fixture,
+            end_to_end_search_fixture=end_to_end_search_fixture,
         )
 
 
