@@ -137,6 +137,15 @@ class SearchServiceOpensearch1(SearchService):
         self._multi_search = MultiSearch(using=self._client)
         self._indexes_created: List[str] = []
 
+        # Documents are not allowed to automatically create indexes.
+        self._client.cluster.put_settings(body={
+            'persistent': {
+                'action': {
+                    'auto_create_index': "false"
+                }
+            }
+        })
+
     def indexes_created(self) -> List[str]:
         return self._indexes_created
 
