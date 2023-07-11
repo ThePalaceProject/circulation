@@ -1,16 +1,21 @@
 from enum import Enum
-from typing import Optional, Iterable, List, Dict
+from typing import Dict, Iterable, List, Optional
 from unittest.mock import MagicMock
 
-from opensearch_dsl import Search, MultiSearch
+from opensearch_dsl import MultiSearch, Search
 from opensearchpy import OpenSearchException
 
 from core.search.revision import SearchSchemaRevision
-from core.search.service import SearchService, SearchWritePointer, SearchServiceFailedDocument
+from core.search.service import (
+    SearchService,
+    SearchServiceFailedDocument,
+    SearchWritePointer,
+)
 
 
 class SearchServiceFailureMode(Enum):
     """The simulated failure modes for the search service."""
+
     NOT_FAILING = 0
     FAIL_INDEXING_DOCUMENTS = 1
     FAIL_ENTIRELY = 2
@@ -39,7 +44,7 @@ class SearchServiceFake(SearchService):
 
     def _fail_if_necessary(self):
         if self._failing == SearchServiceFailureMode.FAIL_ENTIRELY:
-            raise OpenSearchException('Search index is on fire.')
+            raise OpenSearchException("Search index is on fire.")
 
     def set_failing_mode(self, mode: SearchServiceFailureMode):
         self._failing = mode
@@ -83,16 +88,16 @@ class SearchServiceFake(SearchService):
 
     def create_empty_index(self, base_name: str) -> None:
         self._fail_if_necessary()
-        self._indexes_created.append(f'{base_name}-empty')
+        self._indexes_created.append(f"{base_name}-empty")
         return None
 
     def read_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._read_pointer = f'{revision.name_for_indexed_pointer(base_name)}'
+        self._read_pointer = f"{revision.name_for_indexed_pointer(base_name)}"
 
     def read_pointer_set_empty(self, base_name: str) -> None:
         self._fail_if_necessary()
-        self._read_pointer = f'{base_name}-empty'
+        self._read_pointer = f"{base_name}-empty"
 
     def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
@@ -107,7 +112,6 @@ class SearchServiceFake(SearchService):
 
     def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        pass
 
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]
@@ -116,12 +120,14 @@ class SearchServiceFake(SearchService):
         if self._failing:
             results: List[SearchServiceFailedDocument] = []
             for document in documents:
-                results.append(SearchServiceFailedDocument(
-                    document['_id'],
-                    error_message='There was an error!',
-                    error_status=500,
-                    error_exception='Exception'
-                ))
+                results.append(
+                    SearchServiceFailedDocument(
+                        document["_id"],
+                        error_message="There was an error!",
+                        error_status=500,
+                        error_exception="Exception",
+                    )
+                )
             return results
 
         if not (pointer in self._documents_by_index):
@@ -153,7 +159,7 @@ class SearchServiceFake(SearchService):
             items = self._documents_by_index[pointer]
             to_remove = []
             for item in items:
-                if item.get('_id') == id:
+                if item.get("_id") == id:
                     to_remove.append(item)
             for item in to_remove:
                 items.remove(item)
