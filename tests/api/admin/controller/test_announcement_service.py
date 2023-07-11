@@ -82,6 +82,42 @@ class TestAnnouncementService:
         assert announcements[0].finish == data.finish
         assert announcements[0].content == data.content
 
+    def test_post_edit(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        announcement_fixture: AnnouncementFixture,
+    ):
+        # Two existing announcements.
+        session = admin_ctrl_fixture.ctrl.db.session
+        a1 = announcement_fixture.active_announcement(session)
+        a2 = announcement_fixture.active_announcement(session)
+
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST") as ctx:
+            # a1 is edited, a2 is deleted, a3 is added.
+            a1_edited = a1.to_data()
+            a1_edited.content = "This is an edited announcement."
+            a3 = AnnouncementData(
+                id=uuid.uuid4(),
+                start=announcement_fixture.yesterday,
+                finish=announcement_fixture.tomorrow,
+                content="This is new test announcement.",
+            )
+            ctx.request.form = MultiDict(
+                [("announcements", json.dumps([a1_edited.as_dict(), a3.as_dict()]))]
+            )
+            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+
+        assert response == {"success": True}
+        announcements = (
+            session.execute(Announcement.global_announcements()).scalars().all()
+        )
+        assert len(announcements) == 2
+        for actual, expected in zip(announcements, [a3, a1_edited]):
+            assert actual.id == expected.id
+            assert actual.start == expected.start
+            assert actual.finish == expected.finish
+            assert actual.content == expected.content
+
     def test_post_errors(
         self,
         admin_ctrl_fixture: AdminControllerFixture,

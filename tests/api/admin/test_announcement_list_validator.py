@@ -215,6 +215,15 @@ class TestAnnouncementListValidator:
             in excinfo.value.problem_detail.detail
         )
 
+        # Bad id
+        bad_id = dict(id="not-a-uuid", start=today, content=message)
+        with pytest.raises(ProblemError) as excinfo:
+            m(bad_id)
+        assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
+        assert (
+            "Invalid announcement ID: not-a-uuid" in excinfo.value.problem_detail.detail
+        )
+
         # Bad start date -- tested at greater length in another test.
         bad_start_date = dict(start="not-a-date", content=message)
         with pytest.raises(ProblemError) as excinfo:
