@@ -65,6 +65,8 @@ class ExternalSearchFixture:
             except Exception as e:
                 self._logger.info(f"Failed to delete index {index}: {e}")
 
+        self._logger.info("Waiting for operations to complete.")
+        self.search.indices.refresh()
         return None
 
     def default_work(self, *args, **kwargs):

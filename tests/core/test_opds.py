@@ -1474,7 +1474,7 @@ class TestOPDS:
     def test_groups_feed(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -1494,7 +1494,7 @@ class TestOPDS:
         # of the work don't matter. It just needs to have a LicensePool
         # so it'll show up in the OPDS feed.
         work = db.work(title="An epic tome", with_open_access_download=True)
-        search_engine = external_search_fake_fixture.external_search
+        search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_migration()
         docs.add_documents(search_engine.create_search_documents_from_works([work]))
         docs.finish()
@@ -1734,8 +1734,11 @@ class TestOPDS:
         fantasy_lane = data.fantasy
 
         search_engine = end_to_end_search_fixture.external_search_index
-        docs = search_engine.start_updating_search_documents()
-        docs.add_documents(search_engine.create_search_documents_from_works([work1]))
+        docs = search_engine.start_migration()
+        errors = docs.add_documents(
+            search_engine.create_search_documents_from_works([work1])
+        )
+        assert errors == []
         docs.finish()
 
         def make_page():
