@@ -1,10 +1,10 @@
 import json
+import uuid
 
 from werkzeug.datastructures import MultiDict
 
 from api.admin.controller.announcement_service import AnnouncementSettings
-from api.announcements import Announcements
-from core.model.configuration import ConfigurationSetting
+from core.model.announcements import Announcement, AnnouncementData
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
@@ -17,17 +17,22 @@ class TestAnnouncementService:
         admin_ctrl_fixture: AdminControllerFixture,
         announcement_fixture: AnnouncementFixture,
     ):
-        setting = ConfigurationSetting.sitewide(
-            admin_ctrl_fixture.ctrl.db.session, Announcements.GLOBAL_SETTING_NAME
+        session = admin_ctrl_fixture.ctrl.db.session
+        a1 = announcement_fixture.active_announcement(session)
+        a2 = announcement_fixture.expired_announcement(session)
+        a3 = announcement_fixture.forthcoming_announcement(session)
+
+        expected_start = []
+        expected_finish = []
+        for a in [a2, a1, a3]:
+            assert a.start is not None
+            assert a.finish is not None
+            expected_start.append(a.start.strftime(announcement_fixture.format))
+            expected_finish.append(a.finish.strftime(announcement_fixture.format))
+
+        global_announcements = (
+            session.execute(Announcement.global_announcements()).scalars().all()
         )
-        setting.value = json.dumps(
-            [
-                announcement_fixture.expired,
-                announcement_fixture.active,
-                announcement_fixture.forthcoming,
-            ]
-        )
-        global_announcements = Announcements.for_all(admin_ctrl_fixture.ctrl.db.session)
 
         with admin_ctrl_fixture.request_context_with_admin("/", method="GET") as ctx:
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
@@ -35,11 +40,19 @@ class TestAnnouncementService:
 
         assert set(response.keys()) == {"settings", "announcements"}
         announcements_in_response = response["announcements"]
-        # Only one of the announcements should be active.
-        assert 1 == len(list(global_announcements.active))
+
         # All announcements should be available for management.
-        assert 3 == len(global_announcements.announcements)
-        assert len(global_announcements.announcements) == len(announcements_in_response)
+        assert 3 == len(global_announcements)
+        assert len(global_announcements) == len(announcements_in_response)
+
+        assert [str(a2.id), str(a1.id), str(a3.id)] == [
+            a["id"] for a in announcements_in_response
+        ]
+        assert [a2.content, a1.content, a3.content] == [
+            a["content"] for a in announcements_in_response
+        ]
+        assert expected_start == [a["start"] for a in announcements_in_response]
+        assert expected_finish == [a["finish"] for a in announcements_in_response]
 
     def test_post(
         self,
@@ -47,14 +60,27 @@ class TestAnnouncementService:
         announcement_fixture: AnnouncementFixture,
     ):
         with admin_ctrl_fixture.request_context_with_admin("/", method="POST") as ctx:
+            data = AnnouncementData(
+                id=uuid.uuid4(),
+                start=announcement_fixture.yesterday,
+                finish=announcement_fixture.tomorrow,
+                content="This is a test announcement.",
+            )
             ctx.request.form = MultiDict(
-                [("announcements", json.dumps([announcement_fixture.active]))]
+                [("announcements", json.dumps([data.as_dict()]))]
             )
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
 
-        announcements = Announcements.for_all(admin_ctrl_fixture.ctrl.db.session)
-        assert len(announcements.announcements) == 1
-        assert announcements.announcements[0].id == "active"
+        assert response == {"success": True}
+        session = admin_ctrl_fixture.ctrl.db.session
+        announcements = (
+            session.execute(Announcement.global_announcements()).scalars().all()
+        )
+        assert len(announcements) == 1
+        assert announcements[0].id == data.id
+        assert announcements[0].start == data.start
+        assert announcements[0].finish == data.finish
+        assert announcements[0].content == data.content
 
     def test_post_errors(
         self,
@@ -66,14 +92,12 @@ class TestAnnouncementService:
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
             assert response == INVALID_INPUT
 
-            ctx.request.form = MultiDict(
-                [("somethingelse", json.dumps([announcement_fixture.active]))]
-            )
+            ctx.request.form = MultiDict([("somethingelse", json.dumps([]))])
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
             assert response == INVALID_INPUT
 
             ctx.request.form = MultiDict(
-                [("announcements", json.dumps([{"id": "xxx"}]))]
+                [("announcements", json.dumps([{"id": str(uuid.uuid4())}]))]
             )
             response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
             assert isinstance(response, ProblemDetail)

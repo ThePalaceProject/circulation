@@ -147,9 +147,10 @@ class Library(Base, HasSessionCache):
         "CirculationEvent", backref="library", cascade="all, delete-orphan"
     )
 
-    announcements: Mapped[List[Announcement]] = relationship(
+    library_announcements: Mapped[List[Announcement]] = relationship(
         "Announcement",
-        primaryjoin="or_(Library.id==Announcement.library_id, Announcement.library_id==None)",
+        back_populates="library",
+        cascade="all, delete-orphan",
     )
 
     # A class-wide cache mapping library ID to the calculated value
