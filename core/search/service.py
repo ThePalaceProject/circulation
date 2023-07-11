@@ -43,6 +43,23 @@ class SearchServiceFailedDocument:
     error_status: int
     error_exception: str
 
+    @classmethod
+    def from_bulk_error(cls, error: dict):
+        """Transform an error dictionary returned from opensearchpy's bulk API to a typed error"""
+        if error.get("index"):
+            error_indexed = error["index"]
+            error_id = int(error_indexed["_id"])
+            error_status = error_indexed["status"]
+            error_reason = error_indexed["error"]["reason"]
+            return SearchServiceFailedDocument(
+                id=error_id,
+                error_message=error_reason,
+                error_status=error_status,
+                error_exception="<unavailable>",
+            )
+        else:
+            raise NotImplementedError
+
 
 class SearchService(ABC):
     """The interface we need from services like Opensearch. Essentially, it provides the operations we want with
@@ -252,14 +269,7 @@ class SearchServiceOpensearch1(SearchService):
         error_results: List[SearchServiceFailedDocument] = []
         if isinstance(errors, list):
             for error in errors:
-                error_results.append(
-                    SearchServiceFailedDocument(
-                        id=int(error.id),
-                        error_status=error.status,
-                        error_message=error.error,
-                        error_exception=error.exception,
-                    )
-                )
+                error_results.append(SearchServiceFailedDocument.from_bulk_error(error))
         else:
             raise SearchServiceException(
                 f"Opensearch returned {errors} instead of a list of errors."

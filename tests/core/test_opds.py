@@ -1253,7 +1253,7 @@ class TestOPDS:
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
         search_engine = end_to_end_search_fixture.external_search_index
-        docs = search_engine.start_updating_search_documents()
+        docs = search_engine.start_migration()
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
         )
@@ -1336,7 +1336,7 @@ class TestOPDS:
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
         search_engine = end_to_end_search_fixture.external_search_index
-        docs = search_engine.start_updating_search_documents()
+        docs = search_engine.start_migration()
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
         )
@@ -1495,7 +1495,7 @@ class TestOPDS:
         # so it'll show up in the OPDS feed.
         work = db.work(title="An epic tome", with_open_access_download=True)
         search_engine = external_search_fake_fixture.external_search
-        docs = search_engine.start_updating_search_documents()
+        docs = search_engine.start_migration()
         docs.add_documents(search_engine.create_search_documents_from_works([work]))
         docs.finish()
 
@@ -1639,7 +1639,7 @@ class TestOPDS:
 
         pagination = Pagination(size=1)
         search_client = end_to_end_search_fixture.external_search_index
-        docs = search_client.start_updating_search_documents()
+        docs = search_client.start_migration()
         docs.add_documents(
             search_client.create_search_documents_from_works([work1, work2])
         )
