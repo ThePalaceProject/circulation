@@ -98,6 +98,7 @@ class EndToEndSearchFixture:
     """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
     external_search: ExternalSearchFixture
     external_search_index: ExternalSearchIndex
+    db: DatabaseTransactionFixture
 
     def __init__(self):
         self._logger = logging.getLogger(EndToEndSearchFixture.__name__)
@@ -105,6 +106,7 @@ class EndToEndSearchFixture:
     @classmethod
     def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
         data = EndToEndSearchFixture()
+        data.db = transaction
         data.external_search = ExternalSearchFixture.create(transaction)
         data.external_search_index = ExternalSearchIndex(transaction.session)
         return data

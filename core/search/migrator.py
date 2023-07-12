@@ -52,7 +52,9 @@ class SearchDocumentReceiver(SearchDocumentReceiverType):
 
     def finish(self) -> None:
         """Make sure all changes are committed."""
+        self._logger.info("Finishing search documents.")
         self._service.refresh()
+        self._logger.info("Finished search documents.")
 
 
 class SearchMigrationInProgress(SearchDocumentReceiverType):

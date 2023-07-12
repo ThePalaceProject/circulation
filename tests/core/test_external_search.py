@@ -4765,18 +4765,24 @@ class TestSearchErrors:
             external_search_fake_fixture.db,
         )
 
-        search.search.set_failing_mode(mode=SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS_TIMEOUT)
+        search.search.set_failing_mode(
+            mode=SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS_TIMEOUT
+        )
         work = transaction.work()
         work.set_presentation_ready()
 
         docs = search.external_search.start_updating_search_documents()
-        failures = docs.add_documents(search.external_search.create_search_documents_from_works([work]))
+        failures = docs.add_documents(
+            search.external_search.create_search_documents_from_works([work])
+        )
         assert 1 == len(failures)
         assert work.id == failures[0].id
         assert "Connection Timeout!" == failures[0].error_message
 
         # Submissions are not retried by the base service
-        assert [work.id] == [docs["_id"] for docs in search.search.document_submission_attempts]
+        assert [work.id] == [
+            docs["_id"] for docs in search.search.document_submission_attempts
+        ]
 
     def test_search_single_document_error(
         self, external_search_fixture: ExternalSearchFixture

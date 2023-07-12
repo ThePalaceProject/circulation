@@ -4302,6 +4302,7 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
+        fixture.external_search_index.start_migration().finish()
 
         # Tell the fixture to call our populate_works method.
         # In this library, the groups feed includes at most two books
@@ -4615,9 +4616,9 @@ class TestWorkListGroups:
     def test_groups_for_lanes_adapts_facets(
         self,
         random_seed_fixture: RandomSeedFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        db = external_search_fake_fixture.db
+        db = end_to_end_search_fixture.db
 
         # Verify that _groups_for_lanes gives each of a WorkList's
         # non-queryable children the opportunity to adapt the incoming

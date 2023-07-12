@@ -126,8 +126,14 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
 
         _should_fail = False
-        _should_fail = _should_fail or self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS
-        _should_fail = _should_fail or self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS_TIMEOUT
+        _should_fail = (
+            _should_fail
+            or self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS
+        )
+        _should_fail = (
+            _should_fail
+            or self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS_TIMEOUT
+        )
 
         if _should_fail:
             results: List[SearchServiceFailedDocument] = []
@@ -141,13 +147,13 @@ class SearchServiceFake(SearchService):
                         error_exception="Exception",
                     )
                 else:
-                    _error  = SearchServiceFailedDocument(
+                    _error = SearchServiceFailedDocument(
                         document["_id"],
                         error_message="Connection Timeout!",
                         error_status=0,
                         error_exception="ConnectionTimeout",
                     )
-                results.append(_error )
+                results.append(_error)
 
             return results
 
