@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import datetime
-import uuid
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Dict, List, Optional, Tuple
 
 import wcag_contrast_ratio
 from pydantic import (
-    UUID4,
-    BaseModel,
     ConstrainedFloat,
-    ConstrainedStr,
     EmailStr,
     HttpUrl,
     PositiveFloat,
@@ -19,7 +14,7 @@ from pydantic import (
     root_validator,
     validator,
 )
-from pydantic.fields import Field, ModelField
+from pydantic.fields import ModelField
 from sqlalchemy.orm import Session
 
 from api.admin.problem_details import (
@@ -40,48 +35,9 @@ from core.integration.settings import (
 from core.util import LanguageCodes
 
 
-class AnnouncementStr(ConstrainedStr):
-    strip_whitespace = True
-    min_length = 15
-    max_length = 350
-
-
 class PercentFloat(ConstrainedFloat):
     ge = 0
     le = 1
-
-
-class Announcement(BaseModel):
-    """Pydantic model for an announcement."""
-
-    content: AnnouncementStr
-    start: datetime.date
-    finish: datetime.date
-    id: UUID4 = Field(default_factory=uuid.uuid4)
-
-    @property
-    def is_active(self) -> bool:
-        """Should this announcement be displayed now?"""
-        today_local = datetime.date.today()
-        return self.start <= today_local <= self.finish
-
-    @property
-    def for_authentication_document(self) -> Dict[str, str]:
-        """The publishable representation of this announcement,
-        for use in an authentication document.
-
-        Basically just the ID and the content.
-        """
-        return dict(id=str(self.id), content=self.content)
-
-    @validator("finish")
-    def finish_must_be_after_start(
-        cls, finish: datetime.date, values: Dict[str, Any]
-    ) -> datetime.date:
-        """Ensure that the finish date is after the start date."""
-        if "start" in values and finish <= values["start"]:
-            raise ValueError("Announcement finish date must come after the start date")
-        return finish
 
 
 # The "level" property determines which admins will be able to modify the
@@ -154,6 +110,13 @@ class LibrarySettings(BaseSettings):
             "the longest dimension does not exceed 135 pixels.",
             category="Client Interface Customization",
             type=ConfigurationFormItemType.IMAGE,
+            level=Level.ALL_ACCESS,
+        ),
+        "announcements": LibraryConfFormItem(
+            label="Scheduled announcements",
+            description="Announcements will be displayed to authenticated patrons.",
+            type=ConfigurationFormItemType.ANNOUNCEMENTS,
+            category="Announcements",
             level=Level.ALL_ACCESS,
         ),
     }
@@ -308,16 +271,6 @@ class LibrarySettings(BaseSettings):
             description="This will be shown to people who aren't sure they've chosen the right library.",
             category="Basic Information",
             level=Level.SYS_ADMIN_ONLY,
-        ),
-    )
-    announcements: List[Announcement] = FormField(
-        [],
-        form=LibraryConfFormItem(
-            label="Scheduled announcements",
-            description="Announcements will be displayed to authenticated patrons.",
-            type=ConfigurationFormItemType.ANNOUNCEMENTS,
-            category="Announcements",
-            level=Level.ALL_ACCESS,
         ),
     )
     help_email: Optional[EmailStr] = FormField(
