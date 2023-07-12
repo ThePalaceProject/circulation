@@ -457,14 +457,7 @@ class TestCirculationPatronProfileStorage:
         assert (
             adobe["drm:scheme"] == "http://librarysimplified.org/terms/drm/scheme/ACS"
         )
-        [device_link, annotations_link] = doc["links"]
-        assert (
-            device_link["rel"] == "http://librarysimplified.org/terms/drm/rel/devices"
-        )
-        assert (
-            device_link["href"]
-            == "http://host/adobe_drm_devices?library_short_name=default"
-        )
+        [annotations_link] = doc["links"]
         assert annotations_link["rel"] == "http://www.w3.org/ns/oa#annotationService"
         assert (
             annotations_link["href"]
