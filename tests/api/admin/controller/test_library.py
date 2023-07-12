@@ -19,6 +19,7 @@ from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME
 from core.model.announcements import Announcement, AnnouncementData
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestLibrarySettings:
@@ -63,34 +64,6 @@ class TestLibrarySettings:
             )
             assert response.get("libraries") == []
 
-    def test_libraries_get_with_geographic_info(self, settings_ctrl_fixture):
-        # Delete any existing library created by the controller test setup.
-        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
-        if library:
-            settings_ctrl_fixture.ctrl.db.session.delete(library)
-
-        test_library = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
-        ConfigurationSetting.for_library(
-            Configuration.LIBRARY_FOCUS_AREA, test_library
-        ).value = '{"CA": ["N3L"], "US": ["11235"]}'
-        ConfigurationSetting.for_library(
-            Configuration.LIBRARY_SERVICE_AREA, test_library
-        ).value = '{"CA": ["J2S"], "US": ["31415"]}'
-
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
-            )
-            library_settings = response.get("libraries")[0].get("settings")
-            assert library_settings.get("focus_area") == {
-                "CA": [{"N3L": "Paris, Ontario"}],
-                "US": [{"11235": "Brooklyn, NY"}],
-            }
-            assert library_settings.get("service_area") == {
-                "CA": [{"J2S": "Saint-Hyacinthe Southwest, Quebec"}],
-                "US": [{"31415": "Savannah, GA"}],
-            }
-
     def test_libraries_get_with_announcements(
         self, settings_ctrl_fixture, announcement_fixture: AnnouncementFixture
     ):
@@ -134,27 +107,27 @@ class TestLibrarySettings:
                     datetime.date,
                 )
 
-    def test_libraries_get_with_multiple_libraries(self, settings_ctrl_fixture):
+    def test_libraries_get_with_multiple_libraries(
+        self, settings_ctrl_fixture, library_fixture: LibraryFixture
+    ):
         # Delete any existing library created by the controller test setup.
         library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
         if library:
             settings_ctrl_fixture.ctrl.db.session.delete(library)
 
-        l1 = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
-        l2 = settings_ctrl_fixture.ctrl.db.library("Library 2", "L2")
-        l3 = settings_ctrl_fixture.ctrl.db.library("Library 3", "L3")
+        l1 = library_fixture.library("Library 1", "L1")
+        l2 = library_fixture.library("Library 2", "L2")
+        l3 = library_fixture.library("Library 3", "L3")
+
         # L2 has some additional library-wide settings.
-        ConfigurationSetting.for_library(Configuration.FEATURED_LANE_SIZE, l2).value = 5
-        ConfigurationSetting.for_library(
-            Configuration.DEFAULT_FACET_KEY_PREFIX
-            + FacetConstants.ORDER_FACET_GROUP_NAME,
-            l2,
-        ).value = FacetConstants.ORDER_TITLE
-        ConfigurationSetting.for_library(
-            Configuration.ENABLED_FACETS_KEY_PREFIX
-            + FacetConstants.ORDER_FACET_GROUP_NAME,
-            l2,
-        ).value = json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_AUTHOR])
+        settings = library_fixture.settings(l2)
+        settings.featured_lane_size = 5
+        settings.facets_default_order = FacetConstants.ORDER_TITLE
+        settings.facets_enabled_order = [
+            FacetConstants.ORDER_TITLE,
+            FacetConstants.ORDER_AUTHOR,
+        ]
+        # TODO: FIX THIS
         ConfigurationSetting.for_library(
             Configuration.LARGE_COLLECTION_LANGUAGES, l2
         ).value = json.dumps(["French"])
@@ -349,16 +322,6 @@ class TestLibrarySettings:
         # so we fail here if our test fixture image is large enough to cause
         # a mismatch between the expected data URL and the one configured.
         assert max(*image.size) <= Configuration.LOGO_MAX_DIMENSION
-
-        original_geographic_validate = GeographicValidator().validate_geographic_areas
-
-        class MockGeographicValidator(GeographicValidator):
-            def __init__(self):
-                self.was_called = False
-
-            def validate_geographic_areas(self, values, db):
-                self.was_called = True
-                return original_geographic_validate(values, db)
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(

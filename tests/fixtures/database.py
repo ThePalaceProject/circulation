@@ -8,7 +8,7 @@ import tempfile
 import time
 import uuid
 from textwrap import dedent
-from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple
+from typing import Callable, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -21,6 +21,7 @@ import core.lane
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import Configuration
+from core.configuration.library import LibrarySettings
 from core.integration.goals import Goals
 from core.log import LogConfiguration
 from core.model import (
@@ -255,7 +256,7 @@ class DatabaseTransactionFixture:
         self,
         name: Optional[str] = None,
         short_name: Optional[str] = None,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: Optional[LibrarySettings] = None,
     ) -> Library:
         # Just a dummy key used for testing.
         key_string = """\
@@ -277,13 +278,13 @@ class DatabaseTransactionFixture:
 
         name = name or self.fresh_str()
         short_name = short_name or self.fresh_str()
-        settings = settings or {}
+        settings_dict = settings.dict() if settings else {}
 
         # Make sure we have defaults for settings that are required
-        if "website" not in settings:
-            settings["website"] = "http://library.com"
-        if "help_web" not in settings and "help_email" not in settings:
-            settings["help_web"] = "http://library.com/support"
+        if "website" not in settings_dict:
+            settings_dict["website"] = "http://library.com"
+        if "help_web" not in settings_dict and "help_email" not in settings_dict:
+            settings_dict["help_web"] = "http://library.com/support"
 
         library, ignore = get_one_or_create(
             self.session,
@@ -294,7 +295,7 @@ class DatabaseTransactionFixture:
                 uuid=str(uuid.uuid4()),
                 public_key=public_key.export_key("PEM").decode("utf-8"),
                 private_key=private_key.export_key("DER"),
-                settings_dict=settings,
+                settings_dict=settings_dict,
             ),
         )
         return library
@@ -1022,11 +1023,6 @@ def db(
     tr = DatabaseTransactionFixture.create(database)
     yield tr
     tr.close()
-
-
-@pytest.fixture
-def default_library(db: DatabaseTransactionFixture) -> Library:
-    return db.default_library()
 
 
 @pytest.fixture

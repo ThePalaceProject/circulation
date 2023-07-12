@@ -1,6 +1,5 @@
 """Test the CirculationAPI."""
 from datetime import timedelta
-from types import SimpleNamespace
 from typing import Union
 from unittest.mock import MagicMock
 
@@ -25,7 +24,6 @@ from core.config import CannotLoadConfiguration
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     ExternalIntegration,
@@ -44,6 +42,7 @@ from tests.api.mockapi.circulation import MockBaseCirculationAPI, MockCirculatio
 
 from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
+from ..fixtures.library import LibraryFixture
 
 
 class CirculationAPIFixture:
@@ -532,7 +531,7 @@ class TestCirculationAPI:
         circulation_api.patron.authorization_expires = old_expires
 
     def test_borrow_with_outstanding_fines(
-        self, circulation_api: CirculationAPIFixture
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
     ):
         # This checkout would succeed...
         now = utc_now()
@@ -549,19 +548,18 @@ class TestCirculationAPI:
         # ...except the patron has too many fines.
         old_fines = circulation_api.patron.fines
         circulation_api.patron.fines = 1000
-        setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, circulation_api.db.default_library()
-        )
-        setting.value = "$0.50"
+        library = circulation_api.db.default_library()
+        library_settings = library_fixture.settings(library)
+        library_settings.max_outstanding_fines = "$0.50"
 
         pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
         # Test the case where any amount of fines are too much.
-        setting.value = "$0"
+        library_settings.max_outstanding_fines = "$0"
         pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
         # Remove the fine policy, and borrow succeeds.
-        setting.value = None
+        library_settings.max_outstanding_fines = None
         loan, i1, i2 = self.borrow(circulation_api)
         assert isinstance(loan, Loan)
 
@@ -691,11 +689,12 @@ class TestCirculationAPI:
         other_library.setting(Configuration.LOAN_LIMIT).value = 1
         assert False == m(patron)
 
-    def test_patron_at_hold_limit(self, circulation_api: CirculationAPIFixture):
+    def test_patron_at_hold_limit(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # The hold limit is a per-library setting.
         library = circulation_api.patron.library
-        settings = SimpleNamespace(**library.settings.dict(exclude_defaults=False))
-        library._settings = settings
+        library_settings = library_fixture.settings(library)
 
         # Unlike the loan limit, it's pretty simple -- every hold counts towards your limit.
         patron = circulation_api.patron
@@ -713,23 +712,25 @@ class TestCirculationAPI:
         assert library.settings.hold_limit == None
         assert m(patron) is False
 
-        settings.hold_limit = 1
+        library_settings.hold_limit = 1
         assert m(patron) is True
-        settings.hold_limit = 2
+        library_settings.hold_limit = 2
         assert m(patron) is True
-        settings.hold_limit = 3
+        library_settings.hold_limit = 3
         assert m(patron) is False
 
         # Setting the hold limit to 0 is treated the same as disabling it.
-        settings.hold_limit = 0
+        library_settings.hold_limit = 0
         assert m(patron) is False
 
         # Another library's setting doesn't affect your limit.
-        other_library = circulation_api.db.library()
-        other_library.setting(Configuration.HOLD_LIMIT).value = 1
+        other_library = library_fixture.library()
+        library_fixture.settings(other_library).hold_limit = 1
         assert m(patron) is False
 
-    def test_enforce_limits(self, circulation_api: CirculationAPIFixture):
+    def test_enforce_limits(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # Verify that enforce_limits works whether the patron is at one, both,
         # or neither of their loan limits.
 
@@ -748,9 +749,11 @@ class TestCirculationAPI:
         #
         # Both limits are set to the same value for the sake of
         # convenience in testing.
-        library = circulation_api.db.library(
-            settings={"loan_limit": 12, "hold_limit": 12}
-        )
+
+        mock_settings = library_fixture.mock_settings()
+        mock_settings.loan_limit = 12
+        mock_settings.hold_limit = 12
+        library = library_fixture.library(settings=mock_settings)
         api = MockVendorAPI()
 
         class Mock(MockCirculationAPI):
@@ -1604,18 +1607,20 @@ class TestCirculationAPI:
 
 
 class TestBaseCirculationAPI:
-    def test_default_notification_email_address(self, db: DatabaseTransactionFixture):
+    def test_default_notification_email_address(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
         # Test the ability to get the default notification email address
         # for a patron or a library.
-        library = db.library(
-            settings={"default_notification_email_address": "help@library"}
-        )
+        settings = library_fixture.mock_settings()
+        settings.default_notification_email_address = "help@library"
+        library = library_fixture.library(settings=settings)
         patron = db.patron(library=library)
         m = BaseCirculationAPI.default_notification_email_address
         assert "help@library" == m(library, None)
         assert "help@library" == m(patron, None)
-        other_library = db.library()
-        assert None == m(other_library, None)
+        other_library = library_fixture.library()
+        assert "noreply@thepalaceproject.org" == m(other_library, None)
 
     def test_can_fulfill_without_loan(self, db: DatabaseTransactionFixture):
         """By default, there is a blanket prohibition on fulfilling a title

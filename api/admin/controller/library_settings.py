@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import uuid
 from io import BytesIO
 from typing import Optional, Tuple
@@ -28,6 +29,7 @@ from core.model.library import LibraryLogo
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 from ...config import Configuration
+from ..announcement_list_validator import AnnouncementListValidator
 from ..form_data import ProcessFormData
 from . import SettingsController
 
@@ -125,38 +127,25 @@ class LibrarySettingsController(SettingsController):
         library.settings_dict = validated_settings.dict()
 
         # Validate and scale logo
-        logo_file = flask.request.files.get("logo")
-        if logo_file:
-            logo = self.validate_and_scale_logo(logo_file)
-            if library.logo:
-                library.logo.content = logo
-            else:
-                library.logo = LibraryLogo(
-                    content=logo,
+        self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
+
+        if ANNOUNCEMENT_SETTING_NAME in flask.request.form:
+            validated_announcements = (
+                AnnouncementListValidator().validate_announcements(
+                    flask.request.form[ANNOUNCEMENT_SETTING_NAME]
                 )
+            )
+            existing_announcements = (
+                self._db.execute(Announcement.library_announcements(library))
+                .scalars()
+                .all()
+            )
+            Announcement.sync(
+                self._db, existing_announcements, validated_announcements, library
+            )
 
         # Trigger a site configuration change
         site_configuration_has_changed(self._db)
-
-        self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
-
-        try:
-            if ANNOUNCEMENT_SETTING_NAME in flask.request.form:
-                validated_announcements = (
-                    AnnouncementListValidator().validate_announcements(
-                        flask.request.form.get(ANNOUNCEMENT_SETTING_NAME)
-                    )
-                )
-                existing_announcements = (
-                    self._db.execute(Announcement.library_announcements(library))
-                    .scalars()
-                    .all()
-                )
-                Announcement.sync(
-                    self._db, existing_announcements, validated_announcements, library
-                )
-        except ProblemError as e:
-            return e.problem_detail
 
         if is_new:
             # Now that the configuration settings are in place, create
@@ -194,7 +183,7 @@ class LibrarySettingsController(SettingsController):
             uuid=library_uuid,
         )
         if library:
-            return library  # type: ignore[no-any-return]
+            return library
         else:
             raise ProblemError(
                 problem_detail=LIBRARY_NOT_FOUND.detailed(
@@ -213,7 +202,7 @@ class LibrarySettingsController(SettingsController):
                 raise ProblemError(problem_detail=LIBRARY_SHORT_NAME_ALREADY_IN_USE)
 
     @staticmethod
-    def _process_image(image: Image.Image, _format="PNG") -> bytes:
+    def _process_image(image: Image.Image, _format: str = "PNG") -> bytes:
         """Convert PIL image to RGBA if necessary and return it
         as base64 encoded bytes.
         """
@@ -230,7 +219,7 @@ class LibrarySettingsController(SettingsController):
         cls,
         library: Library,
         image_file: Optional[FileStorage],
-        max_dimension=Configuration.LOGO_MAX_DIMENSION,
+        max_dimension: int = Configuration.LOGO_MAX_DIMENSION,
     ) -> None:
         if not image_file:
             return None

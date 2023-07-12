@@ -14,10 +14,11 @@ from core.app_server import load_facets_from_request
 from core.entrypoint import AudiobooksEntryPoint, EntryPoint, EverythingEntryPoint
 from core.external_search import SortKeyPagination
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from core.model import CachedFeed, ConfigurationSetting, Edition
+from core.model import CachedFeed, Edition
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
+from tests.fixtures.library import LibraryFixture
 
 
 class TestOPDSFeedController:
@@ -36,7 +37,11 @@ class TestOPDSFeedController:
     page_called_with: Any
     called_with: Any
 
-    def test_feed(self, circulation_fixture: CirculationControllerFixture):
+    def test_feed(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         # Test the feed() method.
@@ -80,13 +85,11 @@ class TestOPDSFeedController:
 
         # Set up configuration settings for links and entry points
         library = circulation_fixture.db.default_library()
-        for rel, value in [
-            (LibraryAnnotator.TERMS_OF_SERVICE, "a"),
-            (LibraryAnnotator.PRIVACY_POLICY, "b"),
-            (LibraryAnnotator.COPYRIGHT, "c"),
-            (LibraryAnnotator.ABOUT, "d"),
-        ]:
-            ConfigurationSetting.for_library(rel, library).value = value
+        settings = library_fixture.settings(library)
+        settings.terms_of_service = "a"
+        settings.privacy_policy = "b"
+        settings.copyright = "c"
+        settings.about = "d"
 
         # Make a real OPDS feed and poke at it.
         with circulation_fixture.request_context_with_library(

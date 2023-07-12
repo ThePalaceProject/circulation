@@ -558,70 +558,71 @@ class LibraryAuthenticator:
         """Create the Authentication For OPDS document to be used when
         a request comes in with no authentication.
         """
-        links = []
-        library = self.library
+        links: List[Dict[str, Optional[str]]] = []
+        if self.library is None:
+            raise ValueError("No library specified!")
 
         # Add the same links that we would show in an OPDS feed.
-        if library.settings.terms_of_service:
+        if self.library.settings.terms_of_service:
             links.append(
                 dict(
                     rel="terms-of-service",
-                    href=library.settings.terms_of_service,
+                    href=self.library.settings.terms_of_service,
                     type="text/html",
                 )
             )
 
-        if library.settings.privacy_policy:
+        if self.library.settings.privacy_policy:
             links.append(
                 dict(
                     rel="privacy-policy",
-                    href=library.settings.privacy_policy,
+                    href=self.library.settings.privacy_policy,
                     type="text/html",
                 )
             )
 
-        if library.settings.copyright:
+        if self.library.settings.copyright:
             links.append(
                 dict(
                     rel="copyright",
-                    href=library.settings.copyright,
+                    href=self.library.settings.copyright,
                     type="text/html",
                 )
             )
 
-        if library.settings.about:
+        if self.library.settings.about:
             links.append(
                 dict(
                     rel="about",
-                    href=library.settings.about,
+                    href=self.library.settings.about,
                     type="text/html",
                 )
             )
 
-        if library.settings.license:
+        if self.library.settings.license:
             links.append(
                 dict(
                     rel="license",
-                    href=library.settings.license,
+                    href=self.library.settings.license,
                     type="text/html",
                 )
             )
 
         # Plus some extra like 'registration' that are specific to Authentication For OPDS.
-        if library.settings.registration_url:
+        if self.library.settings.registration_url:
             links.append(
                 dict(
                     rel="register",
-                    href=library.settings.registration_url,
+                    href=self.library.settings.registration_url,
                     type="text/html",
                 )
             )
 
-        if library.settings.patron_password_reset:
+        if self.library.settings.patron_password_reset:
             links.append(
                 dict(
                     rel="http://librarysimplified.org/terms/rel/patron-password-reset",
-                    href=library.settings.patron_password_reset,
+                    href=self.library.settings.patron_password_reset,
                     type="text/html",
                 )
             )
@@ -657,7 +658,9 @@ class LibraryAuthenticator:
 
         # If there is a Designated Agent email address, add it as a
         # link.
-        designated_agent_uri = Configuration.copyright_designated_agent_uri(library)
+        designated_agent_uri = Configuration.copyright_designated_agent_uri(
+            self.library
+        )
         if designated_agent_uri:
             links.append(
                 dict(
@@ -668,20 +671,22 @@ class LibraryAuthenticator:
 
         # Add a rel="help" link for every type of URL scheme that
         # leads to library-specific help.
-        for type, uri in Configuration.help_uris(library):
+        for type, uri in Configuration.help_uris(self.library):
             links.append(dict(rel="help", href=uri, type=type))
 
         # Add a link to the web page of the library itself.
-        library_uri = library.settings.website
+        library_uri = self.library.settings.website
         if library_uri:
             links.append(dict(rel="alternate", type="text/html", href=library_uri))
 
         # Add the library's logo, if it has one.
-        if library and library.logo:
-            links.append(dict(rel="logo", type="image/png", href=library.logo.data_url))
+        if self.library and self.library.logo:
+            links.append(
+                dict(rel="logo", type="image/png", href=self.library.logo.data_url)
+            )
 
         # Add the library's custom CSS file, if it has one.
-        css_file = library.settings.web_css_file
+        css_file = self.library.settings.web_css_file
         if css_file:
             links.append(dict(rel="stylesheet", type="text/css", href=css_file))
 
@@ -695,13 +700,13 @@ class LibraryAuthenticator:
         ).to_dict(self._db)
 
         # Add the library's mobile color scheme, if it has one.
-        color_scheme = library.settings.color_scheme
+        color_scheme = self.library.settings.color_scheme
         if color_scheme:
             doc["color_scheme"] = color_scheme
 
         # Add the library's web colors, if it has any.
-        primary = library.settings.web_primary_color
-        secondary = library.settings.web_secondary_color
+        primary = self.library.settings.web_primary_color
+        secondary = self.library.settings.web_secondary_color
         if primary or secondary:
             doc["web_color_scheme"] = dict(
                 primary=primary,
@@ -712,7 +717,7 @@ class LibraryAuthenticator:
 
         # Add the description of the library as the OPDS feed's
         # service_description.
-        description = library.settings.library_description
+        description = self.library.settings.library_description
         if description:
             doc["service_description"] = description
 
@@ -733,7 +738,7 @@ class LibraryAuthenticator:
         # offer.
         enabled: List[str] = []
         disabled: List[str] = []
-        if library and library.settings.allow_holds:
+        if self.library and self.library.settings.allow_holds:
             bucket = enabled
         else:
             bucket = disabled
@@ -741,9 +746,9 @@ class LibraryAuthenticator:
         doc["features"] = dict(enabled=enabled, disabled=disabled)
 
         # Add any active announcements for the library.
-        if library:
+        if self.library:
             doc["announcements"] = Announcement.authentication_document_announcements(
-                library
+                self.library
             )
 
         # Finally, give the active annotator a chance to modify the document.
@@ -751,7 +756,7 @@ class LibraryAuthenticator:
         if self.authentication_document_annotator:
             doc = (
                 self.authentication_document_annotator.annotate_authentication_document(
-                    library, doc, url_for
+                    self.library, doc, url_for
                 )
             )
 

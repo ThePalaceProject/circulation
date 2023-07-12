@@ -1,8 +1,5 @@
-from unittest.mock import Mock
-
 import pytest
 
-from core.configuration.library import LibrarySettings
 from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
@@ -13,6 +10,7 @@ from core.entrypoint import (
 from core.external_search import Filter
 from core.model import Edition, Work
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestEntryPoint:
@@ -129,18 +127,23 @@ class TestMediumEntryPoint:
 class TestLibrary:
     """Test a Library's interaction with EntryPoints."""
 
-    def test_enabled_entrypoints(self, db: DatabaseTransactionFixture):
-        l = db.default_library()
+    def test_enabled_entrypoints(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        settings = library_fixture.mock_settings()
+        l = library_fixture.library(settings=settings)
 
         # When the value is not set, the default is used.
         assert EntryPoint.DEFAULT_ENABLED == list(l.entrypoints)
 
         # Names that don't correspond to registered entry points are
         # ignored. Names that do are looked up.
-        l._settings = Mock(spec=LibrarySettings)
-        l.settings.enabled_entry_points = ["no such entry point", AudiobooksEntryPoint.INTERNAL_NAME]  # type: ignore[misc]
+        settings.enabled_entry_points = [
+            "no such entry point",
+            AudiobooksEntryPoint.INTERNAL_NAME,
+        ]
         assert [AudiobooksEntryPoint] == list(l.entrypoints)
 
         # An empty list is a valid value.
-        l.settings.enabled_entry_points = []  # type: ignore[misc]
+        settings.enabled_entry_points = []
         assert [] == list(l.entrypoints)

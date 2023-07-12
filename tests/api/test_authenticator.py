@@ -47,7 +47,6 @@ from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from api.util.patron import PatronUtility
 from core.analytics import Analytics
-from core.configuration.library import LibrarySettings
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
@@ -65,6 +64,7 @@ from core.util.http import IntegrationException, RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail
 
 from ..fixtures.announcements import AnnouncementFixture
+from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_controller import ControllerFixture
@@ -958,11 +958,8 @@ class TestLibraryAuthenticator:
         db: DatabaseTransactionFixture,
         mock_basic: MockBasicFixture,
         announcement_fixture: AnnouncementFixture,
+        library_fixture: LibraryFixture,
     ):
-        class MockLibrarySettings(LibrarySettings):
-            class Config(LibrarySettings.Config):
-                allow_mutation = True
-
         class MockAuthenticator(LibraryAuthenticator):
             """Mock the _geographic_areas method."""
 
@@ -972,8 +969,8 @@ class TestLibraryAuthenticator:
             def _geographic_areas(cls, library):
                 return cls.AREAS
 
-        library = db.default_library()
-        library._settings = MockLibrarySettings(**library.settings_dict)
+        library = library_fixture.library()
+        library_settings = library_fixture.settings(library)
         basic = mock_basic()
         library.name = "A Fabulous Library"
         authenticator = MockAuthenticator(
@@ -1001,36 +998,36 @@ class TestLibraryAuthenticator:
         del os.environ["AUTOINITIALIZE"]
 
         # Set up configuration settings for links.
-        library._settings.terms_of_service = parse_obj_as(HttpUrl, "http://terms.com")
-        library._settings.privacy_policy = parse_obj_as(HttpUrl, "http://privacy.com")
-        library._settings.copyright = parse_obj_as(HttpUrl, "http://copyright.com")
-        library._settings.license = parse_obj_as(HttpUrl, "http://license.ca/")
-        library._settings.about = parse_obj_as(HttpUrl, "http://about.io")
-        library._settings.registration_url = parse_obj_as(
+        library_settings.terms_of_service = parse_obj_as(HttpUrl, "http://terms.com")
+        library_settings.privacy_policy = parse_obj_as(HttpUrl, "http://privacy.com")
+        library_settings.copyright = parse_obj_as(HttpUrl, "http://copyright.com")
+        library_settings.license = parse_obj_as(HttpUrl, "http://license.ca/")
+        library_settings.about = parse_obj_as(HttpUrl, "http://about.io")
+        library_settings.registration_url = parse_obj_as(
             HttpUrl, "https://library.org/register"
         )
-        library._settings.patron_password_reset = parse_obj_as(
+        library_settings.patron_password_reset = parse_obj_as(
             HttpUrl, "https://example.org/reset"
         )
-        library._settings.web_css_file = parse_obj_as(HttpUrl, "http://style.css")
+        library_settings.web_css_file = parse_obj_as(HttpUrl, "http://style.css")
 
-        db.default_library().logo = LibraryLogo(content=b"image data")
+        library.logo = LibraryLogo(content=b"image data")
 
-        library._settings.library_description = "Just the best."
+        library_settings.library_description = "Just the best."
 
         # Set the URL to the library's web page.
-        library._settings.website = parse_obj_as(HttpUrl, "http://library.org/")
+        library_settings.website = parse_obj_as(HttpUrl, "http://library.org/")
 
         # Set the color scheme a mobile client should use.
-        library._settings.color_scheme = "plaid"
+        library_settings.color_scheme = "plaid"
 
         # Set the colors a web client should use.
-        library._settings.web_primary_color = "#012345"
-        library._settings.web_secondary_color = "#abcdef"
+        library_settings.web_primary_color = "#012345"
+        library_settings.web_secondary_color = "#abcdef"
 
         # Configure the various ways a patron can get help.
-        library._settings.help_email = parse_obj_as(EmailStr, "help@library.org")
-        library._settings.help_web = parse_obj_as(HttpUrl, "http://library.help/")
+        library_settings.help_email = parse_obj_as(EmailStr, "help@library.org")
+        library_settings.help_web = parse_obj_as(HttpUrl, "http://library.help/")
 
         base_url = ConfigurationSetting.sitewide(db.session, Configuration.BASE_URL_KEY)
         base_url.value = "http://circulation-manager/"
@@ -1134,7 +1131,7 @@ class TestLibraryAuthenticator:
 
             expect_start = url_for(
                 "index",
-                library_short_name=db.default_library().short_name,
+                library_short_name=library.short_name,
                 _external=True,
             )
             assert expect_start == start["href"]
@@ -1194,8 +1191,8 @@ class TestLibraryAuthenticator:
             # If a separate copyright designated agent is configured,
             # that email address is used instead of the default
             # patron support address.
-            library._settings.copyright_designated_agent_email_address = parse_obj_as(
-                EmailStr, "mailto:dmca@library.org"
+            library_settings.copyright_designated_agent_email_address = parse_obj_as(
+                EmailStr, "dmca@library.org"
             )
             doc = json.loads(authenticator.create_authentication_document())
             [agent] = [x for x in doc["links"] if x["rel"] == copyright_rel]

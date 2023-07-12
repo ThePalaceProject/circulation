@@ -13,6 +13,7 @@ from core.config import Configuration as CoreConfiguration
 from core.model import ConfigurationSetting
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.library import LibraryFixture
 
 
 @pytest.fixture()
@@ -152,26 +153,27 @@ class TestConfiguration:
         )
         assert [["fre", "jpn"], ["spa", "ukr", "ira"], ["nav"]] == m(different_sizes)
 
-    def test_max_outstanding_fines(self, db: DatabaseTransactionFixture):
+    def test_max_outstanding_fines(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
         m = Configuration.max_outstanding_fines
 
-        # By default, fines are not enforced.
-        assert None == m(db.default_library())
+        library = library_fixture.library()
+        settings = library_fixture.settings(library)
 
-        # The maximum fine value is determined by this
-        # ConfigurationSetting.
-        setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, db.default_library()
-        )
+        # By default, fines are not enforced.
+        assert m(library) is None
 
         # Any amount of fines is too much.
-        setting.value = "$0"
-        max_fines = m(db.default_library())
+        settings.max_outstanding_fines = 0
+        max_fines = m(library)
+        assert max_fines is not None
         assert 0 == max_fines.amount
 
         # A more lenient approach.
-        setting.value = "100"
-        max_fines = m(db.default_library())
+        settings.max_outstanding_fines = 100.0
+        max_fines = m(library)
+        assert max_fines is not None
         assert 100 == max_fines.amount
 
     def test_default_opds_format(self):

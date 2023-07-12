@@ -27,7 +27,6 @@ from api.overdrive import (
 from core.config import CannotLoadConfiguration
 from core.metadata_layer import TimestampData
 from core.model import (
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     Edition,
@@ -44,6 +43,7 @@ from tests.api.mockapi.overdrive import MockOverdriveAPI
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 
 from ..fixtures.database import DatabaseTransactionFixture
+from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
@@ -243,7 +243,9 @@ class TestOverdriveAPI:
         assert "Failure!" == str(check_creds.exception)
 
     def test_default_notification_email_address(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        library_fixture: LibraryFixture,
     ):
         """Test the ability of the Overdrive API to detect an email address
         previously given by the patron to Overdrive for the purpose of
@@ -255,13 +257,12 @@ class TestOverdriveAPI:
             "patron_info.json"
         )
         overdrive_api_fixture.api.queue_response(200, content=patron_with_email)
-        patron = db.patron()
+        settings = library_fixture.mock_settings()
+        library = library_fixture.library(settings=settings)
+        patron = db.patron(library=library)
 
         # The site default for notification emails will never be used.
-        configuration_setting = ConfigurationSetting.for_library(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS, db.default_library()
-        )
-        configuration_setting.value = "notifications@example.com"
+        settings.default_notification_email_address = "notifications@example.com"  # type: ignore[assignment]
 
         # If the patron has used a particular email address to put
         # books on hold, use that email address, not the site default.
@@ -276,7 +277,7 @@ class TestOverdriveAPI:
         # the site default, it is ignored. This can only happen if
         # this patron placed a hold using an older version of the
         # circulation manager.
-        patron_with_email["lastHoldEmail"] = configuration_setting.value
+        patron_with_email["lastHoldEmail"] = settings.default_notification_email_address
         overdrive_api_fixture.api.queue_response(200, content=patron_with_email)
         assert None == overdrive_api_fixture.api.default_notification_email_address(
             patron, "pin"

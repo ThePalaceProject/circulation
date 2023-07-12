@@ -219,7 +219,7 @@ class TestConfigurationSetting:
         for o in objs:
             assert o.key == key
 
-        assert [for_library, for_both] == library.settings
+        assert [for_library, for_both] == library.external_integration_settings
         assert [for_integration, for_both] == integration.settings
         assert library == for_both.library
         assert integration == for_both.external_integration
@@ -229,7 +229,7 @@ class TestConfigurationSetting:
         # associated with the library.
         db.session.delete(integration)
         db.session.commit()
-        assert [for_library.id] == [x.id for x in library.settings]
+        assert [for_library.id] == [x.id for x in library.external_integration_settings]
 
     def test_no_orphan_delete_cascade(self, db: DatabaseTransactionFixture):
         # Disconnecting a ConfigurationSetting from a Library or

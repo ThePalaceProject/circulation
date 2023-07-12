@@ -29,6 +29,7 @@ from core.opds import MockAnnotator
 from core.problem_details import INVALID_INPUT, INVALID_URN
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestApplicationVersionController:
@@ -339,21 +340,21 @@ def load_methods_fixture(
 
 
 class TestLoadMethods:
-    def test_load_facets_from_request(self, load_methods_fixture: LoadMethodsFixture):
+    def test_load_facets_from_request(
+        self, load_methods_fixture: LoadMethodsFixture, library_fixture: LibraryFixture
+    ):
         fixture, data = load_methods_fixture, load_methods_fixture.transaction
 
         # The library has two EntryPoints enabled.
-        library = data.library(
-            settings={
-                "enabled_entry_points": [
-                    EbooksEntryPoint.INTERNAL_NAME,
-                    AudiobooksEntryPoint.INTERNAL_NAME,
-                ]
-            }
-        )
+        settings = library_fixture.mock_settings()
+        settings.enabled_entry_points = [
+            EbooksEntryPoint.INTERNAL_NAME,
+            AudiobooksEntryPoint.INTERNAL_NAME,
+        ]
+        library = data.library(settings=settings)
 
         with fixture.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             facets = load_facets_from_request()
             assert Facets.ORDER_TITLE == facets.order
             # Enabled facets are passed in to the newly created Facets,
@@ -361,7 +362,7 @@ class TestLoadMethods:
             assert facets.facets_enabled_at_init is not None
 
         with fixture.app.test_request_context("/?order=bad_facet"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             problemdetail = load_facets_from_request()
             assert INVALID_INPUT.uri == problemdetail.uri
 
@@ -371,7 +372,7 @@ class TestLoadMethods:
         worklist = WorkList()
         worklist.initialize(library)
         with fixture.app.test_request_context("/?entrypoint=Audio"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             facets = load_facets_from_request(worklist=worklist)
             assert AudiobooksEntryPoint == facets.entrypoint
             assert facets.entrypoint_is_default is False
@@ -379,7 +380,7 @@ class TestLoadMethods:
         # If the requested EntryPoint not configured, the default
         # EntryPoint is used.
         with fixture.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
-            flask.request.library = library
+            flask.request.library = library  # type: ignore[attr-defined]
             default_entrypoint = object()
             facets = load_facets_from_request(
                 worklist=worklist, default_entrypoint=default_entrypoint

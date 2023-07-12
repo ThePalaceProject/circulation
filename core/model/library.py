@@ -36,6 +36,7 @@ from core.model.hybrid import hybrid_property
 
 from ..configuration.library import LibrarySettings
 from ..entrypoint import EntryPoint
+from ..facets import FacetConstants
 from . import Base, get_one
 from .announcements import Announcement
 from .customlist import customlist_sharedlibrary
@@ -215,7 +216,7 @@ class Library(Base, HasSessionCache):
         return self.short_name
 
     @classmethod
-    def lookup(cls, _db: Session, short_name: str) -> Optional[Library]:
+    def lookup(cls, _db: Session, short_name: Optional[str]) -> Optional[Library]:
         """Look up a library by short name."""
 
         def _lookup() -> Tuple[Optional[Library], bool]:
@@ -346,7 +347,7 @@ class Library(Base, HasSessionCache):
                 if cls:
                     yield cls
 
-    def enabled_facets(self, group_name):
+    def enabled_facets(self, group_name: str) -> List[str]:
         """Look up the enabled facets for a given facet group."""
         if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
             enabled = []
@@ -361,22 +362,11 @@ class Library(Base, HasSessionCache):
                 enabled.append(collection.name)
             return enabled
 
-        setting = self.enabled_facets_setting(group_name)
-        value = None
+        return getattr(self.settings, f"facets_enabled_{group_name}")  # type: ignore[no-any-return]
 
-        try:
-            value = setting.json_value
-        except ValueError as e:
-            logging.error(
-                "Invalid list of enabled facets for %s: %s", group_name, setting.value
-            )
-        if value is None:
-            value = list(FacetConstants.DEFAULT_ENABLED_FACETS.get(group_name, []))
-        return value
-
-    def enabled_facets_setting(self, group_name):
-        key = self.ENABLED_FACETS_KEY_PREFIX + group_name
-        return self.setting(key)
+    # def enabled_facets_setting(self, group_name):
+    #     key = self.ENABLED_FACETS_KEY_PREFIX + group_name
+    #     return self.setting(key)
 
     @property
     def has_root_lanes(self) -> bool:
@@ -465,6 +455,12 @@ class Library(Base, HasSessionCache):
         return counter
 
     def default_facet(self, group_name: str) -> str:
+        if (
+            group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME
+            or group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME
+        ):
+            return FacetConstants.DEFAULT_FACET[group_name]
+
         """Look up the default facet for a given facet group."""
         return getattr(self.settings, "facets_default_" + group_name)  # type: ignore[no-any-return]
 

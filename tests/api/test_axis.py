@@ -32,7 +32,6 @@ from api.axis import (
 )
 from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
-from api.config import Configuration
 from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.coverage import CoverageFailure
 from core.metadata_layer import (
@@ -45,7 +44,6 @@ from core.metadata_layer import (
 )
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
-    ConfigurationSetting,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -65,6 +63,8 @@ from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
+
+from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_axis_files import AxisFilesFixture
@@ -390,7 +390,7 @@ class TestAxis360API:
         patron.authorization_identifier = axis360.db.fresh_str()
         pytest.raises(NotFoundOnRemote, axis360.api.checkin, patron, "pin", pool)
 
-    def test_place_hold(self, axis360: Axis360Fixture):
+    def test_place_hold(self, axis360: Axis360Fixture, library_fixture: LibraryFixture):
         edition, pool = axis360.db.edition(
             identifier_type=Identifier.AXIS_360_ID,
             data_source_name=DataSource.AXIS_360,
@@ -398,11 +398,13 @@ class TestAxis360API:
         )
         data = axis360.sample_data("place_hold_success.xml")
         axis360.api.queue_response(200, content=data)
-        patron = axis360.db.patron()
-        ConfigurationSetting.for_library(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
-            axis360.db.default_library(),
-        ).value = "notifications@example.com"
+        library = library_fixture.library()
+        library_settings = library_fixture.settings(library)
+        patron = axis360.db.patron(library=library)
+        library_settings.default_notification_email_address = (
+            "notifications@example.com"  # type: ignore[assignment]
+        )
+
         response = axis360.api.place_hold(patron, "pin", pool, None)
         assert 1 == response.hold_position
         assert response.identifier_type == pool.identifier.type

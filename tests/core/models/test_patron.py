@@ -11,6 +11,7 @@ from core.model.licensing import PolicyException
 from core.model.patron import Annotation, Hold, Loan, Patron, PatronProfileStorage
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestAnnotation:
@@ -103,8 +104,12 @@ class TestHold:
         assert pool == hold2.license_pool
         assert hold != hold2
 
-    def test_holds_not_allowed(self, db: DatabaseTransactionFixture):
-        library = db.library(settings={"allow_holds": False})
+    def test_holds_not_allowed(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        settings = library_fixture.mock_settings()
+        settings.allow_holds = False
+        library = library_fixture.library(settings=settings)
         patron = db.patron(library=library)
         edition = db.edition()
         pool = db.licensepool(edition)

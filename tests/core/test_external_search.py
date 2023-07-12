@@ -4,7 +4,6 @@ import time
 import uuid
 from datetime import datetime
 from typing import Callable, Collection, List
-from unittest.mock import MagicMock
 
 import pytest
 from opensearch_dsl import Q
@@ -66,6 +65,7 @@ from tests.fixtures.database import (
     DBStatementCounter,
     PerfTimer,
 )
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
@@ -3734,7 +3734,9 @@ class TestFilter:
             Filter(no_such_keyword="nope")
         assert "Unknown keyword arguments" in str(excinfo.value)
 
-    def test_from_worklist(self, filter_fixture: FilterFixture):
+    def test_from_worklist(
+        self, filter_fixture: FilterFixture, library_fixture: LibraryFixture
+    ):
         data, transaction, session = (
             filter_fixture,
             filter_fixture.transaction,
@@ -3842,8 +3844,8 @@ class TestFilter:
 
         # If the library does not allow holds, this information is
         # propagated to its Filter.
-        library._settings = MagicMock(spec=library._settings)
-        library.settings.allow_holds = False
+        settings = library_fixture.settings(library)
+        settings.allow_holds = False
         filter = Filter.from_worklist(session, parent, facets)
         assert library.settings.allow_holds is False
 

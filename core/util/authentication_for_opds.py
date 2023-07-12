@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -45,7 +45,7 @@ class AuthenticationForOPDSDocument:
         id: str | None = None,
         title: str | None = None,
         authentication_flows: List[OPDSAuthenticationFlow] | None = None,
-        links: List[Dict[str, str]] | None = None,
+        links: List[Dict[str, Optional[str]]] | None = None,
     ):
         """Initialize an Authentication For OPDS document.
 

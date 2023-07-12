@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional
 
 import flask
 import pytest
+from sqlalchemy.orm.attributes import flag_modified
 from werkzeug.datastructures import Authorization
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -308,11 +309,13 @@ class CirculationControllerFixture(ControllerFixture):
 
         # Enable the audiobook entry point for the default library -- a lot of
         # tests verify that non-default entry points can be selected.
-        self.db.default_library().setting(
-            EntryPoint.ENABLED_SETTING
-        ).value = json.dumps(
-            [EbooksEntryPoint.INTERNAL_NAME, AudiobooksEntryPoint.INTERNAL_NAME]
-        )
+        library = self.db.default_library()
+
+        library.settings_dict[EntryPoint.ENABLED_SETTING] = [
+            EbooksEntryPoint.INTERNAL_NAME,
+            AudiobooksEntryPoint.INTERNAL_NAME,
+        ]
+        flag_modified(library, "settings_dict")
 
     def add_works(self, works: list[WorkSpec]):
         """Add works to the database."""

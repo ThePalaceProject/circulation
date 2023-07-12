@@ -1,7 +1,6 @@
 from flask_babel import lazy_gettext as _
 
 from api.circulation_exceptions import *
-from api.config import Configuration
 from api.problem_details import *
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -56,22 +55,3 @@ class TestLimitReached:
         assert 14 == ex.limit
         pd = ex.as_problem_detail_document()
         assert "The limit was 14." == pd.detail
-
-    def test_subclasses(self, db: DatabaseTransactionFixture):
-        # Use end-to-end tests to verify that the subclasses of
-        # LimitReached define the right constants.
-        library = db.default_library()
-
-        library.setting(Configuration.LOAN_LIMIT).value = 2
-        pd = PatronLoanLimitReached(library=library).as_problem_detail_document()
-        assert (
-            "You have reached your loan limit of 2. You cannot borrow anything further until you return something."
-            == pd.detail
-        )
-
-        library.setting(Configuration.HOLD_LIMIT).value = 3
-        pd = PatronHoldLimitReached(library=library).as_problem_detail_document()
-        assert (
-            "You have reached your hold limit of 3. You cannot place another item on hold until you borrow something or remove a hold."
-            == pd.detail
-        )

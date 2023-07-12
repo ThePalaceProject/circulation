@@ -1403,7 +1403,7 @@ class CirculationAPI:
             for loan in patron.loans
             if loan.license_pool and loan.license_pool.open_access == False and loan.end
         ]
-        return loan_limit and len(non_open_access_loans_with_end_date) >= loan_limit
+        return len(non_open_access_loans_with_end_date) >= loan_limit
 
     def patron_at_hold_limit(self, patron):
         """Is the given patron at their hold limit?
@@ -1414,9 +1414,9 @@ class CirculationAPI:
         :param patron: A Patron.
         """
         hold_limit = patron.library.settings.hold_limit
-        if hold_limit is None:
+        if not hold_limit:
             return False
-        return hold_limit and len(patron.holds) >= hold_limit
+        return len(patron.holds) >= hold_limit
 
     def can_fulfill_without_loan(self, patron, pool, lpdm):
         """Can we deliver the given book in the given format to the given
