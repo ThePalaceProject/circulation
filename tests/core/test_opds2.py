@@ -18,6 +18,7 @@ from core.model.resource import Hyperlink
 from core.opds2 import AcquisitonFeedOPDS2, OPDS2Annotator
 from core.util.flask_util import OPDSFeedResponse
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import EndToEndSearchFixture
 from tests.mocks.search import SearchServiceFake
 
 
@@ -29,22 +30,12 @@ class TestOPDS2FeedFixture:
 
 @pytest.fixture
 def opds2_feed_fixture(
-    db: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture, end_to_end_search_fixture: EndToEndSearchFixture
 ) -> TestOPDS2FeedFixture:
     data = TestOPDS2FeedFixture()
     data.transaction = db
-    data.search_integration = db.external_integration(
-        ExternalIntegration.OPENSEARCH,
-        goal=ExternalIntegration.SEARCH_GOAL,
-        url="http://does-not-matter.com",  # It doesn't matter what URL we specify, because the search service is fake
-        settings={
-            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
-            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
-        },
-    )
-    data.search_engine = ExternalSearchIndex(
-        _db=db.session, custom_client_service=SearchServiceFake()
-    )
+    data.search_fixture = end_to_end_search_fixture
+    data.search_engine = data.search_fixture.external_search_index
     data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
@@ -63,7 +54,7 @@ class TestOPDS2Feed:
             with_open_access_download=True, authors="Author Name", fiction=True
         )
 
-        docs = data.search_engine.start_updating_search_documents()
+        docs = data.search_engine.start_migration()
         docs.add_documents(
             data.search_engine.create_search_documents_from_works([work])
         )
@@ -88,7 +79,6 @@ class TestOPDS2Feed:
             opds2_feed_fixture.transaction,
             opds2_feed_fixture.transaction.session,
         )
-
         works = [
             transaction.work(
                 with_open_access_download=True,
@@ -116,7 +106,7 @@ class TestOPDS2Feed:
             ),
         ]
 
-        docs = data.search_engine.start_updating_search_documents()
+        docs = data.search_engine.start_migration()
         docs.add_documents(data.search_engine.create_search_documents_from_works(works))
         docs.finish()
 

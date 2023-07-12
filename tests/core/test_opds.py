@@ -2914,13 +2914,14 @@ class TestEntrypointLinkInsertion:
     def test_groups(
         self,
         entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             entrypoint_link_insertion_fixture,
             entrypoint_link_insertion_fixture.db,
             entrypoint_link_insertion_fixture.db.session,
         )
+        end_to_end_search_fixture.external_search_index.start_migration().finish()
 
         # When AcquisitionFeed.groups() generates a grouped
         # feed, it will link to different entry points into the feed,
@@ -2938,7 +2939,7 @@ class TestEntrypointLinkInsertion:
                 data.annotator,
                 max_age=0,
                 facets=facets,
-                search_engine=external_search_fake_fixture.external_search,
+                search_engine=end_to_end_search_fixture.external_search_index,
             )
             return data.mock.called_with
 
