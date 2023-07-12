@@ -4758,44 +4758,25 @@ class TestBulkUpdate:
 
 class TestSearchErrors:
     def test_search_connection_timeout(
-        self, external_search_fixture: ExternalSearchFixture
+        self, external_search_fake_fixture: ExternalSearchFixtureFake
     ):
         search, transaction = (
-            external_search_fixture,
-            external_search_fixture.db,
+            external_search_fake_fixture,
+            external_search_fake_fixture.db,
         )
 
-        attempts = []
-
-        def bulk_with_timeout(docs, raise_on_error=False, raise_on_exception=False):
-            attempts.append(docs)
-
-            def error(doc):
-                return dict(
-                    index=dict(
-                        status="TIMEOUT",
-                        exception="ConnectionTimeout",
-                        error="Connection Timeout!",
-                        _id=doc["_id"],
-                        data=doc,
-                    )
-                )
-
-            errors = list(map(error, docs))
-            return 0, errors
-
-        search.search.bulk = bulk_with_timeout
-
+        search.search.set_failing_mode(mode=SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS_TIMEOUT)
         work = transaction.work()
         work.set_presentation_ready()
-        successes, failures = search.search.bulk_update([work])
-        assert [] == successes
-        assert 1 == len(failures)
-        assert work == failures[0][0]
-        assert "Connection Timeout!" == failures[0][1]
 
-        # When all the documents fail, it tries again once with the same arguments.
-        assert [work.id, work.id] == [docs[0]["_id"] for docs in attempts]
+        docs = search.external_search.start_updating_search_documents()
+        failures = docs.add_documents(search.external_search.create_search_documents_from_works([work]))
+        assert 1 == len(failures)
+        assert work.id == failures[0].id
+        assert "Connection Timeout!" == failures[0].error_message
+
+        # Submissions are not retried by the base service
+        assert [work.id] == [docs["_id"] for docs in search.search.document_submission_attempts]
 
     def test_search_single_document_error(
         self, external_search_fixture: ExternalSearchFixture

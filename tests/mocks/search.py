@@ -18,6 +18,7 @@ class SearchServiceFailureMode(Enum):
 
     NOT_FAILING = 0
     FAIL_INDEXING_DOCUMENTS = 1
+    FAIL_INDEXING_DOCUMENTS_TIMEOUT = 3
     FAIL_ENTIRELY = 2
 
 
@@ -29,6 +30,7 @@ class SearchServiceFake(SearchService):
     _search_client: Search
     _multi_search_client: MultiSearch
     _indexes_created: List[str]
+    _document_submission_attempts: List[dict]
 
     def __init__(self):
         self._failing = SearchServiceFailureMode.NOT_FAILING
@@ -38,6 +40,11 @@ class SearchServiceFake(SearchService):
         self._search_client = Search(using=MagicMock())
         self._multi_search_client = MultiSearch(using=MagicMock())
         self._indexes_created = []
+        self._document_submission_attempts = []
+
+    @property
+    def document_submission_attempts(self) -> List[dict]:
+        return self._document_submission_attempts
 
     def indexes_created(self) -> List[str]:
         return self._indexes_created
@@ -117,17 +124,31 @@ class SearchServiceFake(SearchService):
         self, pointer: str, documents: Iterable[dict]
     ) -> List[SearchServiceFailedDocument]:
         self._fail_if_necessary()
-        if self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS:
+
+        _should_fail = False
+        _should_fail = _should_fail or self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS
+        _should_fail = _should_fail or self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS_TIMEOUT
+
+        if _should_fail:
             results: List[SearchServiceFailedDocument] = []
             for document in documents:
-                results.append(
-                    SearchServiceFailedDocument(
+                self._document_submission_attempts.append(document)
+                if self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS:
+                    _error = SearchServiceFailedDocument(
                         document["_id"],
                         error_message="There was an error!",
                         error_status=500,
                         error_exception="Exception",
                     )
-                )
+                else:
+                    _error  = SearchServiceFailedDocument(
+                        document["_id"],
+                        error_message="Connection Timeout!",
+                        error_status=0,
+                        error_exception="ConnectionTimeout",
+                    )
+                results.append(_error )
+
             return results
 
         if not (pointer in self._documents_by_index):
