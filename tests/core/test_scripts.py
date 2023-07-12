@@ -2139,11 +2139,14 @@ class TestSearchIndexCoverageRemover:
 
 
 class TestUpdateLaneSizeScript:
-    def test_do_run(self, db, external_search_fake_fixture: ExternalSearchFixtureFake):
+    def test_do_run(self, db, end_to_end_search_fixture: EndToEndSearchFixture):
+        end_to_end_search_fixture.external_search_index.start_migration().finish()
+
         lane = db.lane()
         lane.size = 100
         UpdateLaneSizeScript(
-            db.session, search_index_client=external_search_fake_fixture.external_search
+            db.session,
+            search_index_client=end_to_end_search_fixture.external_search_index,
         ).do_run(cmd_args=[])
         assert 0 == lane.size
 
@@ -2165,15 +2168,18 @@ class TestUpdateLaneSizeScript:
     def test_site_configuration_has_changed(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
+        end_to_end_search_fixture.external_search_index.start_migration().finish()
+
         library = db.default_library()
         lane1 = db.lane()
         lane2 = db.lane()
 
         # Run the script to create all the default config settings.
         UpdateLaneSizeScript(
-            db.session, search_index_client=external_search_fake_fixture.external_search
+            db.session,
+            search_index_client=end_to_end_search_fixture.external_search_index,
         ).do_run(cmd_args=[])
 
         # Set the lane sizes

@@ -117,7 +117,7 @@ class SearchServiceFake(SearchService):
         self, pointer: str, documents: Iterable[dict]
     ) -> List[SearchServiceFailedDocument]:
         self._fail_if_necessary()
-        if self._failing:
+        if self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS:
             results: List[SearchServiceFailedDocument] = []
             for document in documents:
                 results.append(
