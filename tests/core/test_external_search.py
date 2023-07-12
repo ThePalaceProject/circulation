@@ -522,6 +522,7 @@ class TestExternalSearchWithWorks:
         transaction = fixture.external_search.db
         session = transaction.session
 
+        fixture.external_search_index.start_migration().finish()
         data = self._populate_works(fixture)
         fixture.populate_search_index()
 
@@ -4785,36 +4786,31 @@ class TestSearchErrors:
         ]
 
     def test_search_single_document_error(
-        self, external_search_fixture: ExternalSearchFixture
+        self, external_search_fake_fixture: ExternalSearchFixtureFake
     ):
         search, transaction = (
-            external_search_fixture,
-            external_search_fixture.db,
+            external_search_fake_fixture,
+            external_search_fake_fixture.db,
         )
 
-        successful_work = transaction.work()
-        successful_work.set_presentation_ready()
-        failing_work = transaction.work()
-        failing_work.set_presentation_ready()
+        search.search.set_failing_mode(
+            mode=SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS
+        )
+        work = transaction.work()
+        work.set_presentation_ready()
 
-        def bulk_with_error(docs, raise_on_error=False, raise_on_exception=False):
-            failures = [
-                dict(
-                    data=dict(_id=failing_work.id),
-                    error="There was an error!",
-                    exception="Exception",
-                )
-            ]
-            success_count = 1
-            return success_count, failures
-
-        search.search.bulk = bulk_with_error
-
-        successes, failures = search.search.bulk_update([successful_work, failing_work])
-        assert [successful_work] == successes
+        docs = search.external_search.start_updating_search_documents()
+        failures = docs.add_documents(
+            search.external_search.create_search_documents_from_works([work])
+        )
         assert 1 == len(failures)
-        assert failing_work == failures[0][0]
-        assert "There was an error!" == failures[0][1]
+        assert work.id == failures[0].id
+        assert "There was an error!" == failures[0].error_message
+
+        # Submissions are not retried by the base service
+        assert [work.id] == [
+            docs["_id"] for docs in search.search.document_submission_attempts
+        ]
 
 
 class TestWorkSearchResult:
