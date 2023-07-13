@@ -8,11 +8,10 @@ from flask_babel import lazy_gettext as _
 from core.config import CannotLoadConfiguration  # noqa: autoflake
 from core.config import IntegrationException  # noqa: autoflake
 from core.config import Configuration as CoreConfiguration
-from core.model import ConfigurationSetting
+from core.model import ConfigurationSetting, announcements
+from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
 from core.model.constants import LinkRelations
 from core.util import MoneyUtility
-
-from .announcements import Announcements
 
 
 class Configuration(CoreConfiguration):
@@ -238,7 +237,7 @@ class Configuration(CoreConfiguration):
             "level": CoreConfiguration.SYS_ADMIN_ONLY,
         },
         {
-            "key": Announcements.SETTING_NAME,
+            "key": announcements.SETTING_NAME,
             "label": _("Scheduled announcements"),
             "description": _(
                 "Announcements will be displayed to authenticated patrons."
@@ -562,7 +561,7 @@ class Configuration(CoreConfiguration):
 
     ANNOUNCEMENT_SETTINGS = [
         {
-            "key": Announcements.GLOBAL_SETTING_NAME,
+            "key": ANNOUNCEMENT_SETTING_NAME,
             "label": _("Scheduled announcements"),
             "description": _(
                 "Announcements will be displayed to authenticated patrons."

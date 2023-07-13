@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Unio
 import pytest
 import pytest_alembic
 from pytest_alembic.config import Config
+from sqlalchemy import inspect
 
 from tests.fixtures.database import ApplicationFixture, DatabaseFixture
 
@@ -109,9 +110,30 @@ def create_library(random_name: RandomName) -> CreateLibrary:
             name = random_name()
         if short_name is None:
             short_name = random_name()
+
+        # See if we need to include public and private keys
+        inspector = inspect(connection)
+        columns = inspector.get_columns("libraries")
+        if "public_key" in [column["name"] for column in columns]:
+            include_keys = True
+        else:
+            include_keys = False
+
+        args = {
+            "name": name,
+            "short_name": short_name,
+        }
+
+        if include_keys:
+            args["public_key"] = random_name()
+            args["private_key"] = random_name()
+
+        keys = ",".join(args.keys())
+        values = ",".join([f"'{value}'" for value in args.values()])
         library = connection.execute(
-            f"INSERT INTO libraries (name, short_name) VALUES ('{name}', '{short_name}') returning id"
+            f"INSERT INTO libraries ({keys}) VALUES ({values}) returning id"
         ).fetchone()
+
         assert library is not None
         assert isinstance(library.id, int)
         return library.id

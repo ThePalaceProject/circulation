@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
-from api.announcements import Announcements
 from api.authentication.base import PatronData
 from api.authentication.basic import (
     BarcodeFormats,
@@ -64,6 +63,8 @@ from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException, RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail
+
+from ..fixtures.announcements import AnnouncementFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_controller import ControllerFixture
@@ -953,7 +954,10 @@ class TestLibraryAuthenticator:
         assert authenticator.get_credential_from_header(credential) is None
 
     def test_create_authentication_document(
-        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
+        announcement_fixture: AnnouncementFixture,
     ):
         class MockAuthenticator(LibraryAuthenticator):
             """Mock the _geographic_areas method."""
@@ -1044,55 +1048,41 @@ class TestLibraryAuthenticator:
         base_url = ConfigurationSetting.sitewide(db.session, Configuration.BASE_URL_KEY)
         base_url.value = "http://circulation-manager/"
 
-        # Configure three announcements: two active and one
-        # inactive.
-        format = "%Y-%m-%d"
-        today_date = datetime.date.today()
-        yesterday = (today_date - datetime.timedelta(days=1)).strftime(format)
-        two_days_ago = (today_date - datetime.timedelta(days=2)).strftime(format)
-        today = today_date.strftime(format)
-        announcements = [
-            dict(
-                id="a1",
-                content="this is announcement 1",
-                start=yesterday,
-                finish=today,
-            ),
-            dict(
-                id="a2",
-                content="this is announcement 2",
-                start=two_days_ago,
-                finish=yesterday,
-            ),
-            dict(
-                id="a3",
-                content="this is announcement 3",
-                start=yesterday,
-                finish=today,
-            ),
-        ]
-        announcement_setting = ConfigurationSetting.for_library(
-            Announcements.SETTING_NAME, library
+        # Configure three library announcements: two active and one inactive.
+        a1_db = announcement_fixture.create_announcement(
+            db.session,
+            content="this is announcement 1",
+            start=announcement_fixture.yesterday,
+            finish=announcement_fixture.today,
+            library=library,
         )
-        announcement_setting.value = json.dumps(announcements)
-        announcement_for_all_setting = ConfigurationSetting.sitewide(
-            db.session, Announcements.GLOBAL_SETTING_NAME
+        announcement_fixture.create_announcement(
+            db.session,
+            content="this is announcement 2",
+            start=announcement_fixture.a_week_ago,
+            finish=announcement_fixture.yesterday,
+            library=library,
         )
-        announcement_for_all_setting.value = json.dumps(
-            [
-                dict(
-                    id="all1",
-                    content="test announcement",
-                    start=yesterday,
-                    finish=today,
-                ),
-                dict(
-                    id="all2",
-                    content="test announcement",
-                    start=two_days_ago,
-                    finish=yesterday,
-                ),
-            ]
+        a3_db = announcement_fixture.create_announcement(
+            db.session,
+            content="this is announcement 3",
+            start=announcement_fixture.yesterday,
+            finish=announcement_fixture.today,
+            library=library,
+        )
+
+        # Configure two site-wide announcements: one active and one inactive.
+        a4_db = announcement_fixture.create_announcement(
+            db.session,
+            content="this is announcement 4",
+            start=announcement_fixture.yesterday,
+            finish=announcement_fixture.today,
+        )
+        announcement_fixture.create_announcement(
+            db.session,
+            content="this is announcement 5",
+            start=announcement_fixture.a_week_ago,
+            finish=announcement_fixture.yesterday,
         )
 
         with self.app.test_request_context("/"):
@@ -1212,10 +1202,10 @@ class TestLibraryAuthenticator:
             )
 
             # Active announcements are published; inactive announcements are not.
-            all1, a1, a3 = doc["announcements"]
-            assert dict(id="a1", content="this is announcement 1") == a1
-            assert dict(id="a3", content="this is announcement 3") == a3
-            assert dict(id="all1", content="test announcement") == all1
+            a4, a1, a3 = doc["announcements"]
+            assert dict(id=str(a1_db.id), content="this is announcement 1") == a1
+            assert dict(id=str(a3_db.id), content="this is announcement 3") == a3
+            assert dict(id=str(a4_db.id), content="this is announcement 4") == a4
 
             # Features that are enabled for this library are communicated
             # through the 'features' item.
@@ -1240,15 +1230,16 @@ class TestLibraryAuthenticator:
             for key in ("focus_area", "service_area"):
                 assert key not in doc
 
-            # Only global anouncements
-            announcement_setting.value = None
+            # Only global announcements
+            for announcement in [a1_db, a3_db]:
+                db.session.delete(announcement)
             doc = json.loads(authenticator.create_authentication_document())
-            assert [dict(id="all1", content="test announcement")] == doc[
+            assert [dict(id=str(a4_db.id), content="this is announcement 4")] == doc[
                 "announcements"
             ]
             # If there are no announcements, the list of announcements is present
             # but empty.
-            announcement_for_all_setting.value = None
+            db.session.delete(a4_db)
             doc = json.loads(authenticator.create_authentication_document())
             assert [] == doc["announcements"]
 
