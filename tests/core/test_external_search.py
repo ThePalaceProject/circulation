@@ -150,30 +150,34 @@ class TestExternalSearch:
         assert pagination.offset == default.offset
         assert pagination.size == default.size
 
-    def test__run_self_tests(
-        self, external_search_fake_fixture: ExternalSearchFixtureFake
-    ):
-        transaction = external_search_fake_fixture.db
+    def test__run_self_tests(self, end_to_end_search_fixture: EndToEndSearchFixture):
+        transaction = end_to_end_search_fixture.db
         session = transaction.session
-        index = external_search_fake_fixture.external_search
+        index = end_to_end_search_fixture.external_search_index
+
+        # Intrusively set the search term to something useful.
+        index._test_search_term = "How To Search"
+
+        # Start with an up-to-date but empty index.
+        index.start_migration().finish()
 
         # First, see what happens when the search returns no results.
-        test_results = [x for x in index._run_self_tests(session, in_testing=True)]
+        test_results = [x for x in index._run_self_tests(session)]
 
-        assert "Search results for 'a search term':" == test_results[0].name
+        assert "Search results for 'How To Search':" == test_results[0].name
         assert True == test_results[0].success
         assert [] == test_results[0].result
 
-        assert "Search document for 'a search term':" == test_results[1].name
+        assert "Search document for 'How To Search':" == test_results[1].name
         assert True == test_results[1].success
-        assert "[]" == test_results[1].result
+        assert {} != test_results[1].result
 
-        assert "Raw search results for 'a search term':" == test_results[2].name
+        assert "Raw search results for 'How To Search':" == test_results[2].name
         assert True == test_results[2].success
         assert [] == test_results[2].result
 
         assert (
-            "Total number of search results for 'a search term':"
+            "Total number of search results for 'How To Search':"
             == test_results[3].name
         )
         assert True == test_results[3].success
@@ -188,34 +192,29 @@ class TestExternalSearch:
         assert "{}" == test_results[5].result
 
         # Set up the search index so it will return a result.
-        collection = transaction.collection()
+        work = end_to_end_search_fixture.external_search.default_work(
+            title="How To Search"
+        )
+        work.presentation_ready = True
+        work.presentation_edition.subtitle = "How To Search"
+        work.presentation_edition.series = "Classics"
+        work.summary_text = "How To Search!"
+        work.presentation_edition.publisher = "Project Gutenberg"
+        work.last_update_time = datetime_utc(2019, 1, 1)
+        work.license_pools[0].licenses_available = 100000
 
-        search_result = MockSearchResult("Sample Book Title", "author", {}, "id")
-        index.index("index", "id", search_result)
-        test_results = [x for x in index._run_self_tests(session, in_testing=True)]
+        docs = index.start_updating_search_documents()
+        docs.add_documents(index.create_search_documents_from_works([work]))
+        docs.finish()
 
-        assert "Search results for 'a search term':" == test_results[0].name
+        test_results = [x for x in index._run_self_tests(session)]
+
+        assert "Search results for 'How To Search':" == test_results[0].name
         assert True == test_results[0].success
-        assert ["Sample Book Title (author)"] == test_results[0].result
-
-        assert "Search document for 'a search term':" == test_results[1].name
-        assert True == test_results[1].success
-        result = json.loads(test_results[1].result)
-        sample_book = {
-            "author": "author",
-            "meta": {"id": "id", "_sort": ["Sample Book Title", "author", "id"]},
-            "id": "id",
-            "title": "Sample Book Title",
-        }
-        assert sample_book == result
-
-        assert "Raw search results for 'a search term':" == test_results[2].name
-        assert True == test_results[2].success
-        result = json.loads(test_results[2].result[0])
-        assert sample_book == result
+        assert [f"How To Search ({work.author})"] == test_results[0].result
 
         assert (
-            "Total number of search results for 'a search term':"
+            "Total number of search results for 'How To Search':"
             == test_results[3].name
         )
         assert True == test_results[3].success
@@ -228,7 +227,7 @@ class TestExternalSearch:
         assert "Total number of documents per collection:" == test_results[5].name
         assert True == test_results[5].success
         result = json.loads(test_results[5].result)
-        assert {collection.name: 1} == result
+        assert {"Default Collection": 1} == result
 
 
 class TestSearchV5:

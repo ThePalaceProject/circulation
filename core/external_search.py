@@ -339,8 +339,15 @@ class ExternalSearchIndex(HasSelfTests):
 
         pagination = pagination or Pagination.default()
         query_data = (query_string, filter, pagination)
-        [result] = self.query_works_multi([query_data], debug)
-        return result
+        query_hits = self.query_works_multi([query_data], debug)
+        if not query_hits:
+            return []
+
+        result_list = list(query_hits)
+        if not result_list:
+            return []
+
+        return result_list[0]
 
     def query_works_multi(self, queries, debug=False):
         """Run several queries simultaneously and return the results
@@ -441,7 +448,7 @@ class ExternalSearchIndex(HasSelfTests):
             pointer=self._search_read_pointer, id=work.id
         )
 
-    def _run_self_tests(self, _db, in_testing=False):
+    def _run_self_tests(self, _db):
         # Helper methods for setting up the self-tests:
 
         def _search():
@@ -466,10 +473,6 @@ class ExternalSearchIndex(HasSelfTests):
 
         def _get_raw_doc():
             search = _search()
-            if in_testing:
-                if not len(search):
-                    return str(search)
-                search = search[0]
             return json.dumps(search.to_dict(), indent=1)
 
         yield self.run_test(
@@ -485,10 +488,9 @@ class ExternalSearchIndex(HasSelfTests):
         )
 
         def _count_docs():
-            # The mock methods used in testing return a list, so we have to call len() rather than count().
-            if in_testing:
-                return str(len(self._search))
-            return str(self._search.count())
+            service = self.search_service()
+            client = service.search_client()
+            return str(client.count())
 
         yield self.run_test(
             ("Total number of search results for '%s':" % (self._test_search_term)),
