@@ -32,6 +32,7 @@ class TestMigrator:
         service.read_pointer = MagicMock(return_value=None)
         service.write_pointer = MagicMock(return_value=None)
         service.index_is_populated = MagicMock(return_value=False)
+        service.index_set_populated = MagicMock()
 
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
@@ -52,6 +53,7 @@ class TestMigrator:
         # Both the read and write pointers are set.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
+        service.index_set_populated.assert_called_with("works", revision)
 
     def test_migrate_upgrade(self):
         """Index 2 exists, and we can migrate to 3."""
@@ -61,6 +63,7 @@ class TestMigrator:
         service.index_is_populated = MagicMock(return_value=False)
         service.index_set_mapping = MagicMock()
         service.index_submit_documents = MagicMock()
+        service.index_set_populated = MagicMock()
 
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
@@ -99,6 +102,7 @@ class TestMigrator:
         # Both the read and write pointers are set.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
+        service.index_set_populated.assert_called_with("works", revision)
 
     def test_migrate_upgrade_cancel(self):
         """Cancelling a migration leaves the pointers untouched."""
@@ -108,6 +112,7 @@ class TestMigrator:
         service.index_is_populated = MagicMock(return_value=False)
         service.index_set_mapping = MagicMock()
         service.index_submit_documents = MagicMock()
+        service.index_set_populated = MagicMock()
 
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
@@ -146,6 +151,7 @@ class TestMigrator:
         # Both the read and write pointers are left untouched.
         service.write_pointer_set.assert_not_called()
         service.read_pointer_set.assert_not_called()
+        service.index_set_populated.assert_not_called()
 
     def test_migrate_no_op(self):
         """Index 3 already exists, so migrating to 3 is a no-op."""
@@ -153,6 +159,7 @@ class TestMigrator:
         service.read_pointer = MagicMock(return_value="works-v3")
         service.write_pointer = MagicMock(return_value=SearchWritePointer("works", 3))
         service.index_is_populated = MagicMock(return_value=True)
+        service.index_set_populated = MagicMock()
 
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
@@ -172,6 +179,8 @@ class TestMigrator:
         service.write_pointer_set.assert_called_with("works", revision)
         # The read pointer is set redundantly.
         service.read_pointer_set.assert_called_with("works", revision)
+        # The "indexed" flag is set redundantly.
+        service.index_set_populated.assert_called_with("works", revision)
 
     def test_migrate_from_indexed_2_to_3_unpopulated(self):
         """Index 3 exists but is not populated. Migrating involves populating it."""
@@ -179,6 +188,7 @@ class TestMigrator:
         service.read_pointer = MagicMock(return_value="works-v2")
         service.write_pointer = MagicMock(return_value=SearchWritePointer("works", 2))
         service.index_is_populated = MagicMock(return_value=False)
+        service.index_set_populated = MagicMock()
 
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
@@ -206,6 +216,7 @@ class TestMigrator:
         # Both the read and write pointers are updated.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
+        service.index_set_populated.assert_called_with("works", revision)
 
     def test_migrate_from_indexed_2_to_3_write_unset(self):
         """Index 3 exists and is populated, but the write pointer is unset."""
@@ -213,6 +224,7 @@ class TestMigrator:
         service.read_pointer = MagicMock(return_value="works-v2")
         service.write_pointer = MagicMock(return_value=None)
         service.index_is_populated = MagicMock(return_value=True)
+        service.index_set_populated = MagicMock()
 
         revision = EmptyRevision(3)
         revisions = SearchRevisionDirectory({revision.version: revision})
@@ -232,3 +244,4 @@ class TestMigrator:
         # Both the read and write pointers are updated.
         service.write_pointer_set.assert_called_with("works", revision)
         service.read_pointer_set.assert_called_with("works", revision)
+        service.index_set_populated.assert_called_with("works", revision)

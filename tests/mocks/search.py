@@ -102,6 +102,11 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
         self._read_pointer = f"{revision.name_for_indexed_pointer(base_name)}"
 
+    def index_set_populated(
+        self, base_name: str, revision: SearchSchemaRevision
+    ) -> None:
+        self._fail_if_necessary()
+
     def read_pointer_set_empty(self, base_name: str) -> None:
         self._fail_if_necessary()
         self._read_pointer = f"{base_name}-empty"

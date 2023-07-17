@@ -114,6 +114,12 @@ class SearchService(ABC):
         """Return True if the index for the given base name and revision has been populated."""
 
     @abstractmethod
+    def index_set_populated(
+        self, base_name: str, revision: SearchSchemaRevision
+    ) -> None:
+        """Set an index as populated."""
+
+    @abstractmethod
     def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
         """Set the schema mappings for the given index."""
 
@@ -202,6 +208,22 @@ class SearchServiceOpensearch1(SearchService):
             ]
         }
         self._logger.debug(f"setting read pointer {alias_name} to index {target_index}")
+        self._client.indices.update_aliases(body=action)
+
+    def index_set_populated(
+        self, base_name: str, revision: SearchSchemaRevision
+    ) -> None:
+        alias_name = revision.name_for_indexed_pointer(base_name)
+        target_index = revision.name_for_index(base_name)
+        action = {
+            "actions": [
+                {"remove": {"index": "*", "alias": alias_name}},
+                {"add": {"index": target_index, "alias": alias_name}},
+            ]
+        }
+        self._logger.debug(
+            f"creating 'indexed' flag alias {alias_name} for index {target_index}"
+        )
         self._client.indices.update_aliases(body=action)
 
     def read_pointer_set_empty(self, base_name: str) -> None:

@@ -86,6 +86,8 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
         self._logger.info(f"Completing migration to {self._revision.version}")
         # Make sure all changes are committed.
         self._receiver.finish()
+        # Create the "indexed" alias.
+        self._service.index_set_populated(self._base_name, self._revision)
         # Update the write pointer to point to the now-populated index.
         self._service.write_pointer_set(self._base_name, self._revision)
         # Set the read pointer to point at the now-populated index
