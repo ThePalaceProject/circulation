@@ -1574,22 +1574,23 @@ class TestOPDS:
     def test_empty_groups_feed(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
             opds_fixture.db.session,
         )
+        search_engine = end_to_end_search_fixture.external_search_index
+        docs = search_engine.start_migration()
+        docs.finish()
 
         # Test the case where a grouped feed turns up nothing.
 
         # A Lane, and a Work not in the Lane.
         test_lane = db.lane("Test Lane", genres=["Mystery"])
 
-        # Mock search index and Annotator.
-        search_engine = external_search_fake_fixture.external_search
-
+        # Mock Annotator.
         class Mock(MockAnnotator):
             def annotate_feed(self, feed, worklist):
                 self.called = True
