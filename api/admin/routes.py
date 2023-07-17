@@ -384,16 +384,6 @@ def collection_self_tests(identifier):
     )
 
 
-@app.route("/admin/collection_library_registrations", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def collection_library_registrations():
-    return (
-        app.manager.admin_collection_library_registrations_controller.process_collection_library_registrations()
-    )
-
-
 @app.route("/admin/individual_admins", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @allows_admin_auth_setup
