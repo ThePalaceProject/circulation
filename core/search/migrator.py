@@ -112,8 +112,8 @@ class SearchMigrator:
     ) -> Optional[SearchMigrationInProgress]:
         """
         Migrate to the given version using the given base name (such as 'circulation-works'). The function returns
-        a generator that expects to receive batches of search documents used to populate any new index. When all
-        the batches of documents have been sent to the generator, callers must send `[]` to indicate to the search
+        an object that expects to receive batches of search documents used to populate any new index. When all
+        the batches of documents have been sent to the object, callers must call 'finish' to indicate to the search
         migrator that no more documents are coming. Only at this point will the migrator consider the new index to be
         "populated".
 
