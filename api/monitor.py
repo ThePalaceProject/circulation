@@ -13,13 +13,12 @@ from core.model import (
 from core.monitor import ReaperMonitor
 from core.util.datetime_helpers import utc_now
 
-from .odl import ODLAPI, SharedODLAPI
+from .odl import ODLAPI
 
 
 class LoanlikeReaperMonitor(ReaperMonitor):
     SOURCE_OF_TRUTH_PROTOCOLS = [
         ODLAPI.NAME,
-        SharedODLAPI.NAME,
         ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
     ]
 

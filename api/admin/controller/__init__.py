@@ -198,13 +198,6 @@ def setup_admin_controllers(manager):
     manager.admin_collection_self_tests_controller = CollectionSelfTestsController(
         manager
     )
-    from api.admin.controller.collection_library_registrations import (
-        CollectionLibraryRegistrationsController,
-    )
-
-    manager.admin_collection_library_registrations_controller = (
-        CollectionLibraryRegistrationsController(manager)
-    )
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
     )
