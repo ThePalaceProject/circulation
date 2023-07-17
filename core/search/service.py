@@ -58,7 +58,13 @@ class SearchServiceFailedDocument:
                 error_exception="<unavailable>",
             )
         else:
-            raise NotImplementedError
+            # Not exactly ideal, but we really have no idea what the bulk API can return.
+            return SearchServiceFailedDocument(
+                id=-1,
+                error_message="Unrecognized error returned from Opensearch bulk API.",
+                error_status=-1,
+                error_exception=f"{error}",
+            )
 
 
 class SearchService(ABC):
