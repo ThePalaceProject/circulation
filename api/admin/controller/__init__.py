@@ -64,7 +64,7 @@ from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
 from api.odilo import OdiloAPI
-from api.odl import ODLAPI, SharedODLAPI
+from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
