@@ -254,7 +254,7 @@ class SearchServiceOpensearch1(SearchService):
         # See: Sources for "streaming_bulk":
         # https://github.com/opensearch-project/opensearch-py/blob/db972e615b9156b4e364091d6a893d64fb3ef4f3/opensearchpy/helpers/actions.py#L267
         # The documentation is incredibly vague about what the function actually returns, but these
-        # parameters _should_ cause it to return a tuple containing the number of successfully documents
+        # parameters _should_ cause it to return a tuple containing the number of successfully indexed documents
         # and a list of documents that failed. Unfortunately, the type checker disagrees and the documentation
         # gives no hint as to what an "int" might mean for errors.
         (success_count, errors) = opensearchpy.helpers.bulk(
