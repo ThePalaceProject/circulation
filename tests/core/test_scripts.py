@@ -1884,19 +1884,16 @@ class TestWhereAreMyBooksScript:
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        output = StringIO()
         search = end_to_end_search_fixture.external_search_index
         work = db.work(with_license_pool=True)
         work.presentation_ready = True
 
-        docs = search.start_updating_search_documents()
+        docs = search.start_migration()
         docs.add_documents(search.create_search_documents_from_works([work]))
         docs.finish()
 
-        # This MockExternalSearchIndex will always claim there is one
-        # result.
+        # This search index will always claim there is one result.
         self.check_explanation(
-            search=search,
             in_search_index=1,
             db=db,
             end_to_end_search_fixture=end_to_end_search_fixture,
