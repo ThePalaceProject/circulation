@@ -18,9 +18,11 @@ from api.admin.problem_details import *
 from api.config import Configuration
 from api.lanes import create_default_lanes
 from core.model import ConfigurationSetting, Library, create, get_one
+from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
+from core.model.announcements import Announcement
 from core.model.library import LibraryLogo
 from core.util import LanguageCodes
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 from . import SettingsController
 
@@ -45,14 +47,17 @@ class LibrarySettingsController(SettingsController):
             settings = dict()
             for setting in Configuration.LIBRARY_SETTINGS:
                 if setting.get("type") == "announcements":
-                    value = ConfigurationSetting.for_library(
-                        setting.get("key"), library
-                    ).json_value
-                    if value:
-                        value = AnnouncementListValidator().validate_announcements(
-                            value
-                        )
-                if setting.get("type") == "list":
+                    db_announcements = (
+                        self._db.execute(Announcement.library_announcements(library))
+                        .scalars()
+                        .all()
+                    )
+                    announcements = [x.to_data().as_dict() for x in db_announcements]
+                    if announcements:
+                        value = json.dumps(announcements)
+                    else:
+                        value = None
+                elif setting.get("type") == "list":
                     value = ConfigurationSetting.for_library(
                         setting.get("key"), library
                     ).json_value
@@ -75,12 +80,10 @@ class LibrarySettingsController(SettingsController):
         return dict(libraries=response, settings=Configuration.LIBRARY_SETTINGS)
 
     def process_post(self, validators_by_type=None):
-        library = None
         is_new = False
         if validators_by_type is None:
             validators_by_type = dict()
             validators_by_type["geographic"] = GeographicValidator()
-            validators_by_type["announcements"] = AnnouncementListValidator()
 
         library_uuid = flask.request.form.get("uuid")
         library = self.get_library_from_uuid(library_uuid)
@@ -114,6 +117,24 @@ class LibrarySettingsController(SettingsController):
             return configuration_settings
 
         self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
+
+        try:
+            if ANNOUNCEMENT_SETTING_NAME in flask.request.form:
+                validated_announcements = (
+                    AnnouncementListValidator().validate_announcements(
+                        flask.request.form.get(ANNOUNCEMENT_SETTING_NAME)
+                    )
+                )
+                existing_announcements = (
+                    self._db.execute(Announcement.library_announcements(library))
+                    .scalars()
+                    .all()
+                )
+                Announcement.sync(
+                    self._db, existing_announcements, validated_announcements, library
+                )
+        except ProblemError as e:
+            return e.problem_detail
 
         if is_new:
             # Now that the configuration settings are in place, create
@@ -304,6 +325,11 @@ class LibrarySettingsController(SettingsController):
         """
         settings = settings or Configuration.LIBRARY_SETTINGS
         for setting in settings:
+            if setting.get("key") == ANNOUNCEMENT_SETTING_NAME:
+                # Announcement is a special case -- it's not a library setting
+                # but stored in its own table in the database.
+                continue
+
             # Validate the incoming value.
             validator = None
             if "format" in setting:

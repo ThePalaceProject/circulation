@@ -10,14 +10,14 @@ from PIL import Image
 from werkzeug import Response
 from werkzeug.datastructures import FileStorage, ImmutableMultiDict
 
-from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.exceptions import *
 from api.admin.geographic_validator import GeographicValidator
-from api.announcements import Announcement, Announcements
 from api.config import Configuration
 from core.facets import FacetConstants
 from core.model import AdminRole, ConfigurationSetting, Library, get_one
+from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME
+from core.model.announcements import Announcement, AnnouncementData
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 
@@ -95,22 +95,17 @@ class TestLibrarySettings:
     def test_libraries_get_with_announcements(
         self, settings_ctrl_fixture, announcement_fixture: AnnouncementFixture
     ):
+        db = settings_ctrl_fixture.ctrl.db
         # Delete any existing library created by the controller test setup.
-        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
+        library = get_one(db.session, Library)
         if library:
-            settings_ctrl_fixture.ctrl.db.session.delete(library)
+            db.session.delete(library)
 
         # Set some announcements for this library.
         test_library = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
-        ConfigurationSetting.for_library(
-            Announcements.SETTING_NAME, test_library
-        ).value = json.dumps(
-            [
-                announcement_fixture.active,
-                announcement_fixture.expired,
-                announcement_fixture.forthcoming,
-            ]
-        )
+        a1 = announcement_fixture.active_announcement(db.session, test_library)
+        a2 = announcement_fixture.expired_announcement(db.session, test_library)
+        a3 = announcement_fixture.forthcoming_announcement(db.session, test_library)
 
         # When we request information about this library...
         with settings_ctrl_fixture.request_context_with_admin("/"):
@@ -120,11 +115,11 @@ class TestLibrarySettings:
             library_settings = response.get("libraries")[0].get("settings")
 
             # We find out about the library's announcements.
-            announcements = library_settings.get(Announcements.SETTING_NAME)
+            announcements = library_settings.get(ANNOUNCEMENTS_SETTING_NAME)
             assert [
-                announcement_fixture.active["id"],
-                announcement_fixture.expired["id"],
-                announcement_fixture.forthcoming["id"],
+                str(a2.id),
+                str(a1.id),
+                str(a3.id),
             ] == [x.get("id") for x in json.loads(announcements)]
 
             # The objects found in `library_settings` aren't exactly
@@ -345,6 +340,8 @@ class TestLibrarySettings:
         settings_ctrl_fixture,
         announcement_fixture: AnnouncementFixture,
     ):
+        db = settings_ctrl_fixture.ctrl.db
+
         # Pull needed properties from logo fixture
         image_data, expected_logo_data_url, image = (
             logo_properties[key] for key in ("raw_bytes", "data_url", "image")
@@ -364,18 +361,6 @@ class TestLibrarySettings:
                 self.was_called = True
                 return original_geographic_validate(values, db)
 
-        original_announcement_validate = (
-            AnnouncementListValidator().validate_announcements
-        )
-
-        class MockAnnouncementListValidator(AnnouncementListValidator):
-            def __init__(self):
-                self.was_called = False
-
-            def validate_announcements(self, values):
-                self.was_called = True
-                return original_announcement_validate(values)
-
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -393,11 +378,19 @@ class TestLibrarySettings:
                         ["Manitoba", "Broward County, FL", "QC"],  # type: ignore[list-item]
                     ),
                     (
-                        Announcements.SETTING_NAME,
+                        ANNOUNCEMENTS_SETTING_NAME,
                         json.dumps(
                             [
-                                announcement_fixture.active,
-                                announcement_fixture.forthcoming,
+                                AnnouncementData(
+                                    content="This is announcement one.",
+                                    start=announcement_fixture.today,
+                                    finish=announcement_fixture.tomorrow,
+                                ).as_dict(),
+                                AnnouncementData(
+                                    content="This is announcement two.",
+                                    start=announcement_fixture.tomorrow,
+                                    finish=announcement_fixture.in_a_week,
+                                ).as_dict(),
                             ]
                         ),
                     ),
@@ -438,19 +431,15 @@ class TestLibrarySettings:
                 }
             )
             geographic_validator = MockGeographicValidator()
-            announcement_validator = MockAnnouncementListValidator()
             validators = dict(
                 geographic=geographic_validator,
-                announcements=announcement_validator,
             )
             response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_post(
                 validators
             )
             assert response.status_code == 201
 
-        library = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Library, short_name="nypl"
-        )
+        library = get_one(db.session, Library, short_name="nypl")
         assert isinstance(library, Library)
         assert library.uuid == response.get_data(as_text=True)
         assert library.name == "The New York Public Library"
@@ -504,16 +493,17 @@ class TestLibrarySettings:
         expected_public = private_key.public_key().export_key().decode("utf-8")
         assert library.public_key == expected_public
 
-        # Announcements were validated.
-        assert announcement_validator.was_called == True
-
-        # The validated result was written to the database, such that we can
+        # Announcements were validated and the result was written to the database, such that we can
         # parse it as a list of Announcement objects.
-        announcements = Announcements.for_library(library).announcements
+        announcements = (
+            db.session.execute(Announcement.library_announcements(library))
+            .scalars()
+            .all()
+        )
         assert [
-            announcement_fixture.active["id"],
-            announcement_fixture.forthcoming["id"],
-        ] == [x.id for x in announcements]
+            "This is announcement one.",
+            "This is announcement two.",
+        ] == [x.content for x in announcements]
         assert all(isinstance(x, Announcement) for x in announcements)
 
         # When the library was created, default lanes were also created

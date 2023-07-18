@@ -1,4 +1,5 @@
 pytest_plugins = [
+    "tests.fixtures.announcements",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",
     "tests.fixtures.marc_files",

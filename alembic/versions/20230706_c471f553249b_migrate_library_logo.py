@@ -45,7 +45,7 @@ def upgrade() -> None:
             (library.id,),
         ).first()
         if setting and setting.value:
-            log.info("Library {library.short_name} has a logo, migrating it.")
+            log.info(f"Library {library.short_name} has a logo, migrating it.")
             logo_str = setting.value
 
             # We stored the logo with a data:image prefix before, but we

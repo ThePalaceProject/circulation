@@ -15,7 +15,6 @@ from werkzeug.datastructures import Authorization, Headers
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
-from api.announcements import Announcements
 from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import AuthenticationProvider
 from api.authentication.basic import BasicAuthenticationProvider
@@ -26,6 +25,7 @@ from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model import ConfigurationSetting, Library, Patron, PatronProfileStorage
+from core.model.announcements import Announcement
 from core.model.integration import IntegrationLibraryConfiguration
 from core.opds import OPDSFeed
 from core.user_profile import ProfileController
@@ -66,14 +66,6 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
                 "drm:scheme"
             ] = "http://librarysimplified.org/terms/drm/scheme/ACS"
             drm.append(adobe_drm)
-
-            device_link["rel"] = "http://librarysimplified.org/terms/drm/rel/devices"
-            device_link["href"] = self.url_for(
-                "adobe_drm_devices",
-                library_short_name=self.patron.library.short_name,
-                _external=True,
-            )
-            links.append(device_link)
 
             annotations_link = dict(
                 rel="http://www.w3.org/ns/oa#annotationService",
@@ -722,16 +714,10 @@ class LibraryAuthenticator:
         doc["features"] = dict(enabled=enabled, disabled=disabled)
 
         # Add any active announcements for the library.
-        library_announcements = (
-            Announcements.for_library(library).active if library else []
-        )
-        announcements = [x.for_authentication_document for x in library_announcements]
-        # Add any global announcements
-        announcements_for_all = [
-            x.for_authentication_document
-            for x in Announcements.for_all(self._db).active
-        ]
-        doc["announcements"] = announcements_for_all + announcements
+        if library:
+            doc["announcements"] = Announcement.authentication_document_announcements(
+                library
+            )
 
         # Finally, give the active annotator a chance to modify the document.
 
