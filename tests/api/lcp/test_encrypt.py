@@ -125,6 +125,7 @@ class TestLCPEncryptor:
         )
 
         with Patcher() as patcher:
+            assert patcher.fs is not None
             patcher.fs.create_file(LCPEncryptionConstants.DEFAULT_LCPENCRYPT_LOCATION)
 
             if create_file:
