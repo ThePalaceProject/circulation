@@ -69,6 +69,8 @@ COPY --chown=simplified:simplified poetry.lock pyproject.toml /var/www/circulati
 # building the final image, so it will be up to date then. This gives is a base
 # to work from which speeds up the final image build.
 RUN python3 -m venv env && \
+    SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh && \
+    echo "if [[ -f $SIMPLIFIED_ENVIRONMENT ]]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
     . env/bin/activate && \
     pip install --upgrade pip && \
     poetry install --only main,pg --sync && \
