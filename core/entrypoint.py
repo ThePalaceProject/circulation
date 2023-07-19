@@ -20,10 +20,6 @@ class EntryPoint:
     renders entry points as a set of tabs.
     """
 
-    # The name of the per-library setting that controls which entry points are
-    # enabled.
-    ENABLED_SETTING = "enabled_entry_points"
-
     ENTRY_POINTS: list[type[EntryPoint]] = []
     DEFAULT_ENABLED: list[type[EntryPoint]] = []
     DISPLAY_TITLES: dict[type[EntryPoint], str] = {}

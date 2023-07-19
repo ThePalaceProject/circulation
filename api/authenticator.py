@@ -664,7 +664,7 @@ class LibraryAuthenticator:
         if designated_agent_uri:
             links.append(
                 dict(
-                    rel=Configuration.COPYRIGHT_DESIGNATED_AGENT_REL,
+                    rel="http://librarysimplified.org/rel/designated-agent/copyright",
                     href=designated_agent_uri,
                 )
             )

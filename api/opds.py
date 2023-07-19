@@ -556,13 +556,6 @@ class CirculationManagerAnnotator(Annotator):
 
 
 class LibraryAnnotator(CirculationManagerAnnotator):
-    TERMS_OF_SERVICE = Configuration.TERMS_OF_SERVICE
-    PRIVACY_POLICY = Configuration.PRIVACY_POLICY
-    COPYRIGHT = Configuration.COPYRIGHT
-    ABOUT = Configuration.ABOUT
-    LICENSE = Configuration.LICENSE
-    REGISTER = Configuration.REGISTER
-
     def __init__(
         self,
         circulation,

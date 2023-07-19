@@ -247,7 +247,7 @@ class TestValidator:
             return result
 
         [png, jpeg, gif, invalid] = [
-            MultiDict([(Configuration.LOGO, create_image_file(x))])
+            MultiDict([("logo", create_image_file(x))])
             for x in ["png", "jpeg", "gif", "abc"]
         ]
 

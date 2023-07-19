@@ -127,7 +127,7 @@ class LibrarySettingsController(SettingsController):
         library.settings_dict = validated_settings.dict()
 
         # Validate and scale logo
-        self.scale_and_store_logo(library, flask.request.files.get(Configuration.LOGO))
+        self.scale_and_store_logo(library, flask.request.files.get("logo"))
 
         if ANNOUNCEMENT_SETTING_NAME in flask.request.form:
             validated_announcements = (

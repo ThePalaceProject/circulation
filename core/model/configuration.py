@@ -678,12 +678,6 @@ class ConfigurationSetting(Base, HasSessionCache):
         return cls.for_library_and_externalintegration(_db, key, None, None)
 
     @classmethod
-    def for_library(cls, key, library):
-        """Find or create a ConfigurationSetting for the given Library."""
-        _db = Session.object_session(library)
-        return cls.for_library_and_externalintegration(_db, key, library, None)
-
-    @classmethod
     def for_externalintegration(cls, key, externalintegration):
         """Find or create a ConfigurationSetting for the given
         ExternalIntegration.

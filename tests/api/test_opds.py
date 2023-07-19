@@ -13,7 +13,6 @@ from lxml import etree
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
-from api.config import Configuration
 from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
 from api.opds import (
@@ -396,7 +395,7 @@ class TestLibraryAnnotator:
             says.
             """
             library = annotator_fixture.db.default_library()
-            library.setting(Configuration.HIDDEN_CONTENT_TYPES).value = value
+            library.setting("hidden_content_types").value = value
             return LibraryAnnotator._hidden_content_types(library)
 
         # When the value is not set at all, no content types are hidden.

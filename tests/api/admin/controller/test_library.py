@@ -45,9 +45,9 @@ class TestLibrarySettings:
             "uuid": library.uuid,
             "name": "The New York Public Library",
             "short_name": library.short_name,
-            Configuration.WEBSITE_URL: "https://library.library/",
-            Configuration.HELP_EMAIL: "help@example.com",
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS: "email@example.com",
+            "website": "https://library.library/",
+            "help_email": "help@example.com",
+            "default_notification_email": "email@example.com",
         }
         defaults.update(fields)
         form = ImmutableMultiDict(list(defaults.items()))
@@ -252,8 +252,8 @@ class TestLibrarySettings:
             flask.request.form = self.library_form(
                 library,
                 {
-                    Configuration.WEB_PRIMARY_COLOR: "#000000",
-                    Configuration.WEB_SECONDARY_COLOR: "#e0e0e0",
+                    "web_primary_color": "#000000",
+                    "web_secondary_color": "#e0e0e0",
                 },
             )
             response = (
@@ -272,15 +272,15 @@ class TestLibrarySettings:
                     ("uuid", library.uuid),
                     ("name", "The New York Public Library"),
                     ("short_name", library.short_name),
-                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    ("website", "https://library.library/"),
                     (
                         Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
                         "email@example.com",
                     ),
-                    (Configuration.HELP_EMAIL, "help@example.com"),
-                    (Configuration.WEB_HEADER_LINKS, "http://library.com/1"),
-                    (Configuration.WEB_HEADER_LINKS, "http://library.com/2"),
-                    (Configuration.WEB_HEADER_LABELS, "One"),
+                    ("help_email", "help@example.com"),
+                    ("web_header_links", "http://library.com/1"),
+                    ("web_header_links", "http://library.com/2"),
+                    ("web_header_labels", "One"),
                 ]
             )
             response = (
@@ -328,7 +328,7 @@ class TestLibrarySettings:
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
                     ("library_description", "Short description of library"),
-                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    ("website", "https://library.library/"),
                     ("tiny_collection_languages", "ger"),
                     (
                         ANNOUNCEMENTS_SETTING_NAME,
@@ -348,7 +348,7 @@ class TestLibrarySettings:
                         ),
                     ),
                     (
-                        Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
+                        "default_notification_email_address",
                         "email@example.com",
                     ),
                     ("help_email", "help@example.com"),
@@ -369,7 +369,7 @@ class TestLibrarySettings:
             )
             flask.request.files = ImmutableMultiDict(
                 {
-                    Configuration.LOGO: FileStorage(
+                    "logo": FileStorage(
                         stream=BytesIO(image_data),
                         content_type="image/png",
                         filename="logo.png",
@@ -455,9 +455,9 @@ class TestLibrarySettings:
                     ("short_name", "nypl"),
                     ("featured_lane_size", "20"),
                     ("minimum_featured_quality", "0.9"),
-                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    ("website", "https://library.library/"),
                     (
-                        Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
+                        "default_notification_email_address",
                         "email@example.com",
                     ),
                     ("help_email", "help@example.com"),
@@ -523,8 +523,8 @@ class TestLibrarySettings:
                     ("uuid", str(library_to_edit.uuid)),
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
-                    (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
-                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    ("library_description", ""),  # empty value
+                    ("website", "https://library.library/"),
                     ("help_email", "help@example.com"),
                 ]
             )
@@ -545,8 +545,8 @@ class TestLibrarySettings:
                 [
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
-                    (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
-                    (Configuration.WEBSITE_URL, "https://library.library/"),
+                    ("library_description", ""),  # empty value
+                    ("website", "https://library.library/"),
                     ("help_email", "help@example.com"),
                 ]
             )

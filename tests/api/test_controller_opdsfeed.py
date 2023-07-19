@@ -130,10 +130,10 @@ class TestOPDSFeedController:
                 else:
                     by_rel[i["rel"]] = i["href"]
 
-            assert "a" == by_rel[LibraryAnnotator.TERMS_OF_SERVICE]
-            assert "b" == by_rel[LibraryAnnotator.PRIVACY_POLICY]
-            assert "c" == by_rel[LibraryAnnotator.COPYRIGHT]
-            assert "d" == by_rel[LibraryAnnotator.ABOUT]
+            assert "a" == by_rel["terms-of-service"]
+            assert "b" == by_rel["privacy-policy"]
+            assert "c" == by_rel["copyright"]
+            assert "d" == by_rel["about"]
 
             next_link = by_rel["next"]
             lane_str = str(lane_id)

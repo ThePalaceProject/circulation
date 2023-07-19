@@ -2,7 +2,6 @@ from typing import Optional
 
 from flask_babel import lazy_gettext as _
 
-from api.config import Configuration
 from core.config import IntegrationException
 from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
 from core.util.problem_detail import ProblemDetail
@@ -164,7 +163,6 @@ class LimitReached(CirculationException):
 class PatronLoanLimitReached(CannotLoan, LimitReached):
     BASE_DOC = LOAN_LIMIT_REACHED
     MESSAGE_WITH_LIMIT = SPECIFIC_LOAN_LIMIT_MESSAGE
-    SETTING_NAME = Configuration.LOAN_LIMIT
 
 
 class CannotReturn(CirculationException):
