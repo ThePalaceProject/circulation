@@ -27,6 +27,7 @@ from core.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestBaseController:
@@ -496,7 +497,9 @@ class TestBaseController:
             assert problem is None
 
     def test_apply_borrowing_policy_when_holds_prohibited(
-        self, circulation_fixture: CirculationControllerFixture
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
     ):
         with circulation_fixture.request_context_with_library("/"):
             patron = circulation_fixture.controller.authenticated_patron(
@@ -504,7 +507,7 @@ class TestBaseController:
             )
             # This library does not allow holds.
             library = circulation_fixture.db.default_library()
-            library.setting(library.ALLOW_HOLDS).value = "False"
+            library_fixture.settings(library).allow_holds = False
 
             # This is an open-access work.
             work = circulation_fixture.db.work(

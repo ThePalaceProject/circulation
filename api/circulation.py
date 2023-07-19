@@ -1393,7 +1393,7 @@ class CirculationAPI:
         :param patron: A Patron.
         """
         loan_limit = patron.library.settings.loan_limit
-        if loan_limit is None:
+        if not loan_limit:
             return False
 
         # Open-access loans, and loans of indefinite duration, don't count towards the loan limit

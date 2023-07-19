@@ -525,8 +525,8 @@ class LibrarySettings(BaseSettings):
         ),
         alias="http://librarysimplified.org/terms/rel/patron-password-reset",
     )
-    large_collection_languages: List[str] = FormField(
-        [],
+    large_collection_languages: Optional[List[str]] = FormField(
+        None,
         form=LibraryConfFormItem(
             label="The primary languages represented in this library's collection",
             type=ConfigurationFormItemType.LIST,
@@ -539,8 +539,8 @@ class LibrarySettings(BaseSettings):
         ),
         alias="large_collections",
     )
-    small_collection_languages: List[str] = FormField(
-        [],
+    small_collection_languages: Optional[List[str]] = FormField(
+        None,
         form=LibraryConfFormItem(
             label="Other major languages represented in this library's collection",
             type=ConfigurationFormItemType.LIST,
@@ -553,8 +553,8 @@ class LibrarySettings(BaseSettings):
         ),
         alias="small_collections",
     )
-    tiny_collection_languages: List[str] = FormField(
-        [],
+    tiny_collection_languages: Optional[List[str]] = FormField(
+        None,
         form=LibraryConfFormItem(
             label="Other languages in this library's collection",
             type=ConfigurationFormItemType.LIST,
@@ -633,14 +633,17 @@ class LibrarySettings(BaseSettings):
         "small_collection_languages",
         "tiny_collection_languages",
     )
-    def validate_language_codes(cls, value: List[str], field: ModelField) -> List[str]:
+    def validate_language_codes(
+        cls, value: Optional[List[str]], field: ModelField
+    ) -> Optional[List[str]]:
         """Verify that collection languages are valid."""
-        for language in value:
-            if not LanguageCodes.string_to_alpha_3(language):
-                field_label = cls.get_form_field_label(field.name)
-                raise SettingsValidationError(
-                    problem_detail=UNKNOWN_LANGUAGE.detailed(
-                        f"{field_label}: {language} is not a valid language code."
+        if value is not None:
+            for language in value:
+                if not LanguageCodes.string_to_alpha_3(language):
+                    field_label = cls.get_form_field_label(field.name)
+                    raise SettingsValidationError(
+                        problem_detail=UNKNOWN_LANGUAGE.detailed(
+                            f"{field_label}: {language} is not a valid language code."
+                        )
                     )
-                )
         return value

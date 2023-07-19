@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 from contextlib import contextmanager
 from typing import Any, Callable, Optional
 
 import flask
 import pytest
-from sqlalchemy.orm.attributes import flag_modified
 from werkzeug.datastructures import Authorization
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -19,7 +17,8 @@ from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.util.flask import PalaceFlask
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.configuration.library import LibrarySettings
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.integration.goals import Goals
 from core.lane import Lane
 from core.model import (
@@ -223,12 +222,12 @@ class ControllerFixture:
                 parent=integration,
             )
 
-        for k, v in [
-            (Configuration.LARGE_COLLECTION_LANGUAGES, []),
-            (Configuration.SMALL_COLLECTION_LANGUAGES, ["eng"]),
-            (Configuration.TINY_COLLECTION_LANGUAGES, ["spa", "chi", "fre"]),
-        ]:
-            ConfigurationSetting.for_library(k, library).value = json.dumps(v)
+        settings = LibrarySettings.construct(
+            large_collection_languages=[],
+            small_collection_languages=["eng"],
+            tiny_collection_languages=["spa", "chi", "fre"],
+        )
+        library.update_settings(settings)
         create_default_lanes(_db, library)
 
     def make_default_libraries(self, _db):
@@ -310,12 +309,14 @@ class CirculationControllerFixture(ControllerFixture):
         # Enable the audiobook entry point for the default library -- a lot of
         # tests verify that non-default entry points can be selected.
         library = self.db.default_library()
-
-        library.settings_dict[EntryPoint.ENABLED_SETTING] = [
-            EbooksEntryPoint.INTERNAL_NAME,
-            AudiobooksEntryPoint.INTERNAL_NAME,
-        ]
-        flag_modified(library, "settings_dict")
+        library.update_settings(
+            LibrarySettings.construct(
+                enabled_entry_points=[
+                    EbooksEntryPoint.INTERNAL_NAME,
+                    AudiobooksEntryPoint.INTERNAL_NAME,
+                ]
+            )
+        )
 
     def add_works(self, works: list[WorkSpec]):
         """Add works to the database."""

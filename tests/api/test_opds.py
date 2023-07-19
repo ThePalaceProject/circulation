@@ -1438,7 +1438,9 @@ class TestLibraryAnnotator:
         assert copies_re.search(u) is not None
 
     def test_loans_feed_includes_fulfill_links(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
     ):
         patron = annotator_fixture.db.patron()
 
@@ -1488,18 +1490,15 @@ class TestLibraryAnnotator:
 
         # If one of the content types is hidden, the corresponding
         # delivery mechanism does not have a link.
-        setting = annotator_fixture.db.default_library().setting(
-            Configuration.HIDDEN_CONTENT_TYPES
-        )
-        setting.value = json.dumps([mech1.delivery_mechanism.content_type])
-        feed_obj = LibraryLoanAndHoldAnnotator.active_loans_for(
-            None, patron, test_mode=True
-        )
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
+        settings.hidden_content_types = [mech1.delivery_mechanism.content_type]
+        LibraryLoanAndHoldAnnotator.active_loans_for(None, patron, test_mode=True)
         assert {
             mech2.delivery_mechanism.drm_scheme_media_type,
             OPDSFeed.ENTRY_TYPE,
         } == {link["type"] for link in fulfill_links}
-        setting.value = None
+        settings.hidden_content_types = []
 
         # When the loan is fulfilled, there are only fulfill links for that mechanism
         # and the streaming mechanism.
@@ -1824,7 +1823,11 @@ class TestLibraryAnnotator:
         assert "/crawlable_list_feed" in crawlable
         assert str(list1.name) in crawlable
 
-    def test_acquisition_links(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_acquisition_links(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
+    ):
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
         )
@@ -1919,14 +1922,13 @@ class TestLibraryAnnotator:
         # If a book is ready to be fulfilled, but the library has
         # hidden all of its available content types, the fulfill link does
         # not show up -- only the revoke link.
-        hidden = annotator_fixture.db.default_library().setting(
-            Configuration.HIDDEN_CONTENT_TYPES
-        )
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
         available_types = [
             lpdm.delivery_mechanism.content_type
             for lpdm in loan2.license_pool.delivery_mechanisms
         ]
-        hidden.value = json.dumps(available_types)
+        settings.hidden_content_types = available_types
 
         # The list of hidden content types is stored in the Annotator
         # constructor, so this particular test needs a fresh Annotator.
@@ -1941,7 +1943,7 @@ class TestLibraryAnnotator:
             "rel"
         )
         # Un-hide the content types so the test can continue.
-        hidden.value = None
+        settings.hidden_content_types = []
 
         hold_links = annotator.acquisition_links(
             hold.license_pool, None, hold, None, feed, hold.license_pool.identifier
@@ -2037,7 +2039,9 @@ class TestLibraryAnnotator:
         assert [] == hold_links
 
     def test_acquisition_links_multiple_links(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
     ):
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
@@ -2109,9 +2113,9 @@ class TestLibraryAnnotator:
         # If we configure the library to hide one of the content types,
         # we end up with only one link -- the one for the delivery
         # mechanism that's not hidden.
-        annotator_fixture.db.default_library().setting(
-            Configuration.HIDDEN_CONTENT_TYPES
-        ).value = json.dumps([mech1.delivery_mechanism.content_type])
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
+        settings.hidden_content_types = [mech1.delivery_mechanism.content_type]
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
         )

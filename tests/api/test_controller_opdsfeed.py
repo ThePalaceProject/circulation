@@ -11,7 +11,7 @@ from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
 from api.opds import LibraryAnnotator
 from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.app_server import load_facets_from_request
-from core.entrypoint import AudiobooksEntryPoint, EntryPoint, EverythingEntryPoint
+from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import SortKeyPagination
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import CachedFeed, Edition
@@ -86,10 +86,10 @@ class TestOPDSFeedController:
         # Set up configuration settings for links and entry points
         library = circulation_fixture.db.default_library()
         settings = library_fixture.settings(library)
-        settings.terms_of_service = "a"
-        settings.privacy_policy = "b"
-        settings.copyright = "c"
-        settings.about = "d"
+        settings.terms_of_service = "a"  # type: ignore[assignment]
+        settings.privacy_policy = "b"  # type: ignore[assignment]
+        settings.copyright = "c"  # type: ignore[assignment]
+        settings.about = "d"  # type: ignore[assignment]
 
         # Make a real OPDS feed and poke at it.
         with circulation_fixture.request_context_with_library(
@@ -234,7 +234,11 @@ class TestOPDSFeedController:
         # No other arguments were passed into page().
         assert {} == kwargs
 
-    def test_groups(self, circulation_fixture: CirculationControllerFixture):
+    def test_groups(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         # AcquisitionFeed.groups is tested in core/test_opds.py, and a
@@ -242,8 +246,9 @@ class TestOPDSFeedController:
         # index, so we're just going to test that groups() (or, in one
         # case, page()) is called properly.
         library = circulation_fixture.db.default_library()
-        library.setting(library.MINIMUM_FEATURED_QUALITY).value = 0.15
-        library.setting(library.FEATURED_LANE_SIZE).value = 2
+        settings = library_fixture.settings(library)
+        settings.minimum_featured_quality = 0.15  # type: ignore[assignment]
+        settings.featured_lane_size = 2
 
         # Patron with root lane -> redirect to root lane
         lane = circulation_fixture.db.lane()
@@ -456,7 +461,11 @@ class TestOPDSFeedController:
             )
             assert "OpenSearchDescription" in response.get_data(as_text=True)
 
-    def test_search(self, circulation_fixture: CirculationControllerFixture):
+    def test_search(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         # Test the search() controller method.
@@ -582,9 +591,9 @@ class TestOPDSFeedController:
 
         # When only a single entry point is enabled, it's used as the
         # default.
-        library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
-            [AudiobooksEntryPoint.INTERNAL_NAME]
-        )
+        library_fixture.settings(library).enabled_entry_points = [
+            AudiobooksEntryPoint.INTERNAL_NAME
+        ]
         with circulation_fixture.request_context_with_library("/?q=t"):
             response = circulation_fixture.manager.opds_feeds.search(
                 None, feed_class=Mock

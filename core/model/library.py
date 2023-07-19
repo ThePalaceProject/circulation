@@ -29,6 +29,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, relationship
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
@@ -307,6 +308,12 @@ class Library(Base, HasSessionCache):
             self._settings = settings
         return settings
 
+    def update_settings(self, new_settings: LibrarySettings) -> None:
+        """Update the settings for this integration"""
+        self._settings = None
+        self.settings_dict.update(new_settings.dict())
+        flag_modified(self, "settings_dict")
+
     @property
     def all_collections(self) -> Generator[Collection, None, None]:
         for collection in self.collections:
@@ -339,13 +346,6 @@ class Library(Base, HasSessionCache):
             cls = EntryPoint.BY_INTERNAL_NAME.get(v)
             if cls:
                 yield cls
-        else:
-            # It's okay for `values` to be an empty list--that means
-            # the library wants to only use lanes, no entry points.
-            for v in values:
-                cls = EntryPoint.BY_INTERNAL_NAME.get(v)
-                if cls:
-                    yield cls
 
     def enabled_facets(self, group_name: str) -> List[str]:
         """Look up the enabled facets for a given facet group."""

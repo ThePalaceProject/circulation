@@ -1,5 +1,4 @@
-import json
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
@@ -10,7 +9,8 @@ from money import Money
 from core.config import CannotLoadConfiguration  # noqa: autoflake
 from core.config import IntegrationException  # noqa: autoflake
 from core.config import Configuration as CoreConfiguration
-from core.model import ConfigurationSetting, Library
+from core.configuration.library import LibrarySettings
+from core.model import Library
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
 from core.util import MoneyUtility
 
@@ -563,38 +563,35 @@ class Configuration(CoreConfiguration):
     ]
 
     @classmethod
-    def _collection_languages(cls, library, key):
-        """Look up a list of languages in a library configuration.
-
-        If the value is not set, estimate a value (and all related
-        values) by looking at the library's collection.
-        """
-        setting = ConfigurationSetting.for_library(key, library)
-        value = None
-        try:
-            value = setting.json_value
-            if not isinstance(value, list):
-                value = None
-        except (TypeError, ValueError):
-            pass
-
-        if value is None:
-            # We have no value or a bad value. Estimate a better value.
+    def estimate_language_collections_when_unset(cls, library: Library) -> None:
+        settings = library.settings
+        if (
+            settings.large_collection_languages is None
+            and settings.small_collection_languages is None
+            and settings.tiny_collection_languages is None
+        ):
             cls.estimate_language_collections_for_library(library)
-            value = setting.json_value
-        return value
 
     @classmethod
-    def large_collection_languages(cls, library):
-        return cls._collection_languages(library, cls.LARGE_COLLECTION_LANGUAGES)
+    def large_collection_languages(cls, library: Library) -> List[str]:
+        cls.estimate_language_collections_when_unset(library)
+        if library.settings.large_collection_languages is None:
+            return []
+        return library.settings.large_collection_languages
 
     @classmethod
-    def small_collection_languages(cls, library):
-        return cls._collection_languages(library, cls.SMALL_COLLECTION_LANGUAGES)
+    def small_collection_languages(cls, library: Library) -> List[str]:
+        cls.estimate_language_collections_when_unset(library)
+        if library.settings.small_collection_languages is None:
+            return []
+        return library.settings.small_collection_languages
 
     @classmethod
-    def tiny_collection_languages(cls, library):
-        return cls._collection_languages(library, cls.TINY_COLLECTION_LANGUAGES)
+    def tiny_collection_languages(cls, library: Library) -> List[str]:
+        cls.estimate_language_collections_when_unset(library)
+        if library.settings.tiny_collection_languages is None:
+            return []
+        return library.settings.tiny_collection_languages
 
     @classmethod
     def max_outstanding_fines(cls, library: Library) -> Optional[Money]:
@@ -603,7 +600,7 @@ class Configuration(CoreConfiguration):
         return MoneyUtility.parse(library.settings.max_outstanding_fines)
 
     @classmethod
-    def estimate_language_collections_for_library(cls, library):
+    def estimate_language_collections_for_library(cls, library: Library) -> None:
         """Guess at appropriate values for the given library for
         LARGE_COLLECTION_LANGUAGES, SMALL_COLLECTION_LANGUAGES, and
         TINY_COLLECTION_LANGUAGES. Set configuration values
@@ -611,12 +608,12 @@ class Configuration(CoreConfiguration):
         """
         holdings = library.estimated_holdings_by_language()
         large, small, tiny = cls.classify_holdings(holdings)
-        for setting, value in (
-            (cls.LARGE_COLLECTION_LANGUAGES, large),
-            (cls.SMALL_COLLECTION_LANGUAGES, small),
-            (cls.TINY_COLLECTION_LANGUAGES, tiny),
-        ):
-            ConfigurationSetting.for_library(setting, library).value = json.dumps(value)
+        settings = LibrarySettings.construct(
+            large_collection_languages=large,
+            small_collection_languages=small,
+            tiny_collection_languages=tiny,
+        )
+        library.update_settings(settings)
 
     @classmethod
     def classify_holdings(cls, works_by_language):

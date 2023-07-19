@@ -53,9 +53,6 @@ class LibraryFixture:
         self.set_mock_on_library(library, settings)
         return settings
 
-    def write_settings(self, library: Library) -> None:
-        library.settings_dict = library.settings.dict()
-
     def mock_settings(self) -> MockLibrarySettings:
         return MockLibrarySettings.construct()
 
@@ -63,6 +60,9 @@ class LibraryFixture:
         self, library: Library, settings: MockLibrarySettings
     ) -> None:
         library._settings = settings
+
+    def reset_settings_cache(self, library: Library) -> None:
+        library._settings = None
 
 
 @pytest.fixture

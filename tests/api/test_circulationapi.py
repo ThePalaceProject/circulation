@@ -550,12 +550,12 @@ class TestCirculationAPI:
         circulation_api.patron.fines = 1000
         library = circulation_api.db.default_library()
         library_settings = library_fixture.settings(library)
-        library_settings.max_outstanding_fines = "$0.50"
+        library_settings.max_outstanding_fines = 0.50
 
         pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
-        # Test the case where any amount of fines are too much.
-        library_settings.max_outstanding_fines = "$0"
+        # Test the case where any amount of fines is too much.
+        library_settings.max_outstanding_fines = 0
         pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
         # Remove the fine policy, and borrow succeeds.
@@ -640,9 +640,11 @@ class TestCirculationAPI:
             (circulation_api.patron, circulation_api.pool)
         ] == circulation_api.circulation.enforce_limits_calls  # type: ignore[attr-defined]
 
-    def test_patron_at_loan_limit(self, circulation_api: CirculationAPIFixture):
+    def test_patron_at_loan_limit(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # The loan limit is a per-library setting.
-        setting = circulation_api.patron.library.setting(Configuration.LOAN_LIMIT)
+        settings = library_fixture.settings(circulation_api.patron.library)
 
         future = utc_now() + timedelta(hours=1)
 
@@ -670,24 +672,24 @@ class TestCirculationAPI:
         # patron_at_loan_limit returns True if your number of relevant
         # loans equals or exceeds the limit.
         m = circulation_api.circulation.patron_at_loan_limit
-        assert None == setting.value
-        assert False == m(patron)
+        assert settings.loan_limit is None
+        assert m(patron) is False
 
-        setting.value = 1
-        assert True == m(patron)
-        setting.value = 2
-        assert True == m(patron)
-        setting.value = 3
-        assert False == m(patron)
+        settings.loan_limit = 1
+        assert m(patron) is True
+        settings.loan_limit = 2
+        assert m(patron) is True
+        settings.loan_limit = 3
+        assert m(patron) is False
 
         # Setting the loan limit to 0 is treated the same as disabling it.
-        setting.value = 0
-        assert False == m(patron)
+        settings.loan_limit = 0
+        assert m(patron) is False
 
         # Another library's setting doesn't affect your limit.
         other_library = circulation_api.db.library()
-        other_library.setting(Configuration.LOAN_LIMIT).value = 1
-        assert False == m(patron)
+        library_fixture.settings(other_library).loan_limit = 1
+        assert False is m(patron)
 
     def test_patron_at_hold_limit(
         self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
@@ -837,9 +839,9 @@ class TestCirculationAPI:
 
         # If the book is available, we get PatronLoanLimitReached
         pool.licenses_available = 1  # type: ignore
-        with pytest.raises(PatronLoanLimitReached) as excinfo:
+        with pytest.raises(PatronLoanLimitReached) as loan_limit_info:
             circulation.enforce_limits(patron, pool)
-        assert 12 == excinfo.value.limit
+        assert 12 == loan_limit_info.value.limit
 
         # Reaching this conclusion required checking both patron
         # limits and asking the remote API for updated availability
@@ -863,9 +865,9 @@ class TestCirculationAPI:
 
         # If the book is not available, we get PatronHoldLimitReached
         pool.licenses_available = 0  # type: ignore
-        with pytest.raises(PatronHoldLimitReached) as excinfo:
+        with pytest.raises(PatronHoldLimitReached) as hold_limit_info:
             circulation.enforce_limits(patron, pool)
-        assert 12 == excinfo.value.limit
+        assert 12 == hold_limit_info.value.limit
 
         # Reaching this conclusion required checking both patron
         # limits and asking the remote API for updated availability
@@ -881,14 +883,16 @@ class TestCirculationAPI:
         assert patron == circulation.patron_at_hold_limit_calls.pop()
         assert pool == api.availability_updated.pop()
 
-    def test_borrow_hold_limit_reached(self, circulation_api: CirculationAPIFixture):
+    def test_borrow_hold_limit_reached(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # Verify that you can't place a hold on an unavailable book
         # if you're at your hold limit.
         #
         # NOTE: This is redundant except as an end-to-end test.
 
         # The hold limit is 1, and the patron has a previous hold.
-        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 1
+        library_fixture.settings(circulation_api.patron.library).hold_limit = 1
         other_pool = circulation_api.db.licensepool(None)
         other_pool.open_access = False
         other_pool.on_hold_to(circulation_api.patron)
@@ -904,7 +908,7 @@ class TestCirculationAPI:
             assert 1 == e.limit
 
         # If we increase the limit, borrow succeeds.
-        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 2
+        library_fixture.settings(circulation_api.patron.library).hold_limit = 2
         circulation_api.remote.queue_checkout(NoAvailableCopies())
         now = utc_now()
         holdinfo = HoldInfo(
@@ -1613,14 +1617,14 @@ class TestBaseCirculationAPI:
         # Test the ability to get the default notification email address
         # for a patron or a library.
         settings = library_fixture.mock_settings()
-        settings.default_notification_email_address = "help@library"
+        settings.default_notification_email_address = "help@library"  # type: ignore[assignment]
         library = library_fixture.library(settings=settings)
         patron = db.patron(library=library)
         m = BaseCirculationAPI.default_notification_email_address
-        assert "help@library" == m(library, None)
-        assert "help@library" == m(patron, None)
+        assert "help@library" == m(library, "")
+        assert "help@library" == m(patron, "")
         other_library = library_fixture.library()
-        assert "noreply@thepalaceproject.org" == m(other_library, None)
+        assert "noreply@thepalaceproject.org" == m(other_library, "")
 
     def test_can_fulfill_without_loan(self, db: DatabaseTransactionFixture):
         """By default, there is a blanket prohibition on fulfilling a title

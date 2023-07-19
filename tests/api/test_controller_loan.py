@@ -1061,7 +1061,7 @@ class TestLoanController:
         library = loan_fixture.db.default_library()
         settings = library_fixture.settings(library)
 
-        settings.max_outstanding_fines = "$0.50"
+        settings.max_outstanding_fines = 0.50
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):

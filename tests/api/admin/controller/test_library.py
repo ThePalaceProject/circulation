@@ -14,9 +14,10 @@ from api.admin.controller.library_settings import LibrarySettingsController
 from api.admin.exceptions import *
 from api.config import Configuration
 from core.facets import FacetConstants
-from core.model import AdminRole, ConfigurationSetting, Library, get_one
+from core.model import AdminRole, Library, get_one
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME
 from core.model.announcements import Announcement, AnnouncementData
+from core.model.library import LibraryLogo
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
@@ -127,10 +128,9 @@ class TestLibrarySettings:
             FacetConstants.ORDER_TITLE,
             FacetConstants.ORDER_AUTHOR,
         ]
-        # TODO: FIX THIS
-        ConfigurationSetting.for_library(
-            Configuration.LARGE_COLLECTION_LANGUAGES, l2
-        ).value = json.dumps(["French"])
+        settings.large_collection_languages = ["French"]
+        l2.update_settings(settings)
+
         # The admin only has access to L1 and L2.
         settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         settings_ctrl_fixture.admin.add_role(AdminRole.LIBRARIAN, l1)
@@ -140,7 +140,7 @@ class TestLibrarySettings:
             response = (
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
-            libraries = response.get("libraries")
+            libraries = response.json.get("libraries")
             assert 2 == len(libraries)
 
             assert l1.uuid == libraries[0].get("uuid")
@@ -152,22 +152,21 @@ class TestLibrarySettings:
             assert l1.short_name == libraries[0].get("short_name")
             assert l2.short_name == libraries[1].get("short_name")
 
-            assert {} == libraries[0].get("settings")
-            assert 4 == len(libraries[1].get("settings").keys())
-            settings = libraries[1].get("settings")
-            assert "5" == settings.get(Configuration.FEATURED_LANE_SIZE)
-            assert FacetConstants.ORDER_TITLE == settings.get(
-                Configuration.DEFAULT_FACET_KEY_PREFIX
-                + FacetConstants.ORDER_FACET_GROUP_NAME
+            assert {
+                "website": "http://library.com",
+                "help_web": "http://library.com/support",
+            } == libraries[0].get("settings")
+            assert 6 == len(libraries[1].get("settings").keys())
+            settings_dict = libraries[1].get("settings")
+            assert 5 == settings_dict.get("featured_lane_size")
+            assert FacetConstants.ORDER_TITLE == settings_dict.get(
+                "facets_default_order"
             )
             assert [
                 FacetConstants.ORDER_TITLE,
                 FacetConstants.ORDER_AUTHOR,
-            ] == settings.get(
-                Configuration.ENABLED_FACETS_KEY_PREFIX
-                + FacetConstants.ORDER_FACET_GROUP_NAME
-            )
-            assert ["French"] == settings.get(Configuration.LARGE_COLLECTION_LANGUAGES)
+            ] == settings_dict.get("facets_enabled_order")
+            assert ["French"] == settings_dict.get("large_collection_languages")
 
     def test_libraries_post_errors(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -330,15 +329,7 @@ class TestLibrarySettings:
                     ("short_name", "nypl"),
                     ("library_description", "Short description of library"),
                     (Configuration.WEBSITE_URL, "https://library.library/"),
-                    (Configuration.TINY_COLLECTION_LANGUAGES, ["ger"]),  # type: ignore[list-item]
-                    (
-                        Configuration.LIBRARY_SERVICE_AREA,
-                        ["06759", "everywhere", "MD", "Boston, MA"],  # type: ignore[list-item]
-                    ),
-                    (
-                        Configuration.LIBRARY_FOCUS_AREA,
-                        ["Manitoba", "Broward County, FL", "QC"],  # type: ignore[list-item]
-                    ),
+                    ("tiny_collection_languages", "ger"),
                     (
                         ANNOUNCEMENTS_SETTING_NAME,
                         json.dumps(
@@ -360,25 +351,18 @@ class TestLibrarySettings:
                         Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
                         "email@example.com",
                     ),
-                    (Configuration.HELP_EMAIL, "help@example.com"),
-                    (Configuration.FEATURED_LANE_SIZE, "5"),
+                    ("help_email", "help@example.com"),
+                    ("featured_lane_size", "5"),
                     (
-                        Configuration.DEFAULT_FACET_KEY_PREFIX
-                        + FacetConstants.ORDER_FACET_GROUP_NAME,
+                        "facets_default_order",
                         FacetConstants.ORDER_RANDOM,
                     ),
                     (
-                        Configuration.ENABLED_FACETS_KEY_PREFIX
-                        + FacetConstants.ORDER_FACET_GROUP_NAME
-                        + "_"
-                        + FacetConstants.ORDER_TITLE,
+                        "facets_enabled_order" + "_" + FacetConstants.ORDER_TITLE,
                         "",
                     ),
                     (
-                        Configuration.ENABLED_FACETS_KEY_PREFIX
-                        + FacetConstants.ORDER_FACET_GROUP_NAME
-                        + "_"
-                        + FacetConstants.ORDER_RANDOM,
+                        "facets_enabled_order" + "_" + FacetConstants.ORDER_RANDOM,
                         "",
                     ),
                 ]
@@ -392,12 +376,8 @@ class TestLibrarySettings:
                     )
                 }
             )
-            geographic_validator = MockGeographicValidator()
-            validators = dict(
-                geographic=geographic_validator,
-            )
-            response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_post(
-                validators
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             )
             assert response.status_code == 201
 
@@ -406,43 +386,14 @@ class TestLibrarySettings:
         assert library.uuid == response.get_data(as_text=True)
         assert library.name == "The New York Public Library"
         assert library.short_name == "nypl"
-        assert (
-            "5"
-            == ConfigurationSetting.for_library(
-                Configuration.FEATURED_LANE_SIZE, library
-            ).value
-        )
-        assert (
-            FacetConstants.ORDER_RANDOM
-            == ConfigurationSetting.for_library(
-                Configuration.DEFAULT_FACET_KEY_PREFIX
-                + FacetConstants.ORDER_FACET_GROUP_NAME,
-                library,
-            ).value
-        )
-        assert (
-            json.dumps([FacetConstants.ORDER_TITLE])
-            == ConfigurationSetting.for_library(
-                Configuration.ENABLED_FACETS_KEY_PREFIX
-                + FacetConstants.ORDER_FACET_GROUP_NAME,
-                library,
-            ).value
-        )
+        assert library.settings.featured_lane_size == 5
+        assert library.settings.facets_default_order == FacetConstants.ORDER_RANDOM
+        assert library.settings.facets_enabled_order == [
+            FacetConstants.ORDER_TITLE,
+            FacetConstants.ORDER_RANDOM,
+        ]
         assert library.logo is not None
         assert expected_logo_data_url == library.logo.data_url
-        assert geographic_validator.was_called == True
-        assert (
-            '{"US": ["06759", "everywhere", "MD", "Boston, MA"], "CA": []}'
-            == ConfigurationSetting.for_library(
-                Configuration.LIBRARY_SERVICE_AREA, library
-            ).value
-        )
-        assert (
-            '{"US": ["Broward County, FL"], "CA": ["Manitoba", "Quebec"]}'
-            == ConfigurationSetting.for_library(
-                Configuration.LIBRARY_FOCUS_AREA, library
-            ).value
-        )
 
         # Make sure public and private key were generated and stored.
         assert library.private_key is not None
@@ -479,60 +430,47 @@ class TestLibrarySettings:
         assert other_languages == german.parent
         assert ["ger"] == german.languages
 
-    def test_libraries_post_edit(self, settings_ctrl_fixture):
+    def test_libraries_post_edit(
+        self, settings_ctrl_fixture, library_fixture: LibraryFixture
+    ):
         # A library already exists.
-        library = settings_ctrl_fixture.ctrl.db.library(
-            "New York Public Library", "nypl"
+        settings = library_fixture.mock_settings()
+        settings.featured_lane_size = 5
+        settings.facets_default_order = FacetConstants.ORDER_RANDOM
+        settings.facets_enabled_order = [
+            FacetConstants.ORDER_TITLE,
+            FacetConstants.ORDER_RANDOM,
+        ]
+        library_to_edit = library_fixture.library(
+            "New York Public Library", "nypl", settings
         )
-
-        ConfigurationSetting.for_library(
-            Configuration.FEATURED_LANE_SIZE, library
-        ).value = 5
-        ConfigurationSetting.for_library(
-            Configuration.DEFAULT_FACET_KEY_PREFIX
-            + FacetConstants.ORDER_FACET_GROUP_NAME,
-            library,
-        ).value = FacetConstants.ORDER_RANDOM
-        ConfigurationSetting.for_library(
-            Configuration.ENABLED_FACETS_KEY_PREFIX
-            + FacetConstants.ORDER_FACET_GROUP_NAME,
-            library,
-        ).value = json.dumps([FacetConstants.ORDER_TITLE, FacetConstants.ORDER_RANDOM])
-        ConfigurationSetting.for_library(
-            Configuration.LOGO, library
-        ).value = "A tiny image"
+        library_to_edit.logo = LibraryLogo(content=b"A tiny image")
+        library_fixture.reset_settings_cache(library_to_edit)
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("uuid", library.uuid),
+                    ("uuid", str(library_to_edit.uuid)),
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
-                    (Configuration.FEATURED_LANE_SIZE, "20"),
-                    (Configuration.MINIMUM_FEATURED_QUALITY, "0.9"),
+                    ("featured_lane_size", "20"),
+                    ("minimum_featured_quality", "0.9"),
                     (Configuration.WEBSITE_URL, "https://library.library/"),
                     (
                         Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
                         "email@example.com",
                     ),
-                    (Configuration.HELP_EMAIL, "help@example.com"),
+                    ("help_email", "help@example.com"),
                     (
-                        Configuration.DEFAULT_FACET_KEY_PREFIX
-                        + FacetConstants.ORDER_FACET_GROUP_NAME,
+                        "facets_default_order",
                         FacetConstants.ORDER_AUTHOR,
                     ),
                     (
-                        Configuration.ENABLED_FACETS_KEY_PREFIX
-                        + FacetConstants.ORDER_FACET_GROUP_NAME
-                        + "_"
-                        + FacetConstants.ORDER_AUTHOR,
+                        "facets_enabled_order" + "_" + FacetConstants.ORDER_AUTHOR,
                         "",
                     ),
                     (
-                        Configuration.ENABLED_FACETS_KEY_PREFIX
-                        + FacetConstants.ORDER_FACET_GROUP_NAME
-                        + "_"
-                        + FacetConstants.ORDER_RANDOM,
+                        "facets_enabled_order" + "_" + FacetConstants.ORDER_RANDOM,
                         "",
                     ),
                 ]
@@ -544,56 +482,50 @@ class TestLibrarySettings:
             assert response.status_code == 200
 
         library = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library.uuid
+            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library_to_edit.uuid
         )
 
+        assert library is not None
         assert library.uuid == response.get_data(as_text=True)
         assert library.name == "The New York Public Library"
         assert library.short_name == "nypl"
 
         # The library-wide settings were updated.
-        def val(x):
-            return ConfigurationSetting.for_library(x, library).value
-
-        assert "https://library.library/" == val(Configuration.WEBSITE_URL)
-        assert "email@example.com" == val(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS
+        assert library.settings.website == "https://library.library/"
+        assert (
+            library.settings.default_notification_email_address == "email@example.com"
         )
-        assert "help@example.com" == val(Configuration.HELP_EMAIL)
-        assert "20" == val(Configuration.FEATURED_LANE_SIZE)
-        assert "0.9" == val(Configuration.MINIMUM_FEATURED_QUALITY)
-        assert FacetConstants.ORDER_AUTHOR == val(
-            Configuration.DEFAULT_FACET_KEY_PREFIX
-            + FacetConstants.ORDER_FACET_GROUP_NAME
-        )
-        assert json.dumps([FacetConstants.ORDER_AUTHOR]) == val(
-            Configuration.ENABLED_FACETS_KEY_PREFIX
-            + FacetConstants.ORDER_FACET_GROUP_NAME
-        )
+        assert library.settings.help_email == "help@example.com"
+        assert library.settings.featured_lane_size == 20
+        assert library.settings.minimum_featured_quality == 0.9
+        assert library.settings.facets_default_order == FacetConstants.ORDER_AUTHOR
+        assert library.settings.facets_enabled_order == [
+            FacetConstants.ORDER_AUTHOR,
+            FacetConstants.ORDER_RANDOM,
+        ]
 
         # The library-wide logo was not updated and has been left alone.
-        assert (
-            "A tiny image"
-            == ConfigurationSetting.for_library(Configuration.LOGO, library).value
-        )
+        assert library.logo.content == b"A tiny image"
 
-    def test_library_post_empty_values_edit(self, settings_ctrl_fixture):
-        library = settings_ctrl_fixture.ctrl.db.library(
-            "New York Public Library", "nypl"
+    def test_library_post_empty_values_edit(
+        self, settings_ctrl_fixture, library_fixture: LibraryFixture
+    ):
+        settings = library_fixture.mock_settings()
+        settings.library_description = "description"
+        library_to_edit = library_fixture.library(
+            "New York Public Library", "nypl", settings
         )
-        ConfigurationSetting.for_library(
-            Configuration.LIBRARY_DESCRIPTION, library
-        ).value = "description"
+        library_fixture.reset_settings_cache(library_to_edit)
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("uuid", library.uuid),
+                    ("uuid", str(library_to_edit.uuid)),
                     ("name", "The New York Public Library"),
                     ("short_name", "nypl"),
                     (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
                     (Configuration.WEBSITE_URL, "https://library.library/"),
-                    (Configuration.HELP_EMAIL, "help@example.com"),
+                    ("help_email", "help@example.com"),
                 ]
             )
             response = (
@@ -601,19 +533,11 @@ class TestLibrarySettings:
             )
             assert response.status_code == 200
 
-        assert (
-            ConfigurationSetting.for_library(
-                Configuration.LIBRARY_DESCRIPTION, library
-            )._value
-            == ""
+        library = get_one(
+            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library_to_edit.uuid
         )
-        # ConfigurationSetting.value property.getter sets "" to None
-        assert (
-            ConfigurationSetting.for_library(
-                Configuration.LIBRARY_DESCRIPTION, library
-            ).value
-            == None
-        )
+        assert library is not None
+        assert library.settings.library_description is None
 
     def test_library_post_empty_values_create(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -623,7 +547,7 @@ class TestLibrarySettings:
                     ("short_name", "nypl"),
                     (Configuration.LIBRARY_DESCRIPTION, ""),  # empty value
                     (Configuration.WEBSITE_URL, "https://library.library/"),
-                    (Configuration.HELP_EMAIL, "help@example.com"),
+                    ("help_email", "help@example.com"),
                 ]
             )
             response: Response = (
@@ -633,19 +557,7 @@ class TestLibrarySettings:
             uuid = response.get_data(as_text=True)
 
         library = get_one(settings_ctrl_fixture.ctrl.db.session, Library, uuid=uuid)
-        assert (
-            ConfigurationSetting.for_library(
-                Configuration.LIBRARY_DESCRIPTION, library
-            )._value
-            == ""
-        )
-        # ConfigurationSetting.value property.getter sets "" to None
-        assert (
-            ConfigurationSetting.for_library(
-                Configuration.LIBRARY_DESCRIPTION, library
-            ).value
-            == None
-        )
+        assert library.settings.library_description is None
 
     def test_library_delete(self, settings_ctrl_fixture):
         library = settings_ctrl_fixture.ctrl.db.library()

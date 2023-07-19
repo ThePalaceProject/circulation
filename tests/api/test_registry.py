@@ -657,7 +657,7 @@ class TestRegistration:
         # If a contact is configured, it shows up in the payload.
         contact = "mailto:ohno@library.org"
         settings = library_fixture.settings(registration_fixture.registration.library)
-        settings.configuration_contact_email_address = contact
+        settings.configuration_contact_email_address = contact  # type: ignore[assignment]
         expect_payload["contact"] = contact
         assert expect_payload == m(url_for, stage)
 
