@@ -1229,7 +1229,7 @@ class TestDatabaseBackedFacets:
 
         # When holds are allowed, we can find all works by asking
         # for everything.
-        library = library_fixture.library()
+        library = db.default_library()
         settings = library_fixture.settings(library)
         settings.allow_holds = True
         everything = facetify()

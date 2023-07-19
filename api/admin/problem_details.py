@@ -138,13 +138,6 @@ INVALID_IMAGE = pd(
     detail=_("The submitted image is invalid."),
 )
 
-MISSING_LIBRARY_SHORT_NAME = pd(
-    "http://librarysimplified.org/terms/problem/missing-library-short-name",
-    status_code=400,
-    title=_("Missing library short name"),
-    detail=_("You must set a short name for the library."),
-)
-
 LIBRARY_SHORT_NAME_ALREADY_IN_USE = pd(
     "http://librarysimplified.org/terms/problem/library-short-name-already-in-use",
     status_code=400,

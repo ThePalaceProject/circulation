@@ -1,5 +1,4 @@
 import datetime
-import json
 import re
 from collections import defaultdict
 from typing import Any, List
@@ -388,32 +387,6 @@ def annotator_fixture(db: DatabaseTransactionFixture) -> LibraryAnnotatorFixture
 
 
 class TestLibraryAnnotator:
-    def test__hidden_content_types(self, annotator_fixture: LibraryAnnotatorFixture):
-        def f(value):
-            """Set the default library's HIDDEN_CONTENT_TYPES setting
-            to a specific value and see what _hidden_content_types
-            says.
-            """
-            library = annotator_fixture.db.default_library()
-            library.setting("hidden_content_types").value = value
-            return LibraryAnnotator._hidden_content_types(library)
-
-        # When the value is not set at all, no content types are hidden.
-        assert [] == list(
-            LibraryAnnotator._hidden_content_types(
-                annotator_fixture.db.default_library()
-            )
-        )
-
-        # Now set various values and see what happens.
-        assert [] == f(None)
-        assert [] == f("")
-        assert [] == f(json.dumps([]))
-        assert ["text/html"] == f("text/html")
-        assert ["text/html"] == f(json.dumps("text/html"))
-        assert ["text/html"] == f(json.dumps({"text/html": "some value"}))
-        assert ["text/html", "text/plain"] == f(json.dumps(["text/html", "text/plain"]))
-
     def test_add_configuration_links(
         self,
         annotator_fixture: LibraryAnnotatorFixture,

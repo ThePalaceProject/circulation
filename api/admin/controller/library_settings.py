@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from PIL.Image import Resampling
 from werkzeug.datastructures import FileStorage
 
@@ -18,6 +18,7 @@ from api.lanes import create_default_lanes
 from core.configuration.library import LibrarySettings
 from core.model import (
     Library,
+    Representation,
     create,
     get_one,
     json_serializer,
@@ -114,8 +115,8 @@ class LibrarySettingsController(SettingsController):
                 )
             )
 
-        validated_settings = ProcessFormData.get_settings(LibrarySettings, form_data)
         self.check_short_name_unique(library, short_name)
+        validated_settings = ProcessFormData.get_settings(LibrarySettings, form_data)
 
         if not library:
             # Everyone can modify an existing library, but only a system admin can create a new one.
@@ -224,7 +225,27 @@ class LibrarySettingsController(SettingsController):
         if not image_file:
             return None
 
-        image = Image.open(image_file.stream)
+        allowed_types = [
+            Representation.JPEG_MEDIA_TYPE,
+            Representation.PNG_MEDIA_TYPE,
+            Representation.GIF_MEDIA_TYPE,
+        ]
+        image_type = image_file.headers.get("Content-Type")
+        if image_type not in allowed_types:
+            raise ProblemError(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Image upload must be in GIF, PNG, or JPG format. (Upload was {image_type}.)"
+                )
+            )
+
+        try:
+            image = Image.open(image_file.stream)
+        except UnidentifiedImageError:
+            raise ProblemError(
+                INVALID_CONFIGURATION_OPTION.detailed(
+                    f"Unable to open uploaded image, please try again or upload a different image."
+                )
+            )
         width, height = image.size
         if width > max_dimension or height > max_dimension:
             image.thumbnail((max_dimension, max_dimension), Resampling.LANCZOS)

@@ -187,7 +187,6 @@ facets_enabled_available='['all', 'now', 'always']'
 facets_default_available='all'
 facets_enabled_collection='['full', 'featured']'
 facets_default_collection='full'
-announcements='[]'
 help_web='http://library.com/support'
 default_notification_email_address='noreply@thepalaceproject.org'
 color_scheme='blue'
@@ -196,9 +195,6 @@ web_secondary_color='#D53F34'
 web_header_links='[]'
 web_header_labels='[]'
 hidden_content_types='[]'
-large_collection_languages='[]'
-small_collection_languages='[]'
-tiny_collection_languages='[]'
 
 External integrations:
 ----------------------

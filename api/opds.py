@@ -6,7 +6,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import Any, List, Optional
+from typing import Any, List
 
 from flask import url_for
 
@@ -590,7 +590,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             active_loans_by_work=active_loans_by_work,
             active_holds_by_work=active_holds_by_work,
             active_fulfillments_by_work=active_fulfillments_by_work,
-            hidden_content_types=self._hidden_content_types(library),
+            hidden_content_types=library.settings.hidden_content_types,
             test_mode=test_mode,
         )
         self.circulation = circulation
@@ -602,18 +602,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
-
-    @classmethod
-    def _hidden_content_types(self, library: Optional[Library]) -> List[str]:
-        """Find all content types which this library should not be
-        presenting to patrons.
-
-        This is stored as a per-library setting.
-        """
-        if not library:
-            # This shouldn't happen, but we shouldn't crash if it does.
-            return []
-        return library.settings.hidden_content_types
 
     def top_level_title(self):
         return self._top_level_title

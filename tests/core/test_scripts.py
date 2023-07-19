@@ -1057,6 +1057,8 @@ class TestConfigureLibraryScript:
                 "--short-name=L1",
                 "--name=Library 1",
                 "--setting=customkey=value",
+                "--setting=website=http://library.org",
+                "--setting=help_email=support@library.org",
             ],
             output,
         )
@@ -1065,7 +1067,9 @@ class TestConfigureLibraryScript:
         [library] = db.session.query(Library).all()
         assert "Library 1" == library.name
         assert "L1" == library.short_name
-        assert "value" == library.setting("customkey").value
+        assert "http://library.org" == library.settings.website
+        assert "support@library.org" == library.settings.help_email
+        assert "value" == library.settings_dict.get("customkey")
         expect_output = (
             "Configuration settings stored.\n" + "\n".join(library.explain()) + "\n"
         )
@@ -1092,7 +1096,7 @@ class TestConfigureLibraryScript:
         )
 
         assert "Library 1 New Name" == library.name
-        assert "value" == library.setting("customkey").value
+        assert "value" == library.settings_dict.get("customkey")
 
         expect_output = (
             "Configuration settings stored.\n" + "\n".join(library.explain()) + "\n"

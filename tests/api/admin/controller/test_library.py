@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import base64
 import datetime
 import json
 from io import BytesIO
+from typing import Dict, List
 
 import flask
 import pytest
@@ -18,7 +21,7 @@ from core.model import AdminRole, Library, get_one
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME
 from core.model.announcements import Announcement, AnnouncementData
 from core.model.library import LibraryLogo
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemError
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
 
@@ -39,18 +42,29 @@ class TestLibrarySettings:
             "image": image,
         }
 
-    def library_form(self, library, fields={}):
-
-        defaults = {
-            "uuid": library.uuid,
+    def library_form(
+        self, library: Library, fields: Dict[str, str | List[str]] | None = None
+    ):
+        fields = fields or {}
+        defaults: Dict[str, str | List[str]] = {
+            "uuid": str(library.uuid),
             "name": "The New York Public Library",
-            "short_name": library.short_name,
+            "short_name": str(library.short_name),
             "website": "https://library.library/",
             "help_email": "help@example.com",
             "default_notification_email": "email@example.com",
         }
         defaults.update(fields)
-        form = ImmutableMultiDict(list(defaults.items()))
+
+        form_data = []
+        for k, v in defaults.items():
+            if isinstance(v, list):
+                for value in v:
+                    form_data.append((k, value))
+            else:
+                form_data.append((k, v))
+
+        form = ImmutableMultiDict(form_data)
         return form
 
     def test_libraries_get_with_no_libraries(self, settings_ctrl_fixture):
@@ -63,7 +77,7 @@ class TestLibrarySettings:
             response = (
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
-            assert response.get("libraries") == []
+            assert response.json.get("libraries") == []
 
     def test_libraries_get_with_announcements(
         self, settings_ctrl_fixture, announcement_fixture: AnnouncementFixture
@@ -85,7 +99,7 @@ class TestLibrarySettings:
             response = (
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
             )
-            library_settings = response.get("libraries")[0].get("settings")
+            library_settings = response.json.get("libraries")[0].get("settings")
 
             # We find out about the library's announcements.
             announcements = library_settings.get(ANNOUNCEMENTS_SETTING_NAME)
@@ -175,18 +189,20 @@ class TestLibrarySettings:
                     ("name", "Brooklyn Public Library"),
                 ]
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
+            assert (
+                "Required field 'Short name' is missing."
+                == excinfo.value.problem_detail.detail
             )
-            assert response == MISSING_LIBRARY_SHORT_NAME
 
         library = settings_ctrl_fixture.ctrl.db.library()
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = self.library_form(library, {"uuid": "1234"})
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
-            assert response.uri == LIBRARY_NOT_FOUND.uri
+            assert excinfo.value.problem_detail.uri == LIBRARY_NOT_FOUND.uri
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -195,10 +211,10 @@ class TestLibrarySettings:
                     ("short_name", library.short_name),
                 ]
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
-            assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
+
+            assert excinfo.value.problem_detail == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
         bpl = settings_ctrl_fixture.ctrl.db.library(short_name="bpl")
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -209,10 +225,9 @@ class TestLibrarySettings:
                     ("short_name", library.short_name),
                 ]
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
-            assert response == LIBRARY_SHORT_NAME_ALREADY_IN_USE
+            assert excinfo.value.problem_detail == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -222,10 +237,9 @@ class TestLibrarySettings:
                     ("short_name", library.short_name),
                 ]
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
-            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
 
         # Either patron support email or website MUST be present
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -237,13 +251,12 @@ class TestLibrarySettings:
                     ("default_notification_email_address", "email@example.org"),
                 ]
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
-            assert response.uri == INCOMPLETE_CONFIGURATION.uri
+            assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
             assert (
-                "Patron support email address or Patron support web site"
-                in response.detail
+                "'Patron support email address' or 'Patron support website'"
+                in excinfo.value.problem_detail.detail
             )
 
         # Test a web primary and secondary color that doesn't contrast
@@ -256,37 +269,73 @@ class TestLibrarySettings:
                     "web_secondary_color": "#e0e0e0",
                 },
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert (
+                "contrast-ratio.com/#%23e0e0e0-on-%23ffffff"
+                in excinfo.value.problem_detail.detail
             )
-            assert response.uri == INVALID_CONFIGURATION_OPTION.uri
-            assert "contrast-ratio.com/#%23e0e0e0-on-%23ffffff" in response.detail
-            assert "contrast-ratio.com/#%23e0e0e0-on-%23ffffff" in response.detail
+            assert (
+                "contrast-ratio.com/#%23e0e0e0-on-%23ffffff"
+                in excinfo.value.problem_detail.detail
+            )
 
         # Test a list of web header links and a list of labels that
         # aren't the same length.
-        library = settings_ctrl_fixture.ctrl.db.library()
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                [
-                    ("uuid", library.uuid),
-                    ("name", "The New York Public Library"),
-                    ("short_name", library.short_name),
-                    ("website", "https://library.library/"),
-                    (
-                        Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
-                        "email@example.com",
-                    ),
-                    ("help_email", "help@example.com"),
-                    ("web_header_links", "http://library.com/1"),
-                    ("web_header_links", "http://library.com/2"),
-                    ("web_header_labels", "One"),
-                ]
+            flask.request.form = self.library_form(
+                library,
+                {
+                    "web_header_links": [
+                        "http://library.com/1",
+                        "http://library.com/2",
+                    ],
+                    "web_header_labels": "One",
+                },
             )
-            response = (
+            with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+
+        # Test uploading a logo that is in the wrong format.
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = self.library_form(library)
+            flask.request.files = ImmutableMultiDict(
+                {
+                    "logo": FileStorage(
+                        stream=BytesIO(b"not a png"),
+                        content_type="application/pdf",
+                        filename="logo.png",
+                    )
+                }
             )
-            assert response.uri == INVALID_CONFIGURATION_OPTION.uri
+            with pytest.raises(ProblemError) as excinfo:
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert (
+                "Image upload must be in GIF, PNG, or JPG format."
+                in excinfo.value.problem_detail.detail
+            )
+
+        # Test uploading a logo that we can't open to resize.
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = self.library_form(library)
+            flask.request.files = ImmutableMultiDict(
+                {
+                    "logo": FileStorage(
+                        stream=BytesIO(b"not a png"),
+                        content_type="image/png",
+                        filename="logo.png",
+                    )
+                }
+            )
+            with pytest.raises(ProblemError) as excinfo:
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert (
+                "Unable to open uploaded image" in excinfo.value.problem_detail.detail
+            )
 
     def test__process_image(self, logo_properties, settings_ctrl_fixture):
         image, expected_encoded_image = (
@@ -580,237 +629,3 @@ class TestLibrarySettings:
             settings_ctrl_fixture.ctrl.db.session, Library, uuid=library.uuid
         )
         assert None == library
-
-    def test_library_configuration_settings(self, settings_ctrl_fixture):
-        # Verify that library_configuration_settings validates and updates every
-        # setting for a library.
-        settings = [
-            dict(key="setting1", format="format1"),
-            dict(key="setting2", format="format2"),
-        ]
-
-        # format1 has a custom validation class; format2 does not.
-        class MockValidator:
-            def format_as_string(self, value):
-                self.format_as_string_called_with = value
-                return value + ", formatted for storage"
-
-        validator1 = MockValidator()
-        validators = dict(format1=validator1)
-
-        class MockController(LibrarySettingsController):
-            succeed = True
-            _validate_setting_calls = []
-
-            def _validate_setting(self, library, setting, validator):
-                self._validate_setting_calls.append((library, setting, validator))
-                if self.succeed:
-                    return "validated %s" % setting["key"]
-                else:
-                    return INVALID_INPUT.detailed("invalid!")
-
-        # Run library_configuration_settings in a situation where all validations succeed.
-        controller = MockController(settings_ctrl_fixture.manager)
-        library = settings_ctrl_fixture.ctrl.db.default_library()
-        result = controller.library_configuration_settings(
-            library, validators, settings
-        )
-
-        # No problem detail was returned -- the 'request' can continue.
-        assert None == result
-
-        # _validate_setting was called twice...
-        [c1, c2] = controller._validate_setting_calls
-
-        # ...once for each item in `settings`. One of the settings was
-        # of a type with a known validator, so the validator was
-        # passed in.
-        assert (library, settings[0], validator1) == c1
-        assert (library, settings[1], None) == c2
-
-        # The 'validated' value from the MockValidator was then formatted
-        # for storage using the format() method.
-        assert (
-            "validated %s" % settings[0]["key"]
-            == validator1.format_as_string_called_with
-        )
-
-        # Each (validated and formatted) value was written to the
-        # database.
-        setting1, setting2 = (library.setting(x["key"]) for x in settings)
-        assert "validated %s, formatted for storage" % setting1.key == setting1.value
-        assert "validated %s" % setting2.key == setting2.value
-
-        # Try again in a situation where there are validation failures.
-        setting1.value = None
-        setting2.value = None
-        controller.succeed = False
-        controller._validate_setting_calls = []
-        result = controller.library_configuration_settings(
-            settings_ctrl_fixture.ctrl.db.default_library(), validators, settings
-        )
-
-        # _validate_setting was only called once.
-        assert [
-            (library, settings[0], validator1)
-        ] == controller._validate_setting_calls
-
-        # When it returned a ProblemDetail, that ProblemDetail
-        # was propagated outwards.
-        assert isinstance(result, ProblemDetail)
-        assert "invalid!" == result.detail
-
-        # No new values were written to the database.
-        for x in settings:
-            assert None == library.setting(x["key"]).value
-
-    def test__validate_setting(self, settings_ctrl_fixture):
-        # Verify the rules for validating different kinds of settings,
-        # one simulated setting at a time.
-
-        library = settings_ctrl_fixture.ctrl.db.default_library()
-
-        class MockController(LibrarySettingsController):
-
-            # Mock the functions that pull various values out of the
-            # 'current request' or the 'database' so we don't need an
-            # actual current request or actual database settings.
-            def scalar_setting(self, setting):
-                return self.scalar_form_values.get(setting["key"])
-
-            def list_setting(self, setting, json_objects=False):
-                value = self.list_form_values.get(setting["key"])
-                if json_objects:
-                    value = [json.loads(x) for x in value]
-                return json.dumps(value)
-
-            def image_setting(self, setting):
-                return self.image_form_values.get(setting["key"])
-
-            def current_value(self, setting, _library):
-                # While we're here, make sure the right Library
-                # object was passed in.
-                assert _library == library
-                return self.current_values.get(setting["key"])
-
-            # Now insert mock data into the 'form submission' and
-            # the 'database'.
-
-            # Simulate list values in a form submission. The geographic values
-            # go in as normal strings; the announcements go in as strings that are
-            # JSON-encoded data structures.
-            announcement_list = [
-                {"content": "announcement1"},
-                {"content": "announcement2"},
-            ]
-            list_form_values = dict(
-                geographic_setting=["geographic values"],
-                announcement_list=[json.dumps(x) for x in announcement_list],
-                language_codes=["English", "fr"],
-                list_value=["a list"],
-            )
-
-            # Simulate scalar values in a form submission.
-            scalar_form_values = dict(string_value="a scalar value")
-
-            # Simulate uploaded images in a form submission.
-            image_form_values = dict(image_setting="some image data")
-
-            # Simulate values present in the database but not present
-            # in the form submission.
-            current_values = dict(
-                value_not_present_in_request="a database value",
-                previously_uploaded_image="an old image",
-            )
-
-        # First test some simple cases: scalar values.
-        controller = MockController(settings_ctrl_fixture.manager)
-        m = controller._validate_setting
-
-        # The incoming request has a value for this setting.
-        assert "a scalar value" == m(library, dict(key="string_value"))
-
-        # But not for this setting: we end up going to the database
-        # instead.
-        assert "a database value" == m(
-            library, dict(key="value_not_present_in_request")
-        )
-
-        # And not for this setting either: there is no database value,
-        # so we have to use the default associated with the setting configuration.
-        assert "a default value" == m(
-            library, dict(key="some_other_value", default="a default value")
-        )
-
-        # There are some lists which are more complex, but a normal list is
-        # simple: the return value is the JSON-encoded list.
-        assert json.dumps(["a list"]) == m(library, dict(key="list_value", type="list"))
-
-        # Now let's look at the more complex lists.
-
-        # A list of language codes.
-        assert json.dumps(["eng", "fre"]) == m(
-            library, dict(key="language_codes", format="language-code", type="list")
-        )
-
-        # A list of geographic places
-        class MockGeographicValidator:
-            value = "validated value"
-
-            def validate_geographic_areas(self, value, _db):
-                self.called_with = (value, _db)
-                return self.value
-
-        validator = MockGeographicValidator()
-
-        # The validator was consulted and its response was used as the
-        # value.
-        assert "validated value" == m(
-            library, dict(key="geographic_setting", format="geographic"), validator
-        )
-        assert (
-            json.dumps(["geographic values"]),
-            settings_ctrl_fixture.ctrl.db.session,
-        ) == validator.called_with
-
-        # Just to be explicit, let's also test the case where the 'response' sent from the
-        # validator is a ProblemDetail.
-        validator.value = INVALID_INPUT
-        assert INVALID_INPUT == m(
-            library, dict(key="geographic_setting", format="geographic"), validator
-        )
-
-        # A list of announcements.
-        class MockAnnouncementValidator:
-            value = "validated value"
-
-            def validate_announcements(self, value):
-                self.called_with = value
-                return self.value
-
-        validator = MockAnnouncementValidator()
-
-        assert "validated value" == m(
-            library, dict(key="announcement_list", type="announcements"), validator
-        )
-        assert json.dumps(controller.announcement_list) == validator.called_with
-
-    def test__format_validated_value(self, settings_ctrl_fixture):
-
-        m = LibrarySettingsController._format_validated_value
-
-        # When there is no validator, the incoming value is used as the formatted value,
-        # unchanged.
-        value = object()
-        assert value == m(value, validator=None)
-
-        # When there is a validator, its format_as_string method is
-        # called, and its return value is used as the formatted value.
-        class MockValidator:
-            def format_as_string(self, value):
-                self.called_with = value
-                return "formatted value"
-
-        validator = MockValidator()
-        assert "formatted value" == m(value, validator=validator)
-        assert value == validator.called_with
