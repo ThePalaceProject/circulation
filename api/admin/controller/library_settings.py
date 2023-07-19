@@ -32,10 +32,10 @@ from core.util.problem_detail import ProblemDetail, ProblemError
 from ...config import Configuration
 from ..announcement_list_validator import AnnouncementListValidator
 from ..form_data import ProcessFormData
-from . import SettingsController
+from . import AdminCirculationManagerController
 
 
-class LibrarySettingsController(SettingsController):
+class LibrarySettingsController(AdminCirculationManagerController):
     def process_libraries(self) -> Response | ProblemDetail:
         try:
             if flask.request.method == "GET":
