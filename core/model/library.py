@@ -320,24 +320,6 @@ class Library(Base, HasSessionCache):
             yield collection
             yield from collection.parents
 
-    # # The name of the per-library configuration policy that controls whether
-    # # books may be put on hold.
-    # ALLOW_HOLDS = Configuration.ALLOW_HOLDS
-    #
-    # # Each facet group has two associated per-library keys: one
-    # # configuring which facets are enabled for that facet group, and
-    # # one configuring which facet is the default.
-    # ENABLED_FACETS_KEY_PREFIX = Configuration.ENABLED_FACETS_KEY_PREFIX
-    # DEFAULT_FACET_KEY_PREFIX = Configuration.DEFAULT_FACET_KEY_PREFIX
-    #
-    # # Each library may set a minimum quality for the books that show
-    # # up in the 'featured' lanes that show up on the front page.
-    # MINIMUM_FEATURED_QUALITY = Configuration.MINIMUM_FEATURED_QUALITY
-    #
-    # # Each library may configure the maximum number of books in the
-    # # 'featured' lanes.
-    # FEATURED_LANE_SIZE = Configuration.FEATURED_LANE_SIZE
-
     @property
     def entrypoints(self) -> Generator[Optional[Type[EntryPoint]], None, None]:
         """The EntryPoints enabled for this library."""
@@ -363,10 +345,6 @@ class Library(Base, HasSessionCache):
             return enabled
 
         return getattr(self.settings, f"facets_enabled_{group_name}")  # type: ignore[no-any-return]
-
-    # def enabled_facets_setting(self, group_name):
-    #     key = self.ENABLED_FACETS_KEY_PREFIX + group_name
-    #     return self.setting(key)
 
     @property
     def has_root_lanes(self) -> bool:
