@@ -304,7 +304,7 @@ class Library(Base, HasSessionCache):
                     "settings_dict for library %s is not a dict: %r"
                     % (self.short_name, self.settings_dict)
                 )
-            settings = LibrarySettings(**self.settings_dict)
+            settings = LibrarySettings.construct(**self.settings_dict)
             self._settings = settings
         return settings
 

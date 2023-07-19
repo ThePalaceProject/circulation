@@ -17,7 +17,6 @@ import pytest
 from flask import url_for
 from freezegun import freeze_time
 from money import Money
-from pydantic import EmailStr, HttpUrl, parse_obj_as
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -998,25 +997,21 @@ class TestLibraryAuthenticator:
         del os.environ["AUTOINITIALIZE"]
 
         # Set up configuration settings for links.
-        library_settings.terms_of_service = parse_obj_as(HttpUrl, "http://terms.com")
-        library_settings.privacy_policy = parse_obj_as(HttpUrl, "http://privacy.com")
-        library_settings.copyright = parse_obj_as(HttpUrl, "http://copyright.com")
-        library_settings.license = parse_obj_as(HttpUrl, "http://license.ca/")
-        library_settings.about = parse_obj_as(HttpUrl, "http://about.io")
-        library_settings.registration_url = parse_obj_as(
-            HttpUrl, "https://library.org/register"
-        )
-        library_settings.patron_password_reset = parse_obj_as(
-            HttpUrl, "https://example.org/reset"
-        )
-        library_settings.web_css_file = parse_obj_as(HttpUrl, "http://style.css")
+        library_settings.terms_of_service = "http://terms.com"  # type: ignore[assignment]
+        library_settings.privacy_policy = "http://privacy.com"  # type: ignore[assignment]
+        library_settings.copyright = "http://copyright.com"  # type: ignore[assignment]
+        library_settings.license = "http://license.ca/"  # type: ignore[assignment]
+        library_settings.about = "http://about.io"  # type: ignore[assignment]
+        library_settings.registration_url = "https://library.org/register"  # type: ignore[assignment]
+        library_settings.patron_password_reset = "https://example.org/reset"  # type: ignore[assignment]
+        library_settings.web_css_file = "http://style.css"  # type: ignore[assignment]
 
         library.logo = LibraryLogo(content=b"image data")
 
         library_settings.library_description = "Just the best."
 
         # Set the URL to the library's web page.
-        library_settings.website = parse_obj_as(HttpUrl, "http://library.org/")
+        library_settings.website = "http://library.org/"  # type: ignore[assignment]
 
         # Set the color scheme a mobile client should use.
         library_settings.color_scheme = "plaid"
@@ -1026,8 +1021,8 @@ class TestLibraryAuthenticator:
         library_settings.web_secondary_color = "#abcdef"
 
         # Configure the various ways a patron can get help.
-        library_settings.help_email = parse_obj_as(EmailStr, "help@library.org")
-        library_settings.help_web = parse_obj_as(HttpUrl, "http://library.help/")
+        library_settings.help_email = "help@library.org"  # type: ignore[assignment]
+        library_settings.help_web = "http://library.help/"  # type: ignore[assignment]
 
         base_url = ConfigurationSetting.sitewide(db.session, Configuration.BASE_URL_KEY)
         base_url.value = "http://circulation-manager/"
@@ -1191,9 +1186,7 @@ class TestLibraryAuthenticator:
             # If a separate copyright designated agent is configured,
             # that email address is used instead of the default
             # patron support address.
-            library_settings.copyright_designated_agent_email_address = parse_obj_as(
-                EmailStr, "dmca@library.org"
-            )
+            library_settings.copyright_designated_agent_email_address = "dmca@library.org"  # type: ignore[assignment]
             doc = json.loads(authenticator.create_authentication_document())
             [agent] = [x for x in doc["links"] if x["rel"] == copyright_rel]
             assert "mailto:dmca@library.org" == agent["href"]

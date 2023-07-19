@@ -28,19 +28,6 @@ class CannotLoadConfiguration(IntegrationException):
 
 class ConfigurationConstants:
 
-    # # Each facet group has two associated per-library keys: one
-    # # configuring which facets are enabled for that facet group, and
-    # # one configuring which facet is the default.
-    # ENABLED_FACETS_KEY_PREFIX = "facets_enabled_"
-    # DEFAULT_FACET_KEY_PREFIX = "facets_default_"
-
-    # The "level" property determines which admins will be able to modify the setting.  Level 1 settings can be modified by anyone.
-    # Level 2 settings can be modified only by library managers and system admins (i.e. not by librarians).  Level 3 settings can be changed only by system admins.
-    # If no level is specified, the setting will be treated as Level 1 by default.
-    ALL_ACCESS = 1
-    SYS_ADMIN_OR_MANAGER = 2
-    SYS_ADMIN_ONLY = 3
-
     TRUE = "true"
     FALSE = "false"
 

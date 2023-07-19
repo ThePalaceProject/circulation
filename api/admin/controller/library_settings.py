@@ -40,8 +40,10 @@ class LibrarySettingsController(AdminCirculationManagerController):
         try:
             if flask.request.method == "GET":
                 return self.process_get()
-            else:
+            elif flask.request.method == "POST":
                 return self.process_post()
+            else:
+                return INCOMPLETE_CONFIGURATION
         except ProblemError as e:
             self._db.rollback()
             return e.problem_detail

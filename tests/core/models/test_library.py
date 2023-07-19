@@ -1,6 +1,7 @@
 import pytest
 from Crypto.PublicKey.RSA import RsaKey, import_key
 
+from core.configuration.library import LibrarySettings
 from core.model.configuration import ConfigurationSetting
 from core.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -225,3 +226,26 @@ username='someuser'
         key = import_key(private_key)
         assert isinstance(key, RsaKey)
         assert public_key == key.public_key().export_key().decode("utf-8")
+
+    def test_settings(self, db: DatabaseTransactionFixture):
+        library = db.default_library()
+
+        # If our settings dict gets set to something other than a dict,
+        # we raise an error.
+        library.settings_dict = []
+        with pytest.raises(ValueError):
+            library.settings
+
+        # We don't validate settings when loaded from the database, since
+        # we assume they were validated when they were set.
+        library.settings_dict = {}
+        settings = library.settings
+
+        # This would normally not be possible, because website is
+        # a required property.
+        assert isinstance(settings, LibrarySettings)
+        assert not hasattr(settings, "website")
+
+        # Test with a properly formatted settings dict.
+        library2 = db.library()
+        assert library2.settings.website == "http://library.com"

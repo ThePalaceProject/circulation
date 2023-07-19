@@ -5,6 +5,7 @@ import datetime
 import json
 from io import BytesIO
 from typing import Dict, List
+from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -21,8 +22,9 @@ from core.model import AdminRole, Library, get_one
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME
 from core.model.announcements import Announcement, AnnouncementData
 from core.model.library import LibraryLogo
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.fixtures.announcements import AnnouncementFixture
+from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.library import LibraryFixture
 
 
@@ -184,6 +186,16 @@ class TestLibrarySettings:
 
     def test_libraries_post_errors(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict([])
+            with pytest.raises(ProblemError) as excinfo:
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
+            assert (
+                "Required field 'Name' is missing."
+                == excinfo.value.problem_detail.detail
+            )
+
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
@@ -297,6 +309,19 @@ class TestLibrarySettings:
             with pytest.raises(ProblemError) as excinfo:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+
+        # Test bad language code
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = self.library_form(
+                library, {"tiny_collection_languages": "zzz"}
+            )
+            with pytest.raises(ProblemError) as excinfo:
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+            assert excinfo.value.problem_detail.uri == UNKNOWN_LANGUAGE.uri
+            assert (
+                "zzz is not a valid language code"
+                in excinfo.value.problem_detail.detail
+            )
 
         # Test uploading a logo that is in the wrong format.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -629,3 +654,45 @@ class TestLibrarySettings:
             settings_ctrl_fixture.ctrl.db.session, Library, uuid=library.uuid
         )
         assert None == library
+
+    def test_process_libraries(self, controller_fixture: ControllerFixture):
+        manager = MagicMock()
+        controller = LibrarySettingsController(manager)
+        controller.process_get = MagicMock()  # type: ignore[method-assign]
+        controller.process_post = MagicMock()  # type: ignore[method-assign]
+
+        # Make sure we call process_get for a get request
+        with controller_fixture.request_context_with_library("/", method="GET"):
+            controller.process_libraries()
+
+        controller.process_get.assert_called_once()
+        controller.process_post.assert_not_called()
+        controller.process_get.reset_mock()
+        controller.process_post.reset_mock()
+
+        # Make sure we call process_post for a post request
+        with controller_fixture.request_context_with_library("/", method="POST"):
+            controller.process_libraries()
+
+        controller.process_get.assert_not_called()
+        controller.process_post.assert_called_once()
+        controller.process_get.reset_mock()
+        controller.process_post.reset_mock()
+
+        # For any other request, make sure we return a ProblemDetail
+        with controller_fixture.request_context_with_library("/", method="PUT"):
+            resp = controller.process_libraries()
+
+        controller.process_get.assert_not_called()
+        controller.process_post.assert_not_called()
+        assert isinstance(resp, ProblemDetail)
+
+        # Make sure that if process_get or process_post raises a ProblemError,
+        # we return the problem detail.
+        controller.process_get.side_effect = ProblemError(
+            problem_detail=INCOMPLETE_CONFIGURATION.detailed("test")
+        )
+        with controller_fixture.request_context_with_library("/", method="GET"):
+            resp = controller.process_libraries()
+        assert isinstance(resp, ProblemDetail)
+        assert resp.detail == "test"

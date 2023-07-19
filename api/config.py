@@ -131,7 +131,6 @@ class Configuration(CoreConfiguration):
             ),
             "category": "Announcements",
             "type": "announcements",
-            "level": CoreConfiguration.ALL_ACCESS,
         },
     ]
 
