@@ -235,8 +235,8 @@ class TestIndividualAdmins:
             ) == sorted(admins, key=lambda x: x["email"])
 
     def test_individual_admins_get_no_admin(self, settings_ctrl_fixture):
-        # The application is first started, there is no admin user. In that
-        # case, the API returns an empty list.
+        # When the application is first started, there is no admin user. In that
+        # case, we return a problem detail.
 
         with settings_ctrl_fixture.ctrl.app.test_request_context("/", method="GET"):
             response = (
