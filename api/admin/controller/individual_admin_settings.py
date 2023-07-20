@@ -48,7 +48,10 @@ class IndividualAdminSettingsController(SettingsController):
         return highest_role if has_auth else None
 
     def process_get(self):
-        logged_in_admin: Admin = flask.request.admin
+        logged_in_admin: Optional[Admin] = getattr(flask.request, "admin", None)
+        if not logged_in_admin:
+            return {}
+
         highest_role: AdminRole = self._highest_authorized_role()
 
         if not highest_role:
