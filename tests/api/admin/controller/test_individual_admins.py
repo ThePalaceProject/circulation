@@ -234,6 +234,16 @@ class TestIndividualAdmins:
                 key=lambda x: x["email"],
             ) == sorted(admins, key=lambda x: x["email"])
 
+    def test_individual_admins_get_no_admin(self, settings_ctrl_fixture):
+        # When the application is first started, there is no admin user. In that
+        # case, we return a problem detail.
+
+        with settings_ctrl_fixture.ctrl.app.test_request_context("/", method="GET"):
+            response = (
+                settings_ctrl_fixture.manager.admin_individual_admin_settings_controller.process_get()
+            )
+            assert response == ADMIN_AUTH_NOT_CONFIGURED
+
     def test_individual_admins_post_errors(self, settings_ctrl_fixture):
         db = settings_ctrl_fixture.ctrl.db
 
