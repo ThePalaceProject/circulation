@@ -72,6 +72,9 @@ class LibrarySettingsController(AdminCirculationManagerController):
             if announcements:
                 settings["announcements"] = json.dumps(announcements)
 
+            if library.logo:
+                settings["logo"] = library.logo.data_url
+
             libraries_response += [
                 dict(
                     uuid=library.uuid,

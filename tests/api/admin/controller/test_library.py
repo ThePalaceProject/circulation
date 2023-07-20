@@ -124,6 +124,27 @@ class TestLibrarySettings:
                     datetime.date,
                 )
 
+    def test_libraries_get_with_logo(self, settings_ctrl_fixture, logo_properties):
+        db = settings_ctrl_fixture.ctrl.db
+
+        library = db.default_library()
+
+        # Give the library a logo
+        library.logo = LibraryLogo(content=logo_properties["base64_bytes"])
+
+        # When we request information about this library...
+        with settings_ctrl_fixture.request_context_with_admin("/"):
+            response = (
+                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
+            )
+
+        libraries = response.json.get("libraries")
+        assert len(libraries) == 1
+        library_settings = libraries[0].get("settings")
+
+        assert "logo" in library_settings
+        assert library_settings["logo"] == logo_properties["data_url"]
+
     def test_libraries_get_with_multiple_libraries(
         self, settings_ctrl_fixture, library_fixture: LibraryFixture
     ):
