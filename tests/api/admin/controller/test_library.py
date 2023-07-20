@@ -340,7 +340,7 @@ class TestLibrarySettings:
                 settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
             assert excinfo.value.problem_detail.uri == UNKNOWN_LANGUAGE.uri
             assert (
-                "zzz is not a valid language code"
+                '"zzz" is not a valid language code'
                 in excinfo.value.problem_detail.detail
             )
 

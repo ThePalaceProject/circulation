@@ -643,7 +643,7 @@ class LibrarySettings(BaseSettings):
                     field_label = cls.get_form_field_label(field.name)
                     raise SettingsValidationError(
                         problem_detail=UNKNOWN_LANGUAGE.detailed(
-                            f"{field_label}: {language} is not a valid language code."
+                            f'"{field_label}": "{language}" is not a valid language code.'
                         )
                     )
         return value
