@@ -17,11 +17,18 @@ from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
+from api.model.time_tracking import (
+    PlaytimeEntriesPost,
+    PlaytimeEntriesPostResponse,
+    PlaytimeEntriesPostSummary,
+)
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
@@ -66,6 +73,7 @@ from core.model import (
     Patron,
     Representation,
     Session,
+    create,
     get_one,
 )
 from core.model.devicetokens import (
@@ -73,6 +81,7 @@ from core.model.devicetokens import (
     DuplicateDeviceTokenError,
     InvalidTokenTypeError,
 )
+from core.model.time_tracking import IdentifierPlaytimeEntry
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
@@ -189,6 +198,7 @@ class CirculationManager:
     odl_notification_controller: ODLNotificationController
     shared_collection_controller: SharedCollectionController
     static_files: StaticFileController
+    playtime_entries: PlaytimeEntriesController
 
     # Admin controllers
     admin_sign_in_controller: SignInController
@@ -458,6 +468,7 @@ class CirculationManager:
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
         self.patron_auth_token = PatronAuthTokenController(self)
+        self.playtime_entries = PlaytimeEntriesController(self)
 
         from api.lcp.controller import LCPController
 
@@ -2419,6 +2430,67 @@ class AnalyticsController(CirculationManagerController):
             return Response({}, 200)
         else:
             return INVALID_ANALYTICS_EVENT_TYPE
+
+
+class PlaytimeEntriesController(CirculationManagerController):
+    def track_playtimes(self, identifier_type, identifier):
+        library: Library = flask.request.library
+        identifier = get_one(
+            self._db, Identifier, type=identifier_type, identifier=identifier
+        )
+
+        if not identifier:
+            return NOT_FOUND_ON_REMOTE.detailed(
+                f"The identifier {identifier_type}/{identifier} was not found."
+            )
+
+        try:
+            data = PlaytimeEntriesPost(**flask.request.json)
+        except ValidationError as ex:
+            return INVALID_INPUT.detailed(ex.json())
+
+        responses = []
+        summary = PlaytimeEntriesPostSummary()
+        for entry in data.time_entries:
+            status_code = 201
+            message = "Created"
+            transaction = self._db.begin_nested()
+            try:
+                playtime_entry, _ = create(
+                    self._db,
+                    IdentifierPlaytimeEntry,
+                    tracking_id=entry.id,
+                    identifier_id=identifier.id,
+                    timestamp=entry.during_minute,
+                    total_seconds_played=entry.seconds_played,
+                )
+            except IntegrityError as ex:
+                logging.getLogger("Time Tracking").error(
+                    f"Playtime entry failure {entry.id}: {ex}"
+                )
+                # A duplicate is reported as a success, since we have already recorded this value
+                if "UniqueViolation" in str(ex):
+                    summary.successes += 1
+                    status_code = 200
+                    message = "OK"
+                else:
+                    status_code = 400
+                    message = str(ex.orig)
+                    summary.failures += 1
+                transaction.rollback()
+            else:
+                summary.successes += 1
+                transaction.commit()
+
+            responses.append(dict(id=entry.id, status=status_code, message=message))
+            summary.total += 1
+
+        response_data = PlaytimeEntriesPostResponse(
+            summary=summary, responses=responses
+        )
+        response = flask.jsonify(response_data.dict())
+        response.status_code = 207
+        return response
 
 
 class ODLNotificationController(CirculationManagerController):
