@@ -33,7 +33,7 @@ def upgrade() -> None:
     for library in libraries:
         configuration_settings = connection.execute(
             "select key, value from configurationsettings "
-            "where library_id = (%s) and cs.external_integration_id IS NULL",
+            "where library_id = (%s) and external_integration_id IS NULL",
             (library.id,),
         )
         settings_dict = {}
