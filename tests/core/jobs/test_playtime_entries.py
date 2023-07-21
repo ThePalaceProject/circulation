@@ -1,10 +1,16 @@
 from datetime import datetime, timedelta
 from typing import List
+from unittest.mock import call, patch
 
 import pytz
 
 from api.model.time_tracking import PlaytimeTimeEntry
-from core.jobs.playtime_entries import PlaytimeEntriesSummationScript
+from core.config import Configuration
+from core.jobs.playtime_entries import (
+    PlaytimeEntriesEmailReportsScript,
+    PlaytimeEntriesSummationScript,
+)
+from core.model import create
 from core.model.identifier import Identifier
 from core.model.time_tracking import IdentifierPlaytime, IdentifierPlaytimeEntry
 from core.util.datetime_helpers import utc_now
@@ -125,3 +131,70 @@ class TestPlaytimeEntriesSummationScript:
         PlaytimeEntriesSummationScript(db.session).run()
         # Only 2 should be left
         assert db.session.query(IdentifierPlaytimeEntry).count() == 2
+
+
+def date3m(days):
+    return (utc_now() - timedelta(days=(90 - days))).date()
+
+
+def playtime(session, identifier, timestamp, total_seconds):
+    return create(
+        session,
+        IdentifierPlaytime,
+        identifier=identifier,
+        timestamp=timestamp,
+        total_seconds_played=total_seconds,
+        identifier_str=identifier.urn,
+    )[0]
+
+
+class TestPlaytimeEntriesEmailReportsScript:
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        identifier = db.identifier()
+        edition = db.edition()
+        identifier2 = edition.primary_identifier
+
+        playtime(db.session, identifier, date3m(3), 1)
+        playtime(db.session, identifier, date3m(31), 2)
+        playtime(
+            db.session, identifier, date3m(-31), 60
+        )  # out of range: more than a month prior to the quarter
+        playtime(db.session, identifier, date3m(91), 60)  # out of range: future
+        playtime(db.session, identifier2, date3m(3), 5)
+        playtime(db.session, identifier2, date3m(4), 6)
+
+        with (
+            patch("core.jobs.playtime_entries.csv.writer") as writer,
+            patch("core.jobs.playtime_entries.EmailManager") as email,
+            patch(
+                "core.jobs.playtime_entries.os.environ",
+                new={
+                    Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email"
+                },
+            ),
+        ):
+            PlaytimeEntriesEmailReportsScript(db.session).run()
+
+        assert writer().writerow.call_count == 3  # 1 header, 2 identifiers
+
+        cutoff = date3m(0).replace(day=1)
+        until = utc_now().date().replace(day=1)
+        column1 = f"{cutoff} - {until}"
+        call_args = writer().writerow.call_args_list
+        assert call_args == [
+            call(["date", "urn", "title", "total seconds"]),  # Header
+            call((column1, identifier.urn, None, 3)),  # Identifier without edition
+            call(
+                (column1, identifier2.urn, edition.title, 11)
+            ),  # Identifier with edition
+        ]
+
+        assert email.send_email.call_count == 1
+        assert email.send_email.call_args == call(
+            f"Playtime Summaries {cutoff} - {until}",
+            receivers=["reporting@test.email"],
+            text="",
+            attachments={
+                f"playtime-summary-{cutoff}-{until}": ""
+            },  # Mock objects do not write data
+        )
