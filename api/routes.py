@@ -672,9 +672,7 @@ def track_analytics_event(identifier_type, identifier, event_type):
     )
 
 
-@library_route(
-    "/analytics/<identifier_type>/<path:identifier>/playtimes", methods=["POST"]
-)
+@library_route("/playtimes/<identifier_type>/<path:identifier>", methods=["POST"])
 @has_library
 @allows_auth
 @returns_problem_detail
