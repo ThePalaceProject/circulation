@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -67,7 +66,7 @@ class IdentifierPlaytime(Base):
 
     # This should be a per-minute datetime
     timestamp: Mapped[DateTime] = Column(
-        DateTime,
+        DateTime(timezone=True),
         CheckConstraint(
             "extract(second from timestamp)::integer = 0",
             name="timestamp_minute_boundary_constraint",
@@ -82,26 +81,28 @@ class IdentifierPlaytime(Base):
     __table_args__ = (UniqueConstraint("identifier_str", "timestamp"),)
 
     @classmethod
-    def add(cls, playtime_entry: IdentifierPlaytimeEntry) -> None:
-        if playtime_entry.processed is True:
-            logging.getLogger("IdentifierPlaytime").info(
-                f"PlaytimeEntry is already processed {playtime_entry.identifier.urn} | {playtime_entry.tracking_id}"
-            )
-            return
-
-        db = Session.object_session(playtime_entry)
-        identifier = playtime_entry.identifier
-        ts = playtime_entry.timestamp
+    def add(
+        cls, identifier: Identifier, ts: datetime.datetime, seconds: int
+    ) -> IdentifierPlaytime:
+        """Add playtime in seconds to an identifier for a minute-timestamp"""
+        _db = Session.object_session(identifier)
+        # Sanitize the timestamp to a minute boundary
         timestamp = datetime.datetime(ts.year, ts.month, ts.day, ts.hour, ts.minute)
-        playtime, created = get_one_or_create(
-            db,
+
+        # Ensure the row exists
+        playtime, _ = get_one_or_create(
+            _db,
             cls,
             timestamp=timestamp,
             identifier_id=identifier.id,
+            create_method_kwargs={
+                "identifier_str": identifier.urn,
+            },
         )
 
-        if created:
-            playtime.identifier_str = identifier.urn
-
-        playtime.total_seconds_played.op("+")(playtime_entry.total_seconds_played)
-        playtime_entry.processed = True
+        # Race condition safe update
+        _db.query(cls).filter(cls.id == playtime.id).update(
+            {"total_seconds_played": cls.total_seconds_played + seconds}
+        )
+        _db.refresh(playtime)
+        return playtime

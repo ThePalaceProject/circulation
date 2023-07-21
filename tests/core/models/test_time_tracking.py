@@ -114,7 +114,7 @@ class TestIdentifierPlaytime:
                 total_seconds_played=600,
             )
         assert (
-            f'Key (identifier_str, "timestamp")=({identifier.urn}, 2000-01-01 12:00:00) already exists'
+            f'Key (identifier_str, "timestamp")=({identifier.urn}, 2000-01-01 12:00:00+00) already exists'
             in raised.exconly()
         )
 

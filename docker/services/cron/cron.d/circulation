@@ -115,3 +115,7 @@ HOME=/var/www/circulation
 10 12 * * * root core/bin/run loan_notifications >> /var/log/cron.log 2>&1
 15 12 * * * root core/bin/run hold_notifications >> /var/log/cron.log 2>&1
 0 1 * * * root core/bin/run patron_activity_sync_notifications >> /var/log/cron.log 2>&1
+
+# Audiobook playtimes
+# Every 12 hours, but spaced after hour 8 to reduce job cluttering
+0 8/12 * * * root core/bin/run playtime_summation >> /var/log/cron.log 2>&1
