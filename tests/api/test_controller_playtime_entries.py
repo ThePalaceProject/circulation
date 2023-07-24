@@ -31,7 +31,7 @@ class TestPlaytimeEntriesController:
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json=data
         ):
-            flask.request.patron = patron
+            flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
                 identifier.type, identifier.identifier
             )
@@ -50,12 +50,14 @@ class TestPlaytimeEntriesController:
             entry = get_one(
                 db.session, IdentifierPlaytimeEntry, tracking_id="tracking-id-0"
             )
+            assert entry is not None
             assert entry.total_seconds_played == 12
             assert entry.timestamp.isoformat() == "2000-01-01T12:00:00+00:00"
 
             entry = get_one(
                 db.session, IdentifierPlaytimeEntry, tracking_id="tracking-id-1"
             )
+            assert entry is not None
             assert entry.total_seconds_played == 17
             assert entry.timestamp.isoformat() == "2000-01-01T12:01:00+00:00"
 
@@ -69,7 +71,7 @@ class TestPlaytimeEntriesController:
         db.session.add(
             IdentifierPlaytimeEntry(
                 tracking_id="tracking-id-0",
-                timestamp="2000-01-01T12:00Z",
+                timestamp="2000-01-01T12:00Z",  # type: ignore
                 total_seconds_played=12,
                 identifier_id=identifier.id,
             )
@@ -92,7 +94,7 @@ class TestPlaytimeEntriesController:
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json=data
         ):
-            flask.request.patron = patron
+            flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
                 identifier.type, identifier.identifier
             )
@@ -128,7 +130,7 @@ class TestPlaytimeEntriesController:
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json=data
         ):
-            flask.request.patron = patron
+            flask.request.patron = patron  # type: ignore
             with patch("api.controller.create") as mock_create:
                 mock_create.side_effect = IntegrityError(
                     "STATEMENT", {}, Exception("Fake Exception")

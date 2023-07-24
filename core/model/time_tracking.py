@@ -33,7 +33,9 @@ class IdentifierPlaytimeEntry(Base):
         ForeignKey("identifiers.id", onupdate="CASCADE", ondelete="CASCADE"),
         nullable=False,
     )
-    timestamp: Mapped[DateTime] = Column(DateTime(timezone=True), nullable=False)
+    timestamp: Mapped[datetime.datetime] = Column(
+        DateTime(timezone=True), nullable=False
+    )
     total_seconds_played = Column(
         Integer,
         CheckConstraint(
@@ -65,7 +67,7 @@ class IdentifierPlaytime(Base):
     identifier_str = Column(String, nullable=False)
 
     # This should be a per-minute datetime
-    timestamp: Mapped[DateTime] = Column(
+    timestamp: Mapped[datetime.datetime] = Column(
         DateTime(timezone=True),
         CheckConstraint(
             "extract(second from timestamp)::integer = 0",
