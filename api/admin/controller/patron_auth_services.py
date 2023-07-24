@@ -315,7 +315,7 @@ class PatronAuthServicesController(AdminPermissionsControllerMixin):
 
     def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
         if flask.request.method != "DELETE":
-            return INVALID_INPUT.detailed(_("Method not allowed for this endpoint"))  # type: ignore[no-any-return]
+            return INVALID_INPUT.detailed(_("Method not allowed for this endpoint"))
         self.require_system_admin()
 
         integration = get_one(

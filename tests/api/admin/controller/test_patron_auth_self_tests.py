@@ -142,6 +142,7 @@ class TestPatronAuthSelfTests:
         response = controller.process_patron_auth_service_self_tests(auth_service.id)
         assert isinstance(response, ProblemDetail)
         assert response.title == FAILED_TO_RUN_SELF_TESTS.title
+        assert response.detail is not None
         assert "Failed to run self tests" in response.detail
         assert response.status_code == 400
 

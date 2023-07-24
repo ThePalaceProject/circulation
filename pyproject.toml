@@ -74,6 +74,7 @@ module = [
     "api.adobe_vendor_id",
     "api.circulation",
     "api.integration.*",
+    "api.registration.*",
     "core.integration.*",
     "core.model.announcements",
     "core.model.hassessioncache",
@@ -83,6 +84,7 @@ module = [
     "core.settings.*",
     "core.util.authentication_for_opds",
     "core.util.cache",
+    "core.util.problem_detail",
     "tests.fixtures.authenticator",
     "tests.migration.*",
 ]

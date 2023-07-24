@@ -216,6 +216,7 @@ class TestAdmin:
             )
             assert isinstance(expired_token, ProblemDetail)
             assert expired_token.uri == INVALID_RESET_PASSWORD_TOKEN.uri
+            assert expired_token.detail is not None
             assert "expired" in expired_token.detail
 
         # Valid token but invalid admin id - unsuccessful validation

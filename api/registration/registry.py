@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import base64
 import json
 import logging
+import sys
+from argparse import ArgumentParser
+from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tuple
 
 import feedparser
+from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
+from requests import Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
@@ -13,13 +20,25 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.problem_details import *
-from core.model import ConfigurationSetting, ExternalIntegration, create, get_one
+from core.model import (
+    ConfigurationSetting,
+    ExternalIntegration,
+    Library,
+    create,
+    get_one,
+)
 from core.scripts import LibraryInputScript
 from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail
 
+from ..util.flask import PalaceFlask
 from .constants import RegistrationConstants
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
 class RemoteRegistry:
@@ -39,12 +58,14 @@ class RemoteRegistry:
     OPDS_1_PREFIX = "application/atom+xml;profile=opds-catalog"
     OPDS_2_TYPE = "application/opds+json"
 
-    def __init__(self, integration):
+    def __init__(self, integration: ExternalIntegration) -> None:
         """Constructor."""
         self.integration = integration
 
     @classmethod
-    def for_integration_id(cls, _db, integration_id, goal):
+    def for_integration_id(
+        cls, _db: Session, integration_id: Optional[int], goal: str
+    ) -> Optional[Self]:
         """Find a LibraryRegistry object configured
         by the given ExternalIntegration ID.
 
@@ -56,7 +77,9 @@ class RemoteRegistry:
         return cls(integration)
 
     @classmethod
-    def for_protocol_and_goal(cls, _db, protocol, goal):
+    def for_protocol_and_goal(
+        cls, _db: Session, protocol: Optional[str], goal: Optional[str]
+    ) -> Generator[Self, None, None]:
         """Find all LibraryRegistry objects with the given protocol and goal."""
         for i in _db.query(ExternalIntegration).filter(
             ExternalIntegration.goal == goal,
@@ -65,7 +88,9 @@ class RemoteRegistry:
             yield cls(i)
 
     @classmethod
-    def for_protocol_goal_and_url(cls, _db, protocol, goal, url):
+    def for_protocol_goal_and_url(
+        cls, _db: Session, protocol: str, goal: str, url: str
+    ) -> Self:
         """Get a LibraryRegistry for the given protocol, goal, and
         URL. Create the corresponding ExternalIntegration if necessary.
         """
@@ -83,7 +108,7 @@ class RemoteRegistry:
         return cls(integration)
 
     @property
-    def registrations(self):
+    def registrations(self) -> Generator[Registration, None, None]:
         """Find all of this site's successful registrations with
         this RemoteRegistry.
 
@@ -92,7 +117,11 @@ class RemoteRegistry:
         for x in self.integration.libraries:
             yield Registration(self, x)
 
-    def fetch_catalog(self, catalog_url=None, do_get=HTTP.debuggable_get):
+    def fetch_catalog(
+        self,
+        catalog_url: Optional[str] = None,
+        do_get: Callable[..., Response | ProblemDetail] = HTTP.debuggable_get,
+    ) -> Tuple[str, str] | ProblemDetail:
         """Fetch the root catalog for this RemoteRegistry.
 
         :return: A ProblemDetail if there's a problem communicating
@@ -106,7 +135,9 @@ class RemoteRegistry:
         return self._extract_catalog_information(response)
 
     @classmethod
-    def _extract_catalog_information(cls, response):
+    def _extract_catalog_information(
+        cls, response: Response
+    ) -> Tuple[str, str] | ProblemDetail:
         """From an OPDS catalog, extract information that's essential to
         kickstarting the OPDS Directory Registration Protocol.
 
@@ -138,7 +169,9 @@ class RemoteRegistry:
             )
         return register_url, vendor_id
 
-    def fetch_registration_document(self, do_get=HTTP.debuggable_get):
+    def fetch_registration_document(
+        self, do_get: Callable[..., Response | ProblemDetail] = HTTP.debuggable_get
+    ) -> Tuple[Optional[str], Optional[str]] | ProblemDetail:
         """Fetch a discovery service's registration document and extract
         useful information from it.
 
@@ -163,7 +196,9 @@ class RemoteRegistry:
         return terms_of_service_link, terms_of_service_html
 
     @classmethod
-    def _extract_registration_information(cls, response):
+    def _extract_registration_information(
+        cls, response: Response
+    ) -> Tuple[Optional[str], Optional[str]]:
         """From an OPDS registration document, extract information that's
         useful to kickstarting the OPDS Directory Registration Protocol.
 
@@ -187,7 +222,7 @@ class RemoteRegistry:
         for link in links:
             if link.get("rel") != "terms-of-service":
                 continue
-            url = link.get("href")
+            url = link.get("href") or ""
             is_http = any(
                 [url.startswith(protocol + "://") for protocol in ("http", "https")]
             )
@@ -201,7 +236,9 @@ class RemoteRegistry:
         return tos_link, tos_html
 
     @classmethod
-    def _extract_links(cls, response):
+    def _extract_links(
+        cls, response: Response
+    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, str]]] | ProblemDetail:
         """Parse an OPDS 1 or OPDS feed out of a Requests response object.
 
         :return: A 2-tuple (parsed_catalog, links),
@@ -226,7 +263,7 @@ class RemoteRegistry:
         return catalog, links
 
     @classmethod
-    def _decode_data_url(cls, url):
+    def _decode_data_url(cls, url: str) -> str:
         """Convert a data: URL to a string of sanitized HTML.
 
         :raise ValueError: If the data: URL is invalid, in an
@@ -245,7 +282,7 @@ class RemoteRegistry:
         if not any(media_type.startswith(x) for x in ("text/html", "text/plain")):
             raise ValueError("Unsupported media type in data: URL: %s" % media_type)
         html = base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
-        return Sanitizer().sanitize(html)
+        return Sanitizer().sanitize(html)  # type: ignore[no-any-return]
 
 
 class Registration(RegistrationConstants):
@@ -257,7 +294,7 @@ class Registration(RegistrationConstants):
     configure the relationship between the two.
     """
 
-    def __init__(self, registry, library):
+    def __init__(self, registry: RemoteRegistry, library: Library) -> None:
         self.registry = registry
         self.integration = self.registry.integration
         self.library = library
@@ -283,7 +320,9 @@ class Registration(RegistrationConstants):
         # be stored in this setting.
         self.web_client_field = self.setting(self.LIBRARY_REGISTRATION_WEB_CLIENT)
 
-    def setting(self, key, default_value=None):
+    def setting(
+        self, key: str, default_value: Optional[str] = None
+    ) -> ConfigurationSetting:
         """Find or create a ConfigurationSetting that configures this
         relationship between library and registry.
 
@@ -295,16 +334,16 @@ class Registration(RegistrationConstants):
         )
         if setting.value is None and default_value is not None:
             setting.value = default_value
-        return setting
+        return setting  # type: ignore[no-any-return]
 
     def push(
         self,
-        stage,
-        url_for,
-        catalog_url=None,
-        do_get=HTTP.debuggable_get,
-        do_post=HTTP.debuggable_post,
-    ):
+        stage: str,
+        url_for: Callable[..., str],
+        catalog_url: Optional[str] = None,
+        do_get: Callable[..., Response] = HTTP.debuggable_get,
+        do_post: Callable[..., Response] = HTTP.debuggable_post,
+    ) -> Literal[True] | ProblemDetail:
         """Attempt to register a library with a RemoteRegistry.
 
         NOTE: This method is designed to be used in a
@@ -337,6 +376,8 @@ class Registration(RegistrationConstants):
                 _("%r is not a valid registration stage") % stage
             )
 
+        if self.library.private_key is None:
+            raise RuntimeError(f"{self.library.short_name} has no private key set.")
         cipher = Configuration.cipher(self.library.private_key)
 
         # Before we can start the registration protocol, we must fetch
@@ -376,7 +417,9 @@ class Registration(RegistrationConstants):
         # Process the result.
         return self._process_registration_result(catalog, cipher, stage)
 
-    def _create_registration_payload(self, url_for, stage):
+    def _create_registration_payload(
+        self, url_for: Callable[..., str], stage: str
+    ) -> Dict[str, str]:
         """Collect the key-value pairs to be sent when kicking off the
         registration protocol.
 
@@ -399,7 +442,7 @@ class Registration(RegistrationConstants):
             payload["contact"] = contact
         return payload
 
-    def _create_registration_headers(self):
+    def _create_registration_headers(self) -> Dict[str, str]:
         shared_secret = self.setting(ExternalIntegration.PASSWORD).value
         headers = {}
         if shared_secret:
@@ -407,7 +450,13 @@ class Registration(RegistrationConstants):
         return headers
 
     @classmethod
-    def _send_registration_request(cls, register_url, headers, payload, do_post):
+    def _send_registration_request(
+        cls,
+        register_url: str,
+        headers: Dict[str, str],
+        payload: Dict[str, str],
+        do_post: Callable[..., Response],
+    ) -> Response | ProblemDetail:
         """Send the request that actually kicks off the OPDS Directory
         Registration Protocol.
 
@@ -440,7 +489,9 @@ class Registration(RegistrationConstants):
         return response
 
     @classmethod
-    def _decrypt_shared_secret(cls, cipher, shared_secret):
+    def _decrypt_shared_secret(
+        cls, cipher: PKCS1OAEP_Cipher, cipher_text: str
+    ) -> bytes | ProblemDetail:
         """Attempt to decrypt an encrypted shared secret.
 
         :param cipher: A Cipher object.
@@ -451,14 +502,16 @@ class Registration(RegistrationConstants):
         a ProblemDetail if it could not be decrypted.
         """
         try:
-            shared_secret = cipher.decrypt(base64.b64decode(shared_secret))
+            shared_secret = cipher.decrypt(base64.b64decode(cipher_text))
         except ValueError as e:
             return SHARED_SECRET_DECRYPTION_ERROR.detailed(
-                _("Could not decrypt shared secret %s") % shared_secret
+                _("Could not decrypt shared secret %s") % cipher_text
             )
         return shared_secret
 
-    def _process_registration_result(self, catalog, cipher, desired_stage):
+    def _process_registration_result(
+        self, catalog: Dict[str, Any], cipher: PKCS1OAEP_Cipher, desired_stage: str
+    ) -> Literal[True] | ProblemDetail:
         """We just sent out a registration request and got an OPDS catalog
         in return. Process that catalog.
 
@@ -473,15 +526,15 @@ class Registration(RegistrationConstants):
         # e.g. through Short Client Tokens or authenticated API
         # requests.
         if not isinstance(catalog, dict):
-            return INTEGRATION_ERROR.detailed(
+            return INTEGRATION_ERROR.detailed(  # type: ignore[unreachable]
                 _(
                     "Remote service served %(representation)r, which I can't make sense of as an OPDS document.",
                     representation=catalog,
                 )
             )
-        metadata = catalog.get("metadata", {})
+        metadata: Dict[str, str] = catalog.get("metadata", {})
         short_name = metadata.get("short_name")
-        shared_secret = metadata.get("shared_secret")
+        encrypted_shared_secret = metadata.get("shared_secret")
         links = catalog.get("links", [])
 
         web_client_url = None
@@ -493,8 +546,8 @@ class Registration(RegistrationConstants):
         if short_name:
             setting = self.setting(ExternalIntegration.USERNAME)
             setting.value = short_name
-        if shared_secret:
-            shared_secret = self._decrypt_shared_secret(cipher, shared_secret)
+        if encrypted_shared_secret:
+            shared_secret = self._decrypt_shared_secret(cipher, encrypted_shared_secret)
             if isinstance(shared_secret, ProblemDetail):
                 return shared_secret
 
@@ -528,7 +581,7 @@ class LibraryRegistrationScript(LibraryInputScript):
     GOAL = ExternalIntegration.DISCOVERY_GOAL
 
     @classmethod
-    def arg_parser(cls, _db):
+    def arg_parser(cls, _db: Session) -> ArgumentParser:  # type: ignore[override]
         parser = LibraryInputScript.arg_parser(_db)
         parser.add_argument(
             "--registry-url",
@@ -540,9 +593,13 @@ class LibraryRegistrationScript(LibraryInputScript):
             help="Register these libraries in the 'testing' stage or the 'production' stage.",
             choices=(Registration.TESTING_STAGE, Registration.PRODUCTION_STAGE),
         )
-        return parser
+        return parser  # type: ignore[no-any-return]
 
-    def do_run(self, cmd_args=None, manager=None):
+    def do_run(
+        self,
+        cmd_args: Optional[List[str]] = None,
+        manager: Optional[CirculationManager] = None,
+    ) -> PalaceFlask:
         parser = self.arg_parser(self._db)
         parsed = self.parse_command_line(self._db, cmd_args)
 
@@ -571,7 +628,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         # created.
         return app
 
-    def process_library(self, registration, stage, url_for):
+    def process_library(self, registration: Registration, stage: str, url_for: Callable[..., str]) -> bool | ProblemDetail:  # type: ignore[override]
         """Push one Library's registration to the given RemoteRegistry."""
 
         logger = logging.getLogger(

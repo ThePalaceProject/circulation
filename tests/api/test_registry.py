@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from unittest.mock import MagicMock
 
 import pytest
 from Crypto.Cipher import PKCS1_OAEP
@@ -232,7 +233,7 @@ class TestRemoteRegistry:
                 self.fetch_catalog_called_with = do_get
                 return REMOTE_INTEGRATION_FAILED
 
-        registry = Mock0(object())
+        registry = Mock0(MagicMock())
         result = registry.fetch_registration_document()
 
         # Our mock fetch_catalog was called with a method that would
@@ -257,7 +258,7 @@ class TestRemoteRegistry:
                 self._extract_registration_information_called_with = response
                 return "TOS link", "TOS HTML data"
 
-        registry1 = Mock1(object())
+        registry1 = Mock1(MagicMock())
         result = registry1.fetch_registration_document(client.do_get)
         # A request was made to the registration URL mentioned in the catalog.
         assert "http://register-here/" == client.requests.pop()
@@ -529,10 +530,10 @@ class TestRegistration:
         registry = MockRegistry(registration_fixture.integration)
         registration = MockRegistration(registry, library)
         stage = Registration.TESTING_STAGE
-        url_for = object()
+        url_for = MagicMock()
         catalog_url = "http://catalog/"
-        do_get = object()
-        do_post = object()
+        do_get = MagicMock()
+        do_post = MagicMock()
 
         def push():
             return registration.push(stage, url_for, catalog_url, do_get, do_post)
@@ -646,7 +647,7 @@ class TestRegistration:
 
         # First, test with no configuration contact configured for the
         # library.
-        stage = object()
+        stage = ""
         expect_url = url_for(
             "authentication_document",
             registration_fixture.registration.library.short_name,
@@ -696,8 +697,8 @@ class TestRegistration:
         # passed through.
         mock = Mock(MockRequestsResponse(200, content="all good"))
         url = "url"
-        payload = "payload"
-        headers = "headers"
+        payload = {"payload": "payload"}
+        headers = {"headers": ""}
         m = Registration._send_registration_request
         result = m(url, headers, payload, mock.do_post)
         assert mock.response == result
@@ -747,10 +748,10 @@ class TestRegistration:
         key2 = RSA.generate(2048)
         encryptor2 = PKCS1_OAEP.new(key2)
 
-        # NOTE: In a real case, shared_secret must be UTF-8 string,
-        # but this particular method will work even if it's not.
         shared_secret = os.urandom(24)
-        encrypted_secret = base64.b64encode(encryptor.encrypt(shared_secret))
+        encrypted_secret = base64.b64encode(encryptor.encrypt(shared_secret)).decode(
+            "utf-8"
+        )
 
         # Success.
         m = Registration._decrypt_shared_secret
@@ -761,7 +762,8 @@ class TestRegistration:
         problem = m(encryptor2, encrypted_secret)
         assert isinstance(problem, ProblemDetail)
         assert SHARED_SECRET_DECRYPTION_ERROR.uri == problem.uri
-        assert encrypted_secret.decode("utf-8") in problem.detail
+        assert problem.detail is not None
+        assert encrypted_secret in problem.detail
 
     def test__process_registration_result(
         self, registration_fixture: RegistrationFixture
@@ -771,7 +773,8 @@ class TestRegistration:
         m = reg._process_registration_result
 
         # Result must be a dictionary.
-        result = m("not a dictionary", None, None)
+        result = m("not a dictionary", None, None)  # type: ignore[arg-type]
+        assert isinstance(result, ProblemDetail)
         assert INTEGRATION_ERROR.uri == result.uri
         assert (
             "Remote service served 'not a dictionary', which I can't make sense of as an OPDS document."
@@ -780,7 +783,7 @@ class TestRegistration:
 
         # When the result is empty, the registration is marked as successful.
         new_stage = "new stage"
-        encryptor = object()
+        encryptor = MagicMock()
         result = m(dict(), encryptor, new_stage)
         assert True == result
         assert reg.SUCCESS_STATUS == reg.status_field.value
@@ -852,7 +855,7 @@ class TestLibraryRegistrationScript:
         library2 = db.library()
 
         cmd_args = [
-            library.short_name,
+            str(library.short_name),
             "--stage=testing",
             "--registry-url=http://registry/",
         ]
@@ -906,8 +909,8 @@ class TestLibraryRegistrationScript:
 
         registration = Success(registry, library)
 
-        stage = object()
-        url_for = object()
+        stage = "stage"
+        url_for = MagicMock()
         assert True == script.process_library(registration, stage, url_for)
 
         # The stage and url_for values were passed into
@@ -940,5 +943,6 @@ class TestLibraryRegistrationScript:
         # The problem document is returned. Useful information about
         # the exception is also added to the logs, where someone
         # actually running the script will see it.
+        assert isinstance(result, ProblemDetail)
         assert INVALID_INPUT.uri == result.uri
         assert "oops" == result.detail
