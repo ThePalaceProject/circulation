@@ -875,7 +875,7 @@ class CirculationAPI:
         from .bibliotheca import BibliothecaAPI
         from .enki import EnkiAPI
         from .odilo import OdiloAPI
-        from .odl import ODLAPI, SharedODLAPI
+        from .odl import ODLAPI
         from .odl2 import ODL2API
         from .opds_for_distributors import OPDSForDistributorsAPI
         from .overdrive import OverdriveAPI
@@ -889,7 +889,6 @@ class CirculationAPI:
             OPDSForDistributorsAPI.NAME: OPDSForDistributorsAPI,
             ODLAPI.NAME: ODLAPI,
             ODL2API.NAME: ODL2API,
-            SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
         }
 

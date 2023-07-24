@@ -124,9 +124,6 @@ if TYPE_CHECKING:
 
     from api.admin.controller.announcement_service import AnnouncementSettings
     from api.admin.controller.catalog_services import CatalogServicesController
-    from api.admin.controller.collection_library_registrations import (
-        CollectionLibraryRegistrationsController,
-    )
     from api.admin.controller.collection_self_tests import CollectionSelfTestsController
     from api.admin.controller.collection_settings import CollectionSettingsController
     from api.admin.controller.individual_admin_settings import (
@@ -217,7 +214,6 @@ class CirculationManager:
     admin_patron_auth_service_self_tests_controller: PatronAuthServiceSelfTestsController
     admin_collection_settings_controller: CollectionSettingsController
     admin_collection_self_tests_controller: CollectionSelfTestsController
-    admin_collection_library_registrations_controller: CollectionLibraryRegistrationsController
     admin_sitewide_configuration_settings_controller: SitewideConfigurationSettingsController
     admin_library_settings_controller: LibrarySettingsController
     admin_individual_admin_settings_controller: IndividualAdminSettingsController

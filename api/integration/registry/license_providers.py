@@ -17,7 +17,7 @@ class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
         from api.enki import EnkiAPI
         from api.lcp.collection import LCPAPI
         from api.odilo import OdiloAPI
-        from api.odl import ODLAPI, SharedODLAPI
+        from api.odl import ODLAPI
         from api.odl2 import ODL2API
         from api.opds_for_distributors import OPDSForDistributorsAPI
         from api.overdrive import OverdriveAPI
@@ -33,7 +33,6 @@ class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
             OPDSForDistributorsAPI.NAME: OPDSForDistributorsAPI,
             ODLAPI.NAME: ODLAPI,
             ODL2API.NAME: ODL2API,
-            SharedODLAPI.NAME: SharedODLAPI,
             LCPAPI.NAME: LCPAPI,
             OPDSImporter.NAME: OPDSImporter,
             OPDS2Importer.NAME: OPDS2Importer,

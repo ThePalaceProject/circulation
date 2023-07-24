@@ -528,22 +528,6 @@ class TestAdminCollectionSelfTests:
         )
 
 
-class TestAdminCollectionLibraryRegistrations:
-    CONTROLLER_NAME = "admin_collection_library_registrations_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
-    def test_process_collection_library_registrations(self, fixture: AdminRouteFixture):
-        url = "/admin/collection_library_registrations"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_collection_library_registrations  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "GET", "POST")
-
-
 class TestAdminIndividualAdminSettings:
     CONTROLLER_NAME = "admin_individual_admin_settings_controller"
 

@@ -23,7 +23,6 @@ from api.local_analytics_exporter import LocalAnalyticsExporter
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
-from api.odl import SharedODLImporter, SharedODLImportMonitor
 from api.onix import ONIXExtractor
 from api.opds_for_distributors import (
     OPDSForDistributorsImporter,
@@ -1809,12 +1808,6 @@ class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
                     result += str(response)
 
                     output.write(result)
-
-
-class SharedODLImportScript(OPDSImportScript):
-    IMPORTER_CLASS = SharedODLImporter
-    MONITOR_CLASS = SharedODLImportMonitor
-    PROTOCOL = SharedODLImporter.NAME
 
 
 class LocalAnalyticsExportScript(Script):

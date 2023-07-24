@@ -64,7 +64,7 @@ from api.lanes import create_default_lanes
 from api.lcp.collection import LCPAPI
 from api.local_analytics_exporter import LocalAnalyticsExporter
 from api.odilo import OdiloAPI
-from api.odl import ODLAPI, SharedODLAPI
+from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.overdrive import OverdriveAPI
@@ -197,13 +197,6 @@ def setup_admin_controllers(manager):
 
     manager.admin_collection_self_tests_controller = CollectionSelfTestsController(
         manager
-    )
-    from api.admin.controller.collection_library_registrations import (
-        CollectionLibraryRegistrationsController,
-    )
-
-    manager.admin_collection_library_registrations_controller = (
-        CollectionLibraryRegistrationsController(manager)
     )
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
