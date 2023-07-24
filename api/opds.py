@@ -32,6 +32,7 @@ from core.model import (
     Patron,
     Session,
 )
+from core.model.constants import EditionConstants, LinkRelations
 from core.model.formats import FormatPriorities
 from core.model.integration import IntegrationConfiguration
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
@@ -781,6 +782,19 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     identifier_type=identifier.type,
                     identifier=identifier.identifier,
                     event_type=CirculationEvent.OPEN_BOOK,
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                ),
+            )
+
+        if edition.medium == EditionConstants.AUDIO_MEDIUM:
+            feed.add_link_to_entry(
+                entry,
+                rel=LinkRelations.TIME_TRACKING,
+                href=self.url_for(
+                    "track_playtime_events",
+                    identifier_type=identifier.type,
+                    identifier=identifier.identifier,
                     library_short_name=self.library.short_name,
                     _external=True,
                 ),

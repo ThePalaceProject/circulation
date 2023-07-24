@@ -47,6 +47,7 @@ from core.model import (
     Work,
     get_one,
 )
+from core.model.constants import EditionConstants, LinkRelations
 from core.model.formats import FormatPriorities
 from core.model.integration import IntegrationConfiguration
 from core.model.licensing import LicensePool
@@ -924,6 +925,36 @@ class TestLibraryAnnotator:
         ]
         assert feed_link["href"] == link.resource.url
         assert feed_link["type"] == link.resource.representation.media_type
+
+        # Annotate time tracking
+        work = annotator_fixture.db.work()
+        edition = work.presentation_edition
+        edition.medium = EditionConstants.AUDIO_MEDIUM
+
+        entry = feed._make_entry_xml(work, edition)
+        annotator.annotate_work_entry(work, None, edition, identifier, feed, entry)
+
+        time_tracking_links = entry.findall(
+            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+        )
+        assert len(time_tracking_links) == 1
+        assert time_tracking_links[0].get("href") == annotator.url_for(
+            "track_playtime_events",
+            identifier_type=identifier.type,
+            identifier=identifier.identifier,
+            library_short_name=annotator.library.short_name,
+            _external=True,
+        )
+
+        # Book mediums don't get time tracking
+        edition.medium = EditionConstants.BOOK_MEDIUM
+        entry = feed._make_entry_xml(work, edition)
+        annotator.annotate_work_entry(work, None, edition, identifier, feed, entry)
+
+        time_tracking_links = entry.findall(
+            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+        )
+        assert len(time_tracking_links) == 0
 
     def test_annotate_feed(self, annotator_fixture: LibraryAnnotatorFixture):
         lane = annotator_fixture.db.lane()
