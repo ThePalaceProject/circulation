@@ -235,11 +235,6 @@ class LinkRelations:
     # The rel for a link we feed to clients for samples/previews.
     CLIENT_SAMPLE = "preview"
 
-    # A uri rel type for authentication documents with a vendor specific "link"
-    PATRON_PASSWORD_RESET = (
-        "http://librarysimplified.org/terms/rel/patron-password-reset"
-    )
-
     # opds/opds2 auth token rel
     TOKEN_AUTH = "token_endpoint"
 

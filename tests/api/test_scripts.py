@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import datetime
-import json
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -14,7 +13,7 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.external_search import (
     ExternalSearchIndex,
     MockExternalSearchIndex,
@@ -61,6 +60,7 @@ from scripts import (
     NovelistSnapshotScript,
 )
 from tests.api.mockapi.circulation import MockCirculationManager
+from tests.fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.authenticator import AuthProviderFixture
@@ -114,25 +114,25 @@ class TestAdobeAccountIDResetScript:
 
 
 class LaneScriptFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture):
         self.db = db
         base_url_setting = ConfigurationSetting.sitewide(
             self.db.session, Configuration.BASE_URL_KEY
         )
         base_url_setting.value = "http://test-circulation-manager/"
-        for k, v in [
-            (Configuration.LARGE_COLLECTION_LANGUAGES, []),
-            (Configuration.SMALL_COLLECTION_LANGUAGES, []),
-            (Configuration.TINY_COLLECTION_LANGUAGES, ["eng", "fre"]),
-        ]:
-            ConfigurationSetting.for_library(
-                k, self.db.default_library()
-            ).value = json.dumps(v)
+        library = db.default_library()
+        settings = library_fixture.mock_settings()
+        settings.large_collection_languages = []
+        settings.small_collection_languages = []
+        settings.tiny_collection_languages = ["eng", "fre"]
+        library.update_settings(settings)
 
 
 @pytest.fixture(scope="function")
-def lane_script_fixture(db: DatabaseTransactionFixture) -> LaneScriptFixture:
-    return LaneScriptFixture(db)
+def lane_script_fixture(
+    db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+) -> LaneScriptFixture:
+    return LaneScriptFixture(db, library_fixture)
 
 
 class TestCacheRepresentationPerLane:
@@ -271,7 +271,9 @@ class TestCacheFacetListsPerLane:
         script = CacheFacetListsPerLane(db.session, ["--pages=1"], manager=object())
         assert 1 == script.pages
 
-    def test_facets(self, lane_script_fixture: LaneScriptFixture):
+    def test_facets(
+        self, lane_script_fixture: LaneScriptFixture, library_fixture: LibraryFixture
+    ):
         db = lane_script_fixture.db
         # Verify that CacheFacetListsPerLane.facets combines the items
         # found in the attributes created by command-line parsing.
@@ -285,12 +287,15 @@ class TestCacheFacetListsPerLane:
         script.availabilities = [Facets.AVAILABLE_NOW, "nonsense"]
         script.collections = [Facets.COLLECTION_FULL, "nonsense"]
 
+        library = library_fixture.library()
+
         # EbooksEntryPoint is normally a valid entry point, but we're
         # going to disable it for this library.
-        setting = db.default_library().setting(EntryPoint.ENABLED_SETTING)
-        setting.value = json.dumps([AudiobooksEntryPoint.INTERNAL_NAME])
+        settings = library_fixture.mock_settings()
+        settings.enabled_entry_points = [AudiobooksEntryPoint.INTERNAL_NAME]
+        library.update_settings(settings)
 
-        lane = db.lane()
+        lane = db.lane(library=library)
 
         # We get one Facets object for every valid combination
         # of parameters. Here there are 2*1*1*1 combinations.
@@ -313,7 +318,7 @@ class TestCacheFacetListsPerLane:
         # that have no parent. When the WorkList has a parent, the selected
         # entry point is treated as an explicit choice -- navigating downward
         # in the lane hierarchy ratifies the default value.
-        sublane = db.lane(parent=lane)
+        sublane = db.lane(parent=lane, library=library)
         f1, f2 = script.facets(sublane)
         for f in f1, f2:
             assert False == f.entrypoint_is_default
@@ -456,16 +461,20 @@ class TestCacheOPDSGroupFeedPerLane:
             assert AcquisitionFeed.ACQUISITION_FEED_TYPE == response.content_type
             assert response.get_data(as_text=True).startswith("<feed")
 
-    def test_facets(self, lane_script_fixture: LaneScriptFixture):
+    def test_facets(
+        self, lane_script_fixture: LaneScriptFixture, library_fixture: LibraryFixture
+    ):
         db = lane_script_fixture.db
         # Normally we yield one FeaturedFacets object for each of the
         # library's enabled entry points.
         library = db.default_library()
         script = CacheOPDSGroupFeedPerLane(db.session, manager=object(), cmd_args=[])
-        setting = library.setting(EntryPoint.ENABLED_SETTING)
-        setting.value = json.dumps(
-            [AudiobooksEntryPoint.INTERNAL_NAME, EbooksEntryPoint.INTERNAL_NAME]
-        )
+        settings = library_fixture.mock_settings()
+        settings.enabled_entry_points = [
+            AudiobooksEntryPoint.INTERNAL_NAME,
+            EbooksEntryPoint.INTERNAL_NAME,
+        ]
+        library.update_settings(settings)
 
         lane = db.lane()
         audio_facets, ebook_facets = script.facets(lane)
@@ -481,7 +490,10 @@ class TestCacheOPDSGroupFeedPerLane:
         for facets in (audio_facets, ebook_facets):
             # The FeaturedFacets objects knows to feature works at the
             # library's minimum quality level.
-            assert library.minimum_featured_quality == facets.minimum_featured_quality
+            assert (
+                library.settings.minimum_featured_quality
+                == facets.minimum_featured_quality
+            )
 
         # The first entry point is treated as the default only for WorkLists
         # that have no parent. When the WorkList has a parent, the selected
@@ -497,7 +509,8 @@ class TestCacheOPDSGroupFeedPerLane:
 
         # If the library has no enabled entry points, we yield one
         # FeaturedFacets object with no particular entry point.
-        setting.value = json.dumps([])
+        settings.enabled_entry_points = []
+        library.update_settings(settings)
         (no_entry_point,) = script.facets(lane)
         assert None == no_entry_point.entrypoint
 

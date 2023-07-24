@@ -11,8 +11,6 @@ from sqlalchemy.exc import ArgumentError
 # from this module, alongside CannotLoadConfiguration.
 from core.exceptions import IntegrationException
 
-from .entrypoint import EntryPoint
-from .facets import FacetConstants
 from .util import LanguageCodes
 from .util.datetime_helpers import to_utc, utc_now
 
@@ -29,19 +27,6 @@ class CannotLoadConfiguration(IntegrationException):
 
 
 class ConfigurationConstants:
-
-    # Each facet group has two associated per-library keys: one
-    # configuring which facets are enabled for that facet group, and
-    # one configuring which facet is the default.
-    ENABLED_FACETS_KEY_PREFIX = "facets_enabled_"
-    DEFAULT_FACET_KEY_PREFIX = "facets_default_"
-
-    # The "level" property determines which admins will be able to modify the setting.  Level 1 settings can be modified by anyone.
-    # Level 2 settings can be modified only by library managers and system admins (i.e. not by librarians).  Level 3 settings can be changed only by system admins.
-    # If no level is specified, the setting will be treated as Level 1 by default.
-    ALL_ACCESS = 1
-    SYS_ADMIN_OR_MANAGER = 2
-    SYS_ADMIN_ONLY = 3
 
     TRUE = "true"
     FALSE = "false"
@@ -84,22 +69,7 @@ class Configuration(ConfigurationConstants):
     URL = "url"
     INTEGRATIONS = "integrations"
 
-    # The name of the per-library configuration policy that controls whether
-    # books may be put on hold.
-    ALLOW_HOLDS = "allow_holds"
-
-    # Each library may set a minimum quality for the books that show
-    # up in the 'featured' lanes that show up on the front page.
-    MINIMUM_FEATURED_QUALITY = "minimum_featured_quality"
     DEFAULT_MINIMUM_FEATURED_QUALITY = 0.65
-
-    # Each library may configure the maximum number of books in the
-    # 'featured' lanes.
-    FEATURED_LANE_SIZE = "featured_lane_size"
-
-    WEBSITE_URL = "website"
-    NAME = "name"
-    SHORT_NAME = "short_name"
 
     DEBUG = "DEBUG"
     INFO = "INFO"
@@ -189,132 +159,6 @@ class Configuration(ConfigurationConstants):
             "default": ConfigurationConstants.TRUE,
         },
     ]
-
-    LIBRARY_SETTINGS = (
-        [
-            {
-                "key": NAME,
-                "label": _("Name"),
-                "description": _("The human-readable name of this library."),
-                "category": "Basic Information",
-                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-                "required": True,
-            },
-            {
-                "key": SHORT_NAME,
-                "label": _("Short name"),
-                "description": _(
-                    "A short name of this library, to use when identifying it in scripts or URLs, e.g. 'NYPL'."
-                ),
-                "category": "Basic Information",
-                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-                "required": True,
-            },
-            {
-                "key": WEBSITE_URL,
-                "label": _("URL of the library's website"),
-                "description": _(
-                    "The library's main website, e.g. \"https://www.nypl.org/\" (not this Circulation Manager's URL)."
-                ),
-                "required": True,
-                "format": "url",
-                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-                "category": "Basic Information",
-            },
-            {
-                "key": ALLOW_HOLDS,
-                "label": _("Allow books to be put on hold"),
-                "type": "select",
-                "options": [
-                    {"key": "true", "label": _("Allow holds")},
-                    {"key": "false", "label": _("Disable holds")},
-                ],
-                "default": "true",
-                "category": "Loans, Holds, & Fines",
-                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-            },
-            {
-                "key": EntryPoint.ENABLED_SETTING,
-                "label": _("Enabled entry points"),
-                "description": _(
-                    "Patrons will see the selected entry points at the top level and in search results. <p>Currently supported audiobook vendors: Bibliotheca, Axis 360"
-                ),
-                "type": "list",
-                "options": [
-                    {
-                        "key": entrypoint.INTERNAL_NAME,
-                        "label": EntryPoint.DISPLAY_TITLES.get(entrypoint),
-                    }
-                    for entrypoint in EntryPoint.ENTRY_POINTS
-                ],
-                "default": [x.INTERNAL_NAME for x in EntryPoint.DEFAULT_ENABLED],
-                "category": "Lanes & Filters",
-                # Renders a component with options that get narrowed down as the user makes selections.
-                "format": "narrow",
-                # Renders an input field that cannot be edited.
-                "readOnly": True,
-                "level": ConfigurationConstants.SYS_ADMIN_ONLY,
-            },
-            {
-                "key": FEATURED_LANE_SIZE,
-                "label": _("Maximum number of books in the 'featured' lanes"),
-                "type": "number",
-                "default": 15,
-                "category": "Lanes & Filters",
-                "level": ConfigurationConstants.ALL_ACCESS,
-            },
-            {
-                "key": MINIMUM_FEATURED_QUALITY,
-                "label": _(
-                    "Minimum quality for books that show up in 'featured' lanes"
-                ),
-                "description": _("Between 0 and 1."),
-                "type": "number",
-                "max": 1,
-                "default": DEFAULT_MINIMUM_FEATURED_QUALITY,
-                "category": "Lanes & Filters",
-                "level": ConfigurationConstants.ALL_ACCESS,
-            },
-        ]
-        + [
-            {
-                "key": ConfigurationConstants.ENABLED_FACETS_KEY_PREFIX + group,
-                "label": description,
-                "type": "list",
-                "options": [
-                    {
-                        "key": facet,
-                        "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet),
-                    }
-                    for facet in FacetConstants.FACETS_BY_GROUP.get(group, [])
-                ],
-                "default": FacetConstants.FACETS_BY_GROUP.get(group),
-                "category": "Lanes & Filters",
-                # Tells the front end that each of these settings is related to the corresponding default setting.
-                "paired": ConfigurationConstants.DEFAULT_FACET_KEY_PREFIX + group,
-                "level": ConfigurationConstants.SYS_ADMIN_OR_MANAGER,
-            }
-            for group, description in FacetConstants.GROUP_DESCRIPTIONS.items()
-        ]
-        + [
-            {
-                "key": ConfigurationConstants.DEFAULT_FACET_KEY_PREFIX + group,
-                "label": _("Default %(group)s", group=display_name),
-                "type": "select",
-                "options": [
-                    {
-                        "key": facet,
-                        "label": FacetConstants.FACET_DISPLAY_TITLES.get(facet),
-                    }
-                    for facet in FacetConstants.FACETS_BY_GROUP.get(group, [])
-                ],
-                "default": FacetConstants.DEFAULT_FACET.get(group),
-                "category": "Lanes & Filters",
-                "skip": True,
-            }
-            for group, display_name in FacetConstants.GROUP_DISPLAY_TITLES.items()
-        ]
-    )
 
     @classmethod
     def database_url(cls):

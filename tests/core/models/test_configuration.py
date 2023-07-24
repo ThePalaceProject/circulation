@@ -101,7 +101,9 @@ class TestConfigurationSetting:
         # Here's a library which has a ConfigurationSetting for the same
         # key used in the sitewide configuration.
         library = db.default_library()
-        library_conf = ConfigurationSetting.for_library(key, library)
+        library_conf = ConfigurationSetting.for_library_and_externalintegration(
+            db.session, key, library, None
+        )
 
         # Since all libraries use a given ConfigurationSetting to mean
         # the same thing, a library _does_ inherit the sitewide value
@@ -190,7 +192,6 @@ class TestConfigurationSetting:
         assert [] == integration.settings
 
         library = db.default_library()
-        assert [] == library.settings
 
         # Create four different ConfigurationSettings with the same key.
         cs = ConfigurationSetting
@@ -200,7 +201,9 @@ class TestConfigurationSetting:
         assert None == for_neither.library
         assert None == for_neither.external_integration
 
-        for_library = cs.for_library(key, library)
+        for_library = cs.for_library_and_externalintegration(
+            db.session, key, library, None
+        )
         assert library == for_library.library
         assert None == for_library.external_integration
 
@@ -220,7 +223,7 @@ class TestConfigurationSetting:
         for o in objs:
             assert o.key == key
 
-        assert [for_library, for_both] == library.settings
+        assert [for_library, for_both] == library.external_integration_settings
         assert [for_integration, for_both] == integration.settings
         assert library == for_both.library
         assert integration == for_both.external_integration
@@ -230,7 +233,7 @@ class TestConfigurationSetting:
         # associated with the library.
         db.session.delete(integration)
         db.session.commit()
-        assert [for_library.id] == [x.id for x in library.settings]
+        assert [for_library.id] == [x.id for x in library.external_integration_settings]
 
     def test_no_orphan_delete_cascade(self, db: DatabaseTransactionFixture):
         # Disconnecting a ConfigurationSetting from a Library or
@@ -238,7 +241,9 @@ class TestConfigurationSetting:
         # a ConfigurationSetting to have no associated Library or
         # ExternalIntegration.
         library = db.default_library()
-        for_library = ConfigurationSetting.for_library(db.fresh_str(), library)
+        for_library = ConfigurationSetting.for_library_and_externalintegration(
+            db.session, db.fresh_str(), library, None
+        )
 
         integration = db.external_integration(db.fresh_str())
         for_integration = ConfigurationSetting.for_externalintegration(

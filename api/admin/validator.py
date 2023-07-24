@@ -3,8 +3,6 @@ import re
 from flask_babel import lazy_gettext as _
 
 from api.admin.exceptions import *
-from core.model import Representation
-from core.util import LanguageCodes
 
 
 class Validator:
@@ -13,8 +11,6 @@ class Validator:
             self.validate_email,
             self.validate_url,
             self.validate_number,
-            self.validate_language_code,
-            self.validate_image,
         ]
 
         for validator in validators:
@@ -138,51 +134,6 @@ class Validator:
                     max=max,
                 )
             )
-
-    def validate_language_code(self, settings, content):
-        # Find the fields that should contain language codes and are not blank.
-        language_inputs = self._extract_inputs(
-            settings, "language-code", content.get("form"), is_list=True
-        )
-        for language in language_inputs:
-            if not self._is_language(language):
-                return UNKNOWN_LANGUAGE.detailed(
-                    _('"%(language)s" is not a valid language code.', language=language)
-                )
-
-    def _is_language(self, language):
-        # Check that the input string is in the list of recognized language codes.
-        return LanguageCodes.string_to_alpha_3(language)
-
-    def validate_image(self, settings, content):
-        # Find the fields that contain image uploads and are not blank.
-        files = content.get("files")
-        if files:
-            image_inputs = self._extract_inputs(
-                settings, "image", files, key="type", should_zip=True
-            )
-
-            for setting, image in image_inputs:
-                invalid_format = self._image_format_error(image)
-                if invalid_format:
-                    return INVALID_CONFIGURATION_OPTION.detailed(
-                        _(
-                            "Upload for %(setting)s must be in GIF, PNG, or JPG format. (Upload was %(format)s.)",
-                            setting=setting.get("label"),
-                            format=invalid_format,
-                        )
-                    )
-
-    def _image_format_error(self, image_file):
-        # Check that the uploaded image is in an acceptable format.
-        allowed_types = [
-            Representation.JPEG_MEDIA_TYPE,
-            Representation.PNG_MEDIA_TYPE,
-            Representation.GIF_MEDIA_TYPE,
-        ]
-        image_type = image_file.headers.get("Content-Type")
-        if not image_type in allowed_types:
-            return image_type
 
     def _list_of_values(self, fields, form):
         result = []

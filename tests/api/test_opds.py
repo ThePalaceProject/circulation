@@ -1,8 +1,7 @@
 import datetime
-import json
 import re
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, List
 from unittest.mock import MagicMock, create_autospec
 
 import dateutil
@@ -13,7 +12,6 @@ from lxml import etree
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
-from api.config import Configuration
 from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
 from api.opds import (
@@ -59,6 +57,7 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import AtomFeed, OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 
 _strftime = AtomFeed._strftime
@@ -388,81 +387,52 @@ def annotator_fixture(db: DatabaseTransactionFixture) -> LibraryAnnotatorFixture
 
 
 class TestLibraryAnnotator:
-    def test__hidden_content_types(self, annotator_fixture: LibraryAnnotatorFixture):
-        def f(value):
-            """Set the default library's HIDDEN_CONTENT_TYPES setting
-            to a specific value and see what _hidden_content_types
-            says.
-            """
-            library = annotator_fixture.db.default_library()
-            library.setting(Configuration.HIDDEN_CONTENT_TYPES).value = value
-            return LibraryAnnotator._hidden_content_types(library)
-
-        # When the value is not set at all, no content types are hidden.
-        assert [] == list(
-            LibraryAnnotator._hidden_content_types(
-                annotator_fixture.db.default_library()
-            )
-        )
-
-        # Now set various values and see what happens.
-        assert [] == f(None)
-        assert [] == f("")
-        assert [] == f(json.dumps([]))
-        assert ["text/html"] == f("text/html")
-        assert ["text/html"] == f(json.dumps("text/html"))
-        assert ["text/html"] == f(json.dumps({"text/html": "some value"}))
-        assert ["text/html", "text/plain"] == f(json.dumps(["text/html", "text/plain"]))
-
-    def test_add_configuration_links(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_add_configuration_links(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
+    ):
         mock_feed: List[Any] = []
-        link_config = {
-            LibraryAnnotator.TERMS_OF_SERVICE: "http://terms/",
-            LibraryAnnotator.PRIVACY_POLICY: "http://privacy/",
-            LibraryAnnotator.COPYRIGHT: "http://copyright/",
-            LibraryAnnotator.ABOUT: "http://about/",
-            LibraryAnnotator.LICENSE: "http://license/",
-            Configuration.HELP_EMAIL: "help@me",
-            Configuration.HELP_WEB: "http://help/",
-            Configuration.HELP_URI: "uri:help",
-        }
 
         # Set up configuration settings for links.
-        for rel, value in link_config.items():
-            ConfigurationSetting.for_library(
-                rel, annotator_fixture.db.default_library()
-            ).value = value
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
+        settings.terms_of_service = "http://terms/"  # type: ignore[assignment]
+        settings.privacy_policy = "http://privacy/"  # type: ignore[assignment]
+        settings.copyright = "http://copyright/"  # type: ignore[assignment]
+        settings.about = "http://about/"  # type: ignore[assignment]
+        settings.license = "http://license/"  # type: ignore[assignment]
+        settings.help_email = "help@me"  # type: ignore[assignment]
+        settings.help_web = "http://help/"  # type: ignore[assignment]
 
         # Set up settings for navigation links.
-        ConfigurationSetting.for_library(
-            Configuration.WEB_HEADER_LINKS, annotator_fixture.db.default_library()
-        ).value = json.dumps(["http://example.com/1", "http://example.com/2"])
-        ConfigurationSetting.for_library(
-            Configuration.WEB_HEADER_LABELS, annotator_fixture.db.default_library()
-        ).value = json.dumps(["one", "two"])
+        settings.web_header_links = ["http://example.com/1", "http://example.com/2"]
+        settings.web_header_labels = ["one", "two"]
 
         annotator_fixture.annotator.add_configuration_links(mock_feed)
 
-        # Ten links were added to the "feed"
-        assert 10 == len(mock_feed)
+        assert 9 == len(mock_feed)
+
+        mock_feed_links = sorted(mock_feed, key=lambda x: x.attrib["rel"])
+        expected_links = [
+            (link.attrib["href"], link.attrib.get("type"))
+            for link in mock_feed_links
+            if link.attrib["rel"] != "related"
+        ]
 
         # They are the links we'd expect.
-        links: Dict[str, Any] = {}
-        for link in mock_feed:
-            rel = link.attrib["rel"]
-            href = link.attrib["href"]
-            if rel == "help" or rel == "related":
-                continue  # Tested below
-            # Check that the configuration value made it into the link.
-            assert href == link_config[rel]
-            assert "text/html" == link.attrib["type"]
-
-        # There are three help links using different protocols.
-        help_links = [x.attrib["href"] for x in mock_feed if x.attrib["rel"] == "help"]
-        assert {"mailto:help@me", "http://help/", "uri:help"} == set(help_links)
+        assert [
+            ("http://about/", "text/html"),
+            ("http://copyright/", "text/html"),
+            ("mailto:help@me", None),
+            ("http://help/", "text/html"),
+            ("http://license/", "text/html"),
+            ("http://privacy/", "text/html"),
+            ("http://terms/", "text/html"),
+        ] == expected_links
 
         # There are two navigation links.
-        navigation_links = [x for x in mock_feed if x.attrib["rel"] == "related"]
+        navigation_links = [x for x in mock_feed_links if x.attrib["rel"] == "related"]
         assert {"navigation"} == {x.attrib["role"] for x in navigation_links}
         assert {"http://example.com/1", "http://example.com/2"} == {
             x.attrib["href"] for x in navigation_links
@@ -665,9 +635,7 @@ class TestLibraryAnnotator:
         authdata = AuthdataUtility.from_config(library)
         assert authdata is not None
         decoded = authdata.decode_short_client_token(token)
-        expected_url = ConfigurationSetting.for_library(
-            Configuration.WEBSITE_URL, library
-        ).value
+        expected_url = library.settings.website
         assert (expected_url, patron_identifier) == decoded
 
         # If we call adobe_id_tags again we'll get a distinct tag
@@ -1442,7 +1410,9 @@ class TestLibraryAnnotator:
         assert copies_re.search(u) is not None
 
     def test_loans_feed_includes_fulfill_links(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
     ):
         patron = annotator_fixture.db.patron()
 
@@ -1492,18 +1462,15 @@ class TestLibraryAnnotator:
 
         # If one of the content types is hidden, the corresponding
         # delivery mechanism does not have a link.
-        setting = annotator_fixture.db.default_library().setting(
-            Configuration.HIDDEN_CONTENT_TYPES
-        )
-        setting.value = json.dumps([mech1.delivery_mechanism.content_type])
-        feed_obj = LibraryLoanAndHoldAnnotator.active_loans_for(
-            None, patron, test_mode=True
-        )
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
+        settings.hidden_content_types = [mech1.delivery_mechanism.content_type]
+        LibraryLoanAndHoldAnnotator.active_loans_for(None, patron, test_mode=True)
         assert {
             mech2.delivery_mechanism.drm_scheme_media_type,
             OPDSFeed.ENTRY_TYPE,
         } == {link["type"] for link in fulfill_links}
-        setting.value = None
+        settings.hidden_content_types = []
 
         # When the loan is fulfilled, there are only fulfill links for that mechanism
         # and the streaming mechanism.
@@ -1828,7 +1795,11 @@ class TestLibraryAnnotator:
         assert "/crawlable_list_feed" in crawlable
         assert str(list1.name) in crawlable
 
-    def test_acquisition_links(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_acquisition_links(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
+    ):
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
         )
@@ -1923,14 +1894,13 @@ class TestLibraryAnnotator:
         # If a book is ready to be fulfilled, but the library has
         # hidden all of its available content types, the fulfill link does
         # not show up -- only the revoke link.
-        hidden = annotator_fixture.db.default_library().setting(
-            Configuration.HIDDEN_CONTENT_TYPES
-        )
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
         available_types = [
             lpdm.delivery_mechanism.content_type
             for lpdm in loan2.license_pool.delivery_mechanisms
         ]
-        hidden.value = json.dumps(available_types)
+        settings.hidden_content_types = available_types
 
         # The list of hidden content types is stored in the Annotator
         # constructor, so this particular test needs a fresh Annotator.
@@ -1945,7 +1915,7 @@ class TestLibraryAnnotator:
             "rel"
         )
         # Un-hide the content types so the test can continue.
-        hidden.value = None
+        settings.hidden_content_types = []
 
         hold_links = annotator.acquisition_links(
             hold.license_pool, None, hold, None, feed, hold.license_pool.identifier
@@ -2041,7 +2011,9 @@ class TestLibraryAnnotator:
         assert [] == hold_links
 
     def test_acquisition_links_multiple_links(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
     ):
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
@@ -2113,9 +2085,9 @@ class TestLibraryAnnotator:
         # If we configure the library to hide one of the content types,
         # we end up with only one link -- the one for the delivery
         # mechanism that's not hidden.
-        annotator_fixture.db.default_library().setting(
-            Configuration.HIDDEN_CONTENT_TYPES
-        ).value = json.dumps([mech1.delivery_mechanism.content_type])
+        library = annotator_fixture.db.default_library()
+        settings = library_fixture.settings(library)
+        settings.hidden_content_types = [mech1.delivery_mechanism.content_type]
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library(), test_mode=True
         )

@@ -11,13 +11,14 @@ from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
 from api.opds import LibraryAnnotator
 from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.app_server import load_facets_from_request
-from core.entrypoint import AudiobooksEntryPoint, EntryPoint, EverythingEntryPoint
+from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import SortKeyPagination
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from core.model import CachedFeed, ConfigurationSetting, Edition
+from core.model import CachedFeed, Edition
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
+from tests.fixtures.library import LibraryFixture
 
 
 class TestOPDSFeedController:
@@ -36,7 +37,11 @@ class TestOPDSFeedController:
     page_called_with: Any
     called_with: Any
 
-    def test_feed(self, circulation_fixture: CirculationControllerFixture):
+    def test_feed(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         # Test the feed() method.
@@ -80,13 +85,11 @@ class TestOPDSFeedController:
 
         # Set up configuration settings for links and entry points
         library = circulation_fixture.db.default_library()
-        for rel, value in [
-            (LibraryAnnotator.TERMS_OF_SERVICE, "a"),
-            (LibraryAnnotator.PRIVACY_POLICY, "b"),
-            (LibraryAnnotator.COPYRIGHT, "c"),
-            (LibraryAnnotator.ABOUT, "d"),
-        ]:
-            ConfigurationSetting.for_library(rel, library).value = value
+        settings = library_fixture.settings(library)
+        settings.terms_of_service = "a"  # type: ignore[assignment]
+        settings.privacy_policy = "b"  # type: ignore[assignment]
+        settings.copyright = "c"  # type: ignore[assignment]
+        settings.about = "d"  # type: ignore[assignment]
 
         # Make a real OPDS feed and poke at it.
         with circulation_fixture.request_context_with_library(
@@ -127,10 +130,10 @@ class TestOPDSFeedController:
                 else:
                     by_rel[i["rel"]] = i["href"]
 
-            assert "a" == by_rel[LibraryAnnotator.TERMS_OF_SERVICE]
-            assert "b" == by_rel[LibraryAnnotator.PRIVACY_POLICY]
-            assert "c" == by_rel[LibraryAnnotator.COPYRIGHT]
-            assert "d" == by_rel[LibraryAnnotator.ABOUT]
+            assert "a" == by_rel["terms-of-service"]
+            assert "b" == by_rel["privacy-policy"]
+            assert "c" == by_rel["copyright"]
+            assert "d" == by_rel["about"]
 
             next_link = by_rel["next"]
             lane_str = str(lane_id)
@@ -231,7 +234,11 @@ class TestOPDSFeedController:
         # No other arguments were passed into page().
         assert {} == kwargs
 
-    def test_groups(self, circulation_fixture: CirculationControllerFixture):
+    def test_groups(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         # AcquisitionFeed.groups is tested in core/test_opds.py, and a
@@ -239,8 +246,9 @@ class TestOPDSFeedController:
         # index, so we're just going to test that groups() (or, in one
         # case, page()) is called properly.
         library = circulation_fixture.db.default_library()
-        library.setting(library.MINIMUM_FEATURED_QUALITY).value = 0.15
-        library.setting(library.FEATURED_LANE_SIZE).value = 2
+        settings = library_fixture.settings(library)
+        settings.minimum_featured_quality = 0.15  # type: ignore[assignment]
+        settings.featured_lane_size = 2
 
         # Patron with root lane -> redirect to root lane
         lane = circulation_fixture.db.lane()
@@ -453,7 +461,11 @@ class TestOPDSFeedController:
             )
             assert "OpenSearchDescription" in response.get_data(as_text=True)
 
-    def test_search(self, circulation_fixture: CirculationControllerFixture):
+    def test_search(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        library_fixture: LibraryFixture,
+    ):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
         # Test the search() controller method.
@@ -579,9 +591,9 @@ class TestOPDSFeedController:
 
         # When only a single entry point is enabled, it's used as the
         # default.
-        library.setting(EntryPoint.ENABLED_SETTING).value = json.dumps(
-            [AudiobooksEntryPoint.INTERNAL_NAME]
-        )
+        library_fixture.settings(library).enabled_entry_points = [
+            AudiobooksEntryPoint.INTERNAL_NAME
+        ]
         with circulation_fixture.request_context_with_library("/?q=t"):
             response = circulation_fixture.manager.opds_feeds.search(
                 None, feed_class=Mock

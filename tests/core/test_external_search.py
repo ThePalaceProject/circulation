@@ -65,6 +65,7 @@ from tests.fixtures.database import (
     DBStatementCounter,
     PerfTimer,
 )
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
@@ -2742,7 +2743,7 @@ class TestQuery:
         quality_range = Filter._match_range(
             "quality",
             "gte",
-            db.default_library().minimum_featured_quality,
+            db.default_library().settings.minimum_featured_quality,
         )
         assert Q("bool", must=[quality_range], must_not=[RESEARCH]) == quality_filter
 
@@ -3733,7 +3734,9 @@ class TestFilter:
             Filter(no_such_keyword="nope")
         assert "Unknown keyword arguments" in str(excinfo.value)
 
-    def test_from_worklist(self, filter_fixture: FilterFixture):
+    def test_from_worklist(
+        self, filter_fixture: FilterFixture, library_fixture: LibraryFixture
+    ):
         data, transaction, session = (
             filter_fixture,
             filter_fixture.transaction,
@@ -3753,7 +3756,7 @@ class TestFilter:
         excluded_audio_sources.value = json.dumps([])
 
         library = transaction.default_library()
-        assert True == library.allow_holds
+        assert library.settings.allow_holds is True
 
         parent = transaction.lane(display_name="Parent Lane", library=library)
         parent.media = Edition.AUDIO_MEDIUM
@@ -3841,9 +3844,10 @@ class TestFilter:
 
         # If the library does not allow holds, this information is
         # propagated to its Filter.
-        library.setting(library.ALLOW_HOLDS).value = False
+        settings = library_fixture.settings(library)
+        settings.allow_holds = False
         filter = Filter.from_worklist(session, parent, facets)
-        assert False == library.allow_holds
+        assert library.settings.allow_holds is False
 
         # Any excluded audio sources in the sitewide settings
         # will be propagated to all Filters.

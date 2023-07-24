@@ -115,8 +115,6 @@ def _site_configuration_has_changed(_db, cooldown=1):
 @event.listens_for(ExternalIntegration.settings, "remove")
 @event.listens_for(Library.integrations, "append")
 @event.listens_for(Library.integrations, "remove")
-@event.listens_for(Library.settings, "append")
-@event.listens_for(Library.settings, "remove")
 def configuration_relevant_collection_change(target, value, initiator):
     site_configuration_has_changed(target)
 

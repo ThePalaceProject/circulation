@@ -11,6 +11,7 @@ import pytest_alembic
 from pytest_alembic.config import Config
 from sqlalchemy import inspect
 
+from core.model import json_serializer
 from tests.fixtures.database import ApplicationFixture, DatabaseFixture
 
 if TYPE_CHECKING:
@@ -111,22 +112,26 @@ def create_library(random_name: RandomName) -> CreateLibrary:
         if short_name is None:
             short_name = random_name()
 
-        # See if we need to include public and private keys
         inspector = inspect(connection)
-        columns = inspector.get_columns("libraries")
-        if "public_key" in [column["name"] for column in columns]:
-            include_keys = True
-        else:
-            include_keys = False
+        columns = [column["name"] for column in inspector.get_columns("libraries")]
 
         args = {
             "name": name,
             "short_name": short_name,
         }
 
-        if include_keys:
+        # See if we need to include public and private keys
+        if "public_key" in columns:
             args["public_key"] = random_name()
             args["private_key"] = random_name()
+
+        # See if we need to include a settings dict
+        if "settings_dict" in columns:
+            settings_dict = {
+                "website": "http://library.com",
+                "help_web": "http://library.com/support",
+            }
+            args["settings_dict"] = json_serializer(settings_dict)
 
         keys = ",".join(args.keys())
         values = ",".join([f"'{value}'" for value in args.values()])

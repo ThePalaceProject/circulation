@@ -24,7 +24,6 @@ from core.config import CannotLoadConfiguration
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     ExternalIntegration,
@@ -43,6 +42,7 @@ from tests.api.mockapi.circulation import MockBaseCirculationAPI, MockCirculatio
 
 from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
+from ..fixtures.library import LibraryFixture
 
 
 class CirculationAPIFixture:
@@ -531,7 +531,7 @@ class TestCirculationAPI:
         circulation_api.patron.authorization_expires = old_expires
 
     def test_borrow_with_outstanding_fines(
-        self, circulation_api: CirculationAPIFixture
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
     ):
         # This checkout would succeed...
         now = utc_now()
@@ -548,19 +548,18 @@ class TestCirculationAPI:
         # ...except the patron has too many fines.
         old_fines = circulation_api.patron.fines
         circulation_api.patron.fines = 1000
-        setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, circulation_api.db.default_library()
-        )
-        setting.value = "$0.50"
+        library = circulation_api.db.default_library()
+        library_settings = library_fixture.settings(library)
+        library_settings.max_outstanding_fines = 0.50
 
         pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
-        # Test the case where any amount of fines are too much.
-        setting.value = "$0"
+        # Test the case where any amount of fines is too much.
+        library_settings.max_outstanding_fines = 0
         pytest.raises(OutstandingFines, lambda: self.borrow(circulation_api))
 
         # Remove the fine policy, and borrow succeeds.
-        setting.value = None
+        library_settings.max_outstanding_fines = None
         loan, i1, i2 = self.borrow(circulation_api)
         assert isinstance(loan, Loan)
 
@@ -641,9 +640,11 @@ class TestCirculationAPI:
             (circulation_api.patron, circulation_api.pool)
         ] == circulation_api.circulation.enforce_limits_calls  # type: ignore[attr-defined]
 
-    def test_patron_at_loan_limit(self, circulation_api: CirculationAPIFixture):
+    def test_patron_at_loan_limit(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # The loan limit is a per-library setting.
-        setting = circulation_api.patron.library.setting(Configuration.LOAN_LIMIT)
+        settings = library_fixture.settings(circulation_api.patron.library)
 
         future = utc_now() + timedelta(hours=1)
 
@@ -671,28 +672,31 @@ class TestCirculationAPI:
         # patron_at_loan_limit returns True if your number of relevant
         # loans equals or exceeds the limit.
         m = circulation_api.circulation.patron_at_loan_limit
-        assert None == setting.value
-        assert False == m(patron)
+        assert settings.loan_limit is None
+        assert m(patron) is False
 
-        setting.value = 1
-        assert True == m(patron)
-        setting.value = 2
-        assert True == m(patron)
-        setting.value = 3
-        assert False == m(patron)
+        settings.loan_limit = 1
+        assert m(patron) is True
+        settings.loan_limit = 2
+        assert m(patron) is True
+        settings.loan_limit = 3
+        assert m(patron) is False
 
         # Setting the loan limit to 0 is treated the same as disabling it.
-        setting.value = 0
-        assert False == m(patron)
+        settings.loan_limit = 0
+        assert m(patron) is False
 
         # Another library's setting doesn't affect your limit.
         other_library = circulation_api.db.library()
-        other_library.setting(Configuration.LOAN_LIMIT).value = 1
-        assert False == m(patron)
+        library_fixture.settings(other_library).loan_limit = 1
+        assert False is m(patron)
 
-    def test_patron_at_hold_limit(self, circulation_api: CirculationAPIFixture):
+    def test_patron_at_hold_limit(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # The hold limit is a per-library setting.
-        setting = circulation_api.patron.library.setting(Configuration.HOLD_LIMIT)
+        library = circulation_api.patron.library
+        library_settings = library_fixture.settings(library)
 
         # Unlike the loan limit, it's pretty simple -- every hold counts towards your limit.
         patron = circulation_api.patron
@@ -707,26 +711,28 @@ class TestCirculationAPI:
         # patron_at_hold_limit returns True if your number of holds
         # equals or exceeds the limit.
         m = circulation_api.circulation.patron_at_hold_limit
-        assert None == setting.value
-        assert False == m(patron)
+        assert library.settings.hold_limit == None
+        assert m(patron) is False
 
-        setting.value = 1
-        assert True == m(patron)
-        setting.value = 2
-        assert True == m(patron)
-        setting.value = 3
-        assert False == m(patron)
+        library_settings.hold_limit = 1
+        assert m(patron) is True
+        library_settings.hold_limit = 2
+        assert m(patron) is True
+        library_settings.hold_limit = 3
+        assert m(patron) is False
 
         # Setting the hold limit to 0 is treated the same as disabling it.
-        setting.value = 0
-        assert False == m(patron)
+        library_settings.hold_limit = 0
+        assert m(patron) is False
 
         # Another library's setting doesn't affect your limit.
-        other_library = circulation_api.db.library()
-        other_library.setting(Configuration.HOLD_LIMIT).value = 1
-        assert False == m(patron)
+        other_library = library_fixture.library()
+        library_fixture.settings(other_library).hold_limit = 1
+        assert m(patron) is False
 
-    def test_enforce_limits(self, circulation_api: CirculationAPIFixture):
+    def test_enforce_limits(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # Verify that enforce_limits works whether the patron is at one, both,
         # or neither of their loan limits.
 
@@ -745,13 +751,11 @@ class TestCirculationAPI:
         #
         # Both limits are set to the same value for the sake of
         # convenience in testing.
-        circulation_api.db.default_library().setting(
-            Configuration.LOAN_LIMIT
-        ).value = 12
-        circulation_api.db.default_library().setting(
-            Configuration.HOLD_LIMIT
-        ).value = 12
 
+        mock_settings = library_fixture.mock_settings()
+        mock_settings.loan_limit = 12
+        mock_settings.hold_limit = 12
+        library = library_fixture.library(settings=mock_settings)
         api = MockVendorAPI()
 
         class Mock(MockCirculationAPI):
@@ -781,13 +785,11 @@ class TestCirculationAPI:
                 self.patron_at_hold_limit_calls.append(patron)
                 return self.at_hold_limit
 
-        circulation = Mock(
-            circulation_api.db.session, circulation_api.db.default_library()
-        )
+        circulation = Mock(circulation_api.db.session, library)
 
         # Sub-test 1: patron has reached neither limit.
         #
-        patron = circulation_api.patron
+        patron = circulation_api.db.patron(library=library)
         pool = object()
         circulation.at_loan_limit = False
         circulation.at_hold_limit = False
@@ -809,24 +811,16 @@ class TestCirculationAPI:
         circulation.at_loan_limit = True
         circulation.at_hold_limit = True
 
-        # We can't use assert_raises here because we need to examine the
-        # exception object to make sure it was properly instantiated.
-        def assert_enforce_limits_raises(expected_exception):
-            try:
-                circulation.enforce_limits(patron, pool)
-                raise Exception("Expected a %r" % expected_exception)
-            except Exception as e:
-                assert isinstance(e, expected_exception)
-                # If .limit is set it means we were able to find a
-                # specific limit in the database, which means the
-                # exception was instantiated correctly.
-                #
-                # The presence of .limit will let us give a more specific
-                # error message when the exception is converted to a
-                # problem detail document.
-                assert 12 == e.limit
-
-        assert_enforce_limits_raises(PatronLoanLimitReached)
+        with pytest.raises(PatronLoanLimitReached) as excinfo:
+            circulation.enforce_limits(patron, pool)
+        # If .limit is set it means we were able to find a
+        # specific limit, which means the exception was instantiated
+        # correctly.
+        #
+        # The presence of .limit will let us give a more specific
+        # error message when the exception is converted to a
+        # problem detail document.
+        assert 12 == excinfo.value.limit
 
         # We were able to deduce that the patron can't do anything
         # with this book, without having to ask the API about
@@ -845,7 +839,9 @@ class TestCirculationAPI:
 
         # If the book is available, we get PatronLoanLimitReached
         pool.licenses_available = 1  # type: ignore
-        assert_enforce_limits_raises(PatronLoanLimitReached)
+        with pytest.raises(PatronLoanLimitReached) as loan_limit_info:
+            circulation.enforce_limits(patron, pool)
+        assert 12 == loan_limit_info.value.limit
 
         # Reaching this conclusion required checking both patron
         # limits and asking the remote API for updated availability
@@ -869,7 +865,9 @@ class TestCirculationAPI:
 
         # If the book is not available, we get PatronHoldLimitReached
         pool.licenses_available = 0  # type: ignore
-        assert_enforce_limits_raises(PatronHoldLimitReached)
+        with pytest.raises(PatronHoldLimitReached) as hold_limit_info:
+            circulation.enforce_limits(patron, pool)
+        assert 12 == hold_limit_info.value.limit
 
         # Reaching this conclusion required checking both patron
         # limits and asking the remote API for updated availability
@@ -885,14 +883,16 @@ class TestCirculationAPI:
         assert patron == circulation.patron_at_hold_limit_calls.pop()
         assert pool == api.availability_updated.pop()
 
-    def test_borrow_hold_limit_reached(self, circulation_api: CirculationAPIFixture):
+    def test_borrow_hold_limit_reached(
+        self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
+    ):
         # Verify that you can't place a hold on an unavailable book
         # if you're at your hold limit.
         #
         # NOTE: This is redundant except as an end-to-end test.
 
         # The hold limit is 1, and the patron has a previous hold.
-        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 1
+        library_fixture.settings(circulation_api.patron.library).hold_limit = 1
         other_pool = circulation_api.db.licensepool(None)
         other_pool.open_access = False
         other_pool.on_hold_to(circulation_api.patron)
@@ -908,7 +908,7 @@ class TestCirculationAPI:
             assert 1 == e.limit
 
         # If we increase the limit, borrow succeeds.
-        circulation_api.patron.library.setting(Configuration.HOLD_LIMIT).value = 2
+        library_fixture.settings(circulation_api.patron.library).hold_limit = 2
         circulation_api.remote.queue_checkout(NoAvailableCopies())
         now = utc_now()
         holdinfo = HoldInfo(
@@ -1611,17 +1611,20 @@ class TestCirculationAPI:
 
 
 class TestBaseCirculationAPI:
-    def test_default_notification_email_address(self, db: DatabaseTransactionFixture):
+    def test_default_notification_email_address(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
         # Test the ability to get the default notification email address
         # for a patron or a library.
-        db.default_library().setting(
-            Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS
-        ).value = "help@library"
+        settings = library_fixture.mock_settings()
+        settings.default_notification_email_address = "help@library"  # type: ignore[assignment]
+        library = library_fixture.library(settings=settings)
+        patron = db.patron(library=library)
         m = BaseCirculationAPI.default_notification_email_address
-        assert "help@library" == m(db.default_library(), None)
-        assert "help@library" == m(db.patron(), None)
-        other_library = db.library()
-        assert None == m(other_library, None)
+        assert "help@library" == m(library, "")
+        assert "help@library" == m(patron, "")
+        other_library = library_fixture.library()
+        assert "noreply@thepalaceproject.org" == m(other_library, "")
 
     def test_can_fulfill_without_loan(self, db: DatabaseTransactionFixture):
         """By default, there is a blanket prohibition on fulfilling a title

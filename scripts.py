@@ -58,6 +58,7 @@ from core.model import (
     Hold,
     Hyperlink,
     Identifier,
+    Library,
     LicensePool,
     Loan,
     Patron,
@@ -548,7 +549,7 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
         no way to override this.
         """
         top_level = lane.parent is None
-        library = lane.get_library(self._db)
+        library: Library = lane.get_library(self._db)
 
         # If the WorkList has explicitly defined EntryPoints, we want to
         # create a grouped feed for each EntryPoint. Otherwise, we want
@@ -563,7 +564,7 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
         default_entrypoint = entrypoints[0]
         for entrypoint in entrypoints:
             facets = FeaturedFacets(
-                minimum_featured_quality=library.minimum_featured_quality,
+                minimum_featured_quality=library.settings.minimum_featured_quality,
                 uses_customlists=lane.uses_customlists,
                 entrypoint=entrypoint,
                 entrypoint_is_default=(top_level and entrypoint is default_entrypoint),

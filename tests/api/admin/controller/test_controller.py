@@ -10,7 +10,7 @@ import feedparser
 import flask
 import pytest
 from attrs import define
-from werkzeug.datastructures import FileStorage, ImmutableMultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.http import dump_cookie
 from werkzeug.wrappers import Response as WerkzeugResponse
 
@@ -25,7 +25,6 @@ from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
 from api.admin.problem_details import *
-from api.admin.validator import Validator
 from api.adobe_vendor_id import AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
@@ -3245,56 +3244,6 @@ class TestSettingsController:
         i2, is_new2 = m(protocol_definitions, "allow one", goal)
         assert False == is_new2
         assert DUPLICATE_INTEGRATION == i2
-
-    def test_validate_formats(self, settings_ctrl_fixture: SettingsControllerFixture):
-        class MockValidator(Validator):
-            def __init__(self):
-                self.was_called = False
-                self.args = []
-
-            def validate(self, settings, content):
-                self.was_called = True
-                self.args.append(settings)
-                self.args.append(content)
-
-            def validate_error(self, settings, content):
-                return INVALID_EMAIL
-
-        validator = MockValidator()
-
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                [
-                    ("name", "The New York Public Library"),
-                    ("short_name", "nypl"),
-                    (Configuration.WEBSITE_URL, "https://library.library/"),
-                    (
-                        Configuration.DEFAULT_NOTIFICATION_EMAIL_ADDRESS,
-                        "email@example.com",
-                    ),
-                    (Configuration.HELP_EMAIL, "help@example.com"),
-                ]
-            )
-            flask.request.files = ImmutableMultiDict(
-                [(Configuration.LOGO, FileStorage())]
-            )
-            response = settings_ctrl_fixture.manager.admin_settings_controller.validate_formats(
-                Configuration.LIBRARY_SETTINGS, validator
-            )
-            assert response == None
-            assert validator.was_called == True
-            assert validator.args[0] == Configuration.LIBRARY_SETTINGS
-            assert validator.args[1] == {
-                "files": flask.request.files,
-                "form": flask.request.form,
-            }
-
-            setattr(validator, "validate", validator.validate_error)
-            # If the validator returns an problem detail, validate_formats returns it.
-            response = settings_ctrl_fixture.manager.admin_settings_controller.validate_formats(
-                Configuration.LIBRARY_SETTINGS, validator
-            )
-            assert response == INVALID_EMAIL
 
     def test__mirror_integration_settings(
         self, settings_ctrl_fixture: SettingsControllerFixture

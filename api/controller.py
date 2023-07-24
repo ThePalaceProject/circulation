@@ -770,7 +770,7 @@ class CirculationManagerController(BaseCirculationManagerController):
             return NOT_AGE_APPROPRIATE
 
         if (
-            not patron.library.allow_holds
+            not patron.library.settings.allow_holds
             and license_pool.licenses_available == 0
             and not license_pool.open_access
             and not license_pool.unlimited_access
@@ -897,7 +897,7 @@ class OPDSFeedController(CirculationManagerController):
             return self.feed(lane_identifier, feed_class)
 
         facet_class_kwargs = dict(
-            minimum_featured_quality=library.minimum_featured_quality,
+            minimum_featured_quality=library.settings.minimum_featured_quality,
         )
         facets = self.manager.load_facets_from_request(
             worklist=lane,
@@ -989,7 +989,7 @@ class OPDSFeedController(CirculationManagerController):
 
         title = lane.display_name
         facet_class_kwargs = dict(
-            minimum_featured_quality=library.minimum_featured_quality,
+            minimum_featured_quality=library.settings.minimum_featured_quality,
         )
         facets = self.manager.load_facets_from_request(
             worklist=lane,
@@ -2191,7 +2191,7 @@ class WorkController(CirculationManagerController):
             worklist=lane,
             base_class=FeaturedFacets,
             base_class_constructor_kwargs=dict(
-                minimum_featured_quality=library.minimum_featured_quality
+                minimum_featured_quality=library.settings.minimum_featured_quality
             ),
         )
         if isinstance(facets, ProblemDetail):

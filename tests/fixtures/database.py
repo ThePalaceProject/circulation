@@ -21,6 +21,7 @@ import core.lane
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import Configuration
+from core.configuration.library import LibrarySettings
 from core.integration.goals import Goals
 from core.log import LogConfiguration
 from core.model import (
@@ -252,7 +253,10 @@ class DatabaseTransactionFixture:
         return str(self.fresh_id())
 
     def library(
-        self, name: Optional[str] = None, short_name: Optional[str] = None
+        self,
+        name: Optional[str] = None,
+        short_name: Optional[str] = None,
+        settings: Optional[LibrarySettings] = None,
     ) -> Library:
         # Just a dummy key used for testing.
         key_string = """\
@@ -274,6 +278,14 @@ class DatabaseTransactionFixture:
 
         name = name or self.fresh_str()
         short_name = short_name or self.fresh_str()
+        settings_dict = settings.dict() if settings else {}
+
+        # Make sure we have defaults for settings that are required
+        if "website" not in settings_dict:
+            settings_dict["website"] = "http://library.com"
+        if "help_web" not in settings_dict and "help_email" not in settings_dict:
+            settings_dict["help_web"] = "http://library.com/support"
+
         library, ignore = get_one_or_create(
             self.session,
             Library,
@@ -283,6 +295,7 @@ class DatabaseTransactionFixture:
                 uuid=str(uuid.uuid4()),
                 public_key=public_key.export_key("PEM").decode("utf-8"),
                 private_key=private_key.export_key("DER"),
+                settings_dict=settings_dict,
             ),
         )
         return library
@@ -1010,11 +1023,6 @@ def db(
     tr = DatabaseTransactionFixture.create(database)
     yield tr
     tr.close()
-
-
-@pytest.fixture
-def default_library(db: DatabaseTransactionFixture) -> Library:
-    return db.default_library()
 
 
 @pytest.fixture

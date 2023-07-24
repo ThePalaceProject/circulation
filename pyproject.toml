@@ -57,6 +57,7 @@ disallow_untyped_decorators = true
 disallow_untyped_defs = true
 module = [
     "api.admin.announcement_list_validator",
+    "api.admin.controller.library_settings",
     "api.admin.controller.patron_auth_services",
     "api.admin.form_data",
     "api.admin.model.dashboard_statistics",
@@ -66,7 +67,9 @@ module = [
     "core.model.announcements",
     "core.model.hassessioncache",
     "core.model.integration",
+    "core.model.library",
     "core.selftest",
+    "core.settings.*",
     "core.util.authentication_for_opds",
     "core.util.cache",
     "tests.migration.*",
@@ -118,12 +121,10 @@ module = [
     "pyld",
     "pymarc",
     "pyparsing",
-    "pypostalcode",
     "spellchecker",
     "textblob.*",
     "unicodecsv",
     "uritemplate",
-    "uszipcode",
     "watchtower",
     "wcag_contrast_ratio",
     "webpub_manifest_parser.*",
@@ -171,14 +172,13 @@ opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "~3.0.1"
 pillow = "^10.0"
 pycryptodome = "^3.18"
-pydantic = "^1.10.9"
+pydantic = {version = "^1.10.9", extras = ["email"]}
 pyinstrument = "<4.6"
 PyJWT = "2.6.0"
 PyLD = "2.0.3"
 pymarc = "5.1.0"
 pyOpenSSL = "^23.1.0"
 pyparsing = "3.1.0"
-pypostalcode = "0.4.1"
 pyspellchecker = "0.7.2"
 python = ">=3.8,<4"
 python-dateutil = "2.8.2"
@@ -198,7 +198,6 @@ typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3
 uritemplate = "4.1.1"
 urllib3 = "~1.26.14"
-uszipcode = "0.2.6"
 uWSGI = "~2.0.21"
 watchtower = "3.0.1"  # watchtower is for Cloudwatch logging integration
 wcag-contrast-ratio = "0.9"

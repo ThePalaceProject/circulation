@@ -586,8 +586,9 @@ class ConfigurationSetting(Base, HasSessionCache):
     )
 
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
-    library: Mapped[Library] = relationship("Library", back_populates="settings")
-
+    library: Mapped[Library] = relationship(
+        "Library", back_populates="external_integration_settings"
+    )
     key = Column(Unicode)
     _value = Column("value", Unicode)
 
@@ -675,12 +676,6 @@ class ConfigurationSetting(Base, HasSessionCache):
     def sitewide(cls, _db, key):
         """Find or create a sitewide ConfigurationSetting."""
         return cls.for_library_and_externalintegration(_db, key, None, None)
-
-    @classmethod
-    def for_library(cls, key, library):
-        """Find or create a ConfigurationSetting for the given Library."""
-        _db = Session.object_session(library)
-        return cls.for_library_and_externalintegration(_db, key, library, None)
 
     @classmethod
     def for_externalintegration(cls, key, externalintegration):

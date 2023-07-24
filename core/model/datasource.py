@@ -18,8 +18,8 @@ from .licensing import LicensePoolDeliveryMechanism
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
-    from core.lane import Lane
-    from core.model import (  # noqa: autoflake
+    from api.lanes import Lane
+    from core.model import (
         Classification,
         CoverageRecord,
         Credential,
@@ -110,16 +110,16 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         foreign_keys=lambda: [LicensePoolDeliveryMechanism.data_source_id],
     )
 
-    list_lanes: Mapped[List[Lane]] = relationship(
-        "Lane",
-        back_populates="_list_datasource",
-        primaryjoin="DataSource.id==Lane._list_datasource_id",
-    )
-
     license_lanes: Mapped[List[Lane]] = relationship(
         "Lane",
         back_populates="license_datasource",
-        primaryjoin="DataSource.id==Lane.license_datasource_id",
+        foreign_keys="Lane.license_datasource_id",
+    )
+
+    list_lanes: Mapped[List[Lane]] = relationship(
+        "Lane",
+        back_populates="_list_datasource",
+        foreign_keys="Lane._list_datasource_id",
     )
 
     def __repr__(self):

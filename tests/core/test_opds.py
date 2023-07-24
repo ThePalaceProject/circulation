@@ -2904,7 +2904,7 @@ class TestEntrypointLinkInsertion:
         # A WorkList with entry points does cause the mock method
         # to be called.
         facets = FeaturedFacets(
-            minimum_featured_quality=db.default_library().minimum_featured_quality,
+            minimum_featured_quality=db.default_library().settings.minimum_featured_quality,
             entrypoint=EbooksEntryPoint,
         )
         feed, make_link, entrypoints, selected = run(data.wl, facets)

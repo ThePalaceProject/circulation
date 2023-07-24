@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from core.entrypoint import (
@@ -12,6 +10,7 @@ from core.entrypoint import (
 from core.external_search import Filter
 from core.model import Edition, Work
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestEntryPoint:
@@ -128,23 +127,23 @@ class TestMediumEntryPoint:
 class TestLibrary:
     """Test a Library's interaction with EntryPoints."""
 
-    def test_enabled_entrypoints(self, db: DatabaseTransactionFixture):
-        l = db.default_library()
-
-        setting = l.setting(EntryPoint.ENABLED_SETTING)
+    def test_enabled_entrypoints(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        settings = library_fixture.mock_settings()
+        l = library_fixture.library(settings=settings)
 
         # When the value is not set, the default is used.
-        assert EntryPoint.DEFAULT_ENABLED == list(l.entrypoints)
-        setting.value = None
         assert EntryPoint.DEFAULT_ENABLED == list(l.entrypoints)
 
         # Names that don't correspond to registered entry points are
         # ignored. Names that do are looked up.
-        setting.value = json.dumps(
-            ["no such entry point", AudiobooksEntryPoint.INTERNAL_NAME]
-        )
+        settings.enabled_entry_points = [
+            "no such entry point",
+            AudiobooksEntryPoint.INTERNAL_NAME,
+        ]
         assert [AudiobooksEntryPoint] == list(l.entrypoints)
 
         # An empty list is a valid value.
-        setting.value = json.dumps([])
+        settings.enabled_entry_points = []
         assert [] == list(l.entrypoints)

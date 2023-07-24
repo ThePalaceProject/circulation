@@ -1036,7 +1036,7 @@ class LicensePool(Base):
         _db = Session.object_session(patron_or_client)
         if (
             isinstance(patron_or_client, Patron)
-            and not patron_or_client.library.allow_holds
+            and not patron_or_client.library.settings.allow_holds
         ):
             raise PolicyException("Holds are disabled for this library.")
         start = start or utc_now()

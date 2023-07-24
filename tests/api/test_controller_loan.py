@@ -20,7 +20,6 @@ from api.circulation_exceptions import (
     NotFoundOnRemote,
     PatronHoldLimitReached,
 )
-from api.config import Configuration
 from api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
@@ -31,7 +30,6 @@ from api.problem_details import (
 )
 from core.model import (
     Collection,
-    ConfigurationSetting,
     DataSource,
     DeliveryMechanism,
     ExternalIntegration,
@@ -56,6 +54,7 @@ from core.util.problem_detail import ProblemDetail
 from tests.core.mock import DummyHTTPClient
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class LoanFixture(CirculationControllerFixture):
@@ -1045,7 +1044,9 @@ class TestLoanController:
             assert isinstance(response, ProblemDetail)
             assert HOLD_LIMIT_REACHED.uri == response.uri
 
-    def test_borrow_fails_with_outstanding_fines(self, loan_fixture: LoanFixture):
+    def test_borrow_fails_with_outstanding_fines(
+        self, loan_fixture: LoanFixture, library_fixture: LibraryFixture
+    ):
         threem_edition, pool = loan_fixture.db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.THREEM,
@@ -1057,9 +1058,10 @@ class TestLoanController:
         )
         pool.open_access = False
 
-        ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, loan_fixture.db.default_library()
-        ).value = "$0.50"
+        library = loan_fixture.db.default_library()
+        settings = library_fixture.settings(library)
+
+        settings.max_outstanding_fines = 0.50
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):

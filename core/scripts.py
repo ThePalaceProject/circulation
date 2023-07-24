@@ -14,6 +14,7 @@ from typing import Generator, List, Optional, Type
 
 from sqlalchemy import and_, exists, tuple_
 from sqlalchemy.orm import Query, Session, defer
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from core.model.classification import Classification
@@ -1038,6 +1039,17 @@ class ConfigureLibraryScript(ConfigurationSettingScript):
             'Set a per-library setting, such as terms-of-service. Format: --setting="terms-of-service=https://example.library/tos"',
         )
         return parser
+
+    def apply_settings(self, settings, library):
+        """Treat `settings` as a list of command-line argument settings,
+        and apply each one to `obj`.
+        """
+        if not settings:
+            return None
+        for setting in settings:
+            key, value = self._parse_setting(setting)
+            library.settings_dict[key] = value
+        flag_modified(library, "settings_dict")
 
     def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
         _db = _db or self._db

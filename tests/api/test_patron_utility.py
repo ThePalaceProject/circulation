@@ -6,12 +6,11 @@ import pytest
 
 from api.authentication.base import PatronData
 from api.circulation_exceptions import *
-from api.config import Configuration
 from api.util.patron import Patron, PatronUtility
-from core.model import ConfigurationSetting
 from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestPatronUtility:
@@ -119,15 +118,15 @@ class TestPatronUtility:
         patron.block_reason = None
         assert True == PatronUtility.has_borrowing_privileges(patron)
 
-    def test_has_excess_fines(self, db: DatabaseTransactionFixture):
+    def test_has_excess_fines(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
         # Test the has_excess_fines method.
-        patron = db.patron()
+        library = library_fixture.library()
+        patron = db.patron(library=library)
+        settings = library_fixture.settings(library)
 
         # If you accrue excessive fines you lose borrowing privileges.
-        setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, db.default_library()
-        )
-
         # Verify that all these tests work no matter what data type has been stored in
         # patron.fines.
         for patron_fines in ("1", "0.75", 1, 1.0, Decimal(1), MoneyUtility.parse("1")):
@@ -135,29 +134,20 @@ class TestPatronUtility:
 
             # Test cases where the patron's fines exceed a well-defined limit,
             # or when any amount of fines is too much.
-            for max_fines in ["$0.50", "0.5", 0.5] + [  # well-defined limit
-                "$0",
-                "$0.00",
-                "0",
-                0,
-            ]:  # any fines is too much
-                setting.value = max_fines
-                assert True == PatronUtility.has_excess_fines(patron)
+            for max_fines_exceed in [0.5, 0]:
+                settings.max_outstanding_fines = max_fines_exceed
+                assert PatronUtility.has_excess_fines(patron) is True
 
             # Test cases where the patron's fines are below a
             # well-defined limit, or where fines are ignored
             # altogether.
-            for max_fines in ["$100", 100] + [  # well-defined-limit
-                None,
-                "",
-            ]:  # fines ignored
-                setting.value = max_fines
-                assert False == PatronUtility.has_excess_fines(patron)
+            for max_fines_below in [100, None]:  # fines ignored
+                settings.max_outstanding_fines = max_fines_below
+                assert PatronUtility.has_excess_fines(patron) is False
 
         # Test various cases where fines in any amount deny borrowing
         # privileges, but the patron has no fines.
         for patron_fines in ("0", "$0", 0, None, MoneyUtility.parse("$0")):
             patron.fines = patron_fines
-            for max_fines in ["$0", "$0.00", "0", 0]:
-                setting.value = max_fines
-                assert False == PatronUtility.has_excess_fines(patron)
+            settings.max_outstanding_fines = 0
+            assert PatronUtility.has_excess_fines(patron) is False

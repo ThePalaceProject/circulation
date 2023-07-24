@@ -2513,7 +2513,7 @@ class Filter(SearchBase):
         if library is None:
             allow_holds = True
         else:
-            allow_holds = library.allow_holds
+            allow_holds = library.settings.allow_holds
         return cls(
             collections,
             media,

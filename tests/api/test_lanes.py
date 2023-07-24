@@ -1,10 +1,8 @@
-import json
 from collections import Counter
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.config import Configuration
 from api.lanes import (
     ContributorFacets,
     ContributorLane,
@@ -42,6 +40,7 @@ from core.model import (
     create,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestLaneCreation:
@@ -260,21 +259,16 @@ class TestLaneCreation:
         lane = db.session.query(Lane).filter(Lane.parent == new_parent)
         assert lane.count() == 0
 
-    def test_create_default_lanes(self, db: DatabaseTransactionFixture):
-        library = db.default_library()
-        library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps(
-            ["eng"]
-        )
+    def test_create_default_lanes(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        settings = library_fixture.mock_settings()
+        settings.large_collection_languages = ["eng"]
+        settings.small_collection_languages = ["spa", "chi"]
+        settings.tiny_collection_languages = ["ger", "fre", "ita"]
+        library = library_fixture.library(settings=settings)
 
-        library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps(
-            ["spa", "chi"]
-        )
-
-        library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps(
-            ["ger", "fre", "ita"]
-        )
-
-        create_default_lanes(db.session, db.default_library())
+        create_default_lanes(db.session, library)
         lanes = (
             db.session.query(Lane)
             .filter(Lane.library == library)
@@ -312,19 +306,12 @@ class TestLaneCreation:
         assert Classifier.AUDIENCE_CHILDREN == audiences[0]
 
     def test_create_default_when_more_than_one_large_language_is_configured(
-        self, db: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
-        library = db.default_library()
-        library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps(
-            [
-                "eng",
-                "fre",
-            ]
-        )
+        settings = library_fixture.mock_settings()
+        settings.large_collection_languages = ["eng", "fre"]
+        library = library_fixture.library(settings=settings)
 
-        library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps([])
-
-        library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps([])
         session = db.session
         create_default_lanes(session, library)
         lanes = (
@@ -348,9 +335,6 @@ class TestLaneCreation:
         self, db: DatabaseTransactionFixture
     ):
         library = db.default_library()
-        library.setting(Configuration.LARGE_COLLECTION_LANGUAGES).value = json.dumps([])
-        library.setting(Configuration.SMALL_COLLECTION_LANGUAGES).value = json.dumps([])
-        library.setting(Configuration.TINY_COLLECTION_LANGUAGES).value = json.dumps([])
         session = db.session
         with patch(
             "api.lanes._lane_configuration_from_collection_sizes"

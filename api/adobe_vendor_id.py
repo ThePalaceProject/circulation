@@ -24,7 +24,7 @@ from core.model import (
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
 
-from .config import CannotLoadConfiguration, Configuration
+from .config import CannotLoadConfiguration
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -156,9 +156,7 @@ class AuthdataUtility:
         else:
             return None
 
-        library_uri = ConfigurationSetting.for_library(
-            Configuration.WEBSITE_URL, library
-        ).value
+        library_uri = library.settings.website
 
         vendor_id = integration.setting(cls.VENDOR_ID_KEY).value
         library_short_name = ConfigurationSetting.for_library_and_externalintegration(

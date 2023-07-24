@@ -21,6 +21,7 @@ from core.util.problem_detail import ProblemDetail
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class RemoteRegistryFixture:
@@ -635,7 +636,7 @@ class TestRegistration:
         assert "could not fetch catalog" == problem.detail
 
     def test__create_registration_payload(
-        self, registration_fixture: RegistrationFixture
+        self, registration_fixture: RegistrationFixture, library_fixture: LibraryFixture
     ):
         m = registration_fixture.registration._create_registration_payload
 
@@ -655,10 +656,8 @@ class TestRegistration:
 
         # If a contact is configured, it shows up in the payload.
         contact = "mailto:ohno@library.org"
-        ConfigurationSetting.for_library(
-            Configuration.CONFIGURATION_CONTACT_EMAIL,
-            registration_fixture.registration.library,
-        ).value = contact
+        settings = library_fixture.settings(registration_fixture.registration.library)
+        settings.configuration_contact_email_address = contact  # type: ignore[assignment]
         expect_payload["contact"] = contact
         assert expect_payload == m(url_for, stage)
 

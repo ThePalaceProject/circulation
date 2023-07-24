@@ -6,12 +6,12 @@ import pytest
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration
 from api.registration.constants import RegistrationConstants
 from core.config import CannotLoadConfiguration
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 from tests.fixtures.vendor_id import VendorIDFixture
 
 
@@ -63,11 +63,14 @@ class TestAuthdataUtility:
         assert isinstance(utility, authdata_utility_type)
 
     def test_from_config(
-        self, authdata: AuthdataUtility, vendor_id_fixture: VendorIDFixture
+        self,
+        authdata: AuthdataUtility,
+        vendor_id_fixture: VendorIDFixture,
+        library_fixture: LibraryFixture,
     ):
-        library = vendor_id_fixture.db.default_library()
+        library = library_fixture.library()
         vendor_id_fixture.initialize_adobe(library)
-        library_url = library.setting(Configuration.WEBSITE_URL).value
+        library_url = library.settings.website
 
         utility = AuthdataUtility.from_config(library)
         assert utility is not None
@@ -133,11 +136,11 @@ class TestAuthdataUtility:
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
         setting.value = old_short_name
 
-        setting = library.setting(Configuration.WEBSITE_URL)
-        old_value = setting.value
-        setting.value = None
+        library_settings = library_fixture.settings(library)
+        old_website = library_settings.website
+        library_settings.website = None  # type: ignore[assignment]
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
-        setting.value = old_value
+        library_settings.website = old_website
 
         setting = ConfigurationSetting.for_library_and_externalintegration(
             vendor_id_fixture.db.session,

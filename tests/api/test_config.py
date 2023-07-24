@@ -10,9 +10,10 @@ from Crypto.PublicKey import RSA
 from api.config import Configuration
 from core.config import CannotLoadConfiguration
 from core.config import Configuration as CoreConfiguration
-from core.model import ConfigurationSetting
+from core.configuration.library import LibrarySettings
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.library import LibraryFixture
 
 
 @pytest.fixture()
@@ -49,88 +50,47 @@ class TestConfiguration:
         library = db.default_library()
 
         # We haven't set any of these values.
-        for key in [
-            C.LARGE_COLLECTION_LANGUAGES,
-            C.SMALL_COLLECTION_LANGUAGES,
-            C.TINY_COLLECTION_LANGUAGES,
-        ]:
-            assert None == ConfigurationSetting.for_library(key, library).value
+        assert library.settings.large_collection_languages is None
+        assert library.settings.small_collection_languages is None
+        assert library.settings.tiny_collection_languages is None
 
         # So how does this happen?
-        assert ["eng"] == C.large_collection_languages(library)
-        assert [] == C.small_collection_languages(library)
-        assert [] == C.tiny_collection_languages(library)
+        assert C.large_collection_languages(library) == ["eng"]
+        assert C.small_collection_languages(library) == []
+        assert C.tiny_collection_languages(library) == []
 
         # It happens because the first time we call one of those
         # *_collection_languages, it estimates values for all three
         # configuration settings, based on the library's current
         # holdings.
-        large_setting = ConfigurationSetting.for_library(
-            C.LARGE_COLLECTION_LANGUAGES, library
-        )
-        assert ["eng"] == large_setting.json_value
-        assert (
-            []
-            == ConfigurationSetting.for_library(
-                C.SMALL_COLLECTION_LANGUAGES, library
-            ).json_value
-        )
-        assert (
-            []
-            == ConfigurationSetting.for_library(
-                C.TINY_COLLECTION_LANGUAGES, library
-            ).json_value
-        )
+        assert library.settings.large_collection_languages == ["eng"]
+        assert library.settings.small_collection_languages == []
+        assert library.settings.tiny_collection_languages == []
 
         # We can change these values.
-        large_setting.value = json.dumps(["spa", "jpn"])
-        assert ["spa", "jpn"] == C.large_collection_languages(library)
-
-        # If we enter an invalid value, or a value that's not a list,
-        # the estimate is re-calculated the next time we look.
-        large_setting.value = "this isn't json"
-        assert ["eng"] == C.large_collection_languages(library)
-
-        large_setting.value = '"this is json but it\'s not a list"'
-        assert ["eng"] == C.large_collection_languages(library)
+        library.update_settings(
+            LibrarySettings.construct(large_collection_languages=["spa", "jpn"])
+        )
+        assert C.large_collection_languages(library) == ["spa", "jpn"]
 
     def test_estimate_language_collection_for_library(
-        self, db: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
-        library = db.default_library()
-
         # We thought we'd have big collections.
-        old_settings = {
-            Configuration.LARGE_COLLECTION_LANGUAGES: ["spa", "fre"],
-            Configuration.SMALL_COLLECTION_LANGUAGES: ["chi"],
-            Configuration.TINY_COLLECTION_LANGUAGES: ["rus"],
-        }
-
-        for key, value in list(old_settings.items()):
-            ConfigurationSetting.for_library(key, library).value = json.dumps(value)
+        settings = library_fixture.mock_settings()
+        settings.large_collection_languages = ["spa", "fre"]
+        settings.small_collection_languages = ["chi"]
+        settings.tiny_collection_languages = ["rus"]
+        library = library_fixture.library(settings=settings)
 
         # But there's nothing in our database, so when we call
         # Configuration.estimate_language_collections_for_library...
         Configuration.estimate_language_collections_for_library(library)
 
         # ...it gets reset to the default.
-        assert ["eng"] == ConfigurationSetting.for_library(
-            Configuration.LARGE_COLLECTION_LANGUAGES, library
-        ).json_value
-
-        assert (
-            []
-            == ConfigurationSetting.for_library(
-                Configuration.SMALL_COLLECTION_LANGUAGES, library
-            ).json_value
-        )
-
-        assert (
-            []
-            == ConfigurationSetting.for_library(
-                Configuration.TINY_COLLECTION_LANGUAGES, library
-            ).json_value
-        )
+        assert library.settings.large_collection_languages == ["eng"]
+        assert library.settings.small_collection_languages == []
+        assert library.settings.tiny_collection_languages == []
 
     def test_classify_holdings(self, db: DatabaseTransactionFixture):
         m = Configuration.classify_holdings
@@ -152,26 +112,27 @@ class TestConfiguration:
         )
         assert [["fre", "jpn"], ["spa", "ukr", "ira"], ["nav"]] == m(different_sizes)
 
-    def test_max_outstanding_fines(self, db: DatabaseTransactionFixture):
+    def test_max_outstanding_fines(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
         m = Configuration.max_outstanding_fines
 
-        # By default, fines are not enforced.
-        assert None == m(db.default_library())
+        library = library_fixture.library()
+        settings = library_fixture.settings(library)
 
-        # The maximum fine value is determined by this
-        # ConfigurationSetting.
-        setting = ConfigurationSetting.for_library(
-            Configuration.MAX_OUTSTANDING_FINES, db.default_library()
-        )
+        # By default, fines are not enforced.
+        assert m(library) is None
 
         # Any amount of fines is too much.
-        setting.value = "$0"
-        max_fines = m(db.default_library())
+        settings.max_outstanding_fines = 0
+        max_fines = m(library)
+        assert max_fines is not None
         assert 0 == max_fines.amount
 
         # A more lenient approach.
-        setting.value = "100"
-        max_fines = m(db.default_library())
+        settings.max_outstanding_fines = 100.0
+        max_fines = m(library)
+        assert max_fines is not None
         assert 100 == max_fines.amount
 
     def test_default_opds_format(self):

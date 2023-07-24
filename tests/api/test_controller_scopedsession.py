@@ -36,7 +36,15 @@ class ScopedHolder:
         for i in range(2):
             name = self.fresh_id() + " (library for scoped session)"
             library, ignore = create(
-                session, Library, short_name=name, public_key="x", private_key=b"y"
+                session,
+                Library,
+                short_name=name,
+                public_key="x",
+                private_key=b"y",
+                settings_dict={
+                    "website": "https://library.com",
+                    "help_web": "https://library.com/help",
+                },
             )
             libraries.append(library)
         return libraries
