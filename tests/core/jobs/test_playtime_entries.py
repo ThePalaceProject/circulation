@@ -163,15 +163,14 @@ class TestPlaytimeEntriesEmailReportsScript:
         playtime(db.session, identifier2, date3m(3), 5)
         playtime(db.session, identifier2, date3m(4), 6)
 
-        with (
-            patch("core.jobs.playtime_entries.csv.writer") as writer,
-            patch("core.jobs.playtime_entries.EmailManager") as email,
-            patch(
-                "core.jobs.playtime_entries.os.environ",
-                new={
-                    Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email"
-                },
-            ),
+        # Horrible unbracketted syntax for python 3.8
+        with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
+            "core.jobs.playtime_entries.EmailManager"
+        ) as email, patch(
+            "core.jobs.playtime_entries.os.environ",
+            new={
+                Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email"
+            },
         ):
             PlaytimeEntriesEmailReportsScript(db.session).run()
 
