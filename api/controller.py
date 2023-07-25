@@ -129,7 +129,7 @@ if TYPE_CHECKING:
     from api.admin.controller.collection_self_tests import CollectionSelfTestsController
     from api.admin.controller.collection_settings import CollectionSettingsController
     from api.admin.controller.custom_lists import CustomListsController
-    from api.admin.controller.dashboard_controller import DashboardController
+    from api.admin.controller.dashboard import DashboardController
     from api.admin.controller.discovery_service_library_registrations import (
         DiscoveryServiceLibraryRegistrationsController,
     )
