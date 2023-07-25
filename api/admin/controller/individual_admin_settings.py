@@ -6,12 +6,18 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from sqlalchemy.exc import ProgrammingError
 
-from api.admin.exceptions import *
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    ADMIN_AUTH_NOT_CONFIGURED,
+    INCOMPLETE_CONFIGURATION,
+    MISSING_ADMIN,
+    MISSING_PGCRYPTO_EXTENSION,
+    UNKNOWN_ROLE,
+)
+from api.problem_details import LIBRARY_NOT_FOUND
 from core.model import Admin, AdminRole, Library, get_one, get_one_or_create
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class IndividualAdminSettingsController(SettingsController):

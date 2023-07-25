@@ -12,6 +12,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, ImageDraw, ImageFont
 
+from api.admin.controller.base import AdminCirculationManagerController
 from api.admin.opds import AdminAnnotator
 from api.admin.problem_details import *
 from api.admin.validator import Validator
@@ -41,8 +42,6 @@ from core.opds import AcquisitionFeed
 from core.util import LanguageCodes
 from core.util.datetime_helpers import strptime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
-
-from . import AdminCirculationManagerController
 
 
 class WorkController(AdminCirculationManagerController):

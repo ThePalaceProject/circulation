@@ -4,13 +4,12 @@ import flask
 from flask import Response, url_for
 from flask_babel import lazy_gettext as _
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
 from api.registration.registry import Registration, RemoteRegistry
 from core.model import ExternalIntegration, Library, get_one
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class DiscoveryServiceLibraryRegistrationsController(SettingsController):

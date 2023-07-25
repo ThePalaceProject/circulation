@@ -1,8 +1,5 @@
-import csv
-import datetime
 import json
 import re
-from datetime import timedelta
 from typing import Any, Optional
 from unittest import mock
 
@@ -14,20 +11,40 @@ from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.http import dump_cookie
 from werkzeug.wrappers import Response as WerkzeugResponse
 
-from api.admin.controller import (
-    AdminAnnotator,
-    CustomListsController,
-    PatronController,
-    SettingsController,
-)
-from api.admin.exceptions import *
+from api.admin.controller.custom_lists import CustomListsController
+from api.admin.controller.patron import PatronController
+from api.admin.controller.settings import SettingsController
+from api.admin.exceptions import AdminNotAuthorized
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from api.admin.problem_details import *
+from api.admin.problem_details import (
+    ADMIN_AUTH_MECHANISM_NOT_CONFIGURED,
+    ADMIN_AUTH_NOT_CONFIGURED,
+    AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
+    CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
+    CANNOT_EDIT_DEFAULT_LANE,
+    CANNOT_SHOW_LANE_WITH_HIDDEN_PARENT,
+    COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY,
+    CUSTOM_LIST_NAME_ALREADY_IN_USE,
+    DUPLICATE_INTEGRATION,
+    INTEGRATION_URL_ALREADY_IN_USE,
+    INVALID_ADMIN_CREDENTIALS,
+    LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS,
+    MISSING_COLLECTION,
+    MISSING_CUSTOM_LIST,
+    MISSING_LANE,
+    NO_CUSTOM_LISTS_FOR_LANE,
+    NO_DISPLAY_NAME_FOR_LANE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    NO_SUCH_PATRON,
+    PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    UNKNOWN_PROTOCOL,
+)
 from api.adobe_vendor_id import AuthdataUtility
 from api.authentication.base import PatronData
 from api.config import Configuration
+from api.problem_details import CANNOT_DELETE_SHARED_LIST
 from core.classifier import genres
 from core.integration.base import (
     HasChildIntegrationConfiguration,
@@ -40,20 +57,16 @@ from core.lane import Lane, Pagination
 from core.model import (
     Admin,
     AdminRole,
-    CirculationEvent,
     ConfigurationSetting,
     CustomList,
     CustomListEntry,
     DataSource,
     Edition,
     ExternalIntegration,
-    Genre,
     Library,
     Timestamp,
-    WorkGenre,
     create,
     get_one,
-    get_one_or_create,
 )
 from core.model.collection import Collection
 from core.query.customlist import CustomListQueries
@@ -1635,7 +1648,9 @@ class TestCustomListsController:
         # Valid auto update query request
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
-        ), mock.patch("api.admin.controller.CustomListQueries") as mock_query:
+        ), mock.patch(
+            "api.admin.controller.custom_lists.CustomListQueries"
+        ) as mock_query:
             form = ImmutableMultiDict(
                 [
                     ("name", "200List"),
@@ -2944,193 +2959,6 @@ class TestLanesController:
             assert 1 == parent1.priority
             assert 0 == child2.priority
             assert 1 == child1.priority
-
-
-class DashboardFixture(AdminControllerFixture):
-    def __init__(self, controller_fixture: ControllerFixture):
-        super().__init__(controller_fixture)
-
-        self.english_1 = self.ctrl.db.work(
-            "Quite British",
-            "John Bull",
-            language="eng",
-            fiction=True,
-            with_open_access_download=True,
-        )
-        self.english_1.license_pools[0].collection = self.ctrl.collection
-        self.works = [self.english_1]
-
-        self.manager.external_search.bulk_update(self.works)
-
-
-@pytest.fixture(scope="function")
-def dashboard_fixture(controller_fixture: ControllerFixture) -> DashboardFixture:
-    return DashboardFixture(controller_fixture)
-
-
-class TestDashboardController:
-    def test_circulation_events(self, dashboard_fixture: DashboardFixture):
-        [lp] = dashboard_fixture.english_1.license_pools
-        types = [
-            CirculationEvent.DISTRIBUTOR_CHECKIN,
-            CirculationEvent.DISTRIBUTOR_CHECKOUT,
-            CirculationEvent.DISTRIBUTOR_HOLD_PLACE,
-            CirculationEvent.DISTRIBUTOR_HOLD_RELEASE,
-            CirculationEvent.DISTRIBUTOR_TITLE_ADD,
-        ]
-        time = utc_now() - timedelta(minutes=len(types))
-        for type in types:
-            get_one_or_create(
-                dashboard_fixture.ctrl.db.session,
-                CirculationEvent,
-                license_pool=lp,
-                type=type,
-                start=time,
-                end=time,
-            )
-            time += timedelta(minutes=1)
-
-        with dashboard_fixture.request_context_with_library_and_admin("/"):
-            response = (
-                dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
-            )
-            url = AdminAnnotator(
-                dashboard_fixture.manager.d_circulation,  # type: ignore
-                dashboard_fixture.ctrl.db.default_library(),
-            ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
-
-        events = response["circulation_events"]
-        assert types[::-1] == [event["type"] for event in events]
-        assert [dashboard_fixture.english_1.title] * len(types) == [
-            event["book"]["title"] for event in events
-        ]
-        assert [url] * len(types) == [event["book"]["url"] for event in events]
-
-        # request fewer events
-        with dashboard_fixture.request_context_with_library_and_admin("/?num=2"):
-            response = (
-                dashboard_fixture.manager.admin_dashboard_controller.circulation_events()
-            )
-            url = AdminAnnotator(
-                dashboard_fixture.manager.d_circulation,  # type: ignore
-                dashboard_fixture.ctrl.db.default_library(),
-            ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
-
-        assert 2 == len(response["circulation_events"])
-
-    def test_bulk_circulation_events(self, dashboard_fixture: DashboardFixture):
-        [lp] = dashboard_fixture.english_1.license_pools
-        edition = dashboard_fixture.english_1.presentation_edition
-        identifier = dashboard_fixture.english_1.presentation_edition.primary_identifier
-        genres = dashboard_fixture.ctrl.db.session.query(Genre).all()
-        get_one_or_create(
-            dashboard_fixture.ctrl.db.session,
-            WorkGenre,
-            work=dashboard_fixture.english_1,
-            genre=genres[0],
-            affinity=0.2,
-        )
-
-        time = utc_now() - timedelta(minutes=1)
-        event, ignore = get_one_or_create(
-            dashboard_fixture.ctrl.db.session,
-            CirculationEvent,
-            license_pool=lp,
-            type=CirculationEvent.DISTRIBUTOR_CHECKOUT,
-            start=time,
-            end=time,
-        )
-        time += timedelta(minutes=1)
-
-        # Try an end-to-end test, getting all circulation events for
-        # the current day.
-        with dashboard_fixture.ctrl.app.test_request_context("/"):
-            (
-                response,
-                requested_date,
-                date_end,
-                library_short_name,
-            ) = (
-                dashboard_fixture.manager.admin_dashboard_controller.bulk_circulation_events()
-            )
-        reader = csv.reader(
-            [row for row in response.split("\r\n") if row], dialect=csv.excel
-        )
-        rows = [row for row in reader][1::]  # skip header row
-        assert 1 == len(rows)
-        [row] = rows
-        assert CirculationEvent.DISTRIBUTOR_CHECKOUT == row[1]
-        assert identifier.identifier == row[2]
-        assert identifier.type == row[3]
-        assert edition.title == row[4]
-        assert genres[0].name == row[12]
-
-        # Now verify that this works by passing incoming query
-        # parameters into a LocalAnalyticsExporter object.
-        class MockLocalAnalyticsExporter:
-            def export(self, _db, date_start, date_end, locations, library):
-                self.called_with = (_db, date_start, date_end, locations, library)
-                return "A CSV file"
-
-        exporter = MockLocalAnalyticsExporter()
-        with dashboard_fixture.ctrl.request_context_with_library(
-            "/?date=2018-01-01&dateEnd=2018-01-04&locations=loc1,loc2"
-        ):
-            (
-                response,
-                requested_date,
-                date_end,
-                library_short_name,
-            ) = dashboard_fixture.manager.admin_dashboard_controller.bulk_circulation_events(
-                analytics_exporter=exporter
-            )
-
-            # export() was called with the arguments we expect.
-            #
-            args = list(exporter.called_with)
-            assert dashboard_fixture.ctrl.db.session == args.pop(0)
-            assert datetime.date(2018, 1, 1) == args.pop(0)
-            # This is the start of the day _after_ the dateEnd we
-            # specified -- we want all events that happened _before_
-            # 2018-01-05.
-            assert datetime.date(2018, 1, 5) == args.pop(0)
-            assert "loc1,loc2" == args.pop(0)
-            assert dashboard_fixture.ctrl.db.default_library() == args.pop(0)
-            assert [] == args
-
-            # The data returned is whatever export() returned.
-            assert "A CSV file" == response
-
-            # The other data is necessary to build a filename for the
-            # "CSV file".
-            assert "2018-01-01" == requested_date
-
-            # Note that the date_end is the date we requested --
-            # 2018-01-04 -- not the cutoff time passed in to export(),
-            # which is the start of the subsequent day.
-            assert "2018-01-04" == date_end
-            assert (
-                dashboard_fixture.ctrl.db.default_library().short_name
-                == library_short_name
-            )
-
-    def test_stats_calls_with_correct_arguments(
-        self, dashboard_fixture: DashboardFixture
-    ):
-        # Ensure that the injected statistics function is called properly.
-        stats_mock = mock.MagicMock(return_value={})
-        with dashboard_fixture.request_context_with_admin(
-            "/", admin=dashboard_fixture.admin
-        ):
-            response = dashboard_fixture.manager.admin_dashboard_controller.stats(
-                stats_function=stats_mock
-            )
-        assert 1 == stats_mock.call_count
-        assert (
-            dashboard_fixture.admin,
-            dashboard_fixture.ctrl.db.session,
-        ) == stats_mock.call_args.args
-        assert {} == stats_mock.call_args.kwargs
 
 
 class TestSettingsController:

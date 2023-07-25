@@ -1,7 +1,8 @@
 import flask
 from flask import Response
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import INCOMPLETE_CONFIGURATION, MISSING_ANALYTICS_NAME
 from api.google_analytics_provider import GoogleAnalyticsProvider
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
@@ -9,8 +10,6 @@ from core.model import ExternalIntegration, ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
 from core.util import first_or_default
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class AnalyticsServicesController(SettingsController):

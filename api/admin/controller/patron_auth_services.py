@@ -7,7 +7,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.controller import AdminCirculationManagerController
+from api.admin.controller.base import AdminCirculationManagerController
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
 from api.authentication.base import AuthenticationProvider
@@ -38,8 +38,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
         manager: CirculationManager,
         auth_registry: Optional[IntegrationRegistry[AuthenticationProvider]] = None,
     ):
-        super().__init__(manager)
-
+        self._db = manager._db
         self.registry = auth_registry if auth_registry else PatronAuthRegistry()
         self.type = _("patron authentication service")
         self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")

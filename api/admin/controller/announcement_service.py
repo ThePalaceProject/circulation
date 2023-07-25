@@ -10,7 +10,7 @@ from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 from ..announcement_list_validator import AnnouncementListValidator
-from . import SettingsController
+from .settings import SettingsController
 
 
 class AnnouncementSettings(SettingsController):

@@ -2,13 +2,17 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    MULTIPLE_SITEWIDE_SERVICES,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    UNKNOWN_PROTOCOL,
+)
 from core.external_search import ExternalSearchIndex
 from core.log import CloudwatchLogs, SysLogger
 from core.model import ExternalIntegration, get_one_or_create
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class SitewideServicesController(SettingsController):

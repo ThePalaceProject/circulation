@@ -2,10 +2,9 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import FAILED_TO_RUN_SELF_TESTS, MISSING_IDENTIFIER
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class SelfTestsController(SettingsController):

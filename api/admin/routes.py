@@ -15,7 +15,7 @@ from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
 from core.util.problem_detail import ProblemDetail, ProblemDetailModel
 
-from .controller import CustomListsController
+from .controller.custom_lists import CustomListsController
 from .templates import admin_sign_in_again as sign_in_again_template
 
 # An admin's session will expire after this amount of time and
