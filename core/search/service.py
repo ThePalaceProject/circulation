@@ -338,11 +338,11 @@ class SearchServiceOpensearch1(SearchService):
         except NotFoundError:
             return None
 
-    def search_client(self) -> Search:
-        return self._search
+    def search_client(self, pointer_name: str) -> Search:
+        return self._search.index(pointer_name)
 
-    def search_multi_client(self) -> MultiSearch:
-        return self._multi_search
+    def search_multi_client(self, pointer_name: str) -> MultiSearch:
+        return self._multi_search.index(pointer_name)
 
     def read_pointer_name(self, base_name: str) -> str:
         return f"{base_name}-search-read"

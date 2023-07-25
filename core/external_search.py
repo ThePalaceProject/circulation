@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import datetime
 import json
@@ -284,7 +286,9 @@ class ExternalSearchIndex(HasSelfTests):
         else:
             query = Query(query_string, filter)
 
-        search = query.build(self._search_service.search_client(), pagination)
+        search = query.build(
+            self._search_service.search_client(self._search_read_pointer), pagination
+        )
         if debug:
             search = search.extra(explain=True)
 
@@ -361,7 +365,7 @@ class ExternalSearchIndex(HasSelfTests):
             (query string, Filter, Pagination) 3-tuple.
         """
         # Create a MultiSearch.
-        multi = self._search_service.search_multi_client()
+        multi = self._search_service.search_multi_client(self._search_read_pointer)
 
         # Give it a Search object for every query definition passed in
         # as part of `queries`.
@@ -489,7 +493,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         def _count_docs():
             service = self.search_service()
-            client = service.search_client()
+            client = service.search_client(self._search_read_pointer)
             return str(client.count())
 
         yield self.run_test(
