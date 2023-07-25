@@ -6,7 +6,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.controller.settings import SettingsController
 from api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
-from api.registration.registry import Registration, RemoteRegistry
+from api.discovery.opds_registration import OpdsRegistrationService, Registration
 from core.model import ExternalIntegration, Library, get_one
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
@@ -15,8 +15,8 @@ from core.util.problem_detail import ProblemDetail
 class DiscoveryServiceLibraryRegistrationsController(SettingsController):
 
     """List the libraries that have been registered with a specific
-    RemoteRegistry, and allow the admin to register a library with
-    a RemoteRegistry.
+    OpdsRegistrationService, and allow the admin to register a library with
+    a OpdsRegistrationService.
 
     :param registration_class: Mock class to use instead of Registration.
     """
@@ -44,7 +44,7 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
         status of the registration."""
 
         services = []
-        for registry in RemoteRegistry.for_protocol_and_goal(
+        for registry in OpdsRegistrationService.for_protocol_and_goal(
             self._db, ExternalIntegration.OPDS_REGISTRATION, self.goal
         ):
             result = registry.fetch_registration_document(do_get=do_get)
@@ -92,10 +92,10 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
             return library_info
 
     def look_up_registry(self, integration_id):
-        """Find the RemoteRegistry that the user is trying to register the library with,
+        """Find the OpdsRegistrationService that the user is trying to register the library with,
         and check that it actually exists."""
 
-        registry = RemoteRegistry.for_integration_id(
+        registry = OpdsRegistrationService.for_integration_id(
             self._db, integration_id, self.goal
         )
         if not registry:
@@ -111,7 +111,7 @@ class DiscoveryServiceLibraryRegistrationsController(SettingsController):
         return library
 
     def process_post(self, registration_class, do_get, do_post):
-        """Attempt to register a library with a RemoteRegistry."""
+        """Attempt to register a library with a OpdsRegistrationService."""
 
         integration_id = flask.request.form.get("integration_id")
         library_short_name = flask.request.form.get("library_short_name")

@@ -4,9 +4,9 @@ from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
+from api.discovery.opds_registration import Registration
 from api.opds import CirculationManagerAnnotator, LibraryAnnotator
 from api.problem_details import *
-from api.registration.registry import Registration
 from core.external_search import MockExternalSearchIndex
 from core.lane import Facets, WorkList
 from core.model import Admin, CachedFeed, ConfigurationSetting, ExternalIntegration

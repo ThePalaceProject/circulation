@@ -1,153 +1,147 @@
+from typing import Union
+
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from sqlalchemy import and_, select
 
-from api.admin.controller.settings import SettingsController
+from api.admin.controller.base import AdminPermissionsControllerMixin
+from api.admin.controller.integration_settings import IntegrationSettingsController
+from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import (
-    CANNOT_CHANGE_PROTOCOL,
     INCOMPLETE_CONFIGURATION,
+    INTEGRATION_URL_ALREADY_IN_USE,
     MISSING_SERVICE,
     NO_PROTOCOL_FOR_NEW_SERVICE,
+    UNKNOWN_PROTOCOL,
 )
-from api.registration.registry import RemoteRegistry
-from core.model import ExternalIntegration, get_one_or_create
-from core.util.problem_detail import ProblemDetail
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.integration.registry.discovery import DiscoveryRegistry
+from core.model import (
+    IntegrationConfiguration,
+    get_one,
+    json_serializer,
+    site_configuration_has_changed,
+)
+from core.problem_details import INVALID_INPUT
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
-class DiscoveryServicesController(SettingsController):
-    def __init__(self, manager):
-        super().__init__(manager)
-        self.opds_registration = ExternalIntegration.OPDS_REGISTRATION
-        self.protocols = [
-            {
-                "name": self.opds_registration,
-                "sitewide": True,
-                "settings": [
-                    {
-                        "key": ExternalIntegration.URL,
-                        "label": _("URL"),
-                        "required": True,
-                        "format": "url",
-                    },
-                ],
-                "supports_registration": True,
-                "supports_staging": True,
-            }
-        ]
-        self.goal = ExternalIntegration.DISCOVERY_GOAL
+class DiscoveryServicesController(
+    IntegrationSettingsController[OpdsRegistrationService],
+    AdminPermissionsControllerMixin,
+):
+    def default_registry(self) -> DiscoveryRegistry:
+        return DiscoveryRegistry()
 
-    def process_discovery_services(self):
+    def process_discovery_services(self) -> Union[Response, ProblemDetail]:
         self.require_system_admin()
         if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
-    def process_get(self):
-        registries = list(
-            RemoteRegistry.for_protocol_and_goal(
-                self._db, self.opds_registration, self.goal
-            )
-        )
-        if not registries:
-            # There are no registries at all. Set up the default
-            # library registry.
+    def process_get(self) -> Response:
+        if len(self.configured_services) == 0:
             self.set_up_default_registry()
 
-        services = self._get_integration_info(self.goal, self.protocols)
-        return dict(
-            discovery_services=services,
-            protocols=self.protocols,
+        return Response(
+            json_serializer(
+                {
+                    "discovery_services": self.configured_services,
+                    "protocols": list(self.protocols.values()),
+                }
+            ),
+            status=200,
+            mimetype="application/json",
         )
 
-    def set_up_default_registry(self):
+    def set_up_default_registry(self) -> None:
         """Set up the default library registry; no other registries exist yet."""
-
-        service, is_new = get_one_or_create(
-            self._db,
-            ExternalIntegration,
-            protocol=self.opds_registration,
-            goal=self.goal,
+        protocol = self.registry.get_protocol(OpdsRegistrationService)
+        assert protocol is not None
+        default_registry = self.create_new_service(
+            name=OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_NAME,
+            protocol=protocol,
         )
-        if is_new:
-            service.url = RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL
-            service.name = RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_NAME
+        settings = OpdsRegistrationService.settings_class()(
+            url=OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL
+        )
+        default_registry.settings_dict = settings.dict()
 
-    def process_post(self):
-        name = flask.request.form.get("name")
-        protocol = flask.request.form.get("protocol")
-        fields = {"name": name, "protocol": protocol}
-        form_field_error = self.validate_form_fields(**fields)
-        if form_field_error:
-            return form_field_error
+    def process_post(self) -> Union[Response, ProblemDetail]:
+        try:
+            form_data = flask.request.form
+            protocol = form_data.get("protocol", None, str)
+            id = form_data.get("id", None, int)
+            name = form_data.get("name", None, str)
 
-        id = flask.request.form.get("id")
-        is_new = False
-        if id:
-            # Find an existing service in order to edit it
-            service = self.look_up_service_from_registry(protocol, id)
-        else:
-            service, is_new = self._create_integration(
-                self.protocols, protocol, self.goal
-            )
+            if protocol is None and id is None:
+                raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
 
-        if isinstance(service, ProblemDetail):
+            if protocol is None or protocol not in self.registry:
+                self.log.warning(f"Unknown service protocol: {protocol}")
+                raise ProblemError(UNKNOWN_PROTOCOL)
+
+            if id is not None:
+                # Find an existing service to edit
+                service = self.get_existing_service(id, name, protocol)
+                response_code = 200
+            else:
+                # Create a new service
+                if name is None:
+                    raise ProblemError(INCOMPLETE_CONFIGURATION)
+                service = self.create_new_service(name, protocol)
+                response_code = 201
+
+            impl_cls = self.registry[protocol]
+            settings_class = impl_cls.settings_class()
+            validated_settings = ProcessFormData.get_settings(settings_class, form_data)
+            service.settings_dict = validated_settings.dict()
+
+            # Make sure that the URL of the service is unique.
+            self.check_url_unique(service, validated_settings.url)
+
+            # Trigger a site configuration change
+            site_configuration_has_changed(self._db)
+
+        except ProblemError as e:
             self._db.rollback()
-            return service
+            return e.problem_detail
 
-        name_error = self.check_name_unique(service, name)
-        if name_error:
-            self._db.rollback()
-            return name_error
+        return Response(str(service.id), response_code)
 
-        url = flask.request.form.get("url")
-        url_not_unique = self.check_url_unique(service, url, protocol, self.goal)
-        if url_not_unique:
-            self._db.rollback()
-            return url_not_unique
+    def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
+        if flask.request.method != "DELETE":
+            return INVALID_INPUT.detailed(_("Method not allowed for this endpoint"))
+        self.require_system_admin()
 
-        protocol_error = self.set_protocols(service, protocol)
-        if protocol_error:
-            self._db.rollback()
-            return protocol_error
-
-        service.name = name
-
-        if is_new:
-            return Response(str(service.id), 201)
-        else:
-            return Response(str(service.id), 200)
-
-    def validate_form_fields(self, **fields):
-        """The 'name' and 'protocol' fields cannot be blank, and the protocol must
-        be selected from the list of recognized protocols.  The URL must be valid."""
-
-        name = fields.get("name")
-        protocol = fields.get("protocol")
-        if not name:
-            return INCOMPLETE_CONFIGURATION
-        if not protocol:
-            return NO_PROTOCOL_FOR_NEW_SERVICE
-
-        error = self.validate_protocol()
-        if error:
-            return error
-
-        wrong_format = self.validate_formats()
-        if wrong_format:
-            return wrong_format
-
-    def look_up_service_from_registry(self, protocol, id):
-        """Find an existing service, and make sure that the user is not trying to edit
-        its protocol."""
-
-        registry = RemoteRegistry.for_integration_id(self._db, id, self.goal)
-        if not registry:
+        integration = get_one(
+            self._db,
+            IntegrationConfiguration,
+            id=service_id,
+            goal=self.registry.goal,
+        )
+        if not integration:
             return MISSING_SERVICE
-        service = registry.integration
-        if protocol != service.protocol:
-            return CANNOT_CHANGE_PROTOCOL
-        return service
+        self._db.delete(integration)
+        return Response(str(_("Deleted")), 200)
 
-    def process_delete(self, service_id):
-        return self._delete_integration(service_id, ExternalIntegration.DISCOVERY_GOAL)
+    def check_url_unique(self, service: IntegrationConfiguration, url: str) -> None:
+        """Check that the URL of the service is unique.
+
+        :raises ProblemDetail: If the URL is not unique.
+        """
+
+        existing_service = self._db.scalars(
+            select(IntegrationConfiguration).where(
+                and_(
+                    IntegrationConfiguration.goal == service.goal,
+                    IntegrationConfiguration.protocol == service.protocol,
+                    IntegrationConfiguration.settings_dict.contains({"url": url}),
+                    IntegrationConfiguration.id != service.id,
+                )
+            )
+        ).one_or_none()
+        if existing_service:
+            raise ProblemError(problem_detail=INTEGRATION_URL_ALREADY_IN_USE)

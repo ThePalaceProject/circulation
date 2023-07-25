@@ -68,7 +68,7 @@ class LibraryAnnotator(Annotator):
             if marc_setting:
                 settings.append(marc_setting)
 
-        from api.registration.registry import Registration
+        from api.discovery.opds_registration import Registration
 
         settings += [
             s.value

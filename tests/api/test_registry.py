@@ -9,12 +9,12 @@ from Crypto.PublicKey import RSA
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
-from api.problem_details import *
-from api.registration.registry import (
+from api.discovery.opds_registration import (
     LibraryRegistrationScript,
+    OpdsRegistrationService,
     Registration,
-    RemoteRegistry,
 )
+from api.problem_details import *
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
@@ -29,7 +29,7 @@ class RemoteRegistryFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         # Create an ExternalIntegration that can be used as the basis for
-        # a RemoteRegistry.
+        # a OpdsRegistrationService.
         self.integration = db.external_integration(
             protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
         )
@@ -42,7 +42,7 @@ def remote_registry_fixture(db: DatabaseTransactionFixture) -> RemoteRegistryFix
 
 class TestRemoteRegistry:
     def test_constructor(self, remote_registry_fixture: RemoteRegistryFixture):
-        registry = RemoteRegistry(remote_registry_fixture.integration)
+        registry = OpdsRegistrationService(remote_registry_fixture.integration)
         assert remote_registry_fixture.integration == registry.integration
 
     def test_for_integration_id(self, remote_registry_fixture: RemoteRegistryFixture):
@@ -50,14 +50,14 @@ class TestRemoteRegistry:
         given its ID.
         """
         db = remote_registry_fixture.db
-        m = RemoteRegistry.for_integration_id
+        m = OpdsRegistrationService.for_integration_id
 
         registry = m(
             db.session,
             remote_registry_fixture.integration.id,
             ExternalIntegration.DISCOVERY_GOAL,
         )
-        assert isinstance(registry, RemoteRegistry)
+        assert isinstance(registry, OpdsRegistrationService)
         assert remote_registry_fixture.integration == registry.integration
 
         # If the ID doesn't exist you get None.
@@ -87,15 +87,15 @@ class TestRemoteRegistry:
         )
 
         # Only the original ExternalIntegration has both the requested
-        # protocol and goal, so only it becomes a RemoteRegistry.
+        # protocol and goal, so only it becomes a OpdsRegistrationService.
         [registry] = list(
-            RemoteRegistry.for_protocol_and_goal(
+            OpdsRegistrationService.for_protocol_and_goal(
                 db.session,
                 remote_registry_fixture.integration.protocol,
                 remote_registry_fixture.integration.goal,
             )
         )
-        assert isinstance(registry, RemoteRegistry)
+        assert isinstance(registry, OpdsRegistrationService)
         assert remote_registry_fixture.integration == registry.integration
 
     def test_for_protocol_goal_and_url(
@@ -105,10 +105,10 @@ class TestRemoteRegistry:
         protocol = db.fresh_str()
         goal = db.fresh_str()
         url = db.fresh_url()
-        m = RemoteRegistry.for_protocol_goal_and_url
+        m = OpdsRegistrationService.for_protocol_goal_and_url
 
         registry = m(db.session, protocol, goal, url)
-        assert isinstance(registry, RemoteRegistry)
+        assert isinstance(registry, OpdsRegistrationService)
 
         # A new ExternalIntegration was created.
         integration = registry.integration
@@ -123,7 +123,7 @@ class TestRemoteRegistry:
 
     def test_registrations(self, remote_registry_fixture: RemoteRegistryFixture):
         db = remote_registry_fixture.db
-        registry = RemoteRegistry(remote_registry_fixture.integration)
+        registry = OpdsRegistrationService(remote_registry_fixture.integration)
 
         # Associate the default library with the registry.
         Registration(registry, db.default_library())
@@ -142,7 +142,7 @@ class TestRemoteRegistry:
 
         # Test our ability to retrieve essential information from a
         # remote registry's root catalog.
-        class Mock(RemoteRegistry):
+        class Mock(OpdsRegistrationService):
             def _extract_catalog_information(self, response):
                 self.extracted_from = response
                 return "Essential information"
@@ -175,9 +175,9 @@ class TestRemoteRegistry:
     ):
         # Test our ability to extract a registration link and an
         # Adobe Vendor ID from an OPDS 1 or OPDS 2 catalog.
-        def extract(document, type=RemoteRegistry.OPDS_2_TYPE):
+        def extract(document, type=OpdsRegistrationService.OPDS_2_TYPE):
             response = MockRequestsResponse(200, {"Content-Type": type}, document)
-            return RemoteRegistry._extract_catalog_information(response)
+            return OpdsRegistrationService._extract_catalog_information(response)
 
         def assert_no_link(*args, **kwargs):
             """Verify that calling _extract_catalog_information on the
@@ -207,12 +207,12 @@ class TestRemoteRegistry:
         # OPDS 1 feed with link.
         feed = '<feed><link rel="register" href="register url"/></feed>'
         assert ("register url", None) == extract(
-            feed, RemoteRegistry.OPDS_1_PREFIX + ";foo"
+            feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo"
         )
 
         # OPDS 1 feed with no link.
         feed = "<feed></feed>"
-        assert_no_link(feed, RemoteRegistry.OPDS_1_PREFIX + ";foo")
+        assert_no_link(feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo")
 
         # Non-OPDS document.
         result = extract("plain text here", "text/plain")
@@ -228,7 +228,7 @@ class TestRemoteRegistry:
 
         # First, test the case where we can't even get the catalog
         # document.
-        class Mock0(RemoteRegistry):
+        class Mock0(OpdsRegistrationService):
             def fetch_catalog(self, do_get):
                 self.fetch_catalog_called_with = do_get
                 return REMOTE_INTEGRATION_FAILED
@@ -250,7 +250,7 @@ class TestRemoteRegistry:
         client = DummyHTTPClient()
         client.responses.append(REMOTE_INTEGRATION_FAILED)
 
-        class Mock1(RemoteRegistry):
+        class Mock1(OpdsRegistrationService):
             def fetch_catalog(self, do_get):
                 return "http://register-here/", "vendor id"
 
@@ -298,16 +298,16 @@ class TestRemoteRegistry:
             encoded = base64.b64encode(data.encode("utf-8")).decode("utf-8")
             return dict(rel="terms-of-service", href=f"data:{type};base64,{encoded}")
 
-        class Mock(RemoteRegistry):
+        class Mock(OpdsRegistrationService):
             decoded: str
 
             @classmethod
             def _decode_data_url(cls, url):
                 cls.decoded = url
-                return "Decoded: " + RemoteRegistry._decode_data_url(url)
+                return "Decoded: " + OpdsRegistrationService._decode_data_url(url)
 
-        def extract(document, type=RemoteRegistry.OPDS_2_TYPE):
-            if type == RemoteRegistry.OPDS_2_TYPE:
+        def extract(document, type=OpdsRegistrationService.OPDS_2_TYPE):
+            if type == OpdsRegistrationService.OPDS_2_TYPE:
                 document = json.dumps(dict(links=document))
             response = MockRequestsResponse(200, {"Content-Type": type}, document)
             return Mock._extract_registration_information(response)
@@ -337,12 +337,14 @@ class TestRemoteRegistry:
         # OPDS 1 feed with link.
         feed = '<feed><link rel="terms-of-service" href="http://tos/"/></feed>'
         assert ("http://tos/", None) == extract(
-            feed, RemoteRegistry.OPDS_1_PREFIX + ";foo"
+            feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo"
         )
 
         # OPDS 1 feed with no link.
         feed = "<feed></feed>"
-        assert (None, None) == extract(feed, RemoteRegistry.OPDS_1_PREFIX + ";foo")
+        assert (None, None) == extract(
+            feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo"
+        )
 
         # Non-OPDS document.
         assert (None, None) == extract("plain text here", "text/plain")
@@ -353,7 +355,7 @@ class TestRemoteRegistry:
 
     def test__decode_data_url(self, remote_registry_fixture: RemoteRegistryFixture):
         # Test edge cases of decoding data: URLs.
-        m = RemoteRegistry._decode_data_url
+        m = OpdsRegistrationService._decode_data_url
 
         def data_url(data, type="text/html"):
             encoded = base64.b64encode(data.encode("utf-8")).decode("utf-8")
@@ -404,11 +406,11 @@ class TestRemoteRegistry:
 class RegistrationFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
-        # Create a RemoteRegistry.
+        # Create a OpdsRegistrationService.
         self.integration = db.external_integration(
             protocol="some protocol", goal="some goal"
         )
-        self.registry = RemoteRegistry(self.integration)
+        self.registry = OpdsRegistrationService(self.integration)
         self.registration = Registration(self.registry, db.default_library())
 
 
@@ -491,7 +493,7 @@ class TestRegistration:
         db = registration_fixture.db
         # Test the other methods orchestrated by the push() method.
 
-        class MockRegistry(RemoteRegistry):
+        class MockRegistry(OpdsRegistrationService):
             def fetch_catalog(self, catalog_url, do_get):
                 # Pretend to fetch a root catalog and extract a
                 # registration URL from it.
@@ -890,7 +892,10 @@ class TestLibraryRegistrationScript:
 
             # Every library was registered with the default
             # library registry.
-            assert RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL == i[0].integration.url
+            assert (
+                OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL
+                == i[0].integration.url
+            )
 
     def test_process_library(self, db: DatabaseTransactionFixture):
         """Test the things that might happen when process_library is called."""
@@ -899,7 +904,7 @@ class TestLibraryRegistrationScript:
         integration = db.external_integration(
             protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
         )
-        registry = RemoteRegistry(integration)
+        registry = OpdsRegistrationService(integration)
 
         # First, simulate success.
         class Success(Registration):

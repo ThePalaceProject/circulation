@@ -6,7 +6,7 @@ import pytest
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.registration.constants import RegistrationConstants
+from api.discovery.constants import RegistrationConstants
 from core.config import CannotLoadConfiguration
 from core.model import ConfigurationSetting, ExternalIntegration
 from core.util.datetime_helpers import datetime_utc, utc_now

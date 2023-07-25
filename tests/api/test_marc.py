@@ -4,8 +4,8 @@ import urllib.request
 
 from pymarc import Record
 
+from api.discovery.opds_registration import Registration
 from api.marc import LibraryAnnotator
-from api.registration.registry import Registration
 from core.config import Configuration
 from core.marc import MARCExporter
 from core.model import ConfigurationSetting, ExternalIntegration

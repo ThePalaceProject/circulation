@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.registration.constants import RegistrationConstants
+from api.discovery.constants import RegistrationConstants
 from core.model import ConfigurationSetting, ExternalIntegration, Library
 from tests.fixtures.database import DatabaseTransactionFixture
 

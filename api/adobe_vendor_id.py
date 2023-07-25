@@ -13,7 +13,7 @@ from jwt.exceptions import InvalidIssuedAtError
 from sqlalchemy.orm import Query
 from sqlalchemy.orm.session import Session
 
-from api.registration.constants import RegistrationConstants
+from api.discovery.constants import RegistrationConstants
 from core.model import (
     ConfigurationSetting,
     Credential,

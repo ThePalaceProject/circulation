@@ -4,7 +4,17 @@ import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_ANALYTICS_NAME,
+    MISSING_SERVICE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    NO_SUCH_LIBRARY,
+    UNKNOWN_PROTOCOL,
+)
 from api.google_analytics_provider import GoogleAnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (

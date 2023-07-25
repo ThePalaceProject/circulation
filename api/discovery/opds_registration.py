@@ -5,13 +5,14 @@ import json
 import logging
 import sys
 from argparse import ArgumentParser
-from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tuple, Type
 
 import feedparser
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
+from pydantic import HttpUrl
 from requests import Response
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
@@ -20,6 +21,8 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.problem_details import *
+from core.integration.base import HasIntegrationConfiguration
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.model import (
     ConfigurationSetting,
     ExternalIntegration,
@@ -41,15 +44,24 @@ else:
     from typing_extensions import Self
 
 
-class RemoteRegistry:
+class OpdsRegistrationServiceSettings(BaseSettings):
+    url: HttpUrl = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label=_("URL"),
+            required=True,
+        ),
+    )
+
+
+class OpdsRegistrationService(HasIntegrationConfiguration):
     """A circulation manager's view of a remote service that supports
     the OPDS Directory Registration Protocol:
 
     https://github.com/NYPL-Simplified/Simplified/wiki/OPDS-Directory-Registration-Protocol
 
-    In practical terms, this may be a library registry (which has
-    DISCOVERY_GOAL and wants to help patrons find their libraries) or
-    it may be a shared ODL collection (which has LICENSE_GOAL).
+    In practical terms, this is a library registry (which has
+    DISCOVERY_GOAL and wants to help patrons find their libraries).
     """
 
     DEFAULT_LIBRARY_REGISTRY_URL = "https://registry.thepalaceproject.org"
@@ -61,6 +73,21 @@ class RemoteRegistry:
     def __init__(self, integration: ExternalIntegration) -> None:
         """Constructor."""
         self.integration = integration
+
+    @classmethod
+    def label(cls) -> str:
+        """Get the label of this integration."""
+        return "OPDS Registration"
+
+    @classmethod
+    def description(cls) -> str:
+        """Get the description of this integration."""
+        return "Register your library for discovery in the app with a library registry."
+
+    @classmethod
+    def settings_class(cls) -> Type[OpdsRegistrationServiceSettings]:
+        """Get the settings for this integration."""
+        return OpdsRegistrationServiceSettings
 
     @classmethod
     def for_integration_id(
@@ -110,7 +137,7 @@ class RemoteRegistry:
     @property
     def registrations(self) -> Generator[Registration, None, None]:
         """Find all of this site's successful registrations with
-        this RemoteRegistry.
+        this OpdsRegistrationService.
 
         :yield: A sequence of Registration objects.
         """
@@ -122,7 +149,7 @@ class RemoteRegistry:
         catalog_url: Optional[str] = None,
         do_get: Callable[..., Response | ProblemDetail] = HTTP.debuggable_get,
     ) -> Tuple[str, str] | ProblemDetail:
-        """Fetch the root catalog for this RemoteRegistry.
+        """Fetch the root catalog for this OpdsRegistrationService.
 
         :return: A ProblemDetail if there's a problem communicating
             with the service or parsing the catalog; otherwise a 2-tuple
@@ -294,7 +321,7 @@ class Registration(RegistrationConstants):
     configure the relationship between the two.
     """
 
-    def __init__(self, registry: RemoteRegistry, library: Library) -> None:
+    def __init__(self, registry: OpdsRegistrationService, library: Library) -> None:
         self.registry = registry
         self.integration = self.registry.integration
         self.library = library
@@ -344,7 +371,7 @@ class Registration(RegistrationConstants):
         do_get: Callable[..., Response] = HTTP.debuggable_get,
         do_post: Callable[..., Response] = HTTP.debuggable_post,
     ) -> Literal[True] | ProblemDetail:
-        """Attempt to register a library with a RemoteRegistry.
+        """Attempt to register a library with a OpdsRegistrationService.
 
         NOTE: This method is designed to be used in a
         controller. Other callers may use this method, but they must be
@@ -586,7 +613,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         parser.add_argument(
             "--registry-url",
             help="Register libraries with the given registry.",
-            default=RemoteRegistry.DEFAULT_LIBRARY_REGISTRY_URL,
+            default=OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL,
         )
         parser.add_argument(
             "--stage",
@@ -604,7 +631,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         parsed = self.parse_command_line(self._db, cmd_args)
 
         url = parsed.registry_url
-        registry = RemoteRegistry.for_protocol_goal_and_url(
+        registry = OpdsRegistrationService.for_protocol_goal_and_url(
             self._db, self.PROTOCOL, self.GOAL, url
         )
         stage = parsed.stage
@@ -629,7 +656,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         return app
 
     def process_library(self, registration: Registration, stage: str, url_for: Callable[..., str]) -> bool | ProblemDetail:  # type: ignore[override]
-        """Push one Library's registration to the given RemoteRegistry."""
+        """Push one Library's registration to the given OpdsRegistrationService."""
 
         logger = logging.getLogger(
             "Registration of library %r" % registration.library.short_name

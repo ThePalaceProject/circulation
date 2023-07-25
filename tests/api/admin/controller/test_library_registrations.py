@@ -6,14 +6,14 @@ from flask import url_for
 from werkzeug.datastructures import MultiDict
 
 from api.admin.exceptions import *
-from api.registration.registry import Registration, RemoteRegistry
+from api.discovery.opds_registration import OpdsRegistrationService, Registration
 from core.model import AdminRole, ConfigurationSetting, ExternalIntegration, create
 from core.util.http import HTTP
 from tests.core.mock import DummyHTTPClient
 
 
 class TestLibraryRegistration:
-    """Test the process of registering a library with a RemoteRegistry."""
+    """Test the process of registering a library with a OpdsRegistrationService."""
 
     def test_discovery_service_library_registrations_get(self, settings_ctrl_fixture):
         db = settings_ctrl_fixture.ctrl.db
@@ -70,7 +70,7 @@ class TestLibraryRegistration:
 
         # When a client sends a GET request to the controller, the
         # controller is going to call
-        # RemoteRegistry.fetch_registration_document() to try and find
+        # OpdsRegistrationService.fetch_registration_document() to try and find
         # the discovery services' terms of service. That's going to
         # make one or two HTTP requests.
 
@@ -83,7 +83,7 @@ class TestLibraryRegistration:
         # registration link.
         root_catalog = dict(links=[dict(href="http://register-here/", rel="register")])
         client.queue_requests_response(
-            200, RemoteRegistry.OPDS_2_TYPE, content=json.dumps(root_catalog)
+            200, OpdsRegistrationService.OPDS_2_TYPE, content=json.dumps(root_catalog)
         )
 
         # The second request will fetch that registration link -- then
@@ -99,7 +99,9 @@ class TestLibraryRegistration:
             ]
         )
         client.queue_requests_response(
-            200, RemoteRegistry.OPDS_2_TYPE, content=json.dumps(registration_document)
+            200,
+            OpdsRegistrationService.OPDS_2_TYPE,
+            content=json.dumps(registration_document),
         )
 
         controller = (

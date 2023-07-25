@@ -195,11 +195,11 @@ class ResetPasswordController(AdminController):
 
     def _response_with_message_and_redirect_button(
         self,
-        message: str,
+        message: Optional[str],
         redirect_button_link: str,
         redirect_button_text: str,
         is_error: bool = False,
-        status_code: int = 200,
+        status_code: Optional[int] = 200,
     ) -> Response:
         style = error_style if is_error else body_style
 
