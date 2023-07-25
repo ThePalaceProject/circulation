@@ -91,7 +91,9 @@ def date() -> SearchMappingFieldTypeParameterized:
 
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/keyword/
 def keyword() -> SearchMappingFieldTypeParameterized:
-    return SearchMappingFieldTypeParameterized("keyword")
+    mapping = SearchMappingFieldTypeParameterized("keyword")
+    mapping._parameters["normalizer"] = "filterable_string"
+    return mapping
 
 
 # See: https://www.elastic.co/guide/en/elasticsearch/plugins/current/analysis-icu-collation-keyword-field.html

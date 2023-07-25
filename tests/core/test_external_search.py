@@ -996,7 +996,7 @@ class TestExternalSearchWithWorks:
             while pagination:
                 pages.append(
                     worklist.works(
-                        session, facets, pagination, fixture.external_search.search
+                        session, facets, pagination, fixture.external_search_index
                     )
                 )
                 pagination = pagination.next_page
