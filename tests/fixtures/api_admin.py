@@ -138,3 +138,18 @@ def settings_ctrl_fixture(
     controller_fixture: ControllerFixture,
 ) -> SettingsControllerFixture:
     return SettingsControllerFixture(controller_fixture)
+
+
+class AdminLibrarianFixture(AdminControllerFixture):
+    def __init__(self, controller_fixture: ControllerFixture):
+        super().__init__(controller_fixture)
+        self.admin.add_role(
+            AdminRole.LIBRARIAN, controller_fixture.db.default_library()
+        )
+
+
+@pytest.fixture(scope="function")
+def admin_librarian_fixture(
+    controller_fixture: ControllerFixture,
+) -> AdminLibrarianFixture:
+    return AdminLibrarianFixture(controller_fixture)
