@@ -28,7 +28,7 @@ from api.lanes import (
 from api.novelist import MockNoveListAPI
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import Filter, MockExternalSearchIndex
+from core.external_search import Filter
 from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
@@ -41,6 +41,7 @@ from core.model import (
 )
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.search import ExternalSearchFixtureFake
 
 
 class TestLaneCreation:
@@ -943,7 +944,6 @@ class TestCrawlableFacets:
 
 class TestCrawlableCollectionBasedLane:
     def test_init(self, db: DatabaseTransactionFixture):
-
         # Collection-based crawlable feeds are cached for 2 hours.
         assert 2 * 60 * 60 == CrawlableCollectionBasedLane.MAX_CACHE_AGE
 
@@ -1000,14 +1000,18 @@ class TestCrawlableCollectionBasedLane:
         assert CrawlableCollectionBasedLane.COLLECTION_ROUTE == route
         assert other_collection.name == kwargs.get("collection_name")
 
-    def test_works(self, db: DatabaseTransactionFixture):
+    def test_works(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         w1 = db.work(collection=db.default_collection())
         w2 = db.work(collection=db.default_collection())
         w3 = db.work(collection=db.collection())
 
         lane = CrawlableCollectionBasedLane()
         lane.initialize([db.default_collection()])
-        search = MockExternalSearchIndex()
+        search = external_search_fake_fixture.external_search
         lane.works(
             db.session, facets=CrawlableFacets.default(None), search_engine=search
         )
