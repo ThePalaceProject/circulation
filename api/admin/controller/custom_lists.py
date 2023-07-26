@@ -283,7 +283,12 @@ class CustomListsController(
         if membership_change:
             # We need to update the search index entries for works that caused a membership change,
             # so the upstream counts can be calculated correctly.
-            self.search_engine.bulk_update(works_to_update_in_search)
+            documents = self.search_engine.create_search_documents_from_works(
+                works_to_update_in_search
+            )
+            self.search_engine.search_service().index_submit_documents(
+                self.search_engine._search_write_pointer, documents
+            )
 
             # If this list was used to populate any lanes, those lanes need to have their counts updated.
             for lane in Lane.affected_by_customlist(list):

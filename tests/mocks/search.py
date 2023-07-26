@@ -9,6 +9,7 @@ from opensearch_dsl.response.hit import Hit
 from opensearchpy import OpenSearchException
 
 from core.external_search import ExternalSearchIndex
+from core.model import Work
 from core.model.work import Work
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
@@ -229,6 +230,7 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
         )
 
         self._mock_multi_works = []
+        self._mock_count_works = 0
 
     def mock_query_works(self, works: List[Work]):
         self.mock_query_works_multi(works)
@@ -241,6 +243,13 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
         for ix, (query_string, filter, pagination) in enumerate(queries):
             pagination.page_loaded(self._mock_multi_works[ix])
         return self._mock_multi_works
+
+    def mock_count_works(self, count):
+        self._mock_count_works = count
+
+    def count_works(self, filter):
+        """So far this is not required in the tests"""
+        return self._mock_count_works
 
     def __repr__(self) -> str:
         return f"Expected Results({id(self)}): {self._mock_multi_works}"
