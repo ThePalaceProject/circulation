@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from functools import partial
 from typing import Dict, Iterable, List, Optional
 from unittest.mock import MagicMock
 
@@ -12,6 +11,7 @@ from opensearchpy import OpenSearchException
 from core.external_search import ExternalSearchIndex
 from core.model.work import Work
 from core.search.revision import SearchSchemaRevision
+from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import (
     SearchService,
     SearchServiceFailedDocument,
@@ -204,9 +204,37 @@ class SearchServiceFake(SearchService):
 
 
 def fake_hits(works: List[Work]):
-    return [Hit({"_source": {"work_id": work.id}}) for work in works]
+    return [
+        Hit(
+            {
+                "_source": {"work_id": work.id},
+                "_sort": [work.sort_title, work.sort_author, work.id],
+            }
+        )
+        for work in works
+    ]
 
 
-ExternalSearchIndexFake = partial(
-    ExternalSearchIndex, custom_client_service=SearchServiceFake()
-)
+class ExternalSearchIndexFake(ExternalSearchIndex):
+    def __init__(
+        self,
+        _db,
+        url: str | None = None,
+        test_search_term: str | None = None,
+        revision_directory: SearchRevisionDirectory | None = None,
+        version: int | None = None,
+    ):
+        super().__init__(
+            _db, url, test_search_term, revision_directory, version, SearchServiceFake()
+        )
+
+        self._mock_multi_works = []
+
+    def mock_query_works_multi(self, works: List[Work], *args: List[Work]):
+        self._mock_multi_works = [fake_hits(works)]
+        self._mock_multi_works.extend([fake_hits(arg_works) for arg_works in args])
+
+    def query_works_multi(self, queries, debug=False):
+        for ix, (query_string, filter, pagination) in enumerate(queries):
+            pagination.page_loaded(self._mock_multi_works[ix])
+        return self._mock_multi_works

@@ -97,6 +97,7 @@ class TestOPDSFeedController:
         with circulation_fixture.request_context_with_library(
             "/?entrypoint=Book&size=10"
         ):
+
             response = circulation_fixture.manager.opds_feeds.feed(
                 circulation_fixture.english_adult_fiction.id
             )

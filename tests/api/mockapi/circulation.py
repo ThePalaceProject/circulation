@@ -11,7 +11,7 @@ from core.model import DataSource, Hold, Loan
 from core.external_search import ExternalSearchIndex
 from core.model import DataSource, Hold, Loan, get_one_or_create
 from core.model.configuration import ExternalIntegration
-from tests.mocks.search import SearchServiceFake
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 class MockBaseCirculationAPI(BaseCirculationAPI, ABC):
@@ -185,7 +185,7 @@ class MockCirculationManager(CirculationManager):
             ExternalSearchIndex.TEST_SEARCH_TERM_KEY, "a search term"
         )
         integration.url = "http://does-not-exist.com/"
-        return ExternalSearchIndex(self._db, custom_client_service=SearchServiceFake())
+        return ExternalSearchIndexFake(self._db)
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
