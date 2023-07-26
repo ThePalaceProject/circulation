@@ -179,11 +179,11 @@ class SearchServiceFake(SearchService):
         if pointer in self._documents_by_index:
             self._documents_by_index[pointer] = []
 
-    def search_client(self) -> Search:
-        return self._search_client
+    def search_client(self, pointer_name: str) -> Search:
+        return self._search_client.index(pointer_name)
 
-    def search_multi_client(self) -> MultiSearch:
-        return self._multi_search_client
+    def search_multi_client(self, pointer_name: str) -> MultiSearch:
+        return self._multi_search_client.index(pointer_name)
 
     def index_remove_document(self, pointer: str, id: int):
         self._fail_if_necessary()

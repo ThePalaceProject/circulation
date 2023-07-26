@@ -144,11 +144,11 @@ class SearchService(ABC):
         """Clear all search documents in the given index."""
 
     @abstractmethod
-    def search_client(self) -> Search:
+    def search_client(self, pointer_name: str) -> Search:
         """Return the underlying search client."""
 
     @abstractmethod
-    def search_multi_client(self) -> MultiSearch:
+    def search_multi_client(self, pointer_name: str) -> MultiSearch:
         """Return the underlying search client."""
 
     @abstractmethod
