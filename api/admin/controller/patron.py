@@ -4,15 +4,16 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.controller.base import AdminCirculationManagerController
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import NO_SUCH_PATRON
 from api.adobe_vendor_id import AuthdataUtility
 from api.authentication.base import CannotCreateLocalPatron, PatronData
 from api.authenticator import LibraryAuthenticator
+from api.controller import CirculationManagerController
 from core.util.problem_detail import ProblemDetail
 
 
-class PatronController(AdminCirculationManagerController):
+class PatronController(CirculationManagerController, AdminPermissionsControllerMixin):
     def _load_patrondata(self, authenticator=None):
         """Extract a patron identifier from an incoming form submission,
         and ask the library's LibraryAuthenticator to turn it into a

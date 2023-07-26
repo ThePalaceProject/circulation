@@ -17,7 +17,6 @@ from api.admin.problem_details import (
     INVALID_CSRF_TOKEN,
 )
 from api.config import Configuration
-from api.controller import CirculationManagerController
 from core.model import (
     Admin,
     AdminRole,
@@ -128,8 +127,8 @@ class AdminController:
         return base64.b64encode(os.urandom(24)).decode("utf-8")
 
 
-class AdminCirculationManagerController(CirculationManagerController):
-    """Parent class that provides methods for verifying an admin's roles."""
+class AdminPermissionsControllerMixin:
+    """Mixin that provides methods for verifying an admin's roles."""
 
     def require_system_admin(self):
         admin = getattr(flask.request, "admin", None)
