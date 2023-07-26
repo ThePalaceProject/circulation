@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 from urllib.parse import quote_plus
 
 from flask_babel import lazy_gettext as _
@@ -422,7 +422,7 @@ class Facets(FacetsWithEntryPoint):
         that might not be enabled in library configuration, but you
         can't make up totally new facets.
 
-        TODO: This sytem would make more sense if you _could_ make up
+        TODO: This system would make more sense if you _could_ make up
         totally new facets, maybe because each facet was represented
         as a policy object rather than a key to code implemented
         elsewhere in this class. Right now this method implies more
@@ -448,7 +448,9 @@ class Facets(FacetsWithEntryPoint):
         return config.default_facet(facet_group_name)
 
     @classmethod
-    def _values_from_request(cls, config, get_argument, get_header):
+    def _values_from_request(
+        cls, config, get_argument, get_header
+    ) -> dict[str, Any] | ProblemDetail:
         g = Facets.ORDER_FACET_GROUP_NAME
         order = get_argument(g, cls.default_facet(config, g))
         order_facets = cls.available_facets(config, g)
@@ -484,10 +486,14 @@ class Facets(FacetsWithEntryPoint):
         g = Facets.DISTRIBUTOR_FACETS_GROUP_NAME
         distributor = get_argument(g, cls.default_facet(config, g))
         distributor_facets = cls.available_facets(config, g)
-        if distributor and distributor not in distributor_facets:
+        if (
+            distributor
+            and distributor != "All"
+            and distributor not in distributor_facets
+        ):
             return INVALID_INPUT.detailed(
                 _(
-                    "I don't understand what '%(distributor)s' refers to.",
+                    "I don't understand which distributor '%(distributor)s' refers to.",
                     distributor=distributor,
                 ),
                 400,
@@ -496,10 +502,14 @@ class Facets(FacetsWithEntryPoint):
         g = Facets.COLLECTION_NAME_FACETS_GROUP_NAME
         collection_name = get_argument(g, cls.default_facet(config, g))
         collection_name_facets = cls.available_facets(config, g)
-        if collection_name and collection_name not in collection_name_facets:
+        if (
+            collection_name
+            and collection_name != "All"
+            and collection_name not in collection_name_facets
+        ):
             return INVALID_INPUT.detailed(
                 _(
-                    "I don't understand what '%(collection_name)s' refers to.",
+                    "I don't understand which collection '%(collection_name)s' refers to.",
                     collection_name=collection_name,
                 ),
                 400,
