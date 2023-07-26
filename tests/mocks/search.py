@@ -230,6 +230,9 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
 
         self._mock_multi_works = []
 
+    def mock_query_works(self, works: List[Work]):
+        self.mock_query_works_multi(works)
+
     def mock_query_works_multi(self, works: List[Work], *args: List[Work]):
         self._mock_multi_works = [fake_hits(works)]
         self._mock_multi_works.extend([fake_hits(arg_works) for arg_works in args])
@@ -238,3 +241,6 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
         for ix, (query_string, filter, pagination) in enumerate(queries):
             pagination.page_loaded(self._mock_multi_works[ix])
         return self._mock_multi_works
+
+    def __repr__(self) -> str:
+        return f"Expected Results({id(self)}): {self._mock_multi_works}"

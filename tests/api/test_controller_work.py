@@ -46,6 +46,7 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.mocks.search import fake_hits
 
 
 class WorkFixture(CirculationControllerFixture):
@@ -532,11 +533,11 @@ class TestWorkController:
         # If the NoveList API is configured, the search index is asked
         # about its recommendations.
         #
-        # In this test it doesn't matter whether NoveList actually
-        # provides any recommendations. The Filter object will be
-        # created with .return_nothing set, but our mock
-        # ExternalSearchIndex will ignore that setting and return
-        # everything in its index -- as it always does.
+        # This test no longer makes sense, the external_search no longer blindly returns information
+        # The query_works is not overidden, so we mock it manually
+        work_fixture.manager.external_search.query_works = MagicMock(
+            return_value=fake_hits([work_fixture.english_1])
+        )
         with work_fixture.request_context_with_library("/"):
             response = work_fixture.manager.work_controller.recommendations(
                 *args, **kwargs
@@ -678,8 +679,7 @@ class TestWorkController:
         same_author_and_series = work_fixture.db.work(
             title="Same author and series", with_license_pool=True
         )
-        work_fixture.manager.external_search.docs = {}
-        work_fixture.manager.external_search.bulk_update([same_author_and_series])
+        work_fixture.manager.external_search.mock_query_works([same_author_and_series])
 
         mock_api = MockNoveListAPI(work_fixture.db.session)
 
@@ -879,8 +879,7 @@ class TestWorkController:
         # that is the job of a non-mocked search engine.
         work = work_fixture.db.work(with_open_access_download=True)
         search_engine = work_fixture.manager.external_search
-        search_engine.docs = {}
-        search_engine.bulk_update([work])
+        search_engine.mock_query_works([work])
 
         # If a series is provided, a feed for that series is returned.
         with work_fixture.request_context_with_library("/"):
