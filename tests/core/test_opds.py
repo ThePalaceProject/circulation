@@ -9,6 +9,7 @@ import feedparser
 import pytest
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from opensearch_dsl.response import Hit
 from psycopg2.extras import NumericRange
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from core.entrypoint import (
     EverythingEntryPoint,
     MediumEntryPoint,
 )
+from core.external_search import ExternalSearchIndex
 from core.facets import FacetConstants
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import (
@@ -542,6 +544,9 @@ class TestOPDSFixture:
     history: Lane
     ya: Lane
 
+    def _fake_hit(self, work: Work):
+        return Hit({"_source": dict(work_id=work.id)})
+
 
 @pytest.fixture
 def opds_fixture(db: DatabaseTransactionFixture) -> TestOPDSFixture:
@@ -746,6 +751,9 @@ class TestOPDS:
 
         lane = db.lane()
         facets = Facets.default(db.default_library())
+
+        migration = end_to_end_search_fixture.external_search_index.start_migration()
+        migration.finish()
 
         cached_feed = AcquisitionFeed.page(
             session,
@@ -1474,7 +1482,6 @@ class TestOPDS:
     def test_groups_feed(
         self,
         opds_fixture: TestOPDSFixture,
-        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -1494,10 +1501,13 @@ class TestOPDS:
         # of the work don't matter. It just needs to have a LicensePool
         # so it'll show up in the OPDS feed.
         work = db.work(title="An epic tome", with_open_access_download=True)
-        search_engine = end_to_end_search_fixture.external_search_index
-        docs = search_engine.start_migration()
-        docs.add_documents(search_engine.create_search_documents_from_works([work]))
-        docs.finish()
+        search_engine = MagicMock(spec=ExternalSearchIndex)
+        # We expect 1 hit per lane
+        search_engine.query_works_multi.return_value = [
+            [data._fake_hit(work)],
+            [data._fake_hit(work)],
+            [data._fake_hit(work)],
+        ]
 
         # The lane setup does matter a lot -- that's what controls
         # how many times the search functionality is invoked.
@@ -1527,6 +1537,8 @@ class TestOPDS:
         # constructor.
         assert isinstance(cached_groups, OPDSFeedResponse)
         assert private == cached_groups.private
+        # One query per lane available
+        assert len(search_engine.query_works_multi.call_args[0][0]) == 3
 
         parsed = feedparser.parse(cached_groups.data)
 
@@ -1988,7 +2000,6 @@ class TestAcquisitionFeed:
         assert "{http://opds-spec.org/2010/catalog}activeFacet" not in l
 
     def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
-
         edition, pool = db.edition(with_license_pool=True)
         availability, holds, copies = AcquisitionFeed.license_tags(pool, None, None)
         assert dict(status="available") == availability.attrib
@@ -1996,7 +2007,6 @@ class TestAcquisitionFeed:
         assert dict(total="1", available="1") == copies.attrib
 
     def test_license_tags_hold_position(self, db: DatabaseTransactionFixture):
-
         # When a book is placed on hold, it typically takes a while
         # for the LicensePool to be updated with the new number of
         # holds. This test verifies the normal and exceptional
@@ -2052,7 +2062,6 @@ class TestAcquisitionFeed:
     def test_license_tags_show_unlimited_access_books(
         self, db: DatabaseTransactionFixture
     ):
-
         # Arrange
         edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False

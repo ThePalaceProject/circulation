@@ -243,7 +243,7 @@ class SearchServiceOpensearch1(SearchService):
     def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
         try:
             index_name = revision.name_for_index(base_name)
-            self._logger.debug(f"creating index {index_name}")
+            self._logger.info(f"creating index {index_name}")
             self._client.indices.create(
                 index=index_name,
                 body=revision.mapping_document().serialize(),

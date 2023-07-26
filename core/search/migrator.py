@@ -141,6 +141,7 @@ class SearchMigrator:
             # Does the read pointer exist? Point it at the empty index if not.
             read = self._service.read_pointer(base_name)
             if read is None:
+                self._logger.info("Read pointer did not exist.")
                 self._service.read_pointer_set_empty(base_name)
 
             # We're probably going to have to do a migration. We might end up returning
@@ -152,6 +153,9 @@ class SearchMigrator:
             # Does the write pointer exist?
             write = self._service.write_pointer(base_name)
             if write is None or (not write.version == version):
+                self._logger.info(
+                    f"Write pointer does not point to the desired version: {write} != {version}."
+                )
                 # Either the write pointer didn't exist, or it's pointing at a version
                 # other than the one we want. Create a new index for the version we want.
                 self._service.index_create(base_name, target)
@@ -159,6 +163,7 @@ class SearchMigrator:
 
                 # The index now definitely exists, but it might not be populated. Populate it if necessary.
                 if not self._service.index_is_populated(base_name, target):
+                    self._logger.info("Write index is not populated.")
                     return in_progress
 
             # If we didn't need to return the migration, finish it here. This will

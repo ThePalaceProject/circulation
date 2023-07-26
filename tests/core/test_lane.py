@@ -4409,7 +4409,7 @@ class TestWorkListGroupsEndToEnd:
             return lane.groups(
                 session,
                 facets=facets,
-                search_engine=fixture.external_search.search,
+                search_engine=fixture.external_search_index,
                 debug=True,
                 **kwargs,
             )
