@@ -63,7 +63,6 @@ from .circulation import (
 )
 from .circulation_exceptions import *
 from .lcp.hash import Hasher, HasherFactory, HashingAlgorithm
-from .shared_collection import BaseSharedCollectionAPI, BaseSharedCollectionSettings
 
 
 class ODLAPIConstants:
@@ -72,7 +71,7 @@ class ODLAPIConstants:
     DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
 
-class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
+class ODLSettings(BaseImporterSettings):
     external_account_id: Optional[HttpUrl] = FormField(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         form=ConfigurationFormItem(
@@ -165,7 +164,6 @@ class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
 
 class ODLAPI(
     BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
-    BaseSharedCollectionAPI,
     HasExternalIntegration,
     HasLibraryIntegrationConfiguration,
 ):
