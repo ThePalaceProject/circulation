@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from functools import partial
 from typing import Dict, Iterable, List, Optional
 from unittest.mock import MagicMock
 
@@ -8,6 +9,7 @@ from opensearch_dsl import MultiSearch, Search
 from opensearch_dsl.response.hit import Hit
 from opensearchpy import OpenSearchException
 
+from core.external_search import ExternalSearchIndex
 from core.model.work import Work
 from core.search.revision import SearchSchemaRevision
 from core.search.service import (
@@ -203,3 +205,8 @@ class SearchServiceFake(SearchService):
 
 def fake_hits(works: List[Work]):
     return [Hit({"_source": {"work_id": work.id}}) for work in works]
+
+
+ExternalSearchIndexFake = partial(
+    ExternalSearchIndex, custom_client_service=SearchServiceFake()
+)
