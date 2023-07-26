@@ -30,12 +30,16 @@ from core.model.library import LibraryLogo
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 from ...config import Configuration
+from ...controller import CirculationManager
 from ..announcement_list_validator import AnnouncementListValidator
 from ..form_data import ProcessFormData
-from . import AdminCirculationManagerController
+from .base import AdminCirculationManagerController
 
 
 class LibrarySettingsController(AdminCirculationManagerController):
+    def __init__(self, manager: CirculationManager):
+        self._db = manager._db
+
     def process_libraries(self) -> Response | ProblemDetail:
         try:
             if flask.request.method == "GET":

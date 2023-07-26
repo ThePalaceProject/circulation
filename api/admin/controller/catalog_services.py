@@ -2,14 +2,20 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_INTEGRATION,
+    MISSING_SERVICE,
+    MULTIPLE_SERVICES_FOR_LIBRARY,
+    UNKNOWN_PROTOCOL,
+)
 from core.marc import MARCExporter
 from core.model import ExternalIntegration, get_one, get_one_or_create
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import S3UploaderConfiguration
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class CatalogServicesController(SettingsController):

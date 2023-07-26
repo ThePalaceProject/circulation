@@ -5,7 +5,23 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
+    COLLECTION_NAME_ALREADY_IN_USE,
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_GOAL_CONFLICT,
+    MISSING_COLLECTION,
+    MISSING_COLLECTION_NAME,
+    MISSING_INTEGRATION,
+    MISSING_PARENT,
+    MISSING_SERVICE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    NO_SUCH_LIBRARY,
+    PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    UNKNOWN_PROTOCOL,
+)
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.model import (
     Collection,
@@ -19,8 +35,6 @@ from core.model.admin import Admin
 from core.model.configuration import ExternalIntegrationLink
 from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail, ProblemError
-
-from . import SettingsController
 
 
 class CollectionSettingsController(SettingsController):

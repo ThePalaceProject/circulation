@@ -2,12 +2,16 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    INCOMPLETE_CONFIGURATION,
+    MISSING_SERVICE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+)
 from api.registration.registry import RemoteRegistry
 from core.model import ExternalIntegration, get_one_or_create
 from core.util.problem_detail import ProblemDetail
-
-from . import SettingsController
 
 
 class DiscoveryServicesController(SettingsController):

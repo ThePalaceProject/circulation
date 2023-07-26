@@ -2,8 +2,11 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.controller import SettingsController
-from api.admin.problem_details import *
+from api.admin.controller.settings import SettingsController
+from api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+)
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import ExternalIntegration, get_one

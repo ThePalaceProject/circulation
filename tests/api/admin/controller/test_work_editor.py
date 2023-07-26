@@ -12,9 +12,24 @@ import pytest
 from PIL import Image, ImageChops
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.admin.controller import CustomListsController
-from api.admin.exceptions import *
-from api.admin.problem_details import *
+from api.admin.controller.custom_lists import CustomListsController
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    EROTICA_FOR_ADULTS_ONLY,
+    INCOMPATIBLE_GENRE,
+    INVALID_CONFIGURATION_OPTION,
+    INVALID_DATE_FORMAT,
+    INVALID_EDIT,
+    INVALID_IMAGE,
+    INVALID_RATING,
+    INVALID_SERIES_POSITION,
+    INVALID_URL,
+    METADATA_REFRESH_FAILURE,
+    MISSING_CUSTOM_LIST,
+    UNKNOWN_LANGUAGE,
+    UNKNOWN_MEDIUM,
+    UNKNOWN_ROLE,
+)
 from core.classifier import SimplifiedGenreClassifier
 from core.model import (
     AdminRole,
