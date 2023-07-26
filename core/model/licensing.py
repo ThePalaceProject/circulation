@@ -17,7 +17,7 @@ from sqlalchemy.sql.expression import or_
 from core.model.hybrid import hybrid_property
 
 from ..util.datetime_helpers import utc_now
-from . import Base, create, flush, get_one, get_one_or_create
+from . import Base, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
 from .hassessioncache import HasSessionCache
@@ -133,6 +133,9 @@ class License(Base, LicenseFunctions):
 
     # A License belongs to one LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool: Mapped[LicensePool] = relationship(
+        "LicensePool", back_populates="licenses"
+    )
 
     # One License can have many Loans.
     loans: Mapped[List[Loan]] = relationship(
@@ -141,8 +144,8 @@ class License(Base, LicenseFunctions):
 
     __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
 
-    def loan_to(self, patron_or_client, **kwargs):
-        loan, is_new = self.license_pool.loan_to(patron_or_client, **kwargs)
+    def loan_to(self, patron: Patron, **kwargs):
+        loan, is_new = self.license_pool.loan_to(patron, **kwargs)
         loan.license = self
         return loan, is_new
 
@@ -211,7 +214,10 @@ class LicensePool(Base):
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.
     licenses: Mapped[List[License]] = relationship(
-        "License", backref="license_pool", cascade="all, delete-orphan", uselist=True
+        "License",
+        back_populates="license_pool",
+        cascade="all, delete-orphan",
+        uselist=True,
     )
 
     # One LicensePool can have many Loans.
@@ -987,38 +993,28 @@ class LicensePool(Base):
 
     def loan_to(
         self,
-        patron_or_client,
+        patron: Patron,
         start=None,
         end=None,
         fulfillment=None,
         external_identifier=None,
     ):
-        _db = Session.object_session(patron_or_client)
+        _db = Session.object_session(patron)
         kwargs = dict(start=start or utc_now(), end=end)
-        if isinstance(patron_or_client, Patron):
-            loan, is_new = get_one_or_create(
-                _db,
-                Loan,
-                patron=patron_or_client,
-                license_pool=self,
-                create_method_kwargs=kwargs,
-            )
+        loan, is_new = get_one_or_create(
+            _db,
+            Loan,
+            patron=patron,
+            license_pool=self,
+            create_method_kwargs=kwargs,
+        )
 
-            if is_new:
-                # This action creates uncertainty about what the patron's
-                # loan activity actually is. We'll need to sync with the
-                # vendor APIs.
-                patron_or_client.last_loan_activity_sync = None
-        else:
-            # An IntegrationClient can have multiple loans, so this always creates
-            # a new loan rather than returning an existing loan.
-            loan, is_new = create(
-                _db,
-                Loan,
-                integration_client=patron_or_client,
-                license_pool=self,
-                create_method_kwargs=kwargs,
-            )
+        if is_new:
+            # This action creates uncertainty about what the patron's
+            # loan activity actually is. We'll need to sync with the
+            # vendor APIs.
+            patron.last_loan_activity_sync = None
+
         if fulfillment:
             loan.fulfillment = fulfillment
         if external_identifier:
@@ -1027,34 +1023,22 @@ class LicensePool(Base):
 
     def on_hold_to(
         self,
-        patron_or_client,
+        patron: Patron,
         start=None,
         end=None,
         position=None,
         external_identifier=None,
     ):
-        _db = Session.object_session(patron_or_client)
-        if (
-            isinstance(patron_or_client, Patron)
-            and not patron_or_client.library.settings.allow_holds
-        ):
+        _db = Session.object_session(patron)
+        if not patron.library.settings.allow_holds:
             raise PolicyException("Holds are disabled for this library.")
         start = start or utc_now()
-        if isinstance(patron_or_client, Patron):
-            hold, new = get_one_or_create(
-                _db, Hold, patron=patron_or_client, license_pool=self
-            )
-            # This action creates uncertainty about what the patron's
-            # loan activity actually is. We'll need to sync with the
-            # vendor APIs.
-            if new:
-                patron_or_client.last_loan_activity_sync = None
-        else:
-            # An IntegrationClient can have multiple holds, so this always creates
-            # a new hold rather than returning an existing loan.
-            hold, new = create(
-                _db, Hold, integration_client=patron_or_client, license_pool=self
-            )
+        hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
+        # This action creates uncertainty about what the patron's
+        # loan activity actually is. We'll need to sync with the
+        # vendor APIs.
+        if new:
+            patron.last_loan_activity_sync = None
         hold.update(start, end, position)
         if external_identifier:
             hold.external_identifier = external_identifier

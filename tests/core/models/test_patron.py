@@ -89,21 +89,6 @@ class TestHold:
         assert later == hold.end
         assert 0 == hold.position
 
-        # Make sure we can also hold this book for an IntegrationClient.
-        client = db.integration_client()
-        hold, was_new = pool.on_hold_to(client)
-        assert True == was_new
-        assert client == hold.integration_client
-        assert pool == hold.license_pool
-
-        # Holding the book twice for the same IntegrationClient creates two holds,
-        # since they might be for different patrons on the client.
-        hold2, was_new = pool.on_hold_to(client)
-        assert True == was_new
-        assert client == hold2.integration_client
-        assert pool == hold2.license_pool
-        assert hold != hold2
-
     def test_holds_not_allowed(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
@@ -322,21 +307,6 @@ class TestLoans:
         assert loan == loan2
         assert False == was_new
 
-        # Make sure we can also loan this book to an IntegrationClient.
-        client = db.integration_client()
-        loan, was_new = pool.loan_to(client)
-        assert True == was_new
-        assert client == loan.integration_client
-        assert pool == loan.license_pool
-
-        # Loaning the book to the same IntegrationClient twice creates two loans,
-        # since these loans could be on behalf of different patrons on the client.
-        loan2, was_new = pool.loan_to(client)
-        assert True == was_new
-        assert client == loan2.integration_client
-        assert pool == loan2.license_pool
-        assert loan != loan2
-
     def test_work(self, db: DatabaseTransactionFixture):
         """Test the attribute that finds the Work for a Loan or Hold."""
         patron = db.patron()
@@ -370,11 +340,6 @@ class TestLoans:
         assert db.default_library() == loan.library
 
         loan.patron = None
-        client = db.integration_client()
-        loan.integration_client = client
-        assert None == loan.library
-
-        loan.integration_client = None
         assert None == loan.library
 
         patron.library = db.library()

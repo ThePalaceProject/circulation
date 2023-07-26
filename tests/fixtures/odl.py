@@ -10,7 +10,6 @@ from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from core.model import (
     Collection,
-    IntegrationClient,
     Library,
     License,
     LicensePool,
@@ -133,9 +132,6 @@ class ODLTestFixture:
         api.responses = []
         return api
 
-    def client(self):
-        return self.db.integration_client()
-
     def checkin(self, api, patron: Patron, pool: LicensePool) -> Callable[[], None]:
         """Create a function that, when evaluated, performs a checkin."""
 
@@ -220,7 +216,6 @@ class ODLAPITestFixture:
         license: License,
         api,
         patron: Patron,
-        client: IntegrationClient,
     ):
         self.fixture = odl_fixture
         self.db = odl_fixture.db
@@ -231,8 +226,7 @@ class ODLAPITestFixture:
         self.license = license
         self.api = api
         self.patron = patron
-        self.pool = license.license_pool  # type: ignore
-        self.client = client
+        self.pool = license.license_pool
 
     def checkin(
         self, patron: Optional[Patron] = None, pool: Optional[LicensePool] = None
@@ -263,9 +257,8 @@ def odl_api_test_fixture(odl_test_fixture: ODLTestFixture) -> ODLAPITestFixture:
     license = odl_test_fixture.license(work)
     api = odl_test_fixture.api(collection)
     patron = odl_test_fixture.db.patron()
-    client = odl_test_fixture.client()
     return ODLAPITestFixture(
-        odl_test_fixture, library, collection, work, license, api, patron, client
+        odl_test_fixture, library, collection, work, license, api, patron
     )
 
 
@@ -307,7 +300,6 @@ def odl2_api_test_fixture(odl2_test_fixture: ODL2TestFixture) -> ODL2APITestFixt
     license = odl2_test_fixture.license(work)
     api = odl2_test_fixture.api(collection)
     patron = odl2_test_fixture.db.patron()
-    client = odl2_test_fixture.client()
     return ODL2APITestFixture(
-        odl2_test_fixture, library, collection, work, license, api, patron, client
+        odl2_test_fixture, library, collection, work, license, api, patron
     )

@@ -562,7 +562,6 @@ from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier
 from .integration import IntegrationConfiguration, IntegrationLibraryConfiguration
-from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import (
     DeliveryMechanism,

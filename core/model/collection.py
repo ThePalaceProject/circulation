@@ -44,7 +44,6 @@ from .datasource import DataSource
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Identifier
-from .integrationclient import IntegrationClient
 from .library import Library
 from .licensing import LicensePool, LicensePoolDeliveryMechanism
 from .work import Work
@@ -348,10 +347,7 @@ class Collection(Base, HasSessionCache):
         collection has it for this number of days.
         """
         key = self.loan_period_key(medium)
-        if isinstance(library, Library):
-            config = self.integration_configuration.for_library(library.id)
-        elif isinstance(library, IntegrationClient):
-            config = self.integration_configuration
+        config = self.integration_configuration.for_library(library.id)
 
         if config:
             return config.settings_dict.get(key)

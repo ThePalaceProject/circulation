@@ -31,12 +31,8 @@ from . import Base, get_one_or_create, numericrange_to_tuple
 from .credential import Credential
 
 if TYPE_CHECKING:
-    from core.model import IntegrationClient  # noqa: autoflake
-    from core.model.library import Library  # noqa: autoflake
-    from core.model.licensing import (  # noqa: autoflake
-        LicensePool,
-        LicensePoolDeliveryMechanism,
-    )
+    from core.model.library import Library
+    from core.model.licensing import LicensePool, LicensePoolDeliveryMechanism
 
     from .devicetokens import DeviceToken
 
@@ -539,11 +535,6 @@ class Loan(Base, LoanAndHoldMixin):
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
     patron: Patron  # typing
 
-    integration_client_id = Column(
-        Integer, ForeignKey("integrationclients.id"), index=True
-    )
-    integration_client: IntegrationClient
-
     # A Loan is always associated with a LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
     license_pool: Mapped[LicensePool] = relationship(
@@ -584,9 +575,6 @@ class Hold(Base, LoanAndHoldMixin):
     __tablename__ = "holds"
     id = Column(Integer, primary_key=True)
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
-    integration_client_id = Column(
-        Integer, ForeignKey("integrationclients.id"), index=True
-    )
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="holds"
@@ -598,9 +586,6 @@ class Hold(Base, LoanAndHoldMixin):
 
     patron: Mapped[Patron] = relationship(
         "Patron", back_populates="holds", lazy="joined"
-    )
-    integration_client: Mapped[IntegrationClient] = relationship(
-        "IntegrationClient", back_populates="holds", lazy="joined"
     )
 
     def __lt__(self, other):

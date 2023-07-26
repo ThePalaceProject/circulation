@@ -80,31 +80,31 @@ class ODL2API(ODLAPI):
         self.loan_limit = config.loan_limit
         self.hold_limit = config.hold_limit
 
-    def _checkout(self, patron_or_client: Patron, licensepool, hold=None):
+    def _checkout(self, patron: Patron, licensepool, hold=None):
         # If the loan limit is not None or 0
         if self.loan_limit:
             loans = list(
                 filter(
                     lambda x: x.license_pool.collection.id == self.collection_id,
-                    patron_or_client.loans,
+                    patron.loans,
                 )
             )
             if len(loans) >= self.loan_limit:
                 raise PatronLoanLimitReached(limit=self.loan_limit)
-        return super()._checkout(patron_or_client, licensepool, hold)
+        return super()._checkout(patron, licensepool, hold)
 
-    def _place_hold(self, patron_or_client: Patron, licensepool):
+    def _place_hold(self, patron: Patron, licensepool):
         # If the hold limit is not None or 0
         if self.hold_limit:
             holds = list(
                 filter(
                     lambda x: x.license_pool.collection.id == self.collection_id,
-                    patron_or_client.holds,
+                    patron.holds,
                 )
             )
             if len(holds) >= self.hold_limit:
                 raise PatronHoldLimitReached(limit=self.hold_limit)
-        return super()._place_hold(patron_or_client, licensepool)
+        return super()._place_hold(patron, licensepool)
 
 
 class ODL2Importer(OPDS2Importer, HasExternalIntegration):
