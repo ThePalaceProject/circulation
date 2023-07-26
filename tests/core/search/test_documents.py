@@ -64,7 +64,13 @@ class TestDocuments:
         t.parameters["x"] = "a"
         t.parameters["y"] = "b"
         t.parameters["z"] = "c"
-        assert {"type": "keyword", "x": "a", "y": "b", "z": "c"} == t.serialize()
+        assert {
+            "type": "keyword",
+            "normalizer": "filterable_string",
+            "x": "a",
+            "y": "b",
+            "z": "c",
+        } == t.serialize()
 
     def test_icu_collation_keyword(self):
         t = icu_collation_keyword()
