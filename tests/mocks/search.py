@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 from enum import Enum
 from typing import Dict, Iterable, List, Optional
 from unittest.mock import MagicMock
 
 from opensearch_dsl import MultiSearch, Search
+from opensearch_dsl.response.hit import Hit
 from opensearchpy import OpenSearchException
 
+from core.model.work import Work
 from core.search.revision import SearchSchemaRevision
 from core.search.service import (
     SearchService,
@@ -195,3 +199,7 @@ class SearchServiceFake(SearchService):
                     to_remove.append(item)
             for item in to_remove:
                 items.remove(item)
+
+
+def fake_hits(works: List[Work]):
+    return [Hit({"_source": {"work_id": work.id}}) for work in works]

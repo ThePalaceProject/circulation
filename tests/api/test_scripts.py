@@ -18,9 +18,9 @@ from api.novelist import NoveListAPI
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.external_search import (
     ExternalSearchIndex,
-    MockExternalSearchIndex,
     mock_search_index,
 )
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
 from core.lane import Facets, FeaturedFacets, Pagination, WorkList
 from core.marc import MARCExporter
 from core.model import (
@@ -51,6 +51,8 @@ from scripts import (
 )
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.mocks.search import fake_hits
 
 if TYPE_CHECKING:
     from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
@@ -326,9 +328,11 @@ class TestCacheFacetListsPerLane:
     def test_do_generate(
         self,
         lane_script_fixture: LaneScriptFixture,
-        external_search_fixture: ExternalSearchFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         db = lane_script_fixture.db
+        migration = end_to_end_search_fixture.external_search_index.start_migration()
+        migration and migration.finish()
         # When it's time to generate a feed, AcquisitionFeed.page
         # is called with the right arguments.
         class MockAcquisitionFeed:
@@ -507,7 +511,11 @@ class TestCacheOPDSGroupFeedPerLane:
 
     # We no longer cache the feeds
     @pytest.mark.skip
-    def test_do_run(self, lane_script_fixture: LaneScriptFixture):
+    def test_do_run(
+        self,
+        lane_script_fixture: LaneScriptFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         db = lane_script_fixture.db
 
         work = db.work(fiction=True, with_license_pool=True, genre="Science Fiction")
@@ -519,8 +527,10 @@ class TestCacheOPDSGroupFeedPerLane:
             fiction=True,
             genres=["Science Fiction"],
         )
-        search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work])
+        search_engine = external_search_fake_fixture.external_search
+        search_engine.query_works_multi = MagicMock(
+            return_value=[fake_hits([work]), fake_hits([work])]
+        )
         with mock_search_index(search_engine):
             script = CacheOPDSGroupFeedPerLane(db.session, cmd_args=[])
             script.do_run(cmd_args=[])
