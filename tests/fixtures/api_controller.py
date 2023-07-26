@@ -331,7 +331,9 @@ class CirculationControllerFixture(ControllerFixture):
             setattr(self, spec.variable_name, work)
             work.license_pools[0].collection = self.collection
             self.works.append(work)
-        self.manager.external_search.bulk_update(self.works)
+        self.manager.external_search.search_service().index_submit_documents(
+            self.manager.external_search._search_write_pointer, [self.works]
+        )
 
     def assert_bad_search_index_gives_problem_detail(self, test_function):
         """Helper method to test that a controller method serves a problem
