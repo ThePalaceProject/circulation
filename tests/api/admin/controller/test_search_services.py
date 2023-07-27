@@ -17,6 +17,13 @@ from core.model import AdminRole, ExternalIntegration, create, get_one
 
 class TestSearchServices:
     def test_search_services_get_with_no_services(self, settings_ctrl_fixture):
+        # Delete the search integration
+        session = settings_ctrl_fixture.ctrl.db.session
+        integration = ExternalIntegration.lookup(
+            session, ExternalIntegration.OPENSEARCH, ExternalIntegration.SEARCH_GOAL
+        )
+        session.delete(integration)
+
         with settings_ctrl_fixture.request_context_with_admin("/"):
             response = (
                 settings_ctrl_fixture.manager.admin_search_services_controller.process_services()
@@ -34,8 +41,15 @@ class TestSearchServices:
             )
 
     def test_search_services_get_with_one_service(self, settings_ctrl_fixture):
+        # Delete the pre-existing integration
+        session = settings_ctrl_fixture.ctrl.db.session
+        integration = ExternalIntegration.lookup(
+            session, ExternalIntegration.OPENSEARCH, ExternalIntegration.SEARCH_GOAL
+        )
+        session.delete(integration)
+
         search_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
+            session,
             ExternalIntegration,
             protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
@@ -67,6 +81,13 @@ class TestSearchServices:
     def test_search_services_post_errors(self, settings_ctrl_fixture):
         controller = settings_ctrl_fixture.manager.admin_search_services_controller
 
+        # Delete the previous integrations
+        session = settings_ctrl_fixture.ctrl.db.session
+        integration = ExternalIntegration.lookup(
+            session, ExternalIntegration.OPENSEARCH, ExternalIntegration.SEARCH_GOAL
+        )
+        session.delete(integration)
+
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -93,7 +114,7 @@ class TestSearchServices:
             assert response == MISSING_SERVICE
 
         service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
+            session,
             ExternalIntegration,
             protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
@@ -109,9 +130,9 @@ class TestSearchServices:
             response = controller.process_services()
             assert response.uri == MULTIPLE_SITEWIDE_SERVICES.uri
 
-        settings_ctrl_fixture.ctrl.db.session.delete(service)
+        session.delete(service)
         service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
+            session,
             ExternalIntegration,
             protocol="test",
             goal=ExternalIntegration.LICENSE_GOAL,
@@ -129,7 +150,7 @@ class TestSearchServices:
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
         service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
+            session,
             ExternalIntegration,
             protocol=ExternalIntegration.OPENSEARCH,
             goal=ExternalIntegration.SEARCH_GOAL,
@@ -158,6 +179,13 @@ class TestSearchServices:
             pytest.raises(AdminNotAuthorized, controller.process_services)
 
     def test_search_services_post_create(self, settings_ctrl_fixture):
+        # Delete the previous integrations
+        session = settings_ctrl_fixture.ctrl.db.session
+        integration = ExternalIntegration.lookup(
+            session, ExternalIntegration.OPENSEARCH, ExternalIntegration.SEARCH_GOAL
+        )
+        session.delete(integration)
+
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = MultiDict(
                 [
@@ -174,7 +202,7 @@ class TestSearchServices:
             assert response.status_code == 201
 
         service = get_one(
-            settings_ctrl_fixture.ctrl.db.session,
+            session,
             ExternalIntegration,
             goal=ExternalIntegration.SEARCH_GOAL,
         )
