@@ -8,7 +8,7 @@ import tempfile
 import time
 import uuid
 from textwrap import dedent
-from typing import Callable, Generator, Iterable, List, Optional, Tuple
+from typing import Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -1025,46 +1025,59 @@ def db(
     tr.close()
 
 
-@pytest.fixture
-def create_integration_configuration(
-    db: DatabaseTransactionFixture,
-) -> Callable[..., IntegrationConfiguration]:
-    def create_integration(
-        protocol: str, goal: Goals, settings: Optional[dict] = None
+class IntegrationConfigurationFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+
+    def __call__(
+        self, protocol: Optional[str], goal: Goals, settings_dict: Optional[dict] = None
     ) -> IntegrationConfiguration:
         integration, _ = create(
-            db.session,
+            self.db.session,
             IntegrationConfiguration,
-            name=db.fresh_str(),
+            name=self.db.fresh_str(),
             protocol=protocol,
             goal=goal,
-            settings_dict=settings or {},
+            settings_dict=settings_dict or {},
         )
         return integration
 
-    return create_integration
+
+@pytest.fixture
+def create_integration_configuration(
+    db: DatabaseTransactionFixture,
+) -> IntegrationConfigurationFixture:
+    fixture = IntegrationConfigurationFixture(db)
+    return fixture
+
+
+class IntegrationLibraryConfigurationFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+
+    def __call__(
+        self,
+        library: Library,
+        parent: IntegrationConfiguration,
+        settings_dict: Optional[dict] = None,
+    ) -> IntegrationLibraryConfiguration:
+        settings_dict = settings_dict or {}
+        integration, _ = create(
+            self.db.session,
+            IntegrationLibraryConfiguration,
+            parent=parent,
+            library=library,
+            settings_dict=settings_dict,
+        )
+        return integration
 
 
 @pytest.fixture
 def create_integration_library_configuration(
     db: DatabaseTransactionFixture,
-) -> Callable[..., IntegrationLibraryConfiguration]:
-    def create_library_integration(
-        library: Library,
-        parent: IntegrationConfiguration,
-        settings: Optional[dict] = None,
-    ) -> IntegrationLibraryConfiguration:
-        settings = settings or {}
-        integration, _ = create(
-            db.session,
-            IntegrationLibraryConfiguration,
-            parent=parent,
-            library=library,
-            settings_dict=settings,
-        )
-        return integration
-
-    return create_library_integration
+) -> IntegrationLibraryConfigurationFixture:
+    fixture = IntegrationLibraryConfigurationFixture(db)
+    return fixture
 
 
 class DBStatementCounter:

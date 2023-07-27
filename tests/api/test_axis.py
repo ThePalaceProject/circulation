@@ -6,7 +6,7 @@ import socket
 import ssl
 import urllib
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
@@ -68,7 +68,7 @@ from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_axis_files import AxisFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.database import DatabaseTransactionFixture
 
 
@@ -140,7 +140,7 @@ class TestAxis360API:
     def test__run_self_tests(
         self,
         axis360: Axis360Fixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.

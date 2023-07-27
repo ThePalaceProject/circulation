@@ -4,7 +4,7 @@ import contextlib
 import datetime
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -63,7 +63,7 @@ from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.sample_covers import SampleCoversFixture
     from tests.fixtures.search import ExternalSearchFixture
@@ -1493,7 +1493,7 @@ class TestGenerateShortTokenScript:
     def authentication_provider(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         barcode = "12345"
         pin = "abcd"

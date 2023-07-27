@@ -5,7 +5,7 @@ import json
 import os
 import random
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict
+from typing import TYPE_CHECKING, Any, Dict
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -47,7 +47,7 @@ from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.time import Time
 
 
@@ -122,7 +122,7 @@ class TestOverdriveAPI:
     def test__run_self_tests(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         # Verify that OverdriveAPI._run_self_tests() calls the right
         # methods.

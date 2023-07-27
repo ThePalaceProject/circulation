@@ -4,15 +4,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Optional,
-    Protocol,
-    runtime_checkable,
-)
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, runtime_checkable
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -77,7 +69,7 @@ from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
     from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.time import Time
 
@@ -110,7 +102,7 @@ class TestBibliothecaAPI:
     def test__run_self_tests(
         self,
         bibliotheca_fixture: BibliothecaAPITestFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         db = bibliotheca_fixture.db
         # Verify that BibliothecaAPI._run_self_tests() calls the right

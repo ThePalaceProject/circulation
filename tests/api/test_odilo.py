@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -32,7 +32,7 @@ from tests.core.mock import MockRequestsResponse
 
 if TYPE_CHECKING:
     from ..fixtures.api_odilo_files import OdiloFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.database import DatabaseTransactionFixture
 
 
@@ -226,7 +226,7 @@ class TestOdiloAPI:
     def test__run_self_tests(
         self,
         odilo: OdiloFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         """Verify that OdiloAPI._run_self_tests() calls the right
         methods.
