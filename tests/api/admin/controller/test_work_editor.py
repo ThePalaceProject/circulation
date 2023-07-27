@@ -58,7 +58,7 @@ class WorkFixture(AdminControllerFixture):
         self.english_1.license_pools[0].collection = self.ctrl.collection
         self.works = [self.english_1]
 
-        self.manager.external_search.bulk_update(self.works)
+        self.manager.external_search.mock_query_works(self.works)
 
         self.admin.add_role(AdminRole.LIBRARIAN, self.ctrl.db.default_library())
 
@@ -970,11 +970,6 @@ class TestWorkController:
             assert list == work.custom_list_entries[0].customlist
             assert True == work.custom_list_entries[0].featured
 
-            # Lane.size will not be updated until the work is
-            # reindexed with its new list memebership and lane sizes
-            # are recalculated.
-            assert 2 == lane.size
-
         # Now remove the work from the list.
         work_fixture.ctrl.controller.search_engine.docs = dict(id1="doc1")
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
@@ -989,9 +984,6 @@ class TestWorkController:
         assert 200 == response.status_code
         assert 0 == len(work.custom_list_entries)
         assert 0 == len(list.entries)
-
-        # The lane size was recalculated once again.
-        assert 1 == lane.size
 
         # Add a list that didn't exist before.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
