@@ -369,7 +369,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         # Give it a Search object for every query definition passed in
         # as part of `queries`.
-        for (query_string, filter, pagination) in queries:
+        for query_string, filter, pagination in queries:
             search = self.create_search_doc(
                 query_string, filter=filter, pagination=pagination, debug=debug
             )
@@ -2337,7 +2337,8 @@ class Filter(SearchBase):
         mode = "min"
         return nested, mode
 
-    def last_update_time_script_field(self, script_name: Callable[[str], str]):
+    @property
+    def last_update_time_script_field(self):
         """Return the configuration for a script field that calculates the
         'last update' time of a work. An 'update' happens when the
         work's metadata is changed, when it's added to a collection
@@ -2361,11 +2362,14 @@ class Filter(SearchBase):
             filter=dict(terms={"customlists.list_id": list(all_list_ids)}),
         )
         params = dict(collection_ids=collection_ids, list_ids=list(all_list_ids))
-        return dict(script=dict(stored=script_name("work_last_update"), params=params))
+        # Messy, but this is the only way to get the "current mapping" for the index
+        script_name = (
+            SearchRevisionDirectory.create().highest().script_name("work_last_update")
+        )
+        return dict(script=dict(stored=script_name, params=params))
 
     @property
     def _last_update_time_order_by(self):
-
         """We're sorting works by the time of their 'last update'.
 
         Add the 'last update' field to the dictionary of script fields

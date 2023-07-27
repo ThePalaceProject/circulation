@@ -32,3 +32,6 @@ class SearchSchemaRevision(ABC):
         """Produce the name of the "indexed pointer" as it will appear in Opensearch,
         such as 'circulation-works-v5-indexed'."""
         return f"{base_name}-v{self.version}-indexed"
+
+    def script_name(self, script_name):
+        return f"simplified.{script_name}.v{self.version}"

@@ -54,6 +54,7 @@ from core.model import (
 from core.model.classification import Subject
 from core.model.work import Work
 from core.problem_details import INVALID_INPUT
+from core.search.revision_directory import SearchRevisionDirectory
 from core.search.v5 import SearchV5
 from core.util.cache import CachedData
 from core.util.datetime_helpers import datetime_utc, from_timestamp
@@ -4182,8 +4183,10 @@ class TestFilter:
         assert {} == sort
 
         # The script is the 'simplified.work_last_update' stored script.
-        # assert CurrentMapping.script_name("work_last_update") == script.pop("stored")
-        assert False
+        script_name = (
+            SearchRevisionDirectory.create().highest().script_name("work_last_update")
+        )
+        assert script_name == script.pop("stored")
 
         # Two parameters are passed into the script -- the IDs of the
         # collections and the lists relevant to the query. This is so

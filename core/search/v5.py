@@ -293,5 +293,7 @@ return champion;
             analyzer=dict(self._analyzers),
         )
         document.properties = self._fields
-        document.scripts["work_last_update"] = SearchV5.WORK_LAST_UPDATE_SCRIPT
+        document.scripts[
+            self.script_name("work_last_update")
+        ] = SearchV5.WORK_LAST_UPDATE_SCRIPT
         return document
