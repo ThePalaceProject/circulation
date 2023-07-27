@@ -352,18 +352,20 @@ class LibraryAuthenticator:
                 f"Implementation class {impl_cls} is not an AuthenticationProvider."
             )
         try:
-            if not isinstance(integration.parent.settings, dict):
+            if not isinstance(integration.parent.settings_dict, dict):
                 raise CannotLoadConfiguration(
                     f"Settings for {impl_cls.__name__} authentication provider for "
                     f"library {self.library_short_name} are not a dictionary."
                 )
-            if not isinstance(integration.settings, dict):
+            if not isinstance(integration.settings_dict, dict):
                 raise CannotLoadConfiguration(
                     f"Library settings for {impl_cls.__name__} authentication provider for "
                     f"library {self.library_short_name} are not a dictionary."
                 )
-            settings = impl_cls.settings_class()(**integration.parent.settings)
-            library_settings = impl_cls.library_settings_class()(**integration.settings)
+            settings = impl_cls.settings_class()(**integration.parent.settings_dict)
+            library_settings = impl_cls.library_settings_class()(
+                **integration.settings_dict
+            )
             provider = impl_cls(
                 self.library_id,  # type: ignore[arg-type]
                 integration.parent_id,  # type: ignore[arg-type]

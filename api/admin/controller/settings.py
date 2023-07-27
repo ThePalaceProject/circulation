@@ -372,7 +372,7 @@ class SettingsController(AdminCirculationManagerController):
         protocol_class.library_settings_class()(**info_copy)
         # Attach the configuration
         config = configuration.for_library(cast(int, library.id), create=True)
-        config.settings = info_copy
+        config.settings_dict = info_copy
         return config
 
     def _set_integration_library(self, integration, library_info, protocol):

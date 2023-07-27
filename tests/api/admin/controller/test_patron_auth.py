@@ -497,14 +497,14 @@ class TestPatronAuth:
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
         settings = SimpleAuthenticationProvider.settings_class()(
-            **auth_service.settings
+            **auth_service.settings_dict
         )
         assert settings.test_identifier == "user"
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations
         assert library_config.library == default_library
         assert (
-            library_config.settings["library_identifier_restriction_criteria"]
+            library_config.settings_dict["library_identifier_restriction_criteria"]
             == "^1234"
         )
 
@@ -530,7 +530,7 @@ class TestPatronAuth:
         assert auth_service2 is not None
         assert auth_service2 != auth_service
         assert auth_service2.id == int(response.response[0])  # type: ignore[index]
-        settings2 = MilleniumPatronAPI.settings_class()(**auth_service2.settings)
+        settings2 = MilleniumPatronAPI.settings_class()(**auth_service2.settings_dict)
         assert "https://url.com" == settings2.url
         assert "user" == settings2.test_identifier
         assert "pass" == settings2.test_password
@@ -587,17 +587,17 @@ class TestPatronAuth:
 
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
-        assert isinstance(auth_service.settings, dict)
+        assert isinstance(auth_service.settings_dict, dict)
         settings = SimpleAuthenticationProvider.settings_class()(
-            **auth_service.settings
+            **auth_service.settings_dict
         )
         assert settings.test_identifier == "user"
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations
         assert l2 == library_config.library
-        assert isinstance(library_config.settings, dict)
+        assert isinstance(library_config.settings_dict, dict)
         library_settings = SimpleAuthenticationProvider.library_settings_class()(
-            **library_config.settings
+            **library_config.settings_dict
         )
         assert (
             library_settings.library_identifier_restriction_type

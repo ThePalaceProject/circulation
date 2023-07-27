@@ -121,7 +121,7 @@ class SimplifiedOPDSLookup:
             config = config.for_library(library.id)
         if config is None:
             return None
-        return cls(config.settings["url"])
+        return cls(config.settings_dict["url"])
 
     def __init__(self, base_url):
         if not base_url.endswith("/"):

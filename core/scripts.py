@@ -1259,7 +1259,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     % name
                 )
         config = collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         integration = collection.external_integration
         if protocol:
             config.protocol = protocol
@@ -1278,7 +1278,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
             for setting in args.setting:
                 key, value = ConfigurationSettingScript._parse_setting(setting)
                 settings[key] = value
-        config.settings = settings
+        config.settings_dict = settings
 
         if hasattr(args, "library"):
             for name in args.library:

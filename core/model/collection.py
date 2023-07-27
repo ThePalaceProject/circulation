@@ -264,7 +264,7 @@ class Collection(Base, HasSessionCache):
                 cls.integration_configuration_id == IntegrationConfiguration.id,
             )
             .filter(
-                IntegrationConfiguration.settings[
+                IntegrationConfiguration.settings_dict[
                     Collection.DATA_SOURCE_NAME_SETTING
                 ].astext
                 == data_source
@@ -297,17 +297,17 @@ class Collection(Base, HasSessionCache):
     @hybrid_property
     def primary_identifier_source(self):
         """Identify if should try to use another identifier than <id>"""
-        return self.integration_configuration.settings.get(
+        return self.integration_configuration.settings_dict.get(
             ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
         )
 
     @primary_identifier_source.setter
     def primary_identifier_source(self, new_primary_identifier_source):
         """Modify the primary identifier source in use by this Collection."""
-        self.integration_configuration.settings = (
-            self.integration_configuration.settings.copy()
+        self.integration_configuration.settings_dict = (
+            self.integration_configuration.settings_dict.copy()
         )
-        self.integration_configuration.settings[
+        self.integration_configuration.settings_dict[
             ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
         ] = new_primary_identifier_source
 
@@ -354,15 +354,15 @@ class Collection(Base, HasSessionCache):
             config = self.integration_configuration
 
         if config:
-            return config.settings.get(key)
+            return config.settings_dict.get(key)
 
     DEFAULT_RESERVATION_PERIOD_KEY = "default_reservation_period"
     STANDARD_DEFAULT_RESERVATION_PERIOD = 3
 
     def _set_settings(self, **kwargs):
-        settings = self.integration_configuration.settings.copy()
-        settings.update(kwargs)
-        self.integration_configuration.settings = settings
+        settings_dict = self.integration_configuration.settings_dict.copy()
+        settings_dict.update(kwargs)
+        self.integration_configuration.settings_dict = settings_dict
 
     @hybrid_property
     def default_reservation_period(self):
@@ -371,7 +371,7 @@ class Collection(Base, HasSessionCache):
         check it out before it goes to the next person in line.
         """
         return (
-            self.integration_configuration.settings.get(
+            self.integration_configuration.settings_dict.get(
                 self.DEFAULT_RESERVATION_PERIOD_KEY
             )
             or self.STANDARD_DEFAULT_RESERVATION_PERIOD
@@ -395,7 +395,8 @@ class Collection(Base, HasSessionCache):
         :return: Default audience
         """
         return (
-            self.integration_configuration.settings.get(self.DEFAULT_AUDIENCE_KEY) or ""
+            self.integration_configuration.settings_dict.get(self.DEFAULT_AUDIENCE_KEY)
+            or ""
         )
 
     @default_audience.setter
@@ -515,7 +516,7 @@ class Collection(Base, HasSessionCache):
         data_source = None
         name = ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL.get(self.protocol)
         if not name:
-            name = self.integration_configuration.settings.get(
+            name = self.integration_configuration.settings_dict.get(
                 Collection.DATA_SOURCE_NAME_SETTING
             )
         _db = Session.object_session(self)
@@ -696,8 +697,8 @@ class Collection(Base, HasSessionCache):
             lines.append('Used by library: "%s"' % library.short_name)
         if self.external_account_id:
             lines.append('External account ID: "%s"' % self.external_account_id)
-        for name in sorted(integration.settings):
-            value = integration.settings[name]
+        for name in sorted(integration.settings_dict):
+            value = integration.settings_dict[name]
             if (
                 include_secrets or not ConfigurationSetting._is_secret(name)
             ) and value is not None:

@@ -68,7 +68,7 @@ class LCPMirror(MinIOUploader, HasExternalIntegrationPerCollection):
         credential_factory = LCPCredentialFactory()
         lcp_encryptor = LCPEncryptor(configuration)
         lcp_server = LCPServer(
-            lambda: LCPServerSettings(**configuration.settings),
+            lambda: LCPServerSettings(**configuration.settings_dict),
             hasher_factory,
             credential_factory,
         )

@@ -737,9 +737,9 @@ class TestLibraryAuthenticator:
         type(integration.parent).goal = PropertyMock(
             return_value=Goals.PATRON_AUTH_GOAL
         )
-        type(integration.parent).settings = PropertyMock(return_value={})
+        type(integration.parent).settings_dict = PropertyMock(return_value={})
         type(integration).library_id = PropertyMock(return_value=library.id)
-        type(integration).settings = PropertyMock(return_value={})
+        type(integration).settings_dict = PropertyMock(return_value={})
         auth = LibraryAuthenticator(
             _db=db.session, library=library, integration_registry=registry
         )

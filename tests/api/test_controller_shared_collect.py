@@ -67,7 +67,7 @@ class SharedCollectionFixture(ControllerFixture):
         from api.odl import ODLAPI
 
         self.collection = db.collection(protocol=ODLAPI.NAME)
-        self.collection.integration_configuration.settings = dict(
+        self.collection.integration_configuration.settings_dict = dict(
             username="username",
             password="password",
             data_source="data_source",

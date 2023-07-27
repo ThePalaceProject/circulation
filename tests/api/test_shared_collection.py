@@ -42,7 +42,7 @@ class SharedCollectionFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.collection = db.collection(protocol="Mock")
-        self.collection.integration_configuration.settings = dict(
+        self.collection.integration_configuration.settings_dict = dict(
             username="username", password="password", data_source="data_source"
         )
         self.shared_collection = SharedCollectionAPI(
@@ -97,7 +97,7 @@ class TestSharedCollectionAPI:
         db = shared_collection_fixture.db
 
         collection = db.collection(protocol=ODLAPI.NAME)
-        collection.integration_configuration.settings = dict(
+        collection.integration_configuration.settings_dict = dict(
             username="username", password="password", data_source="data_source"
         )
         edition, pool = db.edition(with_license_pool=True, collection=collection)
@@ -110,7 +110,7 @@ class TestSharedCollectionAPI:
         db = shared_collection_fixture.db
 
         collection = db.collection()
-        collection.integration_configuration.settings = dict(
+        collection.integration_configuration.settings_dict = dict(
             username="username", password="password", data_source="data_source"
         )
         shared_collection = SharedCollectionAPI(db.session)

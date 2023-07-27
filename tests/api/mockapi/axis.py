@@ -27,7 +27,7 @@ class MockAxis360API(Axis360API):
         config = collection.create_integration_configuration(
             ExternalIntegration.AXIS_360
         )
-        config.settings = {
+        config.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://axis.test/",

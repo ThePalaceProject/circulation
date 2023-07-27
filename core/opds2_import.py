@@ -953,9 +953,9 @@ class OPDS2Importer(
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
                 config = self.integration_configuration()
-                settings = config.settings.copy()
+                settings = config.settings_dict.copy()
                 settings[ExternalIntegration.TOKEN_AUTH] = link.href
-                config.settings = settings
+                config.settings_dict = settings
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None

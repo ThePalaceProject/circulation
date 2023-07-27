@@ -393,4 +393,4 @@ class TestSettingsController:
             config, dict(short_name="short-name", key="key", value="value"), Protocol1
         )
         assert config.library == library
-        assert config.settings == dict(key="key", value="value")
+        assert config.settings_dict == dict(key="key", value="value")

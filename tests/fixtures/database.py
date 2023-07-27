@@ -317,7 +317,7 @@ class DatabaseTransactionFixture:
         integration.goal = ExternalIntegration.LICENSE_GOAL
         config = collection.create_integration_configuration(protocol)
         config.goal = Goals.LICENSE_GOAL
-        config.settings = {
+        config.settings_dict = {
             "url": url,
             "username": username,
             "password": password,
@@ -788,7 +788,7 @@ class DatabaseTransactionFixture:
         for library in libraries:
             integration.for_library(library.id, create=True)
 
-        integration.settings = kwargs
+        integration.settings_dict = kwargs
         return integration
 
     @classmethod
@@ -798,7 +798,7 @@ class DatabaseTransactionFixture:
         *keyvalues,
         **kwargs,
     ):
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
 
         # Alternating key: value in the args
         for ix, item in enumerate(keyvalues):
@@ -808,7 +808,7 @@ class DatabaseTransactionFixture:
                 settings[key] = item
 
         settings.update(kwargs)
-        config.settings = settings
+        config.settings_dict = settings
 
     def work_coverage_record(
         self, work, operation=None, status=CoverageRecord.SUCCESS
@@ -1038,7 +1038,7 @@ def create_integration_configuration(
             name=db.fresh_str(),
             protocol=protocol,
             goal=goal,
-            settings=settings or {},
+            settings_dict=settings or {},
         )
         return integration
 
@@ -1060,7 +1060,7 @@ def create_integration_library_configuration(
             IntegrationLibraryConfiguration,
             parent=parent,
             library=library,
-            settings=settings,
+            settings_dict=settings,
         )
         return integration
 

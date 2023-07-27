@@ -492,12 +492,12 @@ class CirculationConfigurationMixin(
     def library_configuration(self, library_id) -> LibrarySettingsType | None:
         libconfig = self.integration_configuration().for_library(library_id=library_id)
         if libconfig:
-            config = self.library_settings_class()(**libconfig.settings)
+            config = self.library_settings_class()(**libconfig.settings_dict)
             return config  # type: ignore [return-value]
         return None
 
     def configuration(self) -> SettingsType:
-        return self.settings_class()(**self.integration_configuration().settings)  # type: ignore [return-value]
+        return self.settings_class()(**self.integration_configuration().settings_dict)  # type: ignore [return-value]
 
 
 class BaseCirculationAPIProtocol(BaseCirculationAPIIntegrationProtocol):

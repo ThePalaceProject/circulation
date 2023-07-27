@@ -39,7 +39,7 @@ class LCPServerFixture:
         self.hasher_factory = HasherFactory()
         self.credential_factory = LCPCredentialFactory()
         self.lcp_server = LCPServer(
-            lambda: LCPServerSettings(**self.configuration.settings),
+            lambda: LCPServerSettings(**self.configuration.settings_dict),
             self.hasher_factory,
             self.credential_factory,
         )
@@ -65,7 +65,7 @@ class TestLCPServer:
     ):
         # Arrange
         lcp_server = LCPServer(
-            lambda: LCPServerSettings(**lcp_server_fixture.configuration.settings),
+            lambda: LCPServerSettings(**lcp_server_fixture.configuration.settings_dict),
             lcp_server_fixture.hasher_factory,
             lcp_server_fixture.credential_factory,
         )

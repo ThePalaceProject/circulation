@@ -53,7 +53,7 @@ class IgnoredIdentifierImporterMixin:
         :return: Set of ignored identifier types
         """
         if self._ignored_identifier_types is None:
-            self._ignored_identifier_types = configuration.settings.get(
+            self._ignored_identifier_types = configuration.settings_dict.get(
                 "ignored_identifier_types", []
             )
 
@@ -83,7 +83,7 @@ class IgnoredIdentifierImporterMixin:
                     "Argument 'value' must contain string or IdentifierType enumeration's items only"
                 )
 
-        settings = configuration.settings.copy()
+        settings = configuration.settings_dict.copy()
         settings["ignored_identifier_types"] = ignored_identifier_types
-        configuration.settings = settings
+        configuration.settings_dict = settings
         self._ignored_identifier_types = None

@@ -432,7 +432,7 @@ class TestCollection:
         library.collections.append(test_collection)
 
         test_collection.external_account_id = "id"
-        test_collection.integration_configuration.settings = {
+        test_collection.integration_configuration.settings_dict = {
             "url": "url",
             "username": "username",
             "password": "password",

@@ -213,7 +213,7 @@ class ControllerFixture:
                 name=self.db.fresh_str(),
                 protocol=protocol,
                 goal=Goals.PATRON_AUTH_GOAL,
-                settings=settings.dict(),
+                settings_dict=settings.dict(),
             )
             create(
                 _db,

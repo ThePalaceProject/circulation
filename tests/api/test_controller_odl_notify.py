@@ -32,7 +32,7 @@ class ODLFixture:
         config = self.collection.create_integration_configuration(
             self.integration_protocol()
         )
-        config.settings = {
+        config.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://metadata",

@@ -755,10 +755,10 @@ class TestAxis360API:
         axis360: Axis360Fixture,
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         if setting_value is not None:
             settings[setting] = setting_value
-            config.settings = settings
+            config.settings_dict = settings
         api = MockAxis360API(axis360.db.session, axis360.collection)
         assert getattr(api, attribute) == attribute_value
 
@@ -780,9 +780,9 @@ class TestAxis360API:
         self, setting, setting_value, is_valid, expected, axis360: Axis360Fixture
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         settings[setting] = setting_value
-        config.settings = settings
+        config.settings_dict = settings
 
         if is_valid:
             api = MockAxis360API(axis360.db.session, axis360.collection)
