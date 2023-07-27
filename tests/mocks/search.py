@@ -244,22 +244,26 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
         result = []
         for ix, (query_string, filter, pagination) in enumerate(queries):
             self._queries.append((query_string, filter, pagination))
-
+            this_result = []
             if not self._mock_multi_works:
                 pagination.page_loaded([])
             # Mock Pagination
             elif len(self._mock_multi_works) > ix:
                 this_result = self._mock_multi_works[ix]
-                if pagination.size < len(this_result):
-                    # Pull out only the size asked for if we have more than required
-                    this_result = this_result[: pagination.size]
-                    # Keep the remainder for the next loop
-                    self._mock_multi_works[ix] = self._mock_multi_works[ix][
-                        pagination.size :
-                    ]
+
+                # sortkey pagination, if it exists
+                # Sorting must be done by the test case
+                if getattr(pagination, "last_item_on_previous_page", None):
+                    for ix, hit in enumerate(this_result):
+                        if hit.meta["sort"] == pagination.last_item_on_previous_page:
+                            this_result = this_result[ix + 1 : ix + 1 + pagination.size]
+                            break
+                    else:
+                        this_result = []
                 else:
-                    # Else we empty out the results, so the next loop is empty
-                    self._mock_multi_works[ix] = []
+                    # Else just assume offset pagination
+                    this_result = this_result[pagination.offset : pagination.size]
+
                 pagination.page_loaded(this_result)
                 result.append(this_result)
             else:
