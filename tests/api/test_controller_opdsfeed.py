@@ -567,7 +567,7 @@ class TestOPDSFeedController:
                 library_short_name=library.short_name,
                 **dict(list(facets.items())),
                 q=query,
-                _external=True
+                _external=True,
             )
         assert expect_url == kwargs.pop("url")
 
@@ -605,6 +605,61 @@ class TestOPDSFeedController:
                 None, feed_class=Mock
             )
             assert self.called_with["facets"].search_type == "json"
+
+    def test_lane_search_params(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+    ):
+        # Tests some of the lane search parameters.
+        # TODO: Add test for valid `distributor`.
+
+        valid_lane_id = circulation_fixture.english_adult_fiction.id
+        valid_collection_name = circulation_fixture.collection.name
+        invalid_collection_name = "__non-existent-collection__"
+        invalid_distributor = "__non-existent-distributor__"
+
+        with circulation_fixture.request_context_with_library("/?collectionName=All"):
+            response = circulation_fixture.manager.opds_feeds.search(valid_lane_id)
+            assert 200 == response.status_code
+            assert "application/opensearchdescription+xml" == response.headers.get(
+                "content-type"
+            )
+
+        with circulation_fixture.request_context_with_library(
+            f"/?collectionName={valid_collection_name}"
+        ):
+            response = circulation_fixture.manager.opds_feeds.search(valid_lane_id)
+            assert 200 == response.status_code
+            assert "application/opensearchdescription+xml" == response.headers.get(
+                "content-type"
+            )
+
+        with circulation_fixture.request_context_with_library(
+            f"/?collectionName={invalid_collection_name}"
+        ):
+            response = circulation_fixture.manager.opds_feeds.search(valid_lane_id)
+            assert 400 == response.status_code
+            assert (
+                f"I don't understand which collection '{invalid_collection_name}' refers to."
+                == response.detail
+            )
+
+        with circulation_fixture.request_context_with_library("/?distributor=All"):
+            response = circulation_fixture.manager.opds_feeds.search(valid_lane_id)
+            assert 200 == response.status_code
+            assert "application/opensearchdescription+xml" == response.headers.get(
+                "content-type"
+            )
+
+        with circulation_fixture.request_context_with_library(
+            f"/?distributor={invalid_distributor}"
+        ):
+            response = circulation_fixture.manager.opds_feeds.search(valid_lane_id)
+            assert 400 == response.status_code
+            assert (
+                f"I don't understand which distributor '{invalid_distributor}' refers to."
+                == response.detail
+            )
 
     def test_misconfigured_search(
         self, circulation_fixture: CirculationControllerFixture
