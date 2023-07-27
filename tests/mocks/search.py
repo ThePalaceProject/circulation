@@ -231,6 +231,7 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
 
         self._mock_multi_works = []
         self._mock_count_works = 0
+        self._queries = []
 
     def mock_query_works(self, works: List[Work]):
         self.mock_query_works_multi(works)
@@ -240,9 +241,32 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
         self._mock_multi_works.extend([fake_hits(arg_works) for arg_works in args])
 
     def query_works_multi(self, queries, debug=False):
+        result = []
         for ix, (query_string, filter, pagination) in enumerate(queries):
-            pagination.page_loaded(self._mock_multi_works[ix])
-        return self._mock_multi_works
+            self._queries.append((query_string, filter, pagination))
+
+            if not self._mock_multi_works:
+                pagination.page_loaded([])
+            # Mock Pagination
+            elif len(self._mock_multi_works) > ix:
+                this_result = self._mock_multi_works[ix]
+                if pagination.size < len(this_result):
+                    # Pull out only the size asked for if we have more than required
+                    this_result = this_result[: pagination.size]
+                    # Keep the remainder for the next loop
+                    self._mock_multi_works[ix] = self._mock_multi_works[ix][
+                        pagination.size :
+                    ]
+                else:
+                    # Else we empty out the results, so the next loop is empty
+                    self._mock_multi_works[ix] = []
+                pagination.page_loaded(this_result)
+                result.append(this_result)
+            else:
+                # Catch all
+                pagination.page_loaded([])
+
+        return result
 
     def mock_count_works(self, count):
         self._mock_count_works = count

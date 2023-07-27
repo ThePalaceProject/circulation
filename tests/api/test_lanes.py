@@ -1012,16 +1012,17 @@ class TestCrawlableCollectionBasedLane:
         lane = CrawlableCollectionBasedLane()
         lane.initialize([db.default_collection()])
         search = external_search_fake_fixture.external_search
+        search.query_works = MagicMock(return_value=[])
         lane.works(
             db.session, facets=CrawlableFacets.default(None), search_engine=search
         )
 
-        assert len(search.queries) == 1
-        filter = search.queries[0][1]
+        queries = search.query_works.call_args[1]
+        assert search.query_works.call_count == 1
         # Only target a single collection
-        assert filter.collection_ids == [db.default_collection().id]
+        assert queries["filter"].collection_ids == [db.default_collection().id]
         # without any search query
-        assert None == search.queries[0][0]
+        assert None == queries["query_string"]
 
 
 class TestCrawlableCustomListBasedLane:

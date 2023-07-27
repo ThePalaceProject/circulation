@@ -6,7 +6,7 @@ from freezegun import freeze_time
 from pymarc import MARCReader, Record
 
 from core.config import CannotLoadConfiguration
-from core.external_search import ExternalSearchIndex, Filter
+from core.external_search import Filter
 from core.lane import WorkList
 from core.marc import Annotator, MARCExporter, MARCExporterFacets
 from core.model import (
@@ -28,7 +28,7 @@ from core.s3 import MockS3Uploader
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchFixtureFake
-from tests.mocks.search import SearchServiceFake
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 class TestAnnotator:
@@ -591,6 +591,7 @@ class TestMARCExporter:
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
+        # external_search_fake_fixture is used only for the integration it creates
         integration = self._integration(db)
         now = utc_now()
         exporter = MARCExporter.from_config(db.default_library())
@@ -599,10 +600,8 @@ class TestMARCExporter:
         w1 = db.work(genre="Mystery", with_open_access_download=True)
         w2 = db.work(genre="Mystery", with_open_access_download=True)
 
-        search_engine = external_search_fake_fixture.external_search
-        docs = search_engine.start_updating_search_documents()
-        docs.add_documents(search_engine.create_search_documents_from_works([w1, w2]))
-        docs.finish()
+        search_engine = ExternalSearchIndexFake(db.session)
+        search_engine.mock_query_works([w1, w2])
 
         # If there's a storage protocol but not corresponding storage integration,
         # it raises an exception.
@@ -662,6 +661,7 @@ class TestMARCExporter:
 
         db.session.delete(cache)
 
+        search_engine.mock_query_works([w1, w2])
         # It also works with a WorkList instead of a Lane, in which case
         # there will be no lane in the CachedMARCFile.
         worklist = WorkList()
@@ -745,9 +745,7 @@ class TestMARCExporter:
         # If the search engine returns no contents for the lane,
         # nothing will be mirrored, but a CachedMARCFile is still
         # created to track that we checked for updates.
-        empty_search_engine = ExternalSearchIndex(
-            _db=db, custom_client_service=SearchServiceFake()
-        )
+        search_engine.mock_query_works([])
 
         mirror = MockS3Uploader()
         exporter.records(
@@ -755,7 +753,7 @@ class TestMARCExporter:
             annotator,
             mirror_integration,
             mirror=mirror,
-            search_engine=empty_search_engine,
+            search_engine=search_engine,
         )
 
         assert [] == mirror.content[0]
