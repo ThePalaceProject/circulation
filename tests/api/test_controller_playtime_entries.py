@@ -160,7 +160,7 @@ class TestPlaytimeEntriesController:
             "/", method="POST", json=data
         ):
             flask.request.patron = patron  # type: ignore
-            with patch("api.controller.create") as mock_create:
+            with patch("core.query.playtime_entries.create") as mock_create:
                 mock_create.side_effect = IntegrityError(
                     "STATEMENT", {}, Exception("Fake Exception")
                 )

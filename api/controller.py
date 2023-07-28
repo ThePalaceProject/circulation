@@ -18,17 +18,12 @@ from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
-from api.model.time_tracking import (
-    PlaytimeEntriesPost,
-    PlaytimeEntriesPostResponse,
-    PlaytimeEntriesPostSummary,
-)
+from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
@@ -73,7 +68,6 @@ from core.model import (
     Patron,
     Representation,
     Session,
-    create,
     get_one,
 )
 from core.model.devicetokens import (
@@ -81,10 +75,10 @@ from core.model.devicetokens import (
     DuplicateDeviceTokenError,
     InvalidTokenTypeError,
 )
-from core.model.time_tracking import PlaytimeEntry
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
+from core.query.playtime_entries import PlaytimeEntries
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -2462,43 +2456,9 @@ class PlaytimeEntriesController(CirculationManagerController):
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
 
-        responses = []
-        summary = PlaytimeEntriesPostSummary()
-        for entry in data.time_entries:
-            status_code = 201
-            message = "Created"
-            transaction = self._db.begin_nested()
-            try:
-                playtime_entry, _ = create(
-                    self._db,
-                    PlaytimeEntry,
-                    tracking_id=entry.id,
-                    identifier_id=identifier.id,
-                    collection_id=collection.id,
-                    library_id=library.id,
-                    timestamp=entry.during_minute,
-                    total_seconds_played=entry.seconds_played,
-                )
-            except IntegrityError as ex:
-                logging.getLogger("Time Tracking").error(
-                    f"Playtime entry failure {entry.id}: {ex}"
-                )
-                # A duplicate is reported as a success, since we have already recorded this value
-                if "UniqueViolation" in str(ex):
-                    summary.successes += 1
-                    status_code = 200
-                    message = "OK"
-                else:
-                    status_code = 400
-                    message = str(ex.orig)
-                    summary.failures += 1
-                transaction.rollback()
-            else:
-                summary.successes += 1
-                transaction.commit()
-
-            responses.append(dict(id=entry.id, status=status_code, message=message))
-            summary.total += 1
+        responses, summary = PlaytimeEntries.insert_playtime_entries(
+            self._db, identifier, collection, library, data
+        )
 
         response_data = PlaytimeEntriesPostResponse(
             summary=summary, responses=responses

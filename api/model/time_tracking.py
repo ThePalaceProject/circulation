@@ -10,7 +10,7 @@ from core.util.flask_util import CustomBaseModel
 class PlaytimeTimeEntry(CustomBaseModel):
     id: str = Field(description="An id to ensure uniqueness of the time entry")
     during_minute: datetime.datetime = Field(
-        description="A minute bounday datetime of the format yyyy-mm-ddThh:mmZ"
+        description="A minute boundary datetime of the format yyyy-mm-ddThh:mmZ"
     )
     seconds_played: int = Field(
         description="How many seconds were played within this minute"
