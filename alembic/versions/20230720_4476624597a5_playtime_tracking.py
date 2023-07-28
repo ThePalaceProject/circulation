@@ -1,7 +1,7 @@
 """Playtime tracking
 
 Revision ID: 4476624597a5
-Revises: 3d380776c1bf
+Revises: b3749bac3e55
 Create Date: 2023-07-20 09:30:39.384787+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "4476624597a5"
-down_revision = "3d380776c1bf"
+down_revision = "b3749bac3e55"
 branch_labels = None
 depends_on = None
 
