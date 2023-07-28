@@ -1,7 +1,7 @@
 import csv
 import os
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import timedelta
 from tempfile import TemporaryFile
 
 from sqlalchemy.sql.functions import sum
@@ -65,7 +65,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
         cutoff = utc_now() - timedelta(days=90)
         cutoff = cutoff.replace(day=1).date()
         # Until the 1st of the current month
-        until = date.today().replace(day=1)
+        until = utc_now().date().replace(day=1)
 
         # Let the database do the math for us
         result = (
