@@ -81,7 +81,7 @@ from core.model.devicetokens import (
     DuplicateDeviceTokenError,
     InvalidTokenTypeError,
 )
-from core.model.time_tracking import IdentifierPlaytimeEntry
+from core.model.time_tracking import PlaytimeEntry
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
@@ -2433,15 +2433,20 @@ class AnalyticsController(CirculationManagerController):
 
 
 class PlaytimeEntriesController(CirculationManagerController):
-    def track_playtimes(self, identifier_type, identifier):
+    def track_playtimes(self, collection_id, identifier_type, identifier):
         library: Library = flask.request.library
         identifier = get_one(
             self._db, Identifier, type=identifier_type, identifier=identifier
         )
+        collection = get_one(self._db, Collection, id=collection_id)
 
         if not identifier:
             return NOT_FOUND_ON_REMOTE.detailed(
                 f"The identifier {identifier_type}/{identifier} was not found."
+            )
+        if not collection:
+            return NOT_FOUND_ON_REMOTE.detailed(
+                f"The collection {collection_id} was not found."
             )
 
         try:
@@ -2458,9 +2463,11 @@ class PlaytimeEntriesController(CirculationManagerController):
             try:
                 playtime_entry, _ = create(
                     self._db,
-                    IdentifierPlaytimeEntry,
+                    PlaytimeEntry,
                     tracking_id=entry.id,
                     identifier_id=identifier.id,
+                    collection_id=collection_id,
+                    library_id=library.id,
                     timestamp=entry.during_minute,
                     total_seconds_played=entry.seconds_played,
                 )

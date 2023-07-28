@@ -21,16 +21,28 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Mapped
 
     from core.model import Identifier
+    from core.model.collection import Collection
+    from core.model.library import Library
 
 
-class IdentifierPlaytimeEntry(Base):
-    __tablename__ = "identifier_playtime_entries"
+class PlaytimeEntry(Base):
+    __tablename__ = "playtime_entries"
 
     id = Column(Integer, autoincrement=True, primary_key=True)
 
     identifier_id = Column(
         Integer,
         ForeignKey("identifiers.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    collection_id = Column(
+        Integer,
+        ForeignKey("collections.id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    library_id = Column(
+        Integer,
+        ForeignKey("libraries.id", onupdate="CASCADE", ondelete="CASCADE"),
         nullable=False,
     )
     timestamp: Mapped[datetime.datetime] = Column(
@@ -47,12 +59,16 @@ class IdentifierPlaytimeEntry(Base):
     processed = Column(Boolean, default=False)
 
     identifier: Mapped[Identifier] = relationship("Identifier", uselist=False)
+    collection: Mapped[Collection] = relationship("Collection", uselist=False)
+    library: Mapped[Library] = relationship("Library", uselist=False)
 
-    __table_args__ = (UniqueConstraint("identifier_id", "tracking_id"),)
+    __table_args__ = (
+        UniqueConstraint("identifier_id", "collection_id", "library_id", "tracking_id"),
+    )
 
 
-class IdentifierPlaytime(Base):
-    __tablename__ = "identifier_playtimes"
+class PlaytimeSummary(Base):
+    __tablename__ = "playtime_summaries"
 
     id = Column(Integer, autoincrement=True, primary_key=True)
 
@@ -62,9 +78,23 @@ class IdentifierPlaytime(Base):
         nullable=True,
         index=True,
     )
+    collection_id = Column(
+        Integer,
+        ForeignKey("collections.id", onupdate="CASCADE", ondelete="SET NULL"),
+        nullable=False,
+        index=True,
+    )
+    library_id = Column(
+        Integer,
+        ForeignKey("libraries.id", onupdate="CASCADE", ondelete="SET NULL"),
+        nullable=False,
+        index=True,
+    )
     # In case an identifier is deleted, we should not delete "analytics" on it
     # so we store the identifier "string" as well. This should be an identifier.urn string
     identifier_str = Column(String, nullable=False)
+    collection_name = Column(String, nullable=False)
+    library_name = Column(String, nullable=False)
 
     # This should be a per-minute datetime
     timestamp: Mapped[datetime.datetime] = Column(
@@ -79,13 +109,24 @@ class IdentifierPlaytime(Base):
     total_seconds_played = Column(Integer, default=0)
 
     identifier: Mapped[Identifier] = relationship("Identifier", uselist=False)
+    collection: Mapped[Collection] = relationship("Collection", uselist=False)
+    library: Mapped[Library] = relationship("Library", uselist=False)
 
-    __table_args__ = (UniqueConstraint("identifier_str", "timestamp"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "identifier_str", "collection_name", "library_name", "timestamp"
+        ),
+    )
 
     @classmethod
     def add(
-        cls, identifier: Identifier, ts: datetime.datetime, seconds: int
-    ) -> IdentifierPlaytime:
+        cls,
+        identifier: Identifier,
+        collection: Collection,
+        library: Library,
+        ts: datetime.datetime,
+        seconds: int,
+    ) -> PlaytimeSummary:
         """Add playtime in seconds to an identifier for a minute-timestamp"""
         _db = Session.object_session(identifier)
         # Sanitize the timestamp to a minute boundary
@@ -97,8 +138,12 @@ class IdentifierPlaytime(Base):
             cls,
             timestamp=timestamp,
             identifier_id=identifier.id,
+            collection_id=collection.id,
+            library_id=library.id,
             create_method_kwargs={
                 "identifier_str": identifier.urn,
+                "collection_name": collection.name,
+                "library_name": library.name,
             },
         )
 

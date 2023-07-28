@@ -4,7 +4,7 @@ import flask
 from sqlalchemy.exc import IntegrityError
 
 from core.model import get_one
-from core.model.time_tracking import IdentifierPlaytimeEntry
+from core.model.time_tracking import PlaytimeEntry
 from tests.fixtures.api_controller import CirculationControllerFixture
 
 
@@ -12,6 +12,7 @@ class TestPlaytimeEntriesController:
     def test_track_playtime(self, circulation_fixture: CirculationControllerFixture):
         db = circulation_fixture.db
         identifier = db.identifier()
+        collection = db.default_collection()
         patron = db.patron()
 
         data = dict(
@@ -33,7 +34,7 @@ class TestPlaytimeEntriesController:
         ):
             flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
 
             assert response.status_code == 207
@@ -47,17 +48,19 @@ class TestPlaytimeEntriesController:
                 id="tracking-id-1", status=201, message="Created"
             )
 
-            entry = get_one(
-                db.session, IdentifierPlaytimeEntry, tracking_id="tracking-id-0"
-            )
+            entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-0")
             assert entry is not None
+            assert entry.identifier == identifier
+            assert entry.collection == collection
+            assert entry.library == db.default_library()
             assert entry.total_seconds_played == 12
             assert entry.timestamp.isoformat() == "2000-01-01T12:00:00+00:00"
 
-            entry = get_one(
-                db.session, IdentifierPlaytimeEntry, tracking_id="tracking-id-1"
-            )
+            entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-1")
             assert entry is not None
+            assert entry.identifier == identifier
+            assert entry.collection == collection
+            assert entry.library == db.default_library()
             assert entry.total_seconds_played == 17
             assert entry.timestamp.isoformat() == "2000-01-01T12:01:00+00:00"
 
@@ -66,14 +69,17 @@ class TestPlaytimeEntriesController:
     ):
         db = circulation_fixture.db
         identifier = db.identifier()
+        collection = db.default_collection()
         patron = db.patron()
 
         db.session.add(
-            IdentifierPlaytimeEntry(
+            PlaytimeEntry(
                 tracking_id="tracking-id-0",
                 timestamp="2000-01-01T12:00Z",  # type: ignore
                 total_seconds_played=12,
                 identifier_id=identifier.id,
+                collection_id=collection.id,
+                library_id=db.default_library().id,
             )
         )
 
@@ -96,7 +102,7 @@ class TestPlaytimeEntriesController:
         ):
             flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
 
             assert response.status_code == 207
@@ -116,6 +122,7 @@ class TestPlaytimeEntriesController:
     ):
         db = circulation_fixture.db
         identifier = db.identifier()
+        collection = db.default_collection()
         patron = db.patron()
 
         data = dict(
@@ -136,7 +143,7 @@ class TestPlaytimeEntriesController:
                     "STATEMENT", {}, Exception("Fake Exception")
                 )
                 response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                    identifier.type, identifier.identifier
+                    collection.id, identifier.type, identifier.identifier
                 )
 
             assert response.status_code == 207

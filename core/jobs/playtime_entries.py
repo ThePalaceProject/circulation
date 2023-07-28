@@ -9,7 +9,7 @@ from sqlalchemy.sql.functions import sum
 from core.config import Configuration
 from core.model import get_one
 from core.model.edition import Edition
-from core.model.time_tracking import IdentifierPlaytime, IdentifierPlaytimeEntry
+from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import utc_now
 from core.util.email import EmailManager
 from scripts import Script
@@ -22,18 +22,18 @@ class PlaytimeEntriesSummationScript(Script):
 
         # Reap older processed entries
         deleted = (
-            self._db.query(IdentifierPlaytimeEntry)
+            self._db.query(PlaytimeEntry)
             .filter(
-                IdentifierPlaytimeEntry.processed == True,
+                PlaytimeEntry.processed == True,
             )
             .delete()
         )
         self.log.info(f"Deleted {deleted} old entries.")
 
         # Fetch the unprocessed entries
-        result = self._db.query(IdentifierPlaytimeEntry).filter(
-            IdentifierPlaytimeEntry.processed == False,
-            IdentifierPlaytimeEntry.timestamp <= cuttoff,
+        result = self._db.query(PlaytimeEntry).filter(
+            PlaytimeEntry.processed == False,
+            PlaytimeEntry.timestamp <= cuttoff,
         )
         by_identifier = defaultdict(int)
 
@@ -42,15 +42,17 @@ class PlaytimeEntriesSummationScript(Script):
         # can be written to IdentifierPlaytimes directly
         for entry in result.all():
             by_identifier[
-                (entry.identifier, entry.timestamp)
+                (entry.identifier, entry.collection, entry.library, entry.timestamp)
             ] += entry.total_seconds_played
             entry.processed = True
 
         for id_ts, seconds in by_identifier.items():
-            identifier, timestamp = id_ts
-            playtime = IdentifierPlaytime.add(identifier, timestamp, seconds)
+            identifier, collection, library, timestamp = id_ts
+            playtime = PlaytimeSummary.add(
+                identifier, collection, library, timestamp, seconds
+            )
             self.log.info(
-                f"Added {seconds} to {identifier.urn} for {timestamp}: new total {playtime.total_seconds_played}."
+                f"Added {seconds} to {identifier.urn} ({collection.name} in {library.name}) for {timestamp}: new total {playtime.total_seconds_played}."
             )
 
         self._db.commit()
@@ -67,19 +69,17 @@ class PlaytimeEntriesEmailReportsScript(Script):
 
         # Let the database do the math for us
         result = (
-            self._db.query(IdentifierPlaytime)
+            self._db.query(PlaytimeSummary)
             .with_entities(
-                IdentifierPlaytime.identifier_str,
-                IdentifierPlaytime.identifier_id,
-                sum(IdentifierPlaytime.total_seconds_played),
+                PlaytimeSummary.identifier_str,
+                PlaytimeSummary.identifier_id,
+                sum(PlaytimeSummary.total_seconds_played),
             )
             .filter(
-                IdentifierPlaytime.timestamp >= cutoff,
-                IdentifierPlaytime.timestamp < until,
+                PlaytimeSummary.timestamp >= cutoff,
+                PlaytimeSummary.timestamp < until,
             )
-            .group_by(
-                IdentifierPlaytime.identifier_str, IdentifierPlaytime.identifier_id
-            )
+            .group_by(PlaytimeSummary.identifier_str, PlaytimeSummary.identifier_id)
         )
 
         # Write to a temporary file so we don't overflow the memory

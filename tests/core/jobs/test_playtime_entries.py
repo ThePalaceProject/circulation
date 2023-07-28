@@ -11,21 +11,29 @@ from core.jobs.playtime_entries import (
     PlaytimeEntriesSummationScript,
 )
 from core.model import create
+from core.model.collection import Collection
 from core.model.identifier import Identifier
-from core.model.time_tracking import IdentifierPlaytime, IdentifierPlaytimeEntry
+from core.model.library import Library
+from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
 def create_playtime_entries(
-    db: DatabaseTransactionFixture, identifier: Identifier, *entries: PlaytimeTimeEntry
-) -> List[IdentifierPlaytimeEntry]:
+    db: DatabaseTransactionFixture,
+    identifier: Identifier,
+    collection: Collection,
+    library: Library,
+    *entries: PlaytimeTimeEntry,
+) -> List[PlaytimeEntry]:
     all_inserted = []
     for entry in entries:
-        inserted = IdentifierPlaytimeEntry(
+        inserted = PlaytimeEntry(
             tracking_id=entry.id,
             timestamp=entry.during_minute,
             identifier_id=identifier.id,
+            library_id=library.id,
+            collection_id=collection.id,
             total_seconds_played=entry.seconds_played,
         )
         db.session.add(inserted)
@@ -47,9 +55,13 @@ class TestPlaytimeEntriesSummationScript:
         dk = date2k
         identifier = db.identifier()
         identifier2 = db.identifier()
+        collection = db.default_collection()
+        library = db.default_library()
         entries = create_playtime_entries(
             db,
             identifier,
+            collection,
+            library,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -58,6 +70,8 @@ class TestPlaytimeEntriesSummationScript:
         entries2 = create_playtime_entries(
             db,
             identifier2,
+            collection,
+            library,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -70,6 +84,8 @@ class TestPlaytimeEntriesSummationScript:
         [out_of_scope_entry] = create_playtime_entries(
             db,
             identifier2,
+            collection,
+            library,
             P(id="5", during_minute=utc_now(), seconds_played=30),
         )
 
@@ -77,6 +93,8 @@ class TestPlaytimeEntriesSummationScript:
         [processed_entry] = create_playtime_entries(
             db,
             identifier2,
+            collection,
+            library,
             P(id="6", during_minute=dk(m=10), seconds_played=30),
         )
         processed_entry.processed = True
@@ -84,8 +102,8 @@ class TestPlaytimeEntriesSummationScript:
         PlaytimeEntriesSummationScript(db.session).run()
 
         playtimes = (
-            db.session.query(IdentifierPlaytime)
-            .order_by(IdentifierPlaytime.identifier_id, IdentifierPlaytime.timestamp)
+            db.session.query(PlaytimeSummary)
+            .order_by(PlaytimeSummary.identifier_id, PlaytimeSummary.timestamp)
             .all()
         )
 
@@ -109,9 +127,13 @@ class TestPlaytimeEntriesSummationScript:
         P = PlaytimeTimeEntry
         dk = date2k
         identifier = db.identifier()
+        collection = db.default_collection()
+        library = db.default_library()
         entries = create_playtime_entries(
             db,
             identifier,
+            collection,
+            library,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -123,45 +145,53 @@ class TestPlaytimeEntriesSummationScript:
 
         PlaytimeEntriesSummationScript(db.session).run()
         # Nothing reaped yet
-        assert db.session.query(IdentifierPlaytimeEntry).count() == 6
+        assert db.session.query(PlaytimeEntry).count() == 6
         # Last 2 are not processed
         assert [e.processed for e in entries] == [True, True, True, True, False, False]
 
         # Second run
         PlaytimeEntriesSummationScript(db.session).run()
         # Only 2 should be left
-        assert db.session.query(IdentifierPlaytimeEntry).count() == 2
+        assert db.session.query(PlaytimeEntry).count() == 2
 
 
 def date3m(days):
     return (utc_now() - timedelta(days=(90 - days))).date()
 
 
-def playtime(session, identifier, timestamp, total_seconds):
+def playtime(session, identifier, collection, library, timestamp, total_seconds):
     return create(
         session,
-        IdentifierPlaytime,
+        PlaytimeSummary,
         identifier=identifier,
+        collection=collection,
+        library=library,
         timestamp=timestamp,
         total_seconds_played=total_seconds,
         identifier_str=identifier.urn,
+        collection_name=collection.name,
+        library_name=library.name,
     )[0]
 
 
 class TestPlaytimeEntriesEmailReportsScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
         identifier = db.identifier()
+        collection = db.default_collection()
+        library = db.default_library()
         edition = db.edition()
         identifier2 = edition.primary_identifier
 
-        playtime(db.session, identifier, date3m(3), 1)
-        playtime(db.session, identifier, date3m(31), 2)
+        playtime(db.session, identifier, collection, library, date3m(3), 1)
+        playtime(db.session, identifier, collection, library, date3m(31), 2)
         playtime(
-            db.session, identifier, date3m(-31), 60
+            db.session, identifier, collection, library, date3m(-31), 60
         )  # out of range: more than a month prior to the quarter
-        playtime(db.session, identifier, date3m(91), 60)  # out of range: future
-        playtime(db.session, identifier2, date3m(3), 5)
-        playtime(db.session, identifier2, date3m(4), 6)
+        playtime(
+            db.session, identifier, collection, library, date3m(91), 60
+        )  # out of range: future
+        playtime(db.session, identifier2, collection, library, date3m(3), 5)
+        playtime(db.session, identifier2, collection, library, date3m(4), 6)
 
         # Horrible unbracketted syntax for python 3.8
         with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
