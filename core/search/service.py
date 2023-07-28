@@ -266,9 +266,14 @@ class SearchServiceOpensearch1(SearchService):
         index_name = revision.name_for_index(base_name)
         self._logger.debug(f"setting mappings for index {index_name}")
         self._client.indices.put_mapping(index=index_name, body=data)
+        self._ensure_scripts(revision)
+
+    def _ensure_scripts(self, revision: SearchSchemaRevision) -> None:
         for name, body in revision.mapping_document().scripts.items():
             script = dict(script=dict(lang="painless", source=body))
-            self._client.put_script(name, script, pretty=True)
+            if not name.startswith("simplified"):
+                name = revision.script_name(name)
+            self._client.put_script(name, script)
 
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]
