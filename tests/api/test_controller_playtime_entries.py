@@ -34,7 +34,7 @@ class TestPlaytimeEntriesController:
         ):
             flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.id, identifier.type, identifier.identifier
+                collection.name, identifier.type, identifier.identifier
             )
 
             assert response.status_code == 207
@@ -102,7 +102,7 @@ class TestPlaytimeEntriesController:
         ):
             flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.id, identifier.type, identifier.identifier
+                collection.name, identifier.type, identifier.identifier
             )
 
             assert response.status_code == 207
@@ -143,7 +143,7 @@ class TestPlaytimeEntriesController:
                     "STATEMENT", {}, Exception("Fake Exception")
                 )
                 response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                    collection.id, identifier.type, identifier.identifier
+                    collection.name, identifier.type, identifier.identifier
                 )
 
             assert response.status_code == 207

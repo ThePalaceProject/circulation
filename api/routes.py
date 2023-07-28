@@ -673,13 +673,15 @@ def track_analytics_event(identifier_type, identifier, event_type):
 
 
 @library_route(
-    "/playtimes/<collection_id>/<identifier_type>/<path:identifier>", methods=["POST"]
+    "/playtimes/<collection_name>/<identifier_type>/<path:identifier>", methods=["POST"]
 )
 @has_library
 @allows_auth
 @returns_problem_detail
-def track_playtime_events(identifier_type, identifier):
-    return app.manager.playtime_entries.track_playtimes(identifier_type, identifier)
+def track_playtime_events(collection_name, identifier_type, identifier):
+    return app.manager.playtime_entries.track_playtimes(
+        collection_name, identifier_type, identifier
+    )
 
 
 # Route that redirects to the authentication URL for a SAML provider

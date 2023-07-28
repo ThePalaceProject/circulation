@@ -72,6 +72,8 @@ class PlaytimeEntriesEmailReportsScript(Script):
             self._db.query(PlaytimeSummary)
             .with_entities(
                 PlaytimeSummary.identifier_str,
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
                 PlaytimeSummary.identifier_id,
                 sum(PlaytimeSummary.total_seconds_played),
             )
@@ -79,23 +81,37 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 PlaytimeSummary.timestamp >= cutoff,
                 PlaytimeSummary.timestamp < until,
             )
-            .group_by(PlaytimeSummary.identifier_str, PlaytimeSummary.identifier_id)
+            .group_by(
+                PlaytimeSummary.identifier_str,
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
+                PlaytimeSummary.identifier_id,
+            )
         )
 
         # Write to a temporary file so we don't overflow the memory
         with TemporaryFile("w+", prefix=f"playtimereport{until}", suffix="csv") as temp:
             # Write the data as a CSV
             writer = csv.writer(temp)
-            writer.writerow(["date", "urn", "title", "total seconds"])
+            writer.writerow(
+                ["date", "urn", "collection", "library", "title", "total seconds"]
+            )
 
-            for urn, identifier_id, total in result:
+            for urn, collection_name, library_name, identifier_id, total in result:
                 edition = None
                 if identifier_id:
                     edition = get_one(
                         self._db, Edition, primary_identifier_id=identifier_id
                     )
                 title = edition and edition.title
-                row = (f"{cutoff} - {until}", urn, title, total)
+                row = (
+                    f"{cutoff} - {until}",
+                    urn,
+                    collection_name,
+                    library_name,
+                    title,
+                    total,
+                )
                 # Write the row to the CSV
                 writer.writerow(row)
 

@@ -56,6 +56,7 @@ class TestPlaytimeEntriesSummationScript:
         identifier = db.identifier()
         identifier2 = db.identifier()
         collection = db.default_collection()
+        collection2 = db.collection()
         library = db.default_library()
         entries = create_playtime_entries(
             db,
@@ -78,6 +79,16 @@ class TestPlaytimeEntriesSummationScript:
             P(
                 id="3", during_minute=dk(m=1), seconds_played=30
             ),  # One entry for the next minute
+        )
+
+        # Different collection, should get grouped separately
+        entries3 = create_playtime_entries(
+            db,
+            identifier2,
+            collection2,
+            library,
+            P(id="0", during_minute=dk(m=0), seconds_played=30),
+            P(id="1", during_minute=dk(m=1), seconds_played=40),
         )
 
         # This entry should not be considered as it is too recent
@@ -103,25 +114,48 @@ class TestPlaytimeEntriesSummationScript:
 
         playtimes = (
             db.session.query(PlaytimeSummary)
-            .order_by(PlaytimeSummary.identifier_id, PlaytimeSummary.timestamp)
+            .order_by(
+                PlaytimeSummary.identifier_id,
+                PlaytimeSummary.collection_id,
+                PlaytimeSummary.library_id,
+                PlaytimeSummary.timestamp,
+            )
             .all()
         )
 
-        assert len(playtimes) == 3
+        assert len(playtimes) == 5
 
-        id1time, id2time1, id2time2 = playtimes
+        id1time, id2time1, id2time2, id2col2time, id2col2time1 = playtimes
 
         assert id1time.identifier == identifier
         assert id1time.total_seconds_played == 120
+        assert id1time.collection == collection
+        assert id1time.library == library
         assert id1time.timestamp == dk()
 
         assert id2time1.identifier == identifier2
         assert id2time1.total_seconds_played == 90
+        assert id2time1.collection == collection
+        assert id2time1.library == library
         assert id2time1.timestamp == dk()
 
         assert id2time2.identifier == identifier2
+        assert id2time2.collection == collection
+        assert id2time2.library == library
         assert id2time2.total_seconds_played == 30
         assert id2time2.timestamp == dk(m=1)
+
+        assert id2col2time.identifier == identifier2
+        assert id2col2time.collection == collection2
+        assert id2col2time.library == library
+        assert id2col2time.total_seconds_played == 30
+        assert id2col2time.timestamp == dk()
+
+        assert id2col2time1.identifier == identifier2
+        assert id2col2time1.collection == collection2
+        assert id2col2time1.library == library
+        assert id2col2time1.total_seconds_played == 40
+        assert id2col2time1.timestamp == dk(m=1)
 
     def test_reap_processed_entries(self, db: DatabaseTransactionFixture):
         P = PlaytimeTimeEntry
@@ -181,6 +215,8 @@ class TestPlaytimeEntriesEmailReportsScript:
         library = db.default_library()
         edition = db.edition()
         identifier2 = edition.primary_identifier
+        collection2 = db.collection()
+        library2 = db.library()
 
         playtime(db.session, identifier, collection, library, date3m(3), 1)
         playtime(db.session, identifier, collection, library, date3m(31), 2)
@@ -193,6 +229,13 @@ class TestPlaytimeEntriesEmailReportsScript:
         playtime(db.session, identifier2, collection, library, date3m(3), 5)
         playtime(db.session, identifier2, collection, library, date3m(4), 6)
 
+        # Collection2
+        playtime(db.session, identifier, collection2, library, date3m(3), 100)
+        # library2
+        playtime(db.session, identifier, collection, library2, date3m(3), 200)
+        # collection2 library2
+        playtime(db.session, identifier, collection2, library2, date3m(3), 300)
+
         # Horrible unbracketted syntax for python 3.8
         with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
             "core.jobs.playtime_entries.EmailManager"
@@ -204,17 +247,33 @@ class TestPlaytimeEntriesEmailReportsScript:
         ):
             PlaytimeEntriesEmailReportsScript(db.session).run()
 
-        assert writer().writerow.call_count == 3  # 1 header, 2 identifiers
+        assert (
+            writer().writerow.call_count == 6
+        )  # 1 header, 5 identifier,collection,library entries
 
         cutoff = date3m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
         column1 = f"{cutoff} - {until}"
         call_args = writer().writerow.call_args_list
         assert call_args == [
-            call(["date", "urn", "title", "total seconds"]),  # Header
-            call((column1, identifier.urn, None, 3)),  # Identifier without edition
             call(
-                (column1, identifier2.urn, edition.title, 11)
+                ["date", "urn", "collection", "library", "title", "total seconds"]
+            ),  # Header
+            call((column1, identifier.urn, collection2.name, library2.name, None, 300)),
+            call((column1, identifier.urn, collection2.name, library.name, None, 100)),
+            call((column1, identifier.urn, collection.name, library2.name, None, 200)),
+            call(
+                (column1, identifier.urn, collection.name, library.name, None, 3)
+            ),  # Identifier without edition
+            call(
+                (
+                    column1,
+                    identifier2.urn,
+                    collection.name,
+                    library.name,
+                    edition.title,
+                    11,
+                )
             ),  # Identifier with edition
         ]
 
