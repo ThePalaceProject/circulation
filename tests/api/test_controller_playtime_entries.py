@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from core.model import get_one
 from core.model.time_tracking import PlaytimeEntry
+from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 
 
@@ -13,6 +14,13 @@ class TestPlaytimeEntriesController:
         db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
+        # Attach the identifier to the collection
+        pool = db.licensepool(
+            db.edition(
+                identifier_type=identifier.type, identifier_id=identifier.identifier
+            ),
+            collection=collection,
+        )
         patron = db.patron()
 
         data = dict(
@@ -70,6 +78,13 @@ class TestPlaytimeEntriesController:
         db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
+        # Attach the identifier to the collection
+        pool = db.licensepool(
+            db.edition(
+                identifier_type=identifier.type, identifier_id=identifier.identifier
+            ),
+            collection=collection,
+        )
         patron = db.patron()
 
         db.session.add(
@@ -123,6 +138,13 @@ class TestPlaytimeEntriesController:
         db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
+        # Attach the identifier to the collection
+        pool = db.licensepool(
+            db.edition(
+                identifier_type=identifier.type, identifier_id=identifier.identifier
+            ),
+            collection=collection,
+        )
         patron = db.patron()
 
         data = dict(
@@ -153,3 +175,68 @@ class TestPlaytimeEntriesController:
             assert data["responses"] == [
                 dict(status=400, message="Fake Exception", id="tracking-id-1")
             ]
+
+    def test_api_validation(self, circulation_fixture: CirculationControllerFixture):
+        db = circulation_fixture.db
+        identifier = db.identifier()
+        collection = db.collection()
+        library = db.default_library()
+        patron = db.patron()
+
+        with circulation_fixture.request_context_with_library(
+            "/", method="POST", json={}
+        ):
+            flask.request.patron = patron  # type: ignore
+
+            # Bad identifier
+            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+                collection.name, identifier.type, "not-an-identifier"
+            )
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 404
+            assert (
+                response.detail
+                == "The identifier Gutenberg ID/not-an-identifier was not found."
+            )
+
+            # Bad collection
+            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+                "not-a-collection", identifier.type, identifier.identifier
+            )
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 404
+            assert response.detail == f"The collection not-a-collection was not found."
+
+            # Collection not in library
+            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+                collection.name, identifier.type, identifier.identifier
+            )
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 400
+            assert response.detail == "Collection was not found in the Library."
+
+            # Identifier not part of collection
+            library.collections.append(collection)
+            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+                collection.name, identifier.type, identifier.identifier
+            )
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 400
+            assert response.detail == "This Identifier was not found in the Collection."
+
+            # Attach the identifier to the collection
+            pool = db.licensepool(
+                db.edition(
+                    identifier_type=identifier.type, identifier_id=identifier.identifier
+                ),
+                collection=collection,
+            )
+
+            # Incorrect JSON format
+            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+                collection.name, identifier.type, identifier.identifier
+            )
+            assert isinstance(response, ProblemDetail)
+            assert response.status_code == 400
+            assert "timeEntries" in response.detail
+            assert "field required" in response.detail

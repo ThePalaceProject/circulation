@@ -2433,20 +2433,28 @@ class AnalyticsController(CirculationManagerController):
 
 
 class PlaytimeEntriesController(CirculationManagerController):
-    def track_playtimes(self, collection_name, identifier_type, identifier):
+    def track_playtimes(self, collection_name, identifier_type, identifier_idn):
         library: Library = flask.request.library
         identifier = get_one(
-            self._db, Identifier, type=identifier_type, identifier=identifier
+            self._db, Identifier, type=identifier_type, identifier=identifier_idn
         )
         collection = get_one(self._db, Collection, name=collection_name)
 
         if not identifier:
             return NOT_FOUND_ON_REMOTE.detailed(
-                f"The identifier {identifier_type}/{identifier} was not found."
+                f"The identifier {identifier_type}/{identifier_idn} was not found."
             )
         if not collection:
             return NOT_FOUND_ON_REMOTE.detailed(
                 f"The collection {collection_name} was not found."
+            )
+
+        if collection not in library.collections:
+            return INVALID_INPUT.detailed("Collection was not found in the Library.")
+
+        if not identifier.licensed_through_collection(collection):
+            return INVALID_INPUT.detailed(
+                "This Identifier was not found in the Collection."
             )
 
         try:
