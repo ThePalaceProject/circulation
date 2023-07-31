@@ -5,8 +5,18 @@ from sqlalchemy.exc import IntegrityError
 
 from core.model import get_one
 from core.model.time_tracking import PlaytimeEntry
+from core.util.datetime_helpers import utc_now
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
+
+
+def date_string(hour=None, minute=None):
+    now = utc_now()
+    if hour is not None:
+        now = now.replace(hour=hour)
+    if minute is not None:
+        now = now.replace(minute=minute)
+    return now.strftime("%Y-%m-%dT%H:%M:00+00:00")
 
 
 class TestPlaytimeEntriesController:
@@ -27,12 +37,17 @@ class TestPlaytimeEntriesController:
             timeEntries=[
                 {
                     "id": "tracking-id-0",
-                    "during_minute": "2000-01-01T12:00Z",
+                    "during_minute": date_string(hour=12, minute=0),
                     "seconds_played": 12,
                 },
                 {
                     "id": "tracking-id-1",
-                    "during_minute": "2000-01-01T12:01Z",
+                    "during_minute": date_string(hour=12, minute=1),
+                    "seconds_played": 17,
+                },
+                {
+                    "id": "tracking-id-2",
+                    "during_minute": "2000-01-01T12:00Z",  # A very old entry, 401
                     "seconds_played": 17,
                 },
             ]
@@ -47,13 +62,16 @@ class TestPlaytimeEntriesController:
 
             assert response.status_code == 207
             data = response.json
-            assert data["summary"] == dict(total=2, successes=2, failures=0)
-            assert len(data["responses"]) == 2
+            assert data["summary"] == dict(total=3, successes=3, failures=0)
+            assert len(data["responses"]) == 3
             assert data["responses"][0] == dict(
                 id="tracking-id-0", status=201, message="Created"
             )
             assert data["responses"][1] == dict(
                 id="tracking-id-1", status=201, message="Created"
+            )
+            assert data["responses"][2] == dict(
+                id="tracking-id-2", status=401, message="Gone"
             )
 
             entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-0")
@@ -62,7 +80,7 @@ class TestPlaytimeEntriesController:
             assert entry.collection == collection
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 12
-            assert entry.timestamp.isoformat() == "2000-01-01T12:00:00+00:00"
+            assert entry.timestamp.isoformat() == date_string(hour=12, minute=0)
 
             entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-1")
             assert entry is not None
@@ -70,7 +88,12 @@ class TestPlaytimeEntriesController:
             assert entry.collection == collection
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 17
-            assert entry.timestamp.isoformat() == "2000-01-01T12:01:00+00:00"
+            assert entry.timestamp.isoformat() == date_string(hour=12, minute=1)
+
+            # The very old entry does not get recorded
+            assert None == get_one(
+                db.session, PlaytimeEntry, tracking_id="tracking-id-2"
+            )
 
     def test_track_playtime_duplicate_id_ok(
         self, circulation_fixture: CirculationControllerFixture
@@ -90,7 +113,7 @@ class TestPlaytimeEntriesController:
         db.session.add(
             PlaytimeEntry(
                 tracking_id="tracking-id-0",
-                timestamp="2000-01-01T12:00Z",  # type: ignore
+                timestamp=date_string(hour=12, minute=0),  # type: ignore
                 total_seconds_played=12,
                 identifier_id=identifier.id,
                 collection_id=collection.id,
@@ -102,12 +125,12 @@ class TestPlaytimeEntriesController:
             timeEntries=[
                 {
                     "id": "tracking-id-0",
-                    "during_minute": "2000-01-01T12:00Z",
+                    "during_minute": date_string(hour=12, minute=0),
                     "seconds_played": 12,
                 },
                 {
                     "id": "tracking-id-1",
-                    "during_minute": "2000-01-01T12:01Z",
+                    "during_minute": date_string(hour=12, minute=1),
                     "seconds_played": 12,
                 },
             ]
@@ -151,7 +174,7 @@ class TestPlaytimeEntriesController:
             timeEntries=[
                 {
                     "id": "tracking-id-1",
-                    "during_minute": "2000-01-01T12:01Z",
+                    "during_minute": date_string(hour=12, minute=1),
                     "seconds_played": 12,
                 }
             ]

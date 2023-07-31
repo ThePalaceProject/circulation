@@ -10,11 +10,17 @@ from core.model.collection import Collection
 from core.model.identifier import Identifier
 from core.model.library import Library
 from core.model.time_tracking import PlaytimeEntry
+from core.util.datetime_helpers import utc_now
 
 
 class PlaytimeEntries:
-    @staticmethod
+    # The oldest entry acceptable by the insert API
+    # If anything earlier arrives, we ignore it with a 401 response
+    OLDEST_ACCEPTABLE_ENTRY_DAYS = 120
+
+    @classmethod
     def insert_playtime_entries(
+        cls,
         _db: Session,
         identifier: Identifier,
         collection: Collection,
@@ -24,21 +30,29 @@ class PlaytimeEntries:
         """Insert into the database playtime entries from a request"""
         responses = []
         summary = PlaytimeEntriesPostSummary()
+        today = utc_now().date()
         for entry in data.time_entries:
             status_code = 201
             message = "Created"
             transaction = _db.begin_nested()
             try:
-                playtime_entry, _ = create(
-                    _db,
-                    PlaytimeEntry,
-                    tracking_id=entry.id,
-                    identifier_id=identifier.id,
-                    collection_id=collection.id,
-                    library_id=library.id,
-                    timestamp=entry.during_minute,
-                    total_seconds_played=entry.seconds_played,
-                )
+                if (
+                    today - entry.during_minute.date()
+                ).days > cls.OLDEST_ACCEPTABLE_ENTRY_DAYS:
+                    # This will count as a success, since we don't want to repeat the entry
+                    status_code = 401
+                    message = "Gone"
+                else:
+                    playtime_entry, _ = create(
+                        _db,
+                        PlaytimeEntry,
+                        tracking_id=entry.id,
+                        identifier_id=identifier.id,
+                        collection_id=collection.id,
+                        library_id=library.id,
+                        timestamp=entry.during_minute,
+                        total_seconds_played=entry.seconds_played,
+                    )
             except IntegrityError as ex:
                 logging.getLogger("Time Tracking").error(
                     f"Playtime entry failure {entry.id}: {ex}"
