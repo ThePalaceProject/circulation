@@ -92,6 +92,7 @@ class PlaytimeSummary(Base):
     )
     # In case an identifier is deleted, we should not delete "analytics" on it
     # so we store the identifier "string" as well. This should be an identifier.urn string
+    # The same logic applies to collection, and library
     identifier_str = Column(String, nullable=False)
     collection_name = Column(String, nullable=False)
     library_name = Column(String, nullable=False)
@@ -127,7 +128,7 @@ class PlaytimeSummary(Base):
         ts: datetime.datetime,
         seconds: int,
     ) -> PlaytimeSummary:
-        """Add playtime in seconds to an identifier for a minute-timestamp"""
+        """Add playtime in seconds to a summary record for a minute-timestamp"""
         _db = Session.object_session(identifier)
         # Sanitize the timestamp to a minute boundary
         timestamp = datetime.datetime(ts.year, ts.month, ts.day, ts.hour, ts.minute)

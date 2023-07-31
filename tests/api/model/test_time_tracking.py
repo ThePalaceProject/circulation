@@ -18,6 +18,11 @@ class TestPlaytimeEntriesModels:
         )
         assert entry2.seconds_played == 60
 
+        entry2 = PlaytimeTimeEntry(
+            id="", during_minute="2000-01-01T12:00:00+00:00", seconds_played=-45384
+        )
+        assert entry2.seconds_played == 0
+
         # Minute boundary coercion
         entry2 = PlaytimeTimeEntry(
             id="", during_minute="2000-01-01T12:00:06.123456+00:00", seconds_played=12

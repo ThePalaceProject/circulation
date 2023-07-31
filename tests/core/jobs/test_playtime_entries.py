@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import List
-from unittest.mock import call, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytz
 
@@ -15,7 +15,7 @@ from core.model.collection import Collection
 from core.model.identifier import Identifier
 from core.model.library import Library
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
-from core.util.datetime_helpers import utc_now
+from core.util.datetime_helpers import previous_months, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -190,7 +190,7 @@ class TestPlaytimeEntriesSummationScript:
 
 
 def date3m(days):
-    return (utc_now() - timedelta(days=(90 - days))).date()
+    return previous_months(number_of_months=3)[0] + timedelta(days=days)
 
 
 def playtime(session, identifier, collection, library, timestamp, total_seconds):
@@ -286,3 +286,18 @@ class TestPlaytimeEntriesEmailReportsScript:
                 f"playtime-summary-{cutoff}-{until}": ""
             },  # Mock objects do not write data
         )
+
+    def test_no_reporting_email(self, db: DatabaseTransactionFixture):
+        identifier = db.identifier()
+        collection = db.default_collection()
+        library = db.default_library()
+        entry = playtime(db.session, identifier, collection, library, date3m(20), 1)
+
+        with patch("core.jobs.playtime_entries.os.environ", new={}):
+            script = PlaytimeEntriesEmailReportsScript(db.session)
+            script._log = MagicMock()
+            script.run()
+
+            assert script._log.error.call_count == 1
+            assert script._log.warning.call_count == 1
+            assert "date,urn,collection," in script._log.warning.call_args[0][0]

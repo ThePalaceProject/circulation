@@ -10,7 +10,7 @@ from core.config import Configuration
 from core.model import get_one
 from core.model.edition import Edition
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
-from core.util.datetime_helpers import utc_now
+from core.util.datetime_helpers import previous_months, utc_now
 from core.util.email import EmailManager
 from scripts import Script
 
@@ -62,10 +62,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
     def do_run(self):
         """Send a quarterly report with aggregated playtimes via email"""
         # 3 months prior, shifted to the 1st of the month
-        cutoff = utc_now() - timedelta(days=90)
-        cutoff = cutoff.replace(day=1).date()
-        # Until the 1st of the current month
-        until = utc_now().date().replace(day=1)
+        start, until = previous_months(number_of_months=3)
 
         # Let the database do the math for us
         result = (
@@ -78,7 +75,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 sum(PlaytimeSummary.total_seconds_played),
             )
             .filter(
-                PlaytimeSummary.timestamp >= cutoff,
+                PlaytimeSummary.timestamp >= start,
                 PlaytimeSummary.timestamp < until,
             )
             .group_by(
@@ -105,7 +102,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
                     )
                 title = edition and edition.title
                 row = (
-                    f"{cutoff} - {until}",
+                    f"{start} - {until}",
                     urn,
                     collection_name,
                     library_name,
@@ -122,11 +119,11 @@ class PlaytimeEntriesEmailReportsScript(Script):
             )
             if recipient:
                 EmailManager.send_email(
-                    f"Playtime Summaries {cutoff} - {until}",
+                    f"Playtime Summaries {start} - {until}",
                     receivers=[recipient],
                     text="",
-                    attachments={f"playtime-summary-{cutoff}-{until}": temp.read()},
+                    attachments={f"playtime-summary-{start}-{until}": temp.read()},
                 )
             else:
                 self.log.error("No reporting email found, logging complete report.")
-                self.log.error(temp.read())
+                self.log.warning(temp.read())

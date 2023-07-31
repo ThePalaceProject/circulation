@@ -35,6 +35,11 @@ class PlaytimeTimeEntry(CustomBaseModel):
                 "Greater than 60 seconds was received for a minute playtime."
             )
             value = 60
+        elif value < 0:
+            logging.getLogger("TimeTracking").warning(
+                "Less than 0 seconds was received for a minute playtime."
+            )
+            value = 0
         return value
 
 
