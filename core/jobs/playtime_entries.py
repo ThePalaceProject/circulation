@@ -1,9 +1,10 @@
 import csv
 import os
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 from tempfile import TemporaryFile
 
+import pytz
 from sqlalchemy.sql.functions import sum
 
 from core.config import Configuration
@@ -17,18 +18,22 @@ from scripts import Script
 
 class PlaytimeEntriesSummationScript(Script):
     def do_run(self):
-        # Collect everything from one hour ago, reducing entries still in flux
-        cuttoff = utc_now() - timedelta(hours=1)
-
         # Reap older processed entries
+        older_than, _ = previous_months(number_of_months=1)
+        older_than_ts = datetime(
+            older_than.year, older_than.month, older_than.day, tzinfo=pytz.UTC
+        )
         deleted = (
             self._db.query(PlaytimeEntry)
             .filter(
-                PlaytimeEntry.processed == True,
+                PlaytimeEntry.processed == True, PlaytimeEntry.timestamp < older_than_ts
             )
             .delete()
         )
-        self.log.info(f"Deleted {deleted} old entries.")
+        self.log.info(f"Deleted {deleted} entries. Older than {older_than_ts}")
+
+        # Collect everything from one hour ago, reducing entries still in flux
+        cuttoff = utc_now() - timedelta(hours=1)
 
         # Fetch the unprocessed entries
         result = self._db.query(PlaytimeEntry).filter(

@@ -1,4 +1,5 @@
 import datetime
+import math
 from typing import Optional, Tuple
 
 import pytz
@@ -64,9 +65,10 @@ def strptime_utc(date_string, format):
 
 def previous_months(number_of_months=3) -> Tuple[datetime.date, datetime.date]:
     now = utc_now()
-    # Start from the first of number_of_months ago
-    expected_month = (now.month - number_of_months) % 12
-    start = now.replace(month=expected_month, day=1)
+    # Start from the first of number_of_months ago, where 0=12
+    expected_year = now.year - math.floor(number_of_months / 12)
+    expected_month = ((now.month - number_of_months) % 12) or 12
+    start = now.replace(year=expected_year, month=expected_month, day=1)
     # Until the first of this month
     until = now.replace(day=1)
     return start.date(), until.date()

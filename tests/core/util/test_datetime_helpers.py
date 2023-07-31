@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 import pytest
 import pytz
@@ -6,6 +7,7 @@ import pytz
 from core.util.datetime_helpers import (
     datetime_utc,
     from_timestamp,
+    previous_months,
     strptime_utc,
     to_utc,
     utc_now,
@@ -132,3 +134,23 @@ class TestToUTC:
             "Cannot use strptime_utc with timezone-aware format %Y-%m-%dT%H:%M:%S%z"
             in str(excinfo.value)
         )
+
+
+class TestPreviousMonths:
+    @pytest.mark.parametrize(
+        "start,until,months",
+        [
+            (datetime.date(2000, 6, 1), datetime.date(2000, 12, 1), 6),
+            (datetime.date(1999, 6, 1), datetime.date(2000, 12, 1), 18),
+            (datetime.date(1990, 6, 1), datetime.date(2000, 12, 1), 126),
+            (datetime.date(1999, 12, 1), datetime.date(2000, 12, 1), 12),
+        ],
+    )
+    def test_boundaries(self, start, until, months):
+        with patch("core.util.datetime_helpers.utc_now") as mock_utc_now:
+            mock_utc_now.return_value = datetime.datetime(
+                2000, 12, 15, 0, 0, 0, 0, tzinfo=pytz.UTC
+            )
+            actual_start, actual_until = previous_months(number_of_months=months)
+            assert actual_start == start
+            assert actual_until == until

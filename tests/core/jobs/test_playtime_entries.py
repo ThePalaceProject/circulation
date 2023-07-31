@@ -172,21 +172,27 @@ class TestPlaytimeEntriesSummationScript:
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
             P(id="3", during_minute=dk(m=0), seconds_played=30),
-            # The last 2 will not get processed
-            P(id="4", during_minute=utc_now(), seconds_played=30),
+            # Processed but not reaped
+            P(id="4", during_minute=utc_now() - timedelta(days=10), seconds_played=30),
+            # The last will not get processed
             P(id="5", during_minute=utc_now(), seconds_played=30),
         )
 
         PlaytimeEntriesSummationScript(db.session).run()
         # Nothing reaped yet
         assert db.session.query(PlaytimeEntry).count() == 6
-        # Last 2 are not processed
-        assert [e.processed for e in entries] == [True, True, True, True, False, False]
+        # Last entry is not processed
+        assert [e.processed for e in entries] == [True, True, True, True, True, False]
 
         # Second run
         PlaytimeEntriesSummationScript(db.session).run()
         # Only 2 should be left
         assert db.session.query(PlaytimeEntry).count() == 2
+        assert list(
+            db.session.query(PlaytimeEntry)
+            .order_by(PlaytimeEntry.id)
+            .values(PlaytimeEntry.tracking_id)
+        ) == [("4",), ("5",)]
 
 
 def date3m(days):
