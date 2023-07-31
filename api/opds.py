@@ -32,6 +32,7 @@ from core.model import (
     Patron,
     Session,
 )
+from core.model.configuration import ExternalIntegration
 from core.model.constants import EditionConstants, LinkRelations
 from core.model.formats import FormatPriorities
 from core.model.integration import IntegrationConfiguration
@@ -787,7 +788,13 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 ),
             )
 
-        if edition.medium == EditionConstants.AUDIO_MEDIUM:
+        # Only OPDS for Distributors should get the time tracking link
+        if (
+            edition.medium == EditionConstants.AUDIO_MEDIUM
+            and active_license_pool
+            and active_license_pool.collection.protocol
+            == ExternalIntegration.OPDS_FOR_DISTRIBUTORS
+        ):
             feed.add_link_to_entry(
                 entry,
                 rel=LinkRelations.TIME_TRACKING,

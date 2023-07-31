@@ -927,12 +927,19 @@ class TestLibraryAnnotator:
         assert feed_link["type"] == link.resource.representation.media_type
 
         # Annotate time tracking
-        work = annotator_fixture.db.work()
+        opds_for_distributors = annotator_fixture.db.collection(
+            protocol=ExternalIntegration.OPDS_FOR_DISTRIBUTORS
+        )
+        work = annotator_fixture.db.work(
+            with_license_pool=True, collection=opds_for_distributors
+        )
         edition = work.presentation_edition
         edition.medium = EditionConstants.AUDIO_MEDIUM
 
         entry = feed._make_entry_xml(work, edition)
-        annotator.annotate_work_entry(work, None, edition, identifier, feed, entry)
+        annotator.annotate_work_entry(
+            work, work.active_license_pool(), edition, identifier, feed, entry
+        )
 
         time_tracking_links = entry.findall(
             f"link[@rel='{LinkRelations.TIME_TRACKING}']"
@@ -950,6 +957,21 @@ class TestLibraryAnnotator:
         edition.medium = EditionConstants.BOOK_MEDIUM
         entry = feed._make_entry_xml(work, edition)
         annotator.annotate_work_entry(work, None, edition, identifier, feed, entry)
+
+        time_tracking_links = entry.findall(
+            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+        )
+        assert len(time_tracking_links) == 0
+
+        # Non OPDS for distributor works do not get links either
+        work = annotator_fixture.db.work(with_license_pool=True)
+        edition = work.presentation_edition
+        edition.medium = EditionConstants.AUDIO_MEDIUM
+
+        entry = feed._make_entry_xml(work, edition)
+        annotator.annotate_work_entry(
+            work, work.active_license_pool(), edition, identifier, feed, entry
+        )
 
         time_tracking_links = entry.findall(
             f"link[@rel='{LinkRelations.TIME_TRACKING}']"
