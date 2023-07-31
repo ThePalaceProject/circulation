@@ -113,7 +113,7 @@ class TestPlaytimeEntriesController:
         db.session.add(
             PlaytimeEntry(
                 tracking_id="tracking-id-0",
-                timestamp=date_string(hour=12, minute=0),  # type: ignore
+                timestamp=date_string(hour=12, minute=0),
                 total_seconds_played=12,
                 identifier_id=identifier.id,
                 collection_id=collection.id,
