@@ -57,6 +57,7 @@ from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 class TestBaseAnnotator:
@@ -1651,12 +1652,8 @@ class TestOPDS:
         work2 = db.work(genre=Epic_Fantasy, with_open_access_download=True)
 
         pagination = Pagination(size=1)
-        search_client = end_to_end_search_fixture.external_search_index
-        docs = search_client.start_migration()
-        docs.add_documents(
-            search_client.create_search_documents_from_works([work1, work2])
-        )
-        docs.finish()
+        search_client = ExternalSearchIndexFake(session)
+        search_client.mock_query_works([work1, work2])
         facets = SearchFacets(order="author", min_score=10)
 
         private = object()

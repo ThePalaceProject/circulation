@@ -217,6 +217,10 @@ def fake_hits(works: List[Work]):
 
 
 class ExternalSearchIndexFake(ExternalSearchIndex):
+    """A fake search index, to be used where we do not care what the search does, just that the results match what we expect
+    Eg. Testing a Feed object doesn't need to test the search index, it just needs the search index to report correctly
+    """
+
     def __init__(
         self,
         _db,
@@ -262,7 +266,9 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
                         this_result = []
                 else:
                     # Else just assume offset pagination
-                    this_result = this_result[pagination.offset : pagination.size]
+                    this_result = this_result[
+                        pagination.offset : pagination.offset + pagination.size
+                    ]
 
                 pagination.page_loaded(this_result)
                 result.append(this_result)
