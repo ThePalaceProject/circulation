@@ -336,6 +336,9 @@ class OPDSForDistributorsAPI(
         # use, so there's no need to place a hold.
         raise NotImplementedError()
 
+    def update_availability(self, licensepool):
+        pass
+
 
 class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.NAME

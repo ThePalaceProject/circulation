@@ -363,3 +363,6 @@ class LCPAPI(
 
     def checkin(self, patron, pin, licensepool):
         raise NotImplementedError()
+
+    def update_availability(self, licensepool):
+        pass

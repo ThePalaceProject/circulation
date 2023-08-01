@@ -682,13 +682,9 @@ class BaseCirculationAPI(
         """
         ...
 
+    @abstractmethod
     def update_availability(self, licensepool):
-        """
-        Update availability information for a book.
-
-        The default implementation does nothing. Subclasses should override
-        this if they can update availability information for a book.
-        """
+        """Update availability information for a book."""
         ...
 
 

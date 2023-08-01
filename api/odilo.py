@@ -1016,6 +1016,9 @@ class OdiloAPI(
 
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
+    def update_availability(self, licensepool):
+        pass
+
 
 class OdiloCirculationMonitor(CollectionMonitor, TimelineMonitor):
     """Maintain LicensePools for recently changed Odilo titles"""

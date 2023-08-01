@@ -539,6 +539,9 @@ class EnkiAPI(
     def release_hold(self, patron, pin, licensepool):
         pass
 
+    def update_availability(self, licensepool):
+        pass
+
 
 class BibliographicParser:
     """Parses Enki's representation of book information into
