@@ -788,25 +788,6 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 ),
             )
 
-        # Only OPDS for Distributors should get the time tracking link
-        if (
-            edition.medium == EditionConstants.AUDIO_MEDIUM
-            and active_license_pool
-            and active_license_pool.collection.protocol
-            == ExternalIntegration.OPDS_FOR_DISTRIBUTORS
-        ):
-            feed.add_link_to_entry(
-                entry,
-                rel=LinkRelations.TIME_TRACKING,
-                href=self.url_for(
-                    "track_playtime_events",
-                    identifier_type=identifier.type,
-                    identifier=identifier.identifier,
-                    library_short_name=self.library.short_name,
-                    _external=True,
-                ),
-            )
-
     @classmethod
     def related_books_available(cls, work, library):
         """:return: bool asserting whether related books might exist for a particular Work"""
@@ -1833,6 +1814,33 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             tags.append(self.user_profile_management_protocol_link)
             for tag in tags:
                 feed.feed.append(tag)
+
+    def annotate_work_entry(
+        self, work, active_license_pool, edition, identifier, feed, entry
+    ):
+        super().annotate_work_entry(
+            work, active_license_pool, edition, identifier, feed, entry
+        )
+        # Only OPDS for Distributors should get the time tracking link
+        # And only if there is an active loan for the work
+        if (
+            edition.medium == EditionConstants.AUDIO_MEDIUM
+            and active_license_pool
+            and active_license_pool.collection.protocol
+            == ExternalIntegration.OPDS_FOR_DISTRIBUTORS
+            and work in self.active_loans_by_work
+        ):
+            feed.add_link_to_entry(
+                entry,
+                rel=LinkRelations.TIME_TRACKING,
+                href=self.url_for(
+                    "track_playtime_events",
+                    identifier_type=identifier.type,
+                    identifier=identifier.identifier,
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                ),
+            )
 
 
 class SharedCollectionLoanAndHoldAnnotator(SharedCollectionAnnotator):

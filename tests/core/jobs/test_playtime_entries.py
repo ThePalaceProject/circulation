@@ -230,7 +230,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             db.session, identifier, collection, library, date3m(-31), 60
         )  # out of range: more than a month prior to the quarter
         playtime(
-            db.session, identifier, collection, library, date3m(91), 60
+            db.session, identifier, collection, library, date3m(95), 60
         )  # out of range: future
         playtime(db.session, identifier2, collection, library, date3m(3), 5)
         playtime(db.session, identifier2, collection, library, date3m(4), 6)
