@@ -64,7 +64,11 @@ from tests.fixtures.database import (
     PerfTimer,
 )
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixture, ExternalSearchFixtureFake
+from tests.fixtures.search import (
+    EndToEndSearchFixture,
+    ExternalSearchFixture,
+    ExternalSearchFixtureFake,
+)
 from tests.mocks.search import SearchServiceFailureMode, SearchServiceFake
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())

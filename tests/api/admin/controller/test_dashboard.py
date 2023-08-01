@@ -26,7 +26,7 @@ class DashboardFixture(AdminControllerFixture):
         self.english_1.license_pools[0].collection = self.ctrl.collection
         self.works = [self.english_1]
 
-        self.manager.external_search.bulk_update(self.works)
+        self.manager.external_search.mock_query_works(self.works)
 
 
 @pytest.fixture(scope="function")

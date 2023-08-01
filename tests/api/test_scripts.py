@@ -16,11 +16,7 @@ from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
-from core.external_search import (
-    ExternalSearchIndex,
-    mock_search_index,
-)
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.external_search import ExternalSearchIndex, mock_search_index
 from core.lane import Facets, FeaturedFacets, Pagination, WorkList
 from core.marc import MARCExporter
 from core.model import (
