@@ -879,6 +879,35 @@ class InstanceInitializationScript:
         alembic_conf = self._get_alembic_config(connection)
         command.stamp(alembic_conf, "head")
 
+    def initialize_search_indexes(self, _db: Session) -> bool:
+        try:
+            search = ExternalSearchIndex(_db)
+        except CannotLoadConfiguration as ex:
+            self.log.error(
+                "No search integration found yet, cannot initialize search indices."
+            )
+            self.log.error(f"Error: {ex}")
+            return False
+        service = search.search_service()
+        read_pointer = service.read_pointer(search._revision_base_name)
+        if not read_pointer or read_pointer == service._empty(
+            search._revision_base_name
+        ):
+            # A read pointer does not exist, or points to the empty index
+            # This means either this is a new deployment or the first time
+            # the new opensearch code was deployed.
+            # In both cases doing a migration to the latest version is safe.
+            migration = search.start_migration()
+            if migration is not None:
+                migration.finish()
+            else:
+                self.log.warning(
+                    "Read pointer was set to empty, but no migration was available."
+                )
+                return False
+
+        return True
+
     def initialize(self, connection: Connection):
         """Initialize the database if necessary."""
         inspector = inspect(connection)
@@ -897,6 +926,9 @@ class InstanceInitializationScript:
             self.log.info("Database schema does not exist. Initializing.")
             self.initialize_database(connection)
             self.log.info("Initialization complete.")
+
+        with Session(connection) as session:
+            self.initialize_search_indexes(session)
 
     def run(self) -> None:
         """

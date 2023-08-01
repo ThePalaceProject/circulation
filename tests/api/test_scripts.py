@@ -74,7 +74,6 @@ class TestAdobeAccountIDResetScript:
             AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
             "Some other type",
         ):
-
             credential = Credential.lookup(
                 db.session, data_source, type, patron, set_value, True
             )
@@ -800,6 +799,57 @@ class TestInstanceInitializationScript:
         assert conf.config_file_name.endswith("alembic.ini")
         assert conf.attributes["connection"] == mock_connection.engine
         assert conf.attributes["configure_logger"] is False
+
+    def test_initialize_search_indexes(
+        self, end_to_end_search_fixture: EndToEndSearchFixture
+    ):
+        db = end_to_end_search_fixture.db
+        search = end_to_end_search_fixture.external_search_index
+        base_name = search._revision_base_name
+        script = InstanceInitializationScript()
+
+        # Initially this should be an empty index
+        assert search.search_service().read_pointer(base_name) == f"{base_name}-empty"
+
+        with patch("scripts.ExternalSearchIndex") as mock_index, patch.object(
+            script, "_log"
+        ) as mock_log:
+            # To fake "no migration is available", mock all the values
+            mock_index().start_migration.return_value = None
+            mock_index().search_service().read_pointer.return_value = "read-pointer"
+            mock_index().search_service()._empty.return_value = "read-pointer"
+            # Migration should fail
+            assert script.initialize_search_indexes(db.session) == False
+            # Logs were emitted
+            assert mock_log.warning.call_count == 1
+            assert "no migration was available" in mock_log.warning.call_args[0][0]
+
+            mock_index.reset_mock()
+            mock_log.reset_mock()
+
+            # In case there is no need for a migration, read pointer exists as a non-empty pointer
+            mock_index().search_service().read_pointer.return_value = "read-pointer"
+            mock_index().search_service()._empty.return_value = "read-pointer-empty"
+            # Initialization should pass, as a no-op
+            assert script.initialize_search_indexes(db.session) == True
+            assert mock_index().start_migration.call_count == 0
+
+        # Initialization should work now
+        assert script.initialize_search_indexes(db.session) == True
+        # Then we have the latest version index
+        assert search.search_service().read_pointer(
+            base_name
+        ) == search._revision.name_for_index(base_name)
+
+    def test_initialize_search_indexes_no_integration(
+        self, db: DatabaseTransactionFixture
+    ):
+        script = InstanceInitializationScript()
+        script._log = MagicMock()
+        # No integration mean no migration
+        assert script.initialize_search_indexes(db.session) == False
+        assert script._log.error.call_count == 2
+        assert "No search integration" in script._log.error.call_args[0][0]
 
 
 class TestLanguageListScript:

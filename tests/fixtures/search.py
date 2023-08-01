@@ -252,8 +252,12 @@ def end_to_end_search_fixture(
 ) -> Iterable[EndToEndSearchFixture]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
     data = EndToEndSearchFixture.create(db)
-    yield data
-    data.close()
+    try:
+        yield data
+    except Exception:
+        raise
+    finally:
+        data.close()
 
 
 class ExternalSearchFixtureFake:
