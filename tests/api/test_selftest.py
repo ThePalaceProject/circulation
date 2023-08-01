@@ -195,10 +195,8 @@ class TestRunSelfTestsScript:
 
         # The API lookup map passed into test_collection() is based on
         # CirculationAPI's default API map.
-        default_api_map = CirculationAPI(
-            db.session, db.default_library()
-        ).default_api_map
-        for k, v in list(default_api_map.items()):
+        registry = CirculationAPI(db.session, db.default_library()).registry
+        for k, v in registry:
             assert api_map[k] == v
 
         # But a couple of things were added to the map that are not in

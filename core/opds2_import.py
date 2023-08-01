@@ -19,7 +19,6 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
-from api.circulation import BaseCirculationAPIProtocol
 from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -139,7 +138,6 @@ class OPDS2Importer(
     IgnoredIdentifierImporterMixin,
     OPDSImporter,
     HasExternalIntegration,
-    BaseCirculationAPIProtocol,
 ):
     """Imports editions and license pools from an OPDS 2.0 feed."""
 

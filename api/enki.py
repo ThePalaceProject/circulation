@@ -405,6 +405,10 @@ class EnkiAPI(
         )
         return loan
 
+    def checkin(self, patron, pin, licensepool):
+        """This api does not support returning books early, so we just
+        implement this as a no-op."""
+
     def loan_request(self, barcode, pin, book_id, enki_library_id):
         self.log.debug("Sending checkout request for %s" % book_id)
         url = str(self.base_url) + str(self.user_endpoint)

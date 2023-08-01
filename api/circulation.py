@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.registry import IntegrationRegistry
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -27,7 +28,6 @@ from core.model import (
     CirculationEvent,
     Collection,
     DeliveryMechanism,
-    ExternalIntegration,
     ExternalIntegrationLink,
     Hold,
     Library,
@@ -43,6 +43,7 @@ from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 
 from .circulation_exceptions import *
+from .integration.registry.license_providers import CirculationLicenseProvidersRegistry
 from .util.patron import PatronUtility
 
 
@@ -455,27 +456,15 @@ class BaseCirculationLoanSettings(BaseSettings):
     )
 
 
-class BaseCirculationAPIIntegrationProtocol:
-    _db: Session
-    _integration_configuration_id: Optional[int]
-
-    @classmethod
-    def settings_class(cls) -> Type[BaseSettings]:
-        raise NotImplementedError()
-
-    @classmethod
-    def library_settings_class(cls) -> Type[BaseSettings]:
-        raise NotImplementedError()
-
-
-SettingsType = TypeVar("SettingsType", bound=BaseSettings)
-LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings)
+SettingsType = TypeVar("SettingsType", bound=BaseSettings, covariant=True)
+LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
 
 
 class CirculationConfigurationMixin(
-    Generic[SettingsType, LibrarySettingsType], BaseCirculationAPIIntegrationProtocol
+    Generic[SettingsType, LibrarySettingsType], HasLibraryIntegrationConfiguration, ABC
 ):
-    """Any implementation that uses integration configuration settings"""
+    _db: Session
+    _integration_configuration_id: Optional[int]
 
     def integration_configuration(self) -> IntegrationConfiguration:
         config = get_one(
@@ -500,57 +489,10 @@ class CirculationConfigurationMixin(
         return self.settings_class()(**self.integration_configuration().settings)  # type: ignore [return-value]
 
 
-class BaseCirculationAPIProtocol(BaseCirculationAPIIntegrationProtocol):
-    """Placeholder protocol used only in the LicenseProviderRegistry"""
-
-    def internal_format(self, delivery_mechanism):
-        ...
-
-    @classmethod
-    def default_notification_email_address(self, library_or_patron, pin):
-        ...
-
-    def patron_email_address(self, patron, library_authenticator=None):
-        ...
-
-    def checkin(self, patron, pin, licensepool):
-        ...
-
-    def checkout(self, patron, pin, licensepool, internal_format):
-        ...
-
-    def can_fulfill_without_loan(self, patron, pool, lpdm):
-        ...
-
-    def fulfill(
-        self,
-        patron,
-        pin,
-        licensepool,
-        internal_format=None,
-        part=None,
-        fulfill_part_url=None,
-    ):
-        ...
-
-    def patron_activity(self, patron, pin):
-        ...
-
-    def place_hold(self, patron, pin, licensepool, notification_email_address):
-        ...
-
-    def release_hold(self, patron, pin, licensepool):
-        ...
-
-    def update_availability(self, licensepool):
-        ...
-
-
 class BaseCirculationAPI(
-    HasLibraryIntegrationConfiguration,
-    BaseCirculationAPIProtocol,
     CirculationConfigurationMixin[SettingsType, LibrarySettingsType],
-    Generic[SettingsType, LibrarySettingsType],
+    HasLibraryIntegrationConfiguration,
+    ABC,
 ):
     """Encapsulates logic common to all circulation APIs."""
 
@@ -659,6 +601,7 @@ class BaseCirculationAPI(
                 email_address = patrondata.email_address
         return email_address
 
+    @abstractmethod
     def checkin(self, patron, pin, licensepool):
         """Return a book early.
 
@@ -666,7 +609,9 @@ class BaseCirculationAPI(
         :param pin: The patron's alleged password.
         :param licensepool: Contains lending info as well as link to parent Identifier.
         """
+        ...
 
+    @abstractmethod
     def checkout(self, patron, pin, licensepool, internal_format):
         """Check out a book on behalf of a patron.
 
@@ -677,12 +622,13 @@ class BaseCirculationAPI(
 
         :return: a LoanInfo object.
         """
-        raise NotImplementedError()
+        ...
 
     def can_fulfill_without_loan(self, patron, pool, lpdm):
         """In general, you can't fulfill a book without a loan."""
         return False
 
+    @abstractmethod
     def fulfill(
         self,
         patron,
@@ -711,19 +657,22 @@ class BaseCirculationAPI(
 
         :return: a FulfillmentInfo object.
         """
-        raise NotImplementedError()
+        ...
 
+    @abstractmethod
     def patron_activity(self, patron, pin):
         """Return a patron's current checkouts and holds."""
-        raise NotImplementedError()
+        ...
 
+    @abstractmethod
     def place_hold(self, patron, pin, licensepool, notification_email_address):
         """Place a book on hold.
 
         :return: A HoldInfo object
         """
-        raise NotImplementedError()
+        ...
 
+    @abstractmethod
     def release_hold(self, patron, pin, licensepool):
         """Release a patron's hold on a book.
 
@@ -731,10 +680,16 @@ class BaseCirculationAPI(
             with the provider, or the provider refuses to release the hold for
             any reason.
         """
-        raise NotImplementedError()
+        ...
 
     def update_availability(self, licensepool):
-        """Update availability information for a book."""
+        """
+        Update availability information for a book.
+
+        The default implementation does nothing. Subclasses should override
+        this if they can update availability information for a book.
+        """
+        ...
 
 
 class CirculationFulfillmentPostProcessor(ABC):
@@ -781,7 +736,7 @@ class CirculationAPI:
         db: Session,
         library: Library,
         analytics: Optional[Analytics] = None,
-        api_map: Optional[Dict[str, Type[BaseCirculationAPI]]] = None,
+        registry: Optional[IntegrationRegistry[BaseCirculationAPI]] = None,
         fulfillment_post_processors_map: Optional[
             Dict[int, Type[CirculationFulfillmentPostProcessor]]
         ] = None,
@@ -797,9 +752,9 @@ class CirculationAPI:
          :param analytics: An Analytics object for tracking
            circulation events.
 
-         :param api_map: A dictionary mapping Collection protocols to
+         :param registry: An IntegrationRegistry mapping Collection protocols to
             API classes that should be instantiated to deal with these
-            protocols. The default map will work fine unless you're a
+            protocols. The default registry will work fine unless you're a
             unit test.
 
             Since instantiating these API classes may result in API
@@ -813,7 +768,7 @@ class CirculationAPI:
         self.library_id = library.id
         self.analytics = analytics
         self.initialization_exceptions = dict()
-        api_map = api_map or self.default_api_map
+        self.registry = registry or CirculationLicenseProvidersRegistry()
         fulfillment_post_processors_mapping = (
             fulfillment_post_processors_map
             or self.default_fulfillment_post_processors_map
@@ -834,10 +789,10 @@ class CirculationAPI:
 
         self.log = logging.getLogger("Circulation API")
         for collection in library.collections:
-            if collection.protocol in api_map:
+            if collection.protocol in self.registry:
                 api = None
                 try:
-                    api = api_map[collection.protocol](db, collection)
+                    api = self.registry[collection.protocol](db, collection)
                 except CannotLoadConfiguration as exception:
                     self.log.exception(
                         "Error loading configuration for {}: {}".format(
@@ -863,34 +818,6 @@ class CirculationAPI:
     @property
     def library(self):
         return Library.by_id(self._db, self.library_id)
-
-    @property
-    def default_api_map(self):
-        """When you see a Collection that implements protocol X, instantiate
-        API class Y to handle that collection.
-        """
-        from api.lcp.collection import LCPAPI
-
-        from .axis import Axis360API
-        from .bibliotheca import BibliothecaAPI
-        from .enki import EnkiAPI
-        from .odilo import OdiloAPI
-        from .odl import ODLAPI
-        from .odl2 import ODL2API
-        from .opds_for_distributors import OPDSForDistributorsAPI
-        from .overdrive import OverdriveAPI
-
-        return {
-            ExternalIntegration.OVERDRIVE: OverdriveAPI,
-            ExternalIntegration.ODILO: OdiloAPI,
-            ExternalIntegration.BIBLIOTHECA: BibliothecaAPI,
-            ExternalIntegration.AXIS_360: Axis360API,
-            EnkiAPI.ENKI_EXTERNAL: EnkiAPI,
-            OPDSForDistributorsAPI.NAME: OPDSForDistributorsAPI,
-            ODLAPI.NAME: ODLAPI,
-            ODL2API.NAME: ODL2API,
-            LCPAPI.NAME: LCPAPI,
-        }
 
     @property
     def default_fulfillment_post_processors_map(

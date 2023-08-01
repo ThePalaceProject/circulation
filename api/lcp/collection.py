@@ -355,3 +355,11 @@ class LCPAPI(
         return loan_info_objects
 
     # TODO: Implement place_hold and release_hold (https://jira.nypl.org/browse/SIMPLY-3013)
+    def release_hold(self, patron, pin, licensepool):
+        raise NotImplementedError()
+
+    def place_hold(self, patron, pin, licensepool, notification_email_address):
+        raise NotImplementedError()
+
+    def checkin(self, patron, pin, licensepool):
+        raise NotImplementedError()

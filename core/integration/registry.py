@@ -11,12 +11,13 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
     overload,
 )
 
 from core.integration.goals import Goals
 
-T = TypeVar("T")
+T = TypeVar("T", covariant=True)
 V = TypeVar("V")
 
 
@@ -25,12 +26,15 @@ class IntegrationRegistryException(ValueError):
 
 
 class IntegrationRegistry(Generic[T]):
-    def __init__(self, goal: Goals):
+    def __init__(self, goal: Goals, integrations: Optional[Dict[str, Type[T]]] = None):
         """Initialize a new IntegrationRegistry."""
         self._lookup: Dict[str, Type[T]] = {}
         self._reverse_lookup: Dict[Type[T], List[str]] = defaultdict(list)
-
         self.goal = goal
+
+        if integrations:
+            for protocol, integration in integrations.items():
+                self.register(integration, canonical=protocol)
 
     def register(
         self,
@@ -121,6 +125,18 @@ class IntegrationRegistry(Generic[T]):
         """Return a set of all registered canonical protocols."""
         return set(self._reverse_lookup.keys())
 
+    def update(self, other: IntegrationRegistry[T]) -> None:
+        """Update registry to include integrations in other."""
+        if self.goal != other.goal:
+            raise IntegrationRegistryException(
+                f"IntegrationRegistry's goals must be the same. (Self: {self.goal}, Other: {other.goal})"
+            )
+
+        for integration in other.integrations:
+            names = other.get_protocols(integration)
+            assert isinstance(names, list)
+            self.register(integration, canonical=names[0], aliases=names[1:])
+
     def __iter__(self) -> Iterator[Tuple[str, Type[T]]]:
         for integration, names in self._reverse_lookup.items():
             yield names[0], integration
@@ -139,3 +155,16 @@ class IntegrationRegistry(Generic[T]):
 
     def __repr__(self) -> str:
         return f"<IntegrationRegistry: {self._lookup}>"
+
+    def __add__(
+        self, other: IntegrationRegistry[V]
+    ) -> IntegrationRegistry[Union[T, V]]:
+        if not isinstance(other, IntegrationRegistry):
+            raise TypeError(
+                f"unsupported operand type(s) for +: 'IntegrationRegistry' and '{type(other).__name__}'"
+            )
+
+        new: IntegrationRegistry[Union[T, V]] = IntegrationRegistry(self.goal)
+        new.update(self)
+        new.update(other)
+        return new

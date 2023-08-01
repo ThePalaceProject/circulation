@@ -9,7 +9,10 @@ Create Date: 2023-05-31 12:34:42.550703+00:00
 from typing import Type
 
 from alembic import op
-from api.integration.registry.license_providers import LicenseProvidersRegistry
+from api.integration.registry.license_providers import (
+    CirculationLicenseProvidersRegistry,
+    OpenAccessLicenseProvidersRegistry,
+)
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings
 from core.migration.migrate_external_integration import (
@@ -31,7 +34,9 @@ LICENSE_GOAL = "LICENSE_GOAL"
 
 
 def upgrade() -> None:
-    registry = LicenseProvidersRegistry()
+    registry = (
+        CirculationLicenseProvidersRegistry() + OpenAccessLicenseProvidersRegistry()
+    )
 
     connection = op.get_bind()
 

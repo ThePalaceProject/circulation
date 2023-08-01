@@ -326,6 +326,16 @@ class OPDSForDistributorsAPI(
             for loan in loans
         ]
 
+    def release_hold(self, patron, pin, licensepool):
+        # All the books for this integration are available as simultaneous
+        # use, so there's no need to release a hold.
+        raise NotImplementedError()
+
+    def place_hold(self, patron, pin, licensepool, notification_email_address):
+        # All the books for this integration are available as simultaneous
+        # use, so there's no need to place a hold.
+        raise NotImplementedError()
+
 
 class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.NAME
