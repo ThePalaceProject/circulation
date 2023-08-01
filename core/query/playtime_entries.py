@@ -15,7 +15,7 @@ from core.util.datetime_helpers import utc_now
 
 class PlaytimeEntries:
     # The oldest entry acceptable by the insert API
-    # If anything earlier arrives, we ignore it with a 401 response
+    # If anything earlier arrives, we ignore it with a 410 response
     OLDEST_ACCEPTABLE_ENTRY_DAYS = 120
 
     @classmethod
@@ -40,8 +40,8 @@ class PlaytimeEntries:
                     today - entry.during_minute.date()
                 ).days > cls.OLDEST_ACCEPTABLE_ENTRY_DAYS:
                     # This will count as a success, since we don't want to repeat the entry
-                    status_code = 401
-                    message = "Gone"
+                    status_code = 410
+                    message = "Time entry too old and can no longer be processed"
                 else:
                     playtime_entry, _ = create(
                         _db,

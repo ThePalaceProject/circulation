@@ -42,9 +42,9 @@ class PlaytimeEntriesSummationScript(Script):
         )
         by_identifier = defaultdict(int)
 
-        # Aggregate entries per identifier-timestamp tuple
+        # Aggregate entries per identifier-timestamp-collection-library tuple
         # Since timestamps should be on minute-boundaries the aggregation
-        # can be written to IdentifierPlaytimes directly
+        # can be written to PlaytimeSummary directly
         for entry in result.all():
             by_identifier[
                 (entry.identifier, entry.collection, entry.library, entry.timestamp)

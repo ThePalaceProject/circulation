@@ -47,7 +47,7 @@ class TestPlaytimeEntriesController:
                 },
                 {
                     "id": "tracking-id-2",
-                    "during_minute": "2000-01-01T12:00Z",  # A very old entry, 401
+                    "during_minute": "2000-01-01T12:00Z",  # A very old entry, 410
                     "seconds_played": 17,
                 },
             ]
@@ -71,7 +71,9 @@ class TestPlaytimeEntriesController:
                 id="tracking-id-1", status=201, message="Created"
             )
             assert data["responses"][2] == dict(
-                id="tracking-id-2", status=401, message="Gone"
+                id="tracking-id-2",
+                status=410,
+                message="Time entry too old and can no longer be processed",
             )
 
             entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-0")

@@ -9,7 +9,7 @@ from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestIdentifierPlaytimeEntries:
+class TestPlaytimeEntries:
     def test_create(self, db: DatabaseTransactionFixture):
         identifier = db.identifier()
         collection = db.default_collection()
@@ -110,7 +110,7 @@ class TestIdentifierPlaytimeEntries:
         )
 
 
-class TestIdentifierPlaytime:
+class TestPlaytimeSummaries:
     def test_contraints(self, db: DatabaseTransactionFixture):
         identifier = db.identifier()
         collection = db.default_collection()

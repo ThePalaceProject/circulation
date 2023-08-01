@@ -63,7 +63,7 @@ def strptime_utc(date_string, format):
     return to_utc(datetime.datetime.strptime(date_string, format))
 
 
-def previous_months(number_of_months=3) -> Tuple[datetime.date, datetime.date]:
+def previous_months(number_of_months) -> Tuple[datetime.date, datetime.date]:
     now = utc_now()
     # Start from the first of number_of_months ago, where 0=12
     expected_year = now.year - math.floor(number_of_months / 12)
