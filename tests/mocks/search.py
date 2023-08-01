@@ -203,6 +203,9 @@ class SearchServiceFake(SearchService):
             for item in to_remove:
                 items.remove(item)
 
+    def is_pointer_empty(*args):
+        return False
+
 
 def fake_hits(works: List[Work]):
     return [

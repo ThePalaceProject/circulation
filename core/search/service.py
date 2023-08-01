@@ -155,6 +155,10 @@ class SearchService(ABC):
     def index_remove_document(self, pointer: str, id: int):
         """Remove a specific document from the given index."""
 
+    @abstractmethod
+    def is_pointer_empty(self, base_name: str, pointer: str):
+        """Check to see if a pointer points to an empty index"""
+
 
 class SearchServiceOpensearch1(SearchService):
     """The real Opensearch 1.x service."""
@@ -364,3 +368,6 @@ class SearchServiceOpensearch1(SearchService):
 
     def index_remove_document(self, pointer: str, id: int):
         self._client.delete(index=pointer, id=id, doc_type="_doc")
+
+    def is_pointer_empty(self, base_name: str, pointer: str) -> bool:
+        return pointer == self._empty(base_name)

@@ -808,31 +808,40 @@ class TestInstanceInitializationScript:
         base_name = search._revision_base_name
         script = InstanceInitializationScript()
 
+        _mockable_search = ExternalSearchIndex(db.session)
+        _mockable_search.start_migration = MagicMock()  # type: ignore [method-assign]
+        _mockable_search.search_service = MagicMock()  # type: ignore [method-assign]
+        _mockable_search.log = MagicMock()
+
+        def mockable_search(*args):
+            return _mockable_search
+
         # Initially this should be an empty index
         assert search.search_service().read_pointer(base_name) == f"{base_name}-empty"
 
-        with patch("scripts.ExternalSearchIndex") as mock_index, patch.object(
-            script, "_log"
-        ) as mock_log:
+        with patch("scripts.ExternalSearchIndex", new=mockable_search):
             # To fake "no migration is available", mock all the values
-            mock_index().start_migration.return_value = None
-            mock_index().search_service().read_pointer.return_value = "read-pointer"
-            mock_index().search_service()._empty.return_value = "read-pointer"
+
+            _mockable_search.start_migration.return_value = None
+            _mockable_search.search_service().is_pointer_empty.return_value = True
             # Migration should fail
             assert script.initialize_search_indexes(db.session) == False
             # Logs were emitted
-            assert mock_log.warning.call_count == 1
-            assert "no migration was available" in mock_log.warning.call_args[0][0]
+            assert _mockable_search.log.warning.call_count == 1
+            assert (
+                "no migration was available"
+                in _mockable_search.log.warning.call_args[0][0]
+            )
 
-            mock_index.reset_mock()
-            mock_log.reset_mock()
+            _mockable_search.search_service.reset_mock()
+            _mockable_search.start_migration.reset_mock()
+            _mockable_search.log.reset_mock()
 
             # In case there is no need for a migration, read pointer exists as a non-empty pointer
-            mock_index().search_service().read_pointer.return_value = "read-pointer"
-            mock_index().search_service()._empty.return_value = "read-pointer-empty"
+            _mockable_search.search_service().is_pointer_empty.return_value = False
             # Initialization should pass, as a no-op
             assert script.initialize_search_indexes(db.session) == True
-            assert mock_index().start_migration.call_count == 0
+            assert _mockable_search.start_migration.call_count == 0
 
         # Initialization should work now
         assert script.initialize_search_indexes(db.session) == True

@@ -514,6 +514,28 @@ class ExternalSearchIndex(HasSelfTests):
 
         yield self.run_test("Total number of documents per collection:", _collections)
 
+    def initialize_indices(self) -> bool:
+        """Attempt to initialize the indices and pointers for a first time run"""
+        service = self.search_service()
+        read_pointer = service.read_pointer(self._revision_base_name)
+        if not read_pointer or service.is_pointer_empty(
+            self._revision_base_name, read_pointer
+        ):
+            # A read pointer does not exist, or points to the empty index
+            # This means either this is a new deployment or the first time
+            # the new opensearch code was deployed.
+            # In both cases doing a migration to the latest version is safe.
+            migration = self.start_migration()
+            if migration is not None:
+                migration.finish()
+            else:
+                self.log.warning(
+                    "Read pointer was set to empty, but no migration was available."
+                )
+                return False
+
+        return True
+
 
 class SearchBase:
     """A superclass containing helper methods for creating and modifying
