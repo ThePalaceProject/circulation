@@ -754,6 +754,7 @@ class TestOPDS:
         facets = Facets.default(db.default_library())
 
         migration = end_to_end_search_fixture.external_search_index.start_migration()
+        assert migration is not None
         migration.finish()
 
         cached_feed = AcquisitionFeed.page(
@@ -1263,6 +1264,7 @@ class TestOPDS:
 
         search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_migration()
+        assert docs is not None
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
         )
@@ -1346,6 +1348,7 @@ class TestOPDS:
 
         search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_migration()
+        assert docs is not None
         docs.add_documents(
             search_engine.create_search_documents_from_works([work1, work2])
         )
@@ -1596,6 +1599,7 @@ class TestOPDS:
         )
         search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_migration()
+        assert docs is not None
         docs.finish()
 
         # Test the case where a grouped feed turns up nothing.
@@ -1745,6 +1749,7 @@ class TestOPDS:
 
         search_engine = end_to_end_search_fixture.external_search_index
         docs = search_engine.start_migration()
+        assert docs is not None
         errors = docs.add_documents(
             search_engine.create_search_documents_from_works([work1])
         )
@@ -1773,9 +1778,9 @@ class TestOPDS:
             genre=Epic_Fantasy,
             with_open_access_download=True,
         )
-        docs = search_engine.start_updating_search_documents()
-        docs.add_documents(search_engine.create_search_documents_from_works([work2]))
-        docs.finish()
+        recv = search_engine.start_updating_search_documents()
+        recv.add_documents(search_engine.create_search_documents_from_works([work2]))
+        recv.finish()
 
         # The new work does not show up in the feed because
         # we get the old cached version.
@@ -2928,7 +2933,7 @@ class TestEntrypointLinkInsertion:
             entrypoint_link_insertion_fixture.db,
             entrypoint_link_insertion_fixture.db.session,
         )
-        end_to_end_search_fixture.external_search_index.start_migration().finish()
+        end_to_end_search_fixture.external_search_index.start_migration().finish()  # type: ignore [union-attr]
 
         # When AcquisitionFeed.groups() generates a grouped
         # feed, it will link to different entry points into the feed,

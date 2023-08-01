@@ -181,12 +181,6 @@ class ExternalSearchIndex(HasSelfTests):
         if not integration:
             raise CannotLoadConfiguration("No search integration configured.")
 
-        # Determine the URL that is going to be used to connect to the search server.
-        if isinstance(url, ExternalIntegration):
-            # This is how the self-test initializes this object.
-            integration = url
-            url = integration.url
-
         if not url:
             url = url or integration.url
             test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value

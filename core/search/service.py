@@ -273,7 +273,7 @@ class SearchServiceOpensearch1(SearchService):
             script = dict(script=dict(lang="painless", source=body))
             if not name.startswith("simplified"):
                 name = revision.script_name(name)
-            self._client.put_script(name, script)
+            self._client.put_script(name, script)  # type: ignore [misc] ## Seems the types aren't up to date
 
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]

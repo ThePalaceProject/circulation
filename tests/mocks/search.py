@@ -233,9 +233,9 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
             _db, url, test_search_term, revision_directory, version, SearchServiceFake()
         )
 
-        self._mock_multi_works = []
+        self._mock_multi_works: List[Dict] = []
         self._mock_count_works = 0
-        self._queries = []
+        self._queries: List[tuple] = []
 
     def mock_query_works(self, works: List[Work]):
         self.mock_query_works_multi(works)

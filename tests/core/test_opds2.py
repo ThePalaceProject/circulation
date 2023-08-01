@@ -26,6 +26,7 @@ class TestOPDS2FeedFixture:
     transaction: DatabaseTransactionFixture
     search_engine: ExternalSearchIndex
     fiction: Lane
+    search_fixture: EndToEndSearchFixture
 
 
 @pytest.fixture
@@ -55,6 +56,7 @@ class TestOPDS2Feed:
         )
 
         docs = data.search_engine.start_migration()
+        assert docs is not None
         docs.add_documents(
             data.search_engine.create_search_documents_from_works([work])
         )
@@ -107,6 +109,7 @@ class TestOPDS2Feed:
         ]
 
         docs = data.search_engine.start_migration()
+        assert docs is not None
         docs.add_documents(data.search_engine.create_search_documents_from_works(works))
         docs.finish()
 
@@ -164,6 +167,7 @@ class TestOPDS2AnnotatorFixture:
     search_engine: ExternalSearchIndex
     fiction: Lane
     annotator: OPDS2Annotator
+    search_integration: ExternalIntegration
 
 
 @pytest.fixture

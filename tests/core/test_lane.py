@@ -4098,6 +4098,7 @@ class TestLane:
         lane = db.lane()
         search_client = end_to_end_search_fixture.external_search_index
         docs = end_to_end_search_fixture.external_search_index.start_migration()
+        assert docs is not None
         docs.add_documents(search_client.create_search_documents_from_works([work]))
         docs.finish()
 
@@ -4302,7 +4303,7 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
-        fixture.external_search_index.start_migration().finish()
+        fixture.external_search_index.start_migration().finish()  # type: ignore [union-attr]
 
         # Tell the fixture to call our populate_works method.
         # In this library, the groups feed includes at most two books

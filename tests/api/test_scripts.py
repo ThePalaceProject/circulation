@@ -328,7 +328,9 @@ class TestCacheFacetListsPerLane:
     ):
         db = lane_script_fixture.db
         migration = end_to_end_search_fixture.external_search_index.start_migration()
-        migration and migration.finish()
+        assert migration is not None
+        migration.finish()
+
         # When it's time to generate a feed, AcquisitionFeed.page
         # is called with the right arguments.
         class MockAcquisitionFeed:
@@ -524,7 +526,7 @@ class TestCacheOPDSGroupFeedPerLane:
             genres=["Science Fiction"],
         )
         search_engine = external_search_fake_fixture.external_search
-        search_engine.query_works_multi = MagicMock(
+        search_engine.query_works_multi = MagicMock(  # type: ignore [method-assign]
             return_value=[fake_hits([work]), fake_hits([work])]
         )
         with mock_search_index(search_engine):

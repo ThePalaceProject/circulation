@@ -585,7 +585,7 @@ class TestCustomListsController:
         )
 
         search_service: SearchServiceFake = (
-            admin_librarian_fixture.ctrl.controller.search_engine.search_service()
+            admin_librarian_fixture.ctrl.controller.search_engine.search_service()  # type: ignore [assignment]
         )
         external_search = admin_librarian_fixture.ctrl.controller.search_engine
 
