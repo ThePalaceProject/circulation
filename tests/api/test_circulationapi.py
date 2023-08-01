@@ -1364,7 +1364,10 @@ class TestCirculationAPI:
         incomplete_circulation = IncompleteCirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
-            api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL,
+                {ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            ),
         )
         incomplete_circulation.sync_bookshelf(circulation_api.patron, "1234")
 
@@ -1388,7 +1391,10 @@ class TestCirculationAPI:
         circulation = CompleteCirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
-            api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL,
+                {ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            ),
         )
         circulation.sync_bookshelf(circulation_api.patron, "1234")
 
