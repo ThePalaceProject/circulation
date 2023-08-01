@@ -25,10 +25,7 @@ from api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from api.admin.validator import Validator
-from api.integration.registry.license_providers import (
-    CirculationLicenseProvidersRegistry,
-    OpenAccessLicenseProvidersRegistry,
-)
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.external_search import ExternalSearchIndex
 from core.integration.base import (
     HasChildIntegrationConfiguration,
@@ -485,10 +482,7 @@ class SettingsController(AdminCirculationManagerController):
                     return None
 
                 if not protocol_class:
-                    registry = (
-                        CirculationLicenseProvidersRegistry()
-                        + OpenAccessLicenseProvidersRegistry()
-                    )
+                    registry = LicenseProvidersRegistry()
                     protocol_class = registry.get(item.protocol)
 
                 if item.protocol == OPDSImportMonitor.PROTOCOL:

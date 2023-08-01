@@ -2,10 +2,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.controller.self_tests import SelfTestsController
 from api.admin.problem_details import *
-from api.integration.registry.license_providers import (
-    CirculationLicenseProvidersRegistry,
-    OpenAccessLicenseProvidersRegistry,
-)
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests
 from core.model import Collection
 from core.opds_import import OPDSImporter, OPDSImportMonitor
@@ -15,9 +12,7 @@ class CollectionSelfTestsController(SelfTestsController):
     def __init__(self, manager):
         super().__init__(manager)
         self.type = _("collection")
-        self.registry = (
-            CirculationLicenseProvidersRegistry() + OpenAccessLicenseProvidersRegistry()
-        )
+        self.registry = LicenseProvidersRegistry()
         self.protocols = self._get_collection_protocols(self.registry.integrations)
 
     def process_collection_self_tests(self, identifier):

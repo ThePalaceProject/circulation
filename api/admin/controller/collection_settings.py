@@ -22,10 +22,7 @@ from api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
-from api.integration.registry.license_providers import (
-    CirculationLicenseProvidersRegistry,
-    OpenAccessLicenseProvidersRegistry,
-)
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.model import (
     Collection,
     ConfigurationSetting,
@@ -44,9 +41,7 @@ class CollectionSettingsController(SettingsController):
     def __init__(self, manager):
         super().__init__(manager)
         self.type = _("collection")
-        self.registry = (
-            CirculationLicenseProvidersRegistry() + OpenAccessLicenseProvidersRegistry()
-        )
+        self.registry = LicenseProvidersRegistry()
 
     def _get_collection_protocols(self):
         protocols = super()._get_collection_protocols(self.registry.integrations)

@@ -1,13 +1,26 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model.configuration import ExternalIntegration
 
 if TYPE_CHECKING:
-    pass
+    from api.circulation import BaseCirculationAPI  # noqa: autoflake
+    from core.integration.settings import BaseSettings  # noqa: autoflake
+    from core.opds_import import OPDSImporter  # noqa: autoflake
+
+
+class LicenseProvidersRegistry(
+    IntegrationRegistry[
+        Union["BaseCirculationAPI[BaseSettings, BaseSettings]", "OPDSImporter"]
+    ]
+):
+    def __init__(self) -> None:
+        super().__init__(Goals.LICENSE_GOAL)
+        self.update(CirculationLicenseProvidersRegistry())
+        self.update(OpenAccessLicenseProvidersRegistry())
 
 
 class CirculationLicenseProvidersRegistry(
