@@ -35,11 +35,13 @@ class PlaytimeEntries:
             status_code = 201
             message = "Created"
             transaction = _db.begin_nested()
+            success = True
             try:
                 if (
                     today - entry.during_minute.date()
                 ).days > cls.OLDEST_ACCEPTABLE_ENTRY_DAYS:
-                    # This will count as a success, since we don't want to repeat the entry
+                    # This will count as a failure
+                    success = False
                     status_code = 410
                     message = "Time entry too old and can no longer be processed"
                 else:
@@ -68,7 +70,10 @@ class PlaytimeEntries:
                     summary.failures += 1
                 transaction.rollback()
             else:
-                summary.successes += 1
+                if success:
+                    summary.successes += 1
+                else:
+                    summary.failures += 1
                 transaction.commit()
 
             responses.append(dict(id=entry.id, status=status_code, message=message))

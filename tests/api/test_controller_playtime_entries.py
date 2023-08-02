@@ -62,7 +62,7 @@ class TestPlaytimeEntriesController:
 
             assert response.status_code == 207
             data = response.json
-            assert data["summary"] == dict(total=3, successes=3, failures=0)
+            assert data["summary"] == dict(total=3, successes=2, failures=1)
             assert len(data["responses"]) == 3
             assert data["responses"][0] == dict(
                 id="tracking-id-0", status=201, message="Created"
