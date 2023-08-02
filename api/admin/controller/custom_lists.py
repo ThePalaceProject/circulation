@@ -286,9 +286,9 @@ class CustomListsController(
             documents = self.search_engine.create_search_documents_from_works(
                 works_to_update_in_search
             )
-            self.search_engine.search_service().index_submit_documents(
-                self.search_engine._search_write_pointer, documents
-            )
+            index = self.search_engine.start_updating_search_documents()
+            index.add_documents(documents)
+            index.finish()
 
             # If this list was used to populate any lanes, those lanes need to have their counts updated.
             for lane in Lane.affected_by_customlist(list):
