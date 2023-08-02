@@ -65,6 +65,8 @@ class ExternalSearchFixture:
             except Exception as e:
                 self._logger.info(f"Failed to delete index {index}: {e}")
 
+        # Force test index deletion
+        self.search.indices.delete("test_index*")
         self._logger.info("Waiting for operations to complete.")
         self.search.indices.refresh()
         return None

@@ -727,8 +727,9 @@ class TestInstanceInitializationScript:
         # as necessary.
         with patch("scripts.inspect") as inspect:
             script = InstanceInitializationScript()
-            script.migrate_database = MagicMock()
-            script.initialize_database = MagicMock()
+            script.migrate_database = MagicMock()  # type: ignore[method-assign]
+            script.initialize_database = MagicMock()  # type: ignore[method-assign]
+            script.initialize_search_indexes = MagicMock()  # type: ignore[method-assign]
 
             # If the database is uninitialized, initialize_database() is called.
             inspect().has_table.return_value = False
