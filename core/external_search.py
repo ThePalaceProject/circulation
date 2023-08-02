@@ -29,6 +29,7 @@ from opensearch_dsl.query import Range, Regexp, Term, Terms
 from opensearchpy import OpenSearch
 from spellchecker import SpellChecker
 
+from core.search.coverage_remover import RemovesSearchCoverage
 from core.util import Values
 from core.util.languages import LanguageNames
 
@@ -2773,7 +2774,7 @@ class WorkSearchResult:
         return getattr(self._work, k)
 
 
-class SearchIndexCoverageProvider(WorkPresentationProvider):
+class SearchIndexCoverageProvider(RemovesSearchCoverage, WorkPresentationProvider):
     """Make sure all Works have up-to-date representation in the
     search index.
     """
@@ -2793,9 +2794,8 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
         # Try to migrate to the latest schema. If the function returns None, it means
         # that no migration is necessary, and we're already at the latest version. If
         # we're already at the latest version, then simply upload search documents instead.
-        # This can happen if we've migrated to the latest version, but then run `bin/search_index_clear`
-        # and are now trying to run `bin/search_index_refresh`.
         #
+        self.receiver = None
         self.migration: Optional[
             SearchMigrationInProgress
         ] = self.search_index_client.start_migration()
@@ -2803,6 +2803,9 @@ class SearchIndexCoverageProvider(WorkPresentationProvider):
             self.receiver: SearchDocumentReceiver = (
                 self.search_index_client.start_updating_search_documents()
             )
+        else:
+            # We do have a migration, we must clear out the index and repopulate the index
+            self.remove_search_coverage_records()
 
     def on_completely_finished(self):
         super().on_completely_finished()

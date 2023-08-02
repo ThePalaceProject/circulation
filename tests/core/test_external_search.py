@@ -4,6 +4,7 @@ import time
 import uuid
 from datetime import datetime
 from typing import Callable, Collection, List
+from unittest.mock import MagicMock
 
 import pytest
 from opensearch_dsl import Q
@@ -21,6 +22,7 @@ from opensearch_dsl.query import (
 from opensearch_dsl.query import Query as opensearch_dsl_query
 from opensearch_dsl.query import Range, Term, Terms
 from psycopg2.extras import NumericRange
+from sqlalchemy.sql import Delete as sqlaDelete
 
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration, Configuration
@@ -54,6 +56,8 @@ from core.model import (
 from core.model.classification import Subject
 from core.model.work import Work
 from core.problem_details import INVALID_INPUT
+from core.search.document import SearchMappingDocument
+from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
 from core.search.v5 import SearchV5
 from core.util.cache import CachedData
@@ -4987,6 +4991,46 @@ class TestSearchIndexCoverageProvider:
         assert work == record.obj
         assert True == record.transient
         assert "There was an error!" in record.exception
+
+    def test_migration_available(
+        self, external_search_fake_fixture: ExternalSearchFixtureFake
+    ):
+        search = external_search_fake_fixture.external_search
+        directory = search._revision_directory
+
+        # Create a new highest version
+        directory._available[10000] = SearchV10000(10000)
+        search._revision = directory._available[10000]
+        search._search_service.index_is_populated = lambda x, y: False
+
+        mock_db = MagicMock()
+        provider = SearchIndexCoverageProvider(mock_db, search_index_client=search)
+
+        assert provider.migration is not None
+        assert provider.receiver is None
+        # Execute is called once with a Delete statement
+        assert mock_db.execute.call_count == 1
+        assert len(mock_db.execute.call_args[0]) == 1
+        assert mock_db.execute.call_args[0][0].__class__ == sqlaDelete
+
+    def test_migration_not_available(
+        self, end_to_end_search_fixture: EndToEndSearchFixture
+    ):
+        search = end_to_end_search_fixture.external_search_index
+        db = end_to_end_search_fixture.db
+
+        migration = search.start_migration()
+        assert migration is not None
+        migration.finish()
+
+        provider = SearchIndexCoverageProvider(db.session, search_index_client=search)
+        assert provider.migration is None
+        assert provider.receiver is not None
+
+
+class SearchV10000(SearchSchemaRevision):
+    def mapping_document(self) -> SearchMappingDocument:
+        return {}
 
 
 class TestJSONQuery:

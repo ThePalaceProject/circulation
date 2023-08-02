@@ -21,6 +21,7 @@ from core.model.classification import Classification
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Loan
 from core.query.customlist import CustomListQueries
+from core.search.coverage_remover import RemovesSearchCoverage
 from core.util.notifications import PushNotifications
 
 from .config import CannotLoadConfiguration, Configuration, ConfigurationConstants
@@ -48,7 +49,6 @@ from .model import (
     Subject,
     Timestamp,
     Work,
-    WorkCoverageRecord,
     create,
     get_one,
     get_one_or_create,
@@ -2670,38 +2670,6 @@ class UpdateLaneSizeScript(LaneSweeperScript):
 class UpdateCustomListSizeScript(CustomListSweeperScript):
     def process_custom_list(self, custom_list):
         custom_list.update_size(self._db)
-
-
-class RemovesSearchCoverage:
-    """Mix-in class for a script that might remove all coverage records
-    for the search engine.
-    """
-
-    def remove_search_coverage_records(self):
-        """Delete all search coverage records from the database.
-
-        :return: The number of records deleted.
-        """
-        wcr = WorkCoverageRecord
-        clause = wcr.operation == wcr.UPDATE_SEARCH_INDEX_OPERATION
-        count = self._db.query(wcr).filter(clause).count()
-
-        # We want records to be updated in ascending order in order to avoid deadlocks.
-        # To guarantee lock order, we explicitly acquire locks by using a subquery with FOR UPDATE (with_for_update).
-        # Please refer for my details to this SO article:
-        # https://stackoverflow.com/questions/44660368/postgres-update-with-order-by-how-to-do-it
-        self._db.execute(
-            wcr.__table__.delete().where(
-                wcr.id.in_(
-                    self._db.query(wcr.id)
-                    .with_for_update()
-                    .filter(clause)
-                    .order_by(WorkCoverageRecord.id)
-                )
-            )
-        )
-
-        return count
 
 
 class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCoverage):
