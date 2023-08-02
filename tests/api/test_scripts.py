@@ -818,7 +818,7 @@ class TestInstanceInitializationScript:
             return _mockable_search
 
         # Initially this should be an empty index
-        assert search.search_service().read_pointer(base_name) == f"{base_name}-empty"
+        assert search.search_service().read_pointer() == f"{base_name}-empty"
 
         with patch("scripts.ExternalSearchIndex", new=mockable_search):
             # To fake "no migration is available", mock all the values
@@ -847,9 +847,10 @@ class TestInstanceInitializationScript:
         # Initialization should work now
         assert script.initialize_search_indexes(db.session) == True
         # Then we have the latest version index
-        assert search.search_service().read_pointer(
-            base_name
-        ) == search._revision.name_for_index(base_name)
+        assert (
+            search.search_service().read_pointer()
+            == search._revision.name_for_index(base_name)
+        )
 
     def test_initialize_search_indexes_no_integration(
         self, db: DatabaseTransactionFixture

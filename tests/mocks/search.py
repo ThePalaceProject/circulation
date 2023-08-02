@@ -40,6 +40,7 @@ class SearchServiceFake(SearchService):
     _document_submission_attempts: List[dict]
 
     def __init__(self):
+        self.base_name = "test_index"
         self._failing = SearchServiceFailureMode.NOT_FAILING
         self._documents_by_index = {}
         self._read_pointer: Optional[str] = None
@@ -84,52 +85,48 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
         return
 
-    def read_pointer_name(self, base_name: str) -> str:
+    def read_pointer_name(self) -> str:
         self._fail_if_necessary()
-        return f"{base_name}-search-read"
+        return f"{self.base_name}-search-read"
 
-    def write_pointer_name(self, base_name: str) -> str:
+    def write_pointer_name(self) -> str:
         self._fail_if_necessary()
-        return f"{base_name}-search-write"
+        return f"{self.base_name}-search-write"
 
-    def read_pointer(self, base_name: str) -> Optional[str]:
+    def read_pointer(self) -> Optional[str]:
         self._fail_if_necessary()
         return self._read_pointer
 
-    def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
+    def write_pointer(self) -> Optional[SearchWritePointer]:
         self._fail_if_necessary()
         return self._write_pointer
 
-    def create_empty_index(self, base_name: str) -> None:
+    def create_empty_index(self) -> None:
         self._fail_if_necessary()
-        self._indexes_created.append(f"{base_name}-empty")
+        self._indexes_created.append(f"{self.base_name}-empty")
         return None
 
-    def read_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._read_pointer = f"{revision.name_for_indexed_pointer(base_name)}"
+        self._read_pointer = f"{revision.name_for_indexed_pointer(self.base_name)}"
 
-    def index_set_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> None:
+    def index_set_populated(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
 
-    def read_pointer_set_empty(self, base_name: str) -> None:
+    def read_pointer_set_empty(self) -> None:
         self._fail_if_necessary()
-        self._read_pointer = f"{base_name}-empty"
+        self._read_pointer = f"{self.base_name}-empty"
 
-    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_create(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._indexes_created.append(revision.name_for_index(base_name))
+        self._indexes_created.append(revision.name_for_index(self.base_name))
         return None
 
-    def index_is_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> bool:
+    def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
         self._fail_if_necessary()
         return True
 
-    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
 
     def index_submit_documents(
@@ -177,20 +174,24 @@ class SearchServiceFake(SearchService):
 
         return []
 
-    def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._write_pointer = SearchWritePointer(base_name, revision.version)
+        self._write_pointer = SearchWritePointer(self.base_name, revision.version)
 
     def index_clear_documents(self, pointer: str):
         self._fail_if_necessary()
         if pointer in self._documents_by_index:
             self._documents_by_index[pointer] = []
 
-    def search_client(self, pointer_name: str) -> Search:
-        return self._search_client.index(pointer_name)
+    def search_client(self, write=False) -> Search:
+        return self._search_client.index(
+            self.read_pointer_name() if not write else self.write_pointer_name()
+        )
 
-    def search_multi_client(self, pointer_name: str) -> MultiSearch:
-        return self._multi_search_client.index(pointer_name)
+    def search_multi_client(self, write=False) -> MultiSearch:
+        return self._multi_search_client.index(
+            self.read_pointer_name() if not write else self.write_pointer_name()
+        )
 
     def index_remove_document(self, pointer: str, id: int):
         self._fail_if_necessary()

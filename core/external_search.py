@@ -191,6 +191,11 @@ class ExternalSearchIndex(HasSelfTests):
         if not url:
             raise CannotLoadConfiguration("No URL configured to the search server.")
 
+        # Determine the base name we're going to use for storing revisions.
+        self._revision_base_name = integration.setting(
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
+        ).value
+
         # Create the necessary search client, and the service used by the schema migrator.
         if custom_client_service:
             self._search_service = custom_client_service
@@ -198,7 +203,9 @@ class ExternalSearchIndex(HasSelfTests):
             use_ssl = url.startswith("https://")
             self.log.info("Connecting to the search cluster at %s", url)
             new_client = OpenSearch(url, use_ssl=use_ssl, timeout=20, maxsize=25)
-            self._search_service = SearchServiceOpensearch1(new_client)
+            self._search_service = SearchServiceOpensearch1(
+                new_client, self._revision_base_name
+            )
 
         # Locate the revision of the search index that we're going to use.
         # This will fail fast if the requested version isn't available.
@@ -209,11 +216,6 @@ class ExternalSearchIndex(HasSelfTests):
             self._revision = self._revision_directory.find(version)
         else:
             self._revision = self._revision_directory.highest()
-
-        # Determine the base name we're going to use for storing revisions.
-        self._revision_base_name = integration.setting(
-            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
-        ).value
 
         # initialize the cached data if not already done so
         CachedData.initialize(_db)
@@ -226,12 +228,8 @@ class ExternalSearchIndex(HasSelfTests):
 
         try:
             # Get references to the read and write pointers.
-            self._search_read_pointer = self._search_service.read_pointer_name(
-                self._revision_base_name
-            )
-            self._search_write_pointer = self._search_service.write_pointer_name(
-                self._revision_base_name
-            )
+            self._search_read_pointer = self._search_service.read_pointer_name()
+            self._search_write_pointer = self._search_service.write_pointer_name()
             self._search_migrator = SearchMigrator(
                 revisions=self._revision_directory,
                 service=self._search_service,
@@ -281,9 +279,7 @@ class ExternalSearchIndex(HasSelfTests):
         else:
             query = Query(query_string, filter)
 
-        search = query.build(
-            self._search_service.search_client(self._search_read_pointer), pagination
-        )
+        search = query.build(self._search_service.search_client(), pagination)
         if debug:
             search = search.extra(explain=True)
 
@@ -360,7 +356,7 @@ class ExternalSearchIndex(HasSelfTests):
             (query string, Filter, Pagination) 3-tuple.
         """
         # Create a MultiSearch.
-        multi = self._search_service.search_multi_client(self._search_read_pointer)
+        multi = self._search_service.search_multi_client()
 
         # Give it a Search object for every query definition passed in
         # as part of `queries`.
@@ -488,7 +484,7 @@ class ExternalSearchIndex(HasSelfTests):
 
         def _count_docs():
             service = self.search_service()
-            client = service.search_client(self._search_read_pointer)
+            client = service.search_client()
             return str(client.count())
 
         yield self.run_test(
@@ -518,10 +514,8 @@ class ExternalSearchIndex(HasSelfTests):
     def initialize_indices(self) -> bool:
         """Attempt to initialize the indices and pointers for a first time run"""
         service = self.search_service()
-        read_pointer = service.read_pointer(self._revision_base_name)
-        if not read_pointer or service.is_pointer_empty(
-            self._revision_base_name, read_pointer
-        ):
+        read_pointer = service.read_pointer()
+        if not read_pointer or service.is_pointer_empty(read_pointer):
             # A read pointer does not exist, or points to the empty index
             # This means either this is a new deployment or the first time
             # the new opensearch code was deployed.

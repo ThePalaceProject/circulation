@@ -5001,7 +5001,7 @@ class TestSearchIndexCoverageProvider:
         # Create a new highest version
         directory._available[10000] = SearchV10000(10000)
         search._revision = directory._available[10000]
-        search._search_service.index_is_populated = lambda x, y: False
+        search._search_service.index_is_populated = lambda x: False
 
         mock_db = MagicMock()
         provider = SearchIndexCoverageProvider(mock_db, search_index_client=search)

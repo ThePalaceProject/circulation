@@ -72,35 +72,35 @@ class SearchService(ABC):
     sensible types, rather than the untyped pile of JSON the actual search client provides."""
 
     @abstractmethod
-    def read_pointer_name(self, base_name: str) -> str:
+    def read_pointer_name(self) -> str:
         """Get the name used for the read pointer."""
 
     @abstractmethod
-    def write_pointer_name(self, base_name: str) -> str:
+    def write_pointer_name(self) -> str:
         """Get the name used for the write pointer."""
 
     @abstractmethod
-    def read_pointer(self, base_name: str) -> Optional[str]:
+    def read_pointer(self) -> Optional[str]:
         """Get the read pointer, if it exists."""
 
     @abstractmethod
-    def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
+    def write_pointer(self) -> Optional[SearchWritePointer]:
         """Get the writer pointer, if it exists."""
 
     @abstractmethod
-    def create_empty_index(self, base_name: str) -> None:
+    def create_empty_index(self) -> None:
         """Atomically create the empty index for the given base name."""
 
     @abstractmethod
-    def read_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         """Atomically set the read pointer to the index for the given revision and base name."""
 
     @abstractmethod
-    def read_pointer_set_empty(self, base_name: str) -> None:
+    def read_pointer_set_empty(self) -> None:
         """Atomically set the read pointer to the empty index for the base name."""
 
     @abstractmethod
-    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_create(self, revision: SearchSchemaRevision) -> None:
         """Atomically create an index for the given base name and revision."""
 
     @abstractmethod
@@ -108,19 +108,15 @@ class SearchService(ABC):
         """A log of all the indexes that have been created by this client service."""
 
     @abstractmethod
-    def index_is_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> bool:
+    def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
         """Return True if the index for the given base name and revision has been populated."""
 
     @abstractmethod
-    def index_set_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> None:
+    def index_set_populated(self, revision: SearchSchemaRevision) -> None:
         """Set an index as populated."""
 
     @abstractmethod
-    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         """Set the schema mappings for the given index."""
 
     @abstractmethod
@@ -132,7 +128,7 @@ class SearchService(ABC):
         """Submit search documents to the given index."""
 
     @abstractmethod
-    def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
         """Atomically set the write pointer to the index for the given revision and base name."""
 
     @abstractmethod
@@ -144,11 +140,11 @@ class SearchService(ABC):
         """Clear all search documents in the given index."""
 
     @abstractmethod
-    def search_client(self, pointer_name: str) -> Search:
+    def search_client(self, write: bool = False) -> Search:
         """Return the underlying search client."""
 
     @abstractmethod
-    def search_multi_client(self, pointer_name: str) -> MultiSearch:
+    def search_multi_client(self, write: bool = False) -> MultiSearch:
         """Return the underlying search client."""
 
     @abstractmethod
@@ -156,17 +152,18 @@ class SearchService(ABC):
         """Remove a specific document from the given index."""
 
     @abstractmethod
-    def is_pointer_empty(self, base_name: str, pointer: str):
+    def is_pointer_empty(self, pointer: str):
         """Check to see if a pointer points to an empty index"""
 
 
 class SearchServiceOpensearch1(SearchService):
     """The real Opensearch 1.x service."""
 
-    def __init__(self, client: OpenSearch):
+    def __init__(self, client: OpenSearch, base_revision_name: str):
         self._logger = logging.getLogger(SearchServiceOpensearch1.__name__)
         self._client = client
         self._search = Search(using=self._client)
+        self.base_revision_name = base_revision_name
         self._multi_search = MultiSearch(using=self._client)
         self._indexes_created: List[str] = []
 
@@ -178,22 +175,24 @@ class SearchServiceOpensearch1(SearchService):
     def indexes_created(self) -> List[str]:
         return self._indexes_created
 
-    def write_pointer(self, base_name: str) -> Optional[SearchWritePointer]:
+    def write_pointer(self) -> Optional[SearchWritePointer]:
         try:
             result: dict = self._client.indices.get_alias(
-                name=self.write_pointer_name(base_name)
+                name=self.write_pointer_name()
             )
             for name in result.keys():
-                match = re.search(f"{base_name}-v([0-9]+)", string=name)
+                match = re.search(f"{self.base_revision_name}-v([0-9]+)", string=name)
                 if match:
-                    return SearchWritePointer(base_name, int(match.group(1)))
+                    return SearchWritePointer(
+                        self.base_revision_name, int(match.group(1))
+                    )
             return None
         except NotFoundError:
             return None
 
-    def create_empty_index(self, base_name: str) -> None:
+    def create_empty_index(self) -> None:
         try:
-            index_name = self._empty(base_name)
+            index_name = self._empty(self.base_revision_name)
             self._logger.debug(f"creating empty index {index_name}")
             self._client.indices.create(index=index_name)
             self._indexes_created.append(index_name)
@@ -202,9 +201,9 @@ class SearchServiceOpensearch1(SearchService):
                 return
             raise e
 
-    def read_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
-        alias_name = self.read_pointer_name(base_name)
-        target_index = revision.name_for_index(base_name)
+    def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
+        alias_name = self.read_pointer_name()
+        target_index = revision.name_for_index(self.base_revision_name)
         action = {
             "actions": [
                 {"remove": {"index": "*", "alias": alias_name}},
@@ -214,11 +213,9 @@ class SearchServiceOpensearch1(SearchService):
         self._logger.debug(f"setting read pointer {alias_name} to index {target_index}")
         self._client.indices.update_aliases(body=action)
 
-    def index_set_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> None:
-        alias_name = revision.name_for_indexed_pointer(base_name)
-        target_index = revision.name_for_index(base_name)
+    def index_set_populated(self, revision: SearchSchemaRevision) -> None:
+        alias_name = revision.name_for_indexed_pointer(self.base_revision_name)
+        target_index = revision.name_for_index(self.base_revision_name)
         action = {
             "actions": [
                 {"remove": {"index": "*", "alias": alias_name}},
@@ -230,9 +227,9 @@ class SearchServiceOpensearch1(SearchService):
         )
         self._client.indices.update_aliases(body=action)
 
-    def read_pointer_set_empty(self, base_name: str) -> None:
-        alias_name = self.read_pointer_name(base_name)
-        target_index = self._empty(base_name)
+    def read_pointer_set_empty(self) -> None:
+        alias_name = self.read_pointer_name()
+        target_index = self._empty(self.base_revision_name)
         action = {
             "actions": [
                 {"remove": {"index": "*", "alias": alias_name}},
@@ -244,9 +241,9 @@ class SearchServiceOpensearch1(SearchService):
         )
         self._client.indices.update_aliases(body=action)
 
-    def index_create(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_create(self, revision: SearchSchemaRevision) -> None:
         try:
-            index_name = revision.name_for_index(base_name)
+            index_name = revision.name_for_index(self.base_revision_name)
             self._logger.info(f"creating index {index_name}")
             self._client.indices.create(
                 index=index_name,
@@ -258,16 +255,14 @@ class SearchServiceOpensearch1(SearchService):
                 return
             raise e
 
-    def index_is_populated(
-        self, base_name: str, revision: SearchSchemaRevision
-    ) -> bool:
+    def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
         return self._client.indices.exists_alias(
-            name=revision.name_for_indexed_pointer(base_name)
+            name=revision.name_for_indexed_pointer(self.base_revision_name)
         )
 
-    def index_set_mapping(self, base_name: str, revision: SearchSchemaRevision) -> None:
+    def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         data = {"properties": revision.mapping_document().serialize_properties()}
-        index_name = revision.name_for_index(base_name)
+        index_name = revision.name_for_index(self.base_revision_name)
         self._logger.debug(f"setting mappings for index {index_name}")
         self._client.indices.put_mapping(index=index_name, body=data)
         self._ensure_scripts(revision)
@@ -326,9 +321,9 @@ class SearchServiceOpensearch1(SearchService):
         self._logger.debug(f"waiting for indexes to become ready")
         self._client.indices.refresh()
 
-    def write_pointer_set(self, base_name: str, revision: SearchSchemaRevision) -> None:
-        alias_name = self.write_pointer_name(base_name)
-        target_index = revision.name_for_index(base_name)
+    def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
+        alias_name = self.write_pointer_name()
+        target_index = revision.name_for_index(self.base_revision_name)
         action = {
             "actions": [
                 {"remove": {"index": "*", "alias": alias_name}},
@@ -338,29 +333,31 @@ class SearchServiceOpensearch1(SearchService):
         self._logger.debug(f"setting write pointer {alias_name} to {target_index}")
         self._client.indices.update_aliases(body=action)
 
-    def read_pointer(self, base_name: str) -> Optional[str]:
+    def read_pointer(self) -> Optional[str]:
         try:
-            result: dict = self._client.indices.get_alias(
-                name=self.read_pointer_name(base_name)
-            )
+            result: dict = self._client.indices.get_alias(name=self.read_pointer_name())
             for name in result.keys():
-                if name.startswith(f"{base_name}-"):
+                if name.startswith(f"{self.base_revision_name}-"):
                     return name
             return None
         except NotFoundError:
             return None
 
-    def search_client(self, pointer_name: str) -> Search:
-        return self._search.index(pointer_name)
+    def search_client(self, write=False) -> Search:
+        return self._search.index(
+            self.read_pointer_name() if not write else self.write_pointer_name()
+        )
 
-    def search_multi_client(self, pointer_name: str) -> MultiSearch:
-        return self._multi_search.index(pointer_name)
+    def search_multi_client(self, write=False) -> MultiSearch:
+        return self._multi_search.index(
+            self.read_pointer_name() if not write else self.write_pointer_name()
+        )
 
-    def read_pointer_name(self, base_name: str) -> str:
-        return f"{base_name}-search-read"
+    def read_pointer_name(self) -> str:
+        return f"{self.base_revision_name}-search-read"
 
-    def write_pointer_name(self, base_name: str) -> str:
-        return f"{base_name}-search-write"
+    def write_pointer_name(self) -> str:
+        return f"{self.base_revision_name}-search-write"
 
     @staticmethod
     def _empty(base_name):
@@ -369,5 +366,5 @@ class SearchServiceOpensearch1(SearchService):
     def index_remove_document(self, pointer: str, id: int):
         self._client.delete(index=pointer, id=id, doc_type="_doc")
 
-    def is_pointer_empty(self, base_name: str, pointer: str) -> bool:
-        return pointer == self._empty(base_name)
+    def is_pointer_empty(self, pointer: str) -> bool:
+        return pointer == self._empty(self.base_revision_name)

@@ -42,18 +42,18 @@ class TestMigrator:
         migration.finish()
 
         # The sequence of expected calls.
-        service.create_empty_index.assert_called_with("works")
-        service.read_pointer.assert_called_with("works")
+        service.create_empty_index.assert_called_with()
+        service.read_pointer.assert_called_with()
         # The read pointer didn't exist, so it's set to the empty index
-        service.read_pointer_set_empty.assert_called_with("works")
-        service.write_pointer.assert_called_with("works")
+        service.read_pointer_set_empty.assert_called_with()
+        service.write_pointer.assert_called_with()
         # The new index is created and populated.
-        service.index_create.assert_called_with("works", revision)
+        service.index_create.assert_called_with(revision)
         service.populate_index.assert_not_called()
         # Both the read and write pointers are set.
-        service.write_pointer_set.assert_called_with("works", revision)
-        service.read_pointer_set.assert_called_with("works", revision)
-        service.index_set_populated.assert_called_with("works", revision)
+        service.write_pointer_set.assert_called_with(revision)
+        service.read_pointer_set.assert_called_with(revision)
+        service.index_set_populated.assert_called_with(revision)
 
     def test_migrate_upgrade(self):
         """Index 2 exists, and we can migrate to 3."""
@@ -76,13 +76,13 @@ class TestMigrator:
         docs.finish()
 
         # The sequence of expected calls.
-        service.create_empty_index.assert_called_with("works")
+        service.create_empty_index.assert_called_with()
         # The read pointer existed, so it's left alone for now.
-        service.read_pointer.assert_called_with("works")
-        service.write_pointer.assert_called_with("works")
+        service.read_pointer.assert_called_with()
+        service.write_pointer.assert_called_with()
         # The index for version 3 is created and populated.
-        service.index_create.assert_called_with("works", revision)
-        service.index_set_mapping.assert_called_with("works", revision)
+        service.index_create.assert_called_with(revision)
+        service.index_set_mapping.assert_called_with(revision)
         service.index_submit_documents.assert_has_calls(
             [
                 call(
@@ -100,9 +100,9 @@ class TestMigrator:
             ]
         )
         # Both the read and write pointers are set.
-        service.write_pointer_set.assert_called_with("works", revision)
-        service.read_pointer_set.assert_called_with("works", revision)
-        service.index_set_populated.assert_called_with("works", revision)
+        service.write_pointer_set.assert_called_with(revision)
+        service.read_pointer_set.assert_called_with(revision)
+        service.index_set_populated.assert_called_with(revision)
 
     def test_migrate_upgrade_cancel(self):
         """Cancelling a migration leaves the pointers untouched."""
@@ -125,13 +125,13 @@ class TestMigrator:
         docs.cancel()
 
         # The sequence of expected calls.
-        service.create_empty_index.assert_called_with("works")
+        service.create_empty_index.assert_called_with()
         # The read pointer existed, so it's left alone for now.
-        service.read_pointer.assert_called_with("works")
-        service.write_pointer.assert_called_with("works")
+        service.read_pointer.assert_called_with()
+        service.write_pointer.assert_called_with()
         # The index for version 3 is created and populated.
-        service.index_create.assert_called_with("works", revision)
-        service.index_set_mapping.assert_called_with("works", revision)
+        service.index_create.assert_called_with(revision)
+        service.index_set_mapping.assert_called_with(revision)
         service.index_submit_documents.assert_has_calls(
             [
                 call(
@@ -168,19 +168,19 @@ class TestMigrator:
         assert docs is None
 
         # The sequence of expected calls.
-        service.create_empty_index.assert_called_with("works")
+        service.create_empty_index.assert_called_with()
         # The read pointer existed, so it's left alone for now.
-        service.read_pointer.assert_called_with("works")
-        service.write_pointer.assert_called_with("works")
+        service.read_pointer.assert_called_with()
+        service.write_pointer.assert_called_with()
         # The index for version 3 already exists and is populated, so nothing happens.
         service.index_create.assert_not_called()
         service.index_set_mapping.assert_not_called()
         # The write pointer is set redundantly.
-        service.write_pointer_set.assert_called_with("works", revision)
+        service.write_pointer_set.assert_called_with(revision)
         # The read pointer is set redundantly.
-        service.read_pointer_set.assert_called_with("works", revision)
+        service.read_pointer_set.assert_called_with(revision)
         # The "indexed" flag is set redundantly.
-        service.index_set_populated.assert_called_with("works", revision)
+        service.index_set_populated.assert_called_with(revision)
 
     def test_migrate_from_indexed_2_to_3_unpopulated(self):
         """Index 3 exists but is not populated. Migrating involves populating it."""
@@ -198,13 +198,13 @@ class TestMigrator:
         migration.finish()
 
         # The sequence of expected calls.
-        service.create_empty_index.assert_called_with("works")
+        service.create_empty_index.assert_called_with()
         # The read pointer existed, so it's left alone for now.
-        service.read_pointer.assert_called_with("works")
-        service.write_pointer.assert_called_with("works")
+        service.read_pointer.assert_called_with()
+        service.write_pointer.assert_called_with()
         # The index for version 3 exists but isn't populated, so it is populated.
-        service.index_create.assert_called_with("works", revision)
-        service.index_set_mapping.assert_called_with("works", revision)
+        service.index_create.assert_called_with(revision)
+        service.index_set_mapping.assert_called_with(revision)
         service.index_submit_documents.assert_has_calls(
             [
                 call(
@@ -214,9 +214,9 @@ class TestMigrator:
             ]
         )
         # Both the read and write pointers are updated.
-        service.write_pointer_set.assert_called_with("works", revision)
-        service.read_pointer_set.assert_called_with("works", revision)
-        service.index_set_populated.assert_called_with("works", revision)
+        service.write_pointer_set.assert_called_with(revision)
+        service.read_pointer_set.assert_called_with(revision)
+        service.index_set_populated.assert_called_with(revision)
 
     def test_migrate_from_indexed_2_to_3_write_unset(self):
         """Index 3 exists and is populated, but the write pointer is unset."""
@@ -233,15 +233,15 @@ class TestMigrator:
         assert docs is None
 
         # The sequence of expected calls.
-        service.create_empty_index.assert_called_with("works")
+        service.create_empty_index.assert_called_with()
         # The read pointer existed, so it's left alone for now.
-        service.read_pointer.assert_called_with("works")
+        service.read_pointer.assert_called_with()
         # The write pointer is completely unset.
-        service.write_pointer.assert_called_with("works")
+        service.write_pointer.assert_called_with()
         # The index for version 3 exists and is populated. The create call is redundant but harmless.
-        service.index_create.assert_called_with("works", revision)
+        service.index_create.assert_called_with(revision)
         service.populate_index.assert_not_called()
         # Both the read and write pointers are updated.
-        service.write_pointer_set.assert_called_with("works", revision)
-        service.read_pointer_set.assert_called_with("works", revision)
-        service.index_set_populated.assert_called_with("works", revision)
+        service.write_pointer_set.assert_called_with(revision)
+        service.read_pointer_set.assert_called_with(revision)
+        service.index_set_populated.assert_called_with(revision)

@@ -1805,7 +1805,7 @@ class TestAcquisitionFeed:
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         session = db.session
-        client = external_search_fake_fixture.search.search_multi_client("read-pointer")
+        client = external_search_fake_fixture.search.search_multi_client()
 
         # The search client is supposed to return a set of result sets.
         fake_work = MagicMock()

@@ -87,11 +87,11 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
         # Make sure all changes are committed.
         self._receiver.finish()
         # Create the "indexed" alias.
-        self._service.index_set_populated(self._base_name, self._revision)
+        self._service.index_set_populated(self._revision)
         # Update the write pointer to point to the now-populated index.
-        self._service.write_pointer_set(self._base_name, self._revision)
+        self._service.write_pointer_set(self._revision)
         # Set the read pointer to point at the now-populated index
-        self._service.read_pointer_set(self._base_name, self._revision)
+        self._service.read_pointer_set(self._revision)
         self._service.refresh()
         self._logger.info(f"Completed migration to {self._revision.version}")
 
@@ -136,13 +136,13 @@ class SearchMigrator:
                 )
 
             # Does the empty index exist? Create it if not.
-            self._service.create_empty_index(base_name)
+            self._service.create_empty_index()
 
             # Does the read pointer exist? Point it at the empty index if not.
-            read = self._service.read_pointer(base_name)
+            read = self._service.read_pointer()
             if read is None:
                 self._logger.info("Read pointer did not exist.")
-                self._service.read_pointer_set_empty(base_name)
+                self._service.read_pointer_set_empty()
 
             # We're probably going to have to do a migration. We might end up returning
             # this instance so that users can submit documents for indexing.
@@ -151,18 +151,18 @@ class SearchMigrator:
             )
 
             # Does the write pointer exist?
-            write = self._service.write_pointer(base_name)
+            write = self._service.write_pointer()
             if write is None or (not write.version == version):
                 self._logger.info(
                     f"Write pointer does not point to the desired version: {write} != {version}."
                 )
                 # Either the write pointer didn't exist, or it's pointing at a version
                 # other than the one we want. Create a new index for the version we want.
-                self._service.index_create(base_name, target)
-                self._service.index_set_mapping(base_name, target)
+                self._service.index_create(target)
+                self._service.index_set_mapping(target)
 
                 # The index now definitely exists, but it might not be populated. Populate it if necessary.
-                if not self._service.index_is_populated(base_name, target):
+                if not self._service.index_is_populated(target):
                     self._logger.info("Write index is not populated.")
                     return in_progress
 
