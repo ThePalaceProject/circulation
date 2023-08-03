@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from lxml import etree
 
 from api.adobe_vendor_id import AuthdataUtility
+from api.app import app
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
 from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
@@ -2283,9 +2284,7 @@ class TestLibraryLoanAndHoldAnnotator:
         lane.initialize(
             library,
         )
-        annotator = LibraryLoanAndHoldAnnotator(
-            None, lane, library, patron, test_mode=True
-        )
+        annotator = LibraryLoanAndHoldAnnotator(None, lane, library, patron)
         feed = AcquisitionFeed(db.session, "title", "url", [], annotator=annotator)
 
         # Annotate time tracking
@@ -2299,63 +2298,66 @@ class TestLibraryLoanAndHoldAnnotator:
         annotator.active_loans_by_work = {work: loan}
 
         entry = feed._make_entry_xml(work, edition)
-        annotator.annotate_work_entry(
-            work, work.active_license_pool(), edition, identifier, feed, entry
-        )
+        with app.test_request_context("/") as request:
+            request.library = library
+            annotator.annotate_work_entry(
+                work, work.active_license_pool(), edition, identifier, feed, entry
+            )
 
-        time_tracking_links = entry.findall(
-            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
-        )
-        assert len(time_tracking_links) == 1
-        assert time_tracking_links[0].get("href") == annotator.url_for(
-            "track_playtime_events",
-            identifier_type=identifier.type,
-            identifier=identifier.identifier,
-            library_short_name=annotator.library.short_name,
-            _external=True,
-        )
+            time_tracking_links = entry.findall(
+                f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+            )
+            assert len(time_tracking_links) == 1
+            assert time_tracking_links[0].get("href") == annotator.url_for(
+                "track_playtime_events",
+                identifier_type=identifier.type,
+                identifier=identifier.identifier,
+                library_short_name=annotator.library.short_name,
+                collection_name=opds_for_distributors.name,
+                _external=True,
+            )
 
-        # No active loan means no tracking link
-        annotator.active_loans_by_work = {}
-        entry = feed._make_entry_xml(work, edition)
-        annotator.annotate_work_entry(
-            work, work.active_license_pool(), edition, identifier, feed, entry
-        )
+            # No active loan means no tracking link
+            annotator.active_loans_by_work = {}
+            entry = feed._make_entry_xml(work, edition)
+            annotator.annotate_work_entry(
+                work, work.active_license_pool(), edition, identifier, feed, entry
+            )
 
-        time_tracking_links = entry.findall(
-            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
-        )
-        assert len(time_tracking_links) == 0
+            time_tracking_links = entry.findall(
+                f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+            )
+            assert len(time_tracking_links) == 0
 
-        # Add the loan back in
-        annotator.active_loans_by_work = {work: loan}
+            # Add the loan back in
+            annotator.active_loans_by_work = {work: loan}
 
-        # Book mediums don't get time tracking
-        edition.medium = EditionConstants.BOOK_MEDIUM
-        entry = feed._make_entry_xml(work, edition)
-        annotator.annotate_work_entry(
-            work, work.active_license_pool(), edition, identifier, feed, entry
-        )
+            # Book mediums don't get time tracking
+            edition.medium = EditionConstants.BOOK_MEDIUM
+            entry = feed._make_entry_xml(work, edition)
+            annotator.annotate_work_entry(
+                work, work.active_license_pool(), edition, identifier, feed, entry
+            )
 
-        time_tracking_links = entry.findall(
-            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
-        )
-        assert len(time_tracking_links) == 0
+            time_tracking_links = entry.findall(
+                f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+            )
+            assert len(time_tracking_links) == 0
 
-        # Non OPDS for distributor works do not get links either
-        work = db.work(with_license_pool=True)
-        edition = work.presentation_edition
-        edition.medium = EditionConstants.AUDIO_MEDIUM
+            # Non OPDS for distributor works do not get links either
+            work = db.work(with_license_pool=True)
+            edition = work.presentation_edition
+            edition.medium = EditionConstants.AUDIO_MEDIUM
 
-        entry = feed._make_entry_xml(work, edition)
-        annotator.annotate_work_entry(
-            work, work.active_license_pool(), edition, identifier, feed, entry
-        )
+            entry = feed._make_entry_xml(work, edition)
+            annotator.annotate_work_entry(
+                work, work.active_license_pool(), edition, identifier, feed, entry
+            )
 
-        time_tracking_links = entry.findall(
-            f"link[@rel='{LinkRelations.TIME_TRACKING}']"
-        )
-        assert len(time_tracking_links) == 0
+            time_tracking_links = entry.findall(
+                f"link[@rel='{LinkRelations.TIME_TRACKING}']"
+            )
+            assert len(time_tracking_links) == 0
 
 
 class SharedCollectionAnnotatorFixture:
