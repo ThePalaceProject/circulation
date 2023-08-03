@@ -57,6 +57,7 @@ disallow_untyped_decorators = true
 disallow_untyped_defs = true
 module = [
     "api.admin.announcement_list_validator",
+    "api.admin.config",
     "api.admin.controller.library_settings",
     "api.admin.controller.patron_auth_services",
     "api.admin.form_data",
