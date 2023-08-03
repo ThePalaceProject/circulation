@@ -2427,12 +2427,12 @@ class AnalyticsController(CirculationManagerController):
 
 
 class PlaytimeEntriesController(CirculationManagerController):
-    def track_playtimes(self, collection_name, identifier_type, identifier_idn):
+    def track_playtimes(self, collection_id, identifier_type, identifier_idn):
         library: Library = flask.request.library
         identifier = get_one(
             self._db, Identifier, type=identifier_type, identifier=identifier_idn
         )
-        collection = get_one(self._db, Collection, name=collection_name)
+        collection = Collection.by_id(self._db, collection_id)
 
         if not identifier:
             return NOT_FOUND_ON_REMOTE.detailed(
@@ -2440,7 +2440,7 @@ class PlaytimeEntriesController(CirculationManagerController):
             )
         if not collection:
             return NOT_FOUND_ON_REMOTE.detailed(
-                f"The collection {collection_name} was not found."
+                f"The collection {collection_id} was not found."
             )
 
         if collection not in library.collections:

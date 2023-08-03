@@ -57,7 +57,7 @@ class TestPlaytimeEntriesController:
         ):
             flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.name, identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
 
             assert response.status_code == 207
@@ -142,7 +142,7 @@ class TestPlaytimeEntriesController:
         ):
             flask.request.patron = patron  # type: ignore
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.name, identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
 
             assert response.status_code == 207
@@ -190,7 +190,7 @@ class TestPlaytimeEntriesController:
                     "STATEMENT", {}, Exception("Fake Exception")
                 )
                 response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                    collection.name, identifier.type, identifier.identifier
+                    collection.id, identifier.type, identifier.identifier
                 )
 
             assert response.status_code == 207
@@ -215,7 +215,7 @@ class TestPlaytimeEntriesController:
 
             # Bad identifier
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.name, identifier.type, "not-an-identifier"
+                collection.id, identifier.type, "not-an-identifier"
             )
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 404
@@ -226,15 +226,15 @@ class TestPlaytimeEntriesController:
 
             # Bad collection
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                "not-a-collection", identifier.type, identifier.identifier
+                9088765, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 404
-            assert response.detail == f"The collection not-a-collection was not found."
+            assert response.detail == f"The collection 9088765 was not found."
 
             # Collection not in library
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.name, identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 400
@@ -243,7 +243,7 @@ class TestPlaytimeEntriesController:
             # Identifier not part of collection
             library.collections.append(collection)
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.name, identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 400
@@ -259,7 +259,7 @@ class TestPlaytimeEntriesController:
 
             # Incorrect JSON format
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                collection.name, identifier.type, identifier.identifier
+                collection.id, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
             assert response.status_code == 400

@@ -2313,7 +2313,7 @@ class TestLibraryLoanAndHoldAnnotator:
                 identifier_type=identifier.type,
                 identifier=identifier.identifier,
                 library_short_name=annotator.library.short_name,
-                collection_name=opds_for_distributors.name,
+                collection_id=opds_for_distributors.id,
                 _external=True,
             )
 

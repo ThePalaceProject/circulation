@@ -1838,7 +1838,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
                     identifier_type=identifier.type,
                     identifier=identifier.identifier,
                     library_short_name=self.library.short_name,
-                    collection_name=active_license_pool.collection.name,
+                    collection_id=active_license_pool.collection.id,
                     _external=True,
                 ),
             )

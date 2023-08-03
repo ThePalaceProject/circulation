@@ -674,7 +674,8 @@ def track_analytics_event(identifier_type, identifier, event_type):
 
 
 @library_route(
-    "/playtimes/<collection_name>/<identifier_type>/<path:identifier>", methods=["POST"]
+    "/playtimes/<int:collection_id>/<identifier_type>/<path:identifier>",
+    methods=["POST"],
 )
 @api_spec.validate(
     resp=SpecResponse(HTTP_200=PlaytimeEntriesPostResponse),
@@ -684,10 +685,10 @@ def track_analytics_event(identifier_type, identifier, event_type):
 @has_library
 @allows_auth
 @returns_problem_detail
-def track_playtime_events(collection_name, identifier_type, identifier):
+def track_playtime_events(collection_id, identifier_type, identifier):
     """The actual response type is 207, but due to a bug in flask-pydantic-spec we must document it as a 200"""
     return app.manager.playtime_entries.track_playtimes(
-        collection_name, identifier_type, identifier
+        collection_id, identifier_type, identifier
     )
 
 
