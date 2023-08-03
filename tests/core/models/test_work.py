@@ -1920,6 +1920,7 @@ class TestWorkConsolidation:
             "1",
             collection=collection,
         )
+        assert pool is not None
         work, created = pool.calculate_work()
         assert None == work
 

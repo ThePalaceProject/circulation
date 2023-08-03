@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Literal, Tuple, overload
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
@@ -324,6 +324,33 @@ class LicensePool(Base):
             self.licenses_available = 0
 
     @classmethod
+    @overload
+    def for_foreign_id(
+        self,
+        _db,
+        data_source,
+        foreign_id_type,
+        foreign_id,
+        rights_status=None,
+        collection=None,
+    ) -> Tuple[LicensePool, bool]:
+        ...
+
+    @classmethod
+    @overload
+    def for_foreign_id(
+        self,
+        _db,
+        data_source,
+        foreign_id_type,
+        foreign_id,
+        rights_status,
+        collection,
+        autocreate: Literal[False],
+    ) -> Tuple[LicensePool | None, bool]:
+        ...
+
+    @classmethod
     def for_foreign_id(
         self,
         _db,
@@ -333,7 +360,7 @@ class LicensePool(Base):
         rights_status=None,
         collection=None,
         autocreate=True,
-    ):
+    ) -> Tuple[LicensePool | None, bool]:
         """Find or create a LicensePool for the given foreign ID."""
         from .collection import CollectionMissing
         from .datasource import DataSource
@@ -375,23 +402,22 @@ class LicensePool(Base):
         # DataSource/Identifier/Collection.
         if autocreate:
             license_pool, was_new = get_one_or_create(_db, LicensePool, **kw)
+
+            if was_new:
+                if not license_pool.availability_time:
+                    now = utc_now()
+                    license_pool.availability_time = now
+
+                # Set the LicensePool's initial values to indicate
+                # that we don't actually know how many copies we own.
+                license_pool.licenses_owned = 0
+                license_pool.licenses_available = 0
+                license_pool.licenses_reserved = 0
+                license_pool.patrons_in_hold_queue = 0
+
+            return license_pool, was_new
         else:
-            license_pool = get_one(_db, LicensePool, **kw)
-            was_new = False
-
-        if was_new and not license_pool.availability_time:
-            now = utc_now()
-            license_pool.availability_time = now
-
-        if was_new:
-            # Set the LicensePool's initial values to indicate
-            # that we don't actually know how many copies we own.
-            license_pool.licenses_owned = 0
-            license_pool.licenses_available = 0
-            license_pool.licenses_reserved = 0
-            license_pool.patrons_in_hold_queue = 0
-
-        return license_pool, was_new
+            return get_one(_db, LicensePool, **kw), False
 
     @classmethod
     def with_no_work(cls, _db):
@@ -1452,9 +1478,12 @@ class LicensePoolDeliveryMechanism(Base):
     )
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
+    resource: Mapped[Resource] = relationship(
+        "Resource", back_populates="licensepooldeliverymechanisms"
+    )
 
     # One LicensePoolDeliveryMechanism may fulfill many Loans.
-    fulfills: Mapped[List[Loan]] = relationship("Loan", backref="fulfillment")
+    fulfills: Mapped[List[Loan]] = relationship("Loan", back_populates="fulfillment")
 
     # One LicensePoolDeliveryMechanism may be associated with one RightsStatus.
     rightsstatus_id = Column(Integer, ForeignKey("rightsstatus.id"), index=True)
@@ -1469,7 +1498,7 @@ class LicensePoolDeliveryMechanism(Base):
         rights_uri,
         resource=None,
         autocommit=True,
-    ):
+    ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
         certain format.
 

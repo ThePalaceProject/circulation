@@ -606,6 +606,7 @@ class TestBibliothecaAPI:
 
         # The document sent by the 'Findaway' server has been
         # converted into a web publication manifest.
+        assert fulfillment.content is not None
         manifest = json.loads(fulfillment.content)
 
         # The conversion process is tested more fully in
@@ -835,7 +836,7 @@ class TestPatronCirculationParser:
         holds = [x for x in loans_and_holds if isinstance(x, HoldInfo)]
         assert 2 == len(loans)
         assert 2 == len(holds)
-        [l1, l2] = sorted(loans, key=lambda x: x.identifier)
+        [l1, l2] = sorted(loans, key=lambda x: str(x.identifier))
         assert "1ad589" == l1.identifier
         assert "cgaxr9" == l2.identifier
         expect_loan_start = datetime_utc(2015, 3, 20, 18, 50, 22)
@@ -843,7 +844,7 @@ class TestPatronCirculationParser:
         assert expect_loan_start == l1.start_date
         assert expect_loan_end == l1.end_date
 
-        [h1, h2] = sorted(holds, key=lambda x: x.identifier)
+        [h1, h2] = sorted(holds, key=lambda x: str(x.identifier))
 
         # This is the book on reserve.
         assert collection.id == h1.collection_id

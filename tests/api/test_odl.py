@@ -357,6 +357,7 @@ class TestODLAPI:
         assert odl_api_test_fixture.pool.data_source.name == loan.data_source_name
         assert odl_api_test_fixture.pool.identifier.type == loan.identifier_type
         assert odl_api_test_fixture.pool.identifier.identifier == loan.identifier
+        assert loan.start_date is not None
         assert loan.start_date > utc_now() - datetime.timedelta(minutes=1)
         assert loan.start_date < utc_now() + datetime.timedelta(minutes=1)
         assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date
@@ -399,6 +400,7 @@ class TestODLAPI:
         assert odl_api_test_fixture.pool.data_source.name == loan.data_source_name
         assert odl_api_test_fixture.pool.identifier.type == loan.identifier_type
         assert odl_api_test_fixture.pool.identifier.identifier == loan.identifier
+        assert loan.start_date is not None
         assert loan.start_date > utc_now() - datetime.timedelta(minutes=1)
         assert loan.start_date < utc_now() + datetime.timedelta(minutes=1)
         assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date

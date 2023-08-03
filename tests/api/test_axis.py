@@ -1357,6 +1357,7 @@ class TestAvailabilityResponseParser:
         parser = AvailabilityResponseParser(axis360parsers.api)
         activity = list(parser.process_all(data))
         hold, loan, reserved = sorted(activity, key=lambda x: x.identifier)
+        assert axis360parsers.api.collection is not None
         assert axis360parsers.api.collection.id == hold.collection_id
         assert Identifier.AXIS_360_ID == hold.identifier_type
         assert "0012533119" == hold.identifier
@@ -1380,6 +1381,7 @@ class TestAvailabilityResponseParser:
         parser = AvailabilityResponseParser(axis360parsers.api)
         [loan] = list(parser.process_all(data))
 
+        assert axis360parsers.api.collection is not None
         assert axis360parsers.api.collection.id == loan.collection_id
         assert "0015176429" == loan.identifier
         assert None == loan.fulfillment_info

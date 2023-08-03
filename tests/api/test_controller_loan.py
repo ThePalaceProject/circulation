@@ -201,7 +201,7 @@ class TestLoanController:
                 if x["rel"] == OPDSFeed.ACQUISITION_REL
             ]
 
-            assert loan_fixture.mech1.resource is not None  # type: ignore
+            assert loan_fixture.mech1.resource is not None
 
             # Make sure the two delivery mechanisms are incompatible.
             loan_fixture.mech1.delivery_mechanism.drm_scheme = "DRM Scheme 1"
@@ -223,9 +223,9 @@ class TestLoanController:
 
             # Make sure the first delivery mechanism has the data necessary
             # to carry out an open source fulfillment.
-            assert loan_fixture.mech1.resource is not None  # type: ignore
-            assert loan_fixture.mech1.resource.representation is not None  # type: ignore
-            assert loan_fixture.mech1.resource.representation.url is not None  # type: ignore
+            assert loan_fixture.mech1.resource is not None
+            assert loan_fixture.mech1.resource.representation is not None
+            assert loan_fixture.mech1.resource.representation.url is not None
 
             # Now let's try to fulfill the loan using the first delivery mechanism.
             assert isinstance(loan_fixture.pool.id, int)
@@ -238,7 +238,7 @@ class TestLoanController:
                 raise Exception(repr(j))
             assert 302 == response.status_code
             assert (
-                fulfillable_mechanism.resource.representation.public_url  # type: ignore
+                fulfillable_mechanism.resource.representation.public_url
                 == response.headers.get("Location")
             )
 
@@ -256,8 +256,8 @@ class TestLoanController:
                 loan_fixture.pool.data_source,
                 loan_fixture.pool.identifier.type,
                 loan_fixture.pool.identifier.identifier,
-                content_link=fulfillable_mechanism.resource.url,  # type: ignore
-                content_type=fulfillable_mechanism.resource.representation.media_type,  # type: ignore
+                content_link=fulfillable_mechanism.resource.url,
+                content_type=fulfillable_mechanism.resource.representation.media_type,
                 content=None,
                 content_expires=None,
             )
@@ -274,7 +274,7 @@ class TestLoanController:
             )
             assert 200 == response.status_code
             assert "I am an ACSM file" == response.get_data(as_text=True)
-            assert http.requests == [fulfillable_mechanism.resource.url]  # type: ignore
+            assert http.requests == [fulfillable_mechanism.resource.url]
 
             # But we can't use some other mechanism -- we're stuck with
             # the first one we chose.

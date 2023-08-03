@@ -260,7 +260,7 @@ class ODLAPI(
         :param db: Database session
         :return: External integration associated with this object
         """
-        return self.collection(db).external_integration
+        return self.collection.external_integration
 
     def internal_format(self, delivery_mechanism):
         """Each consolidated copy is only available in one format, so we don't need
@@ -268,13 +268,14 @@ class ODLAPI(
         """
         return delivery_mechanism
 
-    def collection(self, db) -> Collection:
+    @property
+    def collection(self) -> Collection:
         """Return a collection associated with this object.
 
         :param db: Database session
         :return: Collection associated with this object
         """
-        collection = get_one(db, Collection, id=self.collection_id)
+        collection = super().collection
         if not collection:
             raise ValueError(f"Collection not found: {self.collection_id}")
         return collection
@@ -329,7 +330,7 @@ class ODLAPI(
         else:
             id = loan.license.identifier
             checkout_id = str(uuid.uuid1())
-            default_loan_period = self.collection(_db).default_loan_period(
+            default_loan_period = self.collection.default_loan_period(
                 loan.patron.library
             )
 
@@ -671,9 +672,10 @@ class ODLAPI(
         # need it to calculate the end date.
         original_position = holdinfo.hold_position
         self._update_hold_position(holdinfo, pool)
+        assert holdinfo.hold_position is not None
 
-        default_loan_period = self.collection(_db).default_loan_period(library)
-        default_reservation_period = self.collection(_db).default_reservation_period
+        default_loan_period = self.collection.default_loan_period(library)
+        default_reservation_period = self.collection.default_reservation_period
 
         # If the hold was already to check out and already has an end date,
         # it doesn't need an update.

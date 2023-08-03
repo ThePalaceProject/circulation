@@ -534,6 +534,7 @@ class TestEnkiAPI:
         assert fulfillment.identifier == pool.identifier.identifier
         assert fulfillment.collection_id == pool.collection.id
         assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
+        assert fulfillment.content_link is not None
         assert fulfillment.content_link.startswith(
             "http://afs.enkilibrary.org/fulfillment/URLLink.acsm"
         )
