@@ -8,6 +8,7 @@ from flask_pydantic_spec import Response as SpecResponse
 from werkzeug.exceptions import HTTPException
 
 from api.model.patron_auth import PatronAuthAccessToken
+from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
 from core.app_server import ErrorHandler, compressible, returns_problem_detail
 from core.model import HasSessionCache
 from core.util.problem_detail import ProblemDetail
@@ -675,10 +676,16 @@ def track_analytics_event(identifier_type, identifier, event_type):
 @library_route(
     "/playtimes/<collection_name>/<identifier_type>/<path:identifier>", methods=["POST"]
 )
+@api_spec.validate(
+    resp=SpecResponse(HTTP_200=PlaytimeEntriesPostResponse),
+    body=PlaytimeEntriesPost,
+    tags=["analytics"],
+)
 @has_library
 @allows_auth
 @returns_problem_detail
 def track_playtime_events(collection_name, identifier_type, identifier):
+    """The actual response type is 207, but due to a bug in flask-pydantic-spec we must document it as a 200"""
     return app.manager.playtime_entries.track_playtimes(
         collection_name, identifier_type, identifier
     )
