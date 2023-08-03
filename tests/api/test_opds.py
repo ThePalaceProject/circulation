@@ -2299,7 +2299,7 @@ class TestLibraryLoanAndHoldAnnotator:
 
         entry = feed._make_entry_xml(work, edition)
         with app.test_request_context("/") as request:
-            request.library = library
+            request.library = library  # type: ignore [attr-defined]
             annotator.annotate_work_entry(
                 work, work.active_license_pool(), edition, identifier, feed, entry
             )
