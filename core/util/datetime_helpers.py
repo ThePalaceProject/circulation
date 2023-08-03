@@ -1,5 +1,6 @@
 import datetime
-from typing import Optional
+import math
+from typing import Optional, Tuple
 
 import pytz
 
@@ -60,3 +61,14 @@ def strptime_utc(date_string, format):
     if "%Z" in format or "%z" in format:
         raise ValueError(f"Cannot use strptime_utc with timezone-aware format {format}")
     return to_utc(datetime.datetime.strptime(date_string, format))
+
+
+def previous_months(number_of_months) -> Tuple[datetime.date, datetime.date]:
+    now = utc_now()
+    # Start from the first of number_of_months ago, where 0=12
+    expected_year = now.year - math.floor(number_of_months / 12)
+    expected_month = ((now.month - number_of_months) % 12) or 12
+    start = now.replace(year=expected_year, month=expected_month, day=1)
+    # Until the first of this month
+    until = now.replace(day=1)
+    return start.date(), until.date()

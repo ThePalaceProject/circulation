@@ -53,6 +53,9 @@ class Configuration(ConfigurationConstants):
     # Environment variable for SirsiDynix Auth
     SIRSI_DYNIX_APP_ID = "SIMPLIFIED_SIRSI_DYNIX_APP_ID"
 
+    # Environment variable for temporary reporting email
+    REPORTING_EMAIL_ENVIRONMENT_VARIABLE = "SIMPLIFIED_REPORTING_EMAIL"
+
     # ConfigurationSetting key for the base url of the app.
     BASE_URL_KEY = "base_url"
 

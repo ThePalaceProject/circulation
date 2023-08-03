@@ -17,11 +17,13 @@ from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import ValidationError
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
+from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
 from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
@@ -76,6 +78,7 @@ from core.model.devicetokens import (
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
+from core.query.playtime_entries import PlaytimeEntries
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -189,6 +192,7 @@ class CirculationManager:
     odl_notification_controller: ODLNotificationController
     shared_collection_controller: SharedCollectionController
     static_files: StaticFileController
+    playtime_entries: PlaytimeEntriesController
 
     # Admin controllers
     admin_sign_in_controller: SignInController
@@ -458,6 +462,7 @@ class CirculationManager:
         self.shared_collection_controller = SharedCollectionController(self)
         self.static_files = StaticFileController(self)
         self.patron_auth_token = PatronAuthTokenController(self)
+        self.playtime_entries = PlaytimeEntriesController(self)
 
         from api.lcp.controller import LCPController
 
@@ -2419,6 +2424,48 @@ class AnalyticsController(CirculationManagerController):
             return Response({}, 200)
         else:
             return INVALID_ANALYTICS_EVENT_TYPE
+
+
+class PlaytimeEntriesController(CirculationManagerController):
+    def track_playtimes(self, collection_id, identifier_type, identifier_idn):
+        library: Library = flask.request.library
+        identifier = get_one(
+            self._db, Identifier, type=identifier_type, identifier=identifier_idn
+        )
+        collection = Collection.by_id(self._db, collection_id)
+
+        if not identifier:
+            return NOT_FOUND_ON_REMOTE.detailed(
+                f"The identifier {identifier_type}/{identifier_idn} was not found."
+            )
+        if not collection:
+            return NOT_FOUND_ON_REMOTE.detailed(
+                f"The collection {collection_id} was not found."
+            )
+
+        if collection not in library.collections:
+            return INVALID_INPUT.detailed("Collection was not found in the Library.")
+
+        if not identifier.licensed_through_collection(collection):
+            return INVALID_INPUT.detailed(
+                "This Identifier was not found in the Collection."
+            )
+
+        try:
+            data = PlaytimeEntriesPost(**flask.request.json)
+        except ValidationError as ex:
+            return INVALID_INPUT.detailed(ex.json())
+
+        responses, summary = PlaytimeEntries.insert_playtime_entries(
+            self._db, identifier, collection, library, data
+        )
+
+        response_data = PlaytimeEntriesPostResponse(
+            summary=summary, responses=responses
+        )
+        response = flask.jsonify(response_data.dict())
+        response.status_code = 207
+        return response
 
 
 class ODLNotificationController(CirculationManagerController):
