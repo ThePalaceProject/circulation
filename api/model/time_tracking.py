@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field, validator
 
@@ -44,6 +44,12 @@ class PlaytimeTimeEntry(CustomBaseModel):
 
 
 class PlaytimeEntriesPost(CustomBaseModel):
+    book_id: Optional[str] = Field(
+        description="An identifier of a book (currently ignored)."
+    )
+    library_id: Optional[str] = Field(
+        description="And identifier for the library (currently ignored)."
+    )
     time_entries: List[PlaytimeTimeEntry] = Field(description="A List of time entries")
 
 
