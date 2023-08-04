@@ -37,6 +37,10 @@ from core.app_server import (
 )
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import ExternalSearchIndex, SortKeyPagination
+from core.feed_protocol.annotator.circulation import (
+    LibraryAnnotator as OPDSLibraryAnnotator,
+)
+from core.feed_protocol.page import OPDSPageFeed
 from core.lane import (
     BaseFacets,
     Facets,
@@ -941,19 +945,33 @@ class OPDSFeedController(CirculationManagerController):
             _external=True,
         )
 
-        annotator = self.manager.annotator(lane, facets=facets)
-        max_age = flask.request.args.get("max_age")
-        return feed_class.page(
-            _db=self._db,
-            title=lane.display_name,
-            url=url,
-            worklist=lane,
-            annotator=annotator,
-            facets=facets,
-            pagination=pagination,
-            search_engine=search_engine,
-            max_age=int(max_age) if max_age else None,
+        # annotator = self.manager.annotator(lane, facets=facets)
+        # max_age = flask.request.args.get("max_age")
+        feed = OPDSPageFeed(
+            url,
+            lane.display_name,
+            search_engine,
+            facets,
+            pagination,
+            OPDSLibraryAnnotator(
+                self.manager.circulation_apis[flask.request.library.id],
+                lane,
+                flask.request.library,
+            ),
         )
+        feed.generate_feed(self._db, lane)
+        return feed.as_response()
+        # return feed_class.page(
+        #     _db=self._db,
+        #     title=lane.display_name,
+        #     url=url,
+        #     worklist=lane,
+        #     annotator=annotator,
+        #     facets=facets,
+        #     pagination=pagination,
+        #     search_engine=search_engine,
+        #     max_age=int(max_age) if max_age else None,
+        # )
 
     def navigation(self, lane_identifier):
         """Build or retrieve a navigation feed, for clients that do not support groups."""

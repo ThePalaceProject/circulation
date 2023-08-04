@@ -1,0 +1,1447 @@
+from __future__ import annotations
+
+import copy
+import datetime
+import logging
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import defaultdict
+from typing import List
+
+from flask import url_for
+from sqlalchemy.orm import Session
+
+from api.adobe_vendor_id import AuthdataUtility
+from api.annotations import AnnotationWriter
+from api.circulation import BaseCirculationAPI
+from api.config import Configuration
+from api.lanes import DynamicLane
+from api.novelist import NoveListAPI
+from core.classifier import Classifier
+from core.config import CannotLoadConfiguration
+from core.entrypoint import EverythingEntryPoint
+from core.external_search import WorkSearchResult
+from core.feed_protocol.annotator.base import Annotator
+from core.feed_protocol.types import FeedEntryType, Link, WorkEntry
+from core.lane import Lane, WorkList
+from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
+from core.lcp.exceptions import LCPError
+from core.model.collection import Collection
+from core.model.edition import Edition
+from core.model.formats import FormatPriorities
+from core.model.integration import IntegrationConfiguration
+from core.model.library import Library
+from core.model.licensing import (
+    DeliveryMechanism,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
+from core.model.patron import Patron
+from core.opds import UnfulfillableWork
+from core.util.datetime_helpers import from_timestamp
+from core.util.opds_writer import AtomFeed, OPDSFeed
+
+
+class AcquisitionHelper:
+    @classmethod
+    def license_tags(cls, license_pool, loan, hold):
+        # Generate a list of licensing tags. These should be inserted
+        # into a <link> tag.
+        tags = {}
+        availability_tag_name = None
+        suppress_since = False
+        status = None
+        since = None
+        until = None
+
+        if not license_pool:
+            return
+        default_loan_period = default_reservation_period = None
+        collection = license_pool.collection
+        if (loan or hold) and not license_pool.open_access:
+            if loan:
+                obj = loan
+            elif hold:
+                obj = hold
+            default_loan_period = datetime.timedelta(
+                collection.default_loan_period(obj.library or obj.integration_client)
+            )
+        if loan:
+            status = "available"
+            since = loan.start
+            if not loan.license_pool.unlimited_access:
+                until = loan.until(default_loan_period)
+        elif hold:
+            if not license_pool.open_access:
+                default_reservation_period = datetime.timedelta(
+                    collection.default_reservation_period
+                )
+            until = hold.until(default_loan_period, default_reservation_period)
+            if hold.position == 0:
+                status = "ready"
+                since = None
+            else:
+                status = "reserved"
+                since = hold.start
+        elif (
+            license_pool.open_access
+            or license_pool.unlimited_access
+            or license_pool.self_hosted
+            or (license_pool.licenses_available > 0 and license_pool.licenses_owned > 0)
+        ):
+            status = "available"
+        else:
+            status = "unavailable"
+
+        kw = dict(status=status)
+        if since:
+            kw["since"] = AtomFeed._strftime(since)
+        if until:
+            kw["until"] = AtomFeed._strftime(until)
+        tags["availability"] = FeedEntryType(**kw)
+
+        # Open-access pools do not need to display <opds:holds> or <opds:copies>.
+        if (
+            license_pool.open_access
+            or license_pool.unlimited_access
+            or license_pool.self_hosted
+        ):
+            return tags
+
+        holds_kw = dict()
+        total = license_pool.patrons_in_hold_queue or 0
+
+        if hold:
+            if hold.position is None:
+                # This shouldn't happen, but if it does, assume we're last
+                # in the list.
+                position = total
+            else:
+                position = hold.position
+
+            if position > 0:
+                holds_kw["position"] = str(position)
+            if position > total:
+                # The patron's hold position appears larger than the total
+                # number of holds. This happens frequently because the
+                # number of holds and a given patron's hold position are
+                # updated by different processes. Don't propagate this
+                # appearance to the client.
+                total = position
+            elif position == 0 and total == 0:
+                # The book is reserved for this patron but they're not
+                # counted as having it on hold. This is the only case
+                # where we know that the total number of holds is
+                # *greater* than the hold position.
+                total = 1
+        holds_kw["total"] = str(total)
+
+        holds = FeedEntryType(**holds_kw)
+        tags["holds"] = holds
+
+        copies_kw = dict(
+            total=str(license_pool.licenses_owned or 0),
+            available=str(license_pool.licenses_available or 0),
+        )
+        copies = FeedEntryType(**copies_kw)
+        tags["copies"] = copies
+
+        return tags
+
+    @classmethod
+    def format_types(cls, delivery_mechanism):
+        """Generate a set of types suitable for passing into
+        acquisition_link().
+        """
+        types = []
+        # If this is a streaming book, you have to get an OPDS entry, then
+        # get a direct link to the streaming reader from that.
+        if delivery_mechanism.is_streaming:
+            types.append(OPDSFeed.ENTRY_TYPE)
+
+        # If this is a DRM-encrypted book, you have to get through the DRM
+        # to get the goodies inside.
+        drm = delivery_mechanism.drm_scheme_media_type
+        if drm:
+            types.append(drm)
+
+        # Finally, you get the goodies.
+        media = delivery_mechanism.content_type_media_type
+        if media:
+            types.append(media)
+
+        return types
+
+
+class CirculationManagerAnnotator(Annotator):
+    hidden_content_types: list[str]
+
+    def __init__(
+        self,
+        lane,
+        active_loans_by_work={},
+        active_holds_by_work={},
+        active_fulfillments_by_work={},
+        hidden_content_types=[],
+        test_mode=False,
+    ):
+        if lane:
+            logger_name = "Circulation Manager Annotator for %s" % lane.display_name
+        else:
+            logger_name = "Circulation Manager Annotator"
+        self.log = logging.getLogger(logger_name)
+        self.lane = lane
+        self.active_loans_by_work = active_loans_by_work
+        self.active_holds_by_work = active_holds_by_work
+        self.active_fulfillments_by_work = active_fulfillments_by_work
+        self.hidden_content_types = hidden_content_types
+        self.test_mode = test_mode
+
+    def is_work_entry_solo(self, work):
+        """Return a boolean value indicating whether the work's OPDS catalog entry is served by itself,
+            rather than as a part of the feed.
+
+        :param work: Work object
+        :type work: core.model.work.Work
+
+        :return: Boolean value indicating whether the work's OPDS catalog entry is served by itself,
+            rather than as a part of the feed
+        :rtype: bool
+        """
+        return any(
+            work in x
+            for x in (
+                self.active_loans_by_work,
+                self.active_holds_by_work,
+                self.active_fulfillments_by_work,
+            )
+        )
+
+    def _lane_identifier(self, lane):
+        if isinstance(lane, Lane):
+            return lane.id
+        return None
+
+    def top_level_title(self):
+        return ""
+
+    def default_lane_url(self):
+        return self.feed_url(None)
+
+    def lane_url(self, lane):
+        return self.feed_url(lane)
+
+    def url_for(self, *args, **kwargs):
+        if self.test_mode:
+            new_kwargs = {}
+            for k, v in list(kwargs.items()):
+                if not k.startswith("_"):
+                    new_kwargs[k] = v
+            return self.test_url_for(False, *args, **new_kwargs)
+        else:
+            return url_for(*args, **kwargs)
+
+    def test_url_for(self, cdn=False, *args, **kwargs):
+        # Generate a plausible-looking URL that doesn't depend on Flask
+        # being set up.
+        if cdn:
+            host = "cdn"
+        else:
+            host = "host"
+        url = ("http://%s/" % host) + "/".join(args)
+        connector = "?"
+        for k, v in sorted(kwargs.items()):
+            if v is None:
+                v = ""
+            v = urllib.parse.quote(str(v))
+            k = urllib.parse.quote(str(k))
+            url += connector + f"{k}={v}"
+            connector = "&"
+        return url
+
+    def facet_url(self, facets):
+        return self.feed_url(self.lane, facets=facets, default_route=self.facet_view)
+
+    def feed_url(
+        self,
+        lane,
+        facets=None,
+        pagination=None,
+        default_route="feed",
+        extra_kwargs=None,
+    ):
+        if isinstance(lane, WorkList) and hasattr(lane, "url_arguments"):
+            route, kwargs = lane.url_arguments
+        else:
+            route = default_route
+            lane_identifier = self._lane_identifier(lane)
+            kwargs = dict(lane_identifier=lane_identifier)
+        if facets != None:
+            kwargs.update(dict(list(facets.items())))
+        if pagination != None:
+            kwargs.update(dict(list(pagination.items())))
+        if extra_kwargs:
+            kwargs.update(extra_kwargs)
+        return self.url_for(route, _external=True, **kwargs)
+
+    def navigation_url(self, lane):
+        return self.url_for(
+            "navigation_feed",
+            lane_identifier=self._lane_identifier(lane),
+            library_short_name=lane.library.short_name,
+            _external=True,
+        )
+
+    def active_licensepool_for(self, work, library=None):
+        loan = self.active_loans_by_work.get(work) or self.active_holds_by_work.get(
+            work
+        )
+        if loan:
+            # The active license pool is the one associated with
+            # the loan/hold.
+            return loan.license_pool
+        else:
+            # There is no active loan. Use the default logic for
+            # determining the active license pool.
+            return super().active_licensepool_for(work, library=library)
+
+    @staticmethod
+    def _prioritized_formats_for_pool(
+        licensepool: LicensePool,
+    ) -> tuple[list[str], list[str]]:
+        collection: Collection = licensepool.collection
+        config: IntegrationConfiguration = collection.integration_configuration
+
+        # Consult the configuration information for the integration configuration
+        # that underlies the license pool's collection. The configuration
+        # information _might_ contain a set of prioritized DRM schemes and
+        # content types.
+        prioritized_drm_schemes: list[str] = (
+            config.settings.get(FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY) or []
+        )
+
+        content_setting: List[str] = (
+            config.settings.get(FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY) or []
+        )
+        return prioritized_drm_schemes, content_setting
+
+    @staticmethod
+    def _deprioritized_lcp_content(
+        licensepool: LicensePool,
+    ) -> bool:
+        collection: Collection = licensepool.collection
+        config: IntegrationConfiguration = collection.integration_configuration
+
+        # Consult the configuration information for the integration configuration
+        # that underlies the license pool's collection. The configuration
+        # information _might_ contain a flag that indicates whether to deprioritize
+        # LCP content. By default, if no configuration value is specified, then
+        # the priority of LCP content will be left completely unchanged.
+
+        _prioritize: bool = config.settings.get(
+            FormatPriorities.DEPRIORITIZE_LCP_NON_EPUBS_KEY, False
+        )
+        return _prioritize
+
+    def visible_delivery_mechanisms(
+        self, licensepool: LicensePool | None
+    ) -> list[LicensePoolDeliveryMechanism]:
+        if not licensepool:
+            return []
+
+        (
+            prioritized_drm_schemes,
+            prioritized_content_types,
+        ) = CirculationManagerAnnotator._prioritized_formats_for_pool(licensepool)
+
+        return FormatPriorities(
+            prioritized_drm_schemes=prioritized_drm_schemes,
+            prioritized_content_types=prioritized_content_types,
+            hidden_content_types=self.hidden_content_types,
+            deprioritize_lcp_non_epubs=CirculationManagerAnnotator._deprioritized_lcp_content(
+                licensepool
+            ),
+        ).prioritize_for_pool(licensepool)
+
+    def annotate_work_entry(
+        self,
+        entry: WorkEntry,
+        updated=None,
+    ):
+        work = entry.work
+        identifier = work.presentation_edition.primary_identifier
+        active_license_pool = entry.license_pool
+        # If OpenSearch included a more accurate last_update_time,
+        # use it instead of Work.last_update_time
+        updated = entry.work.last_update_time
+        if isinstance(work, WorkSearchResult):
+            # Opensearch puts this field in a list, but we've set it up
+            # so there will be at most one value.
+            last_updates = getattr(work._hit, "last_update", [])
+            if last_updates:
+                # last_update is seconds-since epoch; convert to UTC datetime.
+                updated = from_timestamp(last_updates[0])
+
+                # There's a chance that work.last_updated has been
+                # modified but the change hasn't made it to the search
+                # engine yet. Even then, we stick with the search
+                # engine value, because a sorted list is more
+                # important to the import process than an up-to-date
+                # 'last update' value.
+
+        super().annotate_work_entry(entry, updated=updated)
+        active_loan = self.active_loans_by_work.get(work)
+        active_hold = self.active_holds_by_work.get(work)
+        active_fulfillment = self.active_fulfillments_by_work.get(work)
+
+        # Now we need to generate a <link> tag for every delivery mechanism
+        # that has well-defined media types.
+        link_tags = self.acquisition_links(
+            active_license_pool,
+            active_loan,
+            active_hold,
+            active_fulfillment,
+            identifier,
+        )
+        for tag in link_tags:
+            entry.computed.acquisition_links.append(tag)
+
+    def acquisition_links(
+        self,
+        active_license_pool,
+        active_loan,
+        active_hold,
+        active_fulfillment,
+        identifier,
+        can_hold=True,
+        can_revoke_hold=True,
+        set_mechanism_at_borrow=False,
+        direct_fulfillment_delivery_mechanisms=[],
+        add_open_access_links=True,
+    ):
+        """Generate a number of <link> tags that enumerate all acquisition
+        methods.
+
+        :param direct_fulfillment_delivery_mechanisms: A way to
+            fulfill each LicensePoolDeliveryMechanism in this list will be
+            presented as a link with
+            rel="http://opds-spec.org/acquisition/open-access", indicating
+            that it can be downloaded with no intermediate steps such as
+            authentication.
+        """
+        can_borrow = False
+        can_fulfill = False
+        can_revoke = False
+
+        if active_loan:
+            can_fulfill = True
+            can_revoke = True
+        elif active_hold:
+            # We display the borrow link even if the patron can't
+            # borrow the book right this minute.
+            can_borrow = True
+
+            can_revoke = can_revoke_hold
+        elif active_fulfillment:
+            can_fulfill = True
+            can_revoke = True
+        else:
+            # The patron has no existing relationship with this
+            # work. Give them the opportunity to check out the work
+            # or put it on hold.
+            can_borrow = True
+
+        # If there is something to be revoked for this book,
+        # add a link to revoke it.
+        revoke_links = []
+        if can_revoke:
+            revoke_links.append(
+                self.revoke_link(active_license_pool, active_loan, active_hold)
+            )
+
+        # Add next-step information for every useful delivery
+        # mechanism.
+        borrow_links = []
+        if can_borrow:
+            # Borrowing a book gives you an OPDS entry that gives you
+            # fulfillment links for every visible delivery mechanism.
+            visible_mechanisms = self.visible_delivery_mechanisms(active_license_pool)
+            if set_mechanism_at_borrow and active_license_pool:
+                # The ebook distributor requires that the delivery
+                # mechanism be set at the point of checkout. This means
+                # a separate borrow link for each mechanism.
+                for mechanism in visible_mechanisms:
+                    borrow_links.append(
+                        self.borrow_link(
+                            active_license_pool, mechanism, [mechanism], active_hold
+                        )
+                    )
+            elif active_license_pool:
+                # The ebook distributor does not require that the
+                # delivery mechanism be set at the point of
+                # checkout. This means a single borrow link with
+                # indirectAcquisition tags for every visible delivery
+                # mechanism. If a delivery mechanism must be set, it
+                # will be set at the point of fulfillment.
+                borrow_links.append(
+                    self.borrow_link(
+                        active_license_pool, None, visible_mechanisms, active_hold
+                    )
+                )
+
+            # Generate the licensing tags that tell you whether the book
+            # is available.
+            for link in borrow_links:
+                if link is not None:
+                    license_tags = AcquisitionHelper.license_tags(
+                        active_license_pool, active_loan, active_hold
+                    )
+                    link.add_attributes(license_tags)
+
+        # Add links for fulfilling an active loan.
+        fulfill_links = []
+        if can_fulfill:
+            if active_fulfillment:
+                # We're making an entry for a specific fulfill link.
+                type = active_fulfillment.content_type
+                url = active_fulfillment.content_link
+                rel = OPDSFeed.ACQUISITION_REL
+                link_tag = self.acquisition_link(
+                    rel=rel, href=url, types=[type], active_loan=active_loan
+                )
+                fulfill_links.append(link_tag)
+
+            elif active_loan and active_loan.fulfillment:
+                # The delivery mechanism for this loan has been
+                # set. There is one link for the delivery mechanism
+                # that was locked in, and links for any streaming
+                # delivery mechanisms.
+                #
+                # Since the delivery mechanism has already been locked in,
+                # we choose not to use visible_delivery_mechanisms --
+                # they already chose it and they're stuck with it.
+                for lpdm in active_license_pool.delivery_mechanisms:
+                    if (
+                        lpdm is active_loan.fulfillment
+                        or lpdm.delivery_mechanism.is_streaming
+                    ):
+                        fulfill_links.append(
+                            self.fulfill_link(
+                                active_license_pool,
+                                active_loan,
+                                lpdm.delivery_mechanism,
+                            )
+                        )
+            else:
+                # The delivery mechanism for this loan has not been
+                # set. There is one fulfill link for every visible
+                # delivery mechanism.
+                for lpdm in self.visible_delivery_mechanisms(active_license_pool):
+                    fulfill_links.append(
+                        self.fulfill_link(
+                            active_license_pool, active_loan, lpdm.delivery_mechanism
+                        )
+                    )
+
+        open_access_links = []
+        for lpdm in direct_fulfillment_delivery_mechanisms:
+            # These links use the OPDS 'open-access' link relation not
+            # because they are open access in the licensing sense, but
+            # because they are ways to download the book "without any
+            # requirement, which includes payment and registration."
+            #
+            # To avoid confusion, we explicitly add a dc:rights
+            # statement to each link explaining what the rights are to
+            # this title.
+            direct_fulfill = self.fulfill_link(
+                active_license_pool,
+                active_loan,
+                lpdm.delivery_mechanism,
+                rel=OPDSFeed.OPEN_ACCESS_REL,
+            )
+            direct_fulfill.attrib.update(self.rights_attributes(lpdm))
+            open_access_links.append(direct_fulfill)
+
+        # If this is an open-access book, add an open-access link for
+        # every delivery mechanism with an associated resource.
+        # But only if this library allows it, generally this is if
+        # a library has no patron authentication attached to it
+        if (
+            add_open_access_links
+            and active_license_pool
+            and active_license_pool.open_access
+        ):
+            for lpdm in active_license_pool.delivery_mechanisms:
+                if lpdm.resource:
+                    open_access_links.append(
+                        self.open_access_link(active_license_pool, lpdm)
+                    )
+
+        return [
+            x
+            for x in borrow_links + fulfill_links + open_access_links + revoke_links
+            if x is not None
+        ]
+
+    def revoke_link(self, active_license_pool, active_loan, active_hold):
+        return None
+
+    def borrow_link(
+        self,
+        active_license_pool,
+        borrow_mechanism,
+        fulfillment_mechanisms,
+        active_hold=None,
+    ):
+        return None
+
+    def fulfill_link(
+        self,
+        license_pool,
+        active_loan,
+        delivery_mechanism,
+        rel=OPDSFeed.ACQUISITION_REL,
+    ):
+        return None
+
+    def open_access_link(self, pool, lpdm):
+        _db = Session.object_session(lpdm)
+        kw = dict(rel=OPDSFeed.OPEN_ACCESS_REL, type="")
+
+        # Start off assuming that the URL associated with the
+        # LicensePoolDeliveryMechanism's Resource is the URL we should
+        # send for download purposes. This will be the case unless we
+        # previously mirrored that URL somewhere else.
+        href = lpdm.resource.url
+
+        rep = lpdm.resource.representation
+        if rep:
+            if rep.media_type:
+                kw["type"] = rep.media_type
+            href = rep.public_url
+        kw["href"] = href
+        kw.update(self.rights_attributes(lpdm))
+        link = Link(**kw)
+        link.availability = FeedEntryType(status="available")
+        return link
+
+    def rights_attributes(self, lpdm):
+        """Create a dictionary of tag attributes that explain the
+        rights status of a LicensePoolDeliveryMechanism.
+
+        If nothing is known, the dictionary will be empty.
+        """
+        if not lpdm or not lpdm.rights_status or not lpdm.rights_status.uri:
+            return {}
+        rights_attr = "{%s}rights" % OPDSFeed.DCTERMS_NS
+        return {rights_attr: lpdm.rights_status.uri}
+
+    @classmethod
+    def acquisition_link(cls, rel, href, types, active_loan=None):
+        if types:
+            initial_type = types[0]
+            indirect_types = types[1:]
+        else:
+            initial_type = None
+            indirect_types = []
+        link = Link(href=href, rel=rel, type=initial_type)
+        indirect = cls.indirect_acquisition(indirect_types)
+
+        if indirect is not None:
+            link.indirectAcquisition = indirect
+        return link
+
+    @classmethod
+    def indirect_acquisition(cls, indirect_types):
+        top_level_parent = None
+        parent = None
+        for t in indirect_types:
+            indirect_link = FeedEntryType(type=t)
+            if parent is not None:
+                parent.indirectAcquisition = indirect_link
+            parent = indirect_link
+            if top_level_parent is None:
+                top_level_parent = indirect_link
+        return top_level_parent
+
+
+class LibraryAnnotator(CirculationManagerAnnotator):
+    def __init__(
+        self,
+        circulation,
+        lane,
+        library,
+        patron=None,
+        active_loans_by_work={},
+        active_holds_by_work={},
+        active_fulfillments_by_work={},
+        facet_view="feed",
+        test_mode=False,
+        top_level_title="All Books",
+        library_identifies_patrons=True,
+        facets=None,
+    ):
+        """Constructor.
+
+        :param library_identifies_patrons: A boolean indicating
+          whether or not this library can distinguish between its
+          patrons. A library might not authenticate patrons at
+          all, or it might distinguish patrons from non-patrons in a
+          way that does not allow it to keep track of individuals.
+
+          If this is false, links that imply the library can
+          distinguish between patrons will not be included. Depending
+          on the configured collections, some extra links may be
+          added, for direct acquisition of titles that would normally
+          require a loan.
+        """
+        super().__init__(
+            lane,
+            active_loans_by_work=active_loans_by_work,
+            active_holds_by_work=active_holds_by_work,
+            active_fulfillments_by_work=active_fulfillments_by_work,
+            hidden_content_types=library.settings.hidden_content_types,
+            test_mode=test_mode,
+        )
+        self.circulation = circulation
+        self.library: Library = library
+        self.patron = patron
+        self.lanes_by_work = defaultdict(list)
+        self.facet_view = facet_view
+        self._adobe_id_tags = {}
+        self._top_level_title = top_level_title
+        self.identifies_patrons = library_identifies_patrons
+        self.facets = facets or None
+
+    def top_level_title(self):
+        return self._top_level_title
+
+    def permalink_for(self, work, license_pool, identifier):
+        url = self.url_for(
+            "permalink",
+            identifier_type=identifier.type,
+            identifier=identifier.identifier,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+        return url, OPDSFeed.ENTRY_TYPE
+
+    def groups_url(self, lane, facets=None):
+        lane_identifier = self._lane_identifier(lane)
+        if facets:
+            kwargs = dict(list(facets.items()))
+        else:
+            kwargs = {}
+
+        return self.url_for(
+            "acquisition_groups",
+            lane_identifier=lane_identifier,
+            library_short_name=self.library.short_name,
+            _external=True,
+            **kwargs,
+        )
+
+    def default_lane_url(self, facets=None):
+        return self.groups_url(None, facets=facets)
+
+    def feed_url(self, lane, facets=None, pagination=None, default_route="feed"):
+        extra_kwargs = dict()
+        if self.library:
+            extra_kwargs["library_short_name"] = self.library.short_name
+        return super().feed_url(lane, facets, pagination, default_route, extra_kwargs)
+
+    def search_url(self, lane, query, pagination, facets=None):
+        lane_identifier = self._lane_identifier(lane)
+        kwargs = dict(q=query)
+        if facets:
+            kwargs.update(dict(list(facets.items())))
+        if pagination:
+            kwargs.update(dict(list(pagination.items())))
+        return self.url_for(
+            "lane_search",
+            lane_identifier=lane_identifier,
+            library_short_name=self.library.short_name,
+            _external=True,
+            **kwargs,
+        )
+
+    def group_uri(self, work, license_pool, identifier):
+        if not work in self.lanes_by_work:
+            return None, ""
+
+        lanes = self.lanes_by_work[work]
+        if not lanes:
+            # I don't think this should ever happen?
+            lane_name = None
+            url = self.url_for(
+                "acquisition_groups",
+                lane_identifier=None,
+                library_short_name=self.library.short_name,
+                _external=True,
+            )
+            title = "All Books"
+            return url, title
+
+        lane = lanes[0]
+        self.lanes_by_work[work] = lanes[1:]
+        lane_name = ""
+        show_feed = False
+
+        if isinstance(lane, dict):
+            show_feed = lane.get("link_to_list_feed", show_feed)
+            title = lane.get("label", lane_name)
+            lane = lane["lane"]
+
+        if isinstance(lane, str):
+            return lane, lane_name
+
+        if hasattr(lane, "display_name") and not title:
+            title = lane.display_name
+
+        if show_feed:
+            return self.feed_url(lane, self.facets), title
+
+        return self.lane_url(lane, self.facets), title
+
+    def lane_url(self, lane, facets=None):
+        # If the lane has sublanes, the URL identifying the group will
+        # take the user to another set of groups for the
+        # sublanes. Otherwise it will take the user to a list of the
+        # books in the lane by author.
+
+        if lane and isinstance(lane, Lane) and lane.sublanes:
+            url = self.groups_url(lane, facets=facets)
+        elif lane and (isinstance(lane, Lane) or isinstance(lane, DynamicLane)):
+            url = self.feed_url(lane, facets)
+        else:
+            # This lane isn't part of our lane hierarchy. It's probably
+            # a WorkList created to represent the top-level. Use the top-level
+            # url for it.
+            url = self.default_lane_url(facets=facets)
+        return url
+
+    def annotate_work_entry(self, entry: WorkEntry):
+        super().annotate_work_entry(entry)
+        active_license_pool = entry.license_pool
+        identifier = entry.work.presentation_edition.primary_identifier
+
+        # Groups is only from the library annotator
+        groups_uri = url_for(
+            "acquisition_groups",
+            identifier_type=identifier.type,
+            identifier=identifier.identifier,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+        entry.computed.other_links.append(Link(href=groups_uri, rel=OPDSFeed.GROUP_REL))
+
+    @classmethod
+    def related_books_available(cls, work, library):
+        """:return: bool asserting whether related books might exist for a particular Work"""
+        contributions = work.sort_author and work.sort_author != Edition.UNKNOWN_AUTHOR
+
+        return contributions or work.series or NoveListAPI.is_configured(library)
+
+    def language_and_audience_key_from_work(self, work):
+        language_key = work.language
+
+        audiences = None
+        if work.audience == Classifier.AUDIENCE_CHILDREN:
+            audiences = [Classifier.AUDIENCE_CHILDREN]
+        elif work.audience == Classifier.AUDIENCE_YOUNG_ADULT:
+            audiences = Classifier.AUDIENCES_JUVENILE
+        elif work.audience == Classifier.AUDIENCE_ALL_AGES:
+            audiences = [Classifier.AUDIENCE_CHILDREN, Classifier.AUDIENCE_ALL_AGES]
+        elif work.audience in Classifier.AUDIENCES_ADULT:
+            audiences = list(Classifier.AUDIENCES_NO_RESEARCH)
+        elif work.audience == Classifier.AUDIENCE_RESEARCH:
+            audiences = list(Classifier.AUDIENCES)
+        else:
+            audiences = []
+
+        audience_key = None
+        if audiences:
+            audience_strings = [urllib.parse.quote_plus(a) for a in sorted(audiences)]
+            audience_key = ",".join(audience_strings)
+
+        return language_key, audience_key
+
+    def add_author_links(self, work, feed, entry):
+        """Find all the <author> tags and add a link
+        to each one that points to the author's other works.
+        """
+        author_tag = "{%s}author" % OPDSFeed.ATOM_NS
+        author_entries = entry.findall(author_tag)
+
+        languages, audiences = self.language_and_audience_key_from_work(work)
+        for author_entry in author_entries:
+            name_tag = "{%s}name" % OPDSFeed.ATOM_NS
+
+            # A database ID would be better than a name, but the
+            # <author> tag was created as part of the work's cached
+            # OPDS entry, and as a rule we don't put database IDs into
+            # the cached OPDS entry.
+            #
+            # So we take the content of the <author> tag, use it in
+            # the link, and -- only if the user decides to fetch this feed
+            # -- we do a little extra work to turn this name back into
+            # one or more contributors.
+            #
+            # TODO: If we reliably had VIAF IDs for our contributors,
+            # we could stick them in the <author> tags and get the
+            # best of both worlds.
+            contributor_name = author_entry.find(name_tag).text
+            if not contributor_name:
+                continue
+
+            feed.add_link_to_entry(
+                author_entry,
+                rel="contributor",
+                type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                title=contributor_name,
+                href=self.url_for(
+                    "contributor",
+                    contributor_name=contributor_name,
+                    languages=languages,
+                    audiences=audiences,
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                ),
+            )
+
+    def add_series_link(self, work, feed, entry):
+        series_tag = OPDSFeed.schema_("Series")
+        series_entry = entry.find(series_tag)
+
+        if series_entry is None:
+            # There is no <series> tag, and thus nothing to annotate.
+            # This probably indicates an out-of-date OPDS entry.
+            work_id = work.id
+            work_title = work.title
+            self.log.error(
+                'add_series_link() called on work %s ("%s"), which has no <schema:Series> tag in its OPDS entry.',
+                work_id,
+                work_title,
+            )
+            return
+
+        series_name = work.series
+        languages, audiences = self.language_and_audience_key_from_work(work)
+        href = self.url_for(
+            "series",
+            series_name=series_name,
+            languages=languages,
+            audiences=audiences,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+        feed.add_link_to_entry(
+            series_entry,
+            rel="series",
+            type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            title=series_name,
+            href=href,
+        )
+
+    def annotate_feed(self, feed, lane):
+        if self.patron:
+            # A patron is authenticated.
+            self.add_patron(feed)
+        else:
+            # No patron is authenticated. Show them how to
+            # authenticate (or that authentication is not supported).
+            self.add_authentication_document_link(feed)
+
+        # Add a 'search' link if the lane is searchable.
+        if lane and lane.search_target:
+            search_facet_kwargs = {}
+            if self.facets != None:
+                if self.facets.entrypoint_is_default:
+                    # The currently selected entry point is a default.
+                    # Rather than using it, we want the 'default' behavior
+                    # for search, which is to search everything.
+                    search_facets = self.facets.navigate(
+                        entrypoint=EverythingEntryPoint
+                    )
+                else:
+                    search_facets = self.facets
+                search_facet_kwargs.update(dict(list(search_facets.items())))
+
+            lane_identifier = self._lane_identifier(lane)
+            search_url = self.url_for(
+                "lane_search",
+                lane_identifier=lane_identifier,
+                library_short_name=self.library.short_name,
+                _external=True,
+                **search_facet_kwargs,
+            )
+            search_link = dict(
+                rel="search",
+                type="application/opensearchdescription+xml",
+                href=search_url,
+            )
+            feed.add_link_to_feed(feed.feed, **search_link)
+
+        if self.identifies_patrons:
+            # Since this library authenticates patrons it can offer
+            # a bookshelf and an annotation service.
+            shelf_link = dict(
+                rel="http://opds-spec.org/shelf",
+                type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                href=self.url_for(
+                    "active_loans",
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                ),
+            )
+            feed.add_link_to_feed(feed.feed, **shelf_link)
+
+            annotations_link = dict(
+                rel="http://www.w3.org/ns/oa#annotationService",
+                type=AnnotationWriter.CONTENT_TYPE,
+                href=self.url_for(
+                    "annotations",
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                ),
+            )
+            feed.add_link_to_feed(feed.feed, **annotations_link)
+
+        if lane and lane.uses_customlists:
+            name = None
+            if hasattr(lane, "customlists") and len(lane.customlists) == 1:
+                name = lane.customlists[0].name
+            else:
+                _db = Session.object_session(self.library)
+                customlist = lane.get_customlists(_db)
+                if customlist:
+                    name = customlist[0].name
+
+            if name:
+                crawlable_url = self.url_for(
+                    "crawlable_list_feed",
+                    list_name=name,
+                    library_short_name=self.library.short_name,
+                    _external=True,
+                )
+                crawlable_link = dict(
+                    rel="http://opds-spec.org/crawlable",
+                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    href=crawlable_url,
+                )
+                feed.add_link_to_feed(feed.feed, **crawlable_link)
+
+        self.add_configuration_links(feed)
+
+    def add_configuration_links(self, feed):
+        _db = Session.object_session(self.library)
+
+        def _add_link(l):
+            if isinstance(feed, OPDSFeed):
+                feed.add_link_to_feed(feed.feed, **l)
+            else:
+                # This is an ElementTree object.
+                link = OPDSFeed.link(**l)
+                feed.append(link)
+
+        library = self.library
+        if library.settings.terms_of_service:
+            _add_link(
+                dict(
+                    rel="terms-of-service",
+                    href=library.settings.terms_of_service,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.privacy_policy:
+            _add_link(
+                dict(
+                    rel="privacy-policy",
+                    href=library.settings.privacy_policy,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.copyright:
+            _add_link(
+                dict(
+                    rel="copyright",
+                    href=library.settings.copyright,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.about:
+            _add_link(
+                dict(
+                    rel="about",
+                    href=library.settings.about,
+                    type="text/html",
+                )
+            )
+
+        if library.settings.license:
+            _add_link(
+                dict(
+                    rel="license",
+                    href=library.settings.license,
+                    type="text/html",
+                )
+            )
+
+        navigation_urls = self.library.settings.web_header_links
+        navigation_labels = self.library.settings.web_header_labels
+        for url, label in zip(navigation_urls, navigation_labels):
+            d = dict(
+                href=url,
+                title=label,
+                type="text/html",
+                rel="related",
+                role="navigation",
+            )
+            _add_link(d)
+
+        for type, value in Configuration.help_uris(self.library):
+            d = dict(href=value, rel="help")
+            if type:
+                d["type"] = type
+            _add_link(d)
+
+    def acquisition_links(
+        self,
+        active_license_pool,
+        active_loan,
+        active_hold,
+        active_fulfillment,
+        identifier,
+        direct_fulfillment_delivery_mechanisms=None,
+        mock_api=None,
+    ):
+        """Generate one or more <link> tags that can be used to borrow,
+        reserve, or fulfill a book, depending on the state of the book
+        and the current patron.
+
+        :param active_license_pool: The LicensePool for which we're trying to
+           generate <link> tags.
+        :param active_loan: A Loan object representing the current patron's
+           existing loan for this title, if any.
+        :param active_hold: A Hold object representing the current patron's
+           existing hold on this title, if any.
+        :param active_fulfillment: A LicensePoolDeliveryMechanism object
+           representing the mechanism, if any, which the patron has chosen
+           to fulfill this work.
+        :param feed: The OPDSFeed that will eventually contain these <link>
+           tags.
+        :param identifier: The Identifier of the title for which we're
+           trying to generate <link> tags.
+        :param direct_fulfillment_delivery_mechanisms: A list of
+           LicensePoolDeliveryMechanisms for the given LicensePool
+           that should have fulfillment-type <link> tags generated for
+           them, even if this method wouldn't normally think that
+           makes sense.
+        :param mock_api: A mock object to stand in for the API to the
+           vendor who provided this LicensePool. If this is not provided, a
+           live API for that vendor will be used.
+        """
+        direct_fulfillment_delivery_mechanisms = (
+            direct_fulfillment_delivery_mechanisms or []
+        )
+        api = mock_api
+        if not api and self.circulation and active_license_pool:
+            api = self.circulation.api_for_license_pool(active_license_pool)
+        if api:
+            set_mechanism_at_borrow = (
+                api.SET_DELIVERY_MECHANISM_AT == BaseCirculationAPI.BORROW_STEP
+            )
+            if active_license_pool and not self.identifies_patrons and not active_loan:
+                for lpdm in active_license_pool.delivery_mechanisms:
+                    if api.can_fulfill_without_loan(None, active_license_pool, lpdm):
+                        # This title can be fulfilled without an
+                        # active loan, so we're going to add an acquisition
+                        # link that goes directly to the fulfillment step
+                        # without the 'borrow' step.
+                        direct_fulfillment_delivery_mechanisms.append(lpdm)
+        else:
+            # This is most likely an open-access book. Just put one
+            # borrow link and figure out the rest later.
+            set_mechanism_at_borrow = False
+
+        return super().acquisition_links(
+            active_license_pool,
+            active_loan,
+            active_hold,
+            active_fulfillment,
+            identifier,
+            can_hold=self.library.settings.allow_holds,
+            can_revoke_hold=(
+                active_hold
+                and (
+                    not self.circulation
+                    or self.circulation.can_revoke_hold(
+                        active_license_pool, active_hold
+                    )
+                )
+            ),
+            set_mechanism_at_borrow=set_mechanism_at_borrow,
+            direct_fulfillment_delivery_mechanisms=direct_fulfillment_delivery_mechanisms,
+            add_open_access_links=(not self.identifies_patrons),
+        )
+
+    def revoke_link(self, active_license_pool, active_loan, active_hold):
+        if not self.identifies_patrons:
+            return
+        url = self.url_for(
+            "revoke_loan_or_hold",
+            license_pool_id=active_license_pool.id,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+        kw = dict(href=url, rel=OPDSFeed.REVOKE_LOAN_REL)
+        revoke_link_tag = OPDSFeed.makeelement("link", **kw)
+        return revoke_link_tag
+
+    def borrow_link(
+        self,
+        active_license_pool,
+        borrow_mechanism,
+        fulfillment_mechanisms,
+        active_hold=None,
+    ):
+        if not self.identifies_patrons:
+            return
+        identifier = active_license_pool.identifier
+        if borrow_mechanism:
+            # Following this link will both borrow the book and set
+            # its delivery mechanism.
+            mechanism_id = borrow_mechanism.delivery_mechanism.id
+        else:
+            # Following this link will borrow the book but not set
+            # its delivery mechanism.
+            mechanism_id = None
+        borrow_url = self.url_for(
+            "borrow",
+            identifier_type=identifier.type,
+            identifier=identifier.identifier,
+            mechanism_id=mechanism_id,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+        rel = OPDSFeed.BORROW_REL
+        borrow_link = Link(rel=rel, href=borrow_url, type=OPDSFeed.ENTRY_TYPE)
+
+        indirect_acquisitions = []
+        for lpdm in fulfillment_mechanisms:
+            # We have information about one or more delivery
+            # mechanisms that will be available at the point of
+            # fulfillment. To the extent possible, put information
+            # about these mechanisms into the <link> tag as
+            # <opds:indirectAcquisition> tags.
+
+            # These are the formats mentioned in the indirect
+            # acquisition.
+            format_types = AcquisitionHelper.format_types(lpdm.delivery_mechanism)
+
+            # If we can borrow this book, add this delivery mechanism
+            # to the borrow link as an <opds:indirectAcquisition>.
+            if format_types:
+                indirect_acquisition = self.indirect_acquisition(format_types)
+                indirect_acquisitions.append(indirect_acquisition)
+
+        if not indirect_acquisitions:
+            # If there's no way to actually get the book, cancel the creation
+            # of an OPDS entry altogether.
+            raise UnfulfillableWork()
+
+        borrow_link.indirectAcquisition = indirect_acquisitions
+        return borrow_link
+
+    def fulfill_link(
+        self,
+        license_pool,
+        active_loan,
+        delivery_mechanism,
+        rel=OPDSFeed.ACQUISITION_REL,
+    ):
+        """Create a new fulfillment link.
+
+        This link may include tags from the OPDS Extensions for DRM.
+        """
+        if not self.identifies_patrons and rel != OPDSFeed.OPEN_ACCESS_REL:
+            return
+        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
+            logging.warning(
+                "LicensePoolDeliveryMechanism passed into fulfill_link instead of DeliveryMechanism!"
+            )
+            delivery_mechanism = delivery_mechanism.delivery_mechanism
+        format_types = AcquisitionHelper.format_types(delivery_mechanism)
+        if not format_types:
+            return None
+
+        fulfill_url = self.url_for(
+            "fulfill",
+            license_pool_id=license_pool.id,
+            mechanism_id=delivery_mechanism.id,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+
+        link_tag = self.acquisition_link(
+            rel=rel, href=fulfill_url, types=format_types, active_loan=active_loan
+        )
+
+        children = self.license_tags(license_pool, active_loan, None)
+        link_tag.add_attributes(children)
+
+        drm_tags = self.drm_extension_tags(
+            license_pool, active_loan, delivery_mechanism
+        )
+        link_tag.add_attributes(drm_tags)
+        return link_tag
+
+    def open_access_link(self, pool, lpdm):
+        link_tag = super().open_access_link(pool, lpdm)
+        fulfill_url = self.url_for(
+            "fulfill",
+            license_pool_id=pool.id,
+            mechanism_id=lpdm.delivery_mechanism.id,
+            library_short_name=self.library.short_name,
+            _external=True,
+        )
+        link_tag.attrib.update(dict(href=fulfill_url))
+        return link_tag
+
+    def drm_extension_tags(self, license_pool, active_loan, delivery_mechanism):
+        """Construct OPDS Extensions for DRM tags that explain how to
+        register a device with the DRM server that manages this loan.
+        :param delivery_mechanism: A DeliveryMechanism
+        """
+        if not active_loan or not delivery_mechanism or not self.identifies_patrons:
+            return []
+
+        if delivery_mechanism.drm_scheme == DeliveryMechanism.ADOBE_DRM:
+            # Get an identifier for the patron that will be registered
+            # with the DRM server.
+            patron = active_loan.patron
+
+            # Generate a <drm:licensor> tag that can feed into the
+            # Vendor ID service.
+            return self.adobe_id_tags(patron)
+
+        if delivery_mechanism.drm_scheme == DeliveryMechanism.LCP_DRM:
+            # Generate a <lcp:hashed_passphrase> tag that can be used for the loan
+            # in the mobile apps.
+
+            return self.lcp_key_retrieval_tags(active_loan)
+
+        return []
+
+    def adobe_id_tags(self, patron_identifier):
+        """Construct tags using the DRM Extensions for OPDS standard that
+        explain how to get an Adobe ID for this patron, and how to
+        manage their list of device IDs.
+        :param delivery_mechanism: A DeliveryMechanism
+        :return: If Adobe Vendor ID delegation is configured, a list
+        containing a <drm:licensor> tag. If not, an empty list.
+        """
+        # CirculationManagerAnnotators are created per request.
+        # Within the context of a single request, we can cache the
+        # tags that explain how the patron can get an Adobe ID, and
+        # reuse them across <entry> tags. This saves a little time,
+        # makes tests more reliable, and stops us from providing a
+        # different Short Client Token for every <entry> tag.
+        if isinstance(patron_identifier, Patron):
+            cache_key = patron_identifier.id
+        else:
+            cache_key = patron_identifier
+        cached = self._adobe_id_tags.get(cache_key)
+        if cached is None:
+            cached = []
+            authdata = None
+            try:
+                authdata = AuthdataUtility.from_config(self.library)
+            except CannotLoadConfiguration as e:
+                logging.error(
+                    "Cannot load Short Client Token configuration; outgoing OPDS entries will not have DRM autodiscovery support",
+                    exc_info=e,
+                )
+                return []
+            if authdata:
+                vendor_id, token = authdata.short_client_token_for_patron(
+                    patron_identifier
+                )
+                drm_licensor = OPDSFeed.makeelement("{%s}licensor" % OPDSFeed.DRM_NS)
+                vendor_attr = "{%s}vendor" % OPDSFeed.DRM_NS
+                drm_licensor.attrib[vendor_attr] = vendor_id
+                patron_key = OPDSFeed.makeelement("{%s}clientToken" % OPDSFeed.DRM_NS)
+                patron_key.text = token
+                drm_licensor.append(patron_key)
+                cached = [drm_licensor]
+
+            self._adobe_id_tags[cache_key] = cached
+        else:
+            cached = copy.deepcopy(cached)
+        return cached
+
+    def lcp_key_retrieval_tags(self, active_loan):
+        # In the case of LCP we have to include a patron's hashed passphrase
+        # inside the acquisition link so client applications can use it to open the LCP license
+        # without having to ask the user to enter their password
+        # https://readium.org/lcp-specs/notes/lcp-key-retrieval.html#including-a-hashed-passphrase-in-an-opds-1-catalog
+
+        db = Session.object_session(active_loan)
+        lcp_credential_factory = LCPCredentialFactory()
+
+        response = []
+
+        try:
+            hashed_passphrase: LCPHashedPassphrase = (
+                lcp_credential_factory.get_hashed_passphrase(db, active_loan.patron)
+            )
+            hashed_passphrase_element = OPDSFeed.makeelement(
+                "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
+            )
+            hashed_passphrase_element.text = hashed_passphrase.hashed
+            response.append(hashed_passphrase_element)
+        except LCPError:
+            # The patron's passphrase wasn't generated yet and not present in the database.
+            pass
+
+        return response
+
+    def add_patron(self, feed_obj):
+        if not self.identifies_patrons:
+            return
+        patron_details = {}
+        if self.patron.username:
+            patron_details[
+                "{%s}username" % OPDSFeed.SIMPLIFIED_NS
+            ] = self.patron.username
+        if self.patron.authorization_identifier:
+            patron_details[
+                "{%s}authorizationIdentifier" % OPDSFeed.SIMPLIFIED_NS
+            ] = self.patron.authorization_identifier
+
+        patron_tag = OPDSFeed.makeelement(
+            "{%s}patron" % OPDSFeed.SIMPLIFIED_NS, patron_details
+        )
+        feed_obj.feed.append(patron_tag)
+
+    def add_authentication_document_link(self, feed_obj):
+        """Create a <link> tag that points to the circulation
+        manager's Authentication for OPDS document
+        for the current library.
+        """
+        # Even if self.identifies_patrons is false, we include this link,
+        # because this document is the one that explains there is no
+        # patron authentication at this library.
+        feed_obj.add_link_to_feed(
+            feed_obj.feed,
+            rel="http://opds-spec.org/auth/document",
+            href=self.url_for(
+                "authentication_document",
+                library_short_name=self.library.short_name,
+                _external=True,
+            ),
+        )
