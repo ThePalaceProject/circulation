@@ -33,7 +33,7 @@ from core.model import (
     Session,
 )
 from core.model.configuration import ExternalIntegration
-from core.model.constants import EditionConstants, LinkRelations
+from core.model.constants import EditionConstants, LinkRelations, MediaTypes
 from core.model.formats import FormatPriorities
 from core.model.integration import IntegrationConfiguration
 from core.opds import AcquisitionFeed, Annotator, UnfulfillableWork
@@ -1833,6 +1833,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             feed.add_link_to_entry(
                 entry,
                 rel=LinkRelations.TIME_TRACKING,
+                type=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
                 href=self.url_for(
                     "track_playtime_events",
                     identifier_type=identifier.type,

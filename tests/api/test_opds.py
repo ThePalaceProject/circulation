@@ -2308,6 +2308,10 @@ class TestLibraryLoanAndHoldAnnotator:
                 f"link[@rel='{LinkRelations.TIME_TRACKING}']"
             )
             assert len(time_tracking_links) == 1
+            assert (
+                time_tracking_links[0].get("type")
+                == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
+            )
             assert time_tracking_links[0].get("href") == annotator.url_for(
                 "track_playtime_events",
                 identifier_type=identifier.type,
