@@ -11,7 +11,15 @@ class EmailManager:
     MAIL_SENDER = os.environ.get("SIMPLIFIED_MAIL_SENDER")
 
     @classmethod
-    def send_email(cls, subject, receivers, sender=MAIL_SENDER, text=None, html=None):
+    def send_email(
+        cls,
+        subject,
+        receivers,
+        sender=MAIL_SENDER,
+        text=None,
+        html=None,
+        attachments=None,
+    ):
         email_sender = EmailSender(
             host=cls.MAIL_SERVER,
             port=cls.MAIL_PORT,
@@ -20,5 +28,10 @@ class EmailManager:
         )
 
         email_sender.send(
-            subject=subject, sender=sender, receivers=receivers, text=text, html=html
+            subject=subject,
+            sender=sender,
+            receivers=receivers,
+            text=text,
+            html=html,
+            attachments=attachments,
         )

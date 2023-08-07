@@ -242,6 +242,8 @@ class LinkRelations:
     DRM_ENCRYPTED_DOWNLOAD = "http://opds-spec.org/acquisition/"
     BORROW = "http://opds-spec.org/acquisition/borrow"
 
+    TIME_TRACKING = "http://palaceproject.io/terms/timeTracking"
+
     CIRCULATION_ALLOWED = [
         OPEN_ACCESS_DOWNLOAD,
         DRM_ENCRYPTED_DOWNLOAD,
