@@ -1,7 +1,7 @@
 """Remove integration client
 
 Revision ID: 2f1a51aa0ee8
-Revises: b3749bac3e55
+Revises: 892c8e0c89f8
 Create Date: 2023-07-26 13:34:02.924885+00:00
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "2f1a51aa0ee8"
-down_revision = "b3749bac3e55"
+down_revision = "892c8e0c89f8"
 branch_labels = None
 depends_on = None
 
