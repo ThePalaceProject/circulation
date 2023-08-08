@@ -198,7 +198,8 @@ class TestDiscoveryServices:
             goal=Goals.DISCOVERY_GOAL,
         )
         assert isinstance(service, IntegrationConfiguration)
-        assert service.id == int(response.response[0])
+        assert isinstance(response, Response)
+        assert service.id == int(response.get_data(as_text=True))
         assert ExternalIntegration.OPDS_REGISTRATION == service.protocol
         assert (
             OpdsRegistrationService.settings_class()(**service.settings_dict).url
@@ -230,7 +231,8 @@ class TestDiscoveryServices:
             )
             assert response.status_code == 200
 
-        assert discovery_service.id == int(response.response[0])
+        assert isinstance(response, Response)
+        assert discovery_service.id == int(response.get_data(as_text=True))
         assert ExternalIntegration.OPDS_REGISTRATION == discovery_service.protocol
         assert (
             "http://new_registry_url.com"
@@ -258,7 +260,7 @@ class TestDiscoveryServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", existing_service.name),
+                    ("name", str(existing_service.name)),
                     ("id", str(new_service.id)),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
                     ("url", "http://test.com"),
@@ -273,7 +275,7 @@ class TestDiscoveryServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", existing_service.name),
+                    ("name", str(existing_service.name)),
                     ("id", str(existing_service.id)),
                     ("protocol", ExternalIntegration.OPDS_REGISTRATION),
                     ("url", "http://test.com"),
@@ -322,7 +324,7 @@ class TestDiscoveryServices:
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
             response = settings_ctrl_fixture.manager.admin_discovery_services_controller.process_delete(
-                discovery_service.id
+                discovery_service.id  # type: ignore[arg-type]
             )
             assert response.status_code == 200
 

@@ -1,5 +1,6 @@
 import logging
-from typing import Callable, Optional
+from json import JSONDecodeError
+from typing import Any, Callable, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 import requests
@@ -13,6 +14,7 @@ from core.exceptions import IntegrationException
 from core.problem_details import INTEGRATION_ERROR
 
 from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
+from .problem_detail import ProblemError
 
 
 class RemoteIntegrationException(IntegrationException):
@@ -381,14 +383,16 @@ class HTTP:
         return "%sxx" % (int(status_code) // 100)
 
     @classmethod
-    def debuggable_get(cls, url: str, **kwargs):
+    def debuggable_get(cls, url: str, **kwargs: Any) -> Response:
         """Make a GET request that returns a detailed problem
         detail document on error.
         """
         return cls.debuggable_request("GET", url, **kwargs)
 
     @classmethod
-    def debuggable_post(cls, url: str, payload, **kwargs):
+    def debuggable_post(
+        cls, url: str, payload: Union[str, Dict[str, Any]], **kwargs: Any
+    ) -> Response:
         """Make a POST request that returns a detailed problem
         detail document on error.
         """
@@ -401,10 +405,10 @@ class HTTP:
         http_method: str,
         url: str,
         make_request_with: Optional[Callable[..., Response]] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Response:
-        """Make a request that returns a detailed problem detail document on
-        error, rather than a generic "an integration error occured"
+        """Make a request that raises a ProblemError with a detailed problem detail
+        document on error, rather than a generic "an integration error occurred"
         message.
 
         :param http_method: HTTP method to use when making the request.
@@ -430,52 +434,56 @@ class HTTP:
     def process_debuggable_response(
         cls,
         url: str,
-        response,
-        disallowed_response_codes=None,
-        allowed_response_codes=None,
-        expected_encoding="utf-8",
-    ):
+        response: Response,
+        allowed_response_codes: Optional[List[Union[str, int]]] = None,
+        disallowed_response_codes: Optional[List[Union[str, int]]] = None,
+        expected_encoding: str = "utf-8",
+    ) -> Response:
         """If there was a problem with an integration request,
-        return an appropriate ProblemDetail. Otherwise, return the
+        raise ProblemError with an appropriate ProblemDetail. Otherwise, return the
         response to the original request.
 
         :param response: A Response object from the requests library.
-        :param expected_encoding: Typically we expect HTTP responses to be UTF-8
+        :param expected_encoding: Typically, we expect HTTP responses to be UTF-8
             encoded, but for certain requests we can change the encoding type.
         """
 
         allowed_response_codes = allowed_response_codes or ["2xx", "3xx"]
-        allowed_response_codes = list(map(str, allowed_response_codes))
+        allowed_response_codes_str = list(map(str, allowed_response_codes))
+        disallowed_response_codes = disallowed_response_codes or []
+        disallowed_response_codes_str = list(map(str, disallowed_response_codes))
+
         code = response.status_code
         series = cls.series(code)
-        if str(code) in allowed_response_codes or series in allowed_response_codes:
-            # Whether or not it looks like there's been a problem,
+        if (
+            str(code) in allowed_response_codes_str
+            or series in allowed_response_codes_str
+        ):
+            # Whether it looks like there's been a problem,
             # we've been told to let this response code through.
             return response
 
         content_type = response.headers.get("Content-Type")
-        response_content = response.content
-        if response_content and isinstance(response_content, bytes):
-            try:
-                response_content = response_content.decode(expected_encoding)
-            except Exception as e:
-                return RequestNetworkException(url, e)
         if content_type == PROBLEM_DETAIL_JSON_MEDIA_TYPE:
             # The server returned a problem detail document. Wrap it
             # in a new document that represents the integration
             # failure.
-            problem = INTEGRATION_ERROR.detailed(
-                _("Remote service returned a problem detail document: %r")
-                % (response_content)
-            )
-            problem.debug_message = response_content
-            return problem
+            try:
+                problem = response.json()
+                raise ProblemError(
+                    problem_detail=INTEGRATION_ERROR.detailed(
+                        f'Remote service returned: "{problem.get("title")}" with detail: "{problem.get("detail")}"'
+                    )
+                )
+            except JSONDecodeError:
+                # Failed to decode the problem detail document, we just fall through
+                # and raise the generic integration error.
+                pass
+
         # There's been a problem. Return the message we got from the
         # server, verbatim.
-        return INTEGRATION_ERROR.detailed(
-            _("%s response from integration server: %r")
-            % (
-                response.status_code,
-                response_content,
+        raise ProblemError(
+            problem_detail=INTEGRATION_ERROR.detailed(
+                f"{response.status_code} response from integration server: {response.text}"
             )
         )

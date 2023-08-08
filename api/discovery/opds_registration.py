@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import sys
 from argparse import ArgumentParser
-from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, overload
 
-import feedparser
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
 from pydantic import HttpUrl
 from requests import Response
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy import select
 from sqlalchemy.orm.session import Session
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -22,21 +20,26 @@ from api.config import Configuration
 from api.controller import CirculationManager
 from api.problem_details import *
 from core.integration.base import HasIntegrationConfiguration
+from core.integration.goals import Goals
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.model import (
     ConfigurationSetting,
     ExternalIntegration,
+    IntegrationConfiguration,
     Library,
-    create,
     get_one,
+    get_one_or_create,
+)
+from core.model.discoveryserviceregistration import (
+    DiscoveryServiceRegistration,
+    RegistrationStage,
+    RegistrationStatus,
 )
 from core.scripts import LibraryInputScript
 from core.util.http import HTTP
-from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemError
 
 from ..util.flask import PalaceFlask
-from .constants import RegistrationConstants
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -67,12 +70,16 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
     DEFAULT_LIBRARY_REGISTRY_URL = "https://registry.thepalaceproject.org"
     DEFAULT_LIBRARY_REGISTRY_NAME = "Palace Library Registry"
 
-    OPDS_1_PREFIX = "application/atom+xml;profile=opds-catalog"
     OPDS_2_TYPE = "application/opds+json"
 
-    def __init__(self, integration: ExternalIntegration) -> None:
+    def __init__(
+        self,
+        integration: IntegrationConfiguration,
+        settings: OpdsRegistrationServiceSettings,
+    ) -> None:
         """Constructor."""
         self.integration = integration
+        self.settings = settings
 
     @classmethod
     def label(cls) -> str:
@@ -90,81 +97,80 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         return OpdsRegistrationServiceSettings
 
     @classmethod
-    def for_integration_id(
-        cls, _db: Session, integration_id: Optional[int], goal: str
-    ) -> Optional[Self]:
-        """Find a LibraryRegistry object configured
-        by the given ExternalIntegration ID.
-
-        :param goal: The ExternalIntegration's .goal must be this goal.
-        """
-        integration = get_one(_db, ExternalIntegration, goal=goal, id=integration_id)
-        if not integration:
-            return None
-        return cls(integration)
+    @overload
+    def for_integration(cls, _db: Session, integration: int) -> Optional[Self]:
+        ...
 
     @classmethod
-    def for_protocol_and_goal(
-        cls, _db: Session, protocol: Optional[str], goal: Optional[str]
-    ) -> Generator[Self, None, None]:
-        """Find all LibraryRegistry objects with the given protocol and goal."""
-        for i in _db.query(ExternalIntegration).filter(
-            ExternalIntegration.goal == goal,
-            ExternalIntegration.protocol == protocol,
-        ):
-            yield cls(i)
+    @overload
+    def for_integration(
+        cls, _db: Session, integration: IntegrationConfiguration
+    ) -> Self:
+        ...
+
+    @classmethod
+    def for_integration(
+        cls, _db: Session, integration: int | IntegrationConfiguration
+    ) -> Optional[Self]:
+        """
+        Find a OpdsRegistrationService object configured by the given IntegrationConfiguration ID.
+        """
+        if isinstance(integration, int):
+            integration_obj = get_one(_db, IntegrationConfiguration, id=integration)
+        else:
+            integration_obj = integration
+        if integration_obj is None:
+            return None
+
+        settings = cls.settings_class().construct(**integration_obj.settings_dict)
+        return cls(integration_obj, settings)
 
     @classmethod
     def for_protocol_goal_and_url(
-        cls, _db: Session, protocol: str, goal: str, url: str
-    ) -> Self:
+        cls, _db: Session, protocol: str, goal: Goals, url: str
+    ) -> Optional[Self]:
         """Get a LibraryRegistry for the given protocol, goal, and
         URL. Create the corresponding ExternalIntegration if necessary.
         """
-        try:
-            integration = ExternalIntegration.with_setting_value(
-                _db, protocol, goal, ExternalIntegration.URL, url
-            ).one()
-        except NoResultFound:
-            integration = None
+        settings = cls.settings_class().construct(url=url)  # type: ignore[arg-type]
+        query = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.goal == goal,
+            IntegrationConfiguration.protocol == protocol,
+            IntegrationConfiguration.settings_dict.contains(settings.dict()),
+        )
+        integration = _db.scalars(query).one_or_none()
         if not integration:
-            integration, is_new = create(
-                _db, ExternalIntegration, protocol=protocol, goal=goal
-            )
-            integration.setting(ExternalIntegration.URL).value = url
-        return cls(integration)
+            return None
+        return cls(integration, settings)
 
     @property
-    def registrations(self) -> Generator[Registration, None, None]:
-        """Find all of this site's successful registrations with
-        this OpdsRegistrationService.
+    def registrations(self) -> List[DiscoveryServiceRegistration]:
+        """Find all of this site's registrations with this OpdsRegistrationService.
 
         :yield: A sequence of Registration objects.
         """
-        for x in self.integration.libraries:
-            yield Registration(self, x)
+        session = Session.object_session(self.integration)
+        return session.scalars(
+            select(DiscoveryServiceRegistration).where(
+                DiscoveryServiceRegistration.integration_id == self.integration.id,
+            )
+        ).all()
 
     def fetch_catalog(
         self,
-        catalog_url: Optional[str] = None,
-        do_get: Callable[..., Response | ProblemDetail] = HTTP.debuggable_get,
-    ) -> Tuple[str, str] | ProblemDetail:
+    ) -> Tuple[str, str]:
         """Fetch the root catalog for this OpdsRegistrationService.
 
         :return: A ProblemDetail if there's a problem communicating
             with the service or parsing the catalog; otherwise a 2-tuple
             (registration URL, Adobe vendor ID).
         """
-        catalog_url = catalog_url or self.integration.url
-        response = do_get(catalog_url)
-        if isinstance(response, ProblemDetail):
-            return response
+        catalog_url = self.settings.url
+        response = HTTP.debuggable_get(catalog_url)
         return self._extract_catalog_information(response)
 
     @classmethod
-    def _extract_catalog_information(
-        cls, response: Response
-    ) -> Tuple[str, str] | ProblemDetail:
+    def _extract_catalog_information(cls, response: Response) -> Tuple[str, str]:
         """From an OPDS catalog, extract information that's essential to
         kickstarting the OPDS Directory Registration Protocol.
 
@@ -174,10 +180,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
             catalog; otherwise a 2-tuple (registration URL, Adobe vendor
             ID).
         """
-        result = cls._extract_links(response)
-        if isinstance(result, ProblemDetail):
-            return result
-        catalog, links = result
+        catalog, links = cls._extract_links(response)
         if catalog:
             vendor_id = catalog.get("metadata", {}).get("adobe_vendor_id")
         else:
@@ -188,17 +191,19 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
                 register_url = link.get("href")
                 break
         if not register_url:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _(
-                    "The service at %(url)s did not provide a register link.",
-                    url=response.url,
+            raise ProblemError(
+                problem_detail=REMOTE_INTEGRATION_FAILED.detailed(
+                    _(
+                        "The service at %(url)s did not provide a register link.",
+                        url=response.url,
+                    )
                 )
             )
         return register_url, vendor_id
 
     def fetch_registration_document(
-        self, do_get: Callable[..., Response | ProblemDetail] = HTTP.debuggable_get
-    ) -> Tuple[Optional[str], Optional[str]] | ProblemDetail:
+        self,
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Fetch a discovery service's registration document and extract
         useful information from it.
 
@@ -208,19 +213,9 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
             Terms of Service that govern a circulation manager's
             registration with the discovery service.
         """
-        catalog = self.fetch_catalog(do_get=do_get)
-        if isinstance(catalog, ProblemDetail):
-            return catalog
-        registration_url, vendor_id = catalog
-
-        response = do_get(registration_url)
-        if isinstance(response, ProblemDetail):
-            return response
-        (
-            terms_of_service_link,
-            terms_of_service_html,
-        ) = self._extract_registration_information(response)
-        return terms_of_service_link, terms_of_service_html
+        registration_url, vendor_id = self.fetch_catalog()
+        response = HTTP.debuggable_get(registration_url)
+        return self._extract_registration_information(response)
 
     @classmethod
     def _extract_registration_information(
@@ -242,10 +237,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         """
         tos_link = None
         tos_html = None
-        result = cls._extract_links(response)
-        if isinstance(result, ProblemDetail):
-            return None, None
-        catalog, links = result
+        catalog, links = cls._extract_links(response)
         for link in links:
             if link.get("rel") != "terms-of-service":
                 continue
@@ -265,28 +257,24 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
     @classmethod
     def _extract_links(
         cls, response: Response
-    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, str]]] | ProblemDetail:
-        """Parse an OPDS 1 or OPDS feed out of a Requests response object.
+    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, str]]]:
+        """Parse an OPDS 2 feed out of a Requests response object.
 
         :return: A 2-tuple (parsed_catalog, links),
            with `links` being a list of dictionaries, each containing
            one OPDS link.
         """
-        # The response must contain either an OPDS 2 catalog or an OPDS 1 feed.
+        # The response must contain an OPDS 2 catalog.
         type = response.headers.get("Content-Type")
-        if type and type.startswith(cls.OPDS_2_TYPE):
-            # This is an OPDS 2 catalog.
-            catalog = json.loads(response.content)
-            links = catalog.get("links", [])
-        elif type and type.startswith(cls.OPDS_1_PREFIX):
-            # This is an OPDS 1 feed.
-            feed = feedparser.parse(response.content)
-            links = feed.get("feed", {}).get("links", [])
-            catalog = None
-        else:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("The service at %(url)s did not return OPDS.", url=response.url)
+        if not (type and type.startswith(cls.OPDS_2_TYPE)):
+            raise ProblemError(
+                problem_detail=REMOTE_INTEGRATION_FAILED.detailed(
+                    _("The service at %(url)s did not return OPDS.", url=response.url)
+                )
             )
+
+        catalog = json.loads(response.content)
+        links = catalog.get("links", [])
         return catalog, links
 
     @classmethod
@@ -311,66 +299,12 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         html = base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
         return Sanitizer().sanitize(html)  # type: ignore[no-any-return]
 
-
-class Registration(RegistrationConstants):
-    """A library's registration for a particular registry.
-
-    The registration does not correspond to one specific data model
-    object -- it's a relationship between a Library and an
-    ExternalIntegration, and a set of ConfigurationSettings that
-    configure the relationship between the two.
-    """
-
-    def __init__(self, registry: OpdsRegistrationService, library: Library) -> None:
-        self.registry = registry
-        self.integration = self.registry.integration
-        self.library = library
-        self._db = Session.object_session(self.integration)
-
-        if not library in self.integration.libraries:
-            self.integration.libraries.append(library)
-
-        # Find or create all the ConfigurationSettings that configure
-        # this relationship between library and registry.
-        # Has the registration succeeded? (Initial value: no.)
-        self.status_field = self.setting(
-            self.LIBRARY_REGISTRATION_STATUS, self.FAILURE_STATUS
-        )
-
-        # Does the library want to be in the testing or production stage?
-        # (Initial value: testing.)
-        self.stage_field = self.setting(
-            self.LIBRARY_REGISTRATION_STAGE, self.TESTING_STAGE
-        )
-
-        # If the registry provides a web client for the library, it will
-        # be stored in this setting.
-        self.web_client_field = self.setting(self.LIBRARY_REGISTRATION_WEB_CLIENT)
-
-    def setting(
-        self, key: str, default_value: Optional[str] = None
-    ) -> ConfigurationSetting:
-        """Find or create a ConfigurationSetting that configures this
-        relationship between library and registry.
-
-        :param key: Name of the ConfigurationSetting.
-        :return: A 2-tuple (ConfigurationSetting, is_new)
-        """
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, key, self.library, self.integration
-        )
-        if setting.value is None and default_value is not None:
-            setting.value = default_value
-        return setting  # type: ignore[no-any-return]
-
-    def push(
+    def register_library(
         self,
-        stage: str,
+        library: Library,
+        stage: RegistrationStage,
         url_for: Callable[..., str],
-        catalog_url: Optional[str] = None,
-        do_get: Callable[..., Response] = HTTP.debuggable_get,
-        do_post: Callable[..., Response] = HTTP.debuggable_post,
-    ) -> Literal[True] | ProblemDetail:
+    ) -> Literal[True]:
         """Attempt to register a library with a OpdsRegistrationService.
 
         NOTE: This method is designed to be used in a
@@ -385,95 +319,93 @@ class Registration(RegistrationConstants):
         :param stage: Either TESTING_STAGE or PRODUCTION_STAGE
         :param url_for: Flask url_for() or equivalent, used to generate URLs
             for the application server.
-        :param do_get: Mockable method to make a GET request.
-        :param do_post: Mockable method to make a POST request.
 
-        :return: A ProblemDetail if there was a problem; otherwise True.
+        :return: Raise a ProblemError if there was a problem; otherwise True.
         """
+        db = Session.object_session(library)
+        registration, _ = get_one_or_create(
+            db,
+            DiscoveryServiceRegistration,
+            library=library,
+            integration=self.integration,
+        )
+
         # Assume that the registration will fail.
         #
         # TODO: If a registration has previously succeeded, failure to
         # re-register probably means a maintenance of the status quo,
         # not a change of success to failure. But we don't have any way
         # of being sure.
-        self.status_field.value = self.FAILURE_STATUS
+        registration.status = RegistrationStatus.FAILURE
 
-        if stage not in self.VALID_REGISTRATION_STAGES:
-            return INVALID_INPUT.detailed(
-                _("%r is not a valid registration stage") % stage
-            )
-
-        if self.library.private_key is None:
-            raise RuntimeError(f"{self.library.short_name} has no private key set.")
-        cipher = Configuration.cipher(self.library.private_key)
+        # If the library has no private key, we can't register it. This should never
+        # happen because the column isn't nullable. We add an assertion here just in
+        # case, so we get a stack trace if it does happen.
+        assert library.private_key is not None
+        cipher = Configuration.cipher(library.private_key)
 
         # Before we can start the registration protocol, we must fetch
         # the remote catalog's URL and extract the link to the
         # registration resource that kicks off the protocol.
-        result = self.registry.fetch_catalog(catalog_url, do_get)
-        if isinstance(result, ProblemDetail):
-            return result
-        register_url, vendor_id = result
+        register_url, vendor_id = self.fetch_catalog()
 
         # Store the vendor id as a ConfigurationSetting on the integration
         # -- it'll be the same value for all libraries.
         if vendor_id:
+            # TODO: THIS NEEDS TO CHANGE BEFORE PR IS COMPLETE.
             ConfigurationSetting.for_externalintegration(
                 AuthdataUtility.VENDOR_ID_KEY, self.integration
             ).value = vendor_id
 
         # Build the document we'll be sending to the registration URL.
-        payload = self._create_registration_payload(url_for, stage)
-
-        if isinstance(payload, ProblemDetail):
-            return payload
-
-        headers = self._create_registration_headers()
-        if isinstance(headers, ProblemDetail):
-            return headers
+        payload = self._create_registration_payload(library, stage, url_for)
+        headers = self._create_registration_headers(registration)
 
         # Send the document.
-        response = self._send_registration_request(
-            register_url, headers, payload, do_post
-        )
-
-        if isinstance(response, ProblemDetail):
-            return response
+        response = self._send_registration_request(register_url, headers, payload)
         catalog = json.loads(response.content)
 
         # Process the result.
-        return self._process_registration_result(catalog, cipher, stage)
+        return self._process_registration_result(registration, catalog, cipher, stage)
 
+    @staticmethod
     def _create_registration_payload(
-        self, url_for: Callable[..., str], stage: str
+        library: Library,
+        stage: RegistrationStage,
+        url_for: Callable[..., str],
     ) -> Dict[str, str]:
         """Collect the key-value pairs to be sent when kicking off the
         registration protocol.
 
-        :param url_for: An implementation of Flask url_for.
-        :param state: The registrant's opinion about what stage this
+        :param library: The library to be registered.
+        :param stage: The registrant's opinion about what stage this
            registration should be in.
+        :param url_for: An implementation of Flask url_for.
+
         :return: A dictionary suitable for passing into requests.post.
         """
         auth_document_url = url_for(
             "authentication_document",
-            library_short_name=self.library.short_name,
+            library_short_name=library.short_name,
             _external=True,
         )
-        payload = dict(url=auth_document_url, stage=stage)
+        payload = dict(url=auth_document_url, stage=stage.value)
 
         # Find the email address the administrator should use if they notice
         # a problem with the way the library is using an integration.
-        contact = Configuration.configuration_contact_uri(self.library)
+        contact = Configuration.configuration_contact_uri(library)
         if contact:
             payload["contact"] = contact
         return payload
 
-    def _create_registration_headers(self) -> Dict[str, str]:
-        shared_secret = self.setting(ExternalIntegration.PASSWORD).value
+    @staticmethod
+    def _create_registration_headers(
+        registration: DiscoveryServiceRegistration,
+    ) -> Dict[str, str]:
+        shared_secret = registration.shared_secret
         headers = {}
         if shared_secret:
-            headers["Authorization"] = "Bearer %s" % shared_secret
+            headers["Authorization"] = f"Bearer {shared_secret}"
         return headers
 
     @classmethod
@@ -482,43 +414,25 @@ class Registration(RegistrationConstants):
         register_url: str,
         headers: Dict[str, str],
         payload: Dict[str, str],
-        do_post: Callable[..., Response],
-    ) -> Response | ProblemDetail:
+    ) -> Response:
         """Send the request that actually kicks off the OPDS Directory
         Registration Protocol.
 
         :return: Either a ProblemDetail or a requests-like Response object.
         """
-        # Allow 400 and 401 so we can provide a more useful error message.
-        response = do_post(
+        response = HTTP.debuggable_post(
             register_url,
             headers=headers,
             payload=payload,
             timeout=60,
-            allowed_response_codes=["2xx", "3xx", "400", "401"],
+            allowed_response_codes=["2xx", "3xx"],
         )
-        if response.status_code in [400, 401]:
-            if response.headers.get("Content-Type") == PROBLEM_DETAIL_JSON_MEDIA_TYPE:
-                problem = json.loads(response.content)
-                return INTEGRATION_ERROR.detailed(
-                    _(
-                        'Remote service returned: "%(problem)s"',
-                        problem=problem.get("detail"),
-                    )
-                )
-            else:
-                return INTEGRATION_ERROR.detailed(
-                    _(
-                        'Remote service returned: "%(problem)s"',
-                        problem=response.content.decode("utf-8"),
-                    )
-                )
         return response
 
     @classmethod
     def _decrypt_shared_secret(
         cls, cipher: PKCS1OAEP_Cipher, cipher_text: str
-    ) -> bytes | ProblemDetail:
+    ) -> bytes:
         """Attempt to decrypt an encrypted shared secret.
 
         :param cipher: A Cipher object.
@@ -526,19 +440,26 @@ class Registration(RegistrationConstants):
         :param shared_secret: A byte string.
 
         :return: The decrypted shared secret, as a bytestring, or
-        a ProblemDetail if it could not be decrypted.
+        raise as ProblemError if it could not be decrypted.
         """
         try:
             shared_secret = cipher.decrypt(base64.b64decode(cipher_text))
-        except ValueError as e:
-            return SHARED_SECRET_DECRYPTION_ERROR.detailed(
-                _("Could not decrypt shared secret %s") % cipher_text
+        except ValueError:
+            raise ProblemError(
+                problem_detail=SHARED_SECRET_DECRYPTION_ERROR.detailed(
+                    f"Could not decrypt shared secret: '{cipher_text}'"
+                )
             )
         return shared_secret
 
+    @classmethod
     def _process_registration_result(
-        self, catalog: Dict[str, Any], cipher: PKCS1OAEP_Cipher, desired_stage: str
-    ) -> Literal[True] | ProblemDetail:
+        cls,
+        registration: DiscoveryServiceRegistration,
+        catalog: Dict[str, Any] | Any,
+        cipher: PKCS1OAEP_Cipher,
+        desired_stage: RegistrationStage,
+    ) -> Literal[True]:
         """We just sent out a registration request and got an OPDS catalog
         in return. Process that catalog.
 
@@ -553,10 +474,9 @@ class Registration(RegistrationConstants):
         # e.g. through Short Client Tokens or authenticated API
         # requests.
         if not isinstance(catalog, dict):
-            return INTEGRATION_ERROR.detailed(  # type: ignore[unreachable]
-                _(
-                    "Remote service served %(representation)r, which I can't make sense of as an OPDS document.",
-                    representation=catalog,
+            raise ProblemError(
+                problem_detail=INTEGRATION_ERROR.detailed(
+                    f"Remote service served {catalog}, which I can't make sense of as an OPDS document.",
                 )
             )
         metadata: Dict[str, str] = catalog.get("metadata", {})
@@ -571,32 +491,26 @@ class Registration(RegistrationConstants):
                 break
 
         if short_name:
-            setting = self.setting(ExternalIntegration.USERNAME)
-            setting.value = short_name
+            registration.short_name = short_name
         if encrypted_shared_secret:
-            shared_secret = self._decrypt_shared_secret(cipher, encrypted_shared_secret)
-            if isinstance(shared_secret, ProblemDetail):
-                return shared_secret
-
-            setting = self.setting(ExternalIntegration.PASSWORD)
-
             # NOTE: we can only store Unicode data in the
             # ConfigurationSetting.value, so this requires that the
             # shared secret encoded as UTF-8. This works for the
             # library registry product, which uses a long string of
             # hex digits as its shared secret.
-            setting.value = shared_secret.decode("utf8")
+            registration.shared_secret = cls._decrypt_shared_secret(
+                cipher, encrypted_shared_secret
+            ).decode("utf-8")
 
         # We have successfully completed the registration.
-        self.status_field.value = self.SUCCESS_STATUS
+        registration.status = RegistrationStatus.SUCCESS
 
-        # Our opinion about the proper stage of this library was succesfully
+        # Our opinion about the proper stage of this library was successfully
         # communicated to the registry.
-        self.stage_field.value = desired_stage
+        registration.stage = desired_stage
 
         # Store the web client URL as a ConfigurationSetting.
-        if web_client_url:
-            self.web_client_field.value = web_client_url
+        registration.web_client = web_client_url
 
         return True
 
@@ -605,7 +519,7 @@ class LibraryRegistrationScript(LibraryInputScript):
     """Register local libraries with a remote library registry."""
 
     PROTOCOL = ExternalIntegration.OPDS_REGISTRATION
-    GOAL = ExternalIntegration.DISCOVERY_GOAL
+    GOAL = Goals.DISCOVERY_GOAL
 
     @classmethod
     def arg_parser(cls, _db: Session) -> ArgumentParser:  # type: ignore[override]
@@ -618,7 +532,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         parser.add_argument(
             "--stage",
             help="Register these libraries in the 'testing' stage or the 'production' stage.",
-            choices=(Registration.TESTING_STAGE, Registration.PRODUCTION_STAGE),
+            choices=[stage.value for stage in RegistrationStage],
         )
         return parser  # type: ignore[no-any-return]
 
@@ -626,15 +540,18 @@ class LibraryRegistrationScript(LibraryInputScript):
         self,
         cmd_args: Optional[List[str]] = None,
         manager: Optional[CirculationManager] = None,
-    ) -> PalaceFlask:
-        parser = self.arg_parser(self._db)
+    ) -> PalaceFlask | Literal[False]:
         parsed = self.parse_command_line(self._db, cmd_args)
 
         url = parsed.registry_url
         registry = OpdsRegistrationService.for_protocol_goal_and_url(
             self._db, self.PROTOCOL, self.GOAL, url
         )
-        stage = parsed.stage
+        if registry is None:
+            self.log.error(f'No OPDS Registration service found for "{url}"')
+            return False
+
+        stage = RegistrationStage[parsed.stage]
 
         # Set up an application context so we have access to url_for.
         from api.app import app
@@ -646,35 +563,26 @@ class LibraryRegistrationScript(LibraryInputScript):
         ctx = app.test_request_context(base_url=base_url)
         ctx.push()
         for library in parsed.libraries:
-            registration = Registration(registry, library)
-            library_stage = stage or registration.stage_field.value
-            self.process_library(registration, library_stage, url_for)
+            self.process_library(registry, library, stage, url_for)
         ctx.pop()
 
         # For testing purposes, return the application object that was
         # created.
         return app
 
-    def process_library(self, registration: Registration, stage: str, url_for: Callable[..., str]) -> bool | ProblemDetail:  # type: ignore[override]
+    def process_library(self, registry: OpdsRegistrationService, library: Library, stage: RegistrationStage, url_for: Callable[..., str]) -> bool:  # type: ignore[override]
         """Push one Library's registration to the given OpdsRegistrationService."""
 
-        logger = logging.getLogger(
-            "Registration of library %r" % registration.library.short_name
-        )
-        logger.info(
-            "Registering with %s as %s", registration.registry.integration.url, stage
-        )
+        self.log.info("Processing library %r", library.short_name)
+        self.log.info("Registering with %s as %s", registry.settings.url, stage.value)
         try:
-            result = registration.push(stage, url_for)
-        except Exception as e:
-            logger.error("Exception during registration", exc_info=e)
-            return False
-        if isinstance(result, ProblemDetail):
-            data, status_code, headers = result.response
-            logger.error(
+            registry.register_library(library, stage, url_for)
+        except ProblemError as e:
+            data, status_code, headers = e.problem_detail.response
+            self.log.exception(
                 "Could not complete registration. Problem detail document: %r" % data
             )
-            return result
-        else:
-            logger.info("Success.")
-        return result
+            return False
+
+        self.log.info("Success.")
+        return True
