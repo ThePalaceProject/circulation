@@ -724,6 +724,17 @@ class Edition(Base, EditionConstants):
             sort_author = " ; ".join(sorted(sort_names))
         else:
             sort_author = self.UNKNOWN_AUTHOR
+
+        def truncate_string(mystr: str):
+            if len(mystr) > 1024:
+                return mystr[: (1024 - 3)] + "..."
+            else:
+                return mystr
+
+        # Very long author and sort_author strings can cause the limits of one or more of the
+        # underlying postgres indices.  Therefore,  we limit their size here.
+        author = truncate_string(author)
+        sort_author = truncate_string(sort_author)
         return author, sort_author
 
     def choose_cover(self, policy=None):

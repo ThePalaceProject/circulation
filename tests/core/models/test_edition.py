@@ -325,6 +325,20 @@ class TestEdition:
         assert "Kelly Accumulator, Bob A. Bitshifter" == wr.author
         assert "Accumulator, Kelly ; Bitshifter, Bob" == wr.sort_author
 
+    def test_calculate_presentation_very_long_author(
+        self, db: DatabaseTransactionFixture
+    ):
+        authors = []
+        for i in range(0, 500):
+            author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
+            authors.append(author.sort_name)
+        wr = db.edition(authors=authors)
+        author, sort_author = wr.calculate_author()
+        wr.calculate_presentation()
+        db.session.commit()
+        assert len(wr.author) == 1024
+        assert len(wr.sort_author) == 1024
+
     def test_set_summary(self, db: DatabaseTransactionFixture):
         e, pool = db.edition(with_license_pool=True)
         work = db.work(presentation_edition=e)
