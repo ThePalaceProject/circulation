@@ -57,7 +57,7 @@ class TestCirculationManager:
             return None
 
         old_for_library = CustomIndexView.for_library
-        CustomIndexView.for_library = mock_for_library  # type: ignore[method-assign]
+        CustomIndexView.for_library = mock_for_library
 
         # We also set up some configuration settings that will
         # be loaded.
@@ -140,7 +140,7 @@ class TestCirculationManager:
         } == manager.patron_web_domains
 
         # Restore the CustomIndexView.for_library implementation
-        CustomIndexView.for_library = old_for_library  # type: ignore[method-assign]
+        CustomIndexView.for_library = old_for_library
 
     def test_exception_during_external_search_initialization_is_stored(
         self, circulation_fixture: CirculationControllerFixture

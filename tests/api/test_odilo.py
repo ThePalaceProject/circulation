@@ -313,7 +313,7 @@ class TestOdiloAPI:
         def explode(*args, **kwargs):
             raise Exception("Failure!")
 
-        odilo.api.check_creds = explode  # type: ignore[method-assign]
+        odilo.api.check_creds = explode
 
         # Only one test will be run.
         [check_creds] = odilo.api._run_self_tests(odilo.db.session)

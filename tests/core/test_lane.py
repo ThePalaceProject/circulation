@@ -2191,7 +2191,7 @@ class TestWorkList:
 
         # Now it depends on the return value of Patron.work_is_age_appropriate.
         # Mock that method.
-        patron.work_is_age_appropriate = MagicMock(return_value=False)  # type: ignore[method-assign]
+        patron.work_is_age_appropriate = MagicMock(return_value=False)
 
         # Since our mock returns false, so does accessible_to
         assert False == m(patron)
@@ -2205,7 +2205,7 @@ class TestWorkList:
         )
 
         # If we tell work_is_age_appropriate to always return true...
-        patron.work_is_age_appropriate = MagicMock(return_value=True)  # type: ignore[method-assign]
+        patron.work_is_age_appropriate = MagicMock(return_value=True)
 
         # ...accessible_to starts returning True.
         assert True == m(patron)
@@ -2844,7 +2844,7 @@ class TestDatabaseBackedWorkList:
         # Now we're going to do a more complicated test, with
         # faceting, pagination, and a bibliographic_filter_clauses that
         # actually does something.
-        wl.bibliographic_filter_clauses = wl.active_bibliographic_filter_clauses  # type: ignore[method-assign]
+        wl.bibliographic_filter_clauses = wl.active_bibliographic_filter_clauses
 
         class MockFacets(DatabaseBackedFacets):
             def __init__(self, wl):
@@ -4147,14 +4147,14 @@ class TestLane:
         # Now try the case where a lane is its own search target.  The
         # Facets object is propagated to the WorkList.search().
         mock.called_with = None
-        Lane.search_target = lane  # type: ignore[method-assign]
-        WorkList.search = mock.search  # type: ignore[method-assign]
+        Lane.search_target = lane
+        WorkList.search = mock.search
         lane.search(db.session, "query", None, facets=facets)
         assert facets == mock.called_with
 
         # Restore methods that were mocked.
-        Lane.search_target = old_lane_search_target  # type: ignore[method-assign]
-        WorkList.search = old_wl_search  # type: ignore[method-assign]
+        Lane.search_target = old_lane_search_target
+        WorkList.search = old_wl_search
 
     def test_explain(self, db: DatabaseTransactionFixture):
         parent = db.lane(display_name="Parent")
@@ -4191,7 +4191,7 @@ class TestLane:
         facets = FeaturedFacets(0)
         lane.groups(db.session, facets=facets)
         assert facets == lane.called_with
-        Lane._groups_for_lanes = old_value  # type: ignore[method-assign]
+        Lane._groups_for_lanes = old_value
 
     def test_suppress(self, db: DatabaseTransactionFixture):
         lane1 = db.lane()

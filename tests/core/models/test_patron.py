@@ -168,7 +168,7 @@ class TestHold:
             return "mock until"
 
         old__calculate_until = hold._calculate_until
-        Hold._calculate_until = _mock__calculate_until  # type: ignore[method-assign]
+        Hold._calculate_until = _mock__calculate_until
 
         assert "mock until" == m(one_day, two_days)
 
@@ -199,7 +199,7 @@ class TestHold:
         ) = hold.called_with
         assert pool.patrons_in_hold_queue == position
 
-        Hold._calculate_until = old__calculate_until  # type: ignore[method-assign]
+        Hold._calculate_until = old__calculate_until
 
     def test_calculate_until(self):
         start = datetime_utc(2010, 1, 1)
@@ -619,7 +619,7 @@ class TestPatron:
 
         patron = db.patron()
         mock = MagicMock(side_effect=mock_age_appropriate)
-        patron.age_appropriate_match = mock  # type: ignore[method-assign]
+        patron.age_appropriate_match = mock
         self.calls: list = []
         self.return_true_for = None
 

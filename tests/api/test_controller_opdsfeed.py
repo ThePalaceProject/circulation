@@ -775,7 +775,7 @@ class TestOPDSFeedController:
         # JackpotWorkList and passes it into _qa_feed.
 
         mock = MagicMock(return_value="an OPDS feed")
-        circulation_fixture.manager.opds_feeds._qa_feed = mock  # type: ignore[method-assign]
+        circulation_fixture.manager.opds_feeds._qa_feed = mock
 
         response = circulation_fixture.manager.opds_feeds.qa_feed()
         [call] = mock.mock_calls
@@ -814,7 +814,7 @@ class TestOPDSFeedController:
         # JackpotWorkList and passes it into _qa_feed.
 
         mock = MagicMock(return_value="an OPDS feed")
-        circulation_fixture.manager.opds_feeds._qa_feed = mock  # type: ignore[method-assign]
+        circulation_fixture.manager.opds_feeds._qa_feed = mock
 
         response = circulation_fixture.manager.opds_feeds.qa_feed()
         [call] = mock.mock_calls
@@ -854,7 +854,7 @@ class TestOPDSFeedController:
         # instructions to use HasSeriesFacets.
 
         mock = MagicMock(return_value="an OPDS feed")
-        circulation_fixture.manager.opds_feeds._qa_feed = mock  # type: ignore[method-assign]
+        circulation_fixture.manager.opds_feeds._qa_feed = mock
 
         response = circulation_fixture.manager.opds_feeds.qa_series_feed()
         [call] = mock.mock_calls
