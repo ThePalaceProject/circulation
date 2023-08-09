@@ -32,7 +32,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     """An Acquisition Feed which is not tied to any particular format.
     It is simply responsible for creating different types of feeds."""
 
-    def __init__(self, url, title, facets, pagination, annotator) -> None:
+    def __init__(self, title, url, facets, pagination, annotator) -> None:
         self.annotator = annotator
         self.url = url
         self.title = title
@@ -258,6 +258,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         annotator.active_fulfillments_by_work = active_fulfillments_by_work
         identifier = license_pool.identifier
 
+        # TODO: Error response as is done in _single_entry_response
         url = annotator.url_for(
             "loan_or_hold_detail",
             identifier_type=identifier.type,
