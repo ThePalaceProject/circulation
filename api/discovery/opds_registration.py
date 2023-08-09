@@ -3,11 +3,20 @@ from __future__ import annotations
 import base64
 import json
 import sys
-from argparse import ArgumentParser
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, overload
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    overload,
+)
 
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
-from flask import url_for
 from flask_babel import lazy_gettext as _
 from html_sanitizer import Sanitizer
 from pydantic import HttpUrl
@@ -15,31 +24,19 @@ from requests import Response
 from sqlalchemy import select
 from sqlalchemy.orm.session import Session
 
-from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
-from api.controller import CirculationManager
 from api.problem_details import *
 from core.integration.base import HasIntegrationConfiguration
 from core.integration.goals import Goals
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
-from core.model import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    IntegrationConfiguration,
-    Library,
-    get_one,
-    get_one_or_create,
-)
+from core.model import IntegrationConfiguration, Library, get_one, get_one_or_create
 from core.model.discoveryserviceregistration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
     RegistrationStatus,
 )
-from core.scripts import LibraryInputScript
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemError
-
-from ..util.flask import PalaceFlask
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -92,6 +89,14 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         return "Register your library for discovery in the app with a library registry."
 
     @classmethod
+    def protocol_details(cls, db: Session) -> dict[str, Any]:
+        return {
+            "sitewide": True,
+            "supports_registration": True,
+            "supports_staging": True,
+        }
+
+    @classmethod
     def settings_class(cls) -> Type[OpdsRegistrationServiceSettings]:
         """Get the settings for this integration."""
         return OpdsRegistrationServiceSettings
@@ -124,6 +129,16 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
 
         settings = cls.settings_class().construct(**integration_obj.settings_dict)
         return cls(integration_obj, settings)
+
+    @staticmethod
+    def get_request(url: str) -> Response:
+        return HTTP.debuggable_get(url)
+
+    @staticmethod
+    def post_request(
+        url: str, payload: Union[str, Dict[str, Any]], **kwargs: Any
+    ) -> Response:
+        return HTTP.debuggable_post(url, payload, **kwargs)
 
     @classmethod
     def for_protocol_goal_and_url(
@@ -166,7 +181,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
             (registration URL, Adobe vendor ID).
         """
         catalog_url = self.settings.url
-        response = HTTP.debuggable_get(catalog_url)
+        response = self.get_request(catalog_url)
         return self._extract_catalog_information(response)
 
     @classmethod
@@ -214,7 +229,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
             registration with the discovery service.
         """
         registration_url, vendor_id = self.fetch_catalog()
-        response = HTTP.debuggable_get(registration_url)
+        response = self.get_request(registration_url)
         return self._extract_registration_information(response)
 
     @classmethod
@@ -273,7 +288,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
                 )
             )
 
-        catalog = json.loads(response.content)
+        catalog = response.json()
         links = catalog.get("links", [])
         return catalog, links
 
@@ -349,13 +364,8 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         # registration resource that kicks off the protocol.
         register_url, vendor_id = self.fetch_catalog()
 
-        # Store the vendor id as a ConfigurationSetting on the integration
-        # -- it'll be the same value for all libraries.
         if vendor_id:
-            # TODO: THIS NEEDS TO CHANGE BEFORE PR IS COMPLETE.
-            ConfigurationSetting.for_externalintegration(
-                AuthdataUtility.VENDOR_ID_KEY, self.integration
-            ).value = vendor_id
+            registration.vendor_id = vendor_id
 
         # Build the document we'll be sending to the registration URL.
         payload = self._create_registration_payload(library, stage, url_for)
@@ -420,7 +430,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
 
         :return: Either a ProblemDetail or a requests-like Response object.
         """
-        response = HTTP.debuggable_post(
+        response = cls.post_request(
             register_url,
             headers=headers,
             payload=payload,
@@ -512,77 +522,4 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         # Store the web client URL as a ConfigurationSetting.
         registration.web_client = web_client_url
 
-        return True
-
-
-class LibraryRegistrationScript(LibraryInputScript):
-    """Register local libraries with a remote library registry."""
-
-    PROTOCOL = ExternalIntegration.OPDS_REGISTRATION
-    GOAL = Goals.DISCOVERY_GOAL
-
-    @classmethod
-    def arg_parser(cls, _db: Session) -> ArgumentParser:  # type: ignore[override]
-        parser = LibraryInputScript.arg_parser(_db)
-        parser.add_argument(
-            "--registry-url",
-            help="Register libraries with the given registry.",
-            default=OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL,
-        )
-        parser.add_argument(
-            "--stage",
-            help="Register these libraries in the 'testing' stage or the 'production' stage.",
-            choices=[stage.value for stage in RegistrationStage],
-        )
-        return parser  # type: ignore[no-any-return]
-
-    def do_run(
-        self,
-        cmd_args: Optional[List[str]] = None,
-        manager: Optional[CirculationManager] = None,
-    ) -> PalaceFlask | Literal[False]:
-        parsed = self.parse_command_line(self._db, cmd_args)
-
-        url = parsed.registry_url
-        registry = OpdsRegistrationService.for_protocol_goal_and_url(
-            self._db, self.PROTOCOL, self.GOAL, url
-        )
-        if registry is None:
-            self.log.error(f'No OPDS Registration service found for "{url}"')
-            return False
-
-        stage = RegistrationStage[parsed.stage]
-
-        # Set up an application context so we have access to url_for.
-        from api.app import app
-
-        app.manager = manager or CirculationManager(self._db)
-        base_url = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        ).value
-        ctx = app.test_request_context(base_url=base_url)
-        ctx.push()
-        for library in parsed.libraries:
-            self.process_library(registry, library, stage, url_for)
-        ctx.pop()
-
-        # For testing purposes, return the application object that was
-        # created.
-        return app
-
-    def process_library(self, registry: OpdsRegistrationService, library: Library, stage: RegistrationStage, url_for: Callable[..., str]) -> bool:  # type: ignore[override]
-        """Push one Library's registration to the given OpdsRegistrationService."""
-
-        self.log.info("Processing library %r", library.short_name)
-        self.log.info("Registering with %s as %s", registry.settings.url, stage.value)
-        try:
-            registry.register_library(library, stage, url_for)
-        except ProblemError as e:
-            data, status_code, headers = e.problem_detail.response
-            self.log.exception(
-                "Could not complete registration. Problem detail document: %r" % data
-            )
-            return False
-
-        self.log.info("Success.")
         return True

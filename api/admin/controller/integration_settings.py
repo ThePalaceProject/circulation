@@ -59,6 +59,7 @@ class IntegrationSettingsController(ABC, Generic[T]):
                 protocol[
                     "library_settings"
                 ] = api.library_settings_class().configuration_form(self._db)
+            protocol.update(api.protocol_details(self._db))
             protocols[name] = protocol
         return protocols
 

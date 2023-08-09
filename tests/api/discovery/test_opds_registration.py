@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,92 +10,90 @@ from Crypto.PublicKey import RSA
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
-from api.discovery.opds_registration import (
-    LibraryRegistrationScript,
-    OpdsRegistrationService,
-    Registration,
-)
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.discovery.registration_script import LibraryRegistrationScript
+from api.integration.registry.discovery import DiscoveryRegistry
 from api.problem_details import *
-from core.model import ConfigurationSetting, ExternalIntegration
+from core.integration.goals import Goals
+from core.model import ConfigurationSetting, ExternalIntegration, Library, create
+from core.model.discoveryserviceregistration import DiscoveryServiceRegistration
 from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
-from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    IntegrationConfigurationFixture,
+)
 from tests.fixtures.library import LibraryFixture
 
 
 class RemoteRegistryFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        integration_configuration: IntegrationConfigurationFixture,
+    ):
         self.db = db
         # Create an ExternalIntegration that can be used as the basis for
         # a OpdsRegistrationService.
-        self.integration = db.external_integration(
-            protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
+        integration_registry = DiscoveryRegistry()
+        self.protocol = integration_registry.get_protocol(OpdsRegistrationService)
+        self.goal = Goals.DISCOVERY_GOAL
+        self.registry_url = "http://registry.com"
+
+        self.integration = integration_configuration(
+            protocol=self.protocol,
+            goal=self.goal,
+            settings_dict={"url": self.registry_url},
         )
+
+    def create_registration(self, library: Library) -> DiscoveryServiceRegistration:
+        obj, _ = create(
+            self.db.session,
+            DiscoveryServiceRegistration,
+            library=library,
+            integration=self.integration,
+        )
+        return obj
 
 
 @pytest.fixture(scope="function")
-def remote_registry_fixture(db: DatabaseTransactionFixture) -> RemoteRegistryFixture:
-    return RemoteRegistryFixture(db)
+def remote_registry_fixture(
+    db: DatabaseTransactionFixture,
+    create_integration_configuration: IntegrationConfigurationFixture,
+) -> RemoteRegistryFixture:
+    return RemoteRegistryFixture(db, create_integration_configuration)
 
 
-class TestRemoteRegistry:
-    def test_constructor(self, remote_registry_fixture: RemoteRegistryFixture):
-        registry = OpdsRegistrationService(remote_registry_fixture.integration)
-        assert remote_registry_fixture.integration == registry.integration
+class TestOpdsRegistrationService:
+    def test_constructor(self):
+        integration = MagicMock()
+        settings = MagicMock()
+        registry = OpdsRegistrationService(integration, settings)
+        assert integration == registry.integration
+        assert settings == registry.settings
 
-    def test_for_integration_id(self, remote_registry_fixture: RemoteRegistryFixture):
+    def test_for_integration(self, remote_registry_fixture: RemoteRegistryFixture):
         """Test the ability to build a Registry for an ExternalIntegration
         given its ID.
         """
         db = remote_registry_fixture.db
-        m = OpdsRegistrationService.for_integration_id
+        m = OpdsRegistrationService.for_integration
 
         registry = m(
             db.session,
             remote_registry_fixture.integration.id,
-            ExternalIntegration.DISCOVERY_GOAL,
         )
         assert isinstance(registry, OpdsRegistrationService)
         assert remote_registry_fixture.integration == registry.integration
 
         # If the ID doesn't exist you get None.
-        assert None == m(db.session, -1, ExternalIntegration.DISCOVERY_GOAL)
+        assert m(db.session, -1) is None
 
-        # If the integration's goal doesn't match what you provided,
-        # you get None.
-        assert None == m(
-            db.session, remote_registry_fixture.integration.id, "some other goal"
-        )
-
-    def test_for_protocol_and_goal(
-        self, remote_registry_fixture: RemoteRegistryFixture
-    ):
-        db = remote_registry_fixture.db
-
-        # Create two ExternalIntegrations that have different protocols
-        # or goals from our original.
-        same_goal_different_protocol = db.external_integration(
-            protocol="some other protocol",
-            goal=remote_registry_fixture.integration.goal,
-        )
-
-        same_protocol_different_goal = db.external_integration(
-            protocol=remote_registry_fixture.integration.protocol,
-            goal="some other goal",
-        )
-
-        # Only the original ExternalIntegration has both the requested
-        # protocol and goal, so only it becomes a OpdsRegistrationService.
-        [registry] = list(
-            OpdsRegistrationService.for_protocol_and_goal(
-                db.session,
-                remote_registry_fixture.integration.protocol,
-                remote_registry_fixture.integration.goal,
-            )
-        )
+        # You can also pass in the IntegrationConfiguration object itself.
+        registry = m(db.session, remote_registry_fixture.integration)
         assert isinstance(registry, OpdsRegistrationService)
         assert remote_registry_fixture.integration == registry.integration
 
@@ -102,122 +101,110 @@ class TestRemoteRegistry:
         self, remote_registry_fixture: RemoteRegistryFixture
     ):
         db = remote_registry_fixture.db
-        protocol = db.fresh_str()
-        goal = db.fresh_str()
-        url = db.fresh_url()
         m = OpdsRegistrationService.for_protocol_goal_and_url
 
-        registry = m(db.session, protocol, goal, url)
+        registry = m(
+            db.session,
+            remote_registry_fixture.protocol,
+            remote_registry_fixture.goal,
+            remote_registry_fixture.registry_url,
+        )
         assert isinstance(registry, OpdsRegistrationService)
+        assert remote_registry_fixture.integration == registry.integration
 
-        # A new ExternalIntegration was created.
-        integration = registry.integration
-        assert protocol == integration.protocol
-        assert goal == integration.goal
-        assert url == integration.url
-
-        # Calling the method again doesn't create a second
-        # ExternalIntegration.
-        registry2 = m(db.session, protocol, goal, url)
-        assert registry2.integration == integration
+        # If the ExternalIntegration doesn't exist, we get None.
+        registry = m(
+            db.session,
+            remote_registry_fixture.protocol,
+            remote_registry_fixture.goal,
+            "http://registry2.com",
+        )
+        assert registry is None
 
     def test_registrations(self, remote_registry_fixture: RemoteRegistryFixture):
         db = remote_registry_fixture.db
-        registry = OpdsRegistrationService(remote_registry_fixture.integration)
+        registry = OpdsRegistrationService.for_integration(
+            db.session, remote_registry_fixture.integration
+        )
 
         # Associate the default library with the registry.
-        Registration(registry, db.default_library())
+        remote_registry_fixture.create_registration(db.default_library())
 
         # Create another library not associated with the registry.
         library2 = db.library()
 
         # registrations() finds a single Registration.
         [registration] = list(registry.registrations)
-        assert isinstance(registration, Registration)
-        assert registry == registration.registry
+        assert isinstance(registration, DiscoveryServiceRegistration)
         assert db.default_library() == registration.library
 
     def test_fetch_catalog(self, remote_registry_fixture: RemoteRegistryFixture):
-        db = remote_registry_fixture.db
-
-        # Test our ability to retrieve essential information from a
-        # remote registry's root catalog.
-        class Mock(OpdsRegistrationService):
-            def _extract_catalog_information(self, response):
-                self.extracted_from = response
-                return "Essential information"
+        registry = OpdsRegistrationService.for_integration(
+            remote_registry_fixture.db.session, remote_registry_fixture.integration
+        )
 
         # The behavior of fetch_catalog() depends on what comes back
         # when we ask the remote registry for its root catalog.
         client = DummyHTTPClient()
 
-        # If the result is a problem detail document, that document is
-        # the return value of fetch_catalog().
-        problem = REMOTE_INTEGRATION_FAILED.detailed("oops")
-        client.responses.append(problem)
-        registry = Mock(remote_registry_fixture.integration)
-        result = registry.fetch_catalog(do_get=client.do_get)
-        assert remote_registry_fixture.integration.url == client.requests.pop()
-        assert problem == result
+        # Test our ability to retrieve essential information from a
+        # remote registry's root catalog.
+        registry._extract_catalog_information = MagicMock(
+            return_value="Essential information"
+        )
+        registry.post_request = client.do_post
+        registry.get_request = client.do_get
 
         # If the response looks good, it's passed into
         # _extract_catalog_information(), and the result of _that_
         # method is the return value of fetch_catalog.
         client.queue_requests_response(200, content="A root catalog")
         [queued] = client.responses
-        assert "Essential information" == registry.fetch_catalog(
-            "custom catalog URL", do_get=client.do_get
-        )
-        assert "custom catalog URL" == client.requests.pop()
+        assert "Essential information" == registry.fetch_catalog()
+        assert remote_registry_fixture.registry_url == client.requests.pop()
+        registry._extract_catalog_information.assert_called_once_with(queued)
 
     def test__extract_catalog_information(
         self, remote_registry_fixture: RemoteRegistryFixture
     ):
         # Test our ability to extract a registration link and an
         # Adobe Vendor ID from an OPDS 1 or OPDS 2 catalog.
-        def extract(document, type=OpdsRegistrationService.OPDS_2_TYPE):
-            response = MockRequestsResponse(200, {"Content-Type": type}, document)
-            return OpdsRegistrationService._extract_catalog_information(response)
+        def mock_request(document, type=OpdsRegistrationService.OPDS_2_TYPE) -> Any:
+            data = json.dumps(document) if isinstance(document, dict) else document
+            return MockRequestsResponse(200, {"Content-Type": type}, data)
 
-        def assert_no_link(*args, **kwargs):
-            """Verify that calling _extract_catalog_information on the
-            given feed fails because there is no link with rel="register"
-            """
-            result = extract(*args, **kwargs)
-            assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-            assert (
-                "The service at http://url/ did not provide a register link."
-                == result.detail
-            )
+        m = OpdsRegistrationService._extract_catalog_information
 
         # OPDS 2 feed with link and Adobe Vendor ID.
         link = {"rel": "register", "href": "register url"}
         metadata = {"adobe_vendor_id": "vendorid"}
-        feed = json.dumps(dict(links=[link], metadata=metadata))
-        assert ("register url", "vendorid") == extract(feed)
+        request = mock_request(dict(links=[link], metadata=metadata))
+        assert ("register url", "vendorid") == m(request)
 
         # OPDS 2 feed with link and no Adobe Vendor ID
-        feed = json.dumps(dict(links=[link]))
-        assert ("register url", None) == extract(feed)
+        request = mock_request(dict(links=[link]))
+        assert ("register url", None) == m(request)
 
         # OPDS 2 feed with no link.
-        feed = json.dumps(dict(metadata=metadata))
-        assert_no_link(feed)
+        with pytest.raises(ProblemError) as excinfo:
+            request = mock_request(dict(metadata=metadata))
+            m(request)
 
-        # OPDS 1 feed with link.
-        feed = '<feed><link rel="register" href="register url"/></feed>'
-        assert ("register url", None) == extract(
-            feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo"
+        detail = excinfo.value.problem_detail
+        assert (
+            "The service at http://url/ did not provide a register link."
+            in detail.detail
         )
-
-        # OPDS 1 feed with no link.
-        feed = "<feed></feed>"
-        assert_no_link(feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo")
+        assert REMOTE_INTEGRATION_FAILED.uri == detail.uri
 
         # Non-OPDS document.
-        result = extract("plain text here", "text/plain")
-        assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-        assert "The service at http://url/ did not return OPDS." == result.detail
+        with pytest.raises(ProblemError) as excinfo:
+            request = mock_request("plain text here", "text/plain")
+            m(request)
+
+        detail = excinfo.value.problem_detail
+        assert "The service at http://url/ did not return OPDS." in detail.detail
+        assert REMOTE_INTEGRATION_FAILED.uri == detail.uri
 
     def test_fetch_registration_document(
         self, remote_registry_fixture: RemoteRegistryFixture
