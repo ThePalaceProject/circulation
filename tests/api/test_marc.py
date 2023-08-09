@@ -4,7 +4,6 @@ import urllib.request
 
 from pymarc import Record
 
-from api.discovery.opds_registration import Registration
 from api.marc import LibraryAnnotator
 from core.config import Configuration
 from core.marc import MARCExporter
@@ -200,12 +199,12 @@ class TestLibraryAnnotator:
             ExternalIntegration.DISCOVERY_GOAL,
             libraries=[db.default_library()],
         )
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-            db.default_library(),
-            registry,
-        ).value = client_base_1
+        # ConfigurationSetting.for_library_and_externalintegration(
+        #     db.session,
+        #     Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
+        #     db.default_library(),
+        #     registry,
+        # ).value = client_base_1
 
         record = Record()
         annotator.add_web_client_urls(record, db.default_library(), identifier)

@@ -1,23 +1,29 @@
 import base64
 import json
 import os
-from typing import Any
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, Callable, List, Optional
 from unittest.mock import MagicMock
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from requests_mock import Mocker
 
-from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.discovery.registration_script import LibraryRegistrationScript
 from api.integration.registry.discovery import DiscoveryRegistry
 from api.problem_details import *
 from core.integration.goals import Goals
-from core.model import ConfigurationSetting, ExternalIntegration, Library, create
-from core.model.discoveryserviceregistration import DiscoveryServiceRegistration
+from core.model import ConfigurationSetting, Library, create, get_one
+from core.model.discovery_service_registration import (
+    DiscoveryServiceRegistration,
+    RegistrationStage,
+    RegistrationStatus,
+)
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager
@@ -51,11 +57,17 @@ class RemoteRegistryFixture:
             settings_dict={"url": self.registry_url},
         )
 
-    def create_registration(self, library: Library) -> DiscoveryServiceRegistration:
+        self.registry = OpdsRegistrationService.for_integration(
+            db.session, self.integration
+        )
+
+    def create_registration(
+        self, library: Optional[Library] = None
+    ) -> DiscoveryServiceRegistration:
         obj, _ = create(
             self.db.session,
             DiscoveryServiceRegistration,
-            library=library,
+            library=library or self.db.default_library(),
             integration=self.integration,
         )
         return obj
@@ -125,9 +137,6 @@ class TestOpdsRegistrationService:
 
     def test_registrations(self, remote_registry_fixture: RemoteRegistryFixture):
         db = remote_registry_fixture.db
-        registry = OpdsRegistrationService.for_integration(
-            db.session, remote_registry_fixture.integration
-        )
 
         # Associate the default library with the registry.
         remote_registry_fixture.create_registration(db.default_library())
@@ -136,38 +145,33 @@ class TestOpdsRegistrationService:
         library2 = db.library()
 
         # registrations() finds a single Registration.
-        [registration] = list(registry.registrations)
+        [registration] = list(remote_registry_fixture.registry.registrations)
         assert isinstance(registration, DiscoveryServiceRegistration)
         assert db.default_library() == registration.library
 
     def test_fetch_catalog(
         self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
     ):
-        registry = OpdsRegistrationService.for_integration(
-            remote_registry_fixture.db.session, remote_registry_fixture.integration
-        )
-
         # The behavior of fetch_catalog() depends on what comes back
         # when we ask the remote registry for its root catalog.
         requests_mock.get(remote_registry_fixture.registry_url, text="A root catalog")
 
         # Test our ability to retrieve essential information from a
         # remote registry's root catalog.
-        registry._extract_catalog_information = MagicMock(
-            return_value="Essential information"
-        )
+        func_mock = MagicMock(return_value="Essential information")
+        remote_registry_fixture.registry._extract_catalog_information = func_mock
 
         # If the response looks good, it's passed into
         # _extract_catalog_information(), and the result of _that_
         # method is the return value of fetch_catalog.
-        assert "Essential information" == registry.fetch_catalog()
-        assert requests_mock.called_once
-        assert requests_mock.last_request.url == remote_registry_fixture.registry_url
-        assert registry._extract_catalog_information.called
         assert (
-            registry._extract_catalog_information.call_args.args[0].text
-            == "A root catalog"
+            "Essential information" == remote_registry_fixture.registry.fetch_catalog()
         )
+        assert requests_mock.called_once
+        assert requests_mock.last_request is not None
+        assert requests_mock.last_request.url == remote_registry_fixture.registry_url
+        assert remote_registry_fixture.registry._extract_catalog_information.called
+        assert func_mock.call_args.args[0].text == "A root catalog"
 
     def test__extract_catalog_information(
         self, remote_registry_fixture: RemoteRegistryFixture
@@ -222,20 +226,16 @@ class TestOpdsRegistrationService:
 
         # First, test the case where we can't even get the catalog
         # document.
-        registry = OpdsRegistrationService.for_integration(
-            remote_registry_fixture.db.session, remote_registry_fixture.integration
-        )
-
-        registry.fetch_catalog = MagicMock(
+        remote_registry_fixture.registry.fetch_catalog = MagicMock(
             side_effect=ProblemError(problem_detail=REMOTE_INTEGRATION_FAILED)
         )
         with pytest.raises(ProblemError) as excinfo:
-            registry.fetch_registration_document()
+            remote_registry_fixture.registry.fetch_registration_document()
 
         # The fetch_catalog method raised a ProblemError,
         # which propagated up to fetch_registration_document.
         assert REMOTE_INTEGRATION_FAILED == excinfo.value.problem_detail
-        registry.fetch_catalog.assert_called_once()
+        remote_registry_fixture.registry.fetch_catalog.assert_called_once()
 
     def test_fetch_registration_document_error_registration_document(
         self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
@@ -244,26 +244,25 @@ class TestOpdsRegistrationService:
         # get the registration document.
         requests_mock.get(
             "http://register-here/",
-            status_code=REMOTE_INTEGRATION_FAILED.status_code,
+            status_code=REMOTE_INTEGRATION_FAILED.status_code,  # type: ignore[arg-type]
             headers={"Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE},
             text=REMOTE_INTEGRATION_FAILED.response[0],
         )
-        registry = OpdsRegistrationService.for_integration(
-            remote_registry_fixture.db.session, remote_registry_fixture.integration
-        )
-        registry.fetch_catalog = MagicMock(
+        remote_registry_fixture.registry.fetch_catalog = MagicMock(
             return_value=("http://register-here/", "vendor id")
         )
 
         with pytest.raises(ProblemError) as excinfo:
-            registry.fetch_registration_document()
+            remote_registry_fixture.registry.fetch_registration_document()
 
         # A request was made to the registration URL mentioned in the catalog.
         assert requests_mock.called_once
+        assert requests_mock.last_request is not None
         assert "http://register-here/" == requests_mock.last_request.url
 
         # But the request returned a problem detail, which became a ProblemError
         assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
+        assert excinfo.value.problem_detail.detail is not None
         assert (
             str(REMOTE_INTEGRATION_FAILED.detail) in excinfo.value.problem_detail.detail
         )
@@ -273,29 +272,29 @@ class TestOpdsRegistrationService:
         self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
     ):
         # Finally, test the case where we can get both documents.
-        registry = OpdsRegistrationService.for_integration(
-            remote_registry_fixture.db.session, remote_registry_fixture.integration
-        )
-        registry.fetch_catalog = MagicMock(
+        remote_registry_fixture.registry.fetch_catalog = MagicMock(
             return_value=("http://register-here/", "vendor id")
         )
-        registry._extract_registration_information = MagicMock(
+        remote_registry_fixture.registry._extract_registration_information = MagicMock(
             return_value=("TOS link", "TOS HTML data")
         )
 
         requests_mock.get("http://register-here/", text="a registration document")
-        result = registry.fetch_registration_document()
+        result = remote_registry_fixture.registry.fetch_registration_document()
 
         # Another request was made to the registration URL.
         assert requests_mock.called_once
+        assert requests_mock.last_request is not None
         assert "http://register-here/" == requests_mock.last_request.url
-        registry.fetch_catalog.assert_called_once()
+        remote_registry_fixture.registry.fetch_catalog.assert_called_once()
 
         # Our mock of _extract_registration_information was called
         # with the mock response to that request.
-        registry._extract_registration_information.assert_called_once()
+        remote_registry_fixture.registry._extract_registration_information.assert_called_once()
         assert (
-            registry._extract_registration_information.call_args.args[0].text
+            remote_registry_fixture.registry._extract_registration_information.call_args.args[
+                0
+            ].text
             == "a registration document"
         )
 
@@ -407,246 +406,135 @@ class TestOpdsRegistrationService:
             m(not_encoded)
         assert "data: URL not base64-encoded: data:blah,content" in str(excinfo.value)
 
+    def test_register_library(
+        self,
+        remote_registry_fixture: RemoteRegistryFixture,
+        library_fixture: LibraryFixture,
+    ):
+        db = remote_registry_fixture.db
 
-class RegistrationFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-        # Create a OpdsRegistrationService.
-        self.integration = db.external_integration(
-            protocol="some protocol", goal="some goal"
+        # Test the other methods orchestrated by the register_library() method.
+        registry = remote_registry_fixture.registry
+        registry.fetch_catalog = MagicMock(return_value=("register_url", "vendor_id"))
+        registry._create_registration_payload = MagicMock(
+            return_value={"payload": "this is it"}
         )
-        self.registry = OpdsRegistrationService(self.integration)
-        self.registration = Registration(self.registry, db.default_library())
-
-
-@pytest.fixture(scope="function")
-def registration_fixture(db: DatabaseTransactionFixture) -> RegistrationFixture:
-    return RegistrationFixture(db)
-
-
-class TestRegistration:
-    def test_constructor(self, registration_fixture: RegistrationFixture):
-        db = registration_fixture.db
-
-        # The Registration constructor was called during setup to create
-        # self.registration.
-        reg = registration_fixture.registration
-        assert registration_fixture.registry == reg.registry
-        assert db.default_library() == reg.library
-
-        settings = [x for x in reg.integration.settings if x.library is not None]
-        assert {reg.status_field, reg.stage_field, reg.web_client_field} == set(
-            settings
+        registry._create_registration_headers = MagicMock(
+            return_value=dict(Header="Value")
         )
-        assert Registration.FAILURE_STATUS == reg.status_field.value
-        assert Registration.TESTING_STAGE == reg.stage_field.value
-        assert None == reg.web_client_field.value
+        registry._send_registration_request = MagicMock(
+            return_value=MockRequestsResponse(200, content=json.dumps("you did it!"))
+        )
+        registry._process_registration_result = MagicMock(return_value=True)
 
-        # The Library has been associated with the ExternalIntegration.
-        assert [db.default_library()] == registration_fixture.integration.libraries
-
-        # Creating another Registration doesn't add the library to the
-        # ExternalIntegration again or override existing values for the
-        # settings.
-        reg.status_field.value = "new status"
-        reg.stage_field.value = "new stage"
-        reg2 = Registration(registration_fixture.registry, db.default_library())
-        assert [db.default_library()] == registration_fixture.integration.libraries
-        assert "new status" == reg2.status_field.value
-        assert "new stage" == reg2.stage_field.value
-
-    def test_setting(self, registration_fixture: RegistrationFixture):
-        db = registration_fixture.db
-        m = registration_fixture.registration.setting
-
-        def _find(key):
-            """Find a ConfigurationSetting associated with the library.
-
-            This is necessary because ConfigurationSetting.value
-            creates _two_ ConfigurationSettings, one associated with
-            the library and one not associated with any library, to
-            store the default value.
-            """
-            values = [
-                x
-                for x in registration_fixture.registration.integration.settings
-                if x.library and x.key == key
-            ]
-            if len(values) == 1:
-                return values[0]
-            return None
-
-        # Calling setting() creates a ConfigurationSetting object
-        # associated with the library.
-        setting = m("key")
-        assert "key" == setting.key
-        assert None == setting.value
-        assert db.default_library() == setting.library
-        assert setting == _find("key")
-
-        # You can specify a default value, which is used only if the
-        # current value is None.
-        setting2 = m("key", "default")
-        assert setting == setting2
-        assert "default" == setting.value
-
-        setting3 = m("key", "default2")
-        assert setting == setting3
-        assert "default" == setting.value
-
-    def test_push(self, registration_fixture: RegistrationFixture):
-        db = registration_fixture.db
-        # Test the other methods orchestrated by the push() method.
-
-        class MockRegistry(OpdsRegistrationService):
-            def fetch_catalog(self, catalog_url, do_get):
-                # Pretend to fetch a root catalog and extract a
-                # registration URL from it.
-                self.fetch_catalog_called_with = (catalog_url, do_get)
-                return "register_url", "vendor_id"
-
-        class MockRegistration(Registration):
-            def _create_registration_payload(self, url_for, stage):
-                self.payload_ingredients = (url_for, stage)
-                return dict(payload="this is it")
-
-            def _create_registration_headers(self):
-                self._create_registration_headers_called = True
-                return dict(Header="Value")
-
-            def _send_registration_request(
-                self, register_url, headers, payload, do_post
-            ):
-                self._send_registration_request_called_with = (
-                    register_url,
-                    headers,
-                    payload,
-                    do_post,
-                )
-                return MockRequestsResponse(200, content=json.dumps("you did it!"))
-
-            def _process_registration_result(self, catalog, encryptor, stage):
-                self._process_registration_result_called_with = (
-                    catalog,
-                    encryptor,
-                    stage,
-                )
-                return "all done!"
-
-        library = db.default_library()
-        registry = MockRegistry(registration_fixture.integration)
-        registration = MockRegistration(registry, library)
-        stage = Registration.TESTING_STAGE
+        library = library_fixture.library()
+        stage = RegistrationStage.TESTING
         url_for = MagicMock()
-        catalog_url = "http://catalog/"
-        do_get = MagicMock()
-        do_post = MagicMock()
 
-        def push():
-            return registration.push(stage, url_for, catalog_url, do_get, do_post)
+        register_library = partial(registry.register_library, library, stage, url_for)
 
         # Kick off the registration process, and make sure we get expected return.
-        result = push()
-        assert "all done!" == result
+        result = register_library()
+        assert result is True
 
         # But there were many steps towards this result.
 
-        # First, MockRegistry.fetch_catalog() was called, in an attempt
+        # First, fetch_catalog() was called, in an attempt
         # to find the registration URL inside the root catalog.
-        assert (catalog_url, do_get) == registry.fetch_catalog_called_with
+        registry.fetch_catalog.assert_called_once()
 
         # fetch_catalog() returned a registration URL and
         # a vendor ID. The registration URL was used later on...
         #
-        # The vendor ID was set as a ConfigurationSetting on
-        # the ExternalIntegration associated with this registry.
-        assert (
-            "vendor_id"
-            == ConfigurationSetting.for_externalintegration(
-                AuthdataUtility.VENDOR_ID_KEY, registration_fixture.integration
-            ).value
+        # The vendor ID was set on the registration in the database.
+        registration = get_one(
+            db.session, DiscoveryServiceRegistration, library=library
         )
+        assert registration is not None
+        assert "vendor_id" == registration.vendor_id
 
         # _create_registration_payload was called to create the body
         # of the registration request.
-        assert (url_for, stage) == registration.payload_ingredients
+        registry._create_registration_payload.assert_called_once_with(
+            library, stage, url_for
+        )
 
         # _create_registration_headers was called to create the headers
         # sent along with the request.
-        assert True == registration._create_registration_headers_called
+        registry._create_registration_headers.assert_called_once()
 
         # Then _send_registration_request was called, POSTing the
         # payload to "register_url", the registration URL we got earlier.
-        results = registration._send_registration_request_called_with
-        assert (
-            "register_url",
-            {"Header": "Value"},
-            dict(payload="this is it"),
-            do_post,
-        ) == results
+        registry._send_registration_request.assert_called_once_with(
+            "register_url", {"Header": "Value"}, dict(payload="this is it")
+        )
 
         # Finally, the return value of that method was loaded as JSON
         # and passed into _process_registration_result, along with
         # a cipher created from the private key. (That cipher would be used
         # to decrypt anything the foreign site signed using this site's
         # public key.)
-        results = registration._process_registration_result_called_with
-        message, cipher, actual_stage = results
+        registry._process_registration_result.assert_called_once()
+        (
+            actual_registration,
+            message,
+            cipher,
+            actual_stage,
+        ) = registry._process_registration_result.call_args.args
+        assert registration == actual_registration
         assert "you did it!" == message
         assert cipher._key.export_key("DER") == library.private_key
         assert actual_stage == stage
 
-        # If a nonexistent stage is provided a ProblemDetail is the result.
-        result = registration.push(
-            "no such stage", url_for, catalog_url, do_get, do_post
-        )
-        assert INVALID_INPUT.uri == result.uri
-        assert "'no such stage' is not a valid registration stage" == result.detail
-
         # Now in reverse order, let's replace the mocked methods so
-        # that they return ProblemDetail documents. This tests that if
-        # there is a failure at any stage, the ProblemDetail is
+        # that they raise ProblemError exceptions. This tests that if
+        # there is a failure at any stage, the ProblemError is
         # propagated.
+        def create_exception(message: str) -> ProblemError:
+            return ProblemError(problem_detail=INVALID_REGISTRATION.detailed(message))
 
-        # The push() function will no longer push anything, so rename it.
-        cause_problem = push
+        registry._process_registration_result = MagicMock(
+            side_effect=create_exception("could not process registration result")
+        )
+        with pytest.raises(ProblemError) as excinfo:
+            register_library()
+        assert (
+            "could not process registration result"
+            == excinfo.value.problem_detail.detail
+        )
 
-        def fail0(*args, **kwargs):
-            return INVALID_REGISTRATION.detailed(
-                "could not process registration result"
-            )
+        registry._send_registration_request = MagicMock(
+            side_effect=create_exception("could not send registration request")
+        )
+        with pytest.raises(ProblemError) as excinfo:
+            register_library()
+        assert (
+            "could not send registration request" == excinfo.value.problem_detail.detail
+        )
 
-        registration._process_registration_result = fail0  # type: ignore
-        problem = cause_problem()
-        assert "could not process registration result" == problem.detail
+        registry._create_registration_payload = MagicMock(
+            side_effect=create_exception("could not create registration payload")
+        )
+        with pytest.raises(ProblemError) as excinfo:
+            register_library()
+        assert (
+            "could not create registration payload"
+            == excinfo.value.problem_detail.detail
+        )
 
-        def fail1(*args, **kwargs):
-            return INVALID_REGISTRATION.detailed("could not send registration request")
-
-        registration._send_registration_request = fail1  # type: ignore
-        problem = cause_problem()
-        assert "could not send registration request" == problem.detail
-
-        def fail2(*args, **kwargs):
-            return INVALID_REGISTRATION.detailed(
-                "could not create registration payload"
-            )
-
-        registration._create_registration_payload = fail2  # type: ignore
-        problem = cause_problem()
-        assert "could not create registration payload" == problem.detail
-
-        def fail3(*args, **kwargs):
-            return INVALID_REGISTRATION.detailed("could not fetch catalog")
-
-        registry.fetch_catalog = fail3  # type: ignore
-        problem = cause_problem()
-        assert "could not fetch catalog" == problem.detail
+        registry.fetch_catalog = MagicMock(
+            side_effect=create_exception("could not fetch catalog")
+        )
+        with pytest.raises(ProblemError) as excinfo:
+            register_library()
+        assert "could not fetch catalog" == excinfo.value.problem_detail.detail
 
     def test__create_registration_payload(
-        self, registration_fixture: RegistrationFixture, library_fixture: LibraryFixture
+        self,
+        remote_registry_fixture: RemoteRegistryFixture,
+        library_fixture: LibraryFixture,
     ):
-        m = registration_fixture.registration._create_registration_payload
+        m = remote_registry_fixture.registry._create_registration_payload
 
         # Mock url_for to create good-looking callback URLs.
         def url_for(controller, library_short_name, **kwargs):
@@ -654,101 +542,90 @@ class TestRegistration:
 
         # First, test with no configuration contact configured for the
         # library.
-        stage = ""
+        library = library_fixture.library()
+        stage = RegistrationStage.PRODUCTION
         expect_url = url_for(
             "authentication_document",
-            registration_fixture.registration.library.short_name,
+            library.short_name,
         )
-        expect_payload = dict(url=expect_url, stage=stage)
-        assert expect_payload == m(url_for, stage)
+        expect_payload = dict(url=expect_url, stage=stage.value)
+        assert expect_payload == m(library, stage, url_for)
 
         # If a contact is configured, it shows up in the payload.
         contact = "mailto:ohno@library.org"
-        settings = library_fixture.settings(registration_fixture.registration.library)
+        settings = library_fixture.settings(library)
         settings.configuration_contact_email_address = contact  # type: ignore[assignment]
         expect_payload["contact"] = contact
-        assert expect_payload == m(url_for, stage)
+        assert expect_payload == m(library, stage, url_for)
 
     def test_create_registration_headers(
-        self, registration_fixture: RegistrationFixture
+        self, remote_registry_fixture: RemoteRegistryFixture
     ):
-        db = registration_fixture.db
-        m = registration_fixture.registration._create_registration_headers
+        db = remote_registry_fixture.db
+        m = remote_registry_fixture.registry._create_registration_headers
+
         # If no shared secret is configured, no custom headers are provided.
-        expect_headers = {}  # type: ignore
-        assert expect_headers == m()
+        registration = remote_registry_fixture.create_registration()
+        assert {} == m(registration)
 
         # If a shared secret is configured, it shows up as part of
         # the Authorization header.
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            ExternalIntegration.PASSWORD,
-            registration_fixture.registration.library,
-            registration_fixture.registration.registry.integration,
-        ).value = "a secret"
-        expect_headers["Authorization"] = "Bearer a secret"
-        assert expect_headers == m()
+        registration.shared_secret = "a secret"
+        assert {"Authorization": "Bearer a secret"} == m(registration)
 
     def test__send_registration_request(
-        self, registration_fixture: RegistrationFixture
+        self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
     ):
-        class Mock:
-            def __init__(self, response):
-                self.response = response
-
-            def do_post(self, url, payload, **kwargs):
-                self.called_with = (url, payload, kwargs)
-                return self.response
 
         # If everything goes well, the return value of do_post is
         # passed through.
-        mock = Mock(MockRequestsResponse(200, content="all good"))
-        url = "url"
+        url = "http://url.com"
+        requests_mock.post(url, text="all good")
         payload = {"payload": "payload"}
         headers = {"headers": ""}
-        m = Registration._send_registration_request
-        result = m(url, headers, payload, mock.do_post)
-        assert mock.response == result
-        called_with = mock.called_with
-        assert called_with == (
-            url,
-            payload,
-            dict(
-                headers=headers,
-                timeout=60,
-                allowed_response_codes=["2xx", "3xx", "400", "401"],
-            ),
-        )
+        m = remote_registry_fixture.registry._send_registration_request
 
-        # Most error handling is expected to be handled by do_post
-        # raising an exception, but certain responses get special
-        # treatment:
+        result = m(url, headers, payload)
+        assert "all good" == result.text
+
+        # Error handling is expected to be handled by post_request
+        # raising a ProblemError exception.
 
         # The remote sends a 401 response with a problem detail.
-        mock = Mock(
-            MockRequestsResponse(
-                401,
-                {"Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE},
-                content=json.dumps(dict(detail="this is a problem detail")),
-            )
+        requests_mock.post(
+            url,
+            status_code=401,
+            headers={"Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE},
+            text=json.dumps(dict(detail="this is a problem detail")),
         )
-        result = m(url, headers, payload, mock.do_post)
-        assert isinstance(result, ProblemDetail)
-        assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-        assert 'Remote service returned: "this is a problem detail"' == result.detail
+        with pytest.raises(ProblemError) as excinfo:
+            m(url, headers, payload)
+        assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
+        assert excinfo.value.problem_detail.detail is not None
+        assert (
+            'Remote service returned: "this is a problem detail"'
+            in excinfo.value.problem_detail.detail
+        )
 
         # The remote sends some other kind of 401 response.
-        mock = Mock(
-            MockRequestsResponse(
-                401, {"Content-Type": "text/html"}, content="log in why don't you"
-            )
+        requests_mock.post(
+            url,
+            status_code=401,
+            headers={"Content-Type": "text/html"},
+            text="log in why don't you",
         )
-        result = m(url, headers, payload, mock.do_post)
-        assert isinstance(result, ProblemDetail)
-        assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-        assert 'Remote service returned: "log in why don\'t you"' == result.detail
+        with pytest.raises(ProblemError) as excinfo:
+            m(url, headers, payload)
 
-    def test__decrypt_shared_secret(self, registration_fixture: RegistrationFixture):
+        assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
+        assert (
+            '401 response from integration server: "log in why don\'t you"'
+            == excinfo.value.problem_detail.detail
+        )
+
+    def test__decrypt_shared_secret(
+        self, remote_registry_fixture: RemoteRegistryFixture
+    ):
         key = RSA.generate(2048)
         encryptor = PKCS1_OAEP.new(key)
 
@@ -761,95 +638,104 @@ class TestRegistration:
         )
 
         # Success.
-        m = Registration._decrypt_shared_secret
+        m = remote_registry_fixture.registry._decrypt_shared_secret
         assert shared_secret == m(encryptor, encrypted_secret)
 
-        # If we try to decrypt using the wrong key, a ProblemDetail is
-        # returned explaining the problem.
-        problem = m(encryptor2, encrypted_secret)
-        assert isinstance(problem, ProblemDetail)
-        assert SHARED_SECRET_DECRYPTION_ERROR.uri == problem.uri
-        assert problem.detail is not None
-        assert encrypted_secret in problem.detail
+        # If we try to decrypt using the wrong key, a ProblemError is
+        # raised explaining the problem.
+        with pytest.raises(ProblemError) as excinfo:
+            m(encryptor2, encrypted_secret)
+
+        assert SHARED_SECRET_DECRYPTION_ERROR.uri == excinfo.value.problem_detail.uri
+        assert excinfo.value.problem_detail.detail is not None
+        assert encrypted_secret in excinfo.value.problem_detail.detail
 
     def test__process_registration_result(
-        self, registration_fixture: RegistrationFixture
+        self, remote_registry_fixture: RemoteRegistryFixture, monkeypatch: MonkeyPatch
     ):
-        db = registration_fixture.db
-        reg = registration_fixture.registration
-        m = reg._process_registration_result
+        db = remote_registry_fixture.db
+        m = remote_registry_fixture.registry._process_registration_result
+        stage = RegistrationStage.TESTING
+        encryptor = MagicMock()
+
+        reg = MagicMock(spec=DiscoveryServiceRegistration)
 
         # Result must be a dictionary.
-        result = m("not a dictionary", None, None)  # type: ignore[arg-type]
-        assert isinstance(result, ProblemDetail)
-        assert INTEGRATION_ERROR.uri == result.uri
+        with pytest.raises(ProblemError) as excinfo:
+            m(reg, "not a dictionary", encryptor, stage)
+
+        problem = excinfo.value.problem_detail
+        assert INTEGRATION_ERROR.uri == problem.uri
         assert (
             "Remote service served 'not a dictionary', which I can't make sense of as an OPDS document."
-            == result.detail
+            == problem.detail
         )
 
         # When the result is empty, the registration is marked as successful.
-        new_stage = "new stage"
-        encryptor = MagicMock()
-        result = m(dict(), encryptor, new_stage)
-        assert True == result
-        assert reg.SUCCESS_STATUS == reg.status_field.value
+        result = m(reg, dict(), encryptor, stage)
+        assert result is True
+        reg.status = RegistrationStatus.SUCCESS
 
         # The stage field has been set to the requested value.
-        assert new_stage == reg.stage_field.value
+        reg.stage = stage
 
         # Now try with a result that includes a short name,
         # a shared secret, and a web client URL.
+        mock = MagicMock(return_value="👉 cleartext 👈".encode())
+        monkeypatch.setattr(OpdsRegistrationService, "_decrypt_shared_secret", mock)
 
-        class Mock0(Registration):
-            def _decrypt_shared_secret(self, encryptor, shared_secret):
-                self._decrypt_shared_secret_called_with = (encryptor, shared_secret)
-                return "👉 cleartext 👈".encode()
-
-        reg = Mock0(registration_fixture.registry, db.default_library())
         catalog = dict(
             metadata=dict(short_name="SHORT", shared_secret="ciphertext", id="uuid"),
             links=[dict(href="http://web/library", rel="self", type="text/html")],
         )
-        result = reg._process_registration_result(
-            catalog, encryptor, "another new stage"
-        )
-        assert True == result
+        result = m(reg, catalog, encryptor, RegistrationStage.PRODUCTION)
+        assert result is True
 
         # Short name is set.
-        assert "SHORT" == reg.setting(ExternalIntegration.USERNAME).value
+        assert reg.short_name == "SHORT"
 
         # Shared secret was decrypted, decoded from UTF-8 and is set.
-        assert (encryptor, "ciphertext") == reg._decrypt_shared_secret_called_with
-        assert "👉 cleartext 👈" == reg.setting(ExternalIntegration.PASSWORD).value
+        mock.assert_called_once_with(encryptor, "ciphertext")
+        assert reg.shared_secret == "👉 cleartext 👈"
 
         # Web client URL is set.
-        assert (
-            "http://web/library"
-            == reg.setting(reg.LIBRARY_REGISTRATION_WEB_CLIENT).value
-        )
+        assert reg.web_client == "http://web/library"
 
-        assert "another new stage" == reg.stage_field.value
+        assert reg.stage == RegistrationStage.PRODUCTION
 
         # Now simulate a problem decrypting the shared secret.
-        class Mock1(Registration):
-            def _decrypt_shared_secret(self, encryptor, shared_secret):
-                return SHARED_SECRET_DECRYPTION_ERROR
+        mock.side_effect = ProblemError(problem_detail=SHARED_SECRET_DECRYPTION_ERROR)
+        with pytest.raises(ProblemError) as excinfo:
+            m(reg, catalog, encryptor, stage)
 
-        reg = Mock1(registration_fixture.registry, db.default_library())
-        result = reg._process_registration_result(
-            catalog, encryptor, "another new stage"
-        )
-        assert SHARED_SECRET_DECRYPTION_ERROR == result
+        assert SHARED_SECRET_DECRYPTION_ERROR == excinfo.value.problem_detail
 
 
 class TestLibraryRegistrationScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        class Mock(LibraryRegistrationScript):
-            processed = []
+    def test_do_run(
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        remote_registry_fixture: RemoteRegistryFixture,
+    ):
+        @dataclass
+        class Processed:
+            registry: OpdsRegistrationService
+            library: Library
+            stage: RegistrationStage
+            url_for: Callable[..., str]
 
-            def process_library(self, *args):
-                self.processed.append(args)
+        class Mock(LibraryRegistrationScript):
+            processed: List[Processed] = []
+
+            def process_library(  # type: ignore[override]
+                self,
+                registry: OpdsRegistrationService,
+                library: Library,
+                stage: RegistrationStage,
+                url_for: Callable[..., str],
+            ):
+                self.processed.append(Processed(registry, library, stage, url_for))
 
         script = Mock(db.session)
 
@@ -858,70 +744,61 @@ class TestLibraryRegistrationScript:
         )
         base_url_setting.value = "http://test-circulation-manager/"
 
-        library = db.default_library()
-        library2 = db.library()
+        library = library_fixture.library()
+        library2 = library_fixture.library()
 
         cmd_args = [
             str(library.short_name),
             "--stage=testing",
-            "--registry-url=http://registry/",
+            "--registry-url=http://registry.com/",
         ]
         manager = MockCirculationManager(db.session)
         script.do_run(cmd_args=cmd_args, manager=manager)
 
         # One library was processed.
-        (registration, stage, url_for) = script.processed.pop()
+        processed = script.processed.pop()
         assert [] == script.processed
-        assert library == registration.library
-        assert Registration.TESTING_STAGE == stage
-
-        # A new ExternalIntegration was created for the newly defined
-        # registry at http://registry/.
-        assert "http://registry/" == registration.integration.url
+        assert library == processed.library
+        assert RegistrationStage.TESTING == processed.stage
 
         # Let's say the other library was earlier registered in production.
-        registration_2 = Registration(registration.registry, library2)
-        registration_2.stage_field.value = Registration.PRODUCTION_STAGE
+        registration = remote_registry_fixture.create_registration(library2)
+        registration.stage = RegistrationStage.PRODUCTION
 
         # Now run the script again without specifying a particular
         # library or the --stage argument.
-        script.do_run(cmd_args=[], manager=manager)
+        script.do_run(cmd_args=["--registry-url=http://registry.com/"], manager=manager)
 
         # Every library was processed.
-        assert {library, library2} == {x[0].library for x in script.processed}
+        assert {library, library2} == {x.library for x in script.processed}
 
-        for i in script.processed:
-            # Since no stage was provided, each library was registered
-            # using the stage already associated with it.
-            assert i[0].stage_field.value == i[1]
+        # Since no stage was provided, each library was registered
+        # using the stage already associated with it.
+        assert {RegistrationStage.TESTING, RegistrationStage.PRODUCTION} == {
+            x.stage for x in script.processed
+        }
 
-            # Every library was registered with the default
-            # library registry.
-            assert (
-                OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL
-                == i[0].integration.url
-            )
+        # Every library was registered with the specified registry.
+        assert {"http://registry.com/", "http://registry.com/"} == {
+            x.registry.settings.url for x in script.processed
+        }
 
-    def test_process_library(self, db: DatabaseTransactionFixture):
+    def test_process_library(
+        self,
+        db: DatabaseTransactionFixture,
+        remote_registry_fixture: RemoteRegistryFixture,
+        library_fixture: LibraryFixture,
+    ):
         """Test the things that might happen when process_library is called."""
         script = LibraryRegistrationScript(db.session)
-        library = db.default_library()
-        integration = db.external_integration(
-            protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
-        )
-        registry = OpdsRegistrationService(integration)
+        library = library_fixture.library()
+        registry = remote_registry_fixture.registry
 
         # First, simulate success.
-        class Success(Registration):
-            def push(self, stage, url_for):
-                self.pushed = (stage, url_for)
-                return True
-
-        registration = Success(registry, library)
-
-        stage = "stage"
+        registry.register_library = MagicMock(return_value=True)
+        stage = MagicMock(spec=RegistrationStage)
         url_for = MagicMock()
-        assert True == script.process_library(registration, stage, url_for)
+        assert script.process_library(registry, library, stage, url_for) is True
 
         # The stage and url_for values were passed into
         # Registration.push()

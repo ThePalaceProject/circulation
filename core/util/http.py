@@ -472,7 +472,7 @@ class HTTP:
                 problem = response.json()
                 raise ProblemError(
                     problem_detail=INTEGRATION_ERROR.detailed(
-                        f'Remote service returned: "{problem.get("title")}" with detail: "{problem.get("detail")}"'
+                        f'Remote service returned: "{problem.get("detail")}"'
                     )
                 )
             except JSONDecodeError:
@@ -484,6 +484,6 @@ class HTTP:
         # server, verbatim.
         raise ProblemError(
             problem_detail=INTEGRATION_ERROR.detailed(
-                f"{response.status_code} response from integration server: {response.text}"
+                f'{response.status_code} response from integration server: "{response.text}"'
             )
         )

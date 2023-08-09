@@ -30,7 +30,7 @@ from core.integration.base import HasIntegrationConfiguration
 from core.integration.goals import Goals
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.model import IntegrationConfiguration, Library, get_one, get_one_or_create
-from core.model.discoveryserviceregistration import (
+from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
     RegistrationStatus,
@@ -252,7 +252,10 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         """
         tos_link = None
         tos_html = None
-        catalog, links = cls._extract_links(response)
+        try:
+            catalog, links = cls._extract_links(response)
+        except ProblemError:
+            return None, None
         for link in links:
             if link.get("rel") != "terms-of-service":
                 continue
@@ -428,7 +431,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         """Send the request that actually kicks off the OPDS Directory
         Registration Protocol.
 
-        :return: Either a ProblemDetail or a requests-like Response object.
+        :return: A requests-like Response object or raise a ProblemError on failure.
         """
         response = cls.post_request(
             register_url,
@@ -486,7 +489,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
         if not isinstance(catalog, dict):
             raise ProblemError(
                 problem_detail=INTEGRATION_ERROR.detailed(
-                    f"Remote service served {catalog}, which I can't make sense of as an OPDS document.",
+                    f"Remote service served '{catalog}', which I can't make sense of as an OPDS document.",
                 )
             )
         metadata: Dict[str, str] = catalog.get("metadata", {})

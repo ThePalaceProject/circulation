@@ -6,7 +6,7 @@ from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.integration.goals import Goals
 from core.model import IntegrationConfiguration, Library, create
-from core.model.discoveryserviceregistration import (
+from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStatus,
 )

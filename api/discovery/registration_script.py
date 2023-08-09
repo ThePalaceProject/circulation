@@ -11,8 +11,11 @@ from api.controller import CirculationManager
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.util.flask import PalaceFlask
 from core.integration.goals import Goals
-from core.model import ConfigurationSetting, ExternalIntegration, Library
-from core.model.discoveryserviceregistration import RegistrationStage
+from core.model import ConfigurationSetting, ExternalIntegration, Library, get_one
+from core.model.discovery_service_registration import (
+    DiscoveryServiceRegistration,
+    RegistrationStage,
+)
 from core.scripts import LibraryInputScript
 from core.util.problem_detail import ProblemError
 
@@ -53,7 +56,14 @@ class LibraryRegistrationScript(LibraryInputScript):
             self.log.error(f'No OPDS Registration service found for "{url}"')
             return False
 
-        stage = RegistrationStage[parsed.stage]
+        try:
+            stage = RegistrationStage(parsed.stage) if parsed.stage else None
+        except ValueError:
+            self.log.error(
+                f'Invalid registration stage "{parsed.stage}". '
+                f'Must be one of {", ".join([stage.value for stage in RegistrationStage])}.'
+            )
+            return False
 
         # Set up an application context so we have access to url_for.
         from api.app import app
@@ -65,14 +75,36 @@ class LibraryRegistrationScript(LibraryInputScript):
         ctx = app.test_request_context(base_url=base_url)
         ctx.push()
         for library in parsed.libraries:
-            self.process_library(registry, library, stage, url_for)
+            if not stage:
+                # Check if the library has already been registered.
+                registration = get_one(
+                    self._db,
+                    DiscoveryServiceRegistration,
+                    library=library,
+                    integration=registry.integration,
+                )
+                if registration and registration.stage is not None:
+                    library_stage = registration.stage
+                else:
+                    # Don't know what stage to register this library in, so it defaults to test.
+                    library_stage = RegistrationStage.TESTING
+            else:
+                library_stage = stage
+
+            self.process_library(registry, library, library_stage, url_for)
         ctx.pop()
 
         # For testing purposes, return the application object that was
         # created.
         return app
 
-    def process_library(self, registry: OpdsRegistrationService, library: Library, stage: RegistrationStage, url_for: Callable[..., str]) -> bool:  # type: ignore[override]
+    def process_library(  # type: ignore[override]
+        self,
+        registry: OpdsRegistrationService,
+        library: Library,
+        stage: RegistrationStage,
+        url_for: Callable[..., str],
+    ) -> bool:
         """Push one Library's registration to the given OpdsRegistrationService."""
 
         self.log.info("Processing library %r", library.short_name)

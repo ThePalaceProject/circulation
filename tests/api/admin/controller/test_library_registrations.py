@@ -5,8 +5,7 @@ import pytest
 from flask import url_for
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.discovery.opds_registration import OpdsRegistrationService, Registration
+from api.discovery.opds_registration import OpdsRegistrationService
 from core.model import AdminRole, ConfigurationSetting, ExternalIntegration, create
 from core.util.http import HTTP
 from tests.core.mock import DummyHTTPClient

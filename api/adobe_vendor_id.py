@@ -16,7 +16,7 @@ from sqlalchemy.orm.session import Session
 
 from core.integration.goals import Goals
 from core.model import Credential, DataSource, IntegrationConfiguration, Library, Patron
-from core.model.discoveryserviceregistration import (
+from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStatus,
 )

@@ -4,7 +4,6 @@ from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
-from api.discovery.opds_registration import Registration
 from api.opds import CirculationManagerAnnotator, LibraryAnnotator
 from api.problem_details import *
 from core.external_search import MockExternalSearchIndex
@@ -65,12 +64,12 @@ class TestCirculationManager:
         registry = circulation_fixture.db.external_integration(
             protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
         )
-        ConfigurationSetting.for_library_and_externalintegration(
-            circulation_fixture.db.session,
-            Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-            library,
-            registry,
-        ).value = "http://registration"
+        # ConfigurationSetting.for_library_and_externalintegration(
+        #     circulation_fixture.db.session,
+        #     Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
+        #     library,
+        #     registry,
+        # ).value = "http://registration"
 
         ConfigurationSetting.sitewide(
             circulation_fixture.db.session,

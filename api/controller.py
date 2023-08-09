@@ -75,7 +75,7 @@ from core.model.devicetokens import (
     DuplicateDeviceTokenError,
     InvalidTokenTypeError,
 )
-from core.model.discoveryserviceregistration import DiscoveryServiceRegistration
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument

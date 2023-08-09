@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from api.adobe_vendor_id import AuthdataUtility
 from core.config import CannotLoadConfiguration
-from core.model.discoveryserviceregistration import (
+from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStatus,
 )

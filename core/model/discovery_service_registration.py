@@ -20,7 +20,6 @@ class RegistrationStatus(Enum):
 
     SUCCESS = "success"
     FAILURE = "failure"
-    NONE = "none"
 
 
 class DiscoveryServiceRegistration(Base):
@@ -29,7 +28,9 @@ class DiscoveryServiceRegistration(Base):
     __tablename__ = "discovery_service_registrations"
 
     status = Column(
-        AlchemyEnum(RegistrationStatus), default=RegistrationStatus.NONE, nullable=False
+        AlchemyEnum(RegistrationStatus),
+        default=RegistrationStatus.FAILURE,
+        nullable=False,
     )
     stage = Column(
         AlchemyEnum(RegistrationStage),
