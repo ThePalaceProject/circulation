@@ -833,13 +833,13 @@ class TestLoanController:
         def mock_authenticated_patron():
             return INTEGRATION_ERROR
 
-        controller.authenticated_patron_from_request = mock_authenticated_patron  # type: ignore[method-assign]
+        controller.authenticated_patron_from_request = mock_authenticated_patron
         with loan_fixture.request_context_with_library("/"):
             problem = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
             assert INTEGRATION_ERROR == problem
-        controller.authenticated_patron_from_request = old_authenticated_patron  # type: ignore[method-assign]
+        controller.authenticated_patron_from_request = old_authenticated_patron
 
         # However, if can_fulfill_without_loan returns True, then
         # fulfill() will be called. If fulfill() returns a
@@ -865,7 +865,7 @@ class TestLoanController:
         # Now we're able to fulfill the book even without
         # authenticating a patron.
         with loan_fixture.request_context_with_library("/"):
-            controller.can_fulfill_without_loan = mock_can_fulfill_without_loan  # type: ignore[method-assign]
+            controller.can_fulfill_without_loan = mock_can_fulfill_without_loan
             controller.circulation.fulfill = mock_fulfill
             response = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
@@ -940,8 +940,8 @@ class TestLoanController:
             None,
             content_link_redirect=True,
         )
-        controller.can_fulfill_without_loan = MagicMock(return_value=False)  # type: ignore[method-assign]
-        controller.authenticated_patron_from_request = MagicMock(return_value=patron)  # type: ignore[method-assign]
+        controller.can_fulfill_without_loan = MagicMock(return_value=False)
+        controller.authenticated_patron_from_request = MagicMock(return_value=patron)
 
         with loan_fixture.request_context_with_library(
             "/",
@@ -1137,7 +1137,7 @@ class TestLoanController:
         original_handle_conditional_request = (
             loan_fixture.controller.handle_conditional_request
         )
-        loan_fixture.manager.loans.handle_conditional_request = (  # type: ignore[method-assign]
+        loan_fixture.manager.loans.handle_conditional_request = (
             handle_conditional_request
         )
 
@@ -1176,7 +1176,7 @@ class TestLoanController:
         # the course of this test, but it will not notice any more
         # conditional requests -- the detailed behavior of
         # handle_conditional_request is tested elsewhere.
-        loan_fixture.manager.loans.handle_conditional_request = (  # type: ignore[method-assign]
+        loan_fixture.manager.loans.handle_conditional_request = (
             original_handle_conditional_request
         )
 

@@ -234,7 +234,7 @@ class TestOverdriveAPI:
         def explode(*args, **kwargs):
             raise Exception("Failure!")
 
-        overdrive_api_fixture.api.check_creds = explode  # type: ignore[method-assign]
+        overdrive_api_fixture.api.check_creds = explode
 
         # Only one test will be run.
         [check_creds] = overdrive_api_fixture.api._run_self_tests(
@@ -1668,8 +1668,8 @@ class TestOverdriveAPI:
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         # but mock the request methods
-        od_api._do_post = MagicMock()  # type: ignore[method-assign]
-        od_api._do_get = MagicMock()  # type: ignore[method-assign]
+        od_api._do_post = MagicMock()
+        od_api._do_get = MagicMock()
         response_credential = od_api.refresh_patron_access_token(
             credential, patron, "a pin", is_fulfillment=True
         )
@@ -1705,8 +1705,8 @@ class TestOverdriveAPI:
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})  # type: ignore[method-assign]
-        od_api.get_download_link = MagicMock(return_value=None)  # type: ignore[method-assign]
+        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
+        od_api.get_download_link = MagicMock(return_value=None)
 
         exc = pytest.raises(
             CannotFulfill,
@@ -1749,14 +1749,14 @@ class TestOverdriveAPI:
             api_data = json.load(fp)
 
         # Mock out the flow
-        od_api.get_loan = MagicMock(return_value=api_data["loan"])  # type: ignore[method-assign]
+        od_api.get_loan = MagicMock(return_value=api_data["loan"])
 
         mock_lock_in_response = create_autospec(Response)
         mock_lock_in_response.status_code = 200
         mock_lock_in_response.json.return_value = api_data["lock_in"]
-        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)  # type: ignore[method-assign]
+        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
 
-        od_api.get_fulfillment_link_from_download_link = MagicMock(  # type: ignore[method-assign]
+        od_api.get_fulfillment_link_from_download_link = MagicMock(
             return_value=(
                 "https://example.org/epub-redirect",
                 "application/epub+zip",

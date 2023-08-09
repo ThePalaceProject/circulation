@@ -326,7 +326,7 @@ class TestOPDS2WithTokens:
         loan = loans.first()
         assert isinstance(loan, Loan)
         mechanism_id = loan.license_pool.delivery_mechanisms[0].delivery_mechanism.id
-        manager.loans.authenticated_patron_from_request = lambda: patron  # type: ignore[method-assign]
+        manager.loans.authenticated_patron_from_request = lambda: patron
 
         # Fulfill (Download) the book, should redirect to an authenticated URL
         with controller_fixture.request_context_with_library("/") as ctx, patch.object(

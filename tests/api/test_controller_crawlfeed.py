@@ -41,9 +41,9 @@ class TestCrawlableFeed:
             )
             return "An OPDS feed."
 
-        controller._crawlable_feed = mock  # type: ignore[method-assign]
+        controller._crawlable_feed = mock
         yield
-        controller._crawlable_feed = original  # type: ignore[method-assign]
+        controller._crawlable_feed = original
 
     def test_crawlable_library_feed(
         self, circulation_fixture: CirculationControllerFixture

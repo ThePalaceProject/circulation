@@ -415,7 +415,7 @@ class TestSAMLController:
         authenticator.library_authenticators[
             "default"
         ].bearer_token_signing_secret = "test"
-        authenticator.create_bearer_token = MagicMock(return_value=bearer_token)  # type: ignore[method-assign]
+        authenticator.create_bearer_token = MagicMock(return_value=bearer_token)
 
         controller = SAMLController(controller_fixture.app.manager, authenticator)
 

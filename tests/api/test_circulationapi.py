@@ -190,7 +190,7 @@ class TestCirculationAPI:
 
         # Reset the API map, this book belongs to the "basic" collection,
         # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)  # type: ignore[method-assign]
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
 
         # Mark the book as unlimited access.
         circulation_api.pool.unlimited_access = True
@@ -1043,7 +1043,7 @@ class TestCirculationAPI:
         are fulfilled in the same way as OA and self-hosted books."""
         # Reset the API map, this book belongs to the "basic" collection,
         # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)  # type: ignore[method-assign]
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
 
         # Mark the book as unlimited access.
         circulation_api.pool.unlimited_access = True
@@ -1132,7 +1132,7 @@ class TestCirculationAPI:
         def yes_we_can(*args, **kwargs):
             return True
 
-        circulation_api.circulation.can_fulfill_without_loan = yes_we_can  # type: ignore[method-assign]
+        circulation_api.circulation.can_fulfill_without_loan = yes_we_can
         result = try_to_fulfill()
         assert fulfillment == result
 

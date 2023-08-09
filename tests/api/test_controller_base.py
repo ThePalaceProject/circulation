@@ -67,7 +67,7 @@ class TestBaseController:
         mock = MagicMock(
             side_effect=set_patron, return_value="return value will be ignored"
         )
-        circulation_fixture.controller.authenticated_patron_from_request = mock  # type: ignore[method-assign]
+        circulation_fixture.controller.authenticated_patron_from_request = mock
         with circulation_fixture.app.test_request_context("/"):
             assert o2 == circulation_fixture.controller.request_patron
 
@@ -692,7 +692,7 @@ class TestBaseController:
 
         # Mock Lane.accessible_to so that it always returns
         # false.
-        lane.accessible_to = MagicMock(return_value=False)  # type: ignore[method-assign]
+        lane.accessible_to = MagicMock(return_value=False)
         headers = dict(Authorization=circulation_fixture.valid_auth)
         with circulation_fixture.request_context_with_library(
             "/", headers=headers, library=circulation_fixture.db.default_library()
