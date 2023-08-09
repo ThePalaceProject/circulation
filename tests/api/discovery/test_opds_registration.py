@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
+from requests_mock import Mocker
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
@@ -17,11 +18,10 @@ from api.problem_details import *
 from core.integration.goals import Goals
 from core.model import ConfigurationSetting, ExternalIntegration, Library, create
 from core.model.discoveryserviceregistration import DiscoveryServiceRegistration
-from core.util.http import HTTP
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager
-from tests.core.mock import DummyHTTPClient, MockRequestsResponse
+from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     IntegrationConfigurationFixture,
@@ -43,7 +43,7 @@ class RemoteRegistryFixture:
         assert protocol is not None
         self.protocol = protocol
         self.goal = Goals.DISCOVERY_GOAL
-        self.registry_url = "http://registry.com"
+        self.registry_url = "http://registry.com/"
 
         self.integration = integration_configuration(
             protocol=self.protocol,
@@ -140,31 +140,34 @@ class TestOpdsRegistrationService:
         assert isinstance(registration, DiscoveryServiceRegistration)
         assert db.default_library() == registration.library
 
-    def test_fetch_catalog(self, remote_registry_fixture: RemoteRegistryFixture):
+    def test_fetch_catalog(
+        self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
+    ):
         registry = OpdsRegistrationService.for_integration(
             remote_registry_fixture.db.session, remote_registry_fixture.integration
         )
 
         # The behavior of fetch_catalog() depends on what comes back
         # when we ask the remote registry for its root catalog.
-        client = DummyHTTPClient()
+        requests_mock.get(remote_registry_fixture.registry_url, text="A root catalog")
 
         # Test our ability to retrieve essential information from a
         # remote registry's root catalog.
         registry._extract_catalog_information = MagicMock(
             return_value="Essential information"
         )
-        registry.post_request = client.do_post
-        registry.get_request = client.do_get
 
         # If the response looks good, it's passed into
         # _extract_catalog_information(), and the result of _that_
         # method is the return value of fetch_catalog.
-        client.queue_requests_response(200, content="A root catalog")
-        [queued] = client.responses
         assert "Essential information" == registry.fetch_catalog()
-        assert remote_registry_fixture.registry_url == client.requests.pop()
-        registry._extract_catalog_information.assert_called_once_with(queued)
+        assert requests_mock.called_once
+        assert requests_mock.last_request.url == remote_registry_fixture.registry_url
+        assert registry._extract_catalog_information.called
+        assert (
+            registry._extract_catalog_information.call_args.args[0].text
+            == "A root catalog"
+        )
 
     def test__extract_catalog_information(
         self, remote_registry_fixture: RemoteRegistryFixture
@@ -193,6 +196,7 @@ class TestOpdsRegistrationService:
             m(request)
 
         detail = excinfo.value.problem_detail
+        assert detail.detail is not None
         assert (
             "The service at http://url/ did not provide a register link."
             in detail.detail
@@ -205,10 +209,11 @@ class TestOpdsRegistrationService:
             m(request)
 
         detail = excinfo.value.problem_detail
+        assert detail.detail is not None
         assert "The service at http://url/ did not return OPDS." in detail.detail
         assert REMOTE_INTEGRATION_FAILED.uri == detail.uri
 
-    def test_fetch_registration_document(
+    def test_fetch_registration_document_error_catalog(
         self, remote_registry_fixture: RemoteRegistryFixture
     ):
         # Test our ability to retrieve terms-of-service information
@@ -217,59 +222,82 @@ class TestOpdsRegistrationService:
 
         # First, test the case where we can't even get the catalog
         # document.
-        class Mock0(OpdsRegistrationService):
-            def fetch_catalog(self, do_get):
-                self.fetch_catalog_called_with = do_get
-                return REMOTE_INTEGRATION_FAILED
+        registry = OpdsRegistrationService.for_integration(
+            remote_registry_fixture.db.session, remote_registry_fixture.integration
+        )
 
-        registry = Mock0(MagicMock())
+        registry.fetch_catalog = MagicMock(
+            side_effect=ProblemError(problem_detail=REMOTE_INTEGRATION_FAILED)
+        )
+        with pytest.raises(ProblemError) as excinfo:
+            registry.fetch_registration_document()
+
+        # The fetch_catalog method raised a ProblemError,
+        # which propagated up to fetch_registration_document.
+        assert REMOTE_INTEGRATION_FAILED == excinfo.value.problem_detail
+        registry.fetch_catalog.assert_called_once()
+
+    def test_fetch_registration_document_error_registration_document(
+        self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
+    ):
+        # Test the case where we get the catalog document, but we can't
+        # get the registration document.
+        requests_mock.get(
+            "http://register-here/",
+            status_code=REMOTE_INTEGRATION_FAILED.status_code,
+            headers={"Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE},
+            text=REMOTE_INTEGRATION_FAILED.response[0],
+        )
+        registry = OpdsRegistrationService.for_integration(
+            remote_registry_fixture.db.session, remote_registry_fixture.integration
+        )
+        registry.fetch_catalog = MagicMock(
+            return_value=("http://register-here/", "vendor id")
+        )
+
+        with pytest.raises(ProblemError) as excinfo:
+            registry.fetch_registration_document()
+
+        # A request was made to the registration URL mentioned in the catalog.
+        assert requests_mock.called_once
+        assert "http://register-here/" == requests_mock.last_request.url
+
+        # But the request returned a problem detail, which became a ProblemError
+        assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
+        assert (
+            str(REMOTE_INTEGRATION_FAILED.detail) in excinfo.value.problem_detail.detail
+        )
+        assert "Remote service returned" in excinfo.value.problem_detail.detail
+
+    def test_fetch_registration_document(
+        self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
+    ):
+        # Finally, test the case where we can get both documents.
+        registry = OpdsRegistrationService.for_integration(
+            remote_registry_fixture.db.session, remote_registry_fixture.integration
+        )
+        registry.fetch_catalog = MagicMock(
+            return_value=("http://register-here/", "vendor id")
+        )
+        registry._extract_registration_information = MagicMock(
+            return_value=("TOS link", "TOS HTML data")
+        )
+
+        requests_mock.get("http://register-here/", text="a registration document")
         result = registry.fetch_registration_document()
 
-        # Our mock fetch_catalog was called with a method that would
-        # have made a real HTTP request.
-        assert HTTP.debuggable_get == registry.fetch_catalog_called_with
-
-        # But the fetch_catalog method returned a problem detail,
-        # which became the return value of
-        # fetch_registration_document.
-        assert REMOTE_INTEGRATION_FAILED == result
-
-        # Test the case where we get the catalog document but we can't
-        # get the registration document.
-        client = DummyHTTPClient()
-        client.responses.append(REMOTE_INTEGRATION_FAILED)
-
-        class Mock1(OpdsRegistrationService):
-            def fetch_catalog(self, do_get):
-                return "http://register-here/", "vendor id"
-
-            def _extract_registration_information(self, response):
-                self._extract_registration_information_called_with = response
-                return "TOS link", "TOS HTML data"
-
-        registry1 = Mock1(MagicMock())
-        result = registry1.fetch_registration_document(client.do_get)
-        # A request was made to the registration URL mentioned in the catalog.
-        assert "http://register-here/" == client.requests.pop()
-        assert [] == client.requests
-
-        # But the request returned a problem detail, which became the
-        # return value of the method.
-        assert REMOTE_INTEGRATION_FAILED == result
-
-        # Finally, test the case where we can get both documents.
-
-        client.queue_requests_response(200, content="a registration document")
-        result = registry1.fetch_registration_document(client.do_get)
-
         # Another request was made to the registration URL.
-        assert "http://register-here/" == client.requests.pop()
-        assert [] == client.requests
+        assert requests_mock.called_once
+        assert "http://register-here/" == requests_mock.last_request.url
+        registry.fetch_catalog.assert_called_once()
 
         # Our mock of _extract_registration_information was called
         # with the mock response to that request.
-        response = registry1._extract_registration_information_called_with
-        assert b"a registration document" == response.content
+        registry._extract_registration_information.assert_called_once()
+        assert (
+            registry._extract_registration_information.call_args.args[0].text
+            == "a registration document"
+        )
 
         # The return value of _extract_registration_information was
         # propagated as the return value of
@@ -322,18 +350,6 @@ class TestOpdsRegistrationService:
 
         # OPDS 2 feed with no links.
         assert (None, None) == extract([])
-
-        # OPDS 1 feed with link.
-        feed = '<feed><link rel="terms-of-service" href="http://tos/"/></feed>'
-        assert ("http://tos/", None) == extract(
-            feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo"
-        )
-
-        # OPDS 1 feed with no link.
-        feed = "<feed></feed>"
-        assert (None, None) == extract(
-            feed, OpdsRegistrationService.OPDS_1_PREFIX + ";foo"
-        )
 
         # Non-OPDS document.
         assert (None, None) == extract("plain text here", "text/plain")
