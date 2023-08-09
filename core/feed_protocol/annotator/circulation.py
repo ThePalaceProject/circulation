@@ -9,7 +9,7 @@ import urllib.request
 from collections import defaultdict
 from typing import List
 
-from flask import url_for
+from flask import has_request_context, url_for
 from sqlalchemy.orm import Session
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -18,15 +18,17 @@ from api.circulation import BaseCirculationAPI
 from api.config import Configuration
 from api.lanes import DynamicLane
 from api.novelist import NoveListAPI
+from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
 from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.types import FeedEntryType, Link, WorkEntry
+from core.feed_protocol.types import FeedData, FeedEntryType, Link, WorkEntry
 from core.lane import Lane, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.lcp.exceptions import LCPError
+from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
 from core.model.edition import Edition
 from core.model.formats import FormatPriorities
@@ -233,7 +235,7 @@ class CirculationManagerAnnotator(Annotator):
         return self.feed_url(lane)
 
     def url_for(self, *args, **kwargs):
-        if self.test_mode:
+        if not has_request_context():
             new_kwargs = {}
             for k, v in list(kwargs.items()):
                 if not k.startswith("_"):
@@ -370,8 +372,8 @@ class CirculationManagerAnnotator(Annotator):
         updated=None,
     ):
         work = entry.work
-        identifier = work.presentation_edition.primary_identifier
-        active_license_pool = entry.license_pool
+        identifier = entry.identifier or work.presentation_edition.primary_identifier
+        active_license_pool = entry.license_pool or self.active_licensepool_for(work)
         # If OpenSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
         updated = entry.work.last_update_time
@@ -560,7 +562,7 @@ class CirculationManagerAnnotator(Annotator):
                 lpdm.delivery_mechanism,
                 rel=OPDSFeed.OPEN_ACCESS_REL,
             )
-            direct_fulfill.attrib.update(self.rights_attributes(lpdm))
+            direct_fulfill.add_attributes(self.rights_attributes(lpdm))
             open_access_links.append(direct_fulfill)
 
         # If this is an open-access book, add an open-access link for
@@ -634,7 +636,7 @@ class CirculationManagerAnnotator(Annotator):
         """
         if not lpdm or not lpdm.rights_status or not lpdm.rights_status.uri:
             return {}
-        rights_attr = "{%s}rights" % OPDSFeed.DCTERMS_NS
+        rights_attr = "rights"
         return {rights_attr: lpdm.rights_status.uri}
 
     @classmethod
@@ -649,7 +651,7 @@ class CirculationManagerAnnotator(Annotator):
         indirect = cls.indirect_acquisition(indirect_types)
 
         if indirect is not None:
-            link.indirectAcquisition = indirect
+            link.indirectAcquisition = [indirect]
         return link
 
     @classmethod
@@ -659,7 +661,7 @@ class CirculationManagerAnnotator(Annotator):
         for t in indirect_types:
             indirect_link = FeedEntryType(type=t)
             if parent is not None:
-                parent.indirectAcquisition = indirect_link
+                parent.indirectAcquisition = [indirect_link]
             parent = indirect_link
             if top_level_parent is None:
                 top_level_parent = indirect_link
@@ -717,7 +719,8 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     def top_level_title(self):
         return self._top_level_title
 
-    def permalink_for(self, work, license_pool, identifier):
+    def permalink_for(self, identifier):
+        # TODO: Do not force OPDS types
         url = self.url_for(
             "permalink",
             identifier_type=identifier.type,
@@ -823,11 +826,95 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
     def annotate_work_entry(self, entry: WorkEntry):
         super().annotate_work_entry(entry)
-        active_license_pool = entry.license_pool
-        identifier = entry.work.presentation_edition.primary_identifier
+        work = entry.work
+        identifier = entry.identifier or work.presentation_edition.primary_identifier
+
+        permalink_uri, permalink_type = self.permalink_for(identifier)
+        # TODO: Do not force OPDS types
+        if permalink_uri:
+            entry.computed.other_links.append(
+                Link(href=permalink_uri, rel="alternate", type=permalink_type)
+            )
+            if self.is_work_entry_solo(work):
+                entry.computed.other_links.append(
+                    Link(rel="self", href=permalink_uri, type=permalink_type)
+                )
+
+        # Add a link to each author tag.
+        self.add_author_links(entry)
+
+        # And a series, if there is one.
+        if work.series:
+            self.add_series_link(entry)
+
+        if NoveListAPI.is_configured(self.library):
+            # If NoveList Select is configured, there might be
+            # recommendations, too.
+            entry.computed.other_links.append(
+                Link(
+                    rel="recommendations",
+                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    title="Recommended Works",
+                    href=self.url_for(
+                        "recommendations",
+                        identifier_type=identifier.type,
+                        identifier=identifier.identifier,
+                        library_short_name=self.library.short_name,
+                        _external=True,
+                    ),
+                )
+            )
+
+        # Add a link for related books if available.
+        if self.related_books_available(work, self.library):
+            entry.computed.other_links.append(
+                Link(
+                    rel="related",
+                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    title="Recommended Works",
+                    href=self.url_for(
+                        "related_books",
+                        identifier_type=identifier.type,
+                        identifier=identifier.identifier,
+                        library_short_name=self.library.short_name,
+                        _external=True,
+                    ),
+                )
+            )
+
+        # Add a link to get a patron's annotations for this book.
+        if self.identifies_patrons:
+            entry.computed.other_links.append(
+                Link(
+                    rel="http://www.w3.org/ns/oa#annotationService",
+                    type=AnnotationWriter.CONTENT_TYPE,
+                    href=self.url_for(
+                        "annotations_for_work",
+                        identifier_type=identifier.type,
+                        identifier=identifier.identifier,
+                        library_short_name=self.library.short_name,
+                        _external=True,
+                    ),
+                )
+            )
+
+        if Analytics.is_configured(self.library):
+            entry.computed.other_links.append(
+                Link(
+                    rel="http://librarysimplified.org/terms/rel/analytics/open-book",
+                    href=self.url_for(
+                        "track_analytics_event",
+                        identifier_type=identifier.type,
+                        identifier=identifier.identifier,
+                        event_type=CirculationEvent.OPEN_BOOK,
+                        library_short_name=self.library.short_name,
+                        _external=True,
+                    ),
+                )
+            )
 
         # Groups is only from the library annotator
-        groups_uri = url_for(
+        groups_uri = self.url_for(
             "acquisition_groups",
             identifier_type=identifier.type,
             identifier=identifier.identifier,
@@ -867,55 +954,37 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
         return language_key, audience_key
 
-    def add_author_links(self, work, feed, entry):
-        """Find all the <author> tags and add a link
-        to each one that points to the author's other works.
-        """
-        author_tag = "{%s}author" % OPDSFeed.ATOM_NS
-        author_entries = entry.findall(author_tag)
-
-        languages, audiences = self.language_and_audience_key_from_work(work)
-        for author_entry in author_entries:
-            name_tag = "{%s}name" % OPDSFeed.ATOM_NS
-
-            # A database ID would be better than a name, but the
-            # <author> tag was created as part of the work's cached
-            # OPDS entry, and as a rule we don't put database IDs into
-            # the cached OPDS entry.
-            #
-            # So we take the content of the <author> tag, use it in
-            # the link, and -- only if the user decides to fetch this feed
-            # -- we do a little extra work to turn this name back into
-            # one or more contributors.
-            #
-            # TODO: If we reliably had VIAF IDs for our contributors,
-            # we could stick them in the <author> tags and get the
-            # best of both worlds.
-            contributor_name = author_entry.find(name_tag).text
-            if not contributor_name:
+    def add_author_links(self, entry):
+        """Add a link to all authors"""
+        languages, audiences = self.language_and_audience_key_from_work(entry.work)
+        for author_entry in entry.computed.authors:
+            if not (name := getattr(author_entry, "name", None)):
                 continue
 
-            feed.add_link_to_entry(
-                author_entry,
-                rel="contributor",
-                type=OPDSFeed.ACQUISITION_FEED_TYPE,
-                title=contributor_name,
-                href=self.url_for(
-                    "contributor",
-                    contributor_name=contributor_name,
-                    languages=languages,
-                    audiences=audiences,
-                    library_short_name=self.library.short_name,
-                    _external=True,
-                ),
+            author_entry.add_attributes(
+                {
+                    "link": Link(
+                        rel="contributor",
+                        type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                        title=name,
+                        href=self.url_for(
+                            "contributor",
+                            contributor_name=name,
+                            languages=languages,
+                            audiences=audiences,
+                            library_short_name=self.library.short_name,
+                            _external=True,
+                        ),
+                    ),
+                }
             )
 
-    def add_series_link(self, work, feed, entry):
-        series_tag = OPDSFeed.schema_("Series")
-        series_entry = entry.find(series_tag)
+    def add_series_link(self, entry):
+        series_entry = entry.computed.series
+        work = entry.work
 
         if series_entry is None:
-            # There is no <series> tag, and thus nothing to annotate.
+            # There is no series, and thus nothing to annotate.
             # This probably indicates an out-of-date OPDS entry.
             work_id = work.id
             work_title = work.title
@@ -936,15 +1005,18 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             library_short_name=self.library.short_name,
             _external=True,
         )
-        feed.add_link_to_entry(
-            series_entry,
-            rel="series",
-            type=OPDSFeed.ACQUISITION_FEED_TYPE,
-            title=series_name,
-            href=href,
+        series_entry.add_attributes(
+            {
+                "link": Link(
+                    rel="series",
+                    type=OPDSFeed.ACQUISITION_FEED_TYPE,
+                    title=series_name,
+                    href=href,
+                ),
+            }
         )
 
-    def annotate_feed(self, feed, lane):
+    def annotate_feed(self, feed):
         if self.patron:
             # A patron is authenticated.
             self.add_patron(feed)
@@ -954,7 +1026,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             self.add_authentication_document_link(feed)
 
         # Add a 'search' link if the lane is searchable.
-        if lane and lane.search_target:
+        if self.lane and self.lane.search_target:
             search_facet_kwargs = {}
             if self.facets != None:
                 if self.facets.entrypoint_is_default:
@@ -968,7 +1040,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     search_facets = self.facets
                 search_facet_kwargs.update(dict(list(search_facets.items())))
 
-            lane_identifier = self._lane_identifier(lane)
+            lane_identifier = self._lane_identifier(self.lane)
             search_url = self.url_for(
                 "lane_search",
                 lane_identifier=lane_identifier,
@@ -981,7 +1053,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 type="application/opensearchdescription+xml",
                 href=search_url,
             )
-            feed.add_link_to_feed(feed.feed, **search_link)
+            feed.add_link(**search_link)
 
         if self.identifies_patrons:
             # Since this library authenticates patrons it can offer
@@ -995,7 +1067,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     _external=True,
                 ),
             )
-            feed.add_link_to_feed(feed.feed, **shelf_link)
+            feed.add_link(**shelf_link)
 
             annotations_link = dict(
                 rel="http://www.w3.org/ns/oa#annotationService",
@@ -1006,15 +1078,15 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     _external=True,
                 ),
             )
-            feed.add_link_to_feed(feed.feed, **annotations_link)
+            feed.add_link(**annotations_link)
 
-        if lane and lane.uses_customlists:
+        if self.lane and self.lane.uses_customlists:
             name = None
-            if hasattr(lane, "customlists") and len(lane.customlists) == 1:
-                name = lane.customlists[0].name
+            if hasattr(self.lane, "customlists") and len(self.lane.customlists) == 1:
+                name = self.lane.customlists[0].name
             else:
                 _db = Session.object_session(self.library)
-                customlist = lane.get_customlists(_db)
+                customlist = self.lane.get_customlists(_db)
                 if customlist:
                     name = customlist[0].name
 
@@ -1030,7 +1102,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     type=OPDSFeed.ACQUISITION_FEED_TYPE,
                     href=crawlable_url,
                 )
-                feed.add_link_to_feed(feed.feed, **crawlable_link)
+                feed.add_link(**crawlable_link)
 
         self.add_configuration_links(feed)
 
@@ -1038,12 +1110,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         _db = Session.object_session(self.library)
 
         def _add_link(l):
-            if isinstance(feed, OPDSFeed):
-                feed.add_link_to_feed(feed.feed, **l)
-            else:
-                # This is an ElementTree object.
-                link = OPDSFeed.link(**l)
-                feed.append(link)
+            feed.add_link(**l)
 
         library = self.library
         if library.settings.terms_of_service:
@@ -1199,7 +1266,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
         )
         kw = dict(href=url, rel=OPDSFeed.REVOKE_LOAN_REL)
-        revoke_link_tag = OPDSFeed.makeelement("link", **kw)
+        revoke_link_tag = Link(**kw)
         return revoke_link_tag
 
     def borrow_link(
@@ -1291,7 +1358,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             rel=rel, href=fulfill_url, types=format_types, active_loan=active_loan
         )
 
-        children = self.license_tags(license_pool, active_loan, None)
+        children = AcquisitionHelper.license_tags(license_pool, active_loan, None)
         link_tag.add_attributes(children)
 
         drm_tags = self.drm_extension_tags(
@@ -1309,7 +1376,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             library_short_name=self.library.short_name,
             _external=True,
         )
-        link_tag.attrib.update(dict(href=fulfill_url))
+        link_tag.href = fulfill_url
         return link_tag
 
     def drm_extension_tags(self, license_pool, active_loan, delivery_mechanism):
@@ -1318,7 +1385,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         :param delivery_mechanism: A DeliveryMechanism
         """
         if not active_loan or not delivery_mechanism or not self.identifies_patrons:
-            return []
+            return {}
 
         if delivery_mechanism.drm_scheme == DeliveryMechanism.ADOBE_DRM:
             # Get an identifier for the patron that will be registered
@@ -1335,7 +1402,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
             return self.lcp_key_retrieval_tags(active_loan)
 
-        return []
+        return {}
 
     def adobe_id_tags(self, patron_identifier):
         """Construct tags using the DRM Extensions for OPDS standard that
@@ -1357,7 +1424,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             cache_key = patron_identifier
         cached = self._adobe_id_tags.get(cache_key)
         if cached is None:
-            cached = []
+            cached = {}
             authdata = None
             try:
                 authdata = AuthdataUtility.from_config(self.library)
@@ -1366,18 +1433,15 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                     "Cannot load Short Client Token configuration; outgoing OPDS entries will not have DRM autodiscovery support",
                     exc_info=e,
                 )
-                return []
+                return {}
             if authdata:
                 vendor_id, token = authdata.short_client_token_for_patron(
                     patron_identifier
                 )
-                drm_licensor = OPDSFeed.makeelement("{%s}licensor" % OPDSFeed.DRM_NS)
-                vendor_attr = "{%s}vendor" % OPDSFeed.DRM_NS
-                drm_licensor.attrib[vendor_attr] = vendor_id
-                patron_key = OPDSFeed.makeelement("{%s}clientToken" % OPDSFeed.DRM_NS)
-                patron_key.text = token
-                drm_licensor.append(patron_key)
-                cached = [drm_licensor]
+                drm_licensor = FeedEntryType(
+                    vendor=vendor_id, clientToken=FeedEntryType(text=token)
+                )
+                cached = {"licensor": drm_licensor}
 
             self._adobe_id_tags[cache_key] = cached
         else:
@@ -1393,40 +1457,32 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         db = Session.object_session(active_loan)
         lcp_credential_factory = LCPCredentialFactory()
 
-        response = []
+        response = {}
 
         try:
             hashed_passphrase: LCPHashedPassphrase = (
                 lcp_credential_factory.get_hashed_passphrase(db, active_loan.patron)
             )
-            hashed_passphrase_element = OPDSFeed.makeelement(
-                "{%s}hashed_passphrase" % OPDSFeed.LCP_NS
-            )
-            hashed_passphrase_element.text = hashed_passphrase.hashed
-            response.append(hashed_passphrase_element)
+            response["hashed_passphrase"] = FeedEntryType(text=hashed_passphrase.hashed)
         except LCPError:
             # The patron's passphrase wasn't generated yet and not present in the database.
             pass
 
         return response
 
-    def add_patron(self, feed_obj):
+    def add_patron(self, feed: FeedData):
         if not self.identifies_patrons:
             return
         patron_details = {}
         if self.patron.username:
-            patron_details[
-                "{%s}username" % OPDSFeed.SIMPLIFIED_NS
-            ] = self.patron.username
+            patron_details["username"] = self.patron.username
         if self.patron.authorization_identifier:
             patron_details[
-                "{%s}authorizationIdentifier" % OPDSFeed.SIMPLIFIED_NS
+                "authorizationIdentifier"
             ] = self.patron.authorization_identifier
 
-        patron_tag = OPDSFeed.makeelement(
-            "{%s}patron" % OPDSFeed.SIMPLIFIED_NS, patron_details
-        )
-        feed_obj.feed.append(patron_tag)
+        patron_tag = FeedEntryType(**patron_details)
+        feed.add_metadata("patron", patron_tag)
 
     def add_authentication_document_link(self, feed_obj):
         """Create a <link> tag that points to the circulation
@@ -1436,8 +1492,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         # Even if self.identifies_patrons is false, we include this link,
         # because this document is the one that explains there is no
         # patron authentication at this library.
-        feed_obj.add_link_to_feed(
-            feed_obj.feed,
+        feed_obj.add_link(
             rel="http://opds-spec.org/auth/document",
             href=self.url_for(
                 "authentication_document",
