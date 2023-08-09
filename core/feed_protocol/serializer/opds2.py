@@ -1,4 +1,5 @@
 import json
+from typing import Any, Dict
 
 from core.feed_protocol.types import FeedData, Link, WorkEntryData
 
@@ -8,23 +9,32 @@ class OPDS2Serializer:
         pass
 
     def serialize_feed(self, feed: FeedData):
-        serialized = {"publications": []}
+        serialized: Dict[str, Any] = {"publications": []}
         for entry in feed.entries:
-            publication = self._serialize_work_entry(entry.computed)
-            serialized["publications"].append(publication)
+            if entry.computed:
+                publication = self._serialize_work_entry(entry.computed)
+                serialized["publications"].append(publication)
 
         return json.dumps(serialized, indent=2).encode()
 
     def _serialize_work_entry(self, data: WorkEntryData):
-        metadata = {}
-        metadata["title"] = data.title.text
-        metadata["sortAs"] = data.title.text  # TODO: Change this!
-        metadata["subtitle"] = data.subtitle.text
-        metadata["identifier"] = data.identifier
-        metadata["language"] = data.language.text
-        metadata["modified"] = data.updated.text
-        metadata["published"] = data.published.text
-        metadata["description"] = data.summary.text
+        metadata: Dict[str, Any] = {}
+        if data.title:
+            metadata["title"] = data.title.text
+            metadata["sortAs"] = data.title.text  # TODO: Change this!
+
+        if data.subtitle:
+            metadata["subtitle"] = data.subtitle.text
+        if data.identifier:
+            metadata["identifier"] = data.identifier
+        if data.language:
+            metadata["language"] = data.language.text
+        if data.updated:
+            metadata["modified"] = data.updated.text
+        if data.published:
+            metadata["published"] = data.published.text
+        if data.summary:
+            metadata["description"] = data.summary.text
 
         if data.publisher:
             metadata["publisher"] = dict(name=data.publisher.text)
@@ -32,15 +42,16 @@ class OPDS2Serializer:
             metadata["imprint"] = dict(name=data.imprint.text)
 
         subjects = []
-        for subject in data.categories:
-            subjects.append(
-                {
-                    "scheme": subject.scheme,
-                    "name": subject.label,
-                    "sortAs": subject.label,  # TODO: Change this!
-                }
-            )
-        metadata["subject"] = subjects
+        if data.categories:
+            for subject in data.categories:
+                subjects.append(
+                    {
+                        "scheme": subject.scheme,
+                        "name": subject.label,
+                        "sortAs": subject.label,  # TODO: Change this!
+                    }
+                )
+            metadata["subject"] = subjects
 
         images = [self._serialize_link(link) for link in data.image_links]
         links = [

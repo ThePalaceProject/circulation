@@ -229,7 +229,7 @@ class TestLibraryLoanAndHoldAnnotator:
         with app.test_request_context("/") as request:
             request.library = library  # type: ignore [attr-defined]
             entry = feed.single_entry(work, annotator)
-
+            assert entry and entry.computed is not None
             time_tracking_links = list(
                 filter(
                     lambda l: l.rel == LinkRelations.TIME_TRACKING,
@@ -249,6 +249,7 @@ class TestLibraryLoanAndHoldAnnotator:
             # No active loan means no tracking link
             annotator.active_loans_by_work = {}
             entry = feed.single_entry(work, annotator)
+            assert entry and entry.computed is not None
 
             time_tracking_links = list(
                 filter(
@@ -264,6 +265,7 @@ class TestLibraryLoanAndHoldAnnotator:
             # Book mediums don't get time tracking
             edition.medium = EditionConstants.BOOK_MEDIUM
             entry = feed.single_entry(work, annotator)
+            assert entry and entry.computed is not None
 
             time_tracking_links = list(
                 filter(
@@ -279,6 +281,7 @@ class TestLibraryLoanAndHoldAnnotator:
             edition.medium = EditionConstants.AUDIO_MEDIUM
 
             entry = feed.single_entry(work, annotator)
+            assert entry and entry.computed is not None
 
             time_tracking_links = list(
                 filter(

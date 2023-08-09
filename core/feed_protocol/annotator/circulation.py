@@ -406,8 +406,9 @@ class CirculationManagerAnnotator(Annotator):
             active_fulfillment,
             identifier,
         )
-        for tag in link_tags:
-            entry.computed.acquisition_links.append(tag)
+        if entry.computed:
+            for tag in link_tags:
+                entry.computed.acquisition_links.append(tag)
 
     def acquisition_links(
         self,
@@ -824,8 +825,12 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             url = self.default_lane_url(facets=facets)
         return url
 
-    def annotate_work_entry(self, entry: WorkEntry):
-        super().annotate_work_entry(entry)
+    def annotate_work_entry(self, entry: WorkEntry, updated=None):
+        super().annotate_work_entry(entry, updated=updated)
+
+        if not entry.computed:
+            return
+
         work = entry.work
         identifier = entry.identifier or work.presentation_edition.primary_identifier
 

@@ -19,7 +19,6 @@ from core.model.library import Library
 from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink
 from core.model.work import Work
-from core.opds import Annotator
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import AtomFeed, OPDSFeed
 
@@ -269,7 +268,7 @@ class Annotator(OPDSAnnotator):
 
         kw = {}
         if edition.medium:
-            additional_type = Edition.medium_to_additional_type.get(edition.medium)
+            additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
             if not additional_type:
                 logging.warning("No additionalType for medium %s", edition.medium)
             kw["additionalType"] = additional_type
@@ -367,9 +366,11 @@ class Annotator(OPDSAnnotator):
             if avail:
                 today = datetime.date.today()
                 if isinstance(avail, datetime.datetime):
-                    avail = avail.date()
-                if avail <= today:  # Avoid obviously wrong values.
-                    computed.published = FeedEntryType(text=AtomFeed._strftime(avail))
+                    avail_date = avail.date()
+                if avail_date <= today:  # Avoid obviously wrong values.
+                    computed.published = FeedEntryType(
+                        text=AtomFeed._strftime(avail_date)
+                    )
 
         if not updated and entry.work.last_update_time:
             # NOTE: This is a default that works in most cases. When
