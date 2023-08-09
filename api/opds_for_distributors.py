@@ -371,6 +371,7 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
     """
 
     PROTOCOL = OPDSForDistributorsImporter.NAME
+    SERVICE_NAME = "OPDS for Distributors Import Monitor"
 
     def __init__(self, _db, collection, import_class, **kwargs):
         super().__init__(_db, collection, import_class, **kwargs)

@@ -176,6 +176,8 @@ class Monitor:
         # to this point. It's the job of the subclass to decide where
         # to go from here.
         timestamp_obj = self.timestamp()
+        # commit it now in case something fails during the run.
+        self._db.commit()
         progress = timestamp_obj.to_data()
 
         this_run_start = utc_now()
@@ -224,7 +226,15 @@ class Monitor:
             # this failure.
             timestamp_obj.exception = exception
 
-        self._db.commit()
+        try:
+            self._db.commit()
+        except Exception:
+            self._db.rollback()
+            # save the exception to the time after commit in case the db commit fails.
+            timestamp_obj = self.timestamp()
+            timestamp_obj.finish = this_run_finish
+            timestamp_obj.exception = exception
+            self._db.commit()
 
         duration = this_run_finish - this_run_start
         self.log.info(
