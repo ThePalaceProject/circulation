@@ -39,7 +39,9 @@ class RemoteRegistryFixture:
         # Create an ExternalIntegration that can be used as the basis for
         # a OpdsRegistrationService.
         integration_registry = DiscoveryRegistry()
-        self.protocol = integration_registry.get_protocol(OpdsRegistrationService)
+        protocol = integration_registry.get_protocol(OpdsRegistrationService)
+        assert protocol is not None
+        self.protocol = protocol
         self.goal = Goals.DISCOVERY_GOAL
         self.registry_url = "http://registry.com"
 
@@ -81,7 +83,7 @@ class TestOpdsRegistrationService:
         """
         db = remote_registry_fixture.db
         m = OpdsRegistrationService.for_integration
-
+        assert remote_registry_fixture.integration.id is not None
         registry = m(
             db.session,
             remote_registry_fixture.integration.id,
@@ -168,7 +170,7 @@ class TestOpdsRegistrationService:
         self, remote_registry_fixture: RemoteRegistryFixture
     ):
         # Test our ability to extract a registration link and an
-        # Adobe Vendor ID from an OPDS 1 or OPDS 2 catalog.
+        # Adobe Vendor ID from an OPDS 2 catalog.
         def mock_request(document, type=OpdsRegistrationService.OPDS_2_TYPE) -> Any:
             data = json.dumps(document) if isinstance(document, dict) else document
             return MockRequestsResponse(200, {"Content-Type": type}, data)

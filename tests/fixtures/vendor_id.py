@@ -5,7 +5,7 @@ import pytest
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.integration.goals import Goals
-from core.model import ExternalIntegration, Library, create
+from core.model import IntegrationConfiguration, Library, create
 from core.model.discoveryserviceregistration import (
     DiscoveryServiceRegistration,
     RegistrationStatus,
@@ -26,7 +26,7 @@ class VendorIDFixture:
     TEST_VENDOR_ID = "vendor id"
 
     db: DatabaseTransactionFixture
-    registry: ExternalIntegration
+    registry: IntegrationConfiguration
     registration: DiscoveryServiceRegistration
 
     def initialize_adobe(
