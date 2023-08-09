@@ -86,8 +86,10 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             for name, value in tags.items():
                 feed.add_metadata(name, feed_entry=value)
 
-    def annotate_work_entry(self, entry: WorkEntry):
-        super().annotate_work_entry(entry)
+    def annotate_work_entry(self, entry: WorkEntry, updated=None):
+        super().annotate_work_entry(entry, updated=updated)
+        if not entry.computed:
+            return
         active_license_pool = entry.license_pool
         work = entry.work
         edition = work.presentation_edition

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional
 
 from flask import Response
 from sqlalchemy.orm import Session
@@ -112,7 +112,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     def page(
         cls,
         _db: Session,
-        works: List[Work],
+        works: List[Work] | Generator,
         lane: WorkList,
         annotator: LibraryAnnotator,
         facets,
@@ -128,9 +128,11 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
         feed = OPDSAcquisitionFeed("", "", facets, pagination, annotator)
         for work in works:
-            entries.append(cls.single_entry(work, annotator))
+            entry = cls.single_entry(work, annotator)
+            if entry:
+                entries.append(entry)
 
-        feed.generate_feed()
+        feed.generate_feed(entries)
         feed.add_pagination_links(works, lane)
         feed.add_facet_links(lane)
 
@@ -154,7 +156,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
                 active_loans_by_work[work] = loan
 
         # There might be multiple holds for the same work so we gather all of them and choose the best one.
-        all_holds_by_work = {}
+        all_holds_by_work: Dict[Work, List[Hold]] = {}
         for hold in patron.holds:
             work = hold.work
             if not work:
@@ -165,9 +167,11 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
             all_holds_by_work[work].append(hold)
 
-        active_holds_by_work = {}
+        active_holds_by_work: Dict[Work, List[Hold]] = {}
         for work, list_of_holds in all_holds_by_work.items():
-            active_holds_by_work[work] = cls.choose_best_hold_for_work(list_of_holds)
+            active_holds_by_work[
+                work
+            ] = LibraryLoanAndHoldAnnotator.choose_best_hold_for_work(list_of_holds)
 
         if not annotator:
             annotator = LibraryLoanAndHoldAnnotator(
@@ -181,11 +185,11 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         )
         works = patron.works_on_loan_or_on_hold()
 
-        work_entries = [cls.single_entry(work, annotator) for work in works]
-        work_entries = [entry for entry in work_entries if entry is not None]
+        _work_entries = [cls.single_entry(work, annotator) for work in works]
+        work_entries = [entry for entry in _work_entries if entry is not None]
 
         feed = OPDSAcquisitionFeed(url, "Active loans and holds", None, None, annotator)
-        feed.generate_feed(db, work_entries, None, patron=patron)
+        feed.generate_feed(work_entries)
         response = feed.as_response(max_age=0, private=True)
 
         last_modified = patron.last_loan_activity_sync
@@ -270,8 +274,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
         # TODO: max_age and private response kwargs
-        serializer = serializer_for("OPDS1")()
-        return serializer.to_string(serializer.serialize_work_entry(entry.computed))
+        if entry and entry.computed:
+            serializer = serializer_for("OPDS1")()
+            return serializer.to_string(serializer.serialize_work_entry(entry.computed))
 
     @classmethod
     def single_entry(
@@ -281,7 +286,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         even_if_no_license_pool=False,
         force_create=False,
         use_cache=True,
-    ) -> WorkEntry:
+    ) -> Optional[WorkEntry]:
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):
@@ -290,12 +295,11 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
             active_license_pool = None
             work = None
         else:
-            active_license_pool = annotator.active_licensepool_for(work)
             if not work:
                 # We have a license pool but no work. Most likely we don't have
                 # metadata for this work yet.
                 return None
-
+            active_license_pool = annotator.active_licensepool_for(work)
             if active_license_pool:
                 identifier = active_license_pool.identifier
                 active_edition = active_license_pool.presentation_edition

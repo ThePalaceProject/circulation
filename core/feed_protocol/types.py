@@ -30,6 +30,10 @@ class Link(FeedEntryType):
     rel: str
     type: Optional[str]
 
+    # Additional types
+    role: Optional[str] = None
+    title: Optional[str] = None
+
     def dict(self):
         d = dict(href=self.href, rel=self.rel)
         if self.type is not None:
@@ -40,24 +44,24 @@ class Link(FeedEntryType):
 class WorkEntryData(BaseModel):
     """All the metadata possible for a work. This is not a FeedEntryType because we want strict control."""
 
-    identifier: str = None
-    pwid: str = None
+    identifier: Optional[str] = None
+    pwid: Optional[str] = None
 
-    summary: FeedEntryType = None
-    language: FeedEntryType = None
-    publisher: FeedEntryType = None
-    issued: FeedEntryType = None
-    published: FeedEntryType = None
-    updated: FeedEntryType = None
-    title: FeedEntryType = None
-    subtitle: FeedEntryType = None
-    series: FeedEntryType = None
-    imprint: FeedEntryType = None
+    summary: Optional[FeedEntryType] = None
+    language: Optional[FeedEntryType] = None
+    publisher: Optional[FeedEntryType] = None
+    issued: Optional[FeedEntryType] = None
+    published: Optional[FeedEntryType] = None
+    updated: Optional[FeedEntryType] = None
+    title: Optional[FeedEntryType] = None
+    subtitle: Optional[FeedEntryType] = None
+    series: Optional[FeedEntryType] = None
+    imprint: Optional[FeedEntryType] = None
 
     authors: List[FeedEntryType] = []
     contributors: List[FeedEntryType] = []
     categories: List[FeedEntryType] = []
-    distribution: FeedEntryType = None
+    distribution: Optional[FeedEntryType] = None
 
     # Links
     acquisition_links: List[Link] = []

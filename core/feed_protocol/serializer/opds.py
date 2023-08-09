@@ -37,8 +37,9 @@ class OPDS1Serializer(OPDSFeed):
             serialized.append(element)
 
         for entry in feed.entries:
-            element = self.serialize_work_entry(entry.computed)
-            serialized.append(element)
+            if entry.computed:
+                element = self.serialize_work_entry(entry.computed)
+                serialized.append(element)
 
         for link in feed.links:
             serialized.append(self._serialize_feed_entry("link", link))

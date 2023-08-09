@@ -1,20 +1,17 @@
-from abc import ABC
-from typing import Any, Dict
+from abc import ABC, abstractmethod
 
 from flask import Response
 
 
 class FeedProtocol(ABC):
+    @abstractmethod
     def generate_feed(
         self,
+        work_entries,
     ):
         ...
 
-    def response_headers(
-        self,
-    ) -> Dict[str, Any]:
-        ...
-
+    @abstractmethod
     def as_response(
         self,
     ) -> Response:

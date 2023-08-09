@@ -320,7 +320,7 @@ class TestLibraryAnnotator:
         assert vendor_id_fixture.TEST_VENDOR_ID == element["licensor"].vendor
 
         token = getattr(element["licensor"], "clientToken", None)
-        assert None != token
+        assert token is not None
         # token.text is a token which we can decode, since we know
         # the secret.
         token_text = token.text
@@ -384,7 +384,7 @@ class TestLibraryAnnotator:
             pool, loan, lcp_delivery_mechanism
         )
         hashed_passphrase = getattr(link, "hashed_passphrase", None)
-        assert hashed_passphrase != None
+        assert hashed_passphrase is not None
         assert hashed_passphrase.text == hashed_password.hashed
 
     def test_default_lane_url(self, annotator_fixture: LibraryAnnotatorFixture):
@@ -516,6 +516,7 @@ class TestLibraryAnnotator:
             work_entry = WorkEntry(work=work, license_pool=pool)
             annotator.annotate_work_entry(work_entry)
 
+            assert work_entry.computed is not None
             linksets.append(
                 {
                     x.rel
@@ -558,6 +559,7 @@ class TestLibraryAnnotator:
         )
         work_entry = WorkEntry(work=work, license_pool=None)
         annotator.annotate_work_entry(work_entry)
+        assert work_entry.computed is not None
         links = {
             x.rel
             for x in (
@@ -586,6 +588,7 @@ class TestLibraryAnnotator:
         Analytics.GLOBAL_ENABLED = True
         work_entry = WorkEntry(work=work, license_pool=None)
         annotator.annotate_work_entry(work_entry)
+        assert work_entry.computed is not None
         [analytics_link] = [
             x.href for x in work_entry.computed.other_links if x.rel == open_book_rel
         ]
@@ -608,6 +611,7 @@ class TestLibraryAnnotator:
         )
         work_entry = WorkEntry(work=work, license_pool=None)
         annotator.annotate_work_entry(work_entry)
+        assert work_entry.computed is not None
         [feed_link] = [
             l
             for l in work_entry.computed.other_links
@@ -663,20 +667,16 @@ class TestLibraryAnnotator:
                 None,
                 lane,
                 annotator_fixture.db.default_library(),
-                test_mode=True,
                 **kwargs,
             ),
         )
         feed.generate_feed(
-            annotator_fixture.db.session,
             [
                 awork
                 for work in works
                 if (awork := OPDSAcquisitionFeed.single_entry(work, feed.annotator))
                 is not None
             ],
-            lane,
-            patron=kwargs.get("patron"),
         )
         return feed._feed
 
@@ -1116,6 +1116,7 @@ class TestLibraryAnnotator:
 
         work_entry = WorkEntry(work=work, license_pool=pool)
         annotator_fixture.annotator.annotate_work_entry(work_entry)
+        assert work_entry.computed is not None
         [link] = work_entry.computed.acquisition_links
         assert hasattr(link, "holds")
         assert link.holds.total == "25"
