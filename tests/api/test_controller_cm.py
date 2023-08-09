@@ -4,22 +4,31 @@ from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.integration.registry.discovery import DiscoveryRegistry
 from api.opds import CirculationManagerAnnotator, LibraryAnnotator
 from api.problem_details import *
 from core.external_search import MockExternalSearchIndex
+from core.integration.goals import Goals
 from core.lane import Facets, WorkList
-from core.model import Admin, CachedFeed, ConfigurationSetting, ExternalIntegration
+from core.model import Admin, CachedFeed, ConfigurationSetting, create
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.problem_details import *
 from core.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
+from tests.fixtures.database import IntegrationConfigurationFixture
 
 
 class TestCirculationManager:
     """Test the CirculationManager object itself."""
 
-    def test_load_settings(self, circulation_fixture: CirculationControllerFixture):
+    def test_load_settings(
+        self,
+        circulation_fixture: CirculationControllerFixture,
+        create_integration_configuration: IntegrationConfigurationFixture,
+    ):
         # Here's a CirculationManager which we've been using for a while.
         manager = circulation_fixture.manager
 
@@ -61,15 +70,19 @@ class TestCirculationManager:
         ConfigurationSetting.sitewide(
             circulation_fixture.db.session, Configuration.PATRON_WEB_HOSTNAMES
         ).value = "http://sitewide/1234"
-        registry = circulation_fixture.db.external_integration(
-            protocol="some protocol", goal=ExternalIntegration.DISCOVERY_GOAL
+
+        # And a discovery service registration, that sets a web client url.
+        protocol = DiscoveryRegistry().get_protocol(OpdsRegistrationService)
+        registry = create_integration_configuration(
+            protocol=protocol, goal=Goals.DISCOVERY_GOAL
         )
-        # ConfigurationSetting.for_library_and_externalintegration(
-        #     circulation_fixture.db.session,
-        #     Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-        #     library,
-        #     registry,
-        # ).value = "http://registration"
+        create(
+            circulation_fixture.db.session,
+            DiscoveryServiceRegistration,
+            library=library,
+            integration=registry,
+            web_client="http://registration",
+        )
 
         ConfigurationSetting.sitewide(
             circulation_fixture.db.session,

@@ -603,7 +603,7 @@ class TestOpdsRegistrationService:
         assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
         assert excinfo.value.problem_detail.detail is not None
         assert (
-            'Remote service returned: "this is a problem detail"'
+            'Remote service returned a problem detail document: \'{"detail": "this is a problem detail"}\''
             in excinfo.value.problem_detail.detail
         )
 

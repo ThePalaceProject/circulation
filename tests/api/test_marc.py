@@ -4,11 +4,18 @@ import urllib.request
 
 from pymarc import Record
 
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.integration.registry.discovery import DiscoveryRegistry
 from api.marc import LibraryAnnotator
 from core.config import Configuration
+from core.integration.goals import Goals
 from core.marc import MARCExporter
-from core.model import ConfigurationSetting, ExternalIntegration
-from tests.fixtures.database import DatabaseTransactionFixture
+from core.model import ConfigurationSetting, ExternalIntegration, create
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    IntegrationConfigurationFixture,
+)
 
 
 class TestLibraryAnnotator:
@@ -141,7 +148,11 @@ class TestLibraryAnnotator:
         assert [record, pool] == annotator.called_with.get("add_distributor")
         assert [record, pool] == annotator.called_with.get("add_formats")
 
-    def test_add_web_client_urls(self, db: DatabaseTransactionFixture):
+    def test_add_web_client_urls(
+        self,
+        db: DatabaseTransactionFixture,
+        create_integration_configuration: IntegrationConfigurationFixture,
+    ):
         # Web client URLs can come from either the MARC export integration or
         # a library registry integration.
 
@@ -194,17 +205,17 @@ class TestLibraryAnnotator:
         assert [] == record.get_fields("856")
 
         # Add a URL from a library registry.
-        registry = db.external_integration(
-            ExternalIntegration.OPDS_REGISTRATION,
-            ExternalIntegration.DISCOVERY_GOAL,
-            libraries=[db.default_library()],
+        protocol = DiscoveryRegistry().get_protocol(OpdsRegistrationService)
+        registry = create_integration_configuration(
+            protocol=protocol, goal=Goals.DISCOVERY_GOAL
         )
-        # ConfigurationSetting.for_library_and_externalintegration(
-        #     db.session,
-        #     Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-        #     db.default_library(),
-        #     registry,
-        # ).value = client_base_1
+        create(
+            db.session,
+            DiscoveryServiceRegistration,
+            library=db.default_library(),
+            integration=registry,
+            web_client=client_base_1,
+        )
 
         record = Record()
         annotator.add_web_client_urls(record, db.default_library(), identifier)
