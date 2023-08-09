@@ -17,7 +17,7 @@ from core.model.discovery_service_registration import (
     RegistrationStage,
 )
 from core.scripts import LibraryInputScript
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class LibraryRegistrationScript(LibraryInputScript):
@@ -104,7 +104,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         library: Library,
         stage: RegistrationStage,
         url_for: Callable[..., str],
-    ) -> bool:
+    ) -> bool | ProblemDetail:
         """Push one Library's registration to the given OpdsRegistrationService."""
 
         self.log.info("Processing library %r", library.short_name)
@@ -116,6 +116,9 @@ class LibraryRegistrationScript(LibraryInputScript):
             self.log.exception(
                 "Could not complete registration. Problem detail document: %r" % data
             )
+            return e.problem_detail
+        except Exception as e:
+            self.log.exception(f"Exception during registration: {e}")
             return False
 
         self.log.info("Success.")

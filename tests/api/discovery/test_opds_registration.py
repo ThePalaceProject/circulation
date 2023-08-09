@@ -796,36 +796,29 @@ class TestLibraryRegistrationScript:
 
         # First, simulate success.
         registry.register_library = MagicMock(return_value=True)
-        stage = MagicMock(spec=RegistrationStage)
+        stage = MagicMock()
         url_for = MagicMock()
         assert script.process_library(registry, library, stage, url_for) is True
 
-        # The stage and url_for values were passed into
-        # Registration.push()
-        assert (stage, url_for) == registration.pushed
+        # The stage and url_for values were passed into register_library()
+        registry.register_library.assert_called_once_with(library, stage, url_for)
 
-        # Next, simulate an exception raised during push()
+        # Next, simulate an exception raised during register_library()
         # This can happen in real situations, though the next case
         # we'll test is more common.
-        class FailsWithException(Registration):
-            def push(self, stage, url_for):
-                raise Exception("boo")
+        registry.register_library = MagicMock(side_effect=Exception("boo"))
 
-        registration_fail_exception = FailsWithException(registry, library)
         # We get False rather than the exception being propagated.
         # Useful information about the exception is added to the logs,
         # where someone actually running the script will see it.
-        assert False == script.process_library(
-            registration_fail_exception, stage, url_for
+        assert script.process_library(registry, library, stage, url_for) is False
+
+        # Next, simulate register_library() returning a problem detail document.
+        registry.register_library = MagicMock(
+            side_effect=ProblemError(problem_detail=INVALID_INPUT.detailed("oops"))
         )
 
-        # Next, simulate push() returning a problem detail document.
-        class FailsWithProblemDetail(Registration):
-            def push(self, stage, url_for):
-                return INVALID_INPUT.detailed("oops")
-
-        registration_fail_problem = FailsWithProblemDetail(registry, library)
-        result = script.process_library(registration_fail_problem, stage, url_for)
+        result = script.process_library(registry, library, stage, url_for)
 
         # The problem document is returned. Useful information about
         # the exception is also added to the logs, where someone
