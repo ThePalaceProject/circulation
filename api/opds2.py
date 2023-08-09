@@ -109,7 +109,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         if "authentication_token" not in templated.variable_names:
             return fulfillment
 
-        token_auth = licensepool.collection.integration_configuration.settings.get(
+        token_auth = licensepool.collection.integration_configuration.settings_dict.get(
             ExternalIntegration.TOKEN_AUTH
         )
         if token_auth is None:

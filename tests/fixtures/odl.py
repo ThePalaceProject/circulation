@@ -92,7 +92,7 @@ class ODLTestFixture:
             protocol=integration_protocol
         )
         config = collection.create_integration_configuration(integration_protocol)
-        config.settings = {
+        config.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://metadata",

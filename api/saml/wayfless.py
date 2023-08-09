@@ -48,7 +48,7 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
         external: ExternalIntegration = collection.external_integration
         self._wayfless_url_template: Optional[
             str
-        ] = collection.integration_configuration.settings.get(
+        ] = collection.integration_configuration.settings_dict.get(
             SAMLWAYFlessConstants.WAYFLESS_URL_TEMPLATE_KEY
         )
 

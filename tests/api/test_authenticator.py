@@ -67,7 +67,10 @@ from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_controller import ControllerFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import (
+        CreateAuthIntegrationFixture,
+        MilleniumAuthIntegrationFixture,
+    )
     from ..fixtures.database import DatabaseTransactionFixture
     from ..fixtures.vendor_id import VendorIDFixture
 
@@ -471,7 +474,7 @@ class TestAuthenticator:
     def test_init(
         self,
         controller_fixture: ControllerFixture,
-        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
+        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
     ):
         db = controller_fixture.db
 
@@ -601,7 +604,7 @@ class TestLibraryAuthenticator:
     def test_from_config_basic_auth_only(
         self,
         db: DatabaseTransactionFixture,
-        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
+        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
     ):
         # Only a basic auth provider.
         create_millenium_auth_integration(db.default_library())
@@ -657,8 +660,8 @@ class TestLibraryAuthenticator:
     def test_configuration_exception_during_from_config_stored(
         self,
         db: DatabaseTransactionFixture,
-        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
-        create_auth_integration_configuration: Callable[..., AuthProviderFixture],
+        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
+        create_auth_integration_configuration: CreateAuthIntegrationFixture,
     ):
         # If the initialization of an AuthenticationProvider from config
         # raises CannotLoadConfiguration or ImportError, the exception
@@ -737,9 +740,9 @@ class TestLibraryAuthenticator:
         type(integration.parent).goal = PropertyMock(
             return_value=Goals.PATRON_AUTH_GOAL
         )
-        type(integration.parent).settings = PropertyMock(return_value={})
+        type(integration.parent).settings_dict = PropertyMock(return_value={})
         type(integration).library_id = PropertyMock(return_value=library.id)
-        type(integration).settings = PropertyMock(return_value={})
+        type(integration).settings_dict = PropertyMock(return_value={})
         auth = LibraryAuthenticator(
             _db=db.session, library=library, integration_registry=registry
         )
@@ -753,15 +756,15 @@ class TestLibraryAuthenticator:
     def test_register_provider_basic_auth(
         self,
         db: DatabaseTransactionFixture,
-        create_auth_integration_configuration: Callable[..., AuthProviderFixture],
+        create_auth_integration_configuration: CreateAuthIntegrationFixture,
         patron_auth_registry: PatronAuthRegistry,
     ):
         library = db.default_library()
-        protocol = patron_auth_registry.get_protocol(SIP2AuthenticationProvider)
+        protocol = patron_auth_registry.get_protocol(SIP2AuthenticationProvider, "")
         _, integration = create_auth_integration_configuration(
             protocol,
             library,
-            settings={
+            settings_dict={
                 "url": "http://url/",
                 "password": "secret",
             },

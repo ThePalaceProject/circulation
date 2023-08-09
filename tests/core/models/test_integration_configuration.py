@@ -24,7 +24,7 @@ class TestIntegrationConfigurations:
         assert libconfig is not None
         assert libconfig.library == library
         assert libconfig.parent == config
-        assert libconfig.settings == {}
+        assert libconfig.settings_dict == {}
 
         # The same config is returned henceforth
         assert config.for_library(library.id) == libconfig

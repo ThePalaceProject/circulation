@@ -35,16 +35,21 @@ from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from core.integration.goals import Goals
 from core.model import AdminRole, Library, get_one
-from core.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
+from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
     from tests.fixtures.api_admin import SettingsControllerFixture
-    from tests.fixtures.authenticator import AuthProviderFixture
-    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.authenticator import (
+        MilleniumAuthIntegrationFixture,
+        SamlAuthIntegrationFixture,
+        SimpleAuthIntegrationFixture,
+        Sip2AuthIntegrationFixture,
+    )
+    from tests.fixtures.database import (
+        DatabaseTransactionFixture,
+        IntegrationLibraryConfigurationFixture,
+    )
 
 
 @pytest.fixture
@@ -116,10 +121,8 @@ class TestPatronAuth:
         self,
         settings_ctrl_fixture: SettingsControllerFixture,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
-        create_integration_library_configuration: Callable[
-            ..., IntegrationLibraryConfiguration
-        ],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        create_integration_library_configuration: IntegrationLibraryConfigurationFixture,
         get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_simple_auth_integration(
@@ -163,7 +166,7 @@ class TestPatronAuth:
         self,
         settings_ctrl_fixture: SettingsControllerFixture,
         db: DatabaseTransactionFixture,
-        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
+        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
         get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_millenium_auth_integration(
@@ -194,7 +197,7 @@ class TestPatronAuth:
         self,
         settings_ctrl_fixture: SettingsControllerFixture,
         db: DatabaseTransactionFixture,
-        create_sip2_auth_integration: Callable[..., AuthProviderFixture],
+        create_sip2_auth_integration: Sip2AuthIntegrationFixture,
         get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_sip2_auth_integration(
@@ -229,7 +232,7 @@ class TestPatronAuth:
         self,
         settings_ctrl_fixture: SettingsControllerFixture,
         db: DatabaseTransactionFixture,
-        create_saml_auth_integration: Callable[..., AuthProviderFixture],
+        create_saml_auth_integration: SamlAuthIntegrationFixture,
         get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_saml_auth_integration(
@@ -284,7 +287,7 @@ class TestPatronAuth:
     def test_patron_auth_services_post_cannot_change_protocol(
         self,
         post_response: Callable[..., Response | ProblemDetail],
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
         form = ImmutableMultiDict(
@@ -299,7 +302,7 @@ class TestPatronAuth:
     def test_patron_auth_services_post_name_in_use(
         self,
         post_response: Callable[..., Response | ProblemDetail],
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
         form = ImmutableMultiDict(
@@ -314,7 +317,7 @@ class TestPatronAuth:
     def test_patron_auth_services_post_invalid_configuration(
         self,
         post_response: Callable[..., Response | ProblemDetail],
-        create_millenium_auth_integration: Callable[..., AuthProviderFixture],
+        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
         common_args: list[tuple[str, str]],
     ):
         auth_service, _ = create_millenium_auth_integration()
@@ -336,7 +339,7 @@ class TestPatronAuth:
     def test_patron_auth_services_post_incomplete_configuration(
         self,
         post_response: Callable[..., Response | ProblemDetail],
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
         common_args: list[tuple[str, str]],
     ):
         auth_service, _ = create_simple_auth_integration()
@@ -385,7 +388,7 @@ class TestPatronAuth:
     def test_patron_auth_services_post_missing_patron_auth_multiple_basic(
         self,
         post_response: Callable[..., Response | ProblemDetail],
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
         default_library: Library,
         common_args: list[tuple[str, str]],
     ):
@@ -497,14 +500,14 @@ class TestPatronAuth:
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
         settings = SimpleAuthenticationProvider.settings_class()(
-            **auth_service.settings
+            **auth_service.settings_dict
         )
         assert settings.test_identifier == "user"
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations
         assert library_config.library == default_library
         assert (
-            library_config.settings["library_identifier_restriction_criteria"]
+            library_config.settings_dict["library_identifier_restriction_criteria"]
             == "^1234"
         )
 
@@ -530,7 +533,7 @@ class TestPatronAuth:
         assert auth_service2 is not None
         assert auth_service2 != auth_service
         assert auth_service2.id == int(response.response[0])  # type: ignore[index]
-        settings2 = MilleniumPatronAPI.settings_class()(**auth_service2.settings)
+        settings2 = MilleniumPatronAPI.settings_class()(**auth_service2.settings_dict)
         assert "https://url.com" == settings2.url
         assert "user" == settings2.test_identifier
         assert "pass" == settings2.test_password
@@ -544,7 +547,7 @@ class TestPatronAuth:
         post_response: Callable[..., Response | ProblemDetail],
         common_args: List[Tuple[str, str]],
         settings_ctrl_fixture: SettingsControllerFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
         db: DatabaseTransactionFixture,
         monkeypatch: MonkeyPatch,
     ):
@@ -587,17 +590,17 @@ class TestPatronAuth:
 
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
-        assert isinstance(auth_service.settings, dict)
+        assert isinstance(auth_service.settings_dict, dict)
         settings = SimpleAuthenticationProvider.settings_class()(
-            **auth_service.settings
+            **auth_service.settings_dict
         )
         assert settings.test_identifier == "user"
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations
         assert l2 == library_config.library
-        assert isinstance(library_config.settings, dict)
+        assert isinstance(library_config.settings_dict, dict)
         library_settings = SimpleAuthenticationProvider.library_settings_class()(
-            **library_config.settings
+            **library_config.settings_dict
         )
         assert (
             library_settings.library_identifier_restriction_type
@@ -610,7 +613,7 @@ class TestPatronAuth:
         self,
         common_args: List[Tuple[str, str]],
         settings_ctrl_fixture: SettingsControllerFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         controller = settings_ctrl_fixture.manager.admin_patron_auth_services_controller
         db = settings_ctrl_fixture.ctrl.db

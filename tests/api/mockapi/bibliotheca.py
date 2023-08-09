@@ -30,7 +30,7 @@ class MockBibliothecaAPI(BibliothecaAPI):
         config = collection.create_integration_configuration(
             ExternalIntegration.BIBLIOTHECA
         )
-        config.settings = {
+        config.settings_dict = {
             "username": "a",
             "password": "b",
         }

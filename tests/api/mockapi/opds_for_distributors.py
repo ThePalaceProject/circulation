@@ -34,7 +34,9 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
         config = collection.create_integration_configuration(
             OPDSForDistributorsAPI.NAME
         )
-        config.settings = dict(username="a", password="b", data_source="data_source")
+        config.settings_dict = dict(
+            username="a", password="b", data_source="data_source"
+        )
         config.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection

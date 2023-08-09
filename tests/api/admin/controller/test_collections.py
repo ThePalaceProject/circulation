@@ -274,7 +274,7 @@ class TestCollectionSettings:
             assert c2.external_account_id == settings2.get("external_account_id")
             assert c3.external_account_id == settings3.get("external_account_id")
 
-            assert c2.integration_configuration.settings[
+            assert c2.integration_configuration.settings_dict[
                 "overdrive_client_secret"
             ] == settings2.get("overdrive_client_secret")
 
@@ -547,11 +547,15 @@ class TestCollectionSettings:
         assert "acctid" == collection.external_account_id
         assert (
             "username"
-            == collection.integration_configuration.settings["overdrive_client_key"]
+            == collection.integration_configuration.settings_dict[
+                "overdrive_client_key"
+            ]
         )
         assert (
             "password"
-            == collection.integration_configuration.settings["overdrive_client_secret"]
+            == collection.integration_configuration.settings_dict[
+                "overdrive_client_secret"
+            ]
         )
 
         # Two libraries now have access to the collection.
@@ -562,19 +566,21 @@ class TestCollectionSettings:
         # Additional settings were set on the collection.
         assert (
             "1234"
-            == collection.integration_configuration.settings["overdrive_website_id"]
+            == collection.integration_configuration.settings_dict[
+                "overdrive_website_id"
+            ]
         )
         assert isinstance(l1.id, int)
         assert (
             "l1_ils"
-            == collection.integration_configuration.for_library(l1.id).settings[
+            == collection.integration_configuration.for_library(l1.id).settings_dict[
                 "ils_name"
             ]
         )
         assert isinstance(l2.id, int)
         assert (
             "l2_ils"
-            == collection.integration_configuration.for_library(l2.id).settings[
+            == collection.integration_configuration.for_library(l2.id).settings_dict[
                 "ils_name"
             ]
         )
@@ -608,16 +614,18 @@ class TestCollectionSettings:
         assert "child-acctid" == child.external_account_id
 
         # The settings that are inherited from the parent weren't set.
-        assert "username" not in child.integration_configuration.settings
-        assert "password" not in child.integration_configuration.settings
-        assert "website_id" not in child.integration_configuration.settings
+        assert "username" not in child.integration_configuration.settings_dict
+        assert "password" not in child.integration_configuration.settings_dict
+        assert "website_id" not in child.integration_configuration.settings_dict
 
         # One library has access to the collection.
         assert [child] == l3.collections
         assert isinstance(l3.id, int)
         assert (
             "l3_ils"
-            == child.integration_configuration.for_library(l3.id).settings["ils_name"]
+            == child.integration_configuration.for_library(l3.id).settings_dict[
+                "ils_name"
+            ]
         )
 
     def test_collections_post_edit(
@@ -657,7 +665,7 @@ class TestCollectionSettings:
         assert collection.id == int(response.response[0])
 
         # The collection has been changed.
-        assert "user2" == collection.integration_configuration.settings.get(
+        assert "user2" == collection.integration_configuration.settings_dict.get(
             "overdrive_client_key"
         )
 
@@ -665,13 +673,13 @@ class TestCollectionSettings:
         assert [collection] == l1.collections
 
         # Additional settings were set on the collection.
-        assert "1234" == collection.integration_configuration.settings.get(
+        assert "1234" == collection.integration_configuration.settings_dict.get(
             "overdrive_website_id"
         )
         assert isinstance(l1.id, int)
         assert "the_ils" == collection.integration_configuration.for_library(
             l1.id
-        ).settings.get("ils_name")
+        ).settings_dict.get("ils_name")
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -694,7 +702,7 @@ class TestCollectionSettings:
         assert collection.id == int(response.response[0])
 
         # The collection is the same.
-        assert "user2" == collection.integration_configuration.settings.get(
+        assert "user2" == collection.integration_configuration.settings_dict.get(
             "overdrive_client_key"
         )
         assert ExternalIntegration.OVERDRIVE == collection.protocol
@@ -876,7 +884,7 @@ class TestCollectionSettings:
         assert isinstance(l1.id, int)
         assert "14" == collection.integration_configuration.for_library(
             l1.id
-        ).settings.get("ebook_loan_duration")
+        ).settings_dict.get("ebook_loan_duration")
 
         # Remove the connection between collection and library.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):

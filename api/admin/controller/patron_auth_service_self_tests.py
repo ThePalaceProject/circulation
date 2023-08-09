@@ -107,7 +107,7 @@ class PatronAuthServiceSelfTestsController:
             name=patron_auth_service.name,
             protocol=patron_auth_service.protocol,
             goal=patron_auth_service.goal,
-            settings=patron_auth_service.settings,
+            settings=patron_auth_service.settings_dict,
         )
         return info
 
@@ -122,8 +122,8 @@ class PatronAuthServiceSelfTestsController:
                 )
             )
 
-        if not isinstance(integration.settings, dict) or not isinstance(
-            library_configuration.settings, dict
+        if not isinstance(integration.settings_dict, dict) or not isinstance(
+            library_configuration.settings_dict, dict
         ):
             raise ProblemError(
                 problem_detail=FAILED_TO_RUN_SELF_TESTS.detailed(
@@ -132,9 +132,9 @@ class PatronAuthServiceSelfTestsController:
             )
 
         protocol_class = self.get_protocol_class(integration)
-        settings = protocol_class.settings_class()(**integration.settings)
+        settings = protocol_class.settings_class()(**integration.settings_dict)
         library_settings = protocol_class.library_settings_class()(
-            **library_configuration.settings
+            **library_configuration.settings_dict
         )
 
         value, _ = protocol_class.run_self_tests(

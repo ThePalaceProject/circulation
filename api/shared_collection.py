@@ -131,7 +131,7 @@ class SharedCollectionAPI:
             )
 
         external_library_urls = (
-            collection.integration_configuration.settings.get(
+            collection.integration_configuration.settings_dict.get(
                 BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS
             )
             or []
@@ -173,7 +173,7 @@ class SharedCollectionAPI:
 
     def check_client_authorization(self, collection, client):
         """Verify that an IntegrationClient is whitelisted for access to the collection."""
-        external_library_urls = collection.integration_configuration.settings.get(
+        external_library_urls = collection.integration_configuration.settings_dict.get(
             BaseSharedCollectionAPI.EXTERNAL_LIBRARY_URLS, []
         )
         if client.url not in [

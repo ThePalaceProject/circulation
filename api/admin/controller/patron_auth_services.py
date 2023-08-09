@@ -91,14 +91,14 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             libraries = []
             for library_settings in service.library_configurations:
                 library_info = {"short_name": library_settings.library.short_name}
-                library_info.update(library_settings.settings)
+                library_info.update(library_settings.settings_dict)
                 libraries.append(library_info)
 
             service_info = {
                 "id": service.id,
                 "name": service.name,
                 "protocol": service.protocol,
-                "settings": service.settings,
+                "settings": service.settings_dict,
                 "libraries": libraries,
             }
             configured_services.append(service_info)
@@ -240,7 +240,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
         # Update new and existing libraries settings
         for integration, settings in chain(new, updated):
             validated_settings = settings_class(**settings)
-            integration.settings = validated_settings.dict()
+            integration.settings_dict = validated_settings.dict()
             # Make sure library doesn't have multiple auth basic auth services
             self.check_library_integrations(integration.library)
 
@@ -276,7 +276,7 @@ class PatronAuthServicesController(AdminCirculationManagerController):
             impl_cls = self.registry[protocol]
             settings_class = impl_cls.settings_class()
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)
-            auth_service.settings = validated_settings.dict()
+            auth_service.settings_dict = validated_settings.dict()
 
             # Update library settings
             if libraries_data:

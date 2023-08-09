@@ -441,7 +441,7 @@ class TestOPDS2Importer(OPDS2Test):
         imported_editions, pools, works, failures = data.importer.import_from_feed(
             content
         )
-        setting = data.importer.integration_configuration().settings.get(
+        setting = data.importer.integration_configuration().settings_dict.get(
             ExternalIntegration.TOKEN_AUTH
         )
 

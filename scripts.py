@@ -1378,7 +1378,7 @@ class DirectoryImportScript(TimestampScript):
         data_source = DataSource.lookup(
             self._db, data_source_name, autocreate=True, offers_licenses=True
         )
-        settings = collection.integration_configuration.settings.copy()
+        settings = collection.integration_configuration.settings_dict.copy()
         settings[Collection.DATA_SOURCE_NAME_SETTING] = data_source.name
 
         return collection, mirrors

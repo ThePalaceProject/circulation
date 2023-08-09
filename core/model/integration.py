@@ -45,7 +45,9 @@ class IntegrationConfiguration(Base):
     name = Column(Unicode, nullable=False, unique=True)
 
     # The configuration settings for this integration. Stored as json.
-    settings: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
+    settings_dict: Mapped[Dict[str, Any]] = Column(
+        "settings", JSONB, nullable=False, default=dict
+    )
 
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)
@@ -134,7 +136,9 @@ class IntegrationLibraryConfiguration(Base):
     library: Mapped[Library] = relationship("Library")
 
     # The configuration settings for this integration. Stored as json.
-    settings: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
+    settings_dict: Mapped[Dict[str, Any]] = Column(
+        "settings", JSONB, nullable=False, default=dict
+    )
 
     def __repr__(self) -> str:
         return (

@@ -82,6 +82,7 @@ module = [
     "core.settings.*",
     "core.util.authentication_for_opds",
     "core.util.cache",
+    "tests.fixtures.authenticator",
     "tests.migration.*",
 ]
 no_implicit_reexport = true

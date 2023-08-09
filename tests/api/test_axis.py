@@ -6,7 +6,7 @@ import socket
 import ssl
 import urllib
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
@@ -68,7 +68,7 @@ from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_axis_files import AxisFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.database import DatabaseTransactionFixture
 
 
@@ -140,7 +140,7 @@ class TestAxis360API:
     def test__run_self_tests(
         self,
         axis360: Axis360Fixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.
@@ -755,10 +755,10 @@ class TestAxis360API:
         axis360: Axis360Fixture,
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         if setting_value is not None:
             settings[setting] = setting_value
-            config.settings = settings
+            config.settings_dict = settings
         api = MockAxis360API(axis360.db.session, axis360.collection)
         assert getattr(api, attribute) == attribute_value
 
@@ -780,9 +780,9 @@ class TestAxis360API:
         self, setting, setting_value, is_valid, expected, axis360: Axis360Fixture
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         settings[setting] = setting_value
-        config.settings = settings
+        config.settings_dict = settings
 
         if is_valid:
             api = MockAxis360API(axis360.db.session, axis360.collection)
