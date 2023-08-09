@@ -1,7 +1,12 @@
+import logging
 import os
 from enum import Enum
 from typing import Optional
 from urllib.parse import urljoin
+
+from requests import RequestException
+
+from core.util.http import HTTP, RequestNetworkException
 
 
 class OperationalMode(str, Enum):
@@ -34,6 +39,10 @@ class Configuration:
         },
     }
 
+    METADATA_URL_TEMPLATE = (
+        "https://data.jsdelivr.com/v1/packages/npm/{name}/resolved?specifier={version}"
+    )
+
     DEVELOPMENT_MODE_PACKAGE_TEMPLATE = "node_modules/{name}"
     STATIC_ASSETS_REL_PATH = "dist"
 
@@ -43,6 +52,9 @@ class Configuration:
     ENV_ADMIN_UI_PACKAGE_NAME = "TPP_CIRCULATION_ADMIN_PACKAGE_NAME"
     ENV_ADMIN_UI_PACKAGE_VERSION = "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION"
 
+    # Cache the package version after first lookup.
+    _version: Optional[str] = None
+
     @classmethod
     def operational_mode(cls) -> OperationalMode:
         return (
@@ -50,6 +62,10 @@ class Configuration:
             if os.path.isdir(cls.package_development_directory())
             else OperationalMode.production
         )
+
+    @classmethod
+    def logger(cls) -> logging.Logger:
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     @classmethod
     def package_name(cls) -> str:
@@ -61,12 +77,51 @@ class Configuration:
         return os.environ.get(cls.ENV_ADMIN_UI_PACKAGE_NAME) or cls.PACKAGE_NAME
 
     @classmethod
-    def package_version(cls) -> str:
-        """Get the effective package version.
+    def resolve_package_version(cls, package_name: str, package_version: str) -> str:
+        """Resolve a package version to a specific version, if necessary. For
+        example, if the version is a tag or partial semver. This is done by
+        querying the jsdelivr API."""
+        url = cls.METADATA_URL_TEMPLATE.format(
+            name=package_name, version=package_version
+        )
+        try:
+            response = HTTP.get_with_timeout(url)
+            if response.status_code == 200 and "version" in response.json():
+                return str(response.json()["version"])
+        except (RequestNetworkException, RequestException):
+            cls.logger().exception("Failed to resolve package version.")
+            # If the request fails, just return the version as-is.
+            ...
+
+        return package_version
+
+    @classmethod
+    def env_package_version(cls) -> Optional[str]:
+        """Get the package version specified in configuration or environment.
 
         :return Package verison.
         """
-        return os.environ.get(cls.ENV_ADMIN_UI_PACKAGE_VERSION) or cls.PACKAGE_VERSION
+        if cls.ENV_ADMIN_UI_PACKAGE_VERSION not in os.environ:
+            return None
+
+        version = os.environ[cls.ENV_ADMIN_UI_PACKAGE_VERSION]
+        if version in ["latest", "next", "dev"]:
+            version = cls.resolve_package_version(cls.package_name(), version)
+
+        return version
+
+    @classmethod
+    def package_version(cls) -> str:
+        """Get the effective package version, resolved to a specific version,
+        if necessary. For example, if the version is a tag or partial semver.
+        This is done by querying the jsdelivr API.
+
+        :return Package verison.
+        """
+        if cls._version is None:
+            cls._version = cls.env_package_version() or cls.PACKAGE_VERSION
+
+        return cls._version
 
     @classmethod
     def lookup_asset_url(
