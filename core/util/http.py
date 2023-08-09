@@ -469,12 +469,11 @@ class HTTP:
             # in a new document that represents the integration
             # failure.
             try:
-                problem = response.json()
-                raise ProblemError(
-                    problem_detail=INTEGRATION_ERROR.detailed(
-                        f'Remote service returned: "{problem.get("detail")}"'
-                    )
+                problem_detail = INTEGRATION_ERROR.detailed(
+                    f"Remote service returned a problem detail document: '{response.text}'"
                 )
+                problem_detail.debug_message = response.text
+                raise ProblemError(problem_detail=problem_detail)
             except JSONDecodeError:
                 # Failed to decode the problem detail document, we just fall through
                 # and raise the generic integration error.
