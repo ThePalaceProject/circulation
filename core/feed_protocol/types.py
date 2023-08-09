@@ -3,6 +3,8 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 from core.model import LicensePool, Work
+from core.model.edition import Edition
+from core.model.identifier import Identifier
 
 
 class FeedEntryType(BaseModel):
@@ -15,6 +17,12 @@ class FeedEntryType(BaseModel):
     def add_attributes(self, attrs: dict):
         for name, data in attrs.items():
             setattr(self, name, data)
+
+    def children(self):
+        """Yield all FeedEntryType attributes"""
+        for name, value in self:
+            if isinstance(value, self.__class__):
+                yield name, value
 
 
 class Link(FeedEntryType):
@@ -59,11 +67,13 @@ class WorkEntryData(BaseModel):
 
 class WorkEntry(FeedEntryType):
     work: Work
+    edition: Optional[Edition] = None
+    identifier: Optional[Identifier] = None
     license_pool: Optional[LicensePool] = None
     cached_entry: Optional[str] = None
 
     # Actual, computed feed data
-    computed: Optional[FeedEntryType] = None
+    computed: Optional[WorkEntryData] = None
 
 
 class FeedData(BaseModel):
@@ -78,5 +88,8 @@ class FeedData(BaseModel):
     def add_link(self, href, rel, **kwargs):
         self.links.append(Link(href=href, rel=rel, **kwargs))
 
-    def add_metadata(self, name, **kwargs):
-        self.metadata[name] = FeedEntryType(**kwargs)
+    def add_metadata(self, name, feed_entry=None, **kwargs):
+        if not feed_entry:
+            self.metadata[name] = FeedEntryType(**kwargs)
+        else:
+            self.metadata[name] = feed_entry

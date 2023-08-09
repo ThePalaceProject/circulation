@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import logging
 from collections import defaultdict
@@ -13,6 +15,8 @@ from core.model.classification import Subject
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource
 from core.model.edition import Edition
+from core.model.library import Library
+from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink
 from core.model.work import Work
 from core.opds import Annotator
@@ -213,7 +217,8 @@ def url_for(name, **kwargs):
     if has_request_context():
         return flask_url_for(name, **kwargs)
     else:
-        return f"//{name}/{','.join(kwargs.items)}"
+        params = "&".join([f"k=v" for k, v in kwargs.items()])
+        return f"//{name}?{params}"
 
 
 class OPDSAnnotator:
@@ -239,6 +244,8 @@ class Annotator(OPDSAnnotator):
             (Hyperlink.IMAGE, work.cover_full_url),
             (Hyperlink.THUMBNAIL_IMAGE, work.cover_thumbnail_url),
         ]:
+            if not url:
+                continue
             image_type = "image/png"
             if url.endswith(".jpeg") or url.endswith(".jpg"):
                 image_type = "image/jpeg"
@@ -341,16 +348,8 @@ class Annotator(OPDSAnnotator):
                 # TODO: convert to local timezone, not that it matters much.
                 computed.issued = FeedEntryType(text=issued.isoformat().split("T")[0])
 
-        permalink = url_for(
-            "permalink",
-            identifier_type=identifier.type,
-            identifier=identifier.identifier,
-            library_short_name=self.library.short_name,
-            _external=True,
-        )
-        other_links.append(Link(href=permalink, rel="alternate"))
-
-        # TODO: is_work_entry_solo
+        if identifier:
+            computed.identifier = identifier.urn
 
         if pool:
             data_source = pool.data_source.name
@@ -384,3 +383,15 @@ class Annotator(OPDSAnnotator):
         computed.image_links = image_links
         computed.other_links = other_links
         entry.computed = computed
+
+    @classmethod
+    def active_licensepool_for(
+        cls, work: Work, library: Library | None = None
+    ) -> LicensePool | None:
+        """Which license pool would be/has been used to issue a license for
+        this work?
+        """
+        if not work:
+            return None
+
+        return work.active_license_pool(library=library)

@@ -13,18 +13,15 @@ from core.lane import Lane
 from core.opds import AcquisitionFeed
 
 if TYPE_CHECKING:
-    from core.external_search import ExternalSearchIndex
     from core.lane import Facets, Pagination
 
 
 class OPDSFeedProtocol(FeedProtocol):
     def __init__(
         self,
-        search_engine: ExternalSearchIndex,
         facets: Facets,
         pagination: Pagination,
     ) -> None:
-        self._search_engine = search_engine
         self._facets = facets
         self._pagination = pagination
         self._feed = FeedData()
@@ -101,7 +98,6 @@ class OPDSFeedProtocol(FeedProtocol):
         breadcrumb links.
         """
         # Add the top-level link with rel='start'
-        xml = self.feed
         annotator = self.annotator
         top_level_title = annotator.top_level_title() or "Collection Home"
         self._feed.links.append(

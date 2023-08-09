@@ -37,10 +37,10 @@ from core.app_server import (
 )
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import ExternalSearchIndex, SortKeyPagination
+from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.circulation import (
     LibraryAnnotator as OPDSLibraryAnnotator,
 )
-from core.feed_protocol.page import OPDSPageFeed
 from core.lane import (
     BaseFacets,
     Facets,
@@ -952,7 +952,7 @@ class OPDSFeedController(CirculationManagerController):
 
         # annotator = self.manager.annotator(lane, facets=facets)
         # max_age = flask.request.args.get("max_age")
-        feed = OPDSPageFeed(
+        feed = OPDSAcquisitionFeed(
             url,
             lane.display_name,
             search_engine,

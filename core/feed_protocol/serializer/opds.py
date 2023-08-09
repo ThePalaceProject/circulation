@@ -10,6 +10,16 @@ TAG_MAPPING = {
     "hold": f"{{{OPDSFeed.OPDS_NS}}}hold",
     "copies": f"{{{OPDSFeed.OPDS_NS}}}copies",
     "availability": f"{{{OPDSFeed.OPDS_NS}}}availability",
+    "licensor": f"{{{OPDSFeed.DRM_NS}}}licensor",
+    "patron": f"{{{OPDSFeed.SIMPLIFIED_NS}}}patron",
+}
+
+ATTRIBUTE_MAPPING = {
+    "vendor": f"{{{OPDSFeed.DRM_NS}}}vendor",
+    "scheme": f"{{{OPDSFeed.DRM_NS}}}scheme",
+    "username": f"{{{OPDSFeed.SIMPLIFIED_NS}}}username",
+    "authorizationIdentifier": f"{{{OPDSFeed.SIMPLIFIED_NS}}}authorizationIdentifier",
+    "rights": f"{{{OPDSFeed.DCTERMS_NS}}}rights",
 }
 
 
@@ -27,7 +37,7 @@ class OPDS1Serializer(OPDSFeed):
             serialized.append(element)
 
         for entry in feed.entries:
-            element = self._serialize_work_entry(entry.computed)
+            element = self.serialize_work_entry(entry.computed)
             serialized.append(element)
 
         for link in feed.links:
@@ -37,7 +47,7 @@ class OPDS1Serializer(OPDSFeed):
         etree.indent(serialized)
         return etree.tostring(serialized)
 
-    def _serialize_work_entry(self, feed_entry: WorkEntryData) -> etree.Element:
+    def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree.Element:
         entry: etree._Element = OPDSFeed.entry()
 
         if feed_entry.title:
@@ -130,7 +140,10 @@ class OPDS1Serializer(OPDSFeed):
                 if attrib == "text":
                     entry.text = value
                 else:
-                    entry.set(attrib, value if value is not None else "")
+                    entry.set(
+                        ATTRIBUTE_MAPPING.get(attrib, attrib),
+                        value if value is not None else "",
+                    )
         return entry
 
     def _serialize_author_tag(self, tag: str, feed_entry: FeedEntryType):
@@ -158,3 +171,7 @@ class OPDS1Serializer(OPDSFeed):
         if availability := getattr(link, "availability", None):
             element.append(self._serialize_feed_entry("availability", availability))
         return element
+
+    @classmethod
+    def to_string(cls, element: etree._Element) -> bytes:
+        return etree.tostring(element)
