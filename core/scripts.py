@@ -2927,8 +2927,8 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
         super().__init__(_db, args, kwargs)
         self._data: List[List[str]] = list()
 
-    def _create_overdrive_api(self, c: Collection):
-        return OverdriveCoreAPI(_db=self._db, collection=c)
+    def _create_overdrive_api(self, collection: Collection):
+        return OverdriveCoreAPI(_db=self._db, collection=collection)
 
     def do_run(self, *args, **kwargs):
         parsed = GenerateOverdriveAdvantageAccountList.parse_command_line(
