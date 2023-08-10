@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from flask import Response
 from sqlalchemy.orm import Session
@@ -15,17 +15,18 @@ from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotat
 from core.feed_protocol.opds import OPDSFeedProtocol
 from core.feed_protocol.types import Link, WorkEntry
 from core.feed_protocol.utils import serializer_for
+from core.lane import FacetsWithEntryPoint
 from core.model.edition import Edition
 from core.model.licensing import LicensePool
 from core.model.patron import Hold, Loan
 from core.model.work import Work
 from core.opds import AcquisitionFeed, UnfulfillableWork
+from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
-from core.util.opds_writer import OPDSMessage
+from core.util.opds_writer import AtomFeed, OPDSMessage
 
 if TYPE_CHECKING:
     from core.lane import WorkList
-    from core.model import Patron
 
 
 class OPDSAcquisitionFeed(OPDSFeedProtocol):
@@ -46,6 +47,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         We assume the entries have already been annotated."""
         self._feed.add_metadata("id", text=self.url)
         self._feed.add_metadata("title", text=self.title)
+        self._feed.add_metadata("updated", text=AtomFeed._strftime(utc_now()))
         self._feed.add_link(href=self.url, rel="self")
 
         # TODO: use the entry cache (is this still relevant?)
@@ -112,21 +114,23 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     def page(
         cls,
         _db: Session,
-        works: List[Work] | Generator,
+        url: str,
         lane: WorkList,
         annotator: LibraryAnnotator,
         facets,
         pagination,
-        patron: Optional[Patron] = None,
+        search_engine,
     ):
+        works = lane.works(_db, facets, pagination, search_engine)
         """A basic paged feed"""
         # "works" MAY be a generator, we want a list
         if not isinstance(works, list):
             works = list(works)
 
         entries = []
-
-        feed = OPDSAcquisitionFeed("", "", facets, pagination, annotator)
+        feed = OPDSAcquisitionFeed(
+            lane.display_name, url, facets, pagination, annotator
+        )
         for work in works:
             entry = cls.single_entry(work, annotator)
             if entry:
@@ -136,7 +140,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         feed.add_pagination_links(works, lane)
         feed.add_facet_links(lane)
 
-        # TODO: Breadcrumb links
+        if isinstance(facets, FacetsWithEntryPoint):
+            feed.add_breadcrumb_links(lane, facets.entrypoint)
+
         return feed
 
     @classmethod
@@ -188,7 +194,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         _work_entries = [cls.single_entry(work, annotator) for work in works]
         work_entries = [entry for entry in _work_entries if entry is not None]
 
-        feed = OPDSAcquisitionFeed(url, "Active loans and holds", None, None, annotator)
+        feed = OPDSAcquisitionFeed("Active loans and holds", url, None, None, annotator)
         feed.generate_feed(work_entries)
         response = feed.as_response(max_age=0, private=True)
 

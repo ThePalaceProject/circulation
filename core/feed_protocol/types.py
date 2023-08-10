@@ -27,23 +27,29 @@ class FeedEntryType(BaseModel):
 
 class Link(FeedEntryType):
     href: str
-    rel: str
+    rel: Optional[str]
     type: Optional[str]
 
     # Additional types
     role: Optional[str] = None
     title: Optional[str] = None
 
-    def dict(self):
-        d = dict(href=self.href, rel=self.rel)
-        if self.type is not None:
-            d["type"] = self.type
+    def dict(self, **kwargs):
+        kwargs["exclude_none"] = True
+        return super().dict(**kwargs)
+
+    def link_attribs(self) -> dict:
+        d = dict(href=self.href)
+        for key in ["rel", "type"]:
+            if (value := getattr(self, key, None)) is not None:
+                d[key] = value
         return d
 
 
 class WorkEntryData(BaseModel):
     """All the metadata possible for a work. This is not a FeedEntryType because we want strict control."""
 
+    additionalType: Optional[str] = None
     identifier: Optional[str] = None
     pwid: Optional[str] = None
 
@@ -82,9 +88,11 @@ class WorkEntry(FeedEntryType):
 
 class FeedData(BaseModel):
     links: List[Link] = []
+    breadcrumbs: List[Link] = []
     facet_links: List[Link] = []
     entries: List[WorkEntry] = []
     metadata: Dict[str, FeedEntryType] = {}
+    entrypoint: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True
