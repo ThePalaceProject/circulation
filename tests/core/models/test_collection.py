@@ -333,38 +333,6 @@ class TestCollection:
         example_collection_fixture.set_default_loan_period(audio, 606, library=library)
         assert 606 == test_collection.default_loan_period(library, audio)
 
-        # Given an integration client rather than a library, use
-        # a sitewide integration setting rather than a library-specific
-        # setting.
-        client = db.integration_client()
-
-        # The default when no value is set.
-        assert (
-            Collection.STANDARD_DEFAULT_LOAN_PERIOD
-            == test_collection.default_loan_period(client, ebook)
-        )
-
-        assert (
-            Collection.STANDARD_DEFAULT_LOAN_PERIOD
-            == test_collection.default_loan_period(client, audio)
-        )
-
-        # Set a value, and it's used.
-        example_collection_fixture.set_default_loan_period(ebook, 347)
-        assert 347 == test_collection.default_loan_period(client)
-        assert (
-            Collection.STANDARD_DEFAULT_LOAN_PERIOD
-            == test_collection.default_loan_period(client, audio)
-        )
-
-        example_collection_fixture.set_default_loan_period(audio, 349)
-        assert 349 == test_collection.default_loan_period(client, audio)
-
-        # The same value is used for other clients.
-        client2 = db.integration_client()
-        assert 347 == test_collection.default_loan_period(client)
-        assert 349 == test_collection.default_loan_period(client, audio)
-
     def test_default_reservation_period(
         self, example_collection_fixture: ExampleCollectionFixture
     ):

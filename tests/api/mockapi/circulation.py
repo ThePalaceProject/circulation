@@ -4,7 +4,6 @@ from collections import defaultdict
 
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.controller import CirculationManager
-from api.shared_collection import SharedCollectionAPI
 from core.external_search import MockExternalSearchIndex
 from core.integration.settings import BaseSettings
 from core.model import DataSource, Hold, Loan
@@ -163,61 +162,6 @@ class MockCirculationAPI(CirculationAPI):
         return self.remotes[source]
 
 
-class MockSharedCollectionAPI(SharedCollectionAPI):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.responses = defaultdict(list)
-
-    def _queue(self, k, v):
-        self.responses[k].append(v)
-
-    def _return_or_raise(self, k):
-        self.log.debug(k)
-        l = self.responses[k]
-        v = l.pop(0)
-        if isinstance(v, Exception):
-            raise v
-        return v
-
-    def queue_register(self, response):
-        self._queue("register", response)
-
-    def register(self, collection, url):
-        return self._return_or_raise("register")
-
-    def queue_borrow(self, response):
-        self._queue("borrow", response)
-
-    def borrow(self, collection, client, pool, hold=None):
-        return self._return_or_raise("borrow")
-
-    def queue_revoke_loan(self, response):
-        self._queue("revoke-loan", response)
-
-    def revoke_loan(self, collection, client, loan):
-        return self._return_or_raise("revoke-loan")
-
-    def queue_fulfill(self, response):
-        self._queue("fulfill", response)
-
-    def fulfill(
-        self,
-        patron,
-        pin,
-        licensepool,
-        internal_format=None,
-        part=None,
-        fulfill_part_url=None,
-    ):
-        return self._return_or_raise("fulfill")
-
-    def queue_revoke_hold(self, response):
-        self._queue("revoke-hold", response)
-
-    def revoke_hold(self, collection, client, hold):
-        return self._return_or_raise("revoke-hold")
-
-
 class MockCirculationManager(CirculationManager):
     d_circulation: MockCirculationAPI
 
@@ -228,6 +172,3 @@ class MockCirculationManager(CirculationManager):
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
         return MockCirculationAPI(self._db, library, analytics)
-
-    def setup_shared_collection(self):
-        return MockSharedCollectionAPI(self._db)

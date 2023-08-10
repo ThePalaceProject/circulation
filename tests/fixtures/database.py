@@ -39,7 +39,6 @@ from core.model import (
     Genre,
     Hyperlink,
     Identifier,
-    IntegrationClient,
     Library,
     LicensePool,
     MediaTypes,
@@ -647,16 +646,6 @@ class DatabaseTransactionFixture:
         else:
             id_value = self.fresh_str()
         return Identifier.for_foreign_id(self.session, identifier_type, id_value)[0]
-
-    def integration_client(self, url=None, shared_secret=None) -> IntegrationClient:
-        url = url or self.fresh_url()
-        secret = shared_secret or "secret"
-        return get_one_or_create(
-            self.session,
-            IntegrationClient,
-            shared_secret=secret,
-            create_method_kwargs=dict(url=url),
-        )[0]
 
     def fresh_url(self) -> str:
         return "http://foo.com/" + self.fresh_str()
