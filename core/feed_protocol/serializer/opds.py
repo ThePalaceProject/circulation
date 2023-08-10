@@ -20,6 +20,7 @@ ATTRIBUTE_MAPPING = {
     "username": f"{{{OPDSFeed.SIMPLIFIED_NS}}}username",
     "authorizationIdentifier": f"{{{OPDSFeed.SIMPLIFIED_NS}}}authorizationIdentifier",
     "rights": f"{{{OPDSFeed.DCTERMS_NS}}}rights",
+    "ProviderName": f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName",
 }
 
 
@@ -32,6 +33,10 @@ class OPDS1Serializer(OPDSFeed):
     def serialize_feed(self, feed: FeedData):
         # First we do metadata
         serialized = self.E.feed()
+
+        if feed.entrypoint:
+            serialized.set(f"{{{OPDSFeed.SIMPLIFIED_NS}}}entrypoint", feed.entrypoint)
+
         for name, metadata in feed.metadata.items():
             element = self._serialize_feed_entry(name, metadata)
             serialized.append(element)
@@ -44,12 +49,23 @@ class OPDS1Serializer(OPDSFeed):
         for link in feed.links:
             serialized.append(self._serialize_feed_entry("link", link))
 
+        if feed.breadcrumbs:
+            breadcrumbs = OPDSFeed.E._makeelement(
+                f"{{{OPDSFeed.SIMPLIFIED_NS}}}breadcrumbs"
+            )
+            for link in feed.breadcrumbs:
+                breadcrumbs.append(self._serialize_feed_entry("link", link))
+            serialized.append(breadcrumbs)
+
         # TODO: REMOVE DEBUG INDENT
         etree.indent(serialized)
-        return etree.tostring(serialized)
+        return self.to_string(serialized)
 
     def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree.Element:
         entry: etree._Element = OPDSFeed.entry()
+
+        if feed_entry.additionalType:
+            entry.set("additionalType", feed_entry.additionalType)
 
         if feed_entry.title:
             entry.append(OPDSFeed.E("title", feed_entry.title.text))
@@ -97,7 +113,8 @@ class OPDS1Serializer(OPDSFeed):
         ):
             entry.append(
                 OPDSFeed.E(
-                    f"{{{OPDSFeed.BIBFRAME_NS}}}distribution", ProviderName=provider
+                    f"{{{OPDSFeed.BIBFRAME_NS}}}distribution",
+                    **{f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName": provider},
                 )
             )
         if feed_entry.published:
@@ -132,6 +149,8 @@ class OPDS1Serializer(OPDSFeed):
         """Serialize a feed entry type in a recursive and blind manner"""
         entry: etree._Element = OPDSFeed.E(TAG_MAPPING.get(tag, tag))
         for attrib, value in feed_entry:
+            if value is None:
+                continue
             if isinstance(value, list):
                 for item in value:
                     entry.append(self._serialize_feed_entry(attrib, item))
@@ -156,10 +175,12 @@ class OPDS1Serializer(OPDSFeed):
             entry.append(element)
         if role := getattr(feed_entry, "role", None):
             entry.set(f"{{{OPDSFeed.OPF_NS}}}role", role)
+        if link := getattr(feed_entry, "link", None):
+            entry.append(self._serialize_feed_entry("link", link))
         return entry
 
     def _serialize_acquistion_link(self, link: Link) -> etree._Element:
-        element = OPDSFeed.link(**link.dict())
+        element = OPDSFeed.link(**link.link_attribs())
         if indirects := getattr(link, "indirectAcquisition", None):
             for indirect in indirects:
                 child = self._serialize_feed_entry("indirectAcquisition", indirect)

@@ -947,19 +947,14 @@ class OPDSFeedController(CirculationManagerController):
 
         # annotator = self.manager.annotator(lane, facets=facets)
         # max_age = flask.request.args.get("max_age")
-        feed = OPDSAcquisitionFeed(
-            url,
-            lane.display_name,
-            search_engine,
-            facets,
-            pagination,
-            OPDSLibraryAnnotator(
-                self.manager.circulation_apis[flask.request.library.id],
-                lane,
-                flask.request.library,
-            ),
+        annotator = OPDSLibraryAnnotator(
+            self.manager.circulation_apis[flask.request.library.id],
+            lane,
+            flask.request.library,
         )
-        feed.generate_feed(self._db, lane)
+        feed = OPDSAcquisitionFeed.page(
+            self._db, url, lane, annotator, facets, pagination, search_engine
+        )
         return feed.as_response()
         # return feed_class.page(
         #     _db=self._db,

@@ -86,7 +86,6 @@ class OPDSFeedProtocol(FeedProtocol):
         return link
 
     def add_breadcrumb_links(self, lane, entrypoint=None):
-        """TODO: Rewrite"""
         """Add information necessary to find your current place in the
         site's navigation.
 
@@ -126,6 +125,108 @@ class OPDSFeedProtocol(FeedProtocol):
         # Annotate the feed with a simplified:entryPoint for the
         # current EntryPoint.
         self.show_current_entrypoint(entrypoint)
+
+    def add_breadcrumbs(self, lane, include_lane=False, entrypoint=None):
+        """Add list of ancestor links in a breadcrumbs element.
+
+        :param lane: Add breadcrumbs from up to this lane.
+        :param include_lane: Include `lane` itself in the breadcrumbs.
+        :param entrypoint: The currently selected entrypoint, if any.
+
+        TODO: The switchover from "no entry point" to "entry point" needs
+        its own breadcrumb link.
+        """
+        if entrypoint is None:
+            entrypoint_query = ""
+        else:
+            entrypoint_query = "?entrypoint=" + entrypoint.INTERNAL_NAME
+
+        # Breadcrumbs for lanes may be end up being cut off by a
+        # patron-type-specific root lane. If so, that lane -- not the
+        # site root -- should become the first breadcrumb.
+        site_root_lane = None
+        usable_parentage = []
+        if lane is not None:
+            for ancestor in [lane] + list(lane.parentage):
+                if isinstance(ancestor, Lane) and ancestor.root_for_patron_type:
+                    # Root lane for a specific patron type. The root is
+                    # treated specially, so it should not be added to
+                    # usable_parentage. Any lanes between this lane and the
+                    # library root should not be included at all.
+                    site_root_lane = ancestor
+                    break
+
+                if ancestor != lane or include_lane:
+                    # A lane may appear in its own breadcrumbs
+                    # only if include_lane is True.
+                    usable_parentage.append(ancestor)
+
+        annotator = self.annotator
+        if lane == site_root_lane or (
+            site_root_lane is None
+            and annotator.lane_url(lane) == annotator.default_lane_url()
+        ):
+            # There are no extra breadcrumbs: either we are at the
+            # site root, or we are at a lane that is the root for a
+            # specific patron type.
+            return
+
+        breadcrumbs = []
+
+        # Add root link. This is either the link to the site root
+        # or to the root lane for some patron type.
+        if site_root_lane is None:
+            root_url = annotator.default_lane_url()
+            root_title = annotator.top_level_title()
+        else:
+            root_url = annotator.lane_url(site_root_lane)
+            root_title = site_root_lane.display_name
+        root_link = Link(href=root_url, title=root_title)
+        breadcrumbs.append(root_link)
+
+        # Add entrypoint selection link
+        if entrypoint:
+            breadcrumbs.append(
+                Link(
+                    href=root_url + entrypoint_query,
+                    title=entrypoint.INTERNAL_NAME,
+                )
+            )
+
+        # Add links for all usable lanes between `lane` and `site_root_lane`
+        # (possibly including `lane` itself).
+        for ancestor in reversed(usable_parentage):
+            lane_url = annotator.lane_url(ancestor)
+            if lane_url == root_url:
+                # Root lane for the entire site.
+                break
+
+            breadcrumbs.append(
+                Link(
+                    href=lane_url + entrypoint_query,
+                    title=ancestor.display_name,
+                )
+            )
+
+        # Append the breadcrumbs to the feed.
+        self._feed.breadcrumbs = breadcrumbs
+
+    def show_current_entrypoint(self, entrypoint):
+        """Annotate this given feed with a simplified:entryPoint
+        attribute pointing to the current entrypoint's TYPE_URI.
+
+        This gives clients an overall picture of the type of works in
+        the feed, and a way to distinguish between one EntryPoint
+        and another.
+
+        :param entrypoint: An EntryPoint.
+        """
+        if not entrypoint:
+            return
+
+        if not entrypoint.URI:
+            return
+        self._feed.entrypoint = entrypoint.URI
 
     def as_response(self) -> Response:
         feed = self.serialize()

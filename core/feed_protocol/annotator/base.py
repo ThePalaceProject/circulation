@@ -266,14 +266,13 @@ class Annotator(OPDSAnnotator):
         if isinstance(content, bytes):
             content = content.decode("utf8")
 
-        kw = {}
         if edition.medium:
             additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
             if not additional_type:
                 logging.warning("No additionalType for medium %s", edition.medium)
-            kw["additionalType"] = additional_type
+            computed.additionalType = additional_type
 
-        computed.title = FeedEntryType(text=(edition.title or OPDSFeed.NO_TITLE), **kw)
+        computed.title = FeedEntryType(text=(edition.title or OPDSFeed.NO_TITLE))
 
         if edition.subtitle:
             computed.subtitle = FeedEntryType(text=edition.subtitle)
