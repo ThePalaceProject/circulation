@@ -138,6 +138,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
                     "Missing required parameter 'integration_id'"
                 )
             )
+        registry = self.look_up_registry(integration_id)
 
         if library_short_name is None:
             raise ProblemError(
@@ -145,7 +146,14 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
                     "Missing required parameter 'library_short_name'"
                 )
             )
+        library = self.look_up_library(library_short_name)
 
+        if stage_string is None:
+            raise ProblemError(
+                problem_detail=INVALID_INPUT.detailed(
+                    "Missing required parameter 'registration_stage'"
+                )
+            )
         try:
             stage = RegistrationStage(stage_string)
         except ValueError:
@@ -155,8 +163,6 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
                 )
             )
 
-        registry = self.look_up_registry(integration_id)
-        library = self.look_up_library(library_short_name)
         registry.register_library(library, stage, url_for)
 
         return Response(str(_("Success")), 200)
