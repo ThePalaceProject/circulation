@@ -483,7 +483,8 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
                     return None
 
                 if not protocol_class:
-                    protocol_class = LicenseProvidersRegistry().get(item.protocol)
+                    registry = LicenseProvidersRegistry()
+                    protocol_class = registry.get(item.protocol)
 
                 if item.protocol == OPDSImportMonitor.PROTOCOL:
                     protocol_class = OPDSImportMonitor

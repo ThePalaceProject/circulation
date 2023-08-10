@@ -13,6 +13,8 @@ from api.odilo import (
     OdiloCirculationMonitor,
     OdiloRepresentationExtractor,
 )
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import TimestampData
 from core.model import (
     Classification,
@@ -66,7 +68,11 @@ class OdiloFixture:
         self.patron.authorization_identifier = "0001000265"
         self.collection = MockOdiloAPI.mock_collection(db.session, db.default_library())
         self.circulation = CirculationAPI(
-            db.session, library, api_map={ExternalIntegration.ODILO: MockOdiloAPI}
+            db.session,
+            library,
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL, {ExternalIntegration.ODILO: MockOdiloAPI}
+            ),
         )
         self.api = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         self.edition, self.licensepool = db.edition(

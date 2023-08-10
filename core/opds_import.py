@@ -14,9 +14,8 @@ from pydantic import HttpUrl
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
-from api.circulation import BaseCirculationAPIProtocol, CirculationConfigurationMixin
+from api.circulation import CirculationConfigurationMixin
 from api.selftest import HasCollectionSelfTests
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.goals import Goals
 from core.integration.settings import (
     BaseSettings,
@@ -256,11 +255,7 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
-class OPDSImporter(
-    HasLibraryIntegrationConfiguration,
-    BaseCirculationAPIProtocol,
-    CirculationConfigurationMixin,
-):
+class OPDSImporter(CirculationConfigurationMixin):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.

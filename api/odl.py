@@ -976,6 +976,9 @@ class ODLAPI(
     def release_hold_from_external_library(self, client, hold):
         return self._release_hold(hold)
 
+    def update_availability(self, licensepool):
+        pass
+
 
 class ODLXMLParser(OPDSXMLParser):
     NAMESPACES = dict(OPDSXMLParser.NAMESPACES, odl="http://opds-spec.org/odl")

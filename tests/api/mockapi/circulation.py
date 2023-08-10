@@ -1,14 +1,16 @@
 import logging
+from abc import ABC
 from collections import defaultdict
 
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.controller import CirculationManager
 from api.shared_collection import SharedCollectionAPI
 from core.external_search import MockExternalSearchIndex
+from core.integration.settings import BaseSettings
 from core.model import DataSource, Hold, Loan
 
 
-class MockBaseCirculationAPI(BaseCirculationAPI):
+class MockBaseCirculationAPI(BaseCirculationAPI, ABC):
     def label(self):
         return ""
 
@@ -25,7 +27,9 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
 
 
 class MockRemoteAPI(MockBaseCirculationAPI):
-    def __init__(self, set_delivery_mechanism_at, can_revoke_hold_when_reserved):
+    def __init__(
+        self, set_delivery_mechanism_at=True, can_revoke_hold_when_reserved=True
+    ):
         self.SET_DELIVERY_MECHANISM_AT = set_delivery_mechanism_at
         self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved
         self.responses = defaultdict(list)
@@ -59,6 +63,9 @@ class MockRemoteAPI(MockBaseCirculationAPI):
     def checkin(self, patron, pin, licensepool):
         # Return value is not checked.
         return self._return_or_raise("checkin")
+
+    def patron_activity(self, patron, pin):
+        return self._return_or_raise("patron_activity")
 
     def release_hold(self, patron, pin, licensepool):
         # Return value is not checked.

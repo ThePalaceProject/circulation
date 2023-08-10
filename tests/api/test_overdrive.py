@@ -25,6 +25,8 @@ from api.overdrive import (
     RecentOverdriveCollectionMonitor,
 )
 from core.config import CannotLoadConfiguration
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import TimestampData
 from core.model import (
     DataSource,
@@ -62,7 +64,9 @@ class OverdriveAPIFixture:
         self.circulation = CirculationAPI(
             db.session,
             library,
-            api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
+            ),
         )
         self.api: MockOverdriveAPI = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         os.environ[
@@ -1852,7 +1856,11 @@ class TestOverdriveAPICredentials:
         ]
 
         circulation = CirculationAPI(
-            db.session, library, api_map={ExternalIntegration.OVERDRIVE: MockAPI}
+            db.session,
+            library,
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockAPI}
+            ),
         )
         od_apis = {
             api.collection.name: api  # type: ignore[union-attr]

@@ -1,14 +1,31 @@
 from __future__ import annotations
 
-from typing import Dict, Type
+from typing import TYPE_CHECKING, Union
 
-from api.circulation import BaseCirculationAPIProtocol
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.model.configuration import ExternalIntegration
 
+if TYPE_CHECKING:
+    from api.circulation import BaseCirculationAPI  # noqa: autoflake
+    from core.integration.settings import BaseSettings  # noqa: autoflake
+    from core.opds_import import OPDSImporter  # noqa: autoflake
 
-class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
+
+class LicenseProvidersRegistry(
+    IntegrationRegistry[
+        Union["BaseCirculationAPI[BaseSettings, BaseSettings]", "OPDSImporter"]
+    ]
+):
+    def __init__(self) -> None:
+        super().__init__(Goals.LICENSE_GOAL)
+        self.update(CirculationLicenseProvidersRegistry())
+        self.update(OpenAccessLicenseProvidersRegistry())
+
+
+class CirculationLicenseProvidersRegistry(
+    IntegrationRegistry["BaseCirculationAPI[BaseSettings, BaseSettings]"]
+):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
 
@@ -21,22 +38,23 @@ class LicenseProvidersRegistry(IntegrationRegistry[BaseCirculationAPIProtocol]):
         from api.odl2 import ODL2API
         from api.opds_for_distributors import OPDSForDistributorsAPI
         from api.overdrive import OverdriveAPI
+
+        self.register(OverdriveAPI, canonical=ExternalIntegration.OVERDRIVE)
+        self.register(OdiloAPI, canonical=ExternalIntegration.ODILO)
+        self.register(BibliothecaAPI, canonical=ExternalIntegration.BIBLIOTHECA)
+        self.register(Axis360API, canonical=ExternalIntegration.AXIS_360)
+        self.register(EnkiAPI, canonical=EnkiAPI.ENKI_EXTERNAL)
+        self.register(OPDSForDistributorsAPI, canonical=OPDSForDistributorsAPI.NAME)
+        self.register(ODLAPI, canonical=ODLAPI.NAME)
+        self.register(ODL2API, canonical=ODL2API.NAME)
+        self.register(LCPAPI, canonical=LCPAPI.NAME)
+
+
+class OpenAccessLicenseProvidersRegistry(IntegrationRegistry["OPDSImporter"]):
+    def __init__(self) -> None:
+        super().__init__(Goals.LICENSE_GOAL)
         from core.opds2_import import OPDS2Importer
         from core.opds_import import OPDSImporter
 
-        apis: Dict[str, Type[BaseCirculationAPIProtocol]] = {
-            ExternalIntegration.OVERDRIVE: OverdriveAPI,
-            ExternalIntegration.ODILO: OdiloAPI,
-            ExternalIntegration.BIBLIOTHECA: BibliothecaAPI,
-            ExternalIntegration.AXIS_360: Axis360API,
-            EnkiAPI.ENKI_EXTERNAL: EnkiAPI,
-            OPDSForDistributorsAPI.NAME: OPDSForDistributorsAPI,
-            ODLAPI.NAME: ODLAPI,
-            ODL2API.NAME: ODL2API,
-            LCPAPI.NAME: LCPAPI,
-            OPDSImporter.NAME: OPDSImporter,
-            OPDS2Importer.NAME: OPDS2Importer,
-        }
-
-        for name, api in apis.items():
-            self.register(api, canonical=name)
+        self.register(OPDSImporter, canonical=OPDSImporter.NAME)
+        self.register(OPDS2Importer, canonical=OPDS2Importer.NAME)

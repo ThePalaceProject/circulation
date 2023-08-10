@@ -15,7 +15,6 @@ from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
 from api.circulation_exceptions import CannotFulfill
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -140,7 +139,6 @@ class OverdriveData:
 
 class OverdriveCoreAPI(
     HasExternalIntegration,
-    HasLibraryIntegrationConfiguration,
     CirculationConfigurationMixin,
 ):
     # An OverDrive defined constant indicating the "main" or parent account

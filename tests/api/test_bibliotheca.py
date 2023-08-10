@@ -40,6 +40,8 @@ from api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from api.web_publication_manifest import FindawayManifest
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
@@ -471,7 +473,10 @@ class TestBibliothecaAPI:
         circulation = CirculationAPI(
             db.session,
             db.default_library(),
-            api_map={bibliotheca_fixture.collection.protocol: MockBibliothecaAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL,
+                {bibliotheca_fixture.collection.protocol: MockBibliothecaAPI},
+            ),
         )
 
         api = circulation.api_for_collection[bibliotheca_fixture.collection.id]
