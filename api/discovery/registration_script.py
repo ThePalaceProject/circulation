@@ -49,7 +49,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         url = parsed.registry_url
         protocol = DiscoveryRegistry().get_protocol(OpdsRegistrationService)
         registry = OpdsRegistrationService.for_protocol_goal_and_url(
-            self._db, protocol, Goals.DISCOVERY_GOAL, url
+            self._db, protocol, Goals.DISCOVERY_GOAL, url  # type: ignore[arg-type]
         )
         if registry is None:
             self.log.error(f'No OPDS Registration service found for "{url}"')

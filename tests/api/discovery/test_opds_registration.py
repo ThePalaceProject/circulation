@@ -46,7 +46,9 @@ class RemoteRegistryFixture:
         self.integration = integration_configuration.discovery_service(
             url=self.registry_url
         )
+        assert self.integration.protocol is not None
         self.protocol = self.integration.protocol
+        assert self.integration.goal is not None
         self.goal = self.integration.goal
 
         self.registry = OpdsRegistrationService.for_integration(

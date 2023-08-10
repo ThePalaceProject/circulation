@@ -1039,9 +1039,10 @@ class IntegrationConfigurationFixture:
         registry = DiscoveryRegistry()
         if protocol is None:
             protocol = registry.get_protocol(OpdsRegistrationService)
+            assert protocol is not None
 
         if url is not None:
-            settings_obj = registry[protocol].settings_class().construct(url=url)
+            settings_obj = registry[protocol].settings_class().construct(url=url)  # type: ignore[arg-type]
             settings_dict = settings_obj.dict()
         else:
             settings_dict = {}
