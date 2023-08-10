@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.discovery.opds_registration import OpdsRegistrationService
+from api.integration.registry.discovery import DiscoveryRegistry
 from api.util.flask import PalaceFlask
 from core.integration.goals import Goals
-from core.model import ConfigurationSetting, ExternalIntegration, Library, get_one
+from core.model import ConfigurationSetting, Library, get_one
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
@@ -22,9 +23,6 @@ from core.util.problem_detail import ProblemDetail, ProblemError
 
 class LibraryRegistrationScript(LibraryInputScript):
     """Register local libraries with a remote library registry."""
-
-    PROTOCOL = ExternalIntegration.OPDS_REGISTRATION
-    GOAL = Goals.DISCOVERY_GOAL
 
     @classmethod
     def arg_parser(cls, _db: Session) -> ArgumentParser:  # type: ignore[override]
@@ -49,8 +47,9 @@ class LibraryRegistrationScript(LibraryInputScript):
         parsed = self.parse_command_line(self._db, cmd_args)
 
         url = parsed.registry_url
+        protocol = DiscoveryRegistry().get_protocol(OpdsRegistrationService)
         registry = OpdsRegistrationService.for_protocol_goal_and_url(
-            self._db, self.PROTOCOL, self.GOAL, url
+            self._db, protocol, Goals.DISCOVERY_GOAL, url
         )
         if registry is None:
             self.log.error(f'No OPDS Registration service found for "{url}"')

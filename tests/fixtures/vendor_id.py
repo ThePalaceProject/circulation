@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from api.discovery.opds_registration import OpdsRegistrationService
-from api.integration.registry.discovery import DiscoveryRegistry
-from core.integration.goals import Goals
 from core.model import IntegrationConfiguration, Library, create
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
@@ -33,12 +30,7 @@ class VendorIDFixture:
         self,
         vendor_id_library: Library,
     ):
-        protocol = DiscoveryRegistry().get_protocol(OpdsRegistrationService)
-        self.registry = self.integration_configuration(
-            goal=Goals.DISCOVERY_GOAL,
-            protocol=protocol,
-        )
-
+        self.registry = self.integration_configuration.discovery_service()
         self.registration, _ = create(
             self.db.session,
             DiscoveryServiceRegistration,

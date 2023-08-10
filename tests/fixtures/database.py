@@ -18,6 +18,8 @@ from sqlalchemy.engine import Connection, Engine, Transaction
 from sqlalchemy.orm import Session
 
 import core.lane
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.integration.registry.discovery import DiscoveryRegistry
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import Configuration
@@ -1030,6 +1032,23 @@ class IntegrationConfigurationFixture:
             settings_dict=settings_dict or {},
         )
         return integration
+
+    def discovery_service(
+        self, protocol: Optional[str] = None, url: Optional[str] = None
+    ) -> IntegrationConfiguration:
+        registry = DiscoveryRegistry()
+        if protocol is None:
+            protocol = registry.get_protocol(OpdsRegistrationService)
+
+        if url is not None:
+            settings_obj = registry[protocol].settings_class().construct(url=url)
+            settings_dict = settings_obj.dict()
+        else:
+            settings_dict = {}
+
+        return self(
+            protocol=protocol, goal=Goals.DISCOVERY_GOAL, settings_dict=settings_dict
+        )
 
 
 @pytest.fixture

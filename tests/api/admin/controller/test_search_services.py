@@ -113,8 +113,8 @@ class TestSearchServices:
         service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=ExternalIntegration.DISCOVERY_GOAL,
+            protocol="test",
+            goal=ExternalIntegration.LICENSE_GOAL,
             name="name",
         )
 

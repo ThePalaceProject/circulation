@@ -10,8 +10,7 @@ from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.problem_details import REMOTE_INTEGRATION_FAILED
-from core.integration.goals import Goals
-from core.model import AdminRole, ExternalIntegration, create
+from core.model import AdminRole, create
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
@@ -37,11 +36,8 @@ class TestLibraryRegistration:
         db = admin_ctrl_fixture.ctrl.db
 
         # Here's a discovery service.
-        discovery_service = create_integration_configuration(
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=Goals.DISCOVERY_GOAL,
-            # We'll be making a mock request to this URL later.
-            settings_dict={"url": "http://service-url/"},
+        discovery_service = create_integration_configuration.discovery_service(
+            url="http://service-url/"
         )
 
         # We successfully registered this library with the service.
@@ -242,11 +238,8 @@ class TestLibraryRegistration:
             assert MISSING_SERVICE == response
 
         # Create an IntegrationConfiguration to avoid that problem in future tests.
-        discovery_service = create_integration_configuration(
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=Goals.DISCOVERY_GOAL,
-            # We'll be making a mock request to this URL later.
-            settings_dict={"url": "http://register-here/"},
+        discovery_service = create_integration_configuration.discovery_service(
+            url="http://register-here/"
         )
 
         # We might not get a library short name.

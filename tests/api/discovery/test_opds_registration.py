@@ -15,9 +15,7 @@ from requests_mock import Mocker
 from api.config import Configuration
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.discovery.registration_script import LibraryRegistrationScript
-from api.integration.registry.discovery import DiscoveryRegistry
 from api.problem_details import *
-from core.integration.goals import Goals
 from core.model import ConfigurationSetting, Library, create, get_one
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
@@ -44,18 +42,12 @@ class RemoteRegistryFixture:
         self.db = db
         # Create an ExternalIntegration that can be used as the basis for
         # a OpdsRegistrationService.
-        integration_registry = DiscoveryRegistry()
-        protocol = integration_registry.get_protocol(OpdsRegistrationService)
-        assert protocol is not None
-        self.protocol = protocol
-        self.goal = Goals.DISCOVERY_GOAL
         self.registry_url = "http://registry.com/"
-
-        self.integration = integration_configuration(
-            protocol=self.protocol,
-            goal=self.goal,
-            settings_dict={"url": self.registry_url},
+        self.integration = integration_configuration.discovery_service(
+            url=self.registry_url
         )
+        self.protocol = self.integration.protocol
+        self.goal = self.integration.goal
 
         self.registry = OpdsRegistrationService.for_integration(
             db.session, self.integration
