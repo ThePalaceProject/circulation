@@ -96,7 +96,6 @@ class OPDSForDistributorsAPI(
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)
-        self.collection_id = collection.id
         self.external_integration_id = collection.external_integration.id
 
         config = self.configuration()
@@ -208,7 +207,7 @@ class OPDSForDistributorsAPI(
             _db,
             self.data_source_name,
             self.BEARER_TOKEN_CREDENTIAL_TYPE,
-            collection=Collection.by_id(_db, self.collection_id),
+            collection=self.collection,
             patron=None,
             refresher_method=refresh,
         )

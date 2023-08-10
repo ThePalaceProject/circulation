@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -546,7 +546,9 @@ class Loan(Base, LoanAndHoldMixin):
     license_id = Column(Integer, ForeignKey("licenses.id"), index=True, nullable=True)
 
     fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
-    fulfillment: LicensePoolDeliveryMechanism
+    fulfillment: Mapped[Optional[LicensePoolDeliveryMechanism]] = relationship(
+        "LicensePoolDeliveryMechanism", back_populates="fulfills"
+    )
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     # Some distributors (e.g. Feedbooks) may have an identifier that can

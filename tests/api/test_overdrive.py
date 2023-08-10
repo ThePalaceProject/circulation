@@ -996,7 +996,9 @@ class TestOverdriveAPI:
         # If get_fulfillment_link returns a FulfillmentInfo, it is returned
         # immediately and the rest of fulfill() does not run.
 
-        fulfillment = FulfillmentInfo(overdrive_api_fixture.collection, *[None] * 7)
+        fulfillment = FulfillmentInfo(
+            overdrive_api_fixture.collection, None, None, None, None, None, None, None
+        )
 
         class MockAPI(OverdriveAPI):
             def get_fulfillment_link(*args, **kwargs):
@@ -1478,7 +1480,7 @@ class TestOverdriveAPI:
         assert True == changed
 
         db.session.commit()
-
+        assert pool is not None
         assert raw["copiesOwned"] == pool.licenses_owned
         assert raw["copiesAvailable"] == pool.licenses_available
         assert 0 == pool.licenses_reserved
@@ -1557,6 +1559,7 @@ class TestOverdriveAPI:
         )
         # The new pool doesn't have a presentation edition yet,
         # but it will be updated to share the old pool's edition.
+        assert new_pool is not None
         assert None == new_pool.presentation_edition
 
         (
@@ -1566,6 +1569,7 @@ class TestOverdriveAPI:
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
             raw, new_pool, was_new
         )
+        assert new_pool is not None
         assert True == was_new
         assert True == changed
         assert old_edition == new_pool.presentation_edition
@@ -1840,7 +1844,7 @@ class TestOverdriveAPICredentials:
 
         # These are the credentials we'll expect for each of our collections.
         expected_credentials = {
-            props["name"]: _make_token(
+            str(props["name"]): _make_token(
                 "websiteid:%s authorizationname:%s"
                 % (props["website_id"], props["ils_name"]),
                 patron.authorization_identifier,
@@ -1862,8 +1866,8 @@ class TestOverdriveAPICredentials:
                 Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockAPI}
             ),
         )
-        od_apis = {
-            api.collection.name: api  # type: ignore[union-attr]
+        od_apis: Dict[str, OverdriveAPI] = {
+            api.collection.name: api  # type: ignore[union-attr,misc]
             for api in list(circulation.api_for_collection.values())
         }
 
@@ -1874,7 +1878,7 @@ class TestOverdriveAPICredentials:
         for name in list(expected_credentials.keys()) + list(
             reversed(list(expected_credentials.keys()))
         ):
-            credential = od_apis[name].get_patron_credential(patron, pin)  # type: ignore[union-attr]
+            credential = od_apis[name].get_patron_credential(patron, pin)
             assert expected_credentials[name] == credential.credential
 
     def test_fulfillment_credentials_testing_keys(
@@ -2167,12 +2171,13 @@ class TestSyncBookshelf:
         )
 
         # All four loans in the sample data were created.
+        assert isinstance(loans, list)
         assert 4 == len(loans)
         assert loans.sort() == patron.loans.sort()
 
         # We have created previously unknown LicensePools and
         # Identifiers.
-        identifiers = [loan.license_pool.identifier.identifier for loan in loans]
+        identifiers = [str(loan.license_pool.identifier.identifier) for loan in loans]
         assert sorted(
             [
                 "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
@@ -2206,6 +2211,7 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
             patron, "dummy pin"
         )
+        assert isinstance(loans, list)
         assert 4 == len(loans)
         assert loans.sort() == patron.loans.sort()
 
@@ -2239,6 +2245,7 @@ class TestSyncBookshelf:
             patron, "dummy pin"
         )
 
+        assert isinstance(loans, list)
         assert 4 == len(loans)
         assert set(loans) == set(patron.loans)
         assert overdrive_loan not in patron.loans
@@ -2286,6 +2293,7 @@ class TestSyncBookshelf:
             patron, "dummy pin"
         )
         # All four loans in the sample data were created.
+        assert isinstance(holds, list)
         assert 4 == len(holds)
         assert sorted(holds) == sorted(patron.holds)
 
@@ -2296,6 +2304,7 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
             patron, "dummy pin"
         )
+        assert isinstance(holds, list)
         assert 4 == len(holds)
         assert sorted(holds) == sorted(patron.holds)
 
@@ -2323,6 +2332,7 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
             patron, "dummy pin"
         )
+        assert isinstance(holds, list)
         assert 4 == len(holds)
         assert holds == patron.holds
         assert overdrive_hold not in patron.loans
