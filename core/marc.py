@@ -616,7 +616,7 @@ class MARCExporter:
             # Only add an integration to choose from if it has a
             # MARC File Bucket field in its settings.
             configuration_settings = [
-                s for s in integration.settings_dict if s.key == "marc_bucket"
+                s for s in integration.settings if s.key == "marc_bucket"
             ]
 
             if configuration_settings:
