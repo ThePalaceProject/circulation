@@ -1,4 +1,5 @@
 """Test the CirculationAPI."""
+import datetime
 from datetime import timedelta
 from typing import Union
 from unittest.mock import MagicMock
@@ -511,7 +512,9 @@ class TestCirculationAPI:
         self, circulation_api: CirculationAPIFixture
     ):
         # This checkout would succeed...
-        now = utc_now()
+        # We use local time here, rather than UTC time, because we use
+        # local time when checking for expired cards in authorization_is_active.
+        now = datetime.datetime.now()
         loaninfo = LoanInfo(
             circulation_api.pool.collection,
             circulation_api.pool.data_source,
