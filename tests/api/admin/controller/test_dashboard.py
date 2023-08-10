@@ -97,7 +97,10 @@ class TestDashboardController:
             affinity=0.2,
         )
 
-        time = utc_now() - timedelta(minutes=1)
+        # We use local time here, rather than UTC time, because we use
+        # local time when finding the correct date in bulk_circulation_events
+        # because it is a user supplied date. See the get_date method.
+        time = datetime.datetime.now() - timedelta(minutes=1)
         event, ignore = get_one_or_create(
             dashboard_fixture.ctrl.db.session,
             CirculationEvent,

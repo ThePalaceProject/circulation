@@ -70,7 +70,7 @@ class DashboardController(CirculationManagerController):
             # _beginning_ of the asked-for day, local time.
             #
             # Unlike most places in this application we do not
-            # use UTC since the sime was selected by a human user.
+            # use UTC since the time was selected by a human user.
             today = date.today()
             value = flask.request.args.get(field, None)
             if not value:
