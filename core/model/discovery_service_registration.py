@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy import ForeignKey, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 
-from core.model import Base, IntegrationConfiguration, Library
+from core.model import Base
+
+if TYPE_CHECKING:
+    from core.model import IntegrationConfiguration, Library
 
 
 class RegistrationStage(Enum):
