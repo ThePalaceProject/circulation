@@ -7,7 +7,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.controller.base import AdminCirculationManagerController
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
 from api.authentication.base import AuthenticationProvider
@@ -32,7 +32,7 @@ from core.util.cache import memoize
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 
-class PatronAuthServicesController(AdminCirculationManagerController):
+class PatronAuthServicesController(AdminPermissionsControllerMixin):
     def __init__(
         self,
         manager: CirculationManager,

@@ -5,7 +5,7 @@ from core.model import AdminRole
 from tests.fixtures.api_admin import AdminControllerFixture
 
 
-class TestAdminCirculationManagerController:
+class TestAdminPermissionsControllerMixin:
     def test_require_system_admin(self, admin_ctrl_fixture: AdminControllerFixture):
         with admin_ctrl_fixture.request_context_with_admin("/admin"):
             pytest.raises(

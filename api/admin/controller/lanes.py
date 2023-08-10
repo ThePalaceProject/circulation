@@ -6,7 +6,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.controller.base import AdminCirculationManagerController
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import (
     CANNOT_EDIT_DEFAULT_LANE,
     CANNOT_SHOW_LANE_WITH_HIDDEN_PARENT,
@@ -16,12 +16,13 @@ from api.admin.problem_details import (
     NO_CUSTOM_LISTS_FOR_LANE,
     NO_DISPLAY_NAME_FOR_LANE,
 )
+from api.controller import CirculationManagerController
 from api.lanes import create_default_lanes
 from core.lane import Lane
 from core.model import CustomList, Library, create, get_one
 
 
-class LanesController(AdminCirculationManagerController):
+class LanesController(CirculationManagerController, AdminPermissionsControllerMixin):
     def lanes(self):
         library = flask.request.library
         self.require_librarian(library)

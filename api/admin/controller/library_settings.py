@@ -33,10 +33,10 @@ from ...config import Configuration
 from ...controller import CirculationManager
 from ..announcement_list_validator import AnnouncementListValidator
 from ..form_data import ProcessFormData
-from .base import AdminCirculationManagerController
+from .base import AdminPermissionsControllerMixin
 
 
-class LibrarySettingsController(AdminCirculationManagerController):
+class LibrarySettingsController(AdminPermissionsControllerMixin):
     def __init__(self, manager: CirculationManager):
         self._db = manager._db
 

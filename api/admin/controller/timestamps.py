@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from api.admin.controller.base import AdminCirculationManagerController
+from api.admin.controller.base import AdminPermissionsControllerMixin
+from api.controller import CirculationManagerController
 from core.model import Timestamp
 
 
-class TimestampsController(AdminCirculationManagerController):
+class TimestampsController(
+    CirculationManagerController, AdminPermissionsControllerMixin
+):
     """Returns a dict: each key is a type of service (script, monitor, or coverage provider);
     each value is a nested dict in which timestamps are organized by service name and then by collection ID.
     """
