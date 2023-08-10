@@ -67,33 +67,36 @@ def upgrade() -> None:
 
     # Migrate data
     connection = op.get_bind()
-    integrations = get_integrations(connection, "discovery")
-    for integration in integrations:
+    external_integrations = get_integrations(connection, "discovery")
+    for external_integration in external_integrations:
         # This should always be the case, but we want to make sure
-        assert integration.protocol == "OPDS Registration"
+        assert external_integration.protocol == "OPDS Registration"
 
         # Create the settings and library settings dicts from the configurationsettings
         settings_dict, library_settings, self_test_result = get_configuration_settings(
-            connection, integration
+            connection, external_integration
         )
 
         # Write the configurationsettings into the integration_configurations table
         integration_configuration_id = _migrate_external_integration(
             connection,
-            integration,
+            external_integration,
             OpdsRegistrationService,
             "DISCOVERY_GOAL",
             settings_dict,
             self_test_result,
         )
 
-        # Write the library settings into the discovery_service_registrations table
+        # Get the libraries that are associated with this external integration
         interation_libraries = get_library_for_integration(
-            connection, integration_configuration_id
+            connection, external_integration.id
         )
 
         vendor_id = settings_dict.get("vendor_id")
-        for library_id in interation_libraries:
+
+        # Write the library settings into the discovery_service_registrations table
+        for library in interation_libraries:
+            library_id = library.library_id
             library_settings_dict = library_settings[library_id]
 
             status = library_settings_dict.get("library-registration-status")
