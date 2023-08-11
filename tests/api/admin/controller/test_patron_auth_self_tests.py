@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from _pytest.monkeypatch import MonkeyPatch
     from flask.ctx import RequestContext
 
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -56,7 +56,7 @@ class TestPatronAuthSelfTests:
         self,
         controller: PatronAuthServiceSelfTestsController,
         get_request_context: RequestContext,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
         response_obj = controller.process_patron_auth_service_self_tests(
@@ -75,7 +75,7 @@ class TestPatronAuthSelfTests:
         self,
         controller: PatronAuthServiceSelfTestsController,
         get_request_context: RequestContext,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
         default_library: Library,
     ):
         auth_service, _ = create_simple_auth_integration(library=default_library)
@@ -99,7 +99,7 @@ class TestPatronAuthSelfTests:
         self,
         controller: PatronAuthServiceSelfTestsController,
         get_request_context: RequestContext,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
         monkeypatch: MonkeyPatch,
         default_library: Library,
     ):
@@ -136,7 +136,7 @@ class TestPatronAuthSelfTests:
         self,
         controller: PatronAuthServiceSelfTestsController,
         post_request_context: RequestContext,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
         response = controller.process_patron_auth_service_self_tests(auth_service.id)
@@ -149,7 +149,7 @@ class TestPatronAuthSelfTests:
         self,
         controller: PatronAuthServiceSelfTestsController,
         post_request_context: RequestContext,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
         monkeypatch: MonkeyPatch,
         db: DatabaseTransactionFixture,
     ):

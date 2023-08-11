@@ -36,6 +36,7 @@ from core.model import (
     ExternalIntegration,
     Hold,
     Hyperlink,
+    Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Loan,
@@ -63,7 +64,6 @@ from .circulation import (
 )
 from .circulation_exceptions import *
 from .lcp.hash import Hasher, HasherFactory, HashingAlgorithm
-from .shared_collection import BaseSharedCollectionAPI, BaseSharedCollectionSettings
 
 
 class ODLAPIConstants:
@@ -72,7 +72,7 @@ class ODLAPIConstants:
     DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
 
-class ODLSettings(BaseSharedCollectionSettings, BaseImporterSettings):
+class ODLSettings(BaseImporterSettings):
     external_account_id: Optional[HttpUrl] = FormField(
         key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         form=ConfigurationFormItem(
@@ -165,7 +165,6 @@ class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
 
 class ODLAPI(
     BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
-    BaseSharedCollectionAPI,
     HasExternalIntegration,
     HasLibraryIntegrationConfiguration,
 ):
@@ -261,7 +260,7 @@ class ODLAPI(
         :param db: Database session
         :return: External integration associated with this object
         """
-        return self.collection(db).external_integration
+        return self.collection.external_integration
 
     def internal_format(self, delivery_mechanism):
         """Each consolidated copy is only available in one format, so we don't need
@@ -269,13 +268,14 @@ class ODLAPI(
         """
         return delivery_mechanism
 
-    def collection(self, db) -> Collection:
+    @property
+    def collection(self) -> Collection:
         """Return a collection associated with this object.
 
         :param db: Database session
         :return: Collection associated with this object
         """
-        collection = get_one(db, Collection, id=self.collection_id)
+        collection = super().collection
         if not collection:
             raise ValueError(f"Collection not found: {self.collection_id}")
         return collection
@@ -330,25 +330,16 @@ class ODLAPI(
         else:
             id = loan.license.identifier
             checkout_id = str(uuid.uuid1())
-            if loan.patron:
-                default_loan_period = self.collection(_db).default_loan_period(
-                    loan.patron.library
-                )
-            else:
-                # TODO: should integration clients be able to specify their own loan period?
-                default_loan_period = self.collection(_db).default_loan_period(
-                    loan.integration_client
-                )
+            default_loan_period = self.collection.default_loan_period(
+                loan.patron.library
+            )
+
             expires = utc_now() + datetime.timedelta(days=default_loan_period)
             # The patron UUID is generated randomly on each loan, so the distributor
             # doesn't know when multiple loans come from the same patron.
             patron_id = str(uuid.uuid1())
 
-            if loan.patron:
-                library_short_name = loan.patron.library.short_name
-            else:
-                # If this is for an integration client, choose an arbitrary library.
-                library_short_name = self.collection(_db).libraries[0].short_name
+            library_short_name = loan.patron.library.short_name
 
             db = Session.object_session(loan)
             patron = loan.patron
@@ -477,8 +468,8 @@ class ODLAPI(
             external_identifier=loan.external_identifier,
         )
 
-    def _checkout(self, patron_or_client, licensepool, hold=None):
-        _db = Session.object_session(patron_or_client)
+    def _checkout(self, patron: Patron, licensepool, hold=None):
+        _db = Session.object_session(patron)
 
         if not any(l for l in licensepool.licenses if not l.is_inactive):
             raise NoLicenses()
@@ -489,7 +480,7 @@ class ODLAPI(
         if hold:
             self._update_hold_data(hold)
 
-        # If there's a holds queue, the patron or client must have a non-expired hold
+        # If there's a holds queue, the patron must have a non-expired hold
         # with position 0 to check out the book.
         if (
             not hold or hold.position > 0 or (hold.end and hold.end < utc_now())
@@ -501,7 +492,7 @@ class ODLAPI(
         license = licensepool.best_available_license()
         if not license:
             raise NoAvailableCopies()
-        loan, ignore = license.loan_to(patron_or_client)
+        loan, ignore = license.loan_to(patron)
 
         doc = self.get_license_status_document(loan)
         status = doc.get("status")
@@ -667,14 +658,13 @@ class ODLAPI(
             hold.end,
             hold.position,
         )
-        library = hold.patron.library if hold.patron_id else None
-        client = hold.integration_client if hold.integration_client_id else None
-        self._update_hold_end_date(holdinfo, pool, library=library, client=client)
+        library = hold.patron.library
+        self._update_hold_end_date(holdinfo, pool, library=library)
         hold.end = holdinfo.end_date
         hold.position = holdinfo.hold_position
 
     def _update_hold_end_date(
-        self, holdinfo: HoldInfo, pool: LicensePool, client=None, library=None
+        self, holdinfo: HoldInfo, pool: LicensePool, library: Library
     ):
         _db = Session.object_session(pool)
 
@@ -682,11 +672,10 @@ class ODLAPI(
         # need it to calculate the end date.
         original_position = holdinfo.hold_position
         self._update_hold_position(holdinfo, pool)
+        assert holdinfo.hold_position is not None
 
-        default_loan_period = self.collection(_db).default_loan_period(
-            library or client
-        )
-        default_reservation_period = self.collection(_db).default_reservation_period
+        default_loan_period = self.collection.default_loan_period(library)
+        default_reservation_period = self.collection.default_reservation_period
 
         # If the hold was already to check out and already has an end date,
         # it doesn't need an update.
@@ -801,8 +790,8 @@ class ODLAPI(
         """Create a new hold."""
         return self._place_hold(patron, licensepool)
 
-    def _place_hold(self, patron_or_client, licensepool):
-        _db = Session.object_session(patron_or_client)
+    def _place_hold(self, patron, licensepool):
+        _db = Session.object_session(patron)
 
         # Make sure pool info is updated.
         self.update_licensepool(licensepool)
@@ -810,18 +799,11 @@ class ODLAPI(
         if licensepool.licenses_available > 0:
             raise CurrentlyAvailable()
 
-        patron_id, client_id = None, None
-        if isinstance(patron_or_client, Patron):
-            patron_id = patron_or_client.id
-        else:
-            client_id = patron_or_client.id
-
         # Check for local hold
         hold = get_one(
             _db,
             Hold,
-            patron_id=patron_id,
-            integration_client_id=client_id,
+            patron_id=patron.id,
             license_pool_id=licensepool.id,
         )
 
@@ -838,14 +820,8 @@ class ODLAPI(
             0,
             0,
         )
-        client = patron_or_client if client_id else None
-        library = patron_or_client.library if patron_id else None
-        self._update_hold_end_date(
-            holdinfo, licensepool, library=library, client=client
-        )
-
-        if client is not None:
-            holdinfo.integration_client = client
+        library = patron.library
+        self._update_hold_end_date(holdinfo, licensepool, library=library)
 
         return holdinfo
 
@@ -961,20 +937,8 @@ class ODLAPI(
             _db.delete(loan)
             self.update_licensepool(loan.license_pool)
 
-    def checkout_to_external_library(self, client, licensepool, hold=None):
-        try:
-            return self._checkout(client, licensepool, hold)
-        except NoAvailableCopies as e:
-            return self._place_hold(client, licensepool)
-
-    def checkin_from_external_library(self, client, loan):
-        self._checkin(loan)
-
-    def fulfill_for_external_library(self, client, loan, mechanism):
-        return self._fulfill(loan)
-
-    def release_hold_from_external_library(self, client, hold):
-        return self._release_hold(hold)
+    def update_availability(self, licensepool):
+        pass
 
 
 class ODLXMLParser(OPDSXMLParser):

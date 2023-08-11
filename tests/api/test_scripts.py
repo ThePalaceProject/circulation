@@ -4,7 +4,7 @@ import contextlib
 import datetime
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -63,7 +63,7 @@ from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.sample_covers import SampleCoversFixture
     from tests.fixtures.search import ExternalSearchFixture
@@ -712,7 +712,7 @@ class TestInstanceInitializationScript:
         with patch("scripts.SessionManager") as session_manager:
             with patch("scripts.pg_advisory_lock") as advisory_lock:
                 script = InstanceInitializationScript()
-                script.initialize = MagicMock()  # type: ignore[method-assign]
+                script.initialize = MagicMock()
                 script.run()
 
                 advisory_lock.assert_called_once_with(
@@ -727,8 +727,8 @@ class TestInstanceInitializationScript:
         # as necessary.
         with patch("scripts.inspect") as inspect:
             script = InstanceInitializationScript()
-            script.migrate_database = MagicMock()  # type: ignore[method-assign]
-            script.initialize_database = MagicMock()  # type: ignore[method-assign]
+            script.migrate_database = MagicMock()
+            script.initialize_database = MagicMock()
 
             # If the database is uninitialized, initialize_database() is called.
             inspect().has_table.return_value = False
@@ -1426,7 +1426,7 @@ class TestNovelistSnapshotScript:
             pass
 
         oldNovelistConfig = NoveListAPI.from_config
-        NoveListAPI.from_config = self.mockNoveListAPI  # type: ignore[method-assign]
+        NoveListAPI.from_config = self.mockNoveListAPI
 
         l1 = db.library()
         cmd_args = [l1.name]
@@ -1437,7 +1437,7 @@ class TestNovelistSnapshotScript:
 
         assert params[0] == l1
 
-        NoveListAPI.from_config = oldNovelistConfig  # type: ignore[method-assign]
+        NoveListAPI.from_config = oldNovelistConfig
 
 
 class TestLocalAnalyticsExportScript:
@@ -1493,7 +1493,7 @@ class TestGenerateShortTokenScript:
     def authentication_provider(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         barcode = "12345"
         pin = "abcd"

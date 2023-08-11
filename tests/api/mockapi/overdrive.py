@@ -38,7 +38,7 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         config = collection.create_integration_configuration(
             ExternalIntegration.OVERDRIVE
         )
-        config.settings = {
+        config.settings_dict = {
             OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
             OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
             OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,

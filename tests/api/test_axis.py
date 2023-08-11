@@ -6,7 +6,7 @@ import socket
 import ssl
 import urllib
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
@@ -44,6 +44,7 @@ from core.metadata_layer import (
 )
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
+    Collection,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -68,7 +69,7 @@ from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_axis_files import AxisFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.database import DatabaseTransactionFixture
 
 
@@ -140,7 +141,7 @@ class TestAxis360API:
     def test__run_self_tests(
         self,
         axis360: Axis360Fixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.
@@ -755,10 +756,10 @@ class TestAxis360API:
         axis360: Axis360Fixture,
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         if setting_value is not None:
             settings[setting] = setting_value
-            config.settings = settings
+            config.settings_dict = settings
         api = MockAxis360API(axis360.db.session, axis360.collection)
         assert getattr(api, attribute) == attribute_value
 
@@ -780,9 +781,9 @@ class TestAxis360API:
         self, setting, setting_value, is_valid, expected, axis360: Axis360Fixture
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         settings[setting] = setting_value
-        config.settings = settings
+        config.settings_dict = settings
 
         if is_valid:
             api = MockAxis360API(axis360.db.session, axis360.collection)
@@ -1217,11 +1218,9 @@ class Axis360FixturePlusParsers(Axis360Fixture):
         # these classes, but we do need to test that whatever object
         # we _claim_ is a Collection will have its id put into the
         # right spot of HoldInfo and LoanInfo objects.
-        class MockCollection:
-            pass
 
-        self.default_collection = MockCollection()
-        self.default_collection.id = object()  # type: ignore
+        self.default_collection = MagicMock(spec=Collection)
+        type(self.default_collection).id = PropertyMock(return_value=1337)
 
 
 @pytest.fixture(scope="function")
@@ -1295,7 +1294,7 @@ class TestCheckoutResponseParser:
         parser = CheckoutResponseParser(axis360parsers.default_collection)
         parsed = parser.process_all(data)
         assert isinstance(parsed, LoanInfo)
-        assert axis360parsers.default_collection.id == parsed.collection_id  # type: ignore
+        assert axis360parsers.default_collection.id == parsed.collection_id
         assert DataSource.AXIS_360 == parsed.data_source_name
         assert Identifier.AXIS_360_ID == parsed.identifier_type
         assert datetime_utc(2015, 8, 11, 18, 57, 42) == parsed.end_date
@@ -1326,7 +1325,7 @@ class TestHoldResponseParser:
 
         # The HoldInfo is given the Collection object we passed into
         # the HoldResponseParser.
-        assert axis360parsers.default_collection.id == parsed.collection_id  # type: ignore
+        assert axis360parsers.default_collection.id == parsed.collection_id
 
     def test_parse_already_on_hold(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_on_hold.xml")
@@ -1357,6 +1356,7 @@ class TestAvailabilityResponseParser:
         parser = AvailabilityResponseParser(axis360parsers.api)
         activity = list(parser.process_all(data))
         hold, loan, reserved = sorted(activity, key=lambda x: x.identifier)
+        assert axis360parsers.api.collection is not None
         assert axis360parsers.api.collection.id == hold.collection_id
         assert Identifier.AXIS_360_ID == hold.identifier_type
         assert "0012533119" == hold.identifier
@@ -1380,6 +1380,7 @@ class TestAvailabilityResponseParser:
         parser = AvailabilityResponseParser(axis360parsers.api)
         [loan] = list(parser.process_all(data))
 
+        assert axis360parsers.api.collection is not None
         assert axis360parsers.api.collection.id == loan.collection_id
         assert "0015176429" == loan.identifier
         assert None == loan.fulfillment_info

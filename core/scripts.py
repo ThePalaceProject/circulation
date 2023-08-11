@@ -918,7 +918,7 @@ class RunSelfTestsScript(LibraryInputScript):
 
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
-            api_map = CirculationAPI(self._db, library).default_api_map
+            api_map = dict(CirculationAPI(self._db, library).registry)
             api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
@@ -1259,7 +1259,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     % name
                 )
         config = collection.integration_configuration
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
         integration = collection.external_integration
         if protocol:
             config.protocol = protocol
@@ -1278,7 +1278,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
             for setting in args.setting:
                 key, value = ConfigurationSettingScript._parse_setting(setting)
                 settings[key] = value
-        config.settings = settings
+        config.settings_dict = settings
 
         if hasattr(args, "library"):
             for name in args.library:

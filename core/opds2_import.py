@@ -19,7 +19,6 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
-from api.circulation import BaseCirculationAPIProtocol
 from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -139,7 +138,6 @@ class OPDS2Importer(
     IgnoredIdentifierImporterMixin,
     OPDSImporter,
     HasExternalIntegration,
-    BaseCirculationAPIProtocol,
 ):
     """Imports editions and license pools from an OPDS 2.0 feed."""
 
@@ -953,9 +951,9 @@ class OPDS2Importer(
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
                 config = self.integration_configuration()
-                settings = config.settings.copy()
+                settings = config.settings_dict.copy()
                 settings[ExternalIntegration.TOKEN_AUTH] = link.href
-                config.settings = settings
+                config.settings_dict = settings
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None

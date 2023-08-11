@@ -100,6 +100,7 @@ class TestOPDSImportCoverageProvider:
             identifier.identifier,
             collection=db.default_collection(),
         )
+        assert pool is not None
         assert None == pool.work
 
         # Here's a second Edition/LicensePool that's going to cause a

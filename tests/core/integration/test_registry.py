@@ -109,3 +109,67 @@ def test_registry_get_protocol_returns_default_if_integration_not_registered(
 
     # default is not none
     assert registry.get_protocol(object, "default") == "default"
+
+
+def test_registry_update():
+    """Test that update() works."""
+    registry = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+    registry2 = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+
+    registry.register(object)
+    registry2.register(list)
+
+    assert len(registry) == 1
+    assert len(registry2) == 1
+
+    registry.update(registry2)
+    assert len(registry) == 2
+    assert len(registry2) == 1
+
+    assert registry.get("object") == object
+    assert registry.get("list") == list
+
+
+def test_registry_update_raises_different_goals():
+    """Test that update() raises an error if the goals are different."""
+    registry = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+    registry2 = IntegrationRegistry(Goals.LICENSE_GOAL)
+
+    with pytest.raises(IntegrationRegistryException):
+        registry.update(registry2)
+
+
+def test_registry_add():
+    """Test that add() works."""
+    registry = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+    registry2 = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+
+    registry.register(object)
+    registry2.register(list)
+
+    assert len(registry) == 1
+    assert len(registry2) == 1
+
+    # New registry, by adding two existing registries
+    registry3 = registry + registry2
+
+    # Check that the original registries are unchanged
+    assert len(registry) == 1
+    assert len(registry2) == 1
+
+    # Check that the new registry has the correct integrations
+    assert len(registry3) == 2
+    assert registry3.get("object") == object
+    assert registry3.get("list") == list
+
+
+def test_registry_add_errors():
+    """Test that add() error conditions."""
+    registry = IntegrationRegistry(Goals.PATRON_AUTH_GOAL)
+    registry2 = IntegrationRegistry(Goals.LICENSE_GOAL)
+
+    with pytest.raises(IntegrationRegistryException):
+        registry + registry2
+
+    with pytest.raises(TypeError):
+        registry + object

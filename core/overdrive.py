@@ -15,7 +15,6 @@ from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
 from api.circulation_exceptions import CannotFulfill
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -140,7 +139,6 @@ class OverdriveData:
 
 class OverdriveCoreAPI(
     HasExternalIntegration,
-    HasLibraryIntegrationConfiguration,
     CirculationConfigurationMixin,
 ):
     # An OverDrive defined constant indicating the "main" or parent account
@@ -298,7 +296,7 @@ class OverdriveCoreAPI(
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
             parent_integration = collection.parent.integration_configuration
-            parent_config = self.settings_class()(**parent_integration.settings)
+            parent_config = self.settings_class()(**parent_integration.settings_dict)
             for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
                 parent_value = getattr(parent_config, key, None)
                 setattr(self._configuration, key, parent_value)
@@ -306,7 +304,7 @@ class OverdriveCoreAPI(
             self.parent_library_id = None
 
         # Self settings should override parent settings where available
-        settings = collection.integration_configuration.settings
+        settings = collection.integration_configuration.settings_dict
         for name, schema in self.settings_class().schema()["properties"].items():
             if name in settings or not hasattr(self._configuration, name):
                 setattr(
@@ -401,7 +399,7 @@ class OverdriveCoreAPI(
         config = self.integration_configuration().for_library(library.id)
         if not config:
             return self.ILS_NAME_DEFAULT
-        return config.settings.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
+        return config.settings_dict.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
 
     @property
     def advantage_library_id(self):

@@ -679,8 +679,8 @@ class TestLibrarySettings:
     def test_process_libraries(self, controller_fixture: ControllerFixture):
         manager = MagicMock()
         controller = LibrarySettingsController(manager)
-        controller.process_get = MagicMock()  # type: ignore[method-assign]
-        controller.process_post = MagicMock()  # type: ignore[method-assign]
+        controller.process_get = MagicMock()
+        controller.process_post = MagicMock()
 
         # Make sure we call process_get for a get request
         with controller_fixture.request_context_with_library("/", method="GET"):

@@ -759,6 +759,38 @@ class TestMARCExporter:
 
         db.session.delete(cache)
 
+    def test_get_storage_settings(self, db: DatabaseTransactionFixture):
+        # Two ExternalIntegration, one has a marc_bucket setting, and the
+        # other doesn't.
+        has_marc_bucket = db.external_integration(
+            name="has_marc_bucket",
+            protocol=db.fresh_str(),
+            goal=ExternalIntegration.STORAGE_GOAL,
+            settings={"marc_bucket": "test-marc-bucket"},
+        )
+        db.external_integration(
+            name="no_marc_bucket",
+            protocol=db.fresh_str(),
+            goal=ExternalIntegration.STORAGE_GOAL,
+        )
+
+        # Before we call get_storage_settings, the only option is the default.
+        assert MARCExporter.SETTING["options"] == [
+            MARCExporter.DEFAULT_MIRROR_INTEGRATION
+        ]
+
+        MARCExporter.get_storage_settings(db.session)
+
+        # After we call get_storage_settings, the options are the default and
+        # the ExternalIntegration with a marc_bucket setting.
+        assert len(MARCExporter.SETTING["options"]) == 2
+        [default, from_config] = MARCExporter.SETTING["options"]
+        assert default == MARCExporter.DEFAULT_MIRROR_INTEGRATION
+        assert from_config == {
+            "key": str(has_marc_bucket.id),
+            "label": has_marc_bucket.name,
+        }
+
 
 class TestMARCExporterFacets:
     def test_modify_search_filter(self):

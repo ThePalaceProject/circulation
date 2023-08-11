@@ -701,7 +701,7 @@ class TestNoveListAPI:
             return MockRequestsResponse(200, content=json.dumps(mock_response))
 
         oldPut = novelist_fixture.novelist.put
-        novelist_fixture.novelist.put = mockHTTPPut  # type: ignore[method-assign]
+        novelist_fixture.novelist.put = mockHTTPPut
 
         response = novelist_fixture.novelist.put_items_novelist(
             novelist_fixture.db.default_library()
@@ -709,7 +709,7 @@ class TestNoveListAPI:
 
         assert response == mock_response
 
-        novelist_fixture.novelist.put = oldPut  # type: ignore[method-assign]
+        novelist_fixture.novelist.put = oldPut
 
     def test_make_novelist_data_object(self, novelist_fixture: NoveListFixture):
         bad_data = []  # type: ignore

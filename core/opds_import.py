@@ -14,9 +14,8 @@ from pydantic import HttpUrl
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
-from api.circulation import BaseCirculationAPIProtocol, CirculationConfigurationMixin
+from api.circulation import CirculationConfigurationMixin
 from api.selftest import HasCollectionSelfTests
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.goals import Goals
 from core.integration.settings import (
     BaseSettings,
@@ -121,7 +120,7 @@ class SimplifiedOPDSLookup:
             config = config.for_library(library.id)
         if config is None:
             return None
-        return cls(config.settings["url"])
+        return cls(config.settings_dict["url"])
 
     def __init__(self, base_url):
         if not base_url.endswith("/"):
@@ -256,11 +255,7 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
-class OPDSImporter(
-    HasLibraryIntegrationConfiguration,
-    BaseCirculationAPIProtocol,
-    CirculationConfigurationMixin,
-):
+class OPDSImporter(CirculationConfigurationMixin):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.

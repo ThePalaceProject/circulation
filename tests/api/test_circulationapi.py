@@ -1,14 +1,12 @@
 """Test the CirculationAPI."""
+import datetime
 from datetime import timedelta
-from typing import Union
 from unittest.mock import MagicMock
 
 import flask
 import pytest
 from flask import Flask
 
-from api.authentication.base import PatronData
-from api.authenticator import LibraryAuthenticator
 from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
@@ -21,6 +19,8 @@ from api.circulation import (
 )
 from api.circulation_exceptions import *
 from core.config import CannotLoadConfiguration
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
@@ -30,7 +30,6 @@ from core.model import (
     Hold,
     Hyperlink,
     Identifier,
-    Library,
     Loan,
     MediaTypes,
     Representation,
@@ -38,7 +37,11 @@ from core.model import (
 )
 from core.util.datetime_helpers import utc_now
 from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
-from tests.api.mockapi.circulation import MockBaseCirculationAPI, MockCirculationAPI
+from tests.api.mockapi.circulation import (
+    MockBaseCirculationAPI,
+    MockCirculationAPI,
+    MockRemoteAPI,
+)
 
 from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
 from ..fixtures.database import DatabaseTransactionFixture
@@ -62,11 +65,15 @@ class CirculationAPIFixture:
         [self.delivery_mechanism] = self.pool.delivery_mechanisms
         self.patron = db.patron()
         self.analytics = MockAnalyticsProvider()
+        registry: IntegrationRegistry[BaseCirculationAPI] = IntegrationRegistry(
+            Goals.LICENSE_GOAL
+        )
+        registry.register(MockBibliothecaAPI, canonical=ExternalIntegration.BIBLIOTHECA)
         self.circulation = MockCirculationAPI(
             db.session,
             db.default_library(),
             analytics=self.analytics,
-            api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            registry=registry,
         )
         self.remote = self.circulation.api_for_license_pool(self.pool)
 
@@ -190,7 +197,7 @@ class TestCirculationAPI:
 
         # Reset the API map, this book belongs to the "basic" collection,
         # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)  # type: ignore[method-assign]
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
 
         # Mark the book as unlimited access.
         circulation_api.pool.unlimited_access = True
@@ -511,7 +518,9 @@ class TestCirculationAPI:
         self, circulation_api: CirculationAPIFixture
     ):
         # This checkout would succeed...
-        now = utc_now()
+        # We use local time here, rather than UTC time, because we use
+        # local time when checking for expired cards in authorization_is_active.
+        now = datetime.datetime.now()
         loaninfo = LoanInfo(
             circulation_api.pool.collection,
             circulation_api.pool.data_source,
@@ -602,43 +611,30 @@ class TestCirculationAPI:
         # Verify that the normal behavior of CirculationAPI.borrow()
         # is to call enforce_limits() before trying to check out the
         # book.
-        class MockVendorAPI(MockBaseCirculationAPI):
-            # Short-circuit the borrowing process -- we just need to make sure
-            # enforce_limits is called before checkout()
-            def __init__(self):
-                self.availability_updated = []
 
-            def internal_format(self, *args, **kwargs):
-                return "some format"
+        mock_api = MagicMock(spec=MockBaseCirculationAPI)
+        mock_api.checkout.side_effect = NotImplementedError()
 
-            def checkout(self, *args, **kwargs):
-                raise NotImplementedError()
-
-        api = MockVendorAPI()
-
-        class MockCirculationAPI(CirculationAPI):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.enforce_limits_calls = []
-
-            def enforce_limits(self, patron, licensepool):
-                self.enforce_limits_calls.append((patron, licensepool))
-
-            def api_for_license_pool(self, pool):
-                # Always return the same mock MockVendorAPI.
-                return api
-
-        circulation_api.circulation = MockCirculationAPI(  # type: ignore[assignment]
+        mock_circulation = CirculationAPI(
             circulation_api.db.session, circulation_api.db.default_library()
         )
+        mock_circulation.enforce_limits = MagicMock()  # type: ignore[method-assign]
+        mock_circulation.api_for_license_pool = MagicMock(return_value=mock_api)  # type: ignore[method-assign]
 
         # checkout() raised the expected NotImplementedError
-        pytest.raises(NotImplementedError, lambda: self.borrow(circulation_api))
+        with pytest.raises(NotImplementedError):
+            mock_circulation.borrow(
+                circulation_api.patron,
+                "",
+                circulation_api.pool,
+                circulation_api.pool,
+                circulation_api.delivery_mechanism,
+            )
 
         # But before that happened, enforce_limits was called once.
-        assert [
-            (circulation_api.patron, circulation_api.pool)
-        ] == circulation_api.circulation.enforce_limits_calls  # type: ignore[attr-defined]
+        mock_circulation.enforce_limits.assert_called_once_with(
+            circulation_api.patron, circulation_api.pool
+        )
 
     def test_patron_at_loan_limit(
         self, circulation_api: CirculationAPIFixture, library_fixture: LibraryFixture
@@ -790,11 +786,11 @@ class TestCirculationAPI:
         # Sub-test 1: patron has reached neither limit.
         #
         patron = circulation_api.db.patron(library=library)
-        pool = object()
+        pool = MagicMock()
         circulation.at_loan_limit = False
         circulation.at_hold_limit = False
 
-        assert None == circulation.enforce_limits(patron, pool)
+        circulation.enforce_limits(patron, pool)
 
         # To determine that the patron is under their limit, it was
         # necessary to call patron_at_loan_limit and
@@ -838,7 +834,7 @@ class TestCirculationAPI:
         circulation.at_hold_limit = False
 
         # If the book is available, we get PatronLoanLimitReached
-        pool.licenses_available = 1  # type: ignore
+        pool.licenses_available = 1
         with pytest.raises(PatronLoanLimitReached) as loan_limit_info:
             circulation.enforce_limits(patron, pool)
         assert 12 == loan_limit_info.value.limit
@@ -852,8 +848,8 @@ class TestCirculationAPI:
 
         # If the LicensePool is not available, we pass the
         # test. Placing a hold is fine here.
-        pool.licenses_available = 0  # type: ignore
-        assert None == circulation.enforce_limits(patron, pool)
+        pool.licenses_available = 0
+        circulation.enforce_limits(patron, pool)
         assert patron == circulation.patron_at_loan_limit_calls.pop()
         assert patron == circulation.patron_at_hold_limit_calls.pop()
         assert pool == api.availability_updated.pop()
@@ -864,7 +860,7 @@ class TestCirculationAPI:
         circulation.at_hold_limit = True
 
         # If the book is not available, we get PatronHoldLimitReached
-        pool.licenses_available = 0  # type: ignore
+        pool.licenses_available = 0
         with pytest.raises(PatronHoldLimitReached) as hold_limit_info:
             circulation.enforce_limits(patron, pool)
         assert 12 == hold_limit_info.value.limit
@@ -877,8 +873,8 @@ class TestCirculationAPI:
         assert pool == api.availability_updated.pop()
 
         # If the book is available, we're fine -- we're not at our loan limit.
-        pool.licenses_available = 1  # type: ignore
-        assert None == circulation.enforce_limits(patron, pool)
+        pool.licenses_available = 1
+        circulation.enforce_limits(patron, pool)
         assert patron == circulation.patron_at_loan_limit_calls.pop()
         assert patron == circulation.patron_at_hold_limit_calls.pop()
         assert pool == api.availability_updated.pop()
@@ -1043,7 +1039,7 @@ class TestCirculationAPI:
         are fulfilled in the same way as OA and self-hosted books."""
         # Reset the API map, this book belongs to the "basic" collection,
         # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)  # type: ignore[method-assign]
+        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
 
         # Mark the book as unlimited access.
         circulation_api.pool.unlimited_access = True
@@ -1132,7 +1128,7 @@ class TestCirculationAPI:
         def yes_we_can(*args, **kwargs):
             return True
 
-        circulation_api.circulation.can_fulfill_without_loan = yes_we_can  # type: ignore[method-assign]
+        circulation_api.circulation.can_fulfill_without_loan = yes_we_can
         result = try_to_fulfill()
         assert fulfillment == result
 
@@ -1369,7 +1365,10 @@ class TestCirculationAPI:
         incomplete_circulation = IncompleteCirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
-            api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL,
+                {ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            ),
         )
         incomplete_circulation.sync_bookshelf(circulation_api.patron, "1234")
 
@@ -1393,7 +1392,10 @@ class TestCirculationAPI:
         circulation = CompleteCirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
-            api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL,
+                {ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            ),
         )
         circulation.sync_bookshelf(circulation_api.patron, "1234")
 
@@ -1484,6 +1486,7 @@ class TestCirculationAPI:
 
         # The oddball delivery mechanism is now associated with the loan...
         [loan] = circulation_api.patron.loans
+        assert loan.fulfillment is not None
         delivery = loan.fulfillment.delivery_mechanism
         assert Representation.TEXT_HTML_MEDIA_TYPE == delivery.content_type
         assert DeliveryMechanism.NO_DRM == delivery.drm_scheme
@@ -1553,10 +1556,14 @@ class TestCirculationAPI:
         api_bibliotheca_files_fixture: BibliothecaFilesFixture,
     ):
         # Get a CirculationAPI that doesn't mock out its API's patron activity.
+        registry: IntegrationRegistry[BaseCirculationAPI] = IntegrationRegistry(
+            goal=Goals.LICENSE_GOAL
+        )
+        registry.register(MockBibliothecaAPI, canonical=ExternalIntegration.BIBLIOTHECA)
         circulation = CirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
-            api_map={ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
+            registry=registry,
         )
         mock_bibliotheca = circulation.api_for_collection[circulation_api.collection.id]
         assert isinstance(mock_bibliotheca, MockBibliothecaAPI)
@@ -1592,22 +1599,22 @@ class TestCirculationAPI:
         circulation = CirculationAPI(
             circulation_api.db.session, circulation_api.db.default_library()
         )
-        circulation.api_for_collection[pool.collection.id] = Mock(
-            circulation_api.db.session, circulation_api.db.default_collection()
-        )
-        assert "yep" == circulation.can_fulfill_without_loan(None, pool, object())
+        mock = MagicMock(spec=MockBaseCirculationAPI)
+        mock.can_fulfill_without_loan = MagicMock(return_value="yep")
+        circulation.api_for_collection[pool.collection.id] = mock
+        assert "yep" == circulation.can_fulfill_without_loan(None, pool, MagicMock())
 
         # If format data is missing or the BaseCirculationAPI cannot
         # be found, we assume the title cannot be fulfilled.
         assert False == circulation.can_fulfill_without_loan(None, pool, None)
-        assert False == circulation.can_fulfill_without_loan(None, None, object())
+        assert False == circulation.can_fulfill_without_loan(None, None, MagicMock())
 
         circulation.api_for_collection = {}
         assert False == circulation.can_fulfill_without_loan(None, pool, None)
 
         # An open access pool can be fulfilled even without the BaseCirculationAPI.
         pool.open_access = True
-        assert True == circulation.can_fulfill_without_loan(None, pool, object())
+        assert True == circulation.can_fulfill_without_loan(None, pool, MagicMock())
 
 
 class TestBaseCirculationAPI:
@@ -1630,73 +1637,10 @@ class TestBaseCirculationAPI:
         """By default, there is a blanket prohibition on fulfilling a title
         when there is no active loan.
         """
-        api = MockBaseCirculationAPI(db.session, db.default_collection())
-        assert False == api.can_fulfill_without_loan(object(), object(), object())
-
-    def test_patron_email_address(self, db: DatabaseTransactionFixture):
-        # Test the method that looks up a patron's actual email address
-        # (the one they shared with the library) on demand.
-        class Mock(MockBaseCirculationAPI):
-            _library_authenticator_called_with: Library
-            _library_authenticator_returned: LibraryAuthenticator
-
-            @classmethod
-            def _library_authenticator(self, library):
-                self._library_authenticator_called_with = library
-                value = BaseCirculationAPI._library_authenticator(library)
-                self._library_authenticator_returned = value
-                return value
-
-        api = Mock(db.session, db.default_collection())
-        patron = db.patron()
-        library = patron.library
-
-        # In a non-test scenario, a real LibraryAuthenticator is
-        # created and used as a source of knowledge about a patron's
-        # email address.
-        #
-        # However, the default library has no authentication providers
-        # set up, so the patron has no email address -- there's no one
-        # capable of providing an address.
-        assert None == api.patron_email_address(patron)
-        assert patron.library == api._library_authenticator_called_with
-        assert isinstance(api._library_authenticator_returned, LibraryAuthenticator)
-
-        # Now we're going to pass in our own LibraryAuthenticator,
-        # which we've populated with mock authentication providers,
-        # into a real BaseCirculationAPI.
-        base_circ_api = MockBaseCirculationAPI(db.session, db.default_collection())
-        authenticator = LibraryAuthenticator(_db=db.session, library=library)
-
-        # This basic authentication provider _does_ implement
-        # remote_patron_lookup, but doesn't provide the crucial
-        # information, so still no help.
-        class MockBasic:
-            def remote_patron_lookup(self, patron):
-                self.called_with = patron
-                return PatronData(authorization_identifier="patron")
-
-        basic: Union[MockBasic, "MockBasic2"] = MockBasic()
-
-        authenticator.register_basic_auth_provider(basic)  # type: ignore[arg-type]
-        assert None == base_circ_api.patron_email_address(
-            patron, library_authenticator=authenticator
+        api = MockRemoteAPI(db.session, db.default_collection())
+        assert False == api.can_fulfill_without_loan(
+            MagicMock(), MagicMock(), MagicMock()
         )
-        assert patron == basic.called_with  # type: ignore
-
-        # This basic authentication provider gives us the information
-        # we're after.
-        class MockBasic2:
-            def remote_patron_lookup(self, patron):
-                self.called_with = patron
-                return PatronData(email_address="me@email")
-
-        basic = MockBasic2()
-        authenticator.basic_auth_provider = basic  # type: ignore[assignment]
-        assert "me@email" == base_circ_api.patron_email_address(
-            patron, library_authenticator=authenticator
-        )
-        assert patron == basic.called_with
 
 
 class TestDeliveryMechanismInfo:
@@ -1775,20 +1719,20 @@ class TestDeliveryMechanismInfo:
 
 
 class TestConfigurationFailures:
-    class MisconfiguredAPI:
-        def __init__(self, _db, collection):
-            raise CannotLoadConfiguration("doomed!")
-
     def test_configuration_exception_is_stored(self, db: DatabaseTransactionFixture):
         # If the initialization of an API object raises
         # CannotLoadConfiguration, the exception is stored with the
         # CirculationAPI rather than being propagated.
 
-        api_map = {db.default_collection().protocol: self.MisconfiguredAPI}
+        registry: IntegrationRegistry[BaseCirculationAPI] = IntegrationRegistry(
+            Goals.LICENSE_GOAL
+        )
+        mock_api = MagicMock()
+        mock_api.side_effect = CannotLoadConfiguration("doomed!")
+        mock_api.__name__ = "mock api"
+        registry.register(mock_api, canonical=db.default_collection().protocol)
         circulation = CirculationAPI(
-            db.session,
-            db.default_library(),
-            api_map=api_map,  # type: ignore[arg-type]
+            db.session, db.default_library(), registry=registry
         )
 
         # Although the CirculationAPI was created, it has no functioning
@@ -1820,10 +1764,10 @@ class APIAwareFulfillmentFixture:
 
         # Create a bunch of mock objects which will be used to initialize
         # the instance variables of MockAPIAwareFulfillmentInfo objects.
-        self.mock_data_source_name = object()
-        self.mock_identifier_type = object()
-        self.mock_identifier = object()
-        self.mock_key = object()
+        self.mock_data_source_name = MagicMock()
+        self.mock_identifier_type = MagicMock()
+        self.mock_identifier = MagicMock()
+        self.mock_key = MagicMock()
 
 
 @pytest.fixture(scope="function")

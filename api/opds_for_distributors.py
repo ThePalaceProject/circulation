@@ -96,7 +96,6 @@ class OPDSForDistributorsAPI(
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)
-        self.collection_id = collection.id
         self.external_integration_id = collection.external_integration.id
 
         config = self.configuration()
@@ -208,7 +207,7 @@ class OPDSForDistributorsAPI(
             _db,
             self.data_source_name,
             self.BEARER_TOKEN_CREDENTIAL_TYPE,
-            collection=Collection.by_id(_db, self.collection_id),
+            collection=self.collection,
             patron=None,
             refresher_method=refresh,
         )
@@ -325,6 +324,19 @@ class OPDSForDistributorsAPI(
             )
             for loan in loans
         ]
+
+    def release_hold(self, patron, pin, licensepool):
+        # All the books for this integration are available as simultaneous
+        # use, so there's no need to release a hold.
+        raise NotImplementedError()
+
+    def place_hold(self, patron, pin, licensepool, notification_email_address):
+        # All the books for this integration are available as simultaneous
+        # use, so there's no need to place a hold.
+        raise NotImplementedError()
+
+    def update_availability(self, licensepool):
+        pass
 
 
 class OPDSForDistributorsImporter(OPDSImporter):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,6 +13,8 @@ from api.odilo import (
     OdiloCirculationMonitor,
     OdiloRepresentationExtractor,
 )
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import TimestampData
 from core.model import (
     Classification,
@@ -32,7 +34,7 @@ from tests.core.mock import MockRequestsResponse
 
 if TYPE_CHECKING:
     from ..fixtures.api_odilo_files import OdiloFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.database import DatabaseTransactionFixture
 
 
@@ -66,7 +68,11 @@ class OdiloFixture:
         self.patron.authorization_identifier = "0001000265"
         self.collection = MockOdiloAPI.mock_collection(db.session, db.default_library())
         self.circulation = CirculationAPI(
-            db.session, library, api_map={ExternalIntegration.ODILO: MockOdiloAPI}
+            db.session,
+            library,
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL, {ExternalIntegration.ODILO: MockOdiloAPI}
+            ),
         )
         self.api = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         self.edition, self.licensepool = db.edition(
@@ -226,7 +232,7 @@ class TestOdiloAPI:
     def test__run_self_tests(
         self,
         odilo: OdiloFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         """Verify that OdiloAPI._run_self_tests() calls the right
         methods.
@@ -313,7 +319,7 @@ class TestOdiloAPI:
         def explode(*args, **kwargs):
             raise Exception("Failure!")
 
-        odilo.api.check_creds = explode  # type: ignore[method-assign]
+        odilo.api.check_creds = explode
 
         # Only one test will be run.
         [check_creds] = odilo.api._run_self_tests(odilo.db.session)

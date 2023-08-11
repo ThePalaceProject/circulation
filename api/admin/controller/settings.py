@@ -9,7 +9,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
-from api.admin.controller.base import AdminCirculationManagerController
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     DUPLICATE_INTEGRATION,
@@ -25,6 +25,7 @@ from api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from api.admin.validator import Validator
+from api.controller import CirculationManagerController
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.external_search import ExternalSearchIndex
 from core.integration.base import (
@@ -51,7 +52,7 @@ from core.selftest import BaseHasSelfTests
 from core.util.problem_detail import ProblemDetail
 
 
-class SettingsController(AdminCirculationManagerController):
+class SettingsController(CirculationManagerController, AdminPermissionsControllerMixin):
     METADATA_SERVICE_URI_TYPE = "application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
@@ -372,7 +373,7 @@ class SettingsController(AdminCirculationManagerController):
         protocol_class.library_settings_class()(**info_copy)
         # Attach the configuration
         config = configuration.for_library(cast(int, library.id), create=True)
-        config.settings = info_copy
+        config.settings_dict = info_copy
         return config
 
     def _set_integration_library(self, integration, library_info, protocol):
@@ -482,7 +483,8 @@ class SettingsController(AdminCirculationManagerController):
                     return None
 
                 if not protocol_class:
-                    protocol_class = LicenseProvidersRegistry().get(item.protocol)
+                    registry = LicenseProvidersRegistry()
+                    protocol_class = registry.get(item.protocol)
 
                 if item.protocol == OPDSImportMonitor.PROTOCOL:
                     protocol_class = OPDSImportMonitor

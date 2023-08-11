@@ -68,7 +68,7 @@ class TestSAMLConfiguration:
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore[method-assign]
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)
 
         configuration = create_saml_configuration(
             service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP
@@ -94,7 +94,7 @@ class TestSAMLConfiguration:
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore[method-assign]
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)
         configuration = create_saml_configuration(
             non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
         )
@@ -179,7 +179,7 @@ class TestSAMLConfiguration:
         ]
 
         metadata_parser = SAMLMetadataParser()
-        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)  # type: ignore[method-assign]
+        metadata_parser.parse = MagicMock(side_effect=metadata_parser.parse)
 
         federation = SAMLFederation("Test federation", "http://localhost")
         federated_idp_1 = SAMLFederatedIdentityProvider(

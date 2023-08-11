@@ -8,7 +8,7 @@ import tempfile
 import time
 import uuid
 from textwrap import dedent
-from typing import Callable, Generator, Iterable, List, Optional, Tuple
+from typing import Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -39,7 +39,6 @@ from core.model import (
     Genre,
     Hyperlink,
     Identifier,
-    IntegrationClient,
     Library,
     LicensePool,
     MediaTypes,
@@ -317,7 +316,7 @@ class DatabaseTransactionFixture:
         integration.goal = ExternalIntegration.LICENSE_GOAL
         config = collection.create_integration_configuration(protocol)
         config.goal = Goals.LICENSE_GOAL
-        config.settings = {
+        config.settings_dict = {
             "url": url,
             "username": username,
             "password": password,
@@ -648,16 +647,6 @@ class DatabaseTransactionFixture:
             id_value = self.fresh_str()
         return Identifier.for_foreign_id(self.session, identifier_type, id_value)[0]
 
-    def integration_client(self, url=None, shared_secret=None) -> IntegrationClient:
-        url = url or self.fresh_url()
-        secret = shared_secret or "secret"
-        return get_one_or_create(
-            self.session,
-            IntegrationClient,
-            shared_secret=secret,
-            create_method_kwargs=dict(url=url),
-        )[0]
-
     def fresh_url(self) -> str:
         return "http://foo.com/" + self.fresh_str()
 
@@ -788,7 +777,7 @@ class DatabaseTransactionFixture:
         for library in libraries:
             integration.for_library(library.id, create=True)
 
-        integration.settings = kwargs
+        integration.settings_dict = kwargs
         return integration
 
     @classmethod
@@ -798,7 +787,7 @@ class DatabaseTransactionFixture:
         *keyvalues,
         **kwargs,
     ):
-        settings = config.settings.copy()
+        settings = config.settings_dict.copy()
 
         # Alternating key: value in the args
         for ix, item in enumerate(keyvalues):
@@ -808,7 +797,7 @@ class DatabaseTransactionFixture:
                 settings[key] = item
 
         settings.update(kwargs)
-        config.settings = settings
+        config.settings_dict = settings
 
     def work_coverage_record(
         self, work, operation=None, status=CoverageRecord.SUCCESS
@@ -1025,46 +1014,59 @@ def db(
     tr.close()
 
 
-@pytest.fixture
-def create_integration_configuration(
-    db: DatabaseTransactionFixture,
-) -> Callable[..., IntegrationConfiguration]:
-    def create_integration(
-        protocol: str, goal: Goals, settings: Optional[dict] = None
+class IntegrationConfigurationFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+
+    def __call__(
+        self, protocol: Optional[str], goal: Goals, settings_dict: Optional[dict] = None
     ) -> IntegrationConfiguration:
         integration, _ = create(
-            db.session,
+            self.db.session,
             IntegrationConfiguration,
-            name=db.fresh_str(),
+            name=self.db.fresh_str(),
             protocol=protocol,
             goal=goal,
-            settings=settings or {},
+            settings_dict=settings_dict or {},
         )
         return integration
 
-    return create_integration
+
+@pytest.fixture
+def create_integration_configuration(
+    db: DatabaseTransactionFixture,
+) -> IntegrationConfigurationFixture:
+    fixture = IntegrationConfigurationFixture(db)
+    return fixture
+
+
+class IntegrationLibraryConfigurationFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+
+    def __call__(
+        self,
+        library: Library,
+        parent: IntegrationConfiguration,
+        settings_dict: Optional[dict] = None,
+    ) -> IntegrationLibraryConfiguration:
+        settings_dict = settings_dict or {}
+        integration, _ = create(
+            self.db.session,
+            IntegrationLibraryConfiguration,
+            parent=parent,
+            library=library,
+            settings_dict=settings_dict,
+        )
+        return integration
 
 
 @pytest.fixture
 def create_integration_library_configuration(
     db: DatabaseTransactionFixture,
-) -> Callable[..., IntegrationLibraryConfiguration]:
-    def create_library_integration(
-        library: Library,
-        parent: IntegrationConfiguration,
-        settings: Optional[dict] = None,
-    ) -> IntegrationLibraryConfiguration:
-        settings = settings or {}
-        integration, _ = create(
-            db.session,
-            IntegrationLibraryConfiguration,
-            parent=parent,
-            library=library,
-            settings=settings,
-        )
-        return integration
-
-    return create_library_integration
+) -> IntegrationLibraryConfigurationFixture:
+    fixture = IntegrationLibraryConfigurationFixture(db)
+    return fixture
 
 
 class DBStatementCounter:

@@ -37,7 +37,7 @@ class MockOdiloAPI(OdiloAPI):
             protocol=ExternalIntegration.ODILO
         )
         config = collection.create_integration_configuration(ExternalIntegration.ODILO)
-        config.settings = {
+        config.settings_dict = {
             "username": "a",
             "password": "b",
             OdiloAPI.LIBRARY_API_BASE_URL: "http://library_api_base_url.test/api/v2",

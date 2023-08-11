@@ -5,10 +5,10 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, List
 from urllib.parse import quote, unquote
 
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import Mapped, backref, relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants, IdentifierConstants
@@ -27,7 +27,6 @@ if TYPE_CHECKING:
         Edition,
         Equivalency,
         Hyperlink,
-        IntegrationClient,
         LicensePool,
         Measurement,
         Resource,
@@ -44,18 +43,6 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     offers_licenses = Column(Boolean, default=False)
     primary_identifier_type = Column(String, index=True)
     extra: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
-
-    # One DataSource can have one IntegrationClient.
-    integration_client_id = Column(
-        Integer,
-        ForeignKey("integrationclients.id"),
-        unique=True,
-        index=True,
-        nullable=True,
-    )
-    integration_client: Mapped[IntegrationClient] = relationship(
-        "IntegrationClient", backref=backref("data_source", uselist=False)
-    )
 
     # One DataSource can generate many Editions.
     editions: Mapped[List[Edition]] = relationship(

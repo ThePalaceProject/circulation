@@ -201,7 +201,7 @@ class TestLoanController:
                 if x["rel"] == OPDSFeed.ACQUISITION_REL
             ]
 
-            assert loan_fixture.mech1.resource is not None  # type: ignore
+            assert loan_fixture.mech1.resource is not None
 
             # Make sure the two delivery mechanisms are incompatible.
             loan_fixture.mech1.delivery_mechanism.drm_scheme = "DRM Scheme 1"
@@ -223,9 +223,9 @@ class TestLoanController:
 
             # Make sure the first delivery mechanism has the data necessary
             # to carry out an open source fulfillment.
-            assert loan_fixture.mech1.resource is not None  # type: ignore
-            assert loan_fixture.mech1.resource.representation is not None  # type: ignore
-            assert loan_fixture.mech1.resource.representation.url is not None  # type: ignore
+            assert loan_fixture.mech1.resource is not None
+            assert loan_fixture.mech1.resource.representation is not None
+            assert loan_fixture.mech1.resource.representation.url is not None
 
             # Now let's try to fulfill the loan using the first delivery mechanism.
             assert isinstance(loan_fixture.pool.id, int)
@@ -238,7 +238,7 @@ class TestLoanController:
                 raise Exception(repr(j))
             assert 302 == response.status_code
             assert (
-                fulfillable_mechanism.resource.representation.public_url  # type: ignore
+                fulfillable_mechanism.resource.representation.public_url
                 == response.headers.get("Location")
             )
 
@@ -256,8 +256,8 @@ class TestLoanController:
                 loan_fixture.pool.data_source,
                 loan_fixture.pool.identifier.type,
                 loan_fixture.pool.identifier.identifier,
-                content_link=fulfillable_mechanism.resource.url,  # type: ignore
-                content_type=fulfillable_mechanism.resource.representation.media_type,  # type: ignore
+                content_link=fulfillable_mechanism.resource.url,
+                content_type=fulfillable_mechanism.resource.representation.media_type,
                 content=None,
                 content_expires=None,
             )
@@ -274,7 +274,7 @@ class TestLoanController:
             )
             assert 200 == response.status_code
             assert "I am an ACSM file" == response.get_data(as_text=True)
-            assert http.requests == [fulfillable_mechanism.resource.url]  # type: ignore
+            assert http.requests == [fulfillable_mechanism.resource.url]
 
             # But we can't use some other mechanism -- we're stuck with
             # the first one we chose.
@@ -833,13 +833,13 @@ class TestLoanController:
         def mock_authenticated_patron():
             return INTEGRATION_ERROR
 
-        controller.authenticated_patron_from_request = mock_authenticated_patron  # type: ignore[method-assign]
+        controller.authenticated_patron_from_request = mock_authenticated_patron
         with loan_fixture.request_context_with_library("/"):
             problem = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
             assert INTEGRATION_ERROR == problem
-        controller.authenticated_patron_from_request = old_authenticated_patron  # type: ignore[method-assign]
+        controller.authenticated_patron_from_request = old_authenticated_patron
 
         # However, if can_fulfill_without_loan returns True, then
         # fulfill() will be called. If fulfill() returns a
@@ -865,7 +865,7 @@ class TestLoanController:
         # Now we're able to fulfill the book even without
         # authenticating a patron.
         with loan_fixture.request_context_with_library("/"):
-            controller.can_fulfill_without_loan = mock_can_fulfill_without_loan  # type: ignore[method-assign]
+            controller.can_fulfill_without_loan = mock_can_fulfill_without_loan
             controller.circulation.fulfill = mock_fulfill
             response = controller.fulfill(
                 loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
@@ -940,8 +940,8 @@ class TestLoanController:
             None,
             content_link_redirect=True,
         )
-        controller.can_fulfill_without_loan = MagicMock(return_value=False)  # type: ignore[method-assign]
-        controller.authenticated_patron_from_request = MagicMock(return_value=patron)  # type: ignore[method-assign]
+        controller.can_fulfill_without_loan = MagicMock(return_value=False)
+        controller.authenticated_patron_from_request = MagicMock(return_value=patron)
 
         with loan_fixture.request_context_with_library(
             "/",
@@ -1137,7 +1137,7 @@ class TestLoanController:
         original_handle_conditional_request = (
             loan_fixture.controller.handle_conditional_request
         )
-        loan_fixture.manager.loans.handle_conditional_request = (  # type: ignore[method-assign]
+        loan_fixture.manager.loans.handle_conditional_request = (
             handle_conditional_request
         )
 
@@ -1176,7 +1176,7 @@ class TestLoanController:
         # the course of this test, but it will not notice any more
         # conditional requests -- the detailed behavior of
         # handle_conditional_request is tested elsewhere.
-        loan_fixture.manager.loans.handle_conditional_request = (  # type: ignore[method-assign]
+        loan_fixture.manager.loans.handle_conditional_request = (
             original_handle_conditional_request
         )
 

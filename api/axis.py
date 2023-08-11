@@ -7,6 +7,7 @@ import ssl
 import urllib
 from datetime import timedelta
 from typing import Union
+from urllib.parse import urlparse
 
 import certifi
 from flask_babel import lazy_gettext as _
@@ -36,7 +37,6 @@ from core.metadata_layer import (
 )
 from core.model import (
     Classification,
-    Collection,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -220,14 +220,9 @@ class Axis360API(
         )
 
         self.token = None
-        self.collection_id = collection.id
         self.verify_certificate: bool = (
             config.verify_certificate if config.verify_certificate is not None else True
         )
-
-    @property
-    def collection(self):
-        return Collection.by_id(self._db, id=self.collection_id)
 
     @property
     def source(self):
@@ -1742,7 +1737,7 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
         self.verify: bool = verify
 
     def problem_detail_document(self, error_details: str) -> ProblemDetail:
-        service_name = urllib.parse.urlparse(self.content_link).netloc
+        service_name = urlparse(self.content_link).netloc
         self.logger.warning(error_details)
         return INTEGRATION_ERROR.detailed(
             _(RequestNetworkException.detail, service=service_name),
@@ -1752,7 +1747,7 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
 
     @property
     def as_response(self) -> Union[Response, ProblemDetail]:
-        service_name = urllib.parse.urlparse(self.content_link).netloc
+        service_name = urlparse(str(self.content_link)).netloc
         try:
             if self.verify:
                 # Actually verify the ssl certificates
@@ -1763,6 +1758,10 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
             else:
                 # Default context does no ssl verification
                 ssl_context = ssl.SSLContext()
+            if self.content_link is None:
+                return self.problem_detail_document(
+                    f"No content link provided for {service_name}"
+                )
             req = urllib.request.Request(self.content_link)
             with urllib.request.urlopen(
                 req, timeout=20, context=ssl_context

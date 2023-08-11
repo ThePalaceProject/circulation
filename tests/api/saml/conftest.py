@@ -63,10 +63,10 @@ def create_mock_onelogin_configuration(
         if configuration is None:
             configuration = create_saml_configuration()
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
-        onelogin_configuration._load_identity_providers = MagicMock(  # type: ignore[method-assign]
+        onelogin_configuration._load_identity_providers = MagicMock(
             return_value=identity_providers
         )
-        onelogin_configuration._load_service_provider = MagicMock(  # type: ignore[method-assign]
+        onelogin_configuration._load_service_provider = MagicMock(
             return_value=service_provider
         )
         return onelogin_configuration

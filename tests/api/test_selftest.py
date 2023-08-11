@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 from io import StringIO
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import pytest
@@ -18,7 +18,7 @@ from core.scripts import RunSelfTestsScript
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -26,7 +26,7 @@ class TestHasSelfTests:
     def test__determine_self_test_patron(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         """Test per-library default patron lookup for self-tests.
 
@@ -95,7 +95,7 @@ class TestHasSelfTests:
     def test_default_patrons(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         """Some self-tests must run with a patron's credentials.  The
         default_patrons() method finds the default Patron for every
@@ -195,10 +195,8 @@ class TestRunSelfTestsScript:
 
         # The API lookup map passed into test_collection() is based on
         # CirculationAPI's default API map.
-        default_api_map = CirculationAPI(
-            db.session, db.default_library()
-        ).default_api_map
-        for k, v in list(default_api_map.items()):
+        registry = CirculationAPI(db.session, db.default_library()).registry
+        for k, v in registry:
             assert api_map[k] == v
 
         # But a couple of things were added to the map that are not in

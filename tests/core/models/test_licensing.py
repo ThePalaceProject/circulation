@@ -524,6 +524,8 @@ class TestLicensePool:
             "541",
             collection=db.collection(),
         )
+        assert pool is not None
+        assert pool.availability_time is not None
         assert (pool.availability_time - now).total_seconds() < 2
         assert True == was_new
         assert DataSource.GUTENBERG == pool.data_source.name
@@ -644,6 +646,7 @@ class TestLicensePool:
             "1",
             collection=db.default_collection(),
         )
+        assert p1 is not None
 
         p2, ignore = LicensePool.for_foreign_id(
             db.session,
@@ -652,6 +655,7 @@ class TestLicensePool:
             "2",
             collection=db.default_collection(),
         )
+        assert p2 is not None
 
         work = db.work(title="Foo")
         p1.work = work

@@ -46,6 +46,15 @@ warn_unused_configs = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
+# In our tests, we often overwrite methods on classes to mock out behavior.
+# This is a common pattern in Python, but mypy doesn't like it. This override
+# silences those errors, but only for the tests module.
+# See discussion here:
+# https://github.com/python/mypy/issues/2427
+disable_error_code = "method-assign"
+module = "tests.*"
+
+[[tool.mypy.overrides]]
 # This override is the equivalent of running mypy with the --strict flag.
 # This is a work in progress, but we should try to get as many of our files
 # into the module list here as possible.
@@ -57,11 +66,13 @@ disallow_untyped_decorators = true
 disallow_untyped_defs = true
 module = [
     "api.admin.announcement_list_validator",
+    "api.admin.config",
     "api.admin.controller.library_settings",
     "api.admin.controller.patron_auth_services",
     "api.admin.form_data",
     "api.admin.model.dashboard_statistics",
     "api.adobe_vendor_id",
+    "api.circulation",
     "api.integration.*",
     "core.integration.*",
     "core.model.announcements",
@@ -72,6 +83,7 @@ module = [
     "core.settings.*",
     "core.util.authentication_for_opds",
     "core.util.cache",
+    "tests.fixtures.authenticator",
     "tests.migration.*",
 ]
 no_implicit_reexport = true

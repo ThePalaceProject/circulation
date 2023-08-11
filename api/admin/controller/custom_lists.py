@@ -10,7 +10,7 @@ from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
 
-from api.admin.controller.base import AdminCirculationManagerController
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
@@ -21,6 +21,7 @@ from api.admin.problem_details import (
     MISSING_COLLECTION,
     MISSING_CUSTOM_LIST,
 )
+from api.controller import CirculationManagerController
 from api.problem_details import CANNOT_DELETE_SHARED_LIST
 from core.app_server import load_pagination_from_request
 from core.lane import Lane, WorkList
@@ -42,7 +43,9 @@ from core.util.flask_util import OPDSFeedResponse
 from core.util.problem_detail import ProblemDetail
 
 
-class CustomListsController(AdminCirculationManagerController):
+class CustomListsController(
+    CirculationManagerController, AdminPermissionsControllerMixin
+):
     class CustomListSharePostResponse(BaseModel):
         successes: int = 0
         failures: int = 0

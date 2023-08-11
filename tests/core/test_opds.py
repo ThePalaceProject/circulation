@@ -2856,9 +2856,9 @@ def entrypoint_link_insertion_fixture(
 
     data.annotator = MockAnnotator
     data.old_add_entrypoint_links = AcquisitionFeed.add_entrypoint_links
-    AcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links  # type: ignore[method-assign]
+    AcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links
     yield data
-    AcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links  # type: ignore[method-assign]
+    AcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links
 
 
 class TestEntrypointLinkInsertion:

@@ -48,7 +48,7 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
         external: ExternalIntegration = collection.external_integration
         self._wayfless_url_template: Optional[
             str
-        ] = collection.integration_configuration.settings.get(
+        ] = collection.integration_configuration.settings_dict.get(
             SAMLWAYFlessConstants.WAYFLESS_URL_TEMPLATE_KEY
         )
 
@@ -109,9 +109,17 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
                 SAMLWAYFlessConstants.IDP_PLACEHOLDER,
                 urllib.parse.quote(saml_subject.idp, safe=""),
             )
+            if fulfillment.content_link is None:
+                self._logger.warning(
+                    f"Fulfillment {fulfillment} has no content link, unable to transform it"
+                )
+                content_link = ""
+            else:
+                content_link = fulfillment.content_link
+
             acquisition_link = acquisition_link.replace(
                 SAMLWAYFlessConstants.ACQUISITION_LINK_PLACEHOLDER,
-                urllib.parse.quote(fulfillment.content_link, safe=""),
+                urllib.parse.quote(content_link, safe=""),
             )
 
             self._logger.debug(

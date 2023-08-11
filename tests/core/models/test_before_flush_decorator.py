@@ -102,7 +102,7 @@ def test_dirty_instances_only_called_for_directly_modified(
     instance2 = MagicMock(spec=Base)
 
     session = create_session(dirty=[instance1, instance2])
-    type(session).is_modified = MagicMock(  # type: ignore[method-assign]
+    type(session).is_modified = MagicMock(
         side_effect=lambda x, include_collections: x == instance2
     )
     before_flush_decorator.before_flush(model=Base, state=ListenerState.dirty)(mock)
@@ -128,7 +128,7 @@ def test_filter_not_called_for_new_or_deleted(
     instance3 = MagicMock(spec=Base)
 
     session = create_session(new=[instance1], deleted=[instance2], dirty=[instance3])
-    type(session).is_modified = MagicMock()  # type: ignore[method-assign]
+    type(session).is_modified = MagicMock()
 
     before_flush_decorator.before_flush(model=Base, state=ListenerState.new)(mock)
     before_flush_decorator.before_flush(model=Base, state=ListenerState.deleted)(mock)

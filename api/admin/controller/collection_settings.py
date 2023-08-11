@@ -102,7 +102,7 @@ class CollectionSettingsController(SettingsController):
                 collection_dict["libraries"] = libraries
                 collection_dict[
                     "settings"
-                ] = collection_object.integration_configuration.settings
+                ] = collection_object.integration_configuration.settings_dict
                 self.load_settings(
                     protocol["settings"], collection_object, collection_dict["settings"]
                 )
@@ -145,7 +145,7 @@ class CollectionSettingsController(SettingsController):
             # Find and update the library settings if they exist
             for config in integration.library_configurations:
                 if library.id == config.library_id:
-                    library_info.update(config.settings)
+                    library_info.update(config.settings_dict)
                     break
             libraries.append(library_info)
 
@@ -343,7 +343,7 @@ class CollectionSettingsController(SettingsController):
             settings_class(**collection_settings)
         except ProblemError as ex:
             return ex.problem_detail
-        collection.integration_configuration.settings = collection_settings
+        collection.integration_configuration.settings_dict = collection_settings
 
     def _set_external_integration_link(
         self,

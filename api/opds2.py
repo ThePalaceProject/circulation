@@ -12,7 +12,7 @@ from core.lane import Facets
 from core.model import ExternalIntegration
 from core.model.edition import Edition
 from core.model.identifier import Identifier
-from core.model.licensing import DeliveryMechanism
+from core.model.licensing import LicensePoolDeliveryMechanism
 from core.model.resource import Hyperlink
 from core.opds2 import OPDS2Annotator
 from core.problem_details import INVALID_CREDENTIALS
@@ -99,7 +99,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        delivery_mechanism: DeliveryMechanism | None,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
         fulfillment: FulfillmentInfo,
     ) -> FulfillmentInfo:
         if not fulfillment.content_link:
@@ -109,7 +109,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         if "authentication_token" not in templated.variable_names:
             return fulfillment
 
-        token_auth = licensepool.collection.integration_configuration.settings.get(
+        token_auth = licensepool.collection.integration_configuration.settings_dict.get(
             ExternalIntegration.TOKEN_AUTH
         )
         if token_auth is None:

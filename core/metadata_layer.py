@@ -1994,10 +1994,8 @@ class Metadata(MetaToModelUtility):
             DataSource.BIBLIOTHECA,
             DataSource.AXIS_360,
         ]
-        if (
-            work_requires_new_presentation_edition
-            and (not data_source.integration_client)
-            and (data_source.name not in METADATA_UPLOAD_BLACKLIST)
+        if work_requires_new_presentation_edition and (
+            data_source.name not in METADATA_UPLOAD_BLACKLIST
         ):
             # Create a transient failure CoverageRecord for this edition
             # so it will be processed by the MetadataUploadCoverageProvider.

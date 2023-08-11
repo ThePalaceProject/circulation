@@ -7,7 +7,6 @@ from api.custom_index import CustomIndexView
 from api.opds import CirculationManagerAnnotator, LibraryAnnotator
 from api.problem_details import *
 from api.registration.registry import Registration
-from api.shared_collection import SharedCollectionAPI
 from core.external_search import MockExternalSearchIndex
 from core.lane import Facets, WorkList
 from core.model import Admin, CachedFeed, ConfigurationSetting, ExternalIntegration
@@ -29,7 +28,6 @@ class TestCirculationManager:
         # which are about to be reloaded.
         manager._external_search = object()
         manager.auth = object()
-        manager.shared_collection_api = object()
         manager.patron_web_domains = object()
 
         # But some fields are _not_ about to be reloaded
@@ -57,7 +55,7 @@ class TestCirculationManager:
             return None
 
         old_for_library = CustomIndexView.for_library
-        CustomIndexView.for_library = mock_for_library  # type: ignore[method-assign]
+        CustomIndexView.for_library = mock_for_library
 
         # We also set up some configuration settings that will
         # be loaded.
@@ -105,9 +103,6 @@ class TestCirculationManager:
         # The ExternalSearch object has been reset.
         assert isinstance(manager.external_search, MockExternalSearchIndex)
 
-        # So has the SharecCollectionAPI.
-        assert isinstance(manager.shared_collection_api, SharedCollectionAPI)
-
         # So have the patron web domains, and their paths have been
         # removed.
         assert {"http://sitewide", "http://registration"} == manager.patron_web_domains
@@ -140,7 +135,7 @@ class TestCirculationManager:
         } == manager.patron_web_domains
 
         # Restore the CustomIndexView.for_library implementation
-        CustomIndexView.for_library = old_for_library  # type: ignore[method-assign]
+        CustomIndexView.for_library = old_for_library
 
     def test_exception_during_external_search_initialization_is_stored(
         self, circulation_fixture: CirculationControllerFixture

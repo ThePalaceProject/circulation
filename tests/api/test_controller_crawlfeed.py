@@ -11,8 +11,7 @@ from api.lanes import (
     CrawlableFacets,
     DynamicLane,
 )
-from api.odl import ODLAPI
-from api.opds import CirculationManagerAnnotator, SharedCollectionAnnotator
+from api.opds import CirculationManagerAnnotator
 from api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
 from core.external_search import MockSearchResult, SortKeyPagination
 from core.opds import AcquisitionFeed
@@ -41,9 +40,9 @@ class TestCrawlableFeed:
             )
             return "An OPDS feed."
 
-        controller._crawlable_feed = mock  # type: ignore[method-assign]
+        controller._crawlable_feed = mock
         yield
-        controller._crawlable_feed = original  # type: ignore[method-assign]
+        controller._crawlable_feed = original
 
     def test_crawlable_library_feed(
         self, circulation_fixture: CirculationControllerFixture
@@ -132,21 +131,6 @@ class TestCrawlableFeed:
         # feed. We'll be using the default for a request with no
         # library context--a CirculationManagerAnnotator.
         assert None == kwargs.pop("annotator")
-
-        # A specific annotator _is_ created for an ODL collection:
-        # A SharedCollectionAnnotator that knows about the Collection
-        # _and_ the WorkList.
-        collection.protocol = ODLAPI.NAME
-        with circulation_fixture.app.test_request_context("/"):
-            with self.mock_crawlable_feed(circulation_fixture):
-                response = controller.crawlable_collection_feed(
-                    collection_name=collection.name
-                )
-        kwargs = self._crawlable_feed_called_with
-        annotator = kwargs["annotator"]
-        assert isinstance(annotator, SharedCollectionAnnotator)
-        assert collection == annotator.collection
-        assert kwargs["worklist"] == annotator.lane
 
     def test_crawlable_list_feed(
         self, circulation_fixture: CirculationControllerFixture

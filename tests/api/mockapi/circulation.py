@@ -1,14 +1,15 @@
 import logging
+from abc import ABC
 from collections import defaultdict
 
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.controller import CirculationManager
-from api.shared_collection import SharedCollectionAPI
 from core.external_search import MockExternalSearchIndex
+from core.integration.settings import BaseSettings
 from core.model import DataSource, Hold, Loan
 
 
-class MockBaseCirculationAPI(BaseCirculationAPI):
+class MockBaseCirculationAPI(BaseCirculationAPI, ABC):
     def label(self):
         return ""
 
@@ -25,7 +26,9 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
 
 
 class MockRemoteAPI(MockBaseCirculationAPI):
-    def __init__(self, set_delivery_mechanism_at, can_revoke_hold_when_reserved):
+    def __init__(
+        self, set_delivery_mechanism_at=True, can_revoke_hold_when_reserved=True
+    ):
         self.SET_DELIVERY_MECHANISM_AT = set_delivery_mechanism_at
         self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved
         self.responses = defaultdict(list)
@@ -59,6 +62,9 @@ class MockRemoteAPI(MockBaseCirculationAPI):
     def checkin(self, patron, pin, licensepool):
         # Return value is not checked.
         return self._return_or_raise("checkin")
+
+    def patron_activity(self, patron, pin):
+        return self._return_or_raise("patron_activity")
 
     def release_hold(self, patron, pin, licensepool):
         # Return value is not checked.
@@ -156,61 +162,6 @@ class MockCirculationAPI(CirculationAPI):
         return self.remotes[source]
 
 
-class MockSharedCollectionAPI(SharedCollectionAPI):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.responses = defaultdict(list)
-
-    def _queue(self, k, v):
-        self.responses[k].append(v)
-
-    def _return_or_raise(self, k):
-        self.log.debug(k)
-        l = self.responses[k]
-        v = l.pop(0)
-        if isinstance(v, Exception):
-            raise v
-        return v
-
-    def queue_register(self, response):
-        self._queue("register", response)
-
-    def register(self, collection, url):
-        return self._return_or_raise("register")
-
-    def queue_borrow(self, response):
-        self._queue("borrow", response)
-
-    def borrow(self, collection, client, pool, hold=None):
-        return self._return_or_raise("borrow")
-
-    def queue_revoke_loan(self, response):
-        self._queue("revoke-loan", response)
-
-    def revoke_loan(self, collection, client, loan):
-        return self._return_or_raise("revoke-loan")
-
-    def queue_fulfill(self, response):
-        self._queue("fulfill", response)
-
-    def fulfill(
-        self,
-        patron,
-        pin,
-        licensepool,
-        internal_format=None,
-        part=None,
-        fulfill_part_url=None,
-    ):
-        return self._return_or_raise("fulfill")
-
-    def queue_revoke_hold(self, response):
-        self._queue("revoke-hold", response)
-
-    def revoke_hold(self, collection, client, hold):
-        return self._return_or_raise("revoke-hold")
-
-
 class MockCirculationManager(CirculationManager):
     d_circulation: MockCirculationAPI
 
@@ -221,6 +172,3 @@ class MockCirculationManager(CirculationManager):
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
         return MockCirculationAPI(self._db, library, analytics)
-
-    def setup_shared_collection(self):
-        return MockSharedCollectionAPI(self._db)

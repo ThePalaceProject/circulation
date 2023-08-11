@@ -4,15 +4,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Optional,
-    Protocol,
-    runtime_checkable,
-)
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, runtime_checkable
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -48,6 +40,8 @@ from api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from api.web_publication_manifest import FindawayManifest
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
@@ -77,7 +71,7 @@ from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
     from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.time import Time
 
@@ -110,7 +104,7 @@ class TestBibliothecaAPI:
     def test__run_self_tests(
         self,
         bibliotheca_fixture: BibliothecaAPITestFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         db = bibliotheca_fixture.db
         # Verify that BibliothecaAPI._run_self_tests() calls the right
@@ -479,7 +473,10 @@ class TestBibliothecaAPI:
         circulation = CirculationAPI(
             db.session,
             db.default_library(),
-            api_map={bibliotheca_fixture.collection.protocol: MockBibliothecaAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL,
+                {bibliotheca_fixture.collection.protocol: MockBibliothecaAPI},
+            ),
         )
 
         api = circulation.api_for_collection[bibliotheca_fixture.collection.id]
@@ -609,6 +606,7 @@ class TestBibliothecaAPI:
 
         # The document sent by the 'Findaway' server has been
         # converted into a web publication manifest.
+        assert fulfillment.content is not None
         manifest = json.loads(fulfillment.content)
 
         # The conversion process is tested more fully in
@@ -838,7 +836,7 @@ class TestPatronCirculationParser:
         holds = [x for x in loans_and_holds if isinstance(x, HoldInfo)]
         assert 2 == len(loans)
         assert 2 == len(holds)
-        [l1, l2] = sorted(loans, key=lambda x: x.identifier)
+        [l1, l2] = sorted(loans, key=lambda x: str(x.identifier))
         assert "1ad589" == l1.identifier
         assert "cgaxr9" == l2.identifier
         expect_loan_start = datetime_utc(2015, 3, 20, 18, 50, 22)
@@ -846,7 +844,7 @@ class TestPatronCirculationParser:
         assert expect_loan_start == l1.start_date
         assert expect_loan_end == l1.end_date
 
-        [h1, h2] = sorted(holds, key=lambda x: x.identifier)
+        [h1, h2] = sorted(holds, key=lambda x: str(x.identifier))
 
         # This is the book on reserve.
         assert collection.id == h1.collection_id

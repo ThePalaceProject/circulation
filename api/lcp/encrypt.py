@@ -299,13 +299,15 @@ class LCPEncryptor:
 
             :param configuration: IntegrationConfiguration instance
             """
-            self._lcpencrypt_location = configuration.settings.get(
+            self._lcpencrypt_location = configuration.settings_dict.get(
                 "lcpencrypt_location"
             )
             self._input_file_path = str(file_path)
             self._content_id = str(identifier)
 
-            output_directory = configuration.settings.get("lcpencrypt_output_directory")
+            output_directory = configuration.settings_dict.get(
+                "lcpencrypt_output_directory"
+            )
 
             self._output_file_path = None
 
@@ -388,7 +390,9 @@ class LCPEncryptor:
 
     def _lcpencrypt_exists_locally(self):
         """Returns a Boolean value indicating whether lcpencrypt exists locally"""
-        return os.path.isfile(self.configuration.settings.get("lcpencrypt_location"))
+        return os.path.isfile(
+            self.configuration.settings_dict.get("lcpencrypt_location")
+        )
 
     def _parse_output(self, output):
         """Parses lcpencrypt's output

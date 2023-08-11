@@ -12,16 +12,11 @@ from core.lcp.credential import LCPCredentialFactory, LCPUnhashedPassphrase
 from core.model import ExternalIntegration
 from core.model.library import Library
 from tests.api.lcp import lcp_strings
-from tests.api.mockapi.circulation import (
-    MockCirculationAPI,
-    MockCirculationManager,
-    MockSharedCollectionAPI,
-)
+from tests.api.mockapi.circulation import MockCirculationAPI, MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 
 manager_api_cls = dict(
     circulationapi_cls=MockCirculationAPI,
-    sharedcollectionapi_cls=MockSharedCollectionAPI,
     externalsearch_cls=MockExternalSearchIndex,
 )
 

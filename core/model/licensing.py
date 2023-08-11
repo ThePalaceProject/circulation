@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Literal, Tuple, overload
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
@@ -17,7 +17,7 @@ from sqlalchemy.sql.expression import or_
 from core.model.hybrid import hybrid_property
 
 from ..util.datetime_helpers import utc_now
-from . import Base, create, flush, get_one, get_one_or_create
+from . import Base, flush, get_one, get_one_or_create
 from .circulationevent import CirculationEvent
 from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
 from .hassessioncache import HasSessionCache
@@ -133,6 +133,9 @@ class License(Base, LicenseFunctions):
 
     # A License belongs to one LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool: Mapped[LicensePool] = relationship(
+        "LicensePool", back_populates="licenses"
+    )
 
     # One License can have many Loans.
     loans: Mapped[List[Loan]] = relationship(
@@ -141,8 +144,8 @@ class License(Base, LicenseFunctions):
 
     __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
 
-    def loan_to(self, patron_or_client, **kwargs):
-        loan, is_new = self.license_pool.loan_to(patron_or_client, **kwargs)
+    def loan_to(self, patron: Patron, **kwargs):
+        loan, is_new = self.license_pool.loan_to(patron, **kwargs)
         loan.license = self
         return loan, is_new
 
@@ -211,7 +214,10 @@ class LicensePool(Base):
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.
     licenses: Mapped[List[License]] = relationship(
-        "License", backref="license_pool", cascade="all, delete-orphan", uselist=True
+        "License",
+        back_populates="license_pool",
+        cascade="all, delete-orphan",
+        uselist=True,
     )
 
     # One LicensePool can have many Loans.
@@ -318,6 +324,33 @@ class LicensePool(Base):
             self.licenses_available = 0
 
     @classmethod
+    @overload
+    def for_foreign_id(
+        self,
+        _db,
+        data_source,
+        foreign_id_type,
+        foreign_id,
+        rights_status=None,
+        collection=None,
+    ) -> Tuple[LicensePool, bool]:
+        ...
+
+    @classmethod
+    @overload
+    def for_foreign_id(
+        self,
+        _db,
+        data_source,
+        foreign_id_type,
+        foreign_id,
+        rights_status,
+        collection,
+        autocreate: Literal[False],
+    ) -> Tuple[LicensePool | None, bool]:
+        ...
+
+    @classmethod
     def for_foreign_id(
         self,
         _db,
@@ -327,7 +360,7 @@ class LicensePool(Base):
         rights_status=None,
         collection=None,
         autocreate=True,
-    ):
+    ) -> Tuple[LicensePool | None, bool]:
         """Find or create a LicensePool for the given foreign ID."""
         from .collection import CollectionMissing
         from .datasource import DataSource
@@ -369,23 +402,22 @@ class LicensePool(Base):
         # DataSource/Identifier/Collection.
         if autocreate:
             license_pool, was_new = get_one_or_create(_db, LicensePool, **kw)
+
+            if was_new:
+                if not license_pool.availability_time:
+                    now = utc_now()
+                    license_pool.availability_time = now
+
+                # Set the LicensePool's initial values to indicate
+                # that we don't actually know how many copies we own.
+                license_pool.licenses_owned = 0
+                license_pool.licenses_available = 0
+                license_pool.licenses_reserved = 0
+                license_pool.patrons_in_hold_queue = 0
+
+            return license_pool, was_new
         else:
-            license_pool = get_one(_db, LicensePool, **kw)
-            was_new = False
-
-        if was_new and not license_pool.availability_time:
-            now = utc_now()
-            license_pool.availability_time = now
-
-        if was_new:
-            # Set the LicensePool's initial values to indicate
-            # that we don't actually know how many copies we own.
-            license_pool.licenses_owned = 0
-            license_pool.licenses_available = 0
-            license_pool.licenses_reserved = 0
-            license_pool.patrons_in_hold_queue = 0
-
-        return license_pool, was_new
+            return get_one(_db, LicensePool, **kw), False
 
     @classmethod
     def with_no_work(cls, _db):
@@ -987,38 +1019,28 @@ class LicensePool(Base):
 
     def loan_to(
         self,
-        patron_or_client,
+        patron: Patron,
         start=None,
         end=None,
         fulfillment=None,
         external_identifier=None,
     ):
-        _db = Session.object_session(patron_or_client)
+        _db = Session.object_session(patron)
         kwargs = dict(start=start or utc_now(), end=end)
-        if isinstance(patron_or_client, Patron):
-            loan, is_new = get_one_or_create(
-                _db,
-                Loan,
-                patron=patron_or_client,
-                license_pool=self,
-                create_method_kwargs=kwargs,
-            )
+        loan, is_new = get_one_or_create(
+            _db,
+            Loan,
+            patron=patron,
+            license_pool=self,
+            create_method_kwargs=kwargs,
+        )
 
-            if is_new:
-                # This action creates uncertainty about what the patron's
-                # loan activity actually is. We'll need to sync with the
-                # vendor APIs.
-                patron_or_client.last_loan_activity_sync = None
-        else:
-            # An IntegrationClient can have multiple loans, so this always creates
-            # a new loan rather than returning an existing loan.
-            loan, is_new = create(
-                _db,
-                Loan,
-                integration_client=patron_or_client,
-                license_pool=self,
-                create_method_kwargs=kwargs,
-            )
+        if is_new:
+            # This action creates uncertainty about what the patron's
+            # loan activity actually is. We'll need to sync with the
+            # vendor APIs.
+            patron.last_loan_activity_sync = None
+
         if fulfillment:
             loan.fulfillment = fulfillment
         if external_identifier:
@@ -1027,34 +1049,22 @@ class LicensePool(Base):
 
     def on_hold_to(
         self,
-        patron_or_client,
+        patron: Patron,
         start=None,
         end=None,
         position=None,
         external_identifier=None,
     ):
-        _db = Session.object_session(patron_or_client)
-        if (
-            isinstance(patron_or_client, Patron)
-            and not patron_or_client.library.settings.allow_holds
-        ):
+        _db = Session.object_session(patron)
+        if not patron.library.settings.allow_holds:
             raise PolicyException("Holds are disabled for this library.")
         start = start or utc_now()
-        if isinstance(patron_or_client, Patron):
-            hold, new = get_one_or_create(
-                _db, Hold, patron=patron_or_client, license_pool=self
-            )
-            # This action creates uncertainty about what the patron's
-            # loan activity actually is. We'll need to sync with the
-            # vendor APIs.
-            if new:
-                patron_or_client.last_loan_activity_sync = None
-        else:
-            # An IntegrationClient can have multiple holds, so this always creates
-            # a new hold rather than returning an existing loan.
-            hold, new = create(
-                _db, Hold, integration_client=patron_or_client, license_pool=self
-            )
+        hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
+        # This action creates uncertainty about what the patron's
+        # loan activity actually is. We'll need to sync with the
+        # vendor APIs.
+        if new:
+            patron.last_loan_activity_sync = None
         hold.update(start, end, position)
         if external_identifier:
             hold.external_identifier = external_identifier
@@ -1468,9 +1478,12 @@ class LicensePoolDeliveryMechanism(Base):
     )
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
+    resource: Mapped[Resource] = relationship(
+        "Resource", back_populates="licensepooldeliverymechanisms"
+    )
 
     # One LicensePoolDeliveryMechanism may fulfill many Loans.
-    fulfills: Mapped[List[Loan]] = relationship("Loan", backref="fulfillment")
+    fulfills: Mapped[List[Loan]] = relationship("Loan", back_populates="fulfillment")
 
     # One LicensePoolDeliveryMechanism may be associated with one RightsStatus.
     rightsstatus_id = Column(Integer, ForeignKey("rightsstatus.id"), index=True)
@@ -1485,7 +1498,7 @@ class LicensePoolDeliveryMechanism(Base):
         rights_uri,
         resource=None,
         autocommit=True,
-    ):
+    ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
         certain format.
 

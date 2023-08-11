@@ -159,10 +159,8 @@ class TestSirsiDynixAuthenticationProvider:
                 }
             }
         }
-        provider.api_read_patron_data = MagicMock(return_value=ok_patron_resp)  # type: ignore[method-assign]
-        provider.api_patron_status_info = MagicMock(  # type: ignore[method-assign]
-            return_value=patron_status_resp
-        )
+        provider.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
+        provider.api_patron_status_info = MagicMock(return_value=patron_status_resp)
         patrondata = provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -188,7 +186,7 @@ class TestSirsiDynixAuthenticationProvider:
 
         # Test bad patron read data
         bad_patron_resp = {"bad": "yes"}
-        provider.api_read_patron_data = MagicMock(return_value=bad_patron_resp)  # type: ignore[method-assign]
+        provider.api_read_patron_data = MagicMock(return_value=bad_patron_resp)
         patrondata = provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -197,9 +195,7 @@ class TestSirsiDynixAuthenticationProvider:
         not_approved_patron_resp = {
             "fields": {"approved": False, "patronType": {"key": "testtype"}}
         }
-        provider.api_read_patron_data = MagicMock(  # type: ignore[method-assign]
-            return_value=not_approved_patron_resp
-        )
+        provider.api_read_patron_data = MagicMock(return_value=not_approved_patron_resp)
         patrondata = provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -211,9 +207,7 @@ class TestSirsiDynixAuthenticationProvider:
             "fields": {"approved": True, "patronType": {"key": "testblocked"}}
         }
         provider.sirsi_disallowed_suffixes = ["blocked"]
-        provider.api_read_patron_data = MagicMock(  # type: ignore[method-assign]
-            return_value=bad_prefix_patron_resp
-        )
+        provider.api_read_patron_data = MagicMock(return_value=bad_prefix_patron_resp)
         patrondata = provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -276,12 +270,12 @@ class TestSirsiDynixAuthenticationProvider:
             library_id=library.id,
             library_settings=library_settings,
         )
-        provider.remote_authenticate = MagicMock(  # type: ignore[method-assign]
+        provider.remote_authenticate = MagicMock(
             return_value=SirsiDynixPatronData(
                 permanent_id="xxxx", session_token="xxx", complete=False
             )
         )
-        provider.remote_patron_lookup = MagicMock(  # type: ignore[method-assign]
+        provider.remote_patron_lookup = MagicMock(
             return_value=PatronData(
                 permanent_id="xxxx",
                 personal_name="Test User",
@@ -357,10 +351,8 @@ class TestSirsiDynixAuthenticationProvider:
             info_copy = deepcopy(patron_info)
             info_copy.update(status)
 
-            provider.api_read_patron_data = MagicMock(  # type: ignore[method-assign]
-                return_value=ok_patron_resp
-            )
-            provider.api_patron_status_info = MagicMock(  # type: ignore[method-assign]
+            provider.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
+            provider.api_patron_status_info = MagicMock(
                 return_value={"fields": info_copy}
             )
 

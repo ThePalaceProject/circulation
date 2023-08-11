@@ -74,8 +74,8 @@ def test_initialize(application: ApplicationFixture) -> None:
     assert len(inspector.get_table_names()) == 0
 
     script = InstanceInitializationScript()
-    script.initialize_database = Mock(wraps=script.initialize_database)  # type: ignore[method-assign]
-    script.migrate_database = Mock(wraps=script.migrate_database)  # type: ignore[method-assign]
+    script.initialize_database = Mock(wraps=script.initialize_database)
+    script.migrate_database = Mock(wraps=script.migrate_database)
     script.run()
 
     inspector = inspect(engine)
@@ -103,8 +103,8 @@ def test_migrate(alembic_runner: MigrationContext) -> None:
     assert alembic_runner.current != alembic_runner.heads[0]
 
     script = InstanceInitializationScript()
-    script.initialize_database = Mock(wraps=script.initialize_database)  # type: ignore[method-assign]
-    script.migrate_database = Mock(wraps=script.migrate_database)  # type: ignore[method-assign]
+    script.initialize_database = Mock(wraps=script.initialize_database)
+    script.migrate_database = Mock(wraps=script.migrate_database)
     script.run()
 
     # Make sure we have upgraded

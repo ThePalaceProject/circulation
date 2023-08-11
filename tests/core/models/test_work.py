@@ -1377,7 +1377,7 @@ class TestWork:
 
         # Otherwise, this method is a simple passthrough for
         # Patron.work_is_age_appropriate.
-        patron.work_is_age_appropriate = MagicMock(return_value="value")  # type: ignore[method-assign]
+        patron.work_is_age_appropriate = MagicMock(return_value="value")
 
         assert "value" == work.age_appropriate_for_patron(patron)
         patron.work_is_age_appropriate.assert_called_with(
@@ -1920,6 +1920,7 @@ class TestWorkConsolidation:
             "1",
             collection=collection,
         )
+        assert pool is not None
         work, created = pool.calculate_work()
         assert None == work
 

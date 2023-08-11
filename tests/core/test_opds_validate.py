@@ -38,7 +38,7 @@ class TestODL2Validation(OPDS2Test):
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        db.default_collection().integration_configuration.settings = {
+        db.default_collection().integration_configuration.settings_dict = {
             "username": "username",
             "password": "password",
         }

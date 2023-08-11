@@ -88,7 +88,7 @@ class Resource(Base):
         List[LicensePoolDeliveryMechanism]
     ] = relationship(
         "LicensePoolDeliveryMechanism",
-        backref="resource",
+        back_populates="resource",
         foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
     )
 

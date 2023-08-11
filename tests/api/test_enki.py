@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -31,7 +31,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.api_enki_files import EnkiFilesFixture
-    from tests.fixtures.authenticator import AuthProviderFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
 
 
 class EnkiTestFixure:
@@ -96,7 +96,7 @@ class TestEnkiAPI:
     def test__run_self_tests(
         self,
         enki_test_fixture: EnkiTestFixure,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         db = enki_test_fixture.db
 
@@ -534,6 +534,7 @@ class TestEnkiAPI:
         assert fulfillment.identifier == pool.identifier.identifier
         assert fulfillment.collection_id == pool.collection.id
         assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
+        assert fulfillment.content_link is not None
         assert fulfillment.content_link.startswith(
             "http://afs.enkilibrary.org/fulfillment/URLLink.acsm"
         )

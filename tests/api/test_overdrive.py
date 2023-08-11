@@ -5,7 +5,7 @@ import json
 import os
 import random
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict
+from typing import TYPE_CHECKING, Any, Dict
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -25,6 +25,8 @@ from api.overdrive import (
     RecentOverdriveCollectionMonitor,
 )
 from core.config import CannotLoadConfiguration
+from core.integration.goals import Goals
+from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import TimestampData
 from core.model import (
     DataSource,
@@ -47,7 +49,7 @@ from ..fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
     from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
-    from ..fixtures.authenticator import AuthProviderFixture
+    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
     from ..fixtures.time import Time
 
 
@@ -62,7 +64,9 @@ class OverdriveAPIFixture:
         self.circulation = CirculationAPI(
             db.session,
             library,
-            api_map={ExternalIntegration.OVERDRIVE: MockOverdriveAPI},
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
+            ),
         )
         self.api: MockOverdriveAPI = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         os.environ[
@@ -122,7 +126,7 @@ class TestOverdriveAPI:
     def test__run_self_tests(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
-        create_simple_auth_integration: Callable[..., AuthProviderFixture],
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         # Verify that OverdriveAPI._run_self_tests() calls the right
         # methods.
@@ -234,7 +238,7 @@ class TestOverdriveAPI:
         def explode(*args, **kwargs):
             raise Exception("Failure!")
 
-        overdrive_api_fixture.api.check_creds = explode  # type: ignore[method-assign]
+        overdrive_api_fixture.api.check_creds = explode
 
         # Only one test will be run.
         [check_creds] = overdrive_api_fixture.api._run_self_tests(
@@ -992,7 +996,9 @@ class TestOverdriveAPI:
         # If get_fulfillment_link returns a FulfillmentInfo, it is returned
         # immediately and the rest of fulfill() does not run.
 
-        fulfillment = FulfillmentInfo(overdrive_api_fixture.collection, *[None] * 7)
+        fulfillment = FulfillmentInfo(
+            overdrive_api_fixture.collection, None, None, None, None, None, None, None
+        )
 
         class MockAPI(OverdriveAPI):
             def get_fulfillment_link(*args, **kwargs):
@@ -1474,7 +1480,7 @@ class TestOverdriveAPI:
         assert True == changed
 
         db.session.commit()
-
+        assert pool is not None
         assert raw["copiesOwned"] == pool.licenses_owned
         assert raw["copiesAvailable"] == pool.licenses_available
         assert 0 == pool.licenses_reserved
@@ -1553,6 +1559,7 @@ class TestOverdriveAPI:
         )
         # The new pool doesn't have a presentation edition yet,
         # but it will be updated to share the old pool's edition.
+        assert new_pool is not None
         assert None == new_pool.presentation_edition
 
         (
@@ -1562,6 +1569,7 @@ class TestOverdriveAPI:
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
             raw, new_pool, was_new
         )
+        assert new_pool is not None
         assert True == was_new
         assert True == changed
         assert old_edition == new_pool.presentation_edition
@@ -1668,8 +1676,8 @@ class TestOverdriveAPI:
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         # but mock the request methods
-        od_api._do_post = MagicMock()  # type: ignore[method-assign]
-        od_api._do_get = MagicMock()  # type: ignore[method-assign]
+        od_api._do_post = MagicMock()
+        od_api._do_get = MagicMock()
         response_credential = od_api.refresh_patron_access_token(
             credential, patron, "a pin", is_fulfillment=True
         )
@@ -1705,8 +1713,8 @@ class TestOverdriveAPI:
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, db.default_collection())
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})  # type: ignore[method-assign]
-        od_api.get_download_link = MagicMock(return_value=None)  # type: ignore[method-assign]
+        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
+        od_api.get_download_link = MagicMock(return_value=None)
 
         exc = pytest.raises(
             CannotFulfill,
@@ -1749,14 +1757,14 @@ class TestOverdriveAPI:
             api_data = json.load(fp)
 
         # Mock out the flow
-        od_api.get_loan = MagicMock(return_value=api_data["loan"])  # type: ignore[method-assign]
+        od_api.get_loan = MagicMock(return_value=api_data["loan"])
 
         mock_lock_in_response = create_autospec(Response)
         mock_lock_in_response.status_code = 200
         mock_lock_in_response.json.return_value = api_data["lock_in"]
-        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)  # type: ignore[method-assign]
+        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
 
-        od_api.get_fulfillment_link_from_download_link = MagicMock(  # type: ignore[method-assign]
+        od_api.get_fulfillment_link_from_download_link = MagicMock(
             return_value=(
                 "https://example.org/epub-redirect",
                 "application/epub+zip",
@@ -1836,7 +1844,7 @@ class TestOverdriveAPICredentials:
 
         # These are the credentials we'll expect for each of our collections.
         expected_credentials = {
-            props["name"]: _make_token(
+            str(props["name"]): _make_token(
                 "websiteid:%s authorizationname:%s"
                 % (props["website_id"], props["ils_name"]),
                 patron.authorization_identifier,
@@ -1852,10 +1860,14 @@ class TestOverdriveAPICredentials:
         ]
 
         circulation = CirculationAPI(
-            db.session, library, api_map={ExternalIntegration.OVERDRIVE: MockAPI}
+            db.session,
+            library,
+            registry=IntegrationRegistry(
+                Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockAPI}
+            ),
         )
-        od_apis = {
-            api.collection.name: api  # type: ignore[union-attr]
+        od_apis: Dict[str, OverdriveAPI] = {
+            api.collection.name: api  # type: ignore[union-attr,misc]
             for api in list(circulation.api_for_collection.values())
         }
 
@@ -1866,7 +1878,7 @@ class TestOverdriveAPICredentials:
         for name in list(expected_credentials.keys()) + list(
             reversed(list(expected_credentials.keys()))
         ):
-            credential = od_apis[name].get_patron_credential(patron, pin)  # type: ignore[union-attr]
+            credential = od_apis[name].get_patron_credential(patron, pin)
             assert expected_credentials[name] == credential.credential
 
     def test_fulfillment_credentials_testing_keys(
@@ -2159,12 +2171,13 @@ class TestSyncBookshelf:
         )
 
         # All four loans in the sample data were created.
+        assert isinstance(loans, list)
         assert 4 == len(loans)
         assert loans.sort() == patron.loans.sort()
 
         # We have created previously unknown LicensePools and
         # Identifiers.
-        identifiers = [loan.license_pool.identifier.identifier for loan in loans]
+        identifiers = [str(loan.license_pool.identifier.identifier) for loan in loans]
         assert sorted(
             [
                 "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
@@ -2198,6 +2211,7 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
             patron, "dummy pin"
         )
+        assert isinstance(loans, list)
         assert 4 == len(loans)
         assert loans.sort() == patron.loans.sort()
 
@@ -2231,6 +2245,7 @@ class TestSyncBookshelf:
             patron, "dummy pin"
         )
 
+        assert isinstance(loans, list)
         assert 4 == len(loans)
         assert set(loans) == set(patron.loans)
         assert overdrive_loan not in patron.loans
@@ -2278,6 +2293,7 @@ class TestSyncBookshelf:
             patron, "dummy pin"
         )
         # All four loans in the sample data were created.
+        assert isinstance(holds, list)
         assert 4 == len(holds)
         assert sorted(holds) == sorted(patron.holds)
 
@@ -2288,6 +2304,7 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
             patron, "dummy pin"
         )
+        assert isinstance(holds, list)
         assert 4 == len(holds)
         assert sorted(holds) == sorted(patron.holds)
 
@@ -2315,6 +2332,7 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
             patron, "dummy pin"
         )
+        assert isinstance(holds, list)
         assert 4 == len(holds)
         assert holds == patron.holds
         assert overdrive_hold not in patron.loans
