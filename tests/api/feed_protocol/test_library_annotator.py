@@ -510,10 +510,12 @@ class TestLibraryAnnotator:
                 test_mode=True,
                 library_identifies_patrons=auth,
             )
-            feed = OPDSAcquisitionFeed(
-                "url", "test", FacetsWithEntryPoint(), Pagination.default(), annotator
+            work_entry = WorkEntry(
+                work=work,
+                license_pool=pool,
+                edition=work.presentation_edition,
+                identifier=work.presentation_edition.primary_identifier,
             )
-            work_entry = WorkEntry(work=work, license_pool=pool)
             annotator.annotate_work_entry(work_entry)
 
             assert work_entry.computed is not None
@@ -557,7 +559,9 @@ class TestLibraryAnnotator:
             test_mode=True,
             library_identifies_patrons=True,
         )
-        work_entry = WorkEntry(work=work, license_pool=None)
+        work_entry = WorkEntry(
+            work=work, license_pool=None, edition=edition, identifier=identifier
+        )
         annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         links = {
@@ -586,7 +590,9 @@ class TestLibraryAnnotator:
         # If analytics are configured, a link is added to
         # create an 'open_book' analytics event for this title.
         Analytics.GLOBAL_ENABLED = True
-        work_entry = WorkEntry(work=work, license_pool=None)
+        work_entry = WorkEntry(
+            work=work, license_pool=None, edition=edition, identifier=identifier
+        )
         annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         [analytics_link] = [
@@ -609,7 +615,9 @@ class TestLibraryAnnotator:
             edition.data_source,
             media_type="application/epub+zip",
         )
-        work_entry = WorkEntry(work=work, license_pool=None)
+        work_entry = WorkEntry(
+            work=work, license_pool=None, edition=edition, identifier=identifier
+        )
         annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         [feed_link] = [
@@ -631,7 +639,7 @@ class TestLibraryAnnotator:
                 test_mode=True,
                 library_identifies_patrons=auth,
             )
-            feed = OPDSAcquisitionFeed("test", "url", object(), object(), annotator)
+            feed = OPDSAcquisitionFeed("test", "url", [], object(), object(), annotator)
             annotator.annotate_feed(feed._feed)
             linksets.append([x.rel for x in feed._feed.links])
 
@@ -661,6 +669,7 @@ class TestLibraryAnnotator:
         feed = OPDSAcquisitionFeed(
             "url",
             "test",
+            works,
             FacetsWithEntryPoint(),
             Pagination.default(),
             LibraryAnnotator(
@@ -670,14 +679,7 @@ class TestLibraryAnnotator:
                 **kwargs,
             ),
         )
-        feed.generate_feed(
-            [
-                awork
-                for work in works
-                if (awork := OPDSAcquisitionFeed.single_entry(work, feed.annotator))
-                is not None
-            ],
-        )
+        feed.generate_feed()
         return feed._feed
 
     def assert_link_on_entry(
@@ -1114,7 +1116,12 @@ class TestLibraryAnnotator:
         pool.licenses_available = 50
         pool.patrons_in_hold_queue = 25
 
-        work_entry = WorkEntry(work=work, license_pool=pool)
+        work_entry = WorkEntry(
+            work=work,
+            license_pool=pool,
+            edition=work.presentation_edition,
+            identifier=work.presentation_edition.primary_identifier,
+        )
         annotator_fixture.annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         [link] = work_entry.computed.acquisition_links
@@ -1466,7 +1473,7 @@ class TestLibraryAnnotator:
             # Create an AcquisitionFeed is using the given Annotator.
             # extract its links and return a dictionary that maps link
             # relations to URLs.
-            feed = OPDSAcquisitionFeed("test", "url", object(), object(), annotator)
+            feed = OPDSAcquisitionFeed("test", "url", [], object(), object(), annotator)
             annotator.annotate_feed(feed._feed)
             links = feed._feed.links
 
@@ -1523,7 +1530,7 @@ class TestLibraryAnnotator:
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library()
         )
-        feed = OPDSAcquisitionFeed("test", "url", object(), object(), annotator)
+        feed = OPDSAcquisitionFeed("test", "url", [], object(), object(), annotator)
 
         patron = annotator_fixture.db.patron()
 
@@ -1721,7 +1728,7 @@ class TestLibraryAnnotator:
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library()
         )
-        feed = OPDSAcquisitionFeed("url", "test", None, None, annotator)
+        feed = OPDSAcquisitionFeed("url", "test", [], None, None, annotator)
 
         # This book has two delivery mechanisms
         work = annotator_fixture.db.work(with_license_pool=True)

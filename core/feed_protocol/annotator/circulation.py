@@ -919,14 +919,13 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             )
 
         # Groups is only from the library annotator
-        groups_uri = self.url_for(
-            "acquisition_groups",
-            identifier_type=identifier.type,
-            identifier=identifier.identifier,
-            library_short_name=self.library.short_name,
-            _external=True,
+        group_uri, group_title = self.group_uri(
+            entry.work, entry.license_pool, entry.identifier
         )
-        entry.computed.other_links.append(Link(href=groups_uri, rel=OPDSFeed.GROUP_REL))
+        if group_uri:
+            entry.computed.other_links.append(
+                Link(href=group_uri, rel=OPDSFeed.GROUP_REL, title=str(group_title))
+            )
 
     @classmethod
     def related_books_available(cls, work, library):
