@@ -7,7 +7,7 @@ from core.util.opds_writer import OPDSFeed
 
 TAG_MAPPING = {
     "indirectAcquisition": f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition",
-    "hold": f"{{{OPDSFeed.OPDS_NS}}}hold",
+    "holds": f"{{{OPDSFeed.OPDS_NS}}}holds",
     "copies": f"{{{OPDSFeed.OPDS_NS}}}copies",
     "availability": f"{{{OPDSFeed.OPDS_NS}}}availability",
     "licensor": f"{{{OPDSFeed.DRM_NS}}}licensor",
@@ -65,7 +65,9 @@ class OPDS1Serializer(OPDSFeed):
         entry: etree._Element = OPDSFeed.entry()
 
         if feed_entry.additionalType:
-            entry.set("additionalType", feed_entry.additionalType)
+            entry.set(
+                f"{{{OPDSFeed.SCHEMA_NS}}}additionalType", feed_entry.additionalType
+            )
 
         if feed_entry.title:
             entry.append(OPDSFeed.E("title", feed_entry.title.text))

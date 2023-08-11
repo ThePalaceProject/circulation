@@ -231,8 +231,8 @@ class Annotator(OPDSAnnotator):
             return
 
         work = entry.work
-        edition: Edition = work.presentation_edition
-        identifier = edition.primary_identifier
+        edition: Edition = entry.edition
+        identifier = entry.identifier
         pool = entry.license_pool
         computed = WorkEntryData()
 

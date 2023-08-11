@@ -33,27 +33,23 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     """An Acquisition Feed which is not tied to any particular format.
     It is simply responsible for creating different types of feeds."""
 
-    def __init__(self, title, url, facets, pagination, annotator) -> None:
+    def __init__(self, title, url, works, facets, pagination, annotator) -> None:
         self.annotator = annotator
         self.url = url
         self.title = title
         super().__init__(facets, pagination)
+        for work in works:
+            entry = self.single_entry(work, self.annotator)
+            if entry is not None:
+                self._feed.entries.append(entry)
 
-    def generate_feed(
-        self,
-        work_entries: List[WorkEntry],
-    ):
+    def generate_feed(self):
         """Generate the feed metadata and links.
         We assume the entries have already been annotated."""
         self._feed.add_metadata("id", text=self.url)
         self._feed.add_metadata("title", text=self.title)
         self._feed.add_metadata("updated", text=AtomFeed._strftime(utc_now()))
         self._feed.add_link(href=self.url, rel="self")
-
-        # TODO: use the entry cache (is this still relevant?)
-        for entry in work_entries:
-            self._feed.entries.append(entry)
-
         self.annotator.annotate_feed(self._feed)
 
     def add_pagination_links(self, works, lane):
@@ -111,9 +107,33 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         return OPDSFeedResponse(self._serializer.serialize_feed(self._feed), **kwargs)
 
     @classmethod
+    def _create_entry(
+        cls, work, active_licensepool, edition, identifier, annotator
+    ) -> WorkEntry:
+        entry = WorkEntry(
+            work=work,
+            license_pool=active_licensepool,
+            edition=edition,
+            identifier=identifier,
+        )
+        annotator.annotate_work_entry(entry)
+        return entry
+
+    @classmethod
+    def error_message(cls, identifier, error_status, error_message):
+        """Turn an error result into an OPDSMessage suitable for
+        adding to a feed.
+        """
+        return OPDSMessage(identifier.urn, error_status, error_message)
+
+    # All feed generating classmethods below
+    # Each classmethod creates a different kind of feed
+
+    @classmethod
     def page(
         cls,
         _db: Session,
+        title: str,
         url: str,
         lane: WorkList,
         annotator: LibraryAnnotator,
@@ -127,16 +147,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         if not isinstance(works, list):
             works = list(works)
 
-        entries = []
-        feed = OPDSAcquisitionFeed(
-            lane.display_name, url, facets, pagination, annotator
-        )
-        for work in works:
-            entry = cls.single_entry(work, annotator)
-            if entry:
-                entries.append(entry)
+        feed = OPDSAcquisitionFeed(title, url, works, facets, pagination, annotator)
 
-        feed.generate_feed(entries)
+        feed.generate_feed()
         feed.add_pagination_links(works, lane)
         feed.add_facet_links(lane)
 
@@ -191,11 +204,10 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         )
         works = patron.works_on_loan_or_on_hold()
 
-        _work_entries = [cls.single_entry(work, annotator) for work in works]
-        work_entries = [entry for entry in _work_entries if entry is not None]
-
-        feed = OPDSAcquisitionFeed("Active loans and holds", url, None, None, annotator)
-        feed.generate_feed(work_entries)
+        feed = OPDSAcquisitionFeed(
+            "Active loans and holds", url, works, None, None, annotator
+        )
+        feed.generate_feed()
         response = feed.as_response(max_age=0, private=True)
 
         last_modified = patron.last_loan_activity_sync
@@ -351,23 +363,3 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         except Exception as e:
             logging.error("Exception generating OPDS entry for %r", work, exc_info=e)
             return None
-
-    @classmethod
-    def _create_entry(
-        cls, work, active_licensepool, edition, identifier, annotator
-    ) -> WorkEntry:
-        entry = WorkEntry(
-            work=work,
-            license_pool=active_licensepool,
-            edition=edition,
-            identifier=identifier,
-        )
-        annotator.annotate_work_entry(entry)
-        return entry
-
-    @classmethod
-    def error_message(cls, identifier, error_status, error_message):
-        """Turn an error result into an OPDSMessage suitable for
-        adding to a feed.
-        """
-        return OPDSMessage(identifier.urn, error_status, error_message)
