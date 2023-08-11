@@ -332,12 +332,48 @@ class TestEdition:
         for i in range(0, 500):
             author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
             authors.append(author.sort_name)
+
         wr = db.edition(authors=authors)
         author, sort_author = wr.calculate_author()
         wr.calculate_presentation()
         db.session.commit()
-        assert len(wr.author) == 1024
-        assert len(wr.sort_author) == 1024
+
+        def do_check(original_str: str, truncated_str: str):
+            assert (
+                len(truncated_str)
+                == Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+            )
+            assert truncated_str.endswith("...")
+            assert (
+                len(original_str)
+                > Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+            )
+            assert not original_str.endswith("...")
+
+        do_check(author, wr.author)
+        do_check(sort_author, wr.sort_author)
+
+    def test_calculate_presentation_shortish_author(
+        self, db: DatabaseTransactionFixture
+    ):
+        authors = []
+        author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
+        authors.append(author.sort_name)
+        wr = db.edition(authors=authors)
+        author, sort_author = wr.calculate_author()
+        wr.calculate_presentation()
+        db.session.commit()
+
+        def do_check(original_str: str, truncated_str: str):
+            assert truncated_str == original_str
+            assert not truncated_str.endswith("...")
+            assert (
+                len(original_str)
+                < Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+            )
+
+        do_check(author, wr.author)
+        do_check(sort_author, wr.sort_author)
 
     def test_set_summary(self, db: DatabaseTransactionFixture):
         e, pool = db.edition(with_license_pool=True)

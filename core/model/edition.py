@@ -49,6 +49,22 @@ class Edition(Base, EditionConstants):
     # in a pinch.
     MAX_FALLBACK_THUMBNAIL_HEIGHT = 500
 
+    # Postgresql doesn't allow indices to exceed 1/3 of a buffer page.
+    # We saw the following error here: https://ebce-lyrasis.atlassian.net/browse/PP-188:
+    #
+    # Index row size 3208 exceeds btree version 4 maximum 2704 for index "ix_editions_author"
+    # DETAIL:  Index row references tuple (48187,9) in relation "editions".
+    # HINT:  Values larger than 1/3 of a buffer page cannot be indexed.
+    #
+    # On rare occasions the author (and sort_author) fields can contain a concatenated list of a
+    # large number of authors which breaks the index and causes failures.  What exactly that threshold is
+    # I am not entirely certain.  It appears that 2704 is the size that broke the 1/3 of a buffer page
+    # limit. However, I'm not entirely sure if the buffer page can always be assumed to be a fixed length.
+    # Also, it is not clear to me what other bytes are included in the index row.  Therefore, I have chosen
+    # a value that is both large enough to ensure little or no information is hidden from the end user in most
+    # cases and small enough that we never have to worry about this causing indexing failures in the future.
+    SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR = 1024
+
     # This Edition is associated with one particular
     # identifier--the one used by its data source to identify
     # it. Through the Equivalency class, it is associated with a
@@ -726,13 +742,16 @@ class Edition(Base, EditionConstants):
             sort_author = self.UNKNOWN_AUTHOR
 
         def truncate_string(mystr: str):
-            if len(mystr) > 1024:
-                return mystr[: (1024 - 3)] + "..."
+            if len(mystr) > self.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR:
+                return (
+                    mystr[: (self.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR - 3)]
+                    + "..."
+                )
             else:
                 return mystr
 
-        # Very long author and sort_author strings can cause the limits of one or more of the
-        # underlying postgres indices.  Therefore,  we limit their size here.
+        # Very long author and sort_author strings can cause issues for Postgres indices. See
+        # comment above the SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR constant for details.
         author = truncate_string(author)
         sort_author = truncate_string(sort_author)
         return author, sort_author
