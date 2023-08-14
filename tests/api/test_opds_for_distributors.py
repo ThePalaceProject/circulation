@@ -10,6 +10,7 @@ from api.circulation_exceptions import *
 from api.opds_for_distributors import (
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,
+    OPDSForDistributorsImportMonitor,
     OPDSForDistributorsReaperMonitor,
 )
 from core.metadata_layer import CirculationData, LinkData
@@ -26,6 +27,8 @@ from core.model import (
     MediaTypes,
     Representation,
     RightsStatus,
+    Timestamp,
+    create,
 )
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
@@ -793,3 +796,39 @@ class TestOPDSForDistributorsReaperMonitor:
         # that will be applied by run().
         assert None == progress.start
         assert None == progress.finish
+
+
+class TestOPDSForDistributorsImportMonitor:
+    def test_opds_import_has_db_failure(
+        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
+    ):
+        feed = opds_dist_api_fixture.files.sample_data("biblioboard_mini_feed.opds")
+
+        class MockOPDSForDistributorsImportMonitor(OPDSForDistributorsImportMonitor):
+            """An OPDSForDistributorsImportMonitor that overrides _get."""
+
+            def _get(self, url, headers):
+                # This should cause a database failure on commit
+                ts = create(self._db, Timestamp)
+                return (200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, feed)
+
+        data_source = DataSource.lookup(
+            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
+        )
+        collection = MockOPDSForDistributorsAPI.mock_collection(
+            opds_dist_api_fixture.db.session,
+            opds_dist_api_fixture.db.default_library(),
+        )
+        DatabaseTransactionFixture.set_settings(
+            collection.integration_configuration,
+            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
+        )
+        monitor = MockOPDSForDistributorsImportMonitor(
+            opds_dist_api_fixture.db.session,
+            collection,
+            OPDSForDistributorsImporter,
+        )
+
+        monitor.run()
+
+        assert monitor.timestamp().exception is not None
