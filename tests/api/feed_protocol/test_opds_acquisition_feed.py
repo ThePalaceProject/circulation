@@ -1,26 +1,113 @@
 import datetime
 import logging
 import xml.etree.ElementTree as ET
-from typing import List
+from collections import defaultdict
+from typing import Any, Callable, Generator, List, Type
 
 import pytest
 from lxml import etree
 
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EntryPoint
+from core.entrypoint import (
+    AudiobooksEntryPoint,
+    EbooksEntryPoint,
+    EntryPoint,
+    EverythingEntryPoint,
+    MediumEntryPoint,
+)
+from core.external_search import MockExternalSearchIndex
 from core.facets import FacetConstants
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.annotator.circulation import AcquisitionHelper
 from core.feed_protocol.types import FeedData, WorkEntry
-from core.lane import Facets, WorkList
+from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
 from core.model.constants import LinkRelations
-from core.opds import MockAnnotator, MockUnfulfillableAnnotator
+from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
+
+
+class MockAnnotator(Annotator):
+    def __init__(self):
+        self.lanes_by_work = defaultdict(list)
+
+    @classmethod
+    def lane_url(cls, lane):
+        if lane and lane.has_visible_children:
+            return cls.groups_url(lane)
+        elif lane:
+            return cls.feed_url(lane)
+        else:
+            return ""
+
+    @classmethod
+    def feed_url(cls, lane, facets=None, pagination=None):
+        if isinstance(lane, Lane):
+            base = "http://%s/" % lane.url_name
+        else:
+            base = "http://%s/" % lane.display_name
+        sep = "?"
+        if facets:
+            base += sep + facets.query_string
+            sep = "&"
+        if pagination:
+            base += sep + pagination.query_string
+        return base
+
+    @classmethod
+    def search_url(cls, lane, query, pagination, facets=None):
+        if isinstance(lane, Lane):
+            base = "http://%s/" % lane.url_name
+        else:
+            base = "http://%s/" % lane.display_name
+        sep = "?"
+        if pagination:
+            base += sep + pagination.query_string
+            sep = "&"
+        if facets:
+            facet_query_string = facets.query_string
+            if facet_query_string:
+                base += sep + facet_query_string
+        return base
+
+    @classmethod
+    def groups_url(cls, lane, facets=None):
+        if lane and isinstance(lane, Lane):
+            identifier = lane.id
+        else:
+            identifier = ""
+        if facets:
+            facet_string = "?" + facets.query_string
+        else:
+            facet_string = ""
+
+        return f"http://groups/{identifier}{facet_string}"
+
+    @classmethod
+    def default_lane_url(cls):
+        return cls.groups_url(None)
+
+    @classmethod
+    def facet_url(cls, facets):
+        return "http://facet/" + "&".join(
+            [f"{k}={v}" for k, v in sorted(facets.items())]
+        )
+
+    @classmethod
+    def navigation_url(cls, lane):
+        if lane and isinstance(lane, Lane):
+            identifier = lane.id
+        else:
+            identifier = ""
+        return "http://navigation/%s" % identifier
+
+    @classmethod
+    def top_level_title(cls):
+        return "Test Top Level Title"
 
 
 class TestOPDSAcquisitionFeed:
@@ -877,3 +964,252 @@ class TestOPDSAcquisitionFeed:
         assert Facets.FACET_DISPLAY_TITLES[Facets.COLLECTION_FULL] == facet
         assert Facets.GROUP_DISPLAY_TITLES[Facets.COLLECTION_FACET_GROUP_NAME] == group
         assert True == selected
+
+
+class TestEntrypointLinkInsertionFixture:
+    db: DatabaseTransactionFixture
+    mock: Any
+    no_eps: WorkList
+    entrypoints: List[MediumEntryPoint]
+    wl: WorkList
+    lane: Lane
+    annotator: Type[MockAnnotator]
+    old_add_entrypoint_links: Callable
+
+
+@pytest.fixture()
+def entrypoint_link_insertion_fixture(
+    db,
+) -> Generator[TestEntrypointLinkInsertionFixture, None, None]:
+    data = TestEntrypointLinkInsertionFixture()
+    data.db = db
+
+    # Mock for AcquisitionFeed.add_entrypoint_links
+    class Mock:
+        def add_entrypoint_links(self, *args):
+            self.called_with = args
+
+    data.mock = Mock()
+
+    # A WorkList with no EntryPoints -- should not call the mock method.
+    data.no_eps = WorkList()
+    data.no_eps.initialize(library=db.default_library(), display_name="no_eps")
+
+    # A WorkList with two EntryPoints -- may call the mock method
+    # depending on circumstances.
+    data.entrypoints = [AudiobooksEntryPoint, EbooksEntryPoint]  # type: ignore[list-item]
+    data.wl = WorkList()
+    # The WorkList must have at least one child, or we won't generate
+    # a real groups feed for it.
+    data.lane = db.lane()
+    data.wl.initialize(
+        library=db.default_library(),
+        display_name="wl",
+        entrypoints=data.entrypoints,
+        children=[data.lane],
+    )
+
+    def works(_db, **kwargs):
+        """Mock WorkList.works so we don't need any actual works
+        to run the test.
+        """
+        return []
+
+    data.no_eps.works = works  # type: ignore[method-assign, assignment]
+    data.wl.works = works  # type: ignore[method-assign, assignment]
+
+    data.annotator = MockAnnotator
+    data.old_add_entrypoint_links = OPDSAcquisitionFeed.add_entrypoint_links
+    OPDSAcquisitionFeed.add_entrypoint_links = data.mock.add_entrypoint_links  # type: ignore[method-assign]
+    yield data
+    OPDSAcquisitionFeed.add_entrypoint_links = data.old_add_entrypoint_links  # type: ignore[method-assign]
+
+
+class TestEntrypointLinkInsertion:
+    """Verify that the three main types of OPDS feeds -- grouped,
+    paginated, and search results -- will all include links to the same
+    feed but through a different entry point.
+    """
+
+    def test_groups(
+        self,
+        entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture,
+        external_search_patch_fixture: ExternalSearchPatchFixture,
+    ):
+        data, db, session = (
+            entrypoint_link_insertion_fixture,
+            entrypoint_link_insertion_fixture.db,
+            entrypoint_link_insertion_fixture.db.session,
+        )
+
+        # When AcquisitionFeed.groups() generates a grouped
+        # feed, it will link to different entry points into the feed,
+        # assuming the WorkList has different entry points.
+        def run(wl=None, facets=None):
+            """Call groups() and see what add_entrypoint_links
+            was called with.
+            """
+            data.mock.called_with = None
+            search = MockExternalSearchIndex()
+            feed = OPDSAcquisitionFeed.groups(
+                session,
+                "title",
+                "url",
+                wl,
+                MockAnnotator(),
+                None,
+                facets,
+                search,
+            )
+            return data.mock.called_with
+
+        # This WorkList has no entry points, so the mock method is not
+        # even called.
+        assert None == run(data.no_eps)
+
+        # A WorkList with entry points does cause the mock method
+        # to be called.
+        facets = FeaturedFacets(
+            minimum_featured_quality=db.default_library().settings.minimum_featured_quality,
+            entrypoint=EbooksEntryPoint,
+        )
+        feed, make_link, entrypoints, selected = run(data.wl, facets)
+
+        # add_entrypoint_links was passed both possible entry points
+        # and the selected entry point.
+        assert data.wl.entrypoints == entrypoints
+        assert selected == EbooksEntryPoint
+
+        # The make_link function that was passed in calls
+        # TestAnnotator.groups_url() when passed an EntryPoint.
+        assert "http://groups/?entrypoint=Book" == make_link(EbooksEntryPoint)
+
+    def test_page(
+        self, entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture
+    ):
+        data, db, session = (
+            entrypoint_link_insertion_fixture,
+            entrypoint_link_insertion_fixture.db,
+            entrypoint_link_insertion_fixture.db.session,
+        )
+
+        # When AcquisitionFeed.page() generates the first page of a paginated
+        # list, it will link to different entry points into the list,
+        # assuming the WorkList has different entry points.
+
+        def run(wl=None, facets=None, pagination=None):
+            """Call page() and see what add_entrypoint_links
+            was called with.
+            """
+            data.mock.called_with = None
+            private = object()
+            OPDSAcquisitionFeed.page(
+                session,
+                "title",
+                "url",
+                wl,
+                data.annotator(),
+                facets,
+                pagination,
+                MockExternalSearchIndex(),
+            )
+
+            return data.mock.called_with
+
+        # The WorkList has no entry points, so the mock method is not
+        # even called.
+        assert None == run(data.no_eps)
+
+        # Let's give the WorkList two possible entry points, and choose one.
+        facets = Facets.default(db.default_library()).navigate(
+            entrypoint=EbooksEntryPoint
+        )
+        feed, make_link, entrypoints, selected = run(data.wl, facets)
+
+        # This time, add_entrypoint_links was called, and passed both
+        # possible entry points and the selected entry point.
+        assert data.wl.entrypoints == entrypoints
+        assert selected == EbooksEntryPoint
+
+        # The make_link function that was passed in calls
+        # TestAnnotator.feed_url() when passed an EntryPoint. The
+        # Facets object's other facet groups are propagated in this URL.
+        first_page_url = "http://wl/?available=all&collection=full&collectionName=All&distributor=All&entrypoint=Book&order=author"
+        assert first_page_url == make_link(EbooksEntryPoint)
+
+        # Pagination information is not propagated through entry point links
+        # -- you always start at the beginning of the list.
+        pagination = Pagination(offset=100)
+        feed, make_link, entrypoints, selected = run(data.wl, facets, pagination)
+        assert first_page_url == make_link(EbooksEntryPoint)
+
+    def test_search(
+        self, entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture
+    ):
+        data, db, session = (
+            entrypoint_link_insertion_fixture,
+            entrypoint_link_insertion_fixture.db,
+            entrypoint_link_insertion_fixture.db.session,
+        )
+
+        # When OPDSAcquisitionFeed.search() generates the first page of
+        # search results, it will link to related searches for different
+        # entry points, assuming the WorkList has different entry points.
+        def run(wl=None, facets=None, pagination=None):
+            """Call search() and see what add_entrypoint_links
+            was called with.
+            """
+            data.mock.called_with = None
+            OPDSAcquisitionFeed.search(
+                session,
+                "title",
+                "url",
+                wl,
+                None,
+                None,
+                pagination=pagination,
+                facets=facets,
+                annotator=data.annotator(),
+            )
+            return data.mock.called_with
+
+        # Mock search() so it never tries to return anything.
+        def mock_search(self, *args, **kwargs):
+            return []
+
+        data.no_eps.search = mock_search  # type: ignore[method-assign, assignment]
+        data.wl.search = mock_search  # type: ignore[method-assign, assignment]
+
+        # This WorkList has no entry points, so the mock method is not
+        # even called.
+        assert None == run(data.no_eps)
+
+        # The mock method is called for a WorkList that does have
+        # entry points.
+        facets = SearchFacets().navigate(entrypoint=EbooksEntryPoint)
+        assert isinstance(facets, SearchFacets)
+        feed, make_link, entrypoints, selected = run(data.wl, facets)
+
+        # Since the SearchFacets has more than one entry point,
+        # the EverythingEntryPoint is prepended to the list of possible
+        # entry points.
+        assert [
+            EverythingEntryPoint,
+            AudiobooksEntryPoint,
+            EbooksEntryPoint,
+        ] == entrypoints
+
+        # add_entrypoint_links was passed the three possible entry points
+        # and the selected entry point.
+        assert selected == EbooksEntryPoint
+
+        # The make_link function that was passed in calls
+        # TestAnnotator.search_url() when passed an EntryPoint.
+        first_page_url = "http://wl/?available=all&collection=full&entrypoint=Book&order=relevance&search_type=default"
+        assert first_page_url == make_link(EbooksEntryPoint)
+
+        # Pagination information is not propagated through entry point links
+        # -- you always start at the beginning of the list.
+        pagination = Pagination(offset=100)
+        feed, make_link, entrypoints, selected = run(data.wl, facets, pagination)
+        assert first_page_url == make_link(EbooksEntryPoint)

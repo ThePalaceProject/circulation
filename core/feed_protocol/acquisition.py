@@ -201,7 +201,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         pagination,
         search_engine,
     ):
-        works = lane.works(_db, facets, pagination, search_engine)
+        works = lane.works(
+            _db, facets=facets, pagination=pagination, search_engine=search_engine
+        )
         """A basic paged feed"""
         # "works" MAY be a generator, we want a list
         if not isinstance(works, list):
@@ -494,18 +496,21 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
         # A grouped feed may link to alternate entry points into
         # the data.
-        entrypoints = facets.selectable_entrypoints(worklist)
-        if entrypoints:
+        if facets:
+            entrypoints = facets.selectable_entrypoints(worklist)
+            if entrypoints:
 
-            def make_link(ep):
-                return annotator.groups_url(
-                    worklist, facets=facets.navigate(entrypoint=ep)
+                def make_link(ep):
+                    return annotator.groups_url(
+                        worklist, facets=facets.navigate(entrypoint=ep)
+                    )
+
+                cls.add_entrypoint_links(
+                    feed, make_link, entrypoints, facets.entrypoint
                 )
 
-            cls.add_entrypoint_links(feed, make_link, entrypoints, facets.entrypoint)
-
-        # A grouped feed may have breadcrumb links.
-        feed.add_breadcrumb_links(worklist, facets.entrypoint)
+            # A grouped feed may have breadcrumb links.
+            feed.add_breadcrumb_links(worklist, facets.entrypoint)
 
         return feed
 
