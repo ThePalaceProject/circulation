@@ -97,8 +97,8 @@ class FeedData(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
-    def add_link(self, href, rel, **kwargs):
-        self.links.append(Link(href=href, rel=rel, **kwargs))
+    def add_link(self, href, **kwargs):
+        self.links.append(Link(href=href, **kwargs))
 
     def add_metadata(self, name, feed_entry=None, **kwargs):
         if not feed_entry:

@@ -10,7 +10,6 @@ from core.feed_protocol.base import FeedProtocol
 from core.feed_protocol.serializer.opds import OPDS1Serializer
 from core.feed_protocol.types import FeedData, Link
 from core.lane import Lane
-from core.opds import AcquisitionFeed
 
 if TYPE_CHECKING:
     from core.lane import Facets, Pagination
@@ -29,6 +28,9 @@ class OPDSFeedProtocol(FeedProtocol):
 
     def serialize(self):
         return self._serializer.serialize_feed(self._feed)
+
+    def add_link(self, href, rel=None, **kwargs):
+        self._feed.add_link(href, rel=rel, **kwargs)
 
     ## OPDS1 specifics
     @classmethod
@@ -74,7 +76,7 @@ class OPDSFeedProtocol(FeedProtocol):
 
         url = url_generator(entrypoint)
         is_selected = entrypoint is selected_entrypoint
-        link = AcquisitionFeed.facet_link(url, display_title, group_name, is_selected)
+        link = cls.facet_link(url, display_title, group_name, is_selected)
 
         # Unlike a normal facet group, every link in this facet
         # group has an additional attribute marking it as an entry
@@ -99,9 +101,7 @@ class OPDSFeedProtocol(FeedProtocol):
         # Add the top-level link with rel='start'
         annotator = self.annotator
         top_level_title = annotator.top_level_title() or "Collection Home"
-        self._feed.links.append(
-            Link(rel="start", href=annotator.default_lane_url(), title=top_level_title)
-        )
+        self.add_link(annotator.default_lane_url(), rel="start", title=top_level_title)
 
         # Add a link to the direct parent with rel="up".
         #
@@ -119,7 +119,7 @@ class OPDSFeedProtocol(FeedProtocol):
 
         if parent:
             up_uri = annotator.lane_url(parent)
-            self._feed.links.append(Link(href=up_uri, rel="up", title=parent_title))
+            self.add_link(up_uri, rel="up", title=parent_title)
         self.add_breadcrumbs(lane, entrypoint=entrypoint)
 
         # Annotate the feed with a simplified:entryPoint for the

@@ -16,12 +16,13 @@ from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotat
 from core.feed_protocol.opds import OPDSFeedProtocol
 from core.feed_protocol.types import Link, WorkEntry
 from core.feed_protocol.utils import serializer_for
-from core.lane import FacetsWithEntryPoint, Pagination, SearchFacets
+from core.lane import Facets, FacetsWithEntryPoint, Pagination, SearchFacets
+from core.model.constants import LinkRelations
 from core.model.edition import Edition
 from core.model.licensing import LicensePool
 from core.model.patron import Hold, Loan
 from core.model.work import Work
-from core.opds import AcquisitionFeed, UnfulfillableWork
+from core.opds import UnfulfillableWork
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
@@ -54,9 +55,6 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         self._feed.add_link(href=self.url, rel="self")
         if annotate:
             self.annotator.annotate_feed(self._feed)
-
-    def add_link(self, href, rel=None, **kwargs):
-        self._feed.add_link(href, rel, **kwargs)
 
     def add_pagination_links(self, works, lane):
         """Add pagination links to the feed"""
@@ -104,13 +102,69 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
             )
 
         # Facet links
-        facet_links = AcquisitionFeed.facet_links(self.annotator, self._facets)
+        facet_links = self.facet_links(self.annotator, self._facets)
         for linkdata in facet_links:
             self._feed.links.append(Link(**linkdata))
+
+    @classmethod
+    def facet_links(cls, annotator, facets):
+        """Create links for this feed's navigational facet groups.
+
+        This does not create links for the entry point facet group,
+        because those links should only be present in certain
+        circumstances, and this method doesn't know if those
+        circumstances apply. You need to decide whether to call
+        add_entrypoint_links in addition to calling this method.
+        """
+        for group, value, new_facets, selected in facets.facet_groups:
+            url = annotator.facet_url(new_facets)
+            if not url:
+                continue
+            group_title = Facets.GROUP_DISPLAY_TITLES.get(group)
+            facet_title = Facets.FACET_DISPLAY_TITLES.get(value)
+            if not facet_title:
+                display_lambda = Facets.FACET_DISPLAY_TITLES_DYNAMIC.get(group)
+                facet_title = display_lambda(new_facets) if display_lambda else None
+            if not (group_title and facet_title):
+                # This facet group or facet, is not recognized by the
+                # system. It may be left over from an earlier version,
+                # or just weird junk data.
+                continue
+            yield cls.facet_link(url, str(facet_title), str(group_title), selected)
+
+    @classmethod
+    def facet_link(cls, href, title, facet_group_name, is_active):
+        """Build a set of attributes for a facet link.
+
+        :param href: Destination of the link.
+        :param title: Human-readable description of the facet.
+        :param facet_group_name: The facet group to which the facet belongs,
+           e.g. "Sort By".
+        :param is_active: True if this is the client's currently
+           selected facet.
+
+        :return: A dictionary of attributes, suitable for passing as
+            keyword arguments into OPDSFeed.add_link_to_feed.
+        """
+        args = dict(href=href, title=title)
+        args["rel"] = LinkRelations.FACET_REL
+        args["facetGroup"] = facet_group_name
+        if is_active:
+            args["activeFacet"] = "true"
+        return args
 
     def as_response(self, **kwargs) -> Response:
         """Serialize the feed using the serializer protocol"""
         return OPDSFeedResponse(self._serializer.serialize_feed(self._feed), **kwargs)
+
+    def as_error_response(self, **kwargs):
+        """Convert this feed into an OPDSFeedResponse that should be treated
+        by intermediaries as an error -- that is, treated as private
+        and not cached.
+        """
+        kwargs["max_age"] = 0
+        kwargs["private"] = True
+        return self.as_response(**kwargs)
 
     @classmethod
     def _create_entry(

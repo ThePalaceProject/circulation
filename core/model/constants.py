@@ -231,6 +231,7 @@ class LinkRelations:
     SHORT_DESCRIPTION = "http://librarysimplified.org/terms/rel/short-description"
     AUTHOR = "http://schema.org/author"
     ALTERNATE = "alternate"
+    FACET_REL = "http://opds-spec.org/facet"
 
     # The rel for a link we feed to clients for samples/previews.
     CLIENT_SAMPLE = "preview"

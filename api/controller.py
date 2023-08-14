@@ -958,7 +958,14 @@ class OPDSFeedController(CirculationManagerController):
             flask.request.library,
         )
         feed = OPDSAcquisitionFeed.page(
-            self._db, url, lane, annotator, facets, pagination, search_engine
+            self._db,
+            lane.display_name,
+            url,
+            lane,
+            annotator,
+            facets,
+            pagination,
+            search_engine,
         )
         return feed.as_response()
         # return feed_class.page(
