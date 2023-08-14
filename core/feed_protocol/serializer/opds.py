@@ -21,6 +21,8 @@ ATTRIBUTE_MAPPING = {
     "authorizationIdentifier": f"{{{OPDSFeed.SIMPLIFIED_NS}}}authorizationIdentifier",
     "rights": f"{{{OPDSFeed.DCTERMS_NS}}}rights",
     "ProviderName": f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName",
+    "facetGroup": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
+    "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
 }
 
 

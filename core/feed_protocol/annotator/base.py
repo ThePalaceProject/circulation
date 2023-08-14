@@ -10,7 +10,13 @@ from flask import url_for as flask_url_for
 from sqlalchemy.orm import Session, joinedload
 
 from core.classifier import Classifier
-from core.feed_protocol.types import FeedEntryType, Link, WorkEntry, WorkEntryData
+from core.feed_protocol.types import (
+    FeedData,
+    FeedEntryType,
+    Link,
+    WorkEntry,
+    WorkEntryData,
+)
 from core.model.classification import Subject
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource
@@ -383,6 +389,9 @@ class Annotator(OPDSAnnotator):
         computed.image_links = image_links
         computed.other_links = other_links
         entry.computed = computed
+
+    def annotate_feed(self, feed: FeedData):
+        pass
 
     @classmethod
     def active_licensepool_for(
