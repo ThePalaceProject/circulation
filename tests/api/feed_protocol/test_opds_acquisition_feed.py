@@ -1,6 +1,5 @@
 import datetime
 import logging
-import xml.etree.ElementTree as ET
 from collections import defaultdict
 from typing import Any, Callable, Generator, List, Type
 
@@ -390,7 +389,7 @@ class TestOPDSAcquisitionFeed:
         work = db.work(unlimited_access=True, with_license_pool=True)
         pool = work.active_license_pool()
         loan, _ = pool.loan_to(patron)
-        tags: List[ET.Element] = AcquisitionHelper.license_tags(pool, loan, None)
+        tags = AcquisitionHelper.license_tags(pool, loan, None)
 
         tag = tags["availability"]
         assert "since" in tag.dict()
@@ -435,6 +434,8 @@ class TestOPDSAcquisitionFeed:
             Annotator(db.default_library()),
         )
         assert isinstance(entry, WorkEntry)
+        assert entry.computed is not None
+        assert entry.computed.title is not None
 
         assert new_pool.presentation_edition.title != entry.computed.title.text
         assert original_pool.presentation_edition.title == entry.computed.title.text
@@ -446,6 +447,9 @@ class TestOPDSAcquisitionFeed:
         work.presentation_edition.issued = utc_now() - five_hundred_years
 
         entry = OPDSAcquisitionFeed.single_entry(work, Annotator(db.default_library()))
+        assert entry is not None
+        assert entry.computed is not None
+        assert entry.computed.issued is not None
 
         expected = str(work.presentation_edition.issued.date())
         assert expected == entry.computed.issued.text
@@ -455,8 +459,6 @@ class TestOPDSAcquisitionFeed:
     def test_entry_cache_adds_missing_drm_namespace(
         self, db: DatabaseTransactionFixture
     ):
-        session = db.session
-
         work = db.work(with_open_access_download=True)
 
         # This work's OPDS entry was created with a namespace map
@@ -475,7 +477,7 @@ class TestOPDSAcquisitionFeed:
 
         # The entry is retrieved from cache and the appropriate
         # namespace inserted.
-        entry = OPDSAcquisitionFeed.single_entry(session, work, AddDRMTagAnnotator)
+        entry = OPDSAcquisitionFeed.single_entry(work, AddDRMTagAnnotator)
         assert (
             '<entry xmlns:drm="http://librarysimplified.org/terms/drm"><foo>bar</foo><drm:licensor/></entry>'
             == str(entry)
@@ -547,14 +549,14 @@ class TestOPDSAcquisitionFeed:
 
         # If we pass in use_cache=True, the cached value is used as a basis
         # for the annotated entry.
-        entry = feed.create_entry(work, use_cache=True)
+        annotator = Annotator()
+        entry = feed.single_entry(work, annotator)
         assert tiny_entry == work.simple_opds_entry
 
         # We know what the final value looks like -- it's the cached entry
         # run through `Annotator.annotate_work_entry`.
         [pool] = work.license_pools
         xml = etree.fromstring(work.simple_opds_entry)
-        annotator = Annotator()
         annotator.annotate_work_entry(
             work, pool, pool.presentation_edition, pool.identifier, feed, xml
         )

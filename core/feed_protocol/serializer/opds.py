@@ -153,7 +153,7 @@ class OPDS1Serializer(OPDSFeed):
 
         for category in feed_entry.categories:
             element = OPDSFeed.category(
-                scheme=category.scheme, term=category.term, label=category.label
+                scheme=category.scheme, term=category.term, label=category.label  # type: ignore[attr-defined]
             )
             entry.append(element)
 
@@ -202,9 +202,9 @@ class OPDS1Serializer(OPDSFeed):
     def _serialize_author_tag(self, tag: str, author: Author):
         entry: etree._Element = self._tag(tag)
         attr = partial(self._attr_name, mapping=AUTHOR_MAPPING)
-        tag = partial(self._tag, mapping=AUTHOR_MAPPING)
+        _tag = partial(self._tag, mapping=AUTHOR_MAPPING)
         if author.name:
-            element = tag("name")
+            element = _tag("name")
             element.text = author.name
             entry.append(element)
         if author.role:
@@ -214,13 +214,13 @@ class OPDS1Serializer(OPDSFeed):
 
         # Verbose
         if author.sort_name:
-            entry.append(tag("sort_name", author.sort_name))
+            entry.append(_tag("sort_name", author.sort_name))
         if author.wikipedia_name:
-            entry.append(tag("wikipedia_name", author.wikipedia_name))
+            entry.append(_tag("wikipedia_name", author.wikipedia_name))
         if author.viaf:
-            entry.append(tag("sameas", author.viaf))
+            entry.append(_tag("sameas", author.viaf))
         if author.lc:
-            entry.append(tag("sameas", author.lc))
+            entry.append(_tag("sameas", author.lc))
         return entry
 
     def _serialize_acquistion_link(self, link: Link) -> etree._Element:

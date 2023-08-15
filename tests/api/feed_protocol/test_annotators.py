@@ -226,6 +226,7 @@ class TestAnnotators:
             work.presentation_edition.primary_identifier,
             VerboseAnnotator(db.default_library()),
         )
+        assert entry.computed is not None
 
         ratings = [
             (
@@ -262,6 +263,7 @@ class TestAnnotators:
         )._feed
 
         computed = feed.entries[0].computed
+        assert computed is not None
         assert computed.subtitle is not None
         assert computed.subtitle.text == "Return of the Jedi"
 
@@ -278,6 +280,7 @@ class TestAnnotators:
         )._feed
 
         computed = feed.entries[0].computed
+        assert computed is not None
         assert computed.subtitle == None
 
     def test_series(self, annotators_fixture: TestAnnotatorsFixture):
@@ -301,10 +304,11 @@ class TestAnnotators:
             Annotator(db.default_library()),
         )._feed
         computed = feed.entries[0].computed
+        assert computed is not None
 
         assert computed.series is not None
-        assert computed.series.name == work.presentation_edition.series
-        assert computed.series.position == str(
+        assert computed.series.name == work.presentation_edition.series  # type: ignore[attr-defined]
+        assert computed.series.position == str(  # type: ignore[attr-defined]
             work.presentation_edition.series_position
         )
 
@@ -321,9 +325,10 @@ class TestAnnotators:
             Annotator(db.default_library()),
         )._feed
         computed = feed.entries[0].computed
+        assert computed is not None
         assert computed.series is not None
-        assert computed.series.name == work.presentation_edition.series
-        assert computed.series.position == str(
+        assert computed.series.name == work.presentation_edition.series  # type: ignore[attr-defined]
+        assert computed.series.position == str(  # type: ignore[attr-defined]
             work.presentation_edition.series_position
         )
 
@@ -339,6 +344,7 @@ class TestAnnotators:
             Annotator(db.default_library()),
         )._feed
         computed = feed.entries[0].computed
+        assert computed is not None
         assert computed.series == None
 
     def test_samples(self, annotators_fixture: TestAnnotatorsFixture):

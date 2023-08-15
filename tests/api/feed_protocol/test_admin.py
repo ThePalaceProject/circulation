@@ -38,9 +38,10 @@ class TestOPDS:
         feed.generate_feed()
 
         [entry] = feed._feed.entries
+        assert entry.computed is not None
         assert len(entry.computed.ratings) == 2
-        assert 3 == float(entry.computed.ratings[1].ratingValue)
-        assert Measurement.RATING == entry.computed.ratings[1].additionalType
+        assert 3 == float(entry.computed.ratings[1].ratingValue)  # type: ignore[attr-defined]
+        assert Measurement.RATING == entry.computed.ratings[1].additionalType  # type: ignore[attr-defined]
 
     def test_feed_includes_refresh_link(self, db: DatabaseTransactionFixture):
         work = db.work(with_open_access_download=True)
@@ -58,6 +59,7 @@ class TestOPDS:
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
+        assert entry.computed is not None
         assert [] == [
             x
             for x in entry.computed.other_links
@@ -79,6 +81,7 @@ class TestOPDS:
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
+        assert entry.computed is not None
         [suppress_link] = [
             x
             for x in entry.computed.other_links
@@ -104,6 +107,7 @@ class TestOPDS:
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
+        assert entry.computed is not None
         [unsuppress_link] = [
             x
             for x in entry.computed.other_links
@@ -130,6 +134,7 @@ class TestOPDS:
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
+        assert entry.computed is not None
         [edit_link] = [x for x in entry.computed.other_links if x.rel == "edit"]
         assert lp.identifier.identifier in edit_link.href
 
@@ -147,6 +152,7 @@ class TestOPDS:
             AdminAnnotator(None, library),
         )
         [entry] = feed._feed.entries
+        assert entry.computed is not None
 
         # Since there's no storage integration, the change cover link isn't included.
         assert [] == [
@@ -183,6 +189,7 @@ class TestOPDS:
             AdminAnnotator(None, library),
         )
         [entry] = feed._feed.entries
+        assert entry.computed is not None
 
         [change_cover_link] = [
             x
