@@ -810,7 +810,7 @@ class TestLibraryAnnotator:
             MockExternalSearchIndex(),
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
-        assert [] == [l.link for l in entry.computed.authors if hasattr(l, "link")]
+        assert [] == [l.link for l in entry.computed.authors if l.link]
 
     def test_work_entry_includes_series_link(
         self, annotator_fixture: LibraryAnnotatorFixture
