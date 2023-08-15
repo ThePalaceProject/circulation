@@ -2050,7 +2050,7 @@ class JSONQuery(Query):
         "licensepools.availability_time": dict(path="licensepools", **_LONG_TYPE),
         "licensepools.collection_id": dict(path="licensepools", **_LONG_TYPE),
         "licensepools.data_source_id": dict(
-            path="licensepools", ops=[Operators.EQ], **_LONG_TYPE
+            path="licensepools", ops=[Operators.EQ, Operators.NEQ], **_LONG_TYPE
         ),
         "licensepools.licensed": dict(path="licensepools", **_BOOL_TYPE),
         "licensepools.medium": dict(path="licensepools"),
