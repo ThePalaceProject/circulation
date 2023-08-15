@@ -196,7 +196,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         title: str,
         url: str,
         lane: WorkList,
-        annotator: LibraryAnnotator,
+        annotator: Annotator,
         facets,
         pagination,
         search_engine,

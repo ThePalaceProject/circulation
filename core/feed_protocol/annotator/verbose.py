@@ -33,7 +33,7 @@ class VerboseAnnotator(Annotator):
             (None, work.rating),
             (Measurement.POPULARITY, work.popularity),
         ]:
-            if value:
+            if value and entry.computed:
                 entry.computed.ratings.append(cls.rating(type_uri, value))
 
     @classmethod

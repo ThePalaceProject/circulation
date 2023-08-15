@@ -38,7 +38,7 @@ class Link(FeedEntryType):
         kwargs["exclude_none"] = True
         return super().dict(**kwargs)
 
-    def link_attribs(self) -> dict:
+    def link_attribs(self) -> Dict:
         d = dict(href=self.href)
         for key in ["rel", "type"]:
             if (value := getattr(self, key, None)) is not None:
@@ -53,7 +53,6 @@ class Author(FeedEntryType):
     role: Optional[str]
     family_name: Optional[str]
     wikipedia_name: Optional[str]
-    viaf: Optional[str]
     lc: Optional[str]
     link: Optional[Link]
 
@@ -77,7 +76,7 @@ class WorkEntryData(BaseModel):
     imprint: Optional[FeedEntryType] = None
 
     authors: List[Author] = []
-    contributors: List[FeedEntryType] = []
+    contributors: List[Author] = []
     categories: List[FeedEntryType] = []
     ratings: List[FeedEntryType] = []
     distribution: Optional[FeedEntryType] = None
@@ -90,9 +89,9 @@ class WorkEntryData(BaseModel):
 
 class WorkEntry(FeedEntryType):
     work: Work
-    edition: Optional[Edition] = None
-    identifier: Optional[Identifier] = None
-    license_pool: Optional[LicensePool] = None
+    edition: Edition
+    identifier: Identifier
+    license_pool: LicensePool
     cached_entry: Optional[str] = None
 
     # Actual, computed feed data

@@ -10,8 +10,10 @@ class AdminAnnotator(LibraryAnnotator):
     def __init__(self, circulation, library, test_mode=False):
         super().__init__(circulation, None, library, test_mode=test_mode)
 
-    def annotate_work_entry(self, entry: WorkEntry):
+    def annotate_work_entry(self, entry: WorkEntry, updated=None):
         super().annotate_work_entry(entry)
+        if not entry.computed:
+            return
         VerboseAnnotator.add_ratings(entry)
 
         identifier = entry.identifier
@@ -20,7 +22,7 @@ class AdminAnnotator(LibraryAnnotator):
         # Find staff rating and add a tag for it.
         for measurement in identifier.measurements:
             if (
-                measurement.data_source.name == DataSource.LIBRARY_STAFF
+                measurement.data_source.name == DataSource.LIBRARY_STAFF  # type: ignore[attr-defined]
                 and measurement.is_most_recent
             ):
                 entry.computed.ratings.append(
