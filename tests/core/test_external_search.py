@@ -5426,9 +5426,41 @@ class TestJSONQuery:
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
         with pytest.raises(QueryParseException) as exc:
             q.search_query
-        assert "Operator 'gt' is not allowed for 'data_source'. Only use ['eq']" == str(
-            exc.value
+        assert (
+            "Operator 'gt' is not allowed for 'data_source'. Only use ['eq', 'neq']"
+            == str(exc.value)
         )
+
+    def test_allowed_operators_for_data_source(self, db: DatabaseTransactionFixture):
+        # If we're running this unit test alone, we must intialize the data first
+        CachedData.initialize(db.session)
+
+        gutenberg = (
+            db.session.query(DataSource)
+            .filter(DataSource.name == DataSource.GUTENBERG)
+            .first()
+        )
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "neq"))
+        assert q.search_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {
+                    "bool": {
+                        "must_not": [
+                            {"term": {"licensepools.data_source_id": gutenberg.id}}
+                        ]
+                    }
+                },
+            }
+        }
+
+        q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "eq"))
+        assert q.search_query.to_dict() == {
+            "nested": {
+                "path": "licensepools",
+                "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
+            }
+        }
 
     @pytest.mark.parametrize(
         "key,value,is_text",
