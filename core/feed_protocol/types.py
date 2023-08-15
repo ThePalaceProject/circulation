@@ -46,6 +46,18 @@ class Link(FeedEntryType):
         return d
 
 
+class Author(FeedEntryType):
+    name: Optional[str]
+    sort_name: Optional[str]
+    viaf: Optional[str]
+    role: Optional[str]
+    family_name: Optional[str]
+    wikipedia_name: Optional[str]
+    viaf: Optional[str]
+    lc: Optional[str]
+    link: Optional[Link]
+
+
 class WorkEntryData(BaseModel):
     """All the metadata possible for a work. This is not a FeedEntryType because we want strict control."""
 
@@ -64,9 +76,10 @@ class WorkEntryData(BaseModel):
     series: Optional[FeedEntryType] = None
     imprint: Optional[FeedEntryType] = None
 
-    authors: List[FeedEntryType] = []
+    authors: List[Author] = []
     contributors: List[FeedEntryType] = []
     categories: List[FeedEntryType] = []
+    ratings: List[FeedEntryType] = []
     distribution: Optional[FeedEntryType] = None
 
     # Links

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from core.classifier import Classifier
 from core.feed_protocol.types import (
+    Author,
     FeedData,
     FeedEntryType,
     Link,
@@ -40,7 +41,7 @@ class ToFeedEntry:
             for bibliographic information, including the list of
             Contributions.
         """
-        authors = {"author": [], "contributor": []}
+        authors = {"authors": [], "contributors": []}
         state = defaultdict(set)
         for contribution in edition.contributions:
             info = cls.contributor_tag(contribution, state)
@@ -49,15 +50,15 @@ class ToFeedEntry:
                 # need a tag.
                 continue
             key, tag = info
-            authors[key].append(tag)
+            authors[f"{key}s"].append(tag)
 
-        if authors["author"]:
+        if authors["authors"]:
             return authors
 
         # We have no author information, so we add empty <author> tag
         # to avoid the implication (per RFC 4287 4.2.1) that this book
         # was written by whoever wrote the OPDS feed.
-        authors["author"].append(FeedEntryType(name=""))
+        authors["authors"].append(Author(name=""))
         return authors
 
     @classmethod
@@ -98,7 +99,7 @@ class ToFeedEntry:
         properties = dict()
         if marc_role:
             properties["role"] = marc_role
-        entry = FeedEntryType(name=name, **properties)
+        entry = Author(name=name, **properties)
 
         # Record the fact that we credited this person with this role,
         # so that we don't do it again on a subsequent call.
@@ -116,6 +117,11 @@ class ToFeedEntry:
         if series_position != None:
             series_details["position"] = str(series_position)
         return FeedEntryType(**series_details)
+
+    @classmethod
+    def rating(cls, type_uri, value):
+        """Generate a schema:Rating tag for the given type and value."""
+        return FeedEntryType(ratingValue="%.4f" % value, additionalType=type_uri)
 
     @classmethod
     def samples(cls, edition: Edition) -> list[Hyperlink]:
@@ -231,7 +237,7 @@ class OPDSAnnotator:
         self.library = library
 
 
-class Annotator(OPDSAnnotator):
+class Annotator(OPDSAnnotator, ToFeedEntry):
     def annotate_work_entry(self, entry: WorkEntry, updated=None) -> None:
         if entry.computed:
             return
@@ -258,7 +264,7 @@ class Annotator(OPDSAnnotator):
                 image_type = "image/gif"
             image_links.append(Link(rel=rel, href=url, type=image_type))
 
-        samples = ToFeedEntry.samples(edition)
+        samples = self.samples(edition)
         for sample in samples:
             other_links.append(
                 Link(
@@ -268,7 +274,7 @@ class Annotator(OPDSAnnotator):
                 )
             )
 
-        content = ToFeedEntry.content(work)
+        content = self.content(work)
         if isinstance(content, bytes):
             content = content.decode("utf8")
 
@@ -285,21 +291,19 @@ class Annotator(OPDSAnnotator):
 
         # TODO: Is VerboseAnnotator used anywhere?
 
-        author_entries = ToFeedEntry.authors(edition)
-        computed.contributors = author_entries.get("contributor")
-        computed.authors = author_entries.get("author")
+        author_entries = self.authors(edition)
+        computed.contributors = author_entries.get("contributors")
+        computed.authors = author_entries.get("authors")
 
         if edition.series:
-            computed.series = ToFeedEntry.series(
-                edition.series, edition.series_position
-            )
+            computed.series = self.series(edition.series, edition.series_position)
 
         if content:
             computed.summary = FeedEntryType(text=content, type="html")
 
         computed.pwid = edition.permanent_work_id
 
-        categories_by_scheme = ToFeedEntry.categories(work)
+        categories_by_scheme = self.categories(work)
         category_tags = []
         for scheme, categories in list(categories_by_scheme.items()):
             for category in categories:

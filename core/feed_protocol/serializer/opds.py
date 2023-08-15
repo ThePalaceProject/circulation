@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from functools import partial
+
 from lxml import etree
 
-from core.feed_protocol.types import FeedData, FeedEntryType, Link, WorkEntryData
+from core.feed_protocol.types import (
+    Author,
+    FeedData,
+    FeedEntryType,
+    Link,
+    WorkEntryData,
+)
 from core.util.opds_writer import OPDSFeed
 
 TAG_MAPPING = {
@@ -25,12 +33,29 @@ ATTRIBUTE_MAPPING = {
     "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
 }
 
+AUTHOR_MAPPING = {
+    "name": f"{{{OPDSFeed.ATOM_NS}}}name",
+    "role": f"{{{OPDSFeed.OPF_NS}}}role",
+    "sort_name": f"{{{OPDSFeed.SIMPLIFIED_NS}}}sort_name",
+    "wikipedia_name": f"{{{OPDSFeed.SIMPLIFIED_NS}}}wikipedia_name",
+}
+
 
 class OPDS1Serializer(OPDSFeed):
     """An OPDS 1.2 Atom feed serializer"""
 
     def __init__(self):
         pass
+
+    def _tag(self, tag_name, mapping=None) -> etree._Element:
+        if not mapping:
+            mapping = TAG_MAPPING
+        return self.E._makeelement(mapping.get(tag_name, tag_name))
+
+    def _attr_name(self, attr_name, mapping=None) -> str:
+        if not mapping:
+            mapping = ATTRIBUTE_MAPPING
+        return mapping.get(attr_name, attr_name)
 
     def serialize_feed(self, feed: FeedData):
         # First we do metadata
@@ -132,6 +157,10 @@ class OPDS1Serializer(OPDSFeed):
             )
             entry.append(element)
 
+        for rating in feed_entry.ratings:
+            rating_tag = self._serialize_feed_entry("Rating", rating)
+            entry.append(rating_tag)
+
         for author in feed_entry.authors:
             entry.append(self._serialize_author_tag("author", author))
         for contributor in feed_entry.contributors:
@@ -170,17 +199,28 @@ class OPDS1Serializer(OPDSFeed):
                     )
         return entry
 
-    def _serialize_author_tag(self, tag: str, feed_entry: FeedEntryType):
-        entry: etree._Element = OPDSFeed.E(TAG_MAPPING.get(tag, tag))
-        name = getattr(feed_entry, "name", None)
-        if name:
-            element = OPDSFeed.E(f"{{{OPDSFeed.ATOM_NS}}}name")
-            element.text = name
+    def _serialize_author_tag(self, tag: str, author: Author):
+        entry: etree._Element = self._tag(tag)
+        attr = partial(self._attr_name, mapping=AUTHOR_MAPPING)
+        tag = partial(self._tag, mapping=AUTHOR_MAPPING)
+        if author.name:
+            element = tag("name")
+            element.text = author.name
             entry.append(element)
-        if role := getattr(feed_entry, "role", None):
-            entry.set(f"{{{OPDSFeed.OPF_NS}}}role", role)
-        if link := getattr(feed_entry, "link", None):
-            entry.append(self._serialize_feed_entry("link", link))
+        if author.role:
+            entry.set(attr("role"), author.role)
+        if author.link:
+            entry.append(self._serialize_feed_entry("link", author.link))
+
+        # Verbose
+        if author.sort_name:
+            entry.append(tag("sort_name", author.sort_name))
+        if author.wikipedia_name:
+            entry.append(tag("wikipedia_name", author.wikipedia_name))
+        if author.viaf:
+            entry.append(tag("sameas", author.viaf))
+        if author.lc:
+            entry.append(tag("sameas", author.lc))
         return entry
 
     def _serialize_acquistion_link(self, link: Link) -> etree._Element:

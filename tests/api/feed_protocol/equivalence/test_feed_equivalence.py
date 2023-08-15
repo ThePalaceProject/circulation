@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from lxml import etree
 
+from api.admin.opds import AdminAnnotator as OldAdminAnnotator
+from api.admin.opds import AdminFeed as OldAdminFeed
 from api.app import app
 from api.opds import LibraryAnnotator as OldLibraryAnnotator
 from api.opds import LibraryLoanAndHoldAnnotator as OldLibraryLoanAndHoldAnnotator
 from core.external_search import MockExternalSearchIndex
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
+from core.feed_protocol.admin import AdminFeed
+from core.feed_protocol.annotator.admin import AdminAnnotator
 from core.feed_protocol.annotator.circulation import LibraryAnnotator
 from core.lane import Facets, Pagination
 from core.model.work import Work
@@ -199,7 +203,7 @@ class TestFeedEquivalence:
 
             assert_equal_xmls(str(old_feed), str(new_feed))
 
-    def test_from_query_feed(self, annotator_fixture: LibraryAnnotator):
+    def test_from_query_feed(self, annotator_fixture: LibraryAnnotatorFixture):
         db = annotator_fixture.db
         lane = annotator_fixture.lane
         de_lane = db.lane(parent=lane, languages=["de"])
@@ -240,6 +244,29 @@ class TestFeedEquivalence:
                 Pagination(),
                 url_fn,
                 old_annotator,
+            )
+
+            assert_equal_xmls(str(old_feed), new_feed.serialize())
+
+
+class TestAdminAnnotator:
+    def test_suppressed(self, annotator_fixture: LibraryAnnotatorFixture):
+        db = annotator_fixture.db
+        library = db.default_library()
+
+        work1 = db.work(with_open_access_download=True)
+        pool = work1.active_license_pool()
+        pool.suppressed = True
+
+        with app.test_request_context("/"):
+            new_annotator = AdminAnnotator(None, library)
+            new_feed = AdminFeed.suppressed(
+                db.session, "", "http://verbose", new_annotator
+            )
+
+            old_annotator = OldAdminAnnotator(None, library)
+            old_feed = OldAdminFeed.suppressed(
+                db.session, "", "http://verbose", old_annotator
             )
 
             assert_equal_xmls(str(old_feed), new_feed.serialize())
