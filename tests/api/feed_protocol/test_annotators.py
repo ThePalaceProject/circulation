@@ -7,7 +7,7 @@ from core.model.datasource import DataSource
 from core.model.measurement import Measurement
 from core.model.resource import Hyperlink, Resource
 from core.model.work import Work
-from tests.core.test_opds import TestAnnotatorsFixture
+from tests.core.test_opds import TestAnnotatorsFixture, annotators_fixture  # noqa
 from tests.fixtures.database import DBStatementCounter  # noqa
 
 
