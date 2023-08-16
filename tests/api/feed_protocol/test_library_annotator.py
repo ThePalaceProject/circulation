@@ -111,7 +111,7 @@ class TestLibraryAnnotator:
 
         assert 9 == len(mock_feed.links)
 
-        mock_feed_links = sorted(mock_feed.links, key=lambda x: x.rel)
+        mock_feed_links = sorted(mock_feed.links, key=lambda x: x.rel or "")
         expected_links = [
             (link.href, link.type) for link in mock_feed_links if link.rel != "related"
         ]

@@ -233,8 +233,7 @@ def url_for(name, **kwargs):
 
 
 class OPDSAnnotator:
-    def __init__(self, library) -> None:
-        self.library = library
+    pass
 
 
 class Annotator(OPDSAnnotator, ToFeedEntry):

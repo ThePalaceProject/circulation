@@ -67,21 +67,22 @@ class AdminAnnotator(LibraryAnnotator):
         )
 
         # If there is a storage integration for the collection, changing the cover is allowed.
-        mirror = MirrorUploader.for_collection(
-            active_license_pool.collection, ExternalIntegrationLink.COVERS
-        )
-        if mirror:
-            entry.computed.other_links.append(
-                Link(
-                    href=self.url_for(
-                        "work_change_book_cover",
-                        identifier_type=identifier.type,
-                        identifier=identifier.identifier,
-                        _external=True,
-                    ),
-                    rel="http://librarysimplified.org/terms/rel/change_cover",
-                )
+        if active_license_pool:
+            mirror = MirrorUploader.for_collection(
+                active_license_pool.collection, ExternalIntegrationLink.COVERS
             )
+            if mirror:
+                entry.computed.other_links.append(
+                    Link(
+                        href=self.url_for(
+                            "work_change_book_cover",
+                            identifier_type=identifier.type,
+                            identifier=identifier.identifier,
+                            _external=True,
+                        ),
+                        rel="http://librarysimplified.org/terms/rel/change_cover",
+                    )
+                )
 
     def suppressed_url(self, pagination):
         kwargs = dict(list(pagination.items()))

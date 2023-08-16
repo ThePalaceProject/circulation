@@ -46,9 +46,9 @@ class OPDS2Serializer:
             for subject in data.categories:
                 subjects.append(
                     {
-                        "scheme": subject.scheme,
-                        "name": subject.label,
-                        "sortAs": subject.label,  # TODO: Change this!
+                        "scheme": subject.scheme,  # type: ignore[attr-defined]
+                        "name": subject.label,  # type: ignore[attr-defined]
+                        "sortAs": subject.label,  # type: ignore[attr-defined] # TODO: Change this!
                     }
                 )
             metadata["subject"] = subjects

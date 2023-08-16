@@ -43,7 +43,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         super().__init__(facets, pagination)
         for work in works:
             entry = self.single_entry(work, self.annotator)
-            if entry is not None:
+            if isinstance(entry, WorkEntry):
                 self._feed.entries.append(entry)
 
     def generate_feed(self, annotate=True):
@@ -354,7 +354,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
         # TODO: max_age and private response kwargs
-        if entry and entry.computed:
+        if isinstance(entry, WorkEntry) and entry.computed:
             serializer = serializer_for("OPDS1")()
             return serializer.to_string(serializer.serialize_work_entry(entry.computed))
 
@@ -366,7 +366,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         even_if_no_license_pool=False,
         force_create=False,
         use_cache=True,
-    ) -> Optional[WorkEntry]:
+    ) -> Optional[WorkEntry | OPDSMessage]:
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
         if isinstance(work, Edition):
