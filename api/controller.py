@@ -946,7 +946,7 @@ class OPDSFeedController(CirculationManagerController):
         )
 
         # annotator = self.manager.annotator(lane, facets=facets)
-        # max_age = flask.request.args.get("max_age")
+        max_age = flask.request.args.get("max_age")
         annotator = OPDSLibraryAnnotator(
             self.manager.circulation_apis[flask.request.library.id],
             lane,
@@ -962,7 +962,9 @@ class OPDSFeedController(CirculationManagerController):
             pagination,
             search_engine,
         )
-        return feed.as_response()
+        return feed.as_response(
+            max_age=int(max_age) if max_age else None,
+        )
         # return feed_class.page(
         #     _db=self._db,
         #     title=lane.display_name,

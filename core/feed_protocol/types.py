@@ -91,11 +91,11 @@ class WorkEntry(FeedEntryType):
     work: Work
     edition: Edition
     identifier: Identifier
-    license_pool: LicensePool
-    cached_entry: Optional[str] = None
+    license_pool: Optional[LicensePool]
+    cached_entry: Optional[str]
 
     # Actual, computed feed data
-    computed: Optional[WorkEntryData] = None
+    computed: Optional[WorkEntryData]
 
 
 class FeedData(BaseModel):
