@@ -364,8 +364,6 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         work: Work | Edition | None,
         annotator: Annotator,
         even_if_no_license_pool=False,
-        force_create=False,
-        use_cache=True,
     ) -> Optional[WorkEntry | OPDSMessage]:
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
@@ -622,3 +620,57 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
             )
 
         return feed
+
+
+class LookupAcquisitionFeed(OPDSAcquisitionFeed):
+    """Used when the user has requested a lookup of a specific identifier,
+    which may be different from the identifier used by the Work's
+    default LicensePool.
+    """
+
+    @classmethod
+    def single_entry(cls, work, annotator):
+        # This comes in as a tuple, which deviates from the typical behaviour
+        identifier, work = work
+
+        # Unless the client is asking for something impossible
+        # (e.g. the Identifier is not really associated with the
+        # Work), we should be able to use the cached OPDS entry for
+        # the Work.
+        if identifier.licensed_through:
+            active_licensepool = identifier.licensed_through[0]
+        else:
+            # Use the default active LicensePool for the Work.
+            active_licensepool = annotator.active_licensepool_for(work)
+
+        error_status = error_message = None
+        if not active_licensepool:
+            error_status = 404
+            error_message = "Identifier not found in collection"
+        elif identifier.work != work:
+            error_status = 500
+            error_message = (
+                'I tried to generate an OPDS entry for the identifier "%s" using a Work not associated with that identifier.'
+                % identifier.urn
+            )
+
+        if error_status:
+            return cls.error_message(identifier, error_status, error_message)
+
+        if active_licensepool:
+            edition = active_licensepool.presentation_edition
+        else:
+            edition = work.presentation_edition
+        try:
+            return cls._create_entry(
+                work, active_licensepool, edition, identifier, annotator
+            )
+        except UnfulfillableWork as e:
+            logging.info(
+                "Work %r is not fulfillable, refusing to create an <entry>.", work
+            )
+            return cls.error_message(
+                identifier,
+                403,
+                "I know about this work but can offer no way of fulfilling it.",
+            )

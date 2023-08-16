@@ -5,6 +5,7 @@ from typing import Any, Callable, Generator, List, Type
 
 import pytest
 from lxml import etree
+from sqlalchemy.orm import Session
 
 from core.entrypoint import (
     AudiobooksEntryPoint,
@@ -15,9 +16,10 @@ from core.entrypoint import (
 )
 from core.external_search import MockExternalSearchIndex
 from core.facets import FacetConstants
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
+from core.feed_protocol.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.annotator.circulation import AcquisitionHelper
+from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.types import FeedData, WorkEntry
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
@@ -1214,3 +1216,160 @@ class TestEntrypointLinkInsertion:
         pagination = Pagination(offset=100)
         feed, make_link, entrypoints, selected = run(data.wl, facets, pagination)
         assert first_page_url == make_link(EbooksEntryPoint)
+
+
+class TestLookupAcquisitionFeed:
+    @staticmethod
+    def _feed(session: Session, annotator=VerboseAnnotator, **kwargs):
+        """Helper method to create a LookupAcquisitionFeed."""
+        return LookupAcquisitionFeed(
+            "Feed Title",
+            "http://whatever.io",
+            [],
+            None,
+            None,
+            annotator(),
+            **kwargs,
+        )
+
+    @staticmethod
+    def _entry(
+        session: Session, identifier, work, annotator=VerboseAnnotator, **kwargs
+    ):
+        """Helper method to create an entry."""
+        feed = TestLookupAcquisitionFeed._feed(session, annotator, **kwargs)
+        entry = feed.single_entry((identifier, work), feed.annotator)
+        if isinstance(entry, OPDSMessage):
+            return feed, entry
+        return feed, entry
+
+    def test_create_entry_uses_specified_identifier(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Here's a Work with two LicensePools.
+        work = db.work(with_open_access_download=True)
+        original_pool = work.license_pools[0]
+        edition, new_pool = db.edition(
+            with_license_pool=True, with_open_access_download=True
+        )
+        work.license_pools.append(new_pool)
+
+        # We can generate two different OPDS entries for a single work
+        # depending on which identifier we look up.
+        ignore, e1 = self._entry(db.session, original_pool.identifier, work)
+        assert original_pool.identifier.urn == e1.computed.identifier
+        assert original_pool.presentation_edition.title == e1.computed.title.text
+        assert new_pool.identifier.urn != e1.computed.identifier
+        assert new_pool.presentation_edition.title != e1.computed.title.text
+
+        # Different identifier and pool = different information
+        i = new_pool.identifier
+        ignore, e2 = self._entry(db.session, i, work)
+        assert new_pool.identifier.urn == e2.computed.identifier
+        assert new_pool.presentation_edition.title == e2.computed.title.text
+        assert original_pool.presentation_edition.title != e2.computed.title.text
+        assert original_pool.identifier.urn != e2.computed.identifier
+
+    def test_error_on_mismatched_identifier(self, db: DatabaseTransactionFixture):
+        """We get an error if we try to make it look like an Identifier lookup
+        retrieved a Work that's not actually associated with that Identifier.
+        """
+        work = db.work(with_open_access_download=True)
+
+        # Here's an identifier not associated with any LicensePool or
+        # Work.
+        identifier = db.identifier()
+
+        # It doesn't make sense to make an OPDS feed out of that
+        # Identifier and a totally random Work.
+        expect_error = 'I tried to generate an OPDS entry for the identifier "%s" using a Work not associated with that identifier.'
+        feed, entry = self._entry(db.session, identifier, work)
+        assert entry == OPDSMessage(identifier.urn, 500, expect_error % identifier.urn)
+
+        # Even if the Identifier does have a Work, if the Works don't
+        # match, we get the same error.
+        edition, lp = db.edition(with_license_pool=True)
+        feed, entry = self._entry(db.session, lp.identifier, work)
+        assert entry == OPDSMessage(
+            lp.identifier.urn, 500, expect_error % lp.identifier.urn
+        )
+
+    def test_error_when_work_has_no_licensepool(self, db: DatabaseTransactionFixture):
+        """Under most circumstances, a Work must have at least one
+        LicensePool for a lookup to succeed.
+        """
+
+        # Here's a work with no LicensePools.
+        work = db.work(title="Hello, World!", with_license_pool=False)
+        identifier = work.presentation_edition.primary_identifier
+        feed, entry = self._entry(db.session, identifier, work)
+        # By default, a work is treated as 'not in the collection' if
+        # there is no LicensePool for it.
+        isinstance(entry, OPDSMessage)
+        assert 404 == entry.status_code
+        assert "Identifier not found in collection" == entry.message
+
+    def test_unfilfullable_work(self, db: DatabaseTransactionFixture):
+        work = db.work(with_open_access_download=True)
+        [pool] = work.license_pools
+        feed, entry = self._entry(
+            db.session, pool.identifier, work, MockUnfulfillableAnnotator
+        )
+        expect = OPDSAcquisitionFeed.error_message(
+            pool.identifier,
+            403,
+            "I know about this work but can offer no way of fulfilling it.",
+        )
+        assert expect == entry
+
+    @pytest.mark.skip
+    def test_create_entry_uses_cache_for_all_licensepools_for_work(
+        self, db: DatabaseTransactionFixture
+    ):
+        """A Work's cached OPDS entries can be reused by all LicensePools for
+        that Work, even LicensePools associated with different
+        identifiers.
+        """
+
+        class InstrumentableActiveLicensePool(VerboseAnnotator):
+            """A mock class that lets us control the output of
+            active_license_pool.
+            """
+
+            ACTIVE = None
+
+            @classmethod
+            def active_licensepool_for(cls, work):
+                return cls.ACTIVE
+
+        feed = self._feed(db.session, annotator=InstrumentableActiveLicensePool())
+
+        # Here are two completely different LicensePools for the same work.
+        work = db.work(with_license_pool=True)
+        work.verbose_opds_entry = "<entry>Cached</entry>"
+        [pool1] = work.license_pools
+
+        collection2 = db.collection()
+        edition2 = db.edition()
+        pool2 = db.licensepool(edition=edition2, collection=collection2)
+        identifier2 = pool2.identifier
+        work.license_pools.append(pool2)
+
+        # Regardless of which LicensePool the annotator thinks is
+        # 'active', passing in (identifier, work) will use the cache.
+        m = feed.create_entry
+        annotator = feed.annotator
+
+        annotator.ACTIVE = pool1
+        assert "Cached" == m((pool1.identifier, work)).text
+
+        annotator.ACTIVE = pool2
+        assert "Cached" == m((pool2.identifier, work)).text
+
+        # If for some reason we pass in an identifier that is not
+        # associated with the active license pool, we don't get
+        # anything.
+        work.license_pools = [pool1]
+        result = m((identifier2, work))
+        assert isinstance(result, OPDSMessage)
+        assert "using a Work not associated with that identifier." in result.message
