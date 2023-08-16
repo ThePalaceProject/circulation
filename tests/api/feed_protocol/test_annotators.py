@@ -221,7 +221,7 @@ class TestAnnotators:
         work.calculate_opds_entries(verbose=True)
         entry = OPDSAcquisitionFeed._create_entry(
             work,
-            None,
+            work.active_license_pool(),
             work.presentation_edition,
             work.presentation_edition.primary_identifier,
             VerboseAnnotator(db.default_library()),

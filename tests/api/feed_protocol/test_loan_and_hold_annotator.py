@@ -32,7 +32,13 @@ class TestLibraryLoanAndHoldAnnotator:
                 (work, annotator) + args,
                 kwargs,
             )
-            return WorkEntry(work=work, computed=WorkEntryData())
+            return WorkEntry(
+                work=work,
+                license_pool=work.active_license_pool(),
+                edition=work.presentation_edition,
+                identifier=work.presentation_edition.primary_identifier,
+                computed=WorkEntryData(),
+            )
 
         def test_annotator(item, fulfillment=None):
             # Call MockAnnotator.single_item_feed with certain arguments
