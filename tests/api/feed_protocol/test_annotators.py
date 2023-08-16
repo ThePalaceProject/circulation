@@ -224,7 +224,7 @@ class TestAnnotators:
             work.active_license_pool(),
             work.presentation_edition,
             work.presentation_edition.primary_identifier,
-            VerboseAnnotator(db.default_library()),
+            VerboseAnnotator(),
         )
         assert entry.computed is not None
 
@@ -259,7 +259,7 @@ class TestAnnotators:
             [work],
             None,
             None,
-            Annotator(db.default_library()),
+            Annotator(),
         )._feed
 
         computed = feed.entries[0].computed
@@ -276,7 +276,7 @@ class TestAnnotators:
             [work],
             None,
             None,
-            Annotator(db.default_library()),
+            Annotator(),
         )._feed
 
         computed = feed.entries[0].computed
@@ -301,7 +301,7 @@ class TestAnnotators:
             [work],
             None,
             None,
-            Annotator(db.default_library()),
+            Annotator(),
         )._feed
         computed = feed.entries[0].computed
         assert computed is not None
@@ -322,7 +322,7 @@ class TestAnnotators:
             [work],
             None,
             None,
-            Annotator(db.default_library()),
+            Annotator(),
         )._feed
         computed = feed.entries[0].computed
         assert computed is not None
@@ -341,7 +341,7 @@ class TestAnnotators:
             [work],
             None,
             None,
-            Annotator(db.default_library()),
+            Annotator(),
         )._feed
         computed = feed.entries[0].computed
         assert computed is not None

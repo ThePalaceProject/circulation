@@ -127,7 +127,7 @@ class TestOPDSAcquisitionFeed:
             "feed title",
             "url",
             wl,
-            Annotator(db.default_library()),
+            Annotator(),
             None,
             None,
             None,
@@ -147,7 +147,7 @@ class TestOPDSAcquisitionFeed:
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse containing the feed.
         feed = OPDSAcquisitionFeed(
-            "feed title", "http://url/", [], None, None, Annotator(db.default_library())
+            "feed title", "http://url/", [], None, None, Annotator()
         )
         feed.generate_feed()
 
@@ -171,7 +171,7 @@ class TestOPDSAcquisitionFeed:
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse that is to be treated as an error message.
         feed = OPDSAcquisitionFeed(
-            "feed title", "http://url/", [], None, None, Annotator(db.default_library())
+            "feed title", "http://url/", [], None, None, Annotator()
         )
         feed.generate_feed()
 
@@ -431,7 +431,7 @@ class TestOPDSAcquisitionFeed:
         private = object()
         entry = OPDSAcquisitionFeed.single_entry(
             work,
-            Annotator(db.default_library()),
+            Annotator(),
         )
         assert isinstance(entry, WorkEntry)
         assert entry.computed is not None
@@ -446,8 +446,8 @@ class TestOPDSAcquisitionFeed:
         five_hundred_years = datetime.timedelta(days=(500 * 365))
         work.presentation_edition.issued = utc_now() - five_hundred_years
 
-        entry = OPDSAcquisitionFeed.single_entry(work, Annotator(db.default_library()))
-        assert entry is not None
+        entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
+        assert isinstance(entry, WorkEntry)
         assert entry.computed is not None
         assert entry.computed.issued is not None
 
@@ -477,7 +477,8 @@ class TestOPDSAcquisitionFeed:
 
         # The entry is retrieved from cache and the appropriate
         # namespace inserted.
-        entry = OPDSAcquisitionFeed.single_entry(work, AddDRMTagAnnotator)
+        entry = OPDSAcquisitionFeed.single_entry(work, AddDRMTagAnnotator)  # type: ignore[arg-type]
+        assert isinstance(entry, WorkEntry)
         assert (
             '<entry xmlns:drm="http://librarysimplified.org/terms/drm"><foo>bar</foo><drm:licensor/></entry>'
             == str(entry)
@@ -491,7 +492,7 @@ class TestOPDSAcquisitionFeed:
         work = db.work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].identifier = None
         work.presentation_edition.primary_identifier = None
-        entry = OPDSAcquisitionFeed.single_entry(work, Annotator(db.default_library()))
+        entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
         assert entry == None
 
     def test_error_when_work_has_no_licensepool(self, db: DatabaseTransactionFixture):
@@ -506,7 +507,7 @@ class TestOPDSAcquisitionFeed:
             None,
             annotator=Annotator,
         )
-        entry = feed.single_entry(work, Annotator(db.default_library()))
+        entry = feed.single_entry(work, Annotator())
         expect = OPDSAcquisitionFeed.error_message(
             work.presentation_edition.primary_identifier,
             403,
@@ -525,7 +526,7 @@ class TestOPDSAcquisitionFeed:
         work = db.work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].presentation_edition = None
         work.presentation_edition = None
-        entry = OPDSAcquisitionFeed.single_entry(work, Annotator(db.default_library()))
+        entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
         assert None == entry
 
     # We do not use the cached entry at the moment
@@ -540,7 +541,7 @@ class TestOPDSAcquisitionFeed:
             [],
             None,
             None,
-            Annotator(db.default_library()),
+            Annotator(),
         )
 
         # Set the Work's cached OPDS entry to something that's clearly wrong.
@@ -597,7 +598,7 @@ class TestOPDSAcquisitionFeed:
 
         # But calling create_entry() doesn't raise an exception, it
         # just returns None.
-        entry = DoomedFeed.single_entry(work, Annotator(db.default_library()))
+        entry = DoomedFeed.single_entry(work, Annotator())
         assert entry == None
 
     def test_unfilfullable_work(self, db: DatabaseTransactionFixture):
@@ -606,7 +607,7 @@ class TestOPDSAcquisitionFeed:
         [pool] = work.license_pools
         response = OPDSAcquisitionFeed.single_entry(
             work,
-            MockUnfulfillableAnnotator(),
+            MockUnfulfillableAnnotator(),  # type: ignore[arg-type]
         )
         assert isinstance(response, OPDSMessage)
         expect = OPDSAcquisitionFeed.error_message(
@@ -883,9 +884,7 @@ class TestOPDSAcquisitionFeed:
         the top-level <feed> tag with information about the currently
         selected entrypoint, if any.
         """
-        feed = OPDSAcquisitionFeed(
-            "title", "url", [], None, None, Annotator(db.default_library())
-        )
+        feed = OPDSAcquisitionFeed("title", "url", [], None, None, Annotator())
 
         # No entry point, no annotation.
         feed.show_current_entrypoint(None)

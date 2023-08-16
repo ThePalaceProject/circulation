@@ -159,7 +159,7 @@ class TestFeedEquivalence:
 
         assert_equal_xmls(str(old_feed), new_feed.serialize().decode())
 
-    def test_search_feed(self, annotator_fixture: LibraryAnnotator):
+    def test_search_feed(self, annotator_fixture: LibraryAnnotatorFixture):
         db = annotator_fixture.db
         lane = annotator_fixture.lane
         de_lane = db.lane(parent=lane, languages=["de"])
