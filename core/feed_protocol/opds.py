@@ -10,6 +10,7 @@ from core.feed_protocol.base import FeedProtocol
 from core.feed_protocol.serializer.opds import OPDS1Serializer
 from core.feed_protocol.types import FeedData, Link
 from core.lane import Lane
+from core.util.flask_util import OPDSFeedResponse
 
 if TYPE_CHECKING:
     from core.lane import Facets, Pagination
@@ -18,9 +19,13 @@ if TYPE_CHECKING:
 class OPDSFeedProtocol(FeedProtocol):
     def __init__(
         self,
+        title,
+        url,
         facets: Facets,
         pagination: Pagination,
     ) -> None:
+        self.url = url
+        self.title = title
         self._facets = facets
         self._pagination = pagination
         self._feed = FeedData()
@@ -228,6 +233,6 @@ class OPDSFeedProtocol(FeedProtocol):
             return
         self._feed.entrypoint = entrypoint.URI
 
-    def as_response(self) -> Response:
-        feed = self.serialize()
-        return Response(feed, content_type="application/atom+xml;profile=opds-catalog")
+    def as_response(self, **kwargs) -> Response:
+        """Serialize the feed using the serializer protocol"""
+        return OPDSFeedResponse(self._serializer.serialize_feed(self._feed), **kwargs)
