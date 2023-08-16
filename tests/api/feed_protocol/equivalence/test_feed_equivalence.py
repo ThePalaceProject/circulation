@@ -12,13 +12,16 @@ from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.admin import AdminFeed
 from core.feed_protocol.annotator.admin import AdminAnnotator
 from core.feed_protocol.annotator.circulation import LibraryAnnotator
+from core.feed_protocol.navigation import NavigationFeed
 from core.lane import Facets, Pagination
 from core.model.work import Work
 from core.opds import AcquisitionFeed
+from core.opds import NavigationFeed as OldNavigationFeed
 from tests.api.feed_protocol.test_library_annotator import (  # noqa
     LibraryAnnotatorFixture,
     annotator_fixture,
 )
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 def format_tags(tags1, tags2):
@@ -270,3 +273,23 @@ class TestAdminAnnotator:
             )
 
             assert_equal_xmls(str(old_feed), new_feed.serialize())
+
+
+class TestNavigationFeed:
+    def test_feed(self, db: DatabaseTransactionFixture):
+        lane = db.lane()
+        child1 = db.lane(parent=lane)
+        child2 = db.lane(parent=lane)
+
+        with app.test_request_context("/"):
+            new_annotator = LibraryAnnotator(None, lane, db.default_library())
+            new_feed = NavigationFeed.navigation(
+                db.session, "Navigation", "http://navigation", lane, new_annotator
+            )
+
+            old_annotator = OldLibraryAnnotator(None, lane, db.default_library())
+            old_feed = OldNavigationFeed.navigation(
+                db.session, "Navigation", "http://navigation", lane, old_annotator
+            )
+
+            assert_equal_xmls(str(old_feed), str(new_feed.as_response()))

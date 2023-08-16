@@ -20,6 +20,7 @@ from core.feed_protocol.acquisition import LookupAcquisitionFeed, OPDSAcquisitio
 from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.annotator.circulation import AcquisitionHelper
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
+from core.feed_protocol.navigation import NavigationFeed
 from core.feed_protocol.types import FeedData, WorkEntry
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
@@ -1373,3 +1374,108 @@ class TestLookupAcquisitionFeed:
         result = m((identifier2, work))
         assert isinstance(result, OPDSMessage)
         assert "using a Work not associated with that identifier." in result.message
+
+
+class TestNavigationFeedFixture:
+    db: DatabaseTransactionFixture
+    fiction: Lane
+    fantasy: Lane
+    romance: Lane
+    contemporary_romance: Lane
+
+
+@pytest.fixture()
+def navigation_feed_fixture(
+    db,
+) -> TestNavigationFeedFixture:
+    data = TestNavigationFeedFixture()
+    data.db = db
+    data.fiction = db.lane("Fiction")
+    data.fantasy = db.lane("Fantasy", parent=data.fiction)
+    data.romance = db.lane("Romance", parent=data.fiction)
+    data.contemporary_romance = db.lane("Contemporary Romance", parent=data.romance)
+    return data
+
+
+class TestNavigationFeed:
+    def test_add_entry(self):
+        feed = NavigationFeed("title", "http://navigation", None, None, None, None)
+        feed.add_entry("http://example.com", "Example", "text/html")
+        [entry] = feed._feed.data_entries
+        assert "Example" == entry.title
+        [link] = entry.links
+        assert "http://example.com" == link.href
+        assert "text/html" == link.type
+        assert "subsection" == link.rel
+
+    def test_navigation_with_sublanes(
+        self, navigation_feed_fixture: TestNavigationFeedFixture
+    ):
+        data, db, session = (
+            navigation_feed_fixture,
+            navigation_feed_fixture.db,
+            navigation_feed_fixture.db.session,
+        )
+
+        private = object()
+        response = NavigationFeed.navigation(
+            session,
+            "Navigation",
+            "http://navigation",
+            data.fiction,
+            MockAnnotator(),
+        )
+
+        # The media type of this response is different than from the
+        # typical OPDSFeedResponse.
+        assert OPDSFeed.NAVIGATION_FEED_TYPE == response.as_response().content_type
+
+        feed = response._feed
+
+        assert "Navigation" == feed.metadata["title"].text
+        [self_link] = feed.links
+        assert "http://navigation" == self_link.href
+        assert "self" == self_link.rel
+        assert "http://navigation" == feed.metadata["id"].text
+        [fantasy, romance] = sorted(feed.data_entries, key=lambda x: x.title)
+
+        assert data.fantasy.display_name == fantasy.title
+        assert "http://%s/" % data.fantasy.id == fantasy.id
+        [fantasy_link] = fantasy.links
+        assert "http://%s/" % data.fantasy.id == fantasy_link.href
+        assert "subsection" == fantasy_link.rel
+        assert OPDSFeed.ACQUISITION_FEED_TYPE == fantasy_link.type
+
+        assert data.romance.display_name == romance.title
+        assert "http://navigation/%s" % data.romance.id == romance.id
+        [romance_link] = romance.links
+        assert "http://navigation/%s" % data.romance.id == romance_link.href
+        assert "subsection" == romance_link.rel
+        assert OPDSFeed.NAVIGATION_FEED_TYPE == romance_link.type
+
+    def test_navigation_without_sublanes(
+        self, navigation_feed_fixture: TestNavigationFeedFixture
+    ):
+        data, db, session = (
+            navigation_feed_fixture,
+            navigation_feed_fixture.db,
+            navigation_feed_fixture.db.session,
+        )
+
+        feed = NavigationFeed.navigation(
+            session, "Navigation", "http://navigation", data.fantasy, MockAnnotator()
+        )
+        parsed = feed._feed
+        assert "Navigation" == parsed.metadata["title"].text
+        [self_link] = parsed.links
+        assert "http://navigation" == self_link.href
+        assert "self" == self_link.rel
+        assert "http://navigation" == parsed.metadata["id"].text
+        [fantasy] = parsed.data_entries
+
+        assert "All " + data.fantasy.display_name == fantasy.title
+        assert "http://%s/" % data.fantasy.id == fantasy.id
+        [fantasy_link] = fantasy.links
+        assert "http://%s/" % data.fantasy.id == fantasy_link.href
+        assert "subsection" == fantasy_link.rel
+        assert OPDSFeed.ACQUISITION_FEED_TYPE == fantasy_link.type

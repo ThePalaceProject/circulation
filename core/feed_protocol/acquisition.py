@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from flask import Response
 from sqlalchemy.orm import Session
 
 from api.circulation import FulfillmentInfo
@@ -38,9 +37,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
     def __init__(self, title, url, works, facets, pagination, annotator) -> None:
         self.annotator = annotator
-        self.url = url
-        self.title = title
-        super().__init__(facets, pagination)
+        super().__init__(title, url, facets, pagination)
         for work in works:
             entry = self.single_entry(work, self.annotator)
             if isinstance(entry, WorkEntry):
@@ -152,10 +149,6 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         if is_active:
             args["activeFacet"] = "true"
         return args
-
-    def as_response(self, **kwargs) -> Response:
-        """Serialize the feed using the serializer protocol"""
-        return OPDSFeedResponse(self._serializer.serialize_feed(self._feed), **kwargs)
 
     def as_error_response(self, **kwargs):
         """Convert this feed into an OPDSFeedResponse that should be treated

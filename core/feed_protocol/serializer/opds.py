@@ -6,6 +6,7 @@ from lxml import etree
 
 from core.feed_protocol.types import (
     Author,
+    DataEntry,
     FeedData,
     FeedEntryType,
     Link,
@@ -47,10 +48,10 @@ class OPDS1Serializer(OPDSFeed):
     def __init__(self):
         pass
 
-    def _tag(self, tag_name, mapping=None) -> etree._Element:
+    def _tag(self, tag_name, *args, mapping=None) -> etree._Element:
         if not mapping:
             mapping = TAG_MAPPING
-        return self.E._makeelement(mapping.get(tag_name, tag_name))
+        return self.E(mapping.get(tag_name, tag_name), *args)
 
     def _attr_name(self, attr_name, mapping=None) -> str:
         if not mapping:
@@ -72,6 +73,10 @@ class OPDS1Serializer(OPDSFeed):
             if entry.computed:
                 element = self.serialize_work_entry(entry.computed)
                 serialized.append(element)
+
+        for data_entry in feed.data_entries:
+            element = self._serialize_data_entry(data_entry)
+            serialized.append(element)
 
         for link in feed.links:
             serialized.append(self._serialize_feed_entry("link", link))
@@ -236,6 +241,17 @@ class OPDS1Serializer(OPDSFeed):
             element.append(self._serialize_feed_entry("copies", copies))
         if availability := getattr(link, "availability", None):
             element.append(self._serialize_feed_entry("availability", availability))
+        return element
+
+    def _serialize_data_entry(self, entry: DataEntry):
+        element = self._tag("entry")
+        if entry.title:
+            element.append(self._tag("title", entry.title))
+        if entry.id:
+            element.append(self._tag("id", entry.id))
+        for link in entry.links:
+            link_ele = self._serialize_feed_entry("link", link)
+            element.append(link_ele)
         return element
 
     @classmethod

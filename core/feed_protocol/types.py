@@ -98,11 +98,25 @@ class WorkEntry(FeedEntryType):
     computed: Optional[WorkEntryData]
 
 
+class DataEntryTypes:
+    NAVIGATION = "navigation"
+
+
+class DataEntry(FeedEntryType):
+    """Other kinds of information, like entries of a navigation feed"""
+
+    type: str
+    title: Optional[str]
+    id: Optional[str]
+    links: List[List] = []
+
+
 class FeedData(BaseModel):
     links: List[Link] = []
     breadcrumbs: List[Link] = []
     facet_links: List[Link] = []
     entries: List[WorkEntry] = []
+    data_entries: List[DataEntry] = []
     metadata: Dict[str, FeedEntryType] = {}
     entrypoint: Optional[str] = None
 
