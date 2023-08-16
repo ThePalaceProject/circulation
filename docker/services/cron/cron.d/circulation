@@ -118,6 +118,6 @@ HOME=/var/www/circulation
 
 # Audiobook playtimes
 # Every 12 hours, but spaced after hour 8 to reduce job cluttering
-0 8/12 * * * root core/bin/run playtime_summation >> /var/log/cron.log 2>&1
+0 8,20 * * * root core/bin/run playtime_summation >> /var/log/cron.log 2>&1
 # On the 2nd of every month
 0 4 2 * * root core/bin/run playtime_reporting >> /var/log/cron.log 2>&1
