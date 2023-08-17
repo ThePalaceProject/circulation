@@ -25,6 +25,7 @@ from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import SortKeyPagination, mock_search_index
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.circulation import LibraryAnnotator
+from core.feed_protocol.types import WorkEntry
 from core.lane import Facets, FeaturedFacets
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
@@ -288,9 +289,9 @@ class TestWorkController:
                 work_fixture.identifier.type, work_fixture.identifier.identifier
             )
             annotator = LibraryAnnotator(None, None, work_fixture.db.default_library())
-            expect = OPDSAcquisitionFeed.entry_as_response(
-                OPDSAcquisitionFeed.single_entry(work_fixture.english_1, annotator)
-            )
+            feed = OPDSAcquisitionFeed.single_entry(work_fixture.english_1, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed)
 
         assert 200 == response.status_code
         assert expect.data == response.get_data()
@@ -331,9 +332,9 @@ class TestWorkController:
                 work_fixture.db.default_library(),
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = OPDSAcquisitionFeed.entry_as_response(
-                OPDSAcquisitionFeed.single_entry(work, annotator)
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed).data
 
             response = work_fixture.manager.work_controller.permalink(
                 identifier_type, identifier
@@ -379,9 +380,9 @@ class TestWorkController:
                 work_fixture.db.default_library(),
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = OPDSAcquisitionFeed.entry_as_response(
-                OPDSAcquisitionFeed.single_entry(work, annotator)
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed).data
 
             response = work_fixture.manager.work_controller.permalink(
                 identifier_type, identifier
@@ -472,9 +473,9 @@ class TestWorkController:
                 work_fixture.db.default_library(),
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = OPDSAcquisitionFeed.entry_as_response(
-                OPDSAcquisitionFeed.single_entry(work, annotator)
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed).data
 
             response = work_fixture.manager.work_controller.permalink(
                 identifier_type, identifier

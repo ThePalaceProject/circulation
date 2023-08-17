@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from flask import Response
@@ -41,6 +42,9 @@ class OPDSFeedProtocol(FeedProtocol):
 
     @classmethod
     def entry_as_response(cls, entry: WorkEntry, **response_kwargs):
+        if not entry.computed:
+            logging.getLogger().error(f"Entry data has not been generated for {entry}")
+            raise ValueError(f"Entry data has not been generated")
         serializer = OPDS1Serializer()
         return OPDSEntryResponse(
             response=serializer.serialize_work_entry(entry.computed), **response_kwargs
