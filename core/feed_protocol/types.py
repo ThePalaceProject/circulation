@@ -108,7 +108,7 @@ class DataEntry(FeedEntryType):
     type: str
     title: Optional[str]
     id: Optional[str]
-    links: List[List] = []
+    links: List[Link] = []
 
 
 class FeedData(BaseModel):

@@ -73,7 +73,7 @@ class NavigationFeed(OPDSFeedProtocol):
         entry.links.append(Link(rel="subsection", href=url, type=type))
         self._feed.data_entries.append(entry)
 
-    def as_response(self) -> Response:
-        response = super().as_response()
+    def as_response(self, **kwargs) -> Response:
+        response = super().as_response(**kwargs)
         response.content_type = OPDSFeed.NAVIGATION_FEED_TYPE
         return response
