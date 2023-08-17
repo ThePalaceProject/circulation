@@ -23,7 +23,7 @@ class AdminFeed(OPDSAcquisitionFeed):
         pools = pagination.modify_database_query(_db, q).all()
 
         works = [pool.work for pool in pools]
-        feed = cls(title, url, works, None, pagination, annotator)
+        feed = cls(title, url, works, annotator, pagination=pagination)
         feed.generate_feed()
 
         # Render a 'start' link

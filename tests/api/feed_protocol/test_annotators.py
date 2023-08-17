@@ -257,8 +257,6 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            None,
-            None,
             Annotator(),
         )._feed
 
@@ -274,8 +272,6 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            None,
-            None,
             Annotator(),
         )._feed
 
@@ -299,8 +295,6 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            None,
-            None,
             Annotator(),
         )._feed
         computed = feed.entries[0].computed
@@ -320,8 +314,6 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            None,
-            None,
             Annotator(),
         )._feed
         computed = feed.entries[0].computed
@@ -339,8 +331,6 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            None,
-            None,
             Annotator(),
         )._feed
         computed = feed.entries[0].computed

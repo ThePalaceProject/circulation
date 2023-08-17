@@ -639,7 +639,7 @@ class TestLibraryAnnotator:
                 test_mode=True,
                 library_identifies_patrons=auth,
             )
-            feed = OPDSAcquisitionFeed("test", "url", [], object(), object(), annotator)
+            feed = OPDSAcquisitionFeed("test", "url", [], annotator)
             annotator.annotate_feed(feed._feed)
             linksets.append([x.rel for x in feed._feed.links])
 
@@ -670,14 +670,14 @@ class TestLibraryAnnotator:
             "url",
             "test",
             works,
-            FacetsWithEntryPoint(),
-            Pagination.default(),
             LibraryAnnotator(
                 None,
                 lane,
                 annotator_fixture.db.default_library(),
                 **kwargs,
             ),
+            facets=FacetsWithEntryPoint(),
+            pagination=Pagination.default(),
         )
         feed.generate_feed()
         return feed._feed
@@ -1473,7 +1473,7 @@ class TestLibraryAnnotator:
             # Create an AcquisitionFeed is using the given Annotator.
             # extract its links and return a dictionary that maps link
             # relations to URLs.
-            feed = OPDSAcquisitionFeed("test", "url", [], object(), object(), annotator)
+            feed = OPDSAcquisitionFeed("test", "url", [], annotator)
             annotator.annotate_feed(feed._feed)
             links = feed._feed.links
 
@@ -1530,7 +1530,6 @@ class TestLibraryAnnotator:
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library()
         )
-        feed = OPDSAcquisitionFeed("test", "url", [], object(), object(), annotator)
 
         patron = annotator_fixture.db.patron()
 
@@ -1728,7 +1727,6 @@ class TestLibraryAnnotator:
         annotator = LibraryLoanAndHoldAnnotator(
             None, None, annotator_fixture.db.default_library()
         )
-        feed = OPDSAcquisitionFeed("url", "test", [], None, None, annotator)
 
         # This book has two delivery mechanisms
         work = annotator_fixture.db.work(with_license_pool=True)

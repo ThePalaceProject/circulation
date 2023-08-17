@@ -31,8 +31,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, db.default_library()),
         )
         feed.generate_feed()
@@ -54,8 +52,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
@@ -76,8 +72,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
@@ -102,8 +96,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
@@ -129,8 +121,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, db.default_library()),
         )
         [entry] = feed._feed.entries
@@ -147,8 +137,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, library),
         )
         [entry] = feed._feed.entries
@@ -184,8 +172,6 @@ class TestOPDS:
             "test",
             "url",
             [work],
-            None,
-            None,
             AdminAnnotator(None, library),
         )
         [entry] = feed._feed.entries
