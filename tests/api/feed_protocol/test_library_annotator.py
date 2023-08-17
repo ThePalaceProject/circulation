@@ -1233,7 +1233,7 @@ class TestLibraryAnnotator:
         )
 
         feed_obj = OPDSAcquisitionFeed.single_entry_loans_feed(
-            annotator_fixture.db.session, circulation, pool, annotator
+            circulation, pool, annotator
         )
         raw = str(feed_obj)
         entries = feedparser.parse(raw)["entries"]
@@ -1263,7 +1263,7 @@ class TestLibraryAnnotator:
 
         annotator = LibraryLoanAndHoldAnnotator(circulation, None, circulation.library)
         feed_obj = OPDSAcquisitionFeed.single_entry_loans_feed(
-            annotator_fixture.db.session, circulation, loan, annotator
+            circulation, loan, annotator
         )
         raw = str(feed_obj)
 
@@ -1316,7 +1316,6 @@ class TestLibraryAnnotator:
 
         annotator = LibraryLoanAndHoldAnnotator(circulation, None, circulation.library)
         feed_obj = OPDSAcquisitionFeed.single_entry_loans_feed(
-            annotator_fixture.db.session,
             circulation,
             loan,
             annotator,
@@ -1379,10 +1378,10 @@ class TestLibraryAnnotator:
 
         annotator = LibraryLoanAndHoldAnnotator(None, None, patron.library)
         feed_obj = OPDSAcquisitionFeed.single_entry_loans_feed(
-            annotator_fixture.db.session, None, loan, annotator, fulfillment=fulfillment
+            None, loan, annotator, fulfillment=fulfillment
         )
 
-        entries = feedparser.parse(feed_obj)["entries"]
+        entries = feedparser.parse(str(feed_obj))["entries"]
         assert 1 == len(entries)
 
         links = entries[0]["links"]

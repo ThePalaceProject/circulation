@@ -7,8 +7,8 @@ from core.model.configuration import ExternalIntegrationLink
 
 
 class AdminAnnotator(LibraryAnnotator):
-    def __init__(self, circulation, library, test_mode=False):
-        super().__init__(circulation, None, library, test_mode=test_mode)
+    def __init__(self, circulation, library):
+        super().__init__(circulation, None, library)
 
     def annotate_work_entry(self, entry: WorkEntry, updated=None):
         super().annotate_work_entry(entry)

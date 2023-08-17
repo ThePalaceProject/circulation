@@ -24,6 +24,7 @@ from api.admin.problem_details import (
 from api.controller import CirculationManagerController
 from api.problem_details import CANNOT_DELETE_SHARED_LIST
 from core.app_server import load_pagination_from_request
+from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.lane import Lane, WorkList
 from core.model import (
     Collection,
@@ -36,10 +37,8 @@ from core.model import (
     create,
     get_one,
 )
-from core.opds import AcquisitionFeed
 from core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWED
 from core.query.customlist import CustomListQueries
-from core.util.flask_util import OPDSFeedResponse
 from core.util.problem_detail import ProblemDetail
 
 
@@ -351,12 +350,11 @@ class CustomListsController(
 
             annotator = self.manager.annotator(worklist)
             url_fn = self.url_for_custom_list(library, list)
-            feed = AcquisitionFeed.from_query(
+            feed = OPDSAcquisitionFeed.from_query(
                 query, self._db, list.name, url, pagination, url_fn, annotator
             )
-            annotator.annotate_feed(feed, worklist)
-
-            return OPDSFeedResponse(str(feed), max_age=0)
+            annotator.annotate_feed(feed)
+            return feed.as_response(max_age=0)
 
         elif flask.request.method == "POST":
             ctx: Context = flask.request.context.body  # type: ignore

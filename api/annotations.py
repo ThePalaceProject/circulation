@@ -1,9 +1,9 @@
 import json
 import os
 
+from flask import url_for
 from pyld import jsonld
 
-from core.app_server import url_for
 from core.model import Annotation, Identifier
 from core.util.datetime_helpers import utc_now
 
