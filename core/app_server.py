@@ -22,7 +22,6 @@ from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
 from .problem_details import *
-from .util.flask_util import OPDSFeedResponse
 from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
 
@@ -348,7 +347,7 @@ class URNLookupController:
             annotator,
             precomposed_entries=handler.precomposed_entries,
         )
-        return OPDSFeedResponse(str(opds_feed))
+        return opds_feed.as_response()
 
 
 class URNLookupHandler:

@@ -22,10 +22,10 @@ from core.app_server import (
 )
 from core.config import Configuration
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
+from core.feed_protocol.annotator.base import Annotator
 from core.lane import Facets, Pagination, SearchFacets, WorkList
 from core.log import LogConfiguration
 from core.model import ConfigurationSetting, Identifier
-from core.opds import MockAnnotator
 from core.problem_details import INVALID_INPUT, INVALID_URN
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -265,7 +265,7 @@ class TestURNLookupController:
 
         work = data.transaction.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
-        annotator = MockAnnotator()
+        annotator = Annotator()
         # NOTE: We run this test twice to verify that the controller
         # doesn't keep any state between requests. At one point there
         # was a bug which would have caused a book to show up twice on
@@ -311,7 +311,7 @@ class TestURNLookupController:
         work = data.transaction.work(with_license_pool=True)
         work.license_pools[0].open_access = False
         identifier = work.license_pools[0].identifier
-        annotator = MockAnnotator()
+        annotator = Annotator()
         with data.app.test_request_context("/?urn=%s" % identifier.urn):
             response = data.controller.permalink(identifier.urn, annotator)
 
