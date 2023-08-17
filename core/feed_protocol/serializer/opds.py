@@ -12,7 +12,7 @@ from core.feed_protocol.types import (
     Link,
     WorkEntryData,
 )
-from core.util.opds_writer import OPDSFeed
+from core.util.opds_writer import OPDSFeed, OPDSMessage
 
 TAG_MAPPING = {
     "indirectAcquisition": f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition",
@@ -58,7 +58,7 @@ class OPDS1Serializer(OPDSFeed):
             mapping = ATTRIBUTE_MAPPING
         return mapping.get(attr_name, attr_name)
 
-    def serialize_feed(self, feed: FeedData):
+    def serialize_feed(self, feed: FeedData, precomposed_entries=None):
         # First we do metadata
         serialized = self.E.feed()
 
@@ -77,6 +77,11 @@ class OPDS1Serializer(OPDSFeed):
         for data_entry in feed.data_entries:
             element = self._serialize_data_entry(data_entry)
             serialized.append(element)
+
+        if precomposed_entries:
+            for precomposed in precomposed_entries:
+                if isinstance(precomposed, OPDSMessage):
+                    serialized.append(precomposed.tag)
 
         for link in feed.links:
             serialized.append(self._serialize_feed_entry("link", link))

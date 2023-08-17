@@ -52,7 +52,6 @@ class TestLibraryLoanAndHoldAnnotator:
                 OPDSAcquisitionFeed, "single_entry", new=mock_single_entry
             ):
                 result = OPDSAcquisitionFeed.single_entry_loans_feed(
-                    db.session,
                     MagicMock(),
                     item,
                     annotator,
@@ -130,7 +129,6 @@ class TestLibraryLoanAndHoldAnnotator:
         loan = Loan()
         loan.patron = db.patron()
         not_found_result = OPDSAcquisitionFeed.single_entry_loans_feed(
-            db.session,
             mock,
             loan,
             annotator,
@@ -146,7 +144,6 @@ class TestLibraryLoanAndHoldAnnotator:
         db.session.commit()
         assert (
             OPDSAcquisitionFeed.single_entry_loans_feed(
-                db.session,
                 mock,
                 pool,
                 annotator,
@@ -159,7 +156,6 @@ class TestLibraryLoanAndHoldAnnotator:
         db.session.commit()
         assert (
             OPDSAcquisitionFeed.single_entry_loans_feed(
-                db.session,
                 mock,
                 pool,
                 annotator,

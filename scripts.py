@@ -33,6 +33,7 @@ from api.opds_for_distributors import (
 from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
 from core.external_search import ExternalSearchIndex
+from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.lane import Facets, FeaturedFacets, Lane, Pagination
 from core.log import LogConfiguration
 from core.marc import MARCExporter
@@ -70,7 +71,6 @@ from core.model import (
     pg_advisory_lock,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.opds import AcquisitionFeed
 from core.scripts import (
     CollectionType,
     IdentifierInputScript,
@@ -499,17 +499,17 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
         library = lane.get_library(self._db)
         annotator = self.app.manager.annotator(lane, facets=facets)
         url = annotator.feed_url(lane, facets=facets, pagination=pagination)
-        feed_class = feed_class or AcquisitionFeed
+        feed_class = feed_class or OPDSAcquisitionFeed
         return feed_class.page(
             _db=self._db,
             title=title,
             url=url,
             worklist=lane,
             annotator=annotator,
-            facets=facets,
             pagination=pagination,
-            max_age=0,
-        )
+            facets=facets,
+            search_engine=None,
+        ).as_response(max_age=0)
 
 
 class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
@@ -528,7 +528,7 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
         title = lane.display_name
         annotator = self.app.manager.annotator(lane, facets=facets)
         url = annotator.groups_url(lane, facets)
-        feed_class = feed_class or AcquisitionFeed
+        feed_class = feed_class or OPDSAcquisitionFeed
 
         # Since grouped feeds are only cached for lanes that have sublanes,
         # there's no need to consider the case of a lane with no sublanes,
@@ -539,9 +539,10 @@ class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
             url=url,
             worklist=lane,
             annotator=annotator,
-            max_age=0,
+            pagination=None,
             facets=facets,
-        )
+            search_engine=None,
+        ).as_response(max_age=0)
 
     def facets(self, lane):
         """Generate a Facets object for each of the library's enabled

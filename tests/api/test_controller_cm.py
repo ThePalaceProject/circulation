@@ -4,9 +4,12 @@ from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
-from api.opds import CirculationManagerAnnotator, LibraryAnnotator
 from api.problem_details import *
 from core.external_search import MockExternalSearchIndex
+from core.feed_protocol.annotator.circulation import (
+    CirculationManagerAnnotator,
+    LibraryAnnotator,
+)
 from core.lane import Facets, WorkList
 from core.model import Admin, CachedFeed, ConfigurationSetting, create
 from core.model.discovery_service_registration import DiscoveryServiceRegistration

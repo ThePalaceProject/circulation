@@ -16,7 +16,6 @@ from core.feed_protocol.annotator.circulation import LibraryAnnotator
 from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed_protocol.opds import OPDSFeedProtocol
 from core.feed_protocol.types import Link, WorkEntry
-from core.feed_protocol.utils import serializer_for
 from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, SearchFacets
 from core.model.constants import LinkRelations
 from core.model.edition import Edition
@@ -38,12 +37,19 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     It is simply responsible for creating different types of feeds."""
 
     def __init__(
-        self, title, url, works, annotator, facets=None, pagination=None
+        self,
+        title,
+        url,
+        works,
+        annotator,
+        facets=None,
+        pagination=None,
+        precomposed_entries=[],
     ) -> None:
         self.annotator = annotator
         self._facets = facets
         self._pagination = pagination
-        super().__init__(title, url)
+        super().__init__(title, url, precomposed_entries=precomposed_entries)
         for work in works:
             entry = self.single_entry(work, self.annotator)
             if isinstance(entry, WorkEntry):
@@ -390,13 +396,13 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         _db: Session,
         title: str,
         url: str,
-        lane: WorkList,
+        worklist: WorkList,
         annotator: Annotator,
         facets,
         pagination,
         search_engine,
     ):
-        works = lane.works(
+        works = worklist.works(
             _db, facets=facets, pagination=pagination, search_engine=search_engine
         )
         """A basic paged feed"""
@@ -409,11 +415,11 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         )
 
         feed.generate_feed()
-        feed.add_pagination_links(works, lane)
-        feed.add_facet_links(lane)
+        feed.add_pagination_links(works, worklist)
+        feed.add_facet_links(worklist)
 
         if isinstance(facets, FacetsWithEntryPoint):
-            feed.add_breadcrumb_links(lane, facets.entrypoint)
+            feed.add_breadcrumb_links(worklist, facets.entrypoint)
 
         return feed
 
@@ -475,11 +481,11 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     @classmethod
     def single_entry_loans_feed(
         cls,
-        _db: Session,
         circulation: Any,
         item: LicensePool | Loan,
-        annotator: LibraryAnnotator,
+        annotator: LibraryAnnotator | None = None,
         fulfillment: FulfillmentInfo | None = None,
+        **response_kwargs,
     ):
         """A single entry as a standalone feed specific to a patron"""
         if not item:
@@ -497,6 +503,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
                     Loan, Hold, LicensePool
                 )
             )
+
+        if not annotator:
+            annotator = LibraryLoanAndHoldAnnotator(circulation, None, library)
 
         log = logging.getLogger(cls.__name__)
 
@@ -549,8 +558,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
         # TODO: max_age and private response kwargs
         if isinstance(entry, WorkEntry) and entry.computed:
-            serializer = serializer_for("OPDS1")()
-            return serializer.to_string(serializer.serialize_work_entry(entry.computed))
+            return cls.entry_as_response(entry, **response_kwargs)
 
     @classmethod
     def single_entry(
@@ -626,9 +634,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         url,
         worklist,
         annotator,
-        pagination,
-        facets,
-        search_engine,
+        pagination=None,
+        facets=None,
+        search_engine=None,
         search_debug=False,
     ):
         """Internal method called by groups() when a grouped feed

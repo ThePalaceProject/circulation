@@ -12,10 +12,11 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, ImageDraw, ImageFont
 
-from api.admin.opds import AdminAnnotator
 from api.admin.problem_details import *
 from api.admin.validator import Validator
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
+from core.feed_protocol.acquisition import OPDSAcquisitionFeed
+from core.feed_protocol.annotator.admin import AdminAnnotator
 from core.lane import Lane
 from core.metadata_layer import LinkData, Metadata, ReplacementPolicy
 from core.mirror import MirrorUploader
@@ -37,7 +38,6 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.configuration import ExternalIntegrationLink
-from core.opds import AcquisitionFeed
 from core.util import LanguageCodes
 from core.util.datetime_helpers import strptime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
@@ -68,7 +68,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # single_entry returns an OPDSEntryResponse that will not be
         # cached, which is perfect. We want the admin interface
         # to update immediately when an admin makes a change.
-        return AcquisitionFeed.single_entry(self._db, work, annotator)
+        return OPDSAcquisitionFeed.entry_as_response(
+            OPDSAcquisitionFeed.single_entry(work, annotator)
+        )
 
     def roles(self):
         """Return a mapping from MARC codes to contributor roles."""
