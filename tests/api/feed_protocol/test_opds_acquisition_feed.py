@@ -149,9 +149,7 @@ class TestOPDSAcquisitionFeed:
 
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse containing the feed.
-        feed = OPDSAcquisitionFeed(
-            "feed title", "http://url/", [], None, None, Annotator()
-        )
+        feed = OPDSAcquisitionFeed("feed title", "http://url/", [], Annotator())
         feed.generate_feed()
 
         # Some other piece of code set expectations for how this feed should
@@ -173,9 +171,7 @@ class TestOPDSAcquisitionFeed:
 
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse that is to be treated as an error message.
-        feed = OPDSAcquisitionFeed(
-            "feed title", "http://url/", [], None, None, Annotator()
-        )
+        feed = OPDSAcquisitionFeed("feed title", "http://url/", [], Annotator())
         feed.generate_feed()
 
         # Some other piece of code set expectations for how this feed should
@@ -388,7 +384,6 @@ class TestOPDSAcquisitionFeed:
 
     def test_unlimited_access_pool_loan(self, db: DatabaseTransactionFixture):
         patron = db.patron()
-        # feed = OPDSAcquisitionFeed( "title", "url", [], None, None, None)
         work = db.work(unlimited_access=True, with_license_pool=True)
         pool = work.active_license_pool()
         loan, _ = pool.loan_to(patron)
@@ -502,15 +497,7 @@ class TestOPDSAcquisitionFeed:
         session = db.session
 
         work = db.work()
-        feed = OPDSAcquisitionFeed(
-            db.fresh_str(),
-            db.fresh_url(),
-            [],
-            None,
-            None,
-            annotator=Annotator,
-        )
-        entry = feed.single_entry(work, Annotator())
+        entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
         expect = OPDSAcquisitionFeed.error_message(
             work.presentation_edition.primary_identifier,
             403,
@@ -542,8 +529,6 @@ class TestOPDSAcquisitionFeed:
             db.fresh_str(),
             db.fresh_url(),
             [],
-            None,
-            None,
             Annotator(),
         )
 
@@ -677,7 +662,7 @@ class TestOPDSAcquisitionFeed:
 
         class MockFeed(OPDSAcquisitionFeed):
             def __init__(self):
-                super().__init__("", "", [], None, None, MockAnnotator())
+                super().__init__("", "", [], MockAnnotator())
                 self.feed = []
 
         lane = db.lane(display_name="lane")
@@ -860,7 +845,7 @@ class TestOPDSAcquisitionFeed:
                 self.current_entrypoint = entrypoint
 
         annotator = MockAnnotator
-        feed = MockFeed("title", "url", [], None, None, MockAnnotator())
+        feed = MockFeed("title", "url", [], MockAnnotator())
 
         lane = db.lane()
         sublane = db.lane(parent=lane)
@@ -887,7 +872,7 @@ class TestOPDSAcquisitionFeed:
         the top-level <feed> tag with information about the currently
         selected entrypoint, if any.
         """
-        feed = OPDSAcquisitionFeed("title", "url", [], None, None, Annotator())
+        feed = OPDSAcquisitionFeed("title", "url", [], Annotator())
 
         # No entry point, no annotation.
         feed.show_current_entrypoint(None)
@@ -1227,8 +1212,6 @@ class TestLookupAcquisitionFeed:
             "Feed Title",
             "http://whatever.io",
             [],
-            None,
-            None,
             annotator(),
             **kwargs,
         )
@@ -1399,7 +1382,7 @@ def navigation_feed_fixture(
 
 class TestNavigationFeed:
     def test_add_entry(self):
-        feed = NavigationFeed("title", "http://navigation", None, None, None, None)
+        feed = NavigationFeed("title", "http://navigation", None, None)
         feed.add_entry("http://example.com", "Example", "text/html")
         [entry] = feed._feed.data_entries
         assert "Example" == entry.title

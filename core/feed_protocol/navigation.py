@@ -1,3 +1,5 @@
+from typing import Optional
+
 from flask import Response
 
 from core.feed_protocol.opds import OPDSFeedProtocol
@@ -10,11 +12,19 @@ from core.util.opds_writer import AtomFeed, OPDSFeed
 
 class NavigationFeed(OPDSFeedProtocol):
     def __init__(
-        self, title, url, lane, facets: Facets, pagination: Pagination, annotator
+        self,
+        title,
+        url,
+        lane,
+        annotator,
+        facets: Optional[Facets] = None,
+        pagination: Optional[Pagination] = None,
     ) -> None:
         self.lane = lane
         self.annotator = annotator
-        super().__init__(title, url, facets, pagination)
+        self._facets = facets
+        self._pagination = pagination
+        super().__init__(title, url)
 
     @classmethod
     def navigation(
@@ -29,7 +39,7 @@ class NavigationFeed(OPDSFeedProtocol):
         """The navigation feed with links to a given lane's sublanes."""
 
         facets = facets or NavigationFacets.default(worklist)
-        feed = NavigationFeed(title, url, worklist, None, None, annotator)
+        feed = NavigationFeed(title, url, worklist, annotator, facets=facets)
         feed.generate_feed()
         return feed
 

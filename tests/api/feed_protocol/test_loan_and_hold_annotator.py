@@ -57,7 +57,6 @@ class TestLibraryLoanAndHoldAnnotator:
                     item,
                     annotator,
                     fulfillment=fulfillment,
-                    extra_arg="value",
                 )
 
             assert db.default_library() == annotator.library
@@ -219,7 +218,7 @@ class TestLibraryLoanAndHoldAnnotator:
             library,
         )
         annotator = LibraryLoanAndHoldAnnotator(None, lane, library, patron)
-        feed = OPDSAcquisitionFeed("title", "url", [], None, None, annotator)
+        feed = OPDSAcquisitionFeed("title", "url", [], annotator)
 
         # Annotate time tracking
         opds_for_distributors = db.collection(
