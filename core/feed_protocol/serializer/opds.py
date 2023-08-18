@@ -21,6 +21,7 @@ TAG_MAPPING = {
     "availability": f"{{{OPDSFeed.OPDS_NS}}}availability",
     "licensor": f"{{{OPDSFeed.DRM_NS}}}licensor",
     "patron": f"{{{OPDSFeed.SIMPLIFIED_NS}}}patron",
+    "series": f"{{{OPDSFeed.SCHEMA_NS}}}series",
 }
 
 ATTRIBUTE_MAPPING = {
@@ -98,7 +99,7 @@ class OPDS1Serializer(OPDSFeed):
         etree.indent(serialized)
         return self.to_string(serialized)
 
-    def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree.Element:
+    def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree._Element:
         entry: etree._Element = OPDSFeed.entry()
 
         if feed_entry.additionalType:
@@ -137,7 +138,7 @@ class OPDS1Serializer(OPDSFeed):
         if feed_entry.imprint:
             entry.append(
                 OPDSFeed.E(
-                    f"{{{OPDSFeed.BIBFRAME_NS}}}publisherImprint",
+                    f"{{{OPDSFeed.BIB_SCHEMA_NS}}}publisherImprint",
                     feed_entry.imprint.text,
                 )
             )
@@ -160,6 +161,9 @@ class OPDS1Serializer(OPDSFeed):
             entry.append(OPDSFeed.E("published", feed_entry.published.text))
         if feed_entry.updated:
             entry.append(OPDSFeed.E("updated", feed_entry.updated.text))
+
+        if feed_entry.series:
+            entry.append(self._serialize_series_entry(feed_entry.series))
 
         for category in feed_entry.categories:
             element = OPDSFeed.category(
@@ -188,9 +192,20 @@ class OPDS1Serializer(OPDSFeed):
 
         return entry
 
+    def _serialize_series_entry(self, series: FeedEntryType) -> etree._Element:
+        entry = self._tag("series")
+        if name := getattr(series, "name", None):
+            entry.set("name", name)
+        if position := getattr(series, "position", None):
+            entry.append(self._tag("position", position))
+        if link := getattr(series, "link", None):
+            entry.append(self._serialize_feed_entry("link", link))
+
+        return entry
+
     def _serialize_feed_entry(self, tag: str, feed_entry: FeedEntryType):
         """Serialize a feed entry type in a recursive and blind manner"""
-        entry: etree._Element = OPDSFeed.E(TAG_MAPPING.get(tag, tag))
+        entry: etree._Element = self._tag(tag)
         for attrib, value in feed_entry:
             if value is None:
                 continue
