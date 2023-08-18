@@ -1,14 +1,25 @@
+from datetime import timedelta
+
+from core.classifier import Classifier
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
+from core.feed_protocol.types import FeedEntryType, Link, WorkEntry
+from core.model import tuple_to_numericrange
 from core.model.classification import Subject
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource
+from core.model.edition import Edition
 from core.model.measurement import Measurement
 from core.model.resource import Hyperlink, Resource
 from core.model.work import Work
+from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import AtomFeed
 from tests.core.test_opds import TestAnnotatorsFixture, annotators_fixture  # noqa
-from tests.fixtures.database import DBStatementCounter  # noqa
+from tests.fixtures.database import (  # noqa
+    DatabaseTransactionFixture,
+    DBStatementCounter,
+)
 
 
 class TestAnnotators:
@@ -86,6 +97,37 @@ class TestAnnotators:
         assert [
             dict(label="Fiction", term=Subject.SIMPLIFIED_GENRE + "Fiction")
         ] == category_tags[genre_uri]
+
+        # Age range assertions
+        work = db.work(fiction=False, audience=Classifier.AUDIENCE_CHILDREN)
+        work.target_age = tuple_to_numericrange((8, 12))
+        categories = Annotator.categories(work)
+        assert categories[Subject.SIMPLIFIED_FICTION_STATUS] == [
+            dict(
+                term=f"{Subject.SIMPLIFIED_FICTION_STATUS}Nonfiction",
+                label="Nonfiction",
+            )
+        ]
+        assert categories[Subject.uri_lookup[Subject.AGE_RANGE]] == [
+            dict(term=work.target_age_string, label=work.target_age_string)
+        ]
+
+    def test_content(self, db: DatabaseTransactionFixture):
+        work = db.work()
+        work.summary_text = "A Summary"
+        assert Annotator.content(work) == "A Summary"
+
+        resrc = Resource()
+        db.session.add(resrc)
+        resrc.set_fetched_content("text", "Representation Summary", None)
+
+        work.summary = resrc
+        work.summary_text = None
+        # The resource sets the summary
+        assert Annotator.content(work) == "Representation Summary"
+        assert work.summary_text == "Representation Summary"
+
+        assert Annotator.content(None) == ""
 
     def test_appeals(self, annotators_fixture: TestAnnotatorsFixture):
         data, db, session = (
@@ -337,6 +379,9 @@ class TestAnnotators:
         assert computed is not None
         assert computed.series == None
 
+        # No series name
+        assert Annotator.series(None, "") == None
+
     def test_samples(self, annotators_fixture: TestAnnotatorsFixture):
         data, db, session = (
             annotators_fixture,
@@ -369,3 +414,56 @@ class TestAnnotators:
             assert links[0].resource.url == "sampleurl"
             # accessing resource should not be another query
             assert counter.count == count
+
+        # No edition = No samples
+        assert Annotator.samples(None) == []
+
+
+class TestAnnotator:
+    def test_annotate_work_entry(self, db: DatabaseTransactionFixture):
+        work = db.work(with_license_pool=True)
+        pool = work.active_license_pool()
+        edition: Edition = work.presentation_edition
+        now = utc_now()
+
+        edition.cover_full_url = "http://coverurl.jpg"
+        edition.cover_thumbnail_url = "http://thumburl.gif"
+        work.summary_text = b"Bytes Summary"
+        edition.language = None
+        work.last_update_time = now
+        edition.publisher = "publisher"
+        edition.imprint = "imprint"
+        edition.issued = utc_now().date()
+
+        # datetime for > today
+        pool.availability_time = (utc_now() + timedelta(days=1)).date()
+
+        entry = WorkEntry(
+            work=work,
+            edition=edition,
+            identifier=edition.primary_identifier,
+            license_pool=pool,
+        )
+        Annotator().annotate_work_entry(entry)
+        data = entry.computed
+
+        # Images
+        assert len(data.image_links) == 2
+        assert data.image_links[0] == Link(
+            href=edition.cover_full_url, rel=Hyperlink.IMAGE, type="image/jpeg"
+        )
+        assert data.image_links[1] == Link(
+            href=edition.cover_thumbnail_url,
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            type="image/gif",
+        )
+
+        # Other values
+        assert data.imprint == FeedEntryType(text="imprint")
+        assert data.summary == FeedEntryType(text="Bytes Summary", type="html")
+        assert data.publisher == FeedEntryType(text="publisher")
+        assert data.issued == FeedEntryType(text=edition.issued.isoformat())
+
+        # Missing values
+        assert data.language == None
+        assert data.updated == FeedEntryType(text=AtomFeed._strftime(now))
