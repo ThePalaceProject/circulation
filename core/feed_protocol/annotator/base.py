@@ -218,8 +218,15 @@ class ToFeedEntry:
         if work:
             if work.summary_text != None:
                 summary = work.summary_text
-            elif work.summary and work.summary.content:
-                work.summary_text = work.summary.content
+            elif (
+                work.summary
+                and work.summary.representation
+                and work.summary.representation.content
+            ):
+                content = work.summary.representation.content
+                if isinstance(content, bytes):
+                    content = content.decode("utf-8")
+                work.summary_text = content
                 summary = work.summary_text
         return summary
 
@@ -375,6 +382,8 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
                 today = datetime.date.today()
                 if isinstance(avail, datetime.datetime):
                     avail_date = avail.date()
+                else:
+                    avail_date = avail
                 if avail_date <= today:  # Avoid obviously wrong values.
                     computed.published = FeedEntryType(
                         text=AtomFeed._strftime(avail_date)
