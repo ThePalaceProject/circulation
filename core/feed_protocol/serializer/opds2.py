@@ -1,7 +1,18 @@
 import json
 from typing import Any, Dict
 
-from core.feed_protocol.types import FeedData, Link, WorkEntryData
+from core.feed_protocol.types import (
+    Acquisition,
+    FeedData,
+    IndirectAcquisition,
+    Link,
+    WorkEntryData,
+)
+
+AVAILABILITY_STATES = {
+    "available": "ready",
+    "unavailable": "unavailable",
+}
 
 
 class OPDS2Serializer:
@@ -53,11 +64,17 @@ class OPDS2Serializer:
                 )
             metadata["subject"] = subjects
 
+        if data.series:
+            name = getattr(data.series, "name", None)
+            position = getattr(data.series, "position", 1)
+            if name:
+                metadata["belongsTo"] = dict(name=name, position=position)
+
         images = [self._serialize_link(link) for link in data.image_links]
-        links = [
-            self._serialize_link(link)
-            for link in data.acquisition_links + data.other_links
-        ]
+        links = [self._serialize_link(link) for link in data.other_links]
+
+        for acquisition in data.acquisition_links:
+            links.append(self._serialize_acquisition_links(acquisition))
 
         publication = {"metadata": metadata, "links": links, "images": images}
         return publication
@@ -67,3 +84,43 @@ class OPDS2Serializer:
         if link.type:
             serialized["type"] = link.type
         return serialized
+
+    def _serialize_acquisition_link(self, link: Acquisition):
+        item = self._serialize_link(link)
+
+        def _indirect(indirect: IndirectAcquisition):
+            indirect = dict(type=indirect.type)
+            if indirect.children:
+                indirect["child"] = []
+            for child in indirect.children:
+                indirect["child"].append(_indirect(child))
+            return indirect
+
+        props = {}
+        if link.availability_status:
+            props["availability"] = dict(
+                state=AVAILABILITY_STATES[link.availability_status]
+            )
+            if link.availability_since:
+                props["availability"]["since"] = link.availability_since
+            if link.availability_until:
+                props["availability"]["until"] = link.availability_until
+
+        if link.indirect_acquisitions:
+            props["indirectAcquisition"] = []
+        for indirect in link.indirect_acquisitions:
+            props["indirectAcquisition"].append(_indirect(indirect))
+
+        if link.lcp_hashed_passphrase:
+            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase
+
+        if link.drm_licensor:
+            props["licensor"] = {
+                "clientToken": getattr(link.drm_licensor, "clientToken"),
+                "vendor": getattr(link.drm_licensor, "vendor"),
+            }
+
+        if props:
+            item["properties"] = props
+
+        return item
