@@ -333,6 +333,7 @@ class TestEdition:
             author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
             authors.append(author.sort_name)
 
+        untruncated_authors = ", ".join([x[1] for x in sorted(authors)])
         wr = db.edition(authors=authors)
         author, sort_author = wr.calculate_author()
         wr.calculate_presentation()
@@ -350,14 +351,14 @@ class TestEdition:
             )
             assert not original_str.endswith("...")
 
-        do_check(author, wr.author)
-        do_check(sort_author, wr.sort_author)
+        do_check(untruncated_authors, wr.author)
+        do_check(untruncated_authors, wr.sort_author)
 
     def test_calculate_presentation_shortish_author(
         self, db: DatabaseTransactionFixture
     ):
         authors = []
-        author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
+        author, ignore = db.contributor(sort_name=f"AuthorLast, AuthorFirst")
         authors.append(author.sort_name)
         wr = db.edition(authors=authors)
         author, sort_author = wr.calculate_author()
