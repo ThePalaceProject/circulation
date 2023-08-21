@@ -446,6 +446,7 @@ class TestAnnotator:
         )
         Annotator().annotate_work_entry(entry)
         data = entry.computed
+        assert data is not None
 
         # Images
         assert len(data.image_links) == 2
