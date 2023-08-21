@@ -67,20 +67,3 @@ class OPDS2Serializer:
         if link.type:
             serialized["type"] = link.type
         return serialized
-
-    # def _serialize_feed_entry(self, feed_entry: FeedEntryType) -> dict:
-    #     metadata = {}
-    #     links = []
-    #     images = []
-
-    #     for attrib, value in feed_entry:
-    #         if isinstance(value, list):
-    #             for item in value:
-    #                 metadata[attrib] = self._serialize_feed_entry(item)
-    #         elif isinstance(value, FeedEntryType):
-    #             metadata[attrib] = self._serialize_feed_entry(value)
-    #         else:
-    #             metadata[attrib] = value
-    #             print(attrib, value, metadata)
-
-    #     return metadata
