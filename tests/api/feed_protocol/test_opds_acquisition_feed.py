@@ -302,9 +302,15 @@ class TestOPDSAcquisitionFeed:
     def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)
         tags = AcquisitionHelper.license_tags(pool, None, None)
-        assert dict(status="available") == tags["availability"].dict(exclude_none=True)
-        assert dict(total="0") == tags["holds"].dict(exclude_none=True)
-        assert dict(total="1", available="1") == tags["copies"].dict(exclude_none=True)
+        assert (
+            dict(
+                availability_status="available",
+                holds_total="0",
+                copies_total="1",
+                copies_available="1",
+            )
+            == tags
+        )
 
     def test_license_tags_hold_position(self, db: DatabaseTransactionFixture):
         # When a book is placed on hold, it typically takes a while
@@ -321,23 +327,23 @@ class TestOPDSAcquisitionFeed:
         hold, is_new = pool.on_hold_to(patron, position=1)
 
         tags = AcquisitionHelper.license_tags(pool, None, hold)
-        assert "1" == tags["holds"].position
-        assert "3" == tags["holds"].total
+        assert "1" == tags["holds_position"]
+        assert "3" == tags["holds_total"]
 
         # If the patron's hold position is missing, we assume they
         # are last in the list.
         hold.position = None
         tags = AcquisitionHelper.license_tags(pool, None, hold)
-        assert "3" == tags["holds"].position
-        assert "3" == tags["holds"].total
+        assert "3" == tags["holds_position"]
+        assert "3" == tags["holds_total"]
 
         # If the patron's current hold position is greater than the
         # total recorded number of holds+reserves, their position will
         # be used as the value of opds:total.
         hold.position = 5
         tags = AcquisitionHelper.license_tags(pool, None, hold)
-        assert "5" == tags["holds"].position
-        assert "5" == tags["holds"].total
+        assert "5" == tags["holds_position"]
+        assert "5" == tags["holds_total"]
 
         # A patron earlier in the holds queue may see a different
         # total number of holds, but that's fine -- it doesn't matter
@@ -345,8 +351,8 @@ class TestOPDSAcquisitionFeed:
         # them in the queue.
         hold.position = 4
         tags = AcquisitionHelper.license_tags(pool, None, hold)
-        assert "4" == tags["holds"].position
-        assert "4" == tags["holds"].total
+        assert "4" == tags["holds_position"]
+        assert "4" == tags["holds_total"]
 
         # If the patron's hold position is zero (because the book is
         # reserved to them), we do not represent them as having a hold
@@ -356,8 +362,8 @@ class TestOPDSAcquisitionFeed:
         hold.position = 0
         pool.patrons_in_hold_queue = 0
         tags = AcquisitionHelper.license_tags(pool, None, hold)
-        assert "position" not in tags["holds"]
-        assert "1" == tags["holds"].total
+        assert "holds_position" not in tags
+        assert "1" == tags["holds_total"]
 
     def test_license_tags_show_unlimited_access_books(
         self, db: DatabaseTransactionFixture
@@ -373,13 +379,7 @@ class TestOPDSAcquisitionFeed:
 
         # Assert
         assert 1 == len(tags.keys())
-
-        tag = tags["availability"]
-
-        assert ("status" in tag.dict()) == True
-        assert "available" == tag.status
-        assert ("holds" in tag.dict()) == False
-        assert ("copies" in tag.dict()) == False
+        assert tags["availability_status"] == "available"
 
     def test_unlimited_access_pool_loan(self, db: DatabaseTransactionFixture):
         patron = db.patron()
@@ -388,9 +388,8 @@ class TestOPDSAcquisitionFeed:
         loan, _ = pool.loan_to(patron)
         tags = AcquisitionHelper.license_tags(pool, loan, None)
 
-        tag = tags["availability"]
-        assert "since" in tag.dict()
-        assert "until" not in tag.dict()
+        assert "availability_since" in tags
+        assert "availability_until" not in tags
 
     def test_license_tags_show_self_hosted_books(self, db: DatabaseTransactionFixture):
         # Arrange
@@ -405,8 +404,8 @@ class TestOPDSAcquisitionFeed:
 
         # Assert
         assert 1 == len(tags.keys())
-        assert "status" in tags["availability"].dict()
-        assert "available" == tags["availability"].status
+        assert "availability_status" in tags
+        assert "available" == tags["availability_status"]
 
     def test_single_entry(self, db: DatabaseTransactionFixture):
         session = db.session
@@ -506,7 +505,6 @@ class TestOPDSAcquisitionFeed:
         assert entry == None
 
     def test_unfilfullable_work(self, db: DatabaseTransactionFixture):
-
         work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
         response = OPDSAcquisitionFeed.single_entry(

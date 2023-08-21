@@ -24,7 +24,14 @@ from core.config import CannotLoadConfiguration
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
 from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.types import FeedData, FeedEntryType, Link, WorkEntry
+from core.feed_protocol.types import (
+    Acquisition,
+    FeedData,
+    FeedEntryType,
+    IndirectAcquisition,
+    Link,
+    WorkEntry,
+)
 from core.lane import Lane, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.lcp.exceptions import LCPError
@@ -48,11 +55,9 @@ from core.util.opds_writer import AtomFeed, OPDSFeed
 class AcquisitionHelper:
     @classmethod
     def license_tags(cls, license_pool, loan, hold):
+        acquisition = {}
         # Generate a list of licensing tags. These should be inserted
         # into a <link> tag.
-        tags = {}
-        availability_tag_name = None
-        suppress_since = False
         status = None
         since = None
         until = None
@@ -96,12 +101,11 @@ class AcquisitionHelper:
         else:
             status = "unavailable"
 
-        kw = dict(status=status)
+        acquisition["availability_status"] = status
         if since:
-            kw["since"] = AtomFeed._strftime(since)
+            acquisition["availability_since"] = AtomFeed._strftime(since)
         if until:
-            kw["until"] = AtomFeed._strftime(until)
-        tags["availability"] = FeedEntryType(**kw)
+            acquisition["availability_until"] = AtomFeed._strftime(until)
 
         # Open-access pools do not need to display <opds:holds> or <opds:copies>.
         if (
@@ -109,9 +113,8 @@ class AcquisitionHelper:
             or license_pool.unlimited_access
             or license_pool.self_hosted
         ):
-            return tags
+            return acquisition
 
-        holds_kw = dict()
         total = license_pool.patrons_in_hold_queue or 0
 
         if hold:
@@ -123,7 +126,7 @@ class AcquisitionHelper:
                 position = hold.position
 
             if position > 0:
-                holds_kw["position"] = str(position)
+                acquisition["holds_position"] = str(position)
             if position > total:
                 # The patron's hold position appears larger than the total
                 # number of holds. This happens frequently because the
@@ -137,19 +140,12 @@ class AcquisitionHelper:
                 # where we know that the total number of holds is
                 # *greater* than the hold position.
                 total = 1
-        holds_kw["total"] = str(total)
+        acquisition["holds_total"] = str(total)
 
-        holds = FeedEntryType(**holds_kw)
-        tags["holds"] = holds
+        acquisition["copies_total"] = str(license_pool.licenses_owned or 0)
+        acquisition["copies_available"] = str(license_pool.licenses_available or 0)
 
-        copies_kw = dict(
-            total=str(license_pool.licenses_owned or 0),
-            available=str(license_pool.licenses_available or 0),
-        )
-        copies = FeedEntryType(**copies_kw)
-        tags["copies"] = copies
-
-        return tags
+        return acquisition
 
     @classmethod
     def format_types(cls, delivery_mechanism):
@@ -649,11 +645,11 @@ class CirculationManagerAnnotator(Annotator):
         else:
             initial_type = None
             indirect_types = []
-        link = Link(href=href, rel=rel, type=initial_type)
+        link = Acquisition(href=href, rel=rel, type=initial_type)
         indirect = cls.indirect_acquisition(indirect_types)
 
         if indirect is not None:
-            link.indirectAcquisition = [indirect]
+            link.indirect_acquisitions = [indirect]
         return link
 
     @classmethod
@@ -661,9 +657,9 @@ class CirculationManagerAnnotator(Annotator):
         top_level_parent = None
         parent = None
         for t in indirect_types:
-            indirect_link = FeedEntryType(type=t)
+            indirect_link = IndirectAcquisition(type=t)
             if parent is not None:
-                parent.indirectAcquisition = [indirect_link]
+                parent.children = [indirect_link]
             parent = indirect_link
             if top_level_parent is None:
                 top_level_parent = indirect_link
@@ -1271,7 +1267,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
         )
         kw = dict(href=url, rel=OPDSFeed.REVOKE_LOAN_REL)
-        revoke_link_tag = Link(**kw)
+        revoke_link_tag = Acquisition(**kw)
         return revoke_link_tag
 
     def borrow_link(
@@ -1301,7 +1297,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
         )
         rel = OPDSFeed.BORROW_REL
-        borrow_link = Link(rel=rel, href=borrow_url, type=OPDSFeed.ENTRY_TYPE)
+        borrow_link = Acquisition(rel=rel, href=borrow_url, type=OPDSFeed.ENTRY_TYPE)
 
         indirect_acquisitions = []
         for lpdm in fulfillment_mechanisms:
@@ -1326,7 +1322,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             # of an OPDS entry altogether.
             raise UnfulfillableWork()
 
-        borrow_link.indirectAcquisition = indirect_acquisitions
+        borrow_link.indirect_acquisitions = indirect_acquisitions
         return borrow_link
 
     def fulfill_link(

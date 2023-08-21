@@ -5,11 +5,12 @@ from functools import partial
 from lxml import etree
 
 from core.feed_protocol.types import (
+    Acquisition,
     Author,
     DataEntry,
     FeedData,
     FeedEntryType,
-    Link,
+    IndirectAcquisition,
     WorkEntryData,
 )
 from core.util.opds_writer import OPDSFeed, OPDSMessage
@@ -248,19 +249,50 @@ class OPDS1Serializer(OPDSFeed):
             entry.append(_tag("sameas", author.lc))
         return entry
 
-    def _serialize_acquistion_link(self, link: Link) -> etree._Element:
+    def _serialize_acquistion_link(self, link: Acquisition) -> etree._Element:
         element = OPDSFeed.link(**link.link_attribs())
-        if indirects := getattr(link, "indirectAcquisition", None):
-            for indirect in indirects:
-                child = self._serialize_feed_entry("indirectAcquisition", indirect)
-                element.append(child)
 
-        if holds := getattr(link, "holds", None):
-            element.append(self._serialize_feed_entry("holds", holds))
-        if copies := getattr(link, "copies", None):
-            element.append(self._serialize_feed_entry("copies", copies))
-        if availability := getattr(link, "availability", None):
-            element.append(self._serialize_feed_entry("availability", availability))
+        def _indirect(item: IndirectAcquisition):
+            tag = self._tag("indirectAcquisition")
+            tag.set("type", item.type)
+            for child in item.children:
+                tag.append(_indirect(child))
+            return tag
+
+        for indirect in link.indirect_acquisitions:
+            element.append(_indirect(indirect))
+
+        if link.availability_status:
+            avail_tag = self._tag("availability")
+            avail_tag.set("status", link.availability_status)
+            if link.availability_since:
+                avail_tag.set(self._attr_name("since"), link.availability_since)
+            if link.availability_until:
+                avail_tag.set(self._attr_name("until"), link.availability_until)
+            element.append(avail_tag)
+
+        if link.holds_total is not None:
+            holds_tag = self._tag("holds")
+            holds_tag.set(self._attr_name("total"), link.holds_total)
+            if link.holds_position:
+                holds_tag.set(self._attr_name("position"), link.holds_position)
+            element.append(holds_tag)
+
+        if link.copies_total is not None:
+            copies_tag = self._tag("copies")
+            copies_tag.set(self._attr_name("total"), link.copies_total)
+            if link.copies_available:
+                copies_tag.set(self._attr_name("available"), link.copies_available)
+            element.append(copies_tag)
+
+        if link.lcp_hashed_passphrase:
+            element.append(
+                self._tag("hashed_passphrase", link.lcp_hashed_passphrase.text)
+            )
+
+        if link.drm_licensor:
+            element.append(self._serialize_feed_entry("licensor", link.drm_licensor))
+
         return element
 
     def _serialize_data_entry(self, entry: DataEntry):
