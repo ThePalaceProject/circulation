@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, NamedTuple, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, Generic, List, NamedTuple, Optional, Type, TypeVar
 
 import flask
 from flask import Response
@@ -257,7 +257,7 @@ class IntegrationSettingsController(ABC, Generic[T]):
 
     def process_updated_libraries(
         self,
-        libraries: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]],
+        libraries: List[UpdatedLibrarySettingsTuple],
         settings_class: Type[BaseSettings],
     ) -> None:
         """

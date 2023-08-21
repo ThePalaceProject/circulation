@@ -1,10 +1,13 @@
-from typing import Any, Dict, List, Set, Tuple, Type, Union
+from typing import List, Set, Type, Union
 
 import flask
 from flask import Response
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
-from api.admin.controller.integration_settings import IntegrationSettingsController
+from api.admin.controller.integration_settings import (
+    IntegrationSettingsController,
+    UpdatedLibrarySettingsTuple,
+)
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
 from api.authentication.base import AuthenticationProvider
@@ -131,7 +134,7 @@ class PatronAuthServicesController(
 
     def process_updated_libraries(
         self,
-        libraries: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]],
+        libraries: List[UpdatedLibrarySettingsTuple],
         settings_class: Type[BaseSettings],
     ) -> None:
         super().process_updated_libraries(libraries, settings_class)
