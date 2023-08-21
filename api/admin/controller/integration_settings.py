@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, Generic, List, NamedTuple, Optional, Tuple, Type, TypeVar
 
 import flask
 from flask import Response
@@ -31,6 +31,12 @@ from core.util.cache import memoize
 from core.util.problem_detail import ProblemError
 
 T = TypeVar("T", bound=HasIntegrationConfiguration)
+
+
+class ChangedLibrariesTuple(NamedTuple):
+    new: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]]
+    updated: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]]
+    removed: List[IntegrationLibraryConfiguration]
 
 
 class IntegrationSettingsController(ABC, Generic[T]):
@@ -175,13 +181,9 @@ class IntegrationSettingsController(ABC, Generic[T]):
             )
         return library_settings
 
-    def get_new_updated_removed_libraries(
+    def get_changed_libraries(
         self, service: IntegrationConfiguration, libraries_data: str
-    ) -> Tuple[
-        List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]],
-        List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]],
-        List[IntegrationLibraryConfiguration],
-    ]:
+    ) -> ChangedLibrariesTuple:
         # Update libraries
         libraries = json.loads(libraries_data)
         existing_library_settings = {
@@ -208,7 +210,7 @@ class IntegrationSettingsController(ABC, Generic[T]):
             for library in submitted_library_settings.keys()
             - existing_library_settings.keys()
         ]
-        return new, updated, removed
+        return ChangedLibrariesTuple(new=new, updated=updated, removed=removed)
 
     def process_deleted_libraries(
         self, removed: List[IntegrationLibraryConfiguration]
@@ -231,9 +233,7 @@ class IntegrationSettingsController(ABC, Generic[T]):
         libraries_data: str,
         settings_class: Type[BaseSettings],
     ) -> None:
-        new, updated, removed = self.get_new_updated_removed_libraries(
-            service, libraries_data
-        )
+        new, updated, removed = self.get_changed_libraries(service, libraries_data)
 
         self.process_deleted_libraries(removed)
         self.process_updated_libraries(new, settings_class)
