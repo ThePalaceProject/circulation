@@ -225,6 +225,15 @@ PROTOCOL_DOES_NOT_SUPPORT_PARENTS = pd(
     ),
 )
 
+PROTOCOL_DOES_NOT_SUPPORT_SETTINGS = pd(
+    "http://librarysimplified.org/terms/problem/protocol-does-not-support-settings",
+    status_code=400,
+    title=_("Protocol does not support settings"),
+    detail=_(
+        "You attempted to update settings for a protocol that does not support settings."
+    ),
+)
+
 MISSING_PARENT = pd(
     "http://librarysimplified.org/terms/problem/missing-parent",
     status_code=400,
