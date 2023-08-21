@@ -46,6 +46,28 @@ class Link(FeedEntryType):
         return d
 
 
+class IndirectAcquisition(BaseModel):
+    type: str
+    children: List["IndirectAcquisition"] = []
+
+
+class Acquisition(Link):
+    holds_position: Optional[str]
+    holds_total: Optional[str]
+
+    copies_available: Optional[str]
+    copies_total: Optional[str]
+
+    availability_status: Optional[str]
+    availability_since: Optional[str]
+    availability_until: Optional[str]
+
+    lcp_hashed_passphrase: Optional[FeedEntryType]
+    drm_licensor: Optional[FeedEntryType]
+
+    indirect_acquisitions: List[IndirectAcquisition] = []
+
+
 class Author(FeedEntryType):
     name: Optional[str]
     sort_name: Optional[str]
@@ -82,7 +104,7 @@ class WorkEntryData(BaseModel):
     distribution: Optional[FeedEntryType] = None
 
     # Links
-    acquisition_links: List[Link] = []
+    acquisition_links: List[Acquisition] = []
     image_links: List[Link] = []
     other_links: List[Link] = []
 

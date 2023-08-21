@@ -1125,12 +1125,10 @@ class TestLibraryAnnotator:
         annotator_fixture.annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         [link] = work_entry.computed.acquisition_links
-        assert hasattr(link, "holds")
-        assert link.holds.total == "25"
+        assert link.holds_total == "25"
 
-        assert hasattr(link, "copies")
-        assert link.copies.available == "50"
-        assert link.copies.total == "100"
+        assert link.copies_available == "50"
+        assert link.copies_total == "100"
 
     def test_loans_feed_includes_fulfill_links(
         self,
@@ -1593,10 +1591,8 @@ class TestLibraryAnnotator:
         # Revert the annotator state
         annotator.identifies_patrons = True
 
-        availability = fulfill.availability
-        assert _strftime(loan1.start) == availability.since
-        assert loan1.end == getattr(availability, "until", None) == None
-        assert None == loan1.end
+        assert _strftime(loan1.start) == fulfill.availability_since
+        assert loan1.end == fulfill.availability_until == None
 
         loan2_links = annotator.acquisition_links(
             loan2.license_pool, loan2, None, None, loan2.license_pool.identifier
@@ -1608,9 +1604,8 @@ class TestLibraryAnnotator:
         assert "fulfill" in fulfill.href
         assert "http://opds-spec.org/acquisition" == fulfill.rel
 
-        availability = fulfill.availability
-        assert _strftime(loan2.start) == availability.since
-        assert _strftime(loan2.end) == availability.until
+        assert _strftime(loan2.start) == fulfill.availability_since
+        assert _strftime(loan2.end) == fulfill.availability_until
 
         # If a book is ready to be fulfilled, but the library has
         # hidden all of its available content types, the fulfill link does
@@ -1668,8 +1663,7 @@ class TestLibraryAnnotator:
         assert "fulfill" in fulfill.href
         assert "http://opds-spec.org/acquisition" == fulfill.rel
 
-        availability = fulfill.availability
-        assert _strftime(loan5.start) == availability.since
+        assert _strftime(loan5.start) == fulfill.availability_since
         # TODO: This currently fails, it should be uncommented when the CM 21 day loan bug is fixed
         # assert loan5.end == availability.until
         assert None == loan5.end
@@ -1764,11 +1758,11 @@ class TestLibraryAnnotator:
         indirects = []
         for link in [mech1_link, mech2_link]:
             # Both links should have the same subtags.
-            assert getattr(link, "availability", None) is not None
-            assert getattr(link, "copies", None) is not None
-            assert getattr(link, "holds", None) is not None
-            assert getattr(link, "indirectAcquisition", None) is not None
-            indirects.append(link.indirectAcquisition[0])
+            assert link.availability_status is not None
+            assert link.copies_total is not None
+            assert link.holds_total is not None
+            assert len(link.indirect_acquisitions) > 0
+            indirects.append(link.indirect_acquisitions[0])
 
         # The target of the top-level link is different.
         assert mech1_param in mech1_link.href
@@ -1798,4 +1792,6 @@ class TestLibraryAnnotator:
         [link] = annotator.acquisition_links(
             pool, None, None, None, pool.identifier, mock_api=MockAPI()
         )
-        assert mech2.delivery_mechanism.content_type == link.indirectAcquisition[0].type
+        assert (
+            mech2.delivery_mechanism.content_type == link.indirect_acquisitions[0].type
+        )

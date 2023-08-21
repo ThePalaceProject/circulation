@@ -1,7 +1,14 @@
 from lxml import etree
 
 from core.feed_protocol.serializer.opds import OPDS1Serializer
-from core.feed_protocol.types import Author, FeedEntryType, Link, WorkEntryData
+from core.feed_protocol.types import (
+    Acquisition,
+    Author,
+    FeedEntryType,
+    IndirectAcquisition,
+    Link,
+    WorkEntryData,
+)
 from core.util.opds_writer import OPDSFeed
 
 
@@ -80,12 +87,12 @@ class TestOPDSSerializer:
         assert list(element) == []
 
     def test__serialize_acquistion_link(self):
-        link = Link(
+        link = Acquisition(
             href="http://acquisition",
-            holds=FeedEntryType(text="hold"),
-            copies=FeedEntryType(text="copy"),
-            availability=FeedEntryType(text="availability"),
-            indirectAcquisition=[FeedEntryType(text="indirect1")],
+            holds_total="0",
+            copies_total="1",
+            availability_status="available",
+            indirect_acquisitions=[IndirectAcquisition(type="indirect")],
         )
         element = OPDS1Serializer()._serialize_acquistion_link(link)
         assert element.tag == "link"
@@ -93,13 +100,13 @@ class TestOPDSSerializer:
 
         for child in element:
             if child.tag == f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition":
-                assert child.text == "indirect1"
+                assert child.get("type") == "indirect"
             elif child.tag == f"{{{OPDSFeed.OPDS_NS}}}holds":
-                assert child.text == "hold"
+                assert child.get("total") == "0"
             elif child.tag == f"{{{OPDSFeed.OPDS_NS}}}copies":
-                assert child.text == "copy"
+                assert child.get("total") == "1"
             elif child.tag == f"{{{OPDSFeed.OPDS_NS}}}availability":
-                assert child.text == "availability"
+                assert child.get("status") == "available"
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(
