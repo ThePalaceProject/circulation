@@ -33,9 +33,14 @@ from core.util.problem_detail import ProblemError
 T = TypeVar("T", bound=HasIntegrationConfiguration)
 
 
+class UpdatedLibrarySettingsTuple(NamedTuple):
+    integration: IntegrationLibraryConfiguration
+    settings: Dict[str, Any]
+
+
 class ChangedLibrariesTuple(NamedTuple):
-    new: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]]
-    updated: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]]
+    new: List[UpdatedLibrarySettingsTuple]
+    updated: List[UpdatedLibrarySettingsTuple]
     removed: List[IntegrationLibraryConfiguration]
 
 
@@ -51,6 +56,9 @@ class IntegrationSettingsController(ABC, Generic[T]):
 
     @abstractmethod
     def default_registry(self) -> IntegrationRegistry[T]:
+        """
+        Return the IntegrationRegistry for the controller's goal.
+        """
         ...
 
     @memoize(ttls=1800)
@@ -79,6 +87,7 @@ class IntegrationSettingsController(ABC, Generic[T]):
 
     @property
     def configured_services(self) -> List[Dict[str, Any]]:
+        """Return a list of all currently configured services for the controller's goal."""
         configured_services = []
         for service in (
             self._db.query(IntegrationConfiguration)
@@ -113,7 +122,14 @@ class IntegrationSettingsController(ABC, Generic[T]):
     def get_existing_service(
         self, service_id: int, name: Optional[str], protocol: str
     ) -> IntegrationConfiguration:
-        # Find an existing service to edit
+        """
+        Query for an existing service to edit.
+
+        Raises ProblemError if the service doesn't exist, or if the protocol
+        doesn't match. If the name is provided, the service will be renamed if
+        necessary and a ProblemError will be raised if the name is already in
+        use.
+        """
         service: Optional[IntegrationConfiguration] = get_one(
             self._db,
             IntegrationConfiguration,
@@ -133,6 +149,12 @@ class IntegrationSettingsController(ABC, Generic[T]):
         return service
 
     def create_new_service(self, name: str, protocol: str) -> IntegrationConfiguration:
+        """
+        Create a new service.
+
+        Returns the new IntegrationConfiguration on success and raises a ProblemError
+        on any errors.
+        """
         # Create a new service
         service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
         if service_with_name is not None:
@@ -154,6 +176,9 @@ class IntegrationSettingsController(ABC, Generic[T]):
         return new_service
 
     def get_library(self, short_name: str) -> Library:
+        """
+        Get a library by its short name.
+        """
         library: Optional[Library] = get_one(self._db, Library, short_name=short_name)
         if library is None:
             raise ProblemError(
@@ -166,6 +191,9 @@ class IntegrationSettingsController(ABC, Generic[T]):
     def create_library_settings(
         self, service: IntegrationConfiguration, short_name: str
     ) -> IntegrationLibraryConfiguration:
+        """
+        Create a new IntegrationLibraryConfiguration for the given IntegrationConfiguration and library.
+        """
         library = self.get_library(short_name)
         library_settings, _ = create(
             self._db,
@@ -184,7 +212,10 @@ class IntegrationSettingsController(ABC, Generic[T]):
     def get_changed_libraries(
         self, service: IntegrationConfiguration, libraries_data: str
     ) -> ChangedLibrariesTuple:
-        # Update libraries
+        """
+        Return a tuple of lists of libraries that have had their library settings
+        added, updated, or removed.
+        """
         libraries = json.loads(libraries_data)
         existing_library_settings = {
             c.library.short_name: c for c in service.library_configurations
@@ -197,15 +228,18 @@ class IntegrationSettingsController(ABC, Generic[T]):
             - submitted_library_settings.keys()
         ]
         updated = [
-            (existing_library_settings[library], submitted_library_settings[library])
+            UpdatedLibrarySettingsTuple(
+                integration=existing_library_settings[library],
+                settings=submitted_library_settings[library],
+            )
             for library in existing_library_settings.keys()
             & submitted_library_settings.keys()
             if library and self.get_library(library)
         ]
         new = [
-            (
-                self.create_library_settings(service, library),
-                submitted_library_settings[library],
+            UpdatedLibrarySettingsTuple(
+                integration=self.create_library_settings(service, library),
+                settings=submitted_library_settings[library],
             )
             for library in submitted_library_settings.keys()
             - existing_library_settings.keys()
@@ -215,6 +249,9 @@ class IntegrationSettingsController(ABC, Generic[T]):
     def process_deleted_libraries(
         self, removed: List[IntegrationLibraryConfiguration]
     ) -> None:
+        """
+        Delete any IntegrationLibraryConfigurations that were removed.
+        """
         for library_integration in removed:
             self._db.delete(library_integration)
 
@@ -223,6 +260,9 @@ class IntegrationSettingsController(ABC, Generic[T]):
         libraries: List[Tuple[IntegrationLibraryConfiguration, Dict[str, Any]]],
         settings_class: Type[BaseSettings],
     ) -> None:
+        """
+        Update the settings for any IntegrationLibraryConfigurations that were updated or added.
+        """
         for integration, settings in libraries:
             validated_settings = settings_class(**settings)
             integration.settings_dict = validated_settings.dict()
@@ -233,6 +273,11 @@ class IntegrationSettingsController(ABC, Generic[T]):
         libraries_data: str,
         settings_class: Type[BaseSettings],
     ) -> None:
+        """
+        Process the library settings for a service. This will create new
+        IntegrationLibraryConfigurations for any libraries that don't have one,
+        update the settings for any that do, and delete any that were removed.
+        """
         new, updated, removed = self.get_changed_libraries(service, libraries_data)
 
         self.process_deleted_libraries(removed)
@@ -240,6 +285,12 @@ class IntegrationSettingsController(ABC, Generic[T]):
         self.process_updated_libraries(updated, settings_class)
 
     def delete_service(self, service_id: int) -> Response:
+        """
+        Delete a service.
+
+        Returns a Response on success suitable to return to the frontend
+        and raises a ProblemError on any errors.
+        """
         if flask.request.method != "DELETE":
             raise ProblemError(
                 problem_detail=INVALID_INPUT.detailed(
