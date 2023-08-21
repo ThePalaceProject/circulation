@@ -3,6 +3,9 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar
 
+import flask
+from flask import Response
+
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     INTEGRATION_NAME_ALREADY_IN_USE,
@@ -23,7 +26,7 @@ from core.model import (
     create,
     get_one,
 )
-from core.problem_details import INTERNAL_SERVER_ERROR
+from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from core.util.cache import memoize
 from core.util.problem_detail import ProblemError
 
@@ -235,3 +238,22 @@ class IntegrationSettingsController(ABC, Generic[T]):
         self.process_deleted_libraries(removed)
         self.process_updated_libraries(new, settings_class)
         self.process_updated_libraries(updated, settings_class)
+
+    def delete_service(self, service_id: int) -> Response:
+        if flask.request.method != "DELETE":
+            raise ProblemError(
+                problem_detail=INVALID_INPUT.detailed(
+                    "Method not allowed for this endpoint"
+                )
+            )
+
+        integration = get_one(
+            self._db,
+            IntegrationConfiguration,
+            id=service_id,
+            goal=self.registry.goal,
+        )
+        if not integration:
+            raise ProblemError(problem_detail=MISSING_SERVICE)
+        self._db.delete(integration)
+        return Response("Deleted", 200)

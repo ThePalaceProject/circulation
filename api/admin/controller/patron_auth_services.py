@@ -2,7 +2,6 @@ from typing import Any, Dict, List, Set, Tuple, Type, Union
 
 import flask
 from flask import Response
-from flask_babel import lazy_gettext as _
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.controller.integration_settings import IntegrationSettingsController
@@ -14,7 +13,7 @@ from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings
-from core.model import get_one, json_serializer, site_configuration_has_changed
+from core.model import json_serializer, site_configuration_has_changed
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -140,17 +139,9 @@ class PatronAuthServicesController(
             self.library_integration_validation(integration)
 
     def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
-        if flask.request.method != "DELETE":
-            return INVALID_INPUT.detailed(_("Method not allowed for this endpoint"))
         self.require_system_admin()
-
-        integration = get_one(
-            self._db,
-            IntegrationConfiguration,
-            id=service_id,
-            goal=Goals.PATRON_AUTH_GOAL,
-        )
-        if not integration:
-            return MISSING_SERVICE
-        self._db.delete(integration)
-        return Response(str(_("Deleted")), 200)
+        try:
+            return self.delete_service(service_id)
+        except ProblemError as e:
+            self._db.rollback()
+            return e.problem_detail

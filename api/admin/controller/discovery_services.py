@@ -2,7 +2,6 @@ from typing import Union
 
 import flask
 from flask import Response
-from flask_babel import lazy_gettext as _
 from sqlalchemy import and_, select
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
@@ -11,7 +10,6 @@ from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_URL_ALREADY_IN_USE,
-    MISSING_SERVICE,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     UNKNOWN_PROTOCOL,
 )
@@ -19,11 +17,9 @@ from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.model import (
     IntegrationConfiguration,
-    get_one,
     json_serializer,
     site_configuration_has_changed,
 )
-from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 
@@ -112,20 +108,12 @@ class DiscoveryServicesController(
         return Response(str(service.id), response_code)
 
     def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
-        if flask.request.method != "DELETE":
-            return INVALID_INPUT.detailed(_("Method not allowed for this endpoint"))
         self.require_system_admin()
-
-        integration = get_one(
-            self._db,
-            IntegrationConfiguration,
-            id=service_id,
-            goal=self.registry.goal,
-        )
-        if not integration:
-            return MISSING_SERVICE
-        self._db.delete(integration)
-        return Response(str(_("Deleted")), 200)
+        try:
+            return self.delete_service(service_id)
+        except ProblemError as e:
+            self._db.rollback()
+            return e.problem_detail
 
     def check_url_unique(self, service: IntegrationConfiguration, url: str) -> None:
         """Check that the URL of the service is unique.
