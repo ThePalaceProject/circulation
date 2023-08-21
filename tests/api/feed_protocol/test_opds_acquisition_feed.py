@@ -4,7 +4,6 @@ from collections import defaultdict
 from typing import Any, Callable, Generator, List, Type
 
 import pytest
-from lxml import etree
 from sqlalchemy.orm import Session
 
 from core.entrypoint import (
@@ -452,36 +451,6 @@ class TestOPDSAcquisitionFeed:
         expected = str(work.presentation_edition.issued.date())
         assert expected == entry.computed.issued.text
 
-    # We are currently not using the cached entries
-    @pytest.mark.skip
-    def test_entry_cache_adds_missing_drm_namespace(
-        self, db: DatabaseTransactionFixture
-    ):
-        work = db.work(with_open_access_download=True)
-
-        # This work's OPDS entry was created with a namespace map
-        # that did not include the drm: namespace.
-        work.simple_opds_entry = "<entry><foo>bar</foo></entry>"
-
-        # But now the annotator is set up to insert a tag with that
-        # namespace.
-        class AddDRMTagAnnotator(MockAnnotator):
-            @classmethod
-            def annotate_work_entry(
-                cls, work, license_pool, edition, identifier, feed, entry
-            ):
-                drm_link = OPDSFeed.makeelement("{%s}licensor" % OPDSFeed.DRM_NS)
-                entry.extend([drm_link])
-
-        # The entry is retrieved from cache and the appropriate
-        # namespace inserted.
-        entry = OPDSAcquisitionFeed.single_entry(work, AddDRMTagAnnotator)  # type: ignore[arg-type]
-        assert isinstance(entry, WorkEntry)
-        assert (
-            '<entry xmlns:drm="http://librarysimplified.org/terms/drm"><foo>bar</foo><drm:licensor/></entry>'
-            == str(entry)
-        )
-
     def test_error_when_work_has_no_identifier(self, db: DatabaseTransactionFixture):
         session = db.session
 
@@ -518,59 +487,6 @@ class TestOPDSAcquisitionFeed:
         work.presentation_edition = None
         entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
         assert None == entry
-
-    # We do not use the cached entry at the moment
-    @pytest.mark.skip
-    def test_cache_usage(self, db: DatabaseTransactionFixture):
-        session = db.session
-
-        work = db.work(with_open_access_download=True)
-        feed = OPDSAcquisitionFeed(
-            db.fresh_str(),
-            db.fresh_url(),
-            [],
-            Annotator(),
-        )
-
-        # Set the Work's cached OPDS entry to something that's clearly wrong.
-        tiny_entry = "<feed>cached entry</feed>"
-        work.simple_opds_entry = tiny_entry
-
-        # If we pass in use_cache=True, the cached value is used as a basis
-        # for the annotated entry.
-        annotator = Annotator()
-        entry = feed.single_entry(work, annotator)
-        assert tiny_entry == work.simple_opds_entry
-
-        # We know what the final value looks like -- it's the cached entry
-        # run through `Annotator.annotate_work_entry`.
-        [pool] = work.license_pools
-        xml = etree.fromstring(work.simple_opds_entry)
-        annotator.annotate_work_entry(
-            work, pool, pool.presentation_edition, pool.identifier, feed, xml
-        )
-        assert etree.tounicode(xml) == etree.tounicode(entry)
-
-        # If we pass in use_cache=False, a new OPDS entry is created
-        # from scratch, but the cache is not updated.
-        entry = feed.create_entry(work, use_cache=False)
-        assert etree.tounicode(entry) != tiny_entry
-        assert tiny_entry == work.simple_opds_entry
-
-        # If we pass in force_create, a new OPDS entry is created
-        # and the cache is updated.
-        entry = feed.create_entry(work, force_create=True)
-        entry_string = etree.tounicode(entry)
-        assert entry_string != tiny_entry
-        assert work.simple_opds_entry != tiny_entry
-
-        # Again, we got entry_string by running the (new) cached value
-        # through `Annotator.annotate_work_entry`.
-        full_entry = etree.fromstring(work.simple_opds_entry)
-        annotator.annotate_work_entry(
-            work, pool, pool.presentation_edition, pool.identifier, feed, full_entry
-        )
-        assert entry_string == etree.tounicode(full_entry)
 
     def test_exception_during_entry_creation_is_not_reraised(
         self, db: DatabaseTransactionFixture
@@ -1305,58 +1221,6 @@ class TestLookupAcquisitionFeed:
             "I know about this work but can offer no way of fulfilling it.",
         )
         assert expect == entry
-
-    @pytest.mark.skip
-    def test_create_entry_uses_cache_for_all_licensepools_for_work(
-        self, db: DatabaseTransactionFixture
-    ):
-        """A Work's cached OPDS entries can be reused by all LicensePools for
-        that Work, even LicensePools associated with different
-        identifiers.
-        """
-
-        class InstrumentableActiveLicensePool(VerboseAnnotator):
-            """A mock class that lets us control the output of
-            active_license_pool.
-            """
-
-            ACTIVE = None
-
-            @classmethod
-            def active_licensepool_for(cls, work):
-                return cls.ACTIVE
-
-        feed = self._feed(db.session, annotator=InstrumentableActiveLicensePool())
-
-        # Here are two completely different LicensePools for the same work.
-        work = db.work(with_license_pool=True)
-        work.verbose_opds_entry = "<entry>Cached</entry>"
-        [pool1] = work.license_pools
-
-        collection2 = db.collection()
-        edition2 = db.edition()
-        pool2 = db.licensepool(edition=edition2, collection=collection2)
-        identifier2 = pool2.identifier
-        work.license_pools.append(pool2)
-
-        # Regardless of which LicensePool the annotator thinks is
-        # 'active', passing in (identifier, work) will use the cache.
-        m = feed.create_entry
-        annotator = feed.annotator
-
-        annotator.ACTIVE = pool1
-        assert "Cached" == m((pool1.identifier, work)).text
-
-        annotator.ACTIVE = pool2
-        assert "Cached" == m((pool2.identifier, work)).text
-
-        # If for some reason we pass in an identifier that is not
-        # associated with the active license pool, we don't get
-        # anything.
-        work.license_pools = [pool1]
-        result = m((identifier2, work))
-        assert isinstance(result, OPDSMessage)
-        assert "using a Work not associated with that identifier." in result.message
 
 
 class TestNavigationFeedFixture:

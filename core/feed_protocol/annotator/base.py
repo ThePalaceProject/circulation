@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 from collections import defaultdict
+from typing import Optional
 from urllib.parse import quote
 
 from flask import has_request_context
@@ -124,7 +125,7 @@ class ToFeedEntry:
         return FeedEntryType(ratingValue="%.4f" % value, additionalType=type_uri)
 
     @classmethod
-    def samples(cls, edition: Edition) -> list[Hyperlink]:
+    def samples(cls, edition: Optional[Edition]) -> list[Hyperlink]:
         if not edition:
             return []
         _db = Session.object_session(edition)
@@ -383,7 +384,7 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
                 if isinstance(avail, datetime.datetime):
                     avail_date = avail.date()
                 else:
-                    avail_date = avail
+                    avail_date = avail  # type: ignore[unreachable]
                 if avail_date <= today:  # Avoid obviously wrong values.
                     computed.published = FeedEntryType(
                         text=AtomFeed._strftime(avail_date)
