@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import logging
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.logging import LogCaptureFixture
 
+from alembic.util import CommandError
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
@@ -743,6 +746,24 @@ class TestInstanceInitializationScript:
             script.initialize(MagicMock())
             script.initialize_database.assert_not_called()
             script.migrate_database.assert_called_once()
+
+    def test_initialize_alembic_exception(self, caplog: LogCaptureFixture):
+        # Test that we handle a CommandError exception being returned by Alembic.
+        with patch("scripts.inspect") as inspect:
+            with patch("scripts.LogConfiguration"):
+                script = InstanceInitializationScript()
+
+            caplog.set_level(logging.ERROR)
+            script.migrate_database = MagicMock(side_effect=CommandError("test"))
+            script.initialize_database = MagicMock()
+
+            # If the database is initialized, migrate_database() is called.
+            inspect().has_table.return_value = True
+            script.initialize(MagicMock())
+            script.initialize_database.assert_not_called()
+            script.migrate_database.assert_called_once()
+
+            assert "Error running database migrations" in caplog.text
 
     def test_initialize_database(self, db: DatabaseTransactionFixture):
         # Test that the script initializes the database.
