@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 import flask
 from flask import Response
@@ -20,6 +20,7 @@ from api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    PROTOCOL_DOES_NOT_SUPPORT_SETTINGS,
     UNKNOWN_PROTOCOL,
 )
 from api.integration.registry.license_providers import LicenseProvidersRegistry
@@ -305,8 +306,12 @@ class CollectionSettingsController(SettingsController):
                 )
             )
 
-    def process_settings(self, settings, collection):
-        """Go through the settings that the user has just submitted for this collection,
+    def process_settings(
+        self, settings: List[Dict[str, Any]], collection: Collection
+    ) -> Optional[ProblemDetail]:
+        """Process the settings for the given collection.
+
+        Go through the settings that the user has just submitted for this collection,
         and check that each setting is valid and that no required settings are missing.  If
         the setting passes all of the validations, go ahead and set it for this collection.
         """
@@ -315,10 +320,14 @@ class CollectionSettingsController(SettingsController):
             collection.protocol,
             is_child=(flask.request.form.get("parent_id") is not None),
         )
+        if isinstance(settings_class, ProblemDetail):
+            return settings_class
+        if settings_class is None:
+            return PROTOCOL_DOES_NOT_SUPPORT_SETTINGS
         collection_settings = {}
         for setting in settings:
-            key = setting.get("key")
-            value = flask.request.form.get(key)
+            key = setting["key"]
+            value = self._extract_form_setting_value(setting, flask.request.form)
             if key == "external_account_id":
                 error = self.validate_external_account_id_setting(value, setting)
                 if error:
@@ -334,9 +343,16 @@ class CollectionSettingsController(SettingsController):
 
                 if isinstance(external_integration_link, ProblemDetail):
                     return external_integration_link
-            elif key in flask.request.form:
+            elif value is not None:
                 # Only if the key was present in the request should we add it
                 collection_settings[key] = value
+            else:
+                # Keep existing setting value, when present, if a value is not specified.
+                # This can help prevent accidental loss of settings due to some programming errors.
+                if key in collection.integration_configuration.settings:
+                    collection_settings[
+                        key
+                    ] = collection.integration_configuration.settings[key]
 
         # validate then apply
         try:

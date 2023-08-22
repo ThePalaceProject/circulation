@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
-from typing import Optional, Type, cast
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type, cast
 
 import flask
 from flask import Response
@@ -49,6 +49,9 @@ from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.s3 import S3UploaderConfiguration
 from core.selftest import BaseHasSelfTests
 from core.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from werkzeug.datastructures import ImmutableMultiDict
 
 
 class SettingsController(AdminCirculationManagerController):
@@ -304,18 +307,27 @@ class SettingsController(AdminCirculationManagerController):
 
         return values
 
-    def _set_integration_setting(self, integration, setting):
-        setting_key = setting.get("key")
+    def _extract_form_setting_value(
+        self, setting: Dict[str, Any], form_data: ImmutableMultiDict
+    ) -> Optional[Any]:
+        """Extract the value of a setting from form data."""
+
+        key = setting.get("key")
         setting_type = setting.get("type")
 
+        value: Optional[Any]
         if setting_type == "list" and not setting.get("options"):
-            value = [item for item in flask.request.form.getlist(setting_key) if item]
-            if value:
-                value = json.dumps(value)
+            value = [item for item in form_data.getlist(key) if item]
         elif setting_type == "menu":
-            value = self._get_menu_values(setting_key, flask.request.form)
+            value = self._get_menu_values(key, form_data)
         else:
-            value = flask.request.form.get(setting_key)
+            value = form_data.get(key)
+        return value
+
+    def _set_integration_setting(self, integration, setting):
+        value = self._extract_form_setting_value(setting, flask.request.form)
+        if value and setting.get("type") == "list":
+            value = json.dumps(value)
 
         if value and setting.get("options"):
             # This setting can only take on values that are in its
@@ -351,7 +363,7 @@ class SettingsController(AdminCirculationManagerController):
         if isinstance(value, list):
             value = json.dumps(value)
 
-        integration.setting(setting_key).value = value
+        integration.setting(setting.get("key")).value = value
 
     def _set_configuration_library(
         self,
