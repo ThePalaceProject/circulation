@@ -333,9 +333,8 @@ class TestEdition:
             author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
             authors.append(author.sort_name)
 
-        untruncated_authors = ", ".join([x[1] for x in sorted(authors)])
+        untruncated_authors = ", ".join([x for x in sorted(authors)])
         wr = db.edition(authors=authors)
-        author, sort_author = wr.calculate_author()
         wr.calculate_presentation()
         db.session.commit()
 
@@ -345,11 +344,11 @@ class TestEdition:
                 == Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
             )
             assert truncated_str.endswith("...")
+            assert not original_str.endswith("...")
             assert (
                 len(original_str)
                 > Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
             )
-            assert not original_str.endswith("...")
 
         do_check(untruncated_authors, wr.author)
         do_check(untruncated_authors, wr.sort_author)
@@ -365,9 +364,9 @@ class TestEdition:
         wr.calculate_presentation()
         db.session.commit()
 
-        def do_check(original_str: str, truncated_str: str):
-            assert truncated_str == original_str
-            assert not truncated_str.endswith("...")
+        def do_check(original_str: str, calculated_str: str):
+            assert calculated_str == original_str
+            assert not calculated_str.endswith("...")
             assert (
                 len(original_str)
                 < Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR

@@ -59,11 +59,10 @@ class Edition(Base, EditionConstants):
     # On rare occasions the author (and sort_author) fields can contain a concatenated list of a
     # large number of authors which breaks the index and causes failures.  What exactly that threshold is
     # I am not entirely certain.  It appears that 2704 is the size that broke the 1/3 of a buffer page
-    # limit. However, I'm not entirely sure if the buffer page can always be assumed to be a fixed length.
-    # Also, it is not clear to me what other bytes are included in the index row.  Therefore, I have chosen
-    # a value that is both large enough to ensure little or no information is hidden from the end user in most
-    # cases and small enough that we never have to worry about this causing indexing failures in the future.
-    SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR = 1024
+    # limit. However, I'm not sure how the index size is calculated. I experimented
+    # with different values.  Author field values exceeding 13500 characters in length produced the aforementioned
+    # error with an index row size of 2800.  Author field values below 13000 characters seemed to be okay.
+    SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR = 13000
 
     # This Edition is associated with one particular
     # identifier--the one used by its data source to identify
