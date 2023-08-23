@@ -127,7 +127,6 @@ class TestOPDS2Serializer:
 
         entry = serializer._serialize_work_entry(data)
         metadata = entry["metadata"]
-        print(metadata)
         # Only the first author is considered
         assert metadata["author"] == dict(name="author1")
         # Of the allowed roles
@@ -168,7 +167,7 @@ class TestOPDS2Serializer:
             availability={
                 "since": "2022-02-02",
                 "until": "2222-02-02",
-                "state": "ready",
+                "state": "available",
             },
             indirectAcquisition=[
                 {

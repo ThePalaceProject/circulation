@@ -12,11 +12,6 @@ from core.feed_protocol.types import (
 )
 from core.model import Contributor
 
-AVAILABILITY_STATES = {
-    "available": "ready",
-    "unavailable": "unavailable",
-}
-
 ALLOWED_ROLES = [
     "translator",
     "editor",
@@ -143,9 +138,7 @@ class OPDS2Serializer:
 
         props = {}
         if link.availability_status:
-            props["availability"] = dict(
-                state=AVAILABILITY_STATES[link.availability_status]
-            )
+            props["availability"] = dict(state=link.availability_status)
             if link.availability_since:
                 props["availability"]["since"] = link.availability_since
             if link.availability_until:
