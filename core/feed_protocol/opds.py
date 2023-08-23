@@ -55,7 +55,11 @@ class BaseOPDSFeed(FeedInterface):
             logging.getLogger().error(f"Entry data has not been generated for {entry}")
             raise ValueError(f"Entry data has not been generated")
         serializer = get_serializer(requested_content_type)
-        return OPDSEntryResponse(
+        response = OPDSEntryResponse(
             response=serializer.serialize_work_entry(entry.computed),
-            content_type=serializer.content_type() ** response_kwargs,
+            **response_kwargs,
         )
+        if requested_content_type and "json" in requested_content_type:
+            # Only OPDS2 has the same content type for feed and entry
+            response.content_type = serializer.content_type()
+        return response
