@@ -107,7 +107,6 @@ class SAMLController:
             problem_detail.status_code,
             problem_detail.title,
             problem_detail.detail,
-            problem_detail.instance,
             problem_detail.debug_message,
         )
         params = {self.ERROR: problem_detail_json}

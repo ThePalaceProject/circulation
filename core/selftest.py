@@ -261,7 +261,7 @@ class BaseHasSelfTests(ABC):
     def test_failure(
         cls,
         name: str,
-        message: Union[str, Exception],
+        message: Union[Optional[str], Exception],
         debug_message: Optional[str] = None,
     ) -> SelfTestResult:
         """Create a SelfTestResult for a known failure.

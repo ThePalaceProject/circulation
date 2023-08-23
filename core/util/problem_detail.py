@@ -2,9 +2,11 @@
 
 As per http://datatracker.ietf.org/doc/draft-ietf-appsawg-http-problem/
 """
+from __future__ import annotations
+
 import json as j
 import logging
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 from flask_babel import LazyString
 from pydantic import BaseModel
@@ -14,12 +16,16 @@ from ..exceptions import BaseError
 JSON_MEDIA_TYPE = "application/api-problem+json"
 
 
-def json(type, status, title, detail=None, instance=None, debug_message=None):
+def json(
+    type: str,
+    status: Optional[int],
+    title: Optional[str],
+    detail: Optional[str] = None,
+    debug_message: Optional[str] = None,
+) -> str:
     d = dict(type=type, title=str(title), status=status)
     if detail:
         d["detail"] = str(detail)
-    if instance:
-        d["instance"] = instance
     if debug_message:
         d["debug_message"] = debug_message
     return j.dumps(d)
@@ -41,22 +47,20 @@ class ProblemDetail:
 
     def __init__(
         self,
-        uri,
-        status_code=None,
-        title=None,
-        detail=None,
-        instance=None,
-        debug_message=None,
+        uri: str,
+        status_code: Optional[int] = None,
+        title: Optional[str] = None,
+        detail: Optional[str] = None,
+        debug_message: Optional[str] = None,
     ):
         self.uri = uri
         self.title = title
         self.status_code = status_code
         self.detail = detail
-        self.instance = instance
         self.debug_message = debug_message
 
     @property
-    def response(self):
+    def response(self) -> Tuple[str, int, Dict[str, str]]:
         """Create a Flask-style response."""
         return (
             json(
@@ -64,7 +68,6 @@ class ProblemDetail:
                 self.status_code,
                 self.title,
                 self.detail,
-                self.instance,
                 self.debug_message,
             ),
             self.status_code or 400,
@@ -72,9 +75,13 @@ class ProblemDetail:
         )
 
     def detailed(
-        self, detail, status_code=None, title=None, instance=None, debug_message=None
-    ):
-        """Create a ProblemDetail for a more specific occurance of an existing
+        self,
+        detail: str,
+        status_code: Optional[int] = None,
+        title: Optional[str] = None,
+        debug_message: Optional[str] = None,
+    ) -> ProblemDetail:
+        """Create a ProblemDetail for a more specific occurrence of an existing
         ProblemDetail.
 
         The detailed error message will be shown to patrons.
@@ -92,13 +99,16 @@ class ProblemDetail:
             status_code or self.status_code,
             title or self.title,
             detail,
-            instance,
             debug_message,
         )
 
     def with_debug(
-        self, debug_message, detail=None, status_code=None, title=None, instance=None
-    ):
+        self,
+        debug_message: str,
+        detail: Optional[str] = None,
+        status_code: Optional[int] = None,
+        title: Optional[str] = None,
+    ) -> ProblemDetail:
         """Insert debugging information into a ProblemDetail.
 
         The original ProblemDetail's error message will be shown to
@@ -110,17 +120,15 @@ class ProblemDetail:
             status_code or self.status_code,
             title or self.title,
             detail or self.detail,
-            instance or self.instance,
             debug_message,
         )
 
-    def __repr__(self):
-        return "<ProblemDetail(uri={}, title={}, status_code={}, detail={}, instance={}, debug_message={}".format(
+    def __repr__(self) -> str:
+        return "<ProblemDetail(uri={}, title={}, status_code={}, detail={}, debug_message={}".format(
             self.uri,
             self.title,
             self.status_code,
             self.detail,
-            self.instance,
             self.debug_message,
         )
 
@@ -128,7 +136,7 @@ class ProblemDetail:
 class ProblemError(BaseError):
     """Exception class allowing to raise and catch ProblemDetail objects."""
 
-    def __init__(self, problem_detail: ProblemDetail):
+    def __init__(self, problem_detail: ProblemDetail) -> None:
         """Initialize a new instance of ProblemError class.
 
         :param problem_detail: ProblemDetail object

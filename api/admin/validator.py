@@ -2,7 +2,7 @@ import re
 
 from flask_babel import lazy_gettext as _
 
-from api.admin.exceptions import *
+from api.admin.problem_details import INVALID_EMAIL, INVALID_NUMBER, INVALID_URL
 
 
 class Validator:

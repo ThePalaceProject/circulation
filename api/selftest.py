@@ -31,7 +31,7 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
             detail (optional) -- additional explanation of the error
         """
 
-        def __init__(self, message: str, *, detail: Optional[str] = None):
+        def __init__(self, message: Optional[str], *, detail: Optional[str] = None):
             super().__init__(message=message)
             self.message = message
             self.detail = detail
@@ -97,6 +97,8 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
 
         # If we get here, then we have failed to find a valid test patron
         # and will raise an exception.
+        message: Optional[str]
+        detail: Optional[str]
         if patron is None:
             message = "Library has no test patron configured."
             detail = (

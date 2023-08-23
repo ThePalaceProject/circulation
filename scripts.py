@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from alembic import command, config
+from alembic.util import CommandError
 from api.adobe_vendor_id import AuthdataUtility
 from api.authenticator import LibraryAuthenticator
 from api.axis import Axis360BibliographicCoverageProvider
@@ -898,8 +899,15 @@ class InstanceInitializationScript:
         inspector = inspect(connection)
         if inspector.has_table("alembic_version"):
             self.log.info("Database schema already exists. Running migrations.")
-            self.migrate_database(connection)
-            self.log.info("Migrations complete.")
+            try:
+                self.migrate_database(connection)
+                self.log.info("Migrations complete.")
+            except CommandError as e:
+                self.log.error(
+                    f"Error running database migrations: {str(e)}. This "
+                    f"is possibly because you are running a old version "
+                    f"of the application against a new database."
+                )
         else:
             self.log.info("Database schema does not exist. Initializing.")
             self.initialize_database(connection)

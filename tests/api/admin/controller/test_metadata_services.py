@@ -5,7 +5,16 @@ import pytest
 from werkzeug.datastructures import MultiDict
 
 from api.admin.controller.metadata_services import MetadataServicesController
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_SERVICE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    NO_SUCH_LIBRARY,
+    UNKNOWN_PROTOCOL,
+)
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import AdminRole, ExternalIntegration, create, get_one

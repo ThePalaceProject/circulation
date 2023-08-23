@@ -128,7 +128,7 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CustomLists.
     custom_lists: Mapped[List[CustomList]] = relationship(
-        "CustomList", backref="library", lazy="joined", uselist=True
+        "CustomList", backref="library", uselist=True
     )
 
     # Lists shared with this library
@@ -153,7 +153,6 @@ class Library(Base, HasSessionCache):
     external_integration_settings: Mapped[List[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         back_populates="library",
-        lazy="joined",
         cascade="all, delete",
     )
 

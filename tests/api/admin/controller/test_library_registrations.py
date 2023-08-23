@@ -1,89 +1,97 @@
-import json
+from unittest.mock import MagicMock
 
 import flask
 import pytest
-from flask import url_for
-from werkzeug.datastructures import MultiDict
+from flask import Response, url_for
+from requests_mock import Mocker
+from werkzeug.datastructures import ImmutableMultiDict
 
-from api.admin.exceptions import *
-from api.registration.registry import Registration, RemoteRegistry
-from core.model import AdminRole, ConfigurationSetting, ExternalIntegration, create
-from core.util.http import HTTP
-from tests.core.mock import DummyHTTPClient
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.problem_details import REMOTE_INTEGRATION_FAILED
+from core.model import AdminRole, create
+from core.model.discovery_service_registration import (
+    DiscoveryServiceRegistration,
+    RegistrationStage,
+    RegistrationStatus,
+)
+from core.problem_details import INVALID_INPUT
+from core.util.problem_detail import ProblemDetail, ProblemError
+from tests.fixtures.api_admin import AdminControllerFixture
+from tests.fixtures.database import IntegrationConfigurationFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class TestLibraryRegistration:
-    """Test the process of registering a library with a RemoteRegistry."""
+    """Test the process of registering a library with a OpdsRegistrationService."""
 
-    def test_discovery_service_library_registrations_get(self, settings_ctrl_fixture):
-        db = settings_ctrl_fixture.ctrl.db
+    def test_discovery_service_library_registrations_get(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        create_integration_configuration: IntegrationConfigurationFixture,
+        library_fixture: LibraryFixture,
+        requests_mock: Mocker,
+    ) -> None:
+        db = admin_ctrl_fixture.ctrl.db
 
         # Here's a discovery service.
-        discovery_service, ignore = create(
-            db.session,
-            ExternalIntegration,
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=ExternalIntegration.DISCOVERY_GOAL,
+        discovery_service = create_integration_configuration.discovery_service(
+            url="http://service-url/"
         )
 
-        # We'll be making a mock request to this URL later.
-        discovery_service.setting(ExternalIntegration.URL).value = "http://service-url/"
-
         # We successfully registered this library with the service.
-        succeeded = db.library(
+        succeeded = library_fixture.library(
             name="Library 1",
             short_name="L1",
         )
-        config = ConfigurationSetting.for_library_and_externalintegration
-        config(
-            db.session, "library-registration-status", succeeded, discovery_service
-        ).value = "success"
+        registration, _ = create(
+            db.session,
+            DiscoveryServiceRegistration,
+            library=succeeded,
+            integration=discovery_service,
+        )
+        registration.status = RegistrationStatus.SUCCESS
+        registration.stage = RegistrationStage.PRODUCTION
 
         # We tried to register this library with the service but were
         # unsuccessful.
-        config(
-            db.session, "library-registration-stage", succeeded, discovery_service
-        ).value = "production"
-        failed = db.library(
+        failed = library_fixture.library(
             name="Library 2",
             short_name="L2",
         )
-        config(
+        registration, _ = create(
             db.session,
-            "library-registration-status",
-            failed,
-            discovery_service,
-        ).value = "failure"
-        config(
-            db.session,
-            "library-registration-stage",
-            failed,
-            discovery_service,
-        ).value = "testing"
+            DiscoveryServiceRegistration,
+            library=failed,
+            integration=discovery_service,
+        )
+        registration.status = RegistrationStatus.FAILURE
+        registration.stage = RegistrationStage.TESTING
 
         # We've never tried to register this library with the service.
-        unregistered = db.library(
+        unregistered = library_fixture.library(
             name="Library 3",
             short_name="L3",
         )
-        discovery_service.libraries = [succeeded, failed]
 
         # When a client sends a GET request to the controller, the
         # controller is going to call
-        # RemoteRegistry.fetch_registration_document() to try and find
+        # OpdsRegistrationService.fetch_registration_document() to try and find
         # the discovery services' terms of service. That's going to
         # make one or two HTTP requests.
 
-        # First, let's try the scenario where the discovery serivce is
+        # First, let's try the scenario where the discovery service is
         # working and has a terms-of-service.
-        client = DummyHTTPClient()
 
         # In this case we'll make two requests. The first request will
         # ask for the root catalog, where we'll look for a
         # registration link.
         root_catalog = dict(links=[dict(href="http://register-here/", rel="register")])
-        client.queue_requests_response(
-            200, RemoteRegistry.OPDS_2_TYPE, content=json.dumps(root_catalog)
+        requests_mock.get(
+            "http://service-url/",
+            json=root_catalog,
+            headers={"Content-Type": OpdsRegistrationService.OPDS_2_TYPE},
         )
 
         # The second request will fetch that registration link -- then
@@ -98,19 +106,30 @@ class TestLibraryRegistration:
                 ),
             ]
         )
-        client.queue_requests_response(
-            200, RemoteRegistry.OPDS_2_TYPE, content=json.dumps(registration_document)
+        requests_mock.get(
+            "http://register-here/",
+            json=registration_document,
+            headers={"Content-Type": OpdsRegistrationService.OPDS_2_TYPE},
         )
 
         controller = (
-            settings_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
+            admin_ctrl_fixture.ctrl.manager.admin_discovery_service_library_registrations_controller
         )
         m = controller.process_discovery_service_library_registrations
-        with settings_ctrl_fixture.request_context_with_admin("/", method="GET"):
-            response = m(do_get=client.do_get)
+        with admin_ctrl_fixture.request_context_with_admin("/", method="GET"):
+            # When the user lacks the SYSTEM_ADMIN role, the
+            # controller won't even start processing their GET
+            # request.
+            pytest.raises(AdminNotAuthorized, m)
+
+            # Add the admin role and try again.
+            admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+            response = m()
             # The document we get back from the controller is a
             # dictionary with useful information on all known
             # discovery integrations -- just one, in this case.
+            assert isinstance(response, dict)
             [service] = response["library_registrations"]
             assert discovery_service.id == service["id"]
 
@@ -118,7 +137,9 @@ class TestLibraryRegistration:
             # happened.  The target of the first request is the URL to
             # the discovery service's main catalog. The second request
             # is to the "register" link found in that catalog.
-            assert ["http://service-url/", "http://register-here/"] == client.requests
+            assert ["service-url", "register-here"] == [
+                r.hostname for r in requests_mock.request_history
+            ]
 
             # The TOS link and TOS HTML snippet were recovered from
             # the registration document served in response to the
@@ -145,26 +166,29 @@ class TestLibraryRegistration:
             )
 
             # Note that `unregistered`, the library that never tried
-            # to register with this discover service, is not included.
+            # to register with this discovery service, is not included.
 
             # Now let's try the controller method again, except this
             # time the discovery service's web server is down. The
             # first request will return a ProblemDetail document, and
             # there will be no second request.
-            client.requests = []
-            client.queue_requests_response(
-                502,
-                content=REMOTE_INTEGRATION_FAILED,
+            requests_mock.reset()
+            requests_mock.get(
+                "http://service-url/",
+                json=REMOTE_INTEGRATION_FAILED.response[0],
+                status_code=502,
             )
-            response = m(do_get=client.do_get)
+
+            response = m()
 
             # Everything looks good, except that there's no TOS data
             # available.
+            assert isinstance(response, dict)
             [service] = response["library_registrations"]
             assert discovery_service.id == service["id"]
             assert 2 == len(service["libraries"])
-            assert None == service["terms_of_service_link"]
-            assert None == service["terms_of_service_html"]
+            assert service["terms_of_service_link"] is None
+            assert service["terms_of_service_html"] is None
 
             # The problem detail document that prevented the TOS data
             # from showing up has been converted to a dictionary and
@@ -172,61 +196,68 @@ class TestLibraryRegistration:
             # discovery service.
             assert REMOTE_INTEGRATION_FAILED.uri == service["access_problem"]["type"]
 
-            # When the user lacks the SYSTEM_ADMIN role, the
-            # controller won't even start processing their GET
-            # request.
-            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            db.session.flush()
-            pytest.raises(AdminNotAuthorized, m)
-
-    def test_discovery_service_library_registrations_post(self, settings_ctrl_fixture):
+    def test_discovery_service_library_registrations_post(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        create_integration_configuration: IntegrationConfigurationFixture,
+        library_fixture: LibraryFixture,
+    ) -> None:
         """Test what might happen when you POST to
         discovery_service_library_registrations.
         """
 
         controller = (
-            settings_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
+            admin_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
         )
         m = controller.process_discovery_service_library_registrations
 
         # Here, the user doesn't have permission to start the
         # registration process.
-        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            pytest.raises(
-                AdminNotAuthorized,
-                m,
-                do_get=settings_ctrl_fixture.do_request,
-                do_post=settings_ctrl_fixture.do_request,
-            )
-        settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            pytest.raises(AdminNotAuthorized, m)
+
+        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        # We might not get an integration ID parameter.
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict()
+            response = m()
+            assert isinstance(response, ProblemDetail)
+            assert INVALID_INPUT.uri == response.uri
 
         # The integration ID might not correspond to a valid
         # ExternalIntegration.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
                 [
                     ("integration_id", "1234"),
                 ]
             )
             response = m()
+            assert isinstance(response, ProblemDetail)
             assert MISSING_SERVICE == response
 
-        # Create an ExternalIntegration to avoid that problem in future
-        # tests.
-        discovery_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=ExternalIntegration.DISCOVERY_GOAL,
+        # Create an IntegrationConfiguration to avoid that problem in future tests.
+        discovery_service = create_integration_configuration.discovery_service(
+            url="http://register-here/"
         )
-        discovery_service.url = "registry url"
+
+        # We might not get a library short name.
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("integration_id", str(discovery_service.id)),
+                ]
+            )
+            response = m()
+            assert isinstance(response, ProblemDetail)
+            assert INVALID_INPUT.uri == response.uri
 
         # The library name might not correspond to a real library.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = MultiDict(
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
                 [
-                    ("integration_id", discovery_service.id),
+                    ("integration_id", str(discovery_service.id)),
                     ("library_short_name", "not-a-library"),
                 ]
             )
@@ -234,55 +265,65 @@ class TestLibraryRegistration:
             assert NO_SUCH_LIBRARY == response
 
         # Take care of that problem.
-        library = settings_ctrl_fixture.ctrl.db.default_library()
-        form = MultiDict(
+        library = library_fixture.library()
+
+        # We might not get a registration stage.
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("integration_id", str(discovery_service.id)),
+                    ("library_short_name", str(library.short_name)),
+                ]
+            )
+            response = m()
+            assert isinstance(response, ProblemDetail)
+            assert INVALID_INPUT.uri == response.uri
+
+        # The registration stage might not be valid.
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("integration_id", str(discovery_service.id)),
+                    ("library_short_name", str(library.short_name)),
+                    ("registration_stage", "not-a-stage"),
+                ]
+            )
+            response = m()
+            assert isinstance(response, ProblemDetail)
+            assert INVALID_INPUT.uri == response.uri
+
+        form = ImmutableMultiDict(
             [
-                ("integration_id", discovery_service.id),
-                ("library_short_name", library.short_name),
-                ("registration_stage", Registration.TESTING_STAGE),
+                ("integration_id", str(discovery_service.id)),
+                ("library_short_name", str(library.short_name)),
+                ("registration_stage", RegistrationStage.TESTING.value),
             ]
         )
 
-        # Registration.push might return a ProblemDetail for whatever
-        # reason.
-        class Mock(Registration):
-            # We reproduce the signature, even though it's not
-            # necessary for what we're testing, so that if the push()
-            # signature changes this test will fail.
-            def push(self, stage, url_for, catalog_url=None, do_get=None, do_post=None):
-                return REMOTE_INTEGRATION_FAILED
+        # The registration may fail for some reason.
+        mock_registry = MagicMock(spec=OpdsRegistrationService)
+        mock_registry.register_library.side_effect = ProblemError(
+            problem_detail=REMOTE_INTEGRATION_FAILED
+        )
+        controller.look_up_registry = MagicMock(return_value=mock_registry)
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = form
-            response = m(registration_class=Mock)
+            response = m()
             assert REMOTE_INTEGRATION_FAILED == response
 
         # But if that doesn't happen, success!
-        class Mock(Registration):
-            """When asked to push a registration, do nothing and say it
-            worked.
-            """
+        mock_registry = MagicMock(spec=OpdsRegistrationService)
+        mock_registry.register_library.return_value = True
+        controller.look_up_registry = MagicMock(return_value=mock_registry)
 
-            called_with = None
-
-            def push(self, *args, **kwargs):
-                Mock.called_with = (args, kwargs)
-                return True
-
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = form
-            response = controller.process_discovery_service_library_registrations(
-                registration_class=Mock
-            )
+            response = controller.process_discovery_service_library_registrations()
+            assert isinstance(response, Response)
             assert 200 == response.status_code
 
-            # push() was called with the arguments we would expect.
-            args, kwargs = Mock.called_with
-            assert (Registration.TESTING_STAGE, url_for) == args
-
-            # We would have made real HTTP requests.
-            assert HTTP.debuggable_post == kwargs.pop("do_post")
-            assert HTTP.debuggable_get == kwargs.pop("do_get")
-
-            # No other keyword arguments were passed in.
-            assert {} == kwargs
+            # register_library() was called with the arguments we would expect.
+            mock_registry.register_library.assert_called_once_with(
+                library, RegistrationStage.TESTING, url_for
+            )

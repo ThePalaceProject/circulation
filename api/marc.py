@@ -3,10 +3,12 @@ import urllib.parse
 import urllib.request
 
 from pymarc import Field, Subfield
+from sqlalchemy import select
 
 from core.config import Configuration
 from core.marc import Annotator, MARCExporter
 from core.model import ConfigurationSetting, Session
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
 
 
 class LibraryAnnotator(Annotator):
@@ -68,16 +70,14 @@ class LibraryAnnotator(Annotator):
             if marc_setting:
                 settings.append(marc_setting)
 
-        from api.registration.registry import Registration
-
         settings += [
-            s.value
-            for s in _db.query(ConfigurationSetting).filter(
-                ConfigurationSetting.key
-                == Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-                ConfigurationSetting.library_id == library.id,
-            )
-            if s.value
+            s.web_client
+            for s in _db.execute(
+                select(DiscoveryServiceRegistration.web_client).where(
+                    DiscoveryServiceRegistration.library == library,
+                    DiscoveryServiceRegistration.web_client != None,
+                )
+            ).all()
         ]
 
         qualified_identifier = urllib.parse.quote(

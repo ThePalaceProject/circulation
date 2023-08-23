@@ -4,8 +4,13 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
-from api.admin.problem_details import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    ADMIN_AUTH_NOT_CONFIGURED,
+    INCOMPLETE_CONFIGURATION,
+    UNKNOWN_ROLE,
+)
+from api.problem_details import LIBRARY_NOT_FOUND
 from core.model import Admin, AdminRole, create, get_one
 
 

@@ -18,6 +18,7 @@ from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -74,6 +75,7 @@ from core.model.devicetokens import (
     DuplicateDeviceTokenError,
     InvalidTokenTypeError,
 )
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
@@ -369,13 +371,13 @@ class CirculationManager:
                 if domain:
                     patron_web_domains.add(domain)
 
-        from api.registration.registry import Registration
-
-        for setting in self._db.query(ConfigurationSetting).filter(
-            ConfigurationSetting.key == Registration.LIBRARY_REGISTRATION_WEB_CLIENT
-        ):
-            if setting.value:
-                patron_web_domains.add(get_domain(setting.value))
+        domains = self._db.execute(
+            select(DiscoveryServiceRegistration.web_client).where(
+                DiscoveryServiceRegistration.web_client != None
+            )
+        ).all()
+        for row in domains:
+            patron_web_domains.add(get_domain(row.web_client))
 
         self.patron_web_domains = patron_web_domains
         self.setup_configuration_dependent_controllers()

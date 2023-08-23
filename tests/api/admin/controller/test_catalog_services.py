@@ -4,7 +4,15 @@ import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_INTEGRATION,
+    MISSING_SERVICE,
+    MULTIPLE_SERVICES_FOR_LIBRARY,
+    UNKNOWN_PROTOCOL,
+)
 from core.marc import MARCExporter
 from core.model import (
     AdminRole,

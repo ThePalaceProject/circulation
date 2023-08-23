@@ -2,7 +2,11 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    MISSING_SITEWIDE_SETTING_KEY,
+    MISSING_SITEWIDE_SETTING_VALUE,
+)
 from api.config import Configuration
 from core.model import AdminRole, ConfigurationSetting
 

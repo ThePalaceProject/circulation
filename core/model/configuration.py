@@ -162,10 +162,6 @@ class ExternalIntegration(Base):
     DRM_GOAL = "drm"
 
     # These integrations are associated with external services that
-    # help patrons find libraries.
-    DISCOVERY_GOAL = "discovery"
-
-    # These integrations are associated with external services that
     # collect logs of server-side events.
     LOGGING_GOAL = "logging"
 
@@ -234,9 +230,6 @@ class ExternalIntegration(Base):
 
     # Integrations with SEARCH_GOAL
     OPENSEARCH = "Opensearch"
-
-    # Integrations with DISCOVERY_GOAL
-    OPDS_REGISTRATION = "OPDS Registration"
 
     # Integrations with ANALYTICS_GOAL
     GOOGLE_ANALYTICS = "Google Analytics"

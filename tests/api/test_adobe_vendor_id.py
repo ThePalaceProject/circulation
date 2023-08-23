@@ -1,14 +1,20 @@
+from __future__ import annotations
+
 import base64
 import datetime
+from typing import Type
 from unittest.mock import MagicMock
 
 import pytest
 from jwt import DecodeError, ExpiredSignatureError, InvalidIssuedAtError
+from sqlalchemy import select
 
 from api.adobe_vendor_id import AuthdataUtility
-from api.registration.constants import RegistrationConstants
 from core.config import CannotLoadConfiguration
-from core.model import ConfigurationSetting, ExternalIntegration
+from core.model.discovery_service_registration import (
+    DiscoveryServiceRegistration,
+    RegistrationStatus,
+)
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -29,15 +35,14 @@ class TestAuthdataUtility:
     @pytest.mark.parametrize(
         "registration_status, authdata_utility_type",
         [
-            (RegistrationConstants.SUCCESS_STATUS, AuthdataUtility),
-            (RegistrationConstants.FAILURE_STATUS, type(None)),
-            (None, type(None)),
+            (RegistrationStatus.SUCCESS, AuthdataUtility),
+            (RegistrationStatus.FAILURE, type(None)),
         ],
     )
     def test_eligible_authdata_vendor_id_integrations(
         self,
-        registration_status,
-        authdata_utility_type,
+        registration_status: RegistrationStatus,
+        authdata_utility_type: Type[AuthdataUtility] | Type[None],
         authdata: AuthdataUtility,
         vendor_id_fixture: VendorIDFixture,
     ):
@@ -45,19 +50,7 @@ class TestAuthdataUtility:
         # a given library is eligible to provide an AuthdataUtility.
         library = vendor_id_fixture.db.default_library()
         vendor_id_fixture.initialize_adobe(library)
-        registry = ExternalIntegration.lookup(
-            vendor_id_fixture.db.session,
-            ExternalIntegration.OPDS_REGISTRATION,
-            ExternalIntegration.DISCOVERY_GOAL,
-            library=library,
-        )
-        ConfigurationSetting.for_library_and_externalintegration(
-            vendor_id_fixture.db.session,
-            RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
-            library,
-            registry,
-        ).value = registration_status
-
+        vendor_id_fixture.registration.status = registration_status
         utility = AuthdataUtility.from_config(library)
 
         assert isinstance(utility, authdata_utility_type)
@@ -76,33 +69,19 @@ class TestAuthdataUtility:
         assert utility is not None
         assert library.short_name is not None
 
-        registry = ExternalIntegration.lookup(
-            vendor_id_fixture.db.session,
-            ExternalIntegration.OPDS_REGISTRATION,
-            ExternalIntegration.DISCOVERY_GOAL,
-            library=library,
-        )
-        assert (
-            library.short_name + "token"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                vendor_id_fixture.db.session,
-                ExternalIntegration.USERNAME,
-                library,
-                registry,
-            ).value
-        )
-        assert (
-            library.short_name + " token secret"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                vendor_id_fixture.db.session,
-                ExternalIntegration.PASSWORD,
-                library,
-                registry,
-            ).value
-        )
+        registration = vendor_id_fixture.db.session.scalars(
+            select(DiscoveryServiceRegistration).where(
+                DiscoveryServiceRegistration.library_id == library.id,
+                DiscoveryServiceRegistration.integration_id
+                == vendor_id_fixture.registry.id,
+            )
+        ).first()
+        assert registration is not None
+        assert registration.short_name == library.short_name + "token"
+        assert registration.shared_secret == library.short_name + " token secret"
 
-        assert VendorIDFixture.TEST_VENDOR_ID == utility.vendor_id
-        assert library_url == utility.library_uri
+        assert utility.vendor_id == VendorIDFixture.TEST_VENDOR_ID
+        assert utility.library_uri == library_url
 
         # If the Library object is disconnected from its database
         # session, as may happen in production...
@@ -125,16 +104,10 @@ class TestAuthdataUtility:
 
         # If an integration is set up but incomplete, from_config
         # raises CannotLoadConfiguration.
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            vendor_id_fixture.db.session,
-            ExternalIntegration.USERNAME,
-            library,
-            registry,
-        )
-        old_short_name = setting.value
-        setting.value = None
+        old_short_name = registration.short_name
+        registration.short_name = None
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
-        setting.value = old_short_name
+        registration.short_name = old_short_name
 
         library_settings = library_fixture.settings(library)
         old_website = library_settings.website
@@ -142,20 +115,14 @@ class TestAuthdataUtility:
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
         library_settings.website = old_website
 
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            vendor_id_fixture.db.session,
-            ExternalIntegration.PASSWORD,
-            library,
-            registry,
-        )
-        old_secret = setting.value
-        setting.value = None
+        old_secret = registration.shared_secret
+        registration.shared_secret = None
         pytest.raises(CannotLoadConfiguration, AuthdataUtility.from_config, library)
-        setting.value = old_secret
+        registration.shared_secret = old_secret
 
         # If there is no Adobe Vendor ID integration set up,
         # from_config() returns None.
-        vendor_id_fixture.db.session.delete(registry)
+        vendor_id_fixture.db.session.delete(registration)
         assert AuthdataUtility.from_config(library) is None
 
     def test_short_client_token_for_patron(

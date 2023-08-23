@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Type
+from typing import Any, Type
+
+from sqlalchemy.orm import Session
 
 from core.integration.settings import BaseSettings
 
@@ -24,6 +26,15 @@ class HasIntegrationConfiguration(ABC):
     def settings_class(cls) -> Type[BaseSettings]:
         """Get the settings for this integration"""
         ...
+
+    @classmethod
+    def protocol_details(cls, db: Session) -> dict[str, Any]:
+        """Add any additional details about this protocol to be
+        returned to the admin interface.
+
+        The default implementation returns an empty dict.
+        """
+        return {}
 
 
 class HasLibraryIntegrationConfiguration(HasIntegrationConfiguration, ABC):

@@ -13,7 +13,7 @@ from core.util.http import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.core.mock import MockRequestsResponse
 
 
@@ -264,16 +264,20 @@ class TestHTTP:
         success = MockRequestsResponse(302, content="Success!")
         assert success == m("url", success)
 
-        # An error is turned into a detailed ProblemDetail
+        # An error is turned into a ProblemError
         error = MockRequestsResponse(500, content="Error!")
-        problem = m("url", error)
+        with pytest.raises(ProblemError) as excinfo:
+            m("url", error)
+        problem = excinfo.value.problem_detail
         assert isinstance(problem, ProblemDetail)
         assert INTEGRATION_ERROR.uri == problem.uri
-        assert "500 response from integration server: 'Error!'" == problem.detail
+        assert '500 response from integration server: "Error!"' == problem.detail
 
         content, status_code, headers = INVALID_INPUT.response
         error = MockRequestsResponse(status_code, headers, content)
-        problem = m("url", error)
+        with pytest.raises(ProblemError) as excinfo:
+            m("url", error)
+        problem = excinfo.value.problem_detail
         assert isinstance(problem, ProblemDetail)
         assert INTEGRATION_ERROR.uri == problem.uri
         assert (
