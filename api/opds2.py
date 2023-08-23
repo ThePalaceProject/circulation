@@ -120,7 +120,7 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         if not token_auth or token_auth.value is None:
             return fulfillment
 
-        token = self.get_authentication_token(patron, token_auth)
+        token = self.get_authentication_token(patron, token_auth.value)
         if isinstance(token, ProblemDetail):
             raise CannotFulfill()
 
