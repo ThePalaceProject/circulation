@@ -4,7 +4,22 @@ import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    CANNOT_CHANGE_PROTOCOL,
+    CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
+    COLLECTION_NAME_ALREADY_IN_USE,
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_GOAL_CONFLICT,
+    MISSING_COLLECTION,
+    MISSING_COLLECTION_NAME,
+    MISSING_PARENT,
+    MISSING_SERVICE,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    NO_SUCH_LIBRARY,
+    PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
+    UNKNOWN_PROTOCOL,
+)
 from api.selftest import HasCollectionSelfTests
 from core.model import (
     Admin,

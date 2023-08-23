@@ -15,8 +15,15 @@ from werkzeug import Response
 from werkzeug.datastructures import FileStorage, ImmutableMultiDict
 
 from api.admin.controller.library_settings import LibrarySettingsController
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    INVALID_CONFIGURATION_OPTION,
+    LIBRARY_SHORT_NAME_ALREADY_IN_USE,
+    UNKNOWN_LANGUAGE,
+)
 from api.config import Configuration
+from api.problem_details import LIBRARY_NOT_FOUND
 from core.facets import FacetConstants
 from core.model import AdminRole, Library, get_one
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME

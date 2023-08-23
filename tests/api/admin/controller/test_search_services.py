@@ -2,7 +2,15 @@ import flask
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from api.admin.exceptions import *
+from api.admin.exceptions import AdminNotAuthorized
+from api.admin.problem_details import (
+    INCOMPLETE_CONFIGURATION,
+    INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_SERVICE,
+    MULTIPLE_SITEWIDE_SERVICES,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
+    UNKNOWN_PROTOCOL,
+)
 from core.external_search import ExternalSearchIndex
 from core.model import AdminRole, ExternalIntegration, create, get_one
 
@@ -105,8 +113,8 @@ class TestSearchServices:
         service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=ExternalIntegration.OPDS_REGISTRATION,
-            goal=ExternalIntegration.DISCOVERY_GOAL,
+            protocol="test",
+            goal=ExternalIntegration.LICENSE_GOAL,
             name="name",
         )
 

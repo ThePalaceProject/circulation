@@ -5,11 +5,14 @@ import urllib.request
 from pymarc import Record
 
 from api.marc import LibraryAnnotator
-from api.registration.registry import Registration
 from core.config import Configuration
 from core.marc import MARCExporter
-from core.model import ConfigurationSetting, ExternalIntegration
-from tests.fixtures.database import DatabaseTransactionFixture
+from core.model import ConfigurationSetting, ExternalIntegration, create
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    IntegrationConfigurationFixture,
+)
 
 
 class TestLibraryAnnotator:
@@ -142,7 +145,11 @@ class TestLibraryAnnotator:
         assert [record, pool] == annotator.called_with.get("add_distributor")
         assert [record, pool] == annotator.called_with.get("add_formats")
 
-    def test_add_web_client_urls(self, db: DatabaseTransactionFixture):
+    def test_add_web_client_urls(
+        self,
+        db: DatabaseTransactionFixture,
+        create_integration_configuration: IntegrationConfigurationFixture,
+    ):
         # Web client URLs can come from either the MARC export integration or
         # a library registry integration.
 
@@ -195,17 +202,14 @@ class TestLibraryAnnotator:
         assert [] == record.get_fields("856")
 
         # Add a URL from a library registry.
-        registry = db.external_integration(
-            ExternalIntegration.OPDS_REGISTRATION,
-            ExternalIntegration.DISCOVERY_GOAL,
-            libraries=[db.default_library()],
-        )
-        ConfigurationSetting.for_library_and_externalintegration(
+        registry = create_integration_configuration.discovery_service()
+        create(
             db.session,
-            Registration.LIBRARY_REGISTRATION_WEB_CLIENT,
-            db.default_library(),
-            registry,
-        ).value = client_base_1
+            DiscoveryServiceRegistration,
+            library=db.default_library(),
+            integration=registry,
+            web_client=client_base_1,
+        )
 
         record = Record()
         annotator.add_web_client_urls(record, db.default_library(), identifier)

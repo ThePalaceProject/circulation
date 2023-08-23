@@ -33,7 +33,6 @@ from core.lane import FacetsWithEntryPoint, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.model import (
     CirculationEvent,
-    ConfigurationSetting,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -649,15 +648,8 @@ class TestLibraryAnnotator:
         # If the Adobe Vendor ID configuration is present but
         # incomplete, adobe_id_tags does nothing.
 
-        # Delete one setting from the existing integration to check
-        # this.
-        setting = ConfigurationSetting.for_library_and_externalintegration(
-            annotator_fixture.db.session,
-            ExternalIntegration.USERNAME,
-            library,
-            vendor_id_fixture.registry,
-        )
-        annotator_fixture.db.session.delete(setting)
+        # Delete one setting from the registration to check this.
+        vendor_id_fixture.registration.short_name = None
         assert [] == annotator_fixture.annotator.adobe_id_tags("new identifier")
 
     def test_lcp_acquisition_link_contains_hashed_passphrase(
@@ -1241,12 +1233,8 @@ class TestLibraryAnnotator:
             == licensor.attrib["{http://librarysimplified.org/terms/drm}vendor"]
         )
         [client_token] = licensor
-        expected = ConfigurationSetting.for_library_and_externalintegration(
-            annotator_fixture.db.session,
-            ExternalIntegration.USERNAME,
-            annotator_fixture.db.default_library(),
-            vendor_id_fixture.registry,
-        ).value.upper()
+        assert vendor_id_fixture.registration.short_name is not None
+        expected = vendor_id_fixture.registration.short_name.upper()
         assert client_token.text.startswith(expected)
         assert adobe_patron_identifier in client_token.text
 

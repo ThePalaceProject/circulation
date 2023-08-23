@@ -10,7 +10,6 @@ from api.admin.problem_details import (
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from core.model import ExternalIntegration, get_one
-from core.util.http import HTTP
 from core.util.problem_detail import ProblemDetail
 
 
@@ -63,7 +62,7 @@ class MetadataServicesController(SettingsController):
             "No metadata self-test class for protocol %s" % integration.protocol
         )
 
-    def process_post(self, do_get=HTTP.debuggable_get, do_post=HTTP.debuggable_post):
+    def process_post(self):
         name = flask.request.form.get("name")
         protocol = flask.request.form.get("protocol")
         url = flask.request.form.get("url")

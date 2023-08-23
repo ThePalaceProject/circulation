@@ -3,16 +3,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-import warnings
-from typing import Any, Dict, Generator, List, Literal, Tuple, Type, TypeVar, Union
+from typing import Any, Generator, List, Literal, Tuple, Type, TypeVar
 
 from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
 from psycopg2.extras import NumericRange
 from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.exc import IntegrityError, SAWarning
+from sqlalchemy.engine import Connection
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -558,6 +557,7 @@ from .credential import Credential
 from .customlist import CustomList, CustomListEntry
 from .datasource import DataSource
 from .devicetokens import DeviceToken
+from .discovery_service_registration import DiscoveryServiceRegistration
 from .edition import Edition
 from .hassessioncache import HasSessionCache
 from .identifier import Equivalency, Identifier

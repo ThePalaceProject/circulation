@@ -10,21 +10,21 @@ from typing import Any, Dict, Optional, Tuple, Union
 import jwt
 from jwt.algorithms import HMACAlgorithm
 from jwt.exceptions import InvalidIssuedAtError
+from sqlalchemy import select
 from sqlalchemy.orm import Query
 from sqlalchemy.orm.session import Session
 
-from api.registration.constants import RegistrationConstants
-from core.model import (
-    ConfigurationSetting,
-    Credential,
-    DataSource,
-    ExternalIntegration,
-    Library,
-    Patron,
+from core.integration.goals import Goals
+from core.model import Credential, DataSource, IntegrationConfiguration, Library, Patron
+from core.model.discovery_service_registration import (
+    DiscoveryServiceRegistration,
+    RegistrationStatus,
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
 
 from .config import CannotLoadConfiguration
+from .discovery.opds_registration import OpdsRegistrationService
+from .integration.registry.discovery import DiscoveryRegistry
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -99,8 +99,6 @@ class AuthdataUtility:
         self.short_token_signer = HMACAlgorithm(HMACAlgorithm.SHA256)
         self.short_token_signing_key = self.short_token_signer.prepare_key(self.secret)
 
-    VENDOR_ID_KEY = "vendor_id"
-
     @classmethod
     def from_config(
         cls, library: Library, _db: Optional[Session] = None
@@ -124,60 +122,41 @@ class AuthdataUtility:
         # Use a version of the library
         library = _db.merge(library, load=False)
 
-        # Try to find an external integration with a configured Vendor ID.
-        integrations = (
-            _db.query(ExternalIntegration)
-            .outerjoin(ExternalIntegration.libraries)
-            .filter(
-                ExternalIntegration.protocol == ExternalIntegration.OPDS_REGISTRATION,
-                ExternalIntegration.goal == ExternalIntegration.DISCOVERY_GOAL,
-                Library.id == library.id,
+        # Find the first registration that has a vendor ID.
+        protocol = DiscoveryRegistry().get_protocol(OpdsRegistrationService)
+        registration = _db.scalars(
+            select(DiscoveryServiceRegistration)
+            .join(IntegrationConfiguration)
+            .where(
+                DiscoveryServiceRegistration.library == library,
+                DiscoveryServiceRegistration.vendor_id != None,
+                DiscoveryServiceRegistration.status == RegistrationStatus.SUCCESS,
+                IntegrationConfiguration.protocol == protocol,
+                IntegrationConfiguration.goal == Goals.DISCOVERY_GOAL,
             )
-        )
+        ).first()
 
-        for possible_integration in integrations:
-            vendor_id = ConfigurationSetting.for_externalintegration(
-                cls.VENDOR_ID_KEY, possible_integration
-            ).value
-            registration_status = (
-                ConfigurationSetting.for_library_and_externalintegration(
-                    _db,
-                    RegistrationConstants.LIBRARY_REGISTRATION_STATUS,
-                    library,
-                    possible_integration,
-                ).value
-            )
-            if (
-                vendor_id
-                and registration_status == RegistrationConstants.SUCCESS_STATUS
-            ):
-                integration = possible_integration
-                break
-        else:
+        if registration is None:
+            # No vendor ID is configured for this library.
             return None
 
         library_uri = library.settings.website
+        vendor_id = registration.vendor_id
+        short_name = registration.short_name
+        shared_secret = registration.shared_secret
 
-        vendor_id = integration.setting(cls.VENDOR_ID_KEY).value
-        library_short_name = ConfigurationSetting.for_library_and_externalintegration(
-            _db, ExternalIntegration.USERNAME, library, integration
-        ).value
-        secret = ConfigurationSetting.for_library_and_externalintegration(
-            _db, ExternalIntegration.PASSWORD, library, integration
-        ).value
-
-        if not vendor_id or not library_uri or not library_short_name or not secret:
+        if not vendor_id or not library_uri or not short_name or not shared_secret:
             raise CannotLoadConfiguration(
                 "Short Client Token configuration is incomplete. "
                 "vendor_id (%s), username (%s), password (%s) and "
                 "Library website_url (%s) must all be defined."
-                % (vendor_id, library_uri, library_short_name, secret)
+                % (vendor_id, library_uri, short_name, shared_secret)
             )
-        if "|" in library_short_name:
+        if "|" in short_name:
             raise CannotLoadConfiguration(
                 "Library short name cannot contain the pipe character."
             )
-        return cls(vendor_id, library_uri, library_short_name, secret)
+        return cls(vendor_id, library_uri, short_name, shared_secret)
 
     @classmethod
     def adobe_relevant_credentials(self, patron: Patron) -> Query[Credential]:
