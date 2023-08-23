@@ -113,7 +113,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         # Facet links
         facet_links = self.facet_links(self.annotator, self._facets)
         for linkdata in facet_links:
-            self._feed.links.append(Link(**linkdata))
+            self._feed.facet_links.append(Link(**linkdata))
 
     @classmethod
     def facet_links(cls, annotator, facets):

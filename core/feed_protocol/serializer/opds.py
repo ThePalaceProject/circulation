@@ -96,6 +96,9 @@ class OPDS1Serializer(OPDSFeed):
                 breadcrumbs.append(self._serialize_feed_entry("link", link))
             serialized.append(breadcrumbs)
 
+        for link in feed.facet_links:
+            serialized.append(self._serialize_feed_entry("link", link))
+
         # TODO: REMOVE DEBUG INDENT
         etree.indent(serialized)
         return self.to_string(serialized)
