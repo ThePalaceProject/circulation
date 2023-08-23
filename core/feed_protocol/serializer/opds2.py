@@ -4,15 +4,34 @@ from typing import Any, Dict
 
 from core.feed_protocol.types import (
     Acquisition,
+    Author,
     FeedData,
     IndirectAcquisition,
     Link,
     WorkEntryData,
 )
+from core.model import Contributor
 
 AVAILABILITY_STATES = {
     "available": "ready",
     "unavailable": "unavailable",
+}
+
+ALLOWED_ROLES = [
+    "translator",
+    "editor",
+    "artist",
+    "illustrator",
+    "letterer",
+    "penciler",
+    "colorist",
+    "inker",
+    "narrator",
+]
+MARC_CODE_TO_ROLES = {
+    code: name.lower()
+    for name, code in Contributor.MARC_ROLE_CODES.items()
+    if name.lower() in ALLOWED_ROLES
 }
 
 
@@ -88,6 +107,12 @@ class OPDS2Serializer:
             if name:
                 metadata["belongsTo"] = dict(name=name, position=position)
 
+        if len(data.authors):
+            metadata["author"] = self._serialize_contributor(data.authors[0])
+        for contributor in data.contributors:
+            if role := MARC_CODE_TO_ROLES.get(contributor.role, None):
+                metadata[role] = self._serialize_contributor(contributor)
+
         images = [self._serialize_link(link) for link in data.image_links]
         links = [self._serialize_link(link) for link in data.other_links]
 
@@ -159,3 +184,14 @@ class OPDS2Serializer:
             link_data["facets"].append(facets)
 
         return link_data
+
+    def _serialize_contributor(self, author: Author) -> dict:
+        result = {"name": author.name}
+        if author.sort_name:
+            result["sortAs"] = author.sort_name
+        if author.link:
+            link = self._serialize_link(author.link)
+            # OPDS2 does not need "title" in the link
+            link.pop("title", None)
+            result["links"] = [link]
+        return result

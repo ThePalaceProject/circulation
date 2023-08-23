@@ -3,6 +3,7 @@ import json
 from core.feed_protocol.serializer.opds2 import OPDS2Serializer
 from core.feed_protocol.types import (
     Acquisition,
+    Author,
     FeedData,
     FeedEntryType,
     IndirectAcquisition,
@@ -107,6 +108,39 @@ class TestOPDS2Serializer:
         ]
         assert entry["images"] == [dict(href="http://image", rel="image-rel")]
 
+        # Test the different author types
+        data = WorkEntryData(
+            authors=[Author(name="author1"), Author(name="author2")],
+            contributors=[
+                Author(name="translator", role="trl"),
+                Author(name="editor", role="edt"),
+                Author(name="artist", role="art"),
+                Author(name="illustrator", role="ill"),
+                Author(name="letterer", role="ctb"),
+                Author(name="penciller", role="ctb"),
+                Author(name="colorist", role="clr"),
+                Author(name="inker", role="ctb"),
+                Author(name="narrator", role="nrt"),
+                Author(name="narrator2", role="nrt"),
+            ],
+        )
+
+        entry = serializer._serialize_work_entry(data)
+        metadata = entry["metadata"]
+        print(metadata)
+        # Only the first author is considered
+        assert metadata["author"] == dict(name="author1")
+        # Of the allowed roles
+        assert metadata["translator"] == dict(name="translator")
+        assert metadata["editor"] == dict(name="editor")
+        assert metadata["artist"] == dict(name="artist")
+        assert metadata["illustrator"] == dict(name="illustrator")
+        assert metadata["colorist"] == dict(name="colorist")
+        # Of letterer, penciller, and inker, only inker is used, since the marc roles overlap
+        assert metadata["inker"] == dict(name="inker")
+        # Of repeated roles, only the last entry is picked
+        assert metadata["narrator"] == dict(name="narrator2")
+
     def test__serialize_acquisition_link(self):
         serializer = OPDS2Serializer()
         acquisition = Acquisition(
@@ -143,3 +177,14 @@ class TestOPDS2Serializer:
                 }
             ],
         )
+
+    def test__serialize_contributor(self):
+        author = Author(
+            name="Author",
+            sort_name="Author,",
+            link=Link(href="http://author", rel="contributor", title="Delete me!"),
+        )
+        result = OPDS2Serializer()._serialize_contributor(author)
+        assert result["name"] == "Author"
+        assert result["sortAs"] == "Author,"
+        assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
