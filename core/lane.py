@@ -2783,7 +2783,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     )
 
     # Only the books on these specific CustomLists will be shown.
-    customlists = relationship(
+    customlists: Mapped[List[CustomList]] = relationship(
         "CustomList", secondary=lambda: lanes_customlists, backref="lane"  # type: ignore
     )
 
