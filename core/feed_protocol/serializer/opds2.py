@@ -197,3 +197,6 @@ class OPDS2Serializer:
             link.pop("title", None)
             result["links"] = [link]
         return result
+
+    def content_type(self):
+        return "application/opds+json"

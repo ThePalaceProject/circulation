@@ -40,6 +40,7 @@ class BaseOPDSFeed(FeedInterface):
             serializer.serialize_feed(
                 self._feed, precomposed_entries=self._precomposed_entries
             ),
+            content_type=serializer.content_type(),
             **kwargs,
         )
 
@@ -55,5 +56,6 @@ class BaseOPDSFeed(FeedInterface):
             raise ValueError(f"Entry data has not been generated")
         serializer = get_serializer(requested_content_type)
         return OPDSEntryResponse(
-            response=serializer.serialize_work_entry(entry.computed), **response_kwargs
+            response=serializer.serialize_work_entry(entry.computed),
+            content_type=serializer.content_type() ** response_kwargs,
         )

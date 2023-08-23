@@ -25,7 +25,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
-from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
+from api.opds2 import OPDS2NavigationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
@@ -1306,23 +1306,22 @@ class OPDS2FeedController(CirculationManagerController):
         params: FeedRequestParameters = self._parse_feed_request()
         if params.problem:
             return params.problem
-        annotator = OPDS2PublicationsAnnotator(
-            flask.request.url, params.facets, params.pagination, params.library
-        )
         lane = self.load_lane(None)
+        annotator = self.manager.annotator(lane, params.facets)
         max_age = flask.request.args.get("max_age")
-        feed = AcquisitonFeedOPDS2.publications(
+        feed = OPDSAcquisitionFeed.page(
             self._db,
+            lane.display_name,
+            flask.request.url,
             lane,
+            annotator,
             params.facets,
             params.pagination,
             self.search_engine,
-            annotator,
-            max_age=int(max_age) if max_age is not None else None,
         )
-
-        return Response(
-            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        return feed.as_response(
+            requested_content_type="json",
+            max_age=int(max_age) if max_age is not None else None,
         )
 
     def navigation(self):

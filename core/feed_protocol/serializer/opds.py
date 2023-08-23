@@ -354,3 +354,6 @@ class OPDS1Serializer(OPDSFeed):
     @classmethod
     def to_string(cls, element: etree._Element) -> bytes:
         return cast(bytes, etree.tostring(element))
+
+    def content_type(self) -> str:
+        return OPDSFeed.ACQUISITION_FEED_TYPE
