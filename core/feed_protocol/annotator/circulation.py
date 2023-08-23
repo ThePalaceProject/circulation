@@ -622,8 +622,8 @@ class CirculationManagerAnnotator(Annotator):
             href = rep.public_url
         kw["href"] = href
         kw.update(self.rights_attributes(lpdm))
-        link = Link(**kw)
-        link.availability = FeedEntryType(status="available")
+        link = Acquisition(**kw)
+        link.availability_status = "available"
         return link
 
     def rights_attributes(self, lpdm):
