@@ -5,9 +5,15 @@ from typing import Any, List, Optional
 
 from core.feed_protocol.base import FeedInterface
 from core.feed_protocol.serializer.opds import OPDS1Serializer
+from core.feed_protocol.serializer.opds2 import OPDS2Serializer
 from core.feed_protocol.types import FeedData, WorkEntry
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 
+def get_serializer(content_type):
+    if content_type and "json" in content_type:
+        return OPDS2Serializer()
+    else:
+        return OPDS1Serializer()
 
 class BaseOPDSFeed(FeedInterface):
     def __init__(
@@ -17,7 +23,6 @@ class BaseOPDSFeed(FeedInterface):
         self.title = title
         self._precomposed_entries = precomposed_entries or []
         self._feed = FeedData()
-        self._serializer = OPDS1Serializer()
         self.log = logging.getLogger(self.__class__.__name__)
 
     def serialize(self) -> bytes:
@@ -26,10 +31,13 @@ class BaseOPDSFeed(FeedInterface):
     def add_link(self, href: str, rel: Optional[str] = None, **kwargs: Any) -> None:
         self._feed.add_link(href, rel=rel, **kwargs)
 
-    def as_response(self, **kwargs: Any) -> OPDSFeedResponse:
+    def as_response(
+        self, requested_content_type=None, **kwargs: Any
+    ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
+        serializer = get_serializer(requested_content_type)
         return OPDSFeedResponse(
-            self._serializer.serialize_feed(
+            serializer.serialize_feed(
                 self._feed, precomposed_entries=self._precomposed_entries
             ),
             **kwargs,
@@ -37,12 +45,12 @@ class BaseOPDSFeed(FeedInterface):
 
     @classmethod
     def entry_as_response(
-        cls, entry: WorkEntry, **response_kwargs: Any
+        cls, entry: WorkEntry, requested_content_type=None, **response_kwargs: Any
     ) -> OPDSEntryResponse:
         if not entry.computed:
             logging.getLogger().error(f"Entry data has not been generated for {entry}")
             raise ValueError(f"Entry data has not been generated")
-        serializer = OPDS1Serializer()
+        serializer = get_serializer(requested_content_type)
         return OPDSEntryResponse(
             response=serializer.serialize_work_entry(entry.computed), **response_kwargs
         )

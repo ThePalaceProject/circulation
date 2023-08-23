@@ -153,6 +153,7 @@ class WorkEntryData(BaseModel):
     published: Optional[FeedEntryType] = None
     updated: Optional[FeedEntryType] = None
     title: Optional[FeedEntryType] = None
+    sort_title: Optional[FeedEntryType] = None
     subtitle: Optional[FeedEntryType] = None
     series: Optional[FeedEntryType] = None
     imprint: Optional[FeedEntryType] = None

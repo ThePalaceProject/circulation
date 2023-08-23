@@ -294,6 +294,8 @@ class Annotator(ToFeedEntry):
 
         if edition.subtitle:
             computed.subtitle = FeedEntryType(text=edition.subtitle)
+        if edition.sort_title:
+            computed.sort_title = FeedEntryType(text=edition.sort_title)
 
         author_entries = self.authors(edition)
         computed.contributors = author_entries.get("contributors", [])

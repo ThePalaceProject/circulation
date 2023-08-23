@@ -516,12 +516,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         feed = OPDSAcquisitionFeed("Active loans and holds", url, works, annotator)
         feed.generate_feed()
-        response = feed.as_response(max_age=0, private=True)
-
-        last_modified = patron.last_loan_activity_sync
-        if last_modified:
-            response.last_modified = last_modified
-        return response
+        return feed
 
     @classmethod
     def single_entry_loans_feed(

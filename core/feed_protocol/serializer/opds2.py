@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from typing import Any, Dict
 
 from core.feed_protocol.types import (
@@ -19,20 +20,37 @@ class OPDS2Serializer:
     def __init__(self) -> None:
         pass
 
-    def serialize_feed(self, feed: FeedData) -> bytes:
+    def serialize_feed(self, feed: FeedData, precomposed_entries=[]) -> bytes:
         serialized: Dict[str, Any] = {"publications": []}
+        serialized["metadata"] = self._serialize_metadata(feed)
+
         for entry in feed.entries:
             if entry.computed:
                 publication = self._serialize_work_entry(entry.computed)
                 serialized["publications"].append(publication)
 
+        serialized.update(self._serialize_feed_links(feed))
+
         return json.dumps(serialized, indent=2).encode()
+
+    def _serialize_metadata(self, feed: FeedData) -> dict:
+        fmeta = feed.metadata
+        metadata = {}
+        if title := fmeta.get("title"):
+            metadata["title"] = title.text
+        if item_count := fmeta.get("items_per_page"):
+            metadata["itemsPerPage"] = int(item_count.text)
+        return metadata
 
     def _serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
+        if data.additionalType:
+            metadata["@type"] = data.additionalType
+
         if data.title:
             metadata["title"] = data.title.text
-            metadata["sortAs"] = data.title.text  # TODO: Change this!
+        if data.sort_title:
+            metadata["sortAs"] = data.sort_title.text
 
         if data.subtitle:
             metadata["subtitle"] = data.subtitle.text
@@ -66,7 +84,7 @@ class OPDS2Serializer:
 
         if data.series:
             name = getattr(data.series, "name", None)
-            position = getattr(data.series, "position", 1)
+            position = int(getattr(data.series, "position", 1))
             if name:
                 metadata["belongsTo"] = dict(name=name, position=position)
 
@@ -74,7 +92,7 @@ class OPDS2Serializer:
         links = [self._serialize_link(link) for link in data.other_links]
 
         for acquisition in data.acquisition_links:
-            links.append(self._serialize_acquisition_links(acquisition))
+            links.append(self._serialize_acquisition_link(acquisition))
 
         publication = {"metadata": metadata, "links": links, "images": images}
         return publication
@@ -83,18 +101,20 @@ class OPDS2Serializer:
         serialized = {"href": link.href, "rel": link.rel}
         if link.type:
             serialized["type"] = link.type
+        if link.title:
+            serialized["title"] = link.title
         return serialized
 
     def _serialize_acquisition_link(self, link: Acquisition):
         item = self._serialize_link(link)
 
         def _indirect(indirect: IndirectAcquisition):
-            indirect = dict(type=indirect.type)
+            result = dict(type=indirect.type)
             if indirect.children:
-                indirect["child"] = []
+                result["child"] = []
             for child in indirect.children:
-                indirect["child"].append(_indirect(child))
-            return indirect
+                result["child"].append(_indirect(child))
+            return result
 
         props = {}
         if link.availability_status:
@@ -124,3 +144,18 @@ class OPDS2Serializer:
             item["properties"] = props
 
         return item
+
+    def _serialize_feed_links(self, feed: FeedData) -> dict:
+        link_data = {"links": [], "facets": []}
+        for link in feed.links:
+            link_data["links"].append(self._serialize_link(link))
+
+        facet_links = defaultdict(lambda: {"metadata": {}, "links": []})
+        for link in feed.facet_links:
+            group = getattr(link, "facetGroup", None)
+            facet_links[group]["links"].append(self._serialize_link(link))
+            facet_links[group]["metadata"]["title"] = group
+        for _, facets in facet_links.items():
+            link_data["facets"].append(facets)
+
+        return link_data

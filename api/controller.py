@@ -961,6 +961,7 @@ class OPDSFeedController(CirculationManagerController):
         )
         return feed.as_response(
             max_age=int(max_age) if max_age else None,
+            requested_content_type=flask.request.content_type,
         )
 
     def navigation(self, lane_identifier):
@@ -1464,7 +1465,15 @@ class LoanController(CirculationManagerController):
                 )
 
         # Then make the feed.
-        return OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
+        feed = OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
+        response = feed.as_response(
+            max_age=0, private=True, requested_content_type=flask.request.content_type
+        )
+
+        last_modified = patron.last_loan_activity_sync
+        if last_modified:
+            response.last_modified = last_modified
+        return response
 
     def borrow(self, identifier_type, identifier, mechanism_id=None):
         """Create a new loan or hold for a book.
