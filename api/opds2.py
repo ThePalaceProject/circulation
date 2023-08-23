@@ -9,7 +9,7 @@ from uritemplate import URITemplate
 from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from core.lane import Facets
-from core.model import ExternalIntegration
+from core.model import ConfigurationSetting, ExternalIntegration
 from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import DeliveryMechanism
@@ -109,13 +109,18 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         if "authentication_token" not in templated.variable_names:
             return fulfillment
 
-        token_auth = licensepool.collection.integration_configuration.settings.get(
-            ExternalIntegration.TOKEN_AUTH
+        # TODO: This needs to be refactored to use IntegrationConfiguration,
+        #  but it has been temporarily rolled back, since the IntegrationConfiguration
+        #  code caused problems fulfilling TOKEN_AUTH books in production.
+        #  This should be fixed as part of the work PP-313 to fully remove
+        #  ExternalIntegrations from our collections code.
+        token_auth = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, licensepool.collection.external_integration
         )
-        if token_auth is None:
+        if not token_auth or token_auth.value is None:
             return fulfillment
 
-        token = self.get_authentication_token(patron, token_auth)
+        token = self.get_authentication_token(patron, token_auth.value)
         if isinstance(token, ProblemDetail):
             raise CannotFulfill()
 

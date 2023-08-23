@@ -5,6 +5,7 @@ import pytest
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from core.model import (
+    ConfigurationSetting,
     Contribution,
     Contributor,
     DataSource,
@@ -441,9 +442,9 @@ class TestOPDS2Importer(OPDS2Test):
         imported_editions, pools, works, failures = data.importer.import_from_feed(
             content
         )
-        setting = data.importer.integration_configuration().settings.get(
-            ExternalIntegration.TOKEN_AUTH
+        setting = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, data.collection.external_integration
         )
 
         # Did the token endpoint get stored correctly?
-        assert setting == "http://example.org/auth?userName={patron_id}"
+        assert setting.value == "http://example.org/auth?userName={patron_id}"
