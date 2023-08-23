@@ -32,7 +32,7 @@ class BaseOPDSFeed(FeedInterface):
         self._feed.add_link(href, rel=rel, **kwargs)
 
     def as_response(
-        self, requested_content_type=None, **kwargs: Any
+        self, requested_content_type: Optional[str] = None, **kwargs: Any
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
         serializer = get_serializer(requested_content_type)
@@ -45,7 +45,10 @@ class BaseOPDSFeed(FeedInterface):
 
     @classmethod
     def entry_as_response(
-        cls, entry: WorkEntry, requested_content_type=None, **response_kwargs: Any
+        cls,
+        entry: WorkEntry,
+        requested_content_type: Optional[str] = None,
+        **response_kwargs: Any,
     ) -> OPDSEntryResponse:
         if not entry.computed:
             logging.getLogger().error(f"Entry data has not been generated for {entry}")

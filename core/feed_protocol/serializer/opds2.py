@@ -49,11 +49,11 @@ class OPDS2Serializer:
 
     def _serialize_metadata(self, feed: FeedData) -> dict:
         fmeta = feed.metadata
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         if title := fmeta.get("title"):
             metadata["title"] = title.text
         if item_count := fmeta.get("items_per_page"):
-            metadata["itemsPerPage"] = int(item_count.text)
+            metadata["itemsPerPage"] = int(item_count.text or 0)
         return metadata
 
     def _serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
@@ -105,7 +105,7 @@ class OPDS2Serializer:
         if len(data.authors):
             metadata["author"] = self._serialize_contributor(data.authors[0])
         for contributor in data.contributors:
-            if role := MARC_CODE_TO_ROLES.get(contributor.role, None):
+            if role := MARC_CODE_TO_ROLES.get(contributor.role or "", None):
                 metadata[role] = self._serialize_contributor(contributor)
 
         images = [self._serialize_link(link) for link in data.image_links]
@@ -128,15 +128,15 @@ class OPDS2Serializer:
     def _serialize_acquisition_link(self, link: Acquisition):
         item = self._serialize_link(link)
 
-        def _indirect(indirect: IndirectAcquisition):
-            result = dict(type=indirect.type)
+        def _indirect(indirect: IndirectAcquisition) -> dict:
+            result: Dict[str, Any] = dict(type=indirect.type)
             if indirect.children:
                 result["child"] = []
             for child in indirect.children:
                 result["child"].append(_indirect(child))
             return result
 
-        props = {}
+        props: Dict[str, Any] = {}
         if link.availability_status:
             state = link.availability_status
             if link.is_loan:
@@ -172,22 +172,23 @@ class OPDS2Serializer:
         return item
 
     def _serialize_feed_links(self, feed: FeedData) -> dict:
-        link_data = {"links": [], "facets": []}
+        link_data: Dict[str, list] = {"links": [], "facets": []}
         for link in feed.links:
             link_data["links"].append(self._serialize_link(link))
 
-        facet_links = defaultdict(lambda: {"metadata": {}, "links": []})
+        facet_links: Dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
         for link in feed.facet_links:
             group = getattr(link, "facetGroup", None)
-            facet_links[group]["links"].append(self._serialize_link(link))
-            facet_links[group]["metadata"]["title"] = group
+            if group:
+                facet_links[group]["links"].append(self._serialize_link(link))
+                facet_links[group]["metadata"]["title"] = group
         for _, facets in facet_links.items():
             link_data["facets"].append(facets)
 
         return link_data
 
     def _serialize_contributor(self, author: Author) -> dict:
-        result = {"name": author.name}
+        result: Dict[str, Any] = {"name": author.name}
         if author.sort_name:
             result["sortAs"] = author.sort_name
         if author.link:

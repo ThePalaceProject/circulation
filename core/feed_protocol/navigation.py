@@ -79,7 +79,11 @@ class NavigationFeed(BaseOPDSFeed):
         entry.links.append(Link(rel="subsection", href=url, type=type))
         self._feed.data_entries.append(entry)
 
-    def as_response(self, **kwargs: Any) -> OPDSFeedResponse:
-        response = super().as_response(**kwargs)
+    def as_response(
+        self, requested_content_type: Optional[str] = None, **kwargs: Any
+    ) -> OPDSFeedResponse:
+        response = super().as_response(
+            requested_content_type=requested_content_type, **kwargs
+        )
         response.content_type = OPDSFeed.NAVIGATION_FEED_TYPE
         return response
