@@ -26,7 +26,7 @@ from core.integration.settings import (
     FormField,
 )
 from core.mirror import MirrorUploader
-from core.model.configuration import HasExternalIntegration
+from core.model.configuration import ConfigurationSetting, HasExternalIntegration
 from core.model.integration import IntegrationConfiguration
 
 from .coverage import CoverageFailure
@@ -950,10 +950,10 @@ class OPDS2Importer(
         for link in links:
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
-                config = self.integration_configuration()
-                settings = config.settings_dict.copy()
-                settings[ExternalIntegration.TOKEN_AUTH] = link.href
-                config.settings_dict = settings
+                auth_setting = ConfigurationSetting.for_externalintegration(
+                    ExternalIntegration.TOKEN_AUTH, self.collection.external_integration
+                )
+                auth_setting.value = link.href
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None
