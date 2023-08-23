@@ -138,7 +138,15 @@ class OPDS2Serializer:
 
         props = {}
         if link.availability_status:
-            props["availability"] = dict(state=link.availability_status)
+            state = link.availability_status
+            if link.is_loan:
+                state = "ready"
+            elif link.is_hold:
+                state = "reserved"
+                # This only exists in the serializer because there is no case where cancellable is false,
+                # that logic should be in the annotator if it ever occurs
+                props["actions"] = dict(cancellable=True)
+            props["availability"] = dict(state=state)
             if link.availability_since:
                 props["availability"]["since"] = link.availability_since
             if link.availability_until:

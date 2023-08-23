@@ -652,7 +652,12 @@ class CirculationManagerAnnotator(Annotator):
         else:
             initial_type = None
             indirect_types = []
-        link = Acquisition(href=href, rel=rel, type=initial_type)
+        link = Acquisition(
+            href=href,
+            rel=rel,
+            type=initial_type,
+            is_loan=True if active_loan else False,
+        )
         indirect = cls.indirect_acquisition(indirect_types)
 
         if indirect is not None:
@@ -1342,7 +1347,12 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             _external=True,
         )
         rel = OPDSFeed.BORROW_REL
-        borrow_link = Acquisition(rel=rel, href=borrow_url, type=OPDSFeed.ENTRY_TYPE)
+        borrow_link = Acquisition(
+            rel=rel,
+            href=borrow_url,
+            type=OPDSFeed.ENTRY_TYPE,
+            is_hold=True if active_hold else False,
+        )
 
         indirect_acquisitions: List[IndirectAcquisition] = []
         for lpdm in fulfillment_mechanisms:

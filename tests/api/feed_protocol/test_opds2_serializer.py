@@ -177,6 +177,25 @@ class TestOPDS2Serializer:
             ],
         )
 
+        # Test availability states
+        acquisition = Acquisition(
+            href="http://hold",
+            rel="hold",
+            is_hold=True,
+            availability_status="available",
+        )
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result["properties"]["availability"]["state"] == "reserved"
+
+        acquisition = Acquisition(
+            href="http://loan",
+            rel="loan",
+            is_loan=True,
+            availability_status="available",
+        )
+        result = serializer._serialize_acquisition_link(acquisition)
+        assert result["properties"]["availability"]["state"] == "ready"
+
     def test__serialize_contributor(self):
         author = Author(
             name="Author",

@@ -125,6 +125,10 @@ class Acquisition(Link):
 
     indirect_acquisitions: List[IndirectAcquisition] = field(default_factory=list)
 
+    # Signal if the acquisition is for a loan or a hold for the patron
+    is_loan: bool = False
+    is_hold: bool = False
+
 
 @dataclass
 class Author(FeedEntryType):
