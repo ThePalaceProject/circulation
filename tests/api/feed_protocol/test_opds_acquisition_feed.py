@@ -938,12 +938,12 @@ class TestOPDSAcquisitionFeed:
     def test_single_entry_loans_feed_errors(self, db: DatabaseTransactionFixture):
         with pytest.raises(ValueError) as raised:
             # Mandatory loans item was missing
-            OPDSAcquisitionFeed.single_entry_loans_feed(None, None)
+            OPDSAcquisitionFeed.single_entry_loans_feed(None, None)  # type: ignore[arg-type]
         assert str(raised.value) == "Argument 'item' must be non-empty"
 
         with pytest.raises(ValueError) as raised:
             # Mandatory loans item was incorrect
-            OPDSAcquisitionFeed.single_entry_loans_feed(None, object())
+            OPDSAcquisitionFeed.single_entry_loans_feed(None, object())  # type: ignore[arg-type]
         assert "Argument 'item' must be an instance of" in str(raised.value)
 
     def test_single_entry_loans_feed_default_annotator(
@@ -972,7 +972,7 @@ class TestOPDSAcquisitionFeed:
 
         with patch.object(OPDSAcquisitionFeed, "_create_entry") as mock:
             OPDSAcquisitionFeed.single_entry(
-                work.presentation_edition, annotator, even_if_no_license_pool=True
+                work.presentation_edition, annotator, even_if_no_license_pool=True  # type: ignore[arg-type]
             )
 
         assert mock.call_count == 1
