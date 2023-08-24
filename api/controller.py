@@ -82,7 +82,7 @@ from core.model.devicetokens import (
     InvalidTokenTypeError,
 )
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
-from core.opds import NavigationFacets, NavigationFeed
+from core.opds import NavigationFacets
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
