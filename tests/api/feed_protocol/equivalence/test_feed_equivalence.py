@@ -116,7 +116,7 @@ class TestFeedEquivalence:
         work1.active_license_pool(library).loan_to(patron)
 
         with app.test_request_context("/"):
-            new_feed = OPDSAcquisitionFeed.active_loans_for(None, patron)
+            new_feed = OPDSAcquisitionFeed.active_loans_for(None, patron).as_response()
             old_feed = OldLibraryLoanAndHoldAnnotator.active_loans_for(None, patron)
 
         assert_equal_xmls(str(old_feed), str(new_feed))
@@ -190,7 +190,7 @@ class TestFeedEquivalence:
                 new_annotator,
                 Pagination.default(),
                 Facets.default(library),
-            )
+            ).as_response()
 
             old_annotator = OldLibraryAnnotator(None, lane, library)
             old_feed = AcquisitionFeed.search(

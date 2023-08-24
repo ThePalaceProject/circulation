@@ -1162,7 +1162,7 @@ class OPDSFeedController(CirculationManagerController):
         # Run a search.
         annotator = self.manager.annotator(lane, facets)
         info = OpenSearchDocument.search_info(lane)
-        return feed_class.search(
+        response = feed_class.search(
             _db=self._db,
             title=info["name"],
             url=make_url(),
@@ -1173,6 +1173,9 @@ class OPDSFeedController(CirculationManagerController):
             pagination=pagination,
             facets=facets,
         )
+        if isinstance(response, ProblemDetail):
+            return response
+        return response.as_response(requested_content_type=flask.request.content_type)
 
     def _qa_feed(
         self, feed_factory, feed_title, controller_name, facet_class, worklist_factory

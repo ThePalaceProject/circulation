@@ -828,8 +828,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # technically searching the this lane; you are searching the
         # library's entire collection, using _some_ of the constraints
         # imposed by this lane (notably language and audience).
-
-        return OPDSFeedResponse(response=feed.serialize(), **response_kwargs)
+        return feed
 
     @classmethod
     def from_query(

@@ -25,8 +25,9 @@ class BaseOPDSFeed(FeedInterface):
         self._feed = FeedData()
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def serialize(self) -> bytes:
-        return self._serializer.serialize_feed(self._feed)
+    def serialize(self, requested_content_type: Optional[str] = None) -> bytes:
+        serializer = get_serializer(requested_content_type)
+        return serializer.serialize_feed(self._feed)
 
     def add_link(self, href: str, rel: Optional[str] = None, **kwargs: Any) -> None:
         self._feed.add_link(href, rel=rel, **kwargs)
