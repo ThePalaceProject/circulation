@@ -136,11 +136,14 @@ class TestScopedSession:
             [identifier] = fixture.app.manager._db.query(Identifier).all()
             assert "1024" == identifier.identifier
 
-            # But if we were to use flask_scoped_session to create a
-            # brand new session, it would not see the Identifier,
-            # because it's running in a different database session.
-            new_session = fixture.app.manager._db.session_factory()
-            assert [] == new_session.query(Identifier).all()
+            # We use the session context manager here to make sure
+            # we don't keep a transaction open for this new session
+            # once we are done with it.
+            with fixture.app.manager._db.session_factory() as new_session:
+                # But if we were to use flask_scoped_session to create a
+                # brand new session, it would not see the Identifier,
+                # because it's running in a different database session.
+                assert [] == new_session.query(Identifier).all()
 
             # When the index controller runs in the request context,
             # it doesn't store anything that's associated with the
@@ -182,3 +185,7 @@ class TestScopedSession:
         # which is the same as self._db, the unscoped database session
         # used by most other unit tests.
         assert session1 != session2
+
+        # Make sure that we close the connections for the scoped sessions.
+        session1.bind.dispose()
+        session2.bind.dispose()
