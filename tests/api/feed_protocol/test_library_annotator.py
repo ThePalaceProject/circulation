@@ -951,6 +951,7 @@ class TestLibraryAnnotator:
             == licensor.attrib["{http://librarysimplified.org/terms/drm}vendor"]
         )
         [client_token] = licensor
+        assert vendor_id_fixture.registration.short_name is not None
         expected = vendor_id_fixture.registration.short_name.upper()
         assert client_token.text.startswith(expected)
         assert adobe_patron_identifier in client_token.text
