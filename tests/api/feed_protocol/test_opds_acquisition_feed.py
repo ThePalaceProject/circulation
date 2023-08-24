@@ -2,6 +2,7 @@ import datetime
 import logging
 from collections import defaultdict
 from typing import Any, Callable, Generator, List, Type
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -21,18 +22,49 @@ from core.feed_protocol.annotator.circulation import (
     AcquisitionHelper,
     CirculationManagerAnnotator,
 )
+from core.feed_protocol.annotator.circulation import AcquisitionHelper, LibraryAnnotator
+from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.navigation import NavigationFeed
-from core.feed_protocol.types import FeedData, Link, WorkEntry
+from core.feed_protocol.opds import BaseOPDSFeed
+from core.feed_protocol.types import FeedData, WorkEntry, WorkEntryData, Link
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
 from core.model.constants import LinkRelations
 from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
-from core.util.flask_util import OPDSFeedResponse
+from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
+
+
+class TestOPDSFeedProtocol:
+    def test_entry_as_response(self, db: DatabaseTransactionFixture):
+        work = db.work()
+        entry = WorkEntry(
+            work=work,
+            edition=work.presentation_edition,
+            identifier=work.presentation_edition.primary_identifier,
+        )
+
+        with pytest.raises(ValueError) as raised:
+            BaseOPDSFeed.entry_as_response(entry)
+        assert str(raised.value) == "Entry data has not been generated"
+
+        entry.computed = WorkEntryData()
+
+        response = BaseOPDSFeed.entry_as_response(entry)
+        assert isinstance(response, OPDSEntryResponse)
+        # default content type is XML
+        assert response.content_type == OPDSEntryResponse().content_type
+
+        # Specifiically asking for a json type
+        response = BaseOPDSFeed.entry_as_response(
+            entry, requested_content_type="anything/...json..."
+        )
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.content_type == "application/opds+json"
 
 
 class MockAnnotator(CirculationManagerAnnotator):
@@ -892,6 +924,64 @@ class TestOPDSAcquisitionFeed:
         assert Facets.FACET_DISPLAY_TITLES[Facets.COLLECTION_FULL] == facet
         assert Facets.GROUP_DISPLAY_TITLES[Facets.COLLECTION_FACET_GROUP_NAME] == group
         assert True == selected
+
+    def test_active_loans_for_with_holds(self, db: DatabaseTransactionFixture):
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
+        hold, _ = work.active_license_pool().on_hold_to(patron)
+
+        feed = OPDSAcquisitionFeed.active_loans_for(
+            None, patron, LibraryAnnotator(None, None, db.default_library())
+        )
+        assert feed.annotator.active_holds_by_work == {work: hold}
+
+    def test_single_entry_loans_feed_errors(self, db: DatabaseTransactionFixture):
+        with pytest.raises(ValueError) as raised:
+            # Mandatory loans item was missing
+            OPDSAcquisitionFeed.single_entry_loans_feed(None, None)
+        assert str(raised.value) == "Argument 'item' must be non-empty"
+
+        with pytest.raises(ValueError) as raised:
+            # Mandatory loans item was incorrect
+            OPDSAcquisitionFeed.single_entry_loans_feed(None, object())
+        assert "Argument 'item' must be an instance of" in str(raised.value)
+
+    def test_single_entry_loans_feed_default_annotator(
+        self, db: DatabaseTransactionFixture
+    ):
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
+        pool = work.active_license_pool()
+        assert pool is not None
+        loan, _ = pool.loan_to(patron)
+
+        with patch.object(OPDSAcquisitionFeed, "single_entry") as mock:
+            mock.return_value = None
+            response = OPDSAcquisitionFeed.single_entry_loans_feed(None, loan)
+
+        assert response == None
+        assert mock.call_count == 1
+        _work, annotator = mock.call_args[0]
+        assert isinstance(annotator, LibraryLoanAndHoldAnnotator)
+        assert _work == work
+        assert annotator.library == db.default_library()
+
+    def test_single_entry_with_edition(self, db: DatabaseTransactionFixture):
+        work = db.work(with_license_pool=True)
+        annotator = object()
+
+        with patch.object(OPDSAcquisitionFeed, "_create_entry") as mock:
+            OPDSAcquisitionFeed.single_entry(
+                work.presentation_edition, annotator, even_if_no_license_pool=True
+            )
+
+        assert mock.call_count == 1
+        _work, _pool, _edition, _identifier, _annotator = mock.call_args[0]
+        assert _work == None
+        assert _pool == None
+        assert _edition == work.presentation_edition
+        assert _identifier == work.presentation_edition.primary_identifier
+        assert _annotator == annotator
 
 
 class TestEntrypointLinkInsertionFixture:

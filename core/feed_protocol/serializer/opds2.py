@@ -40,7 +40,7 @@ class OPDS2Serializer:
 
         for entry in feed.entries:
             if entry.computed:
-                publication = self._serialize_work_entry(entry.computed)
+                publication = self.serialize_work_entry(entry.computed)
                 serialized["publications"].append(publication)
 
         serialized.update(self._serialize_feed_links(feed))
@@ -56,7 +56,7 @@ class OPDS2Serializer:
             metadata["itemsPerPage"] = int(item_count.text or 0)
         return metadata
 
-    def _serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
+    def serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         if data.additionalType:
             metadata["@type"] = data.additionalType

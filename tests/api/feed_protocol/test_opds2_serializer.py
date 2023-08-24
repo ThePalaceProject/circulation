@@ -57,7 +57,7 @@ class TestOPDS2Serializer:
             links=[{"href": "http://facet-link", "rel": "facet-rel"}],
         )
 
-    def test__serialize_work_entry(self):
+    def test_serialize_work_entry(self):
         data = WorkEntryData(
             additionalType="type",
             title=FeedEntryType(text="The Title"),
@@ -83,7 +83,7 @@ class TestOPDS2Serializer:
 
         serializer = OPDS2Serializer()
 
-        entry = serializer._serialize_work_entry(data)
+        entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
 
         assert metadata["@type"] == data.additionalType
@@ -125,7 +125,7 @@ class TestOPDS2Serializer:
             ],
         )
 
-        entry = serializer._serialize_work_entry(data)
+        entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
         # Only the first author is considered
         assert metadata["author"] == dict(name="author1")

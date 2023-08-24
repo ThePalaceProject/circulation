@@ -587,9 +587,13 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
-        # TODO: max_age and private response kwargs
         if isinstance(entry, WorkEntry) and entry.computed:
             return cls.entry_as_response(entry, **response_kwargs)
+        elif entry is None:
+            return None
+
+        # This is probably an error message
+        return entry
 
         return None
 
