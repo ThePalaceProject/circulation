@@ -8,8 +8,10 @@ from core.feed_protocol.serializer.opds import OPDS1Serializer
 from core.feed_protocol.serializer.opds2 import OPDS2Serializer
 from core.feed_protocol.types import FeedData, WorkEntry
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from core.util.opds_writer import OPDSMessage
 
-def get_serializer(content_type):
+
+def get_serializer(content_type: Optional[str]) -> OPDS1Serializer | OPDS2Serializer:
     if content_type and "json" in content_type:
         return OPDS2Serializer()
     else:
@@ -17,7 +19,10 @@ def get_serializer(content_type):
 
 class BaseOPDSFeed(FeedInterface):
     def __init__(
-        self, title: str, url: str, precomposed_entries: Optional[List[Any]] = None
+        self,
+        title: str,
+        url: str,
+        precomposed_entries: Optional[List[OPDSMessage]] = None,
     ) -> None:
         self.url = url
         self.title = title

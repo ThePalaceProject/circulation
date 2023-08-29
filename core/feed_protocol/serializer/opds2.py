@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from core.feed_protocol.types import (
     Acquisition,
@@ -34,7 +34,9 @@ class OPDS2Serializer:
     def __init__(self) -> None:
         pass
 
-    def serialize_feed(self, feed: FeedData, precomposed_entries=[]) -> bytes:
+    def serialize_feed(
+        self, feed: FeedData, precomposed_entries: List[Any] = []
+    ) -> bytes:
         serialized: Dict[str, Any] = {"publications": []}
         serialized["metadata"] = self._serialize_metadata(feed)
 
@@ -47,7 +49,7 @@ class OPDS2Serializer:
 
         return json.dumps(serialized, indent=2).encode()
 
-    def _serialize_metadata(self, feed: FeedData) -> dict:
+    def _serialize_metadata(self, feed: FeedData) -> Dict[str, Any]:
         fmeta = feed.metadata
         metadata: Dict[str, Any] = {}
         if title := fmeta.get("title"):
@@ -125,10 +127,10 @@ class OPDS2Serializer:
             serialized["title"] = link.title
         return serialized
 
-    def _serialize_acquisition_link(self, link: Acquisition):
+    def _serialize_acquisition_link(self, link: Acquisition) -> Dict[str, Any]:
         item = self._serialize_link(link)
 
-        def _indirect(indirect: IndirectAcquisition) -> dict:
+        def _indirect(indirect: IndirectAcquisition) -> Dict[str, Any]:
             result: Dict[str, Any] = dict(type=indirect.type)
             if indirect.children:
                 result["child"] = []
@@ -171,8 +173,8 @@ class OPDS2Serializer:
 
         return item
 
-    def _serialize_feed_links(self, feed: FeedData) -> dict:
-        link_data: Dict[str, list] = {"links": [], "facets": []}
+    def _serialize_feed_links(self, feed: FeedData) -> Dict[str, Any]:
+        link_data: Dict[str, List[Dict[str, Any]]] = {"links": [], "facets": []}
         for link in feed.links:
             link_data["links"].append(self._serialize_link(link))
 
@@ -187,7 +189,7 @@ class OPDS2Serializer:
 
         return link_data
 
-    def _serialize_contributor(self, author: Author) -> dict:
+    def _serialize_contributor(self, author: Author) -> Dict[str, Any]:
         result: Dict[str, Any] = {"name": author.name}
         if author.sort_name:
             result["sortAs"] = author.sort_name
@@ -198,5 +200,5 @@ class OPDS2Serializer:
             result["links"] = [link]
         return result
 
-    def content_type(self):
+    def content_type(self) -> str:
         return "application/opds+json"

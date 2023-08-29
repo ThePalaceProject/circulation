@@ -12,6 +12,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    cast,
 )
 
 from sqlalchemy.orm import Query, Session
@@ -475,7 +476,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         patron: Patron,
         annotator: Optional[LibraryAnnotator] = None,
         **response_kwargs: Any,
-    ) -> OPDSFeedResponse:
+    ) -> OPDSAcquisitionFeed:
         """A patron specific feed that only contains the loans and holds of a patron"""
         db = Session.object_session(patron)
         active_loans_by_work = {}
@@ -593,9 +594,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             return None
 
         # This is probably an error message
-        return entry
-
-        return None
+        return cast(ProblemDetail, entry)
 
     @classmethod
     def single_entry(
@@ -768,7 +767,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         pagination: Optional[Pagination] = None,
         facets: Optional[FacetsWithEntryPoint] = None,
         **response_kwargs: Any,
-    ) -> OPDSFeedResponse | ProblemDetail:
+    ) -> OPDSAcquisitionFeed | ProblemDetail:
         """Run a search against the given search engine and return
         the results as a Flask Response.
 

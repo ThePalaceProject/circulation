@@ -180,7 +180,7 @@ class TestFeedEquivalence:
 
         with app.test_request_context("/"):
             new_annotator = LibraryAnnotator(None, lane, library)
-            new_feed = OPDSAcquisitionFeed.search(
+            new_feed = OPDSAcquisitionFeed.search(  # type: ignore[union-attr]
                 db.session,
                 "Search",
                 "http://search/",
