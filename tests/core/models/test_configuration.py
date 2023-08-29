@@ -755,7 +755,7 @@ username='someuser'"""
         db = example_externalintegration_fixture.database_fixture
 
         integration1 = db.external_integration(
-            ExternalIntegration.MANUAL,
+            ExternalIntegration.LCP,
             ExternalIntegration.LICENSE_GOAL,
             libraries=[db.default_library()],
         )

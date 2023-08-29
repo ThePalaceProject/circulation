@@ -182,7 +182,6 @@ class ExternalIntegration(Base):
     ODL = "ODL"
     ODL2 = "ODL 2.0"
     LCP = DataSourceConstants.LCP
-    MANUAL = DataSourceConstants.MANUAL
     PROQUEST = DataSourceConstants.PROQUEST
 
     # These protocols were used on the Content Server when mirroring
@@ -201,7 +200,6 @@ class ExternalIntegration(Base):
         AXIS_360,
         GUTENBERG,
         ENKI,
-        MANUAL,
     ]
 
     # Some integrations with LICENSE_GOAL imply that the data and

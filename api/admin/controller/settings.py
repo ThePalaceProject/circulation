@@ -465,17 +465,6 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         protocols = self._get_integration_protocols(
             provider_apis, protocol_name_attr="NAME"
         )
-        protocols.append(
-            {
-                "name": ExternalIntegration.MANUAL,
-                "label": _("Manual import"),
-                "description": _(
-                    "Books will be manually added to the circulation manager, "
-                    "not imported automatically through a protocol."
-                ),
-                "settings": [],
-            }
-        )
 
         return protocols
 
