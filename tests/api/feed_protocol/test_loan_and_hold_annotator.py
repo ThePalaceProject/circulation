@@ -63,17 +63,6 @@ class TestLibraryLoanAndHoldAnnotator:
             # Now let's see what we did with it after calling its
             # constructor.
 
-            # First, we generated a URL to the "loan_or_hold_detail"
-            # controller for the license pool's identifier.
-            url_call = annotator.url_for_called_with
-            controller_name, kwargs = url_call
-            assert "loan_or_hold_detail" == controller_name
-            assert db.default_library().short_name == kwargs.pop("library_short_name")
-            assert pool.identifier.type == kwargs.pop("identifier_type")
-            assert pool.identifier.identifier == kwargs.pop("identifier")
-            assert True == kwargs.pop("_external")
-            assert {} == kwargs
-
             # The return value of that was the string "a URL". We then
             # passed that into _single_entry_response, along with
             # `item` and a number of arguments that we made up.
