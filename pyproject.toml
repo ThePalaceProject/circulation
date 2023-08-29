@@ -78,6 +78,7 @@ module = [
     "api.circulation",
     "api.discovery.*",
     "api.integration.*",
+    "core.feed_protocol.*",
     "core.integration.*",
     "core.model.announcements",
     "core.model.hassessioncache",

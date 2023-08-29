@@ -1,14 +1,25 @@
+from typing import Optional
+
 from sqlalchemy import and_
+from sqlalchemy.orm import Session
 
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
+from core.feed_protocol.annotator.admin import AdminAnnotator
 from core.lane import Pagination
 from core.model.licensing import LicensePool
 
 
 class AdminFeed(OPDSAcquisitionFeed):
     @classmethod
-    def suppressed(cls, _db, title, url, annotator, pagination=None):
-        pagination = pagination or Pagination.default()
+    def suppressed(
+        cls,
+        _db: Session,
+        title: str,
+        url: str,
+        annotator: AdminAnnotator,
+        pagination: Optional[Pagination] = None,
+    ) -> "AdminFeed":
+        _pagination = pagination or Pagination.default()
 
         q = (
             _db.query(LicensePool)
@@ -20,10 +31,10 @@ class AdminFeed(OPDSAcquisitionFeed):
             )
             .order_by(LicensePool.id)
         )
-        pools = pagination.modify_database_query(_db, q).all()
+        pools = _pagination.modify_database_query(_db, q).all()
 
         works = [pool.work for pool in pools]
-        feed = cls(title, url, works, annotator, pagination=pagination)
+        feed = cls(title, url, works, annotator, pagination=_pagination)
         feed.generate_feed()
 
         # Render a 'start' link
@@ -38,17 +49,17 @@ class AdminFeed(OPDSAcquisitionFeed):
         if len(works) > 0:
             # There are works in this list. Add a 'next' link.
             feed.add_link(
-                href=annotator.suppressed_url(pagination.next_page),
+                href=annotator.suppressed_url(_pagination.next_page),
                 rel="next",
             )
 
-        if pagination.offset > 0:
+        if _pagination.offset > 0:
             feed.add_link(
-                annotator.suppressed_url(pagination.first_page),
+                annotator.suppressed_url(_pagination.first_page),
                 rel="first",
             )
 
-        previous_page = pagination.previous_page
+        previous_page = _pagination.previous_page
         if previous_page:
             feed.add_link(
                 annotator.suppressed_url(previous_page),

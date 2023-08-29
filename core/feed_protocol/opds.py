@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-from flask import Response
+from typing import TYPE_CHECKING, Any, Optional
 
 from core.feed_protocol.base import FeedProtocol
 from core.feed_protocol.serializer.opds import OPDS1Serializer
@@ -15,23 +13,25 @@ if TYPE_CHECKING:
 
 
 class OPDSFeedProtocol(FeedProtocol):
-    def __init__(self, title, url, precomposed_entries=None) -> None:
+    def __init__(
+        self, title: str, url: str, precomposed_entries: Optional[Any] = None
+    ) -> None:
         self.url = url
         self.title = title
         self._precomposed_entries = precomposed_entries
         self._feed = FeedData()
         self._serializer = OPDS1Serializer()
 
-    def generate_feed(self, work_entries):
+    def generate_feed(self) -> None:
         pass
 
-    def serialize(self):
+    def serialize(self) -> bytes:
         return self._serializer.serialize_feed(self._feed)
 
-    def add_link(self, href, rel=None, **kwargs):
+    def add_link(self, href: str, rel: Optional[str] = None, **kwargs: Any) -> None:
         self._feed.add_link(href, rel=rel, **kwargs)
 
-    def as_response(self, **kwargs) -> Response:
+    def as_response(self, **kwargs: Any) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
         return OPDSFeedResponse(
             self._serializer.serialize_feed(
@@ -41,7 +41,9 @@ class OPDSFeedProtocol(FeedProtocol):
         )
 
     @classmethod
-    def entry_as_response(cls, entry: WorkEntry, **response_kwargs):
+    def entry_as_response(
+        cls, entry: WorkEntry, **response_kwargs: Any
+    ) -> OPDSEntryResponse:
         if not entry.computed:
             logging.getLogger().error(f"Entry data has not been generated for {entry}")
             raise ValueError(f"Entry data has not been generated")

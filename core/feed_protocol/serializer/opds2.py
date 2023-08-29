@@ -8,7 +8,7 @@ class OPDS2Serializer:
     def __init__(self) -> None:
         pass
 
-    def serialize_feed(self, feed: FeedData):
+    def serialize_feed(self, feed: FeedData) -> bytes:
         serialized: Dict[str, Any] = {"publications": []}
         for entry in feed.entries:
             if entry.computed:
@@ -17,7 +17,7 @@ class OPDS2Serializer:
 
         return json.dumps(serialized, indent=2).encode()
 
-    def _serialize_work_entry(self, data: WorkEntryData):
+    def _serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
         if data.title:
             metadata["title"] = data.title.text
@@ -62,7 +62,7 @@ class OPDS2Serializer:
         publication = {"metadata": metadata, "links": links, "images": images}
         return publication
 
-    def _serialize_link(self, link: Link):
+    def _serialize_link(self, link: Link) -> Dict[str, Any]:
         serialized = {"href": link.href, "rel": link.rel}
         if link.type:
             serialized["type"] = link.type

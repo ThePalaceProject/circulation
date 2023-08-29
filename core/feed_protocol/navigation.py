@@ -1,22 +1,24 @@
-from typing import Optional
+from typing import Any, Optional
 
-from flask import Response
+from sqlalchemy.orm import Session
 
+from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
 from core.feed_protocol.opds import OPDSFeedProtocol
 from core.feed_protocol.types import DataEntry, DataEntryTypes, Link
-from core.lane import Facets, Pagination
+from core.lane import Facets, Pagination, WorkList
 from core.opds import NavigationFacets
 from core.util.datetime_helpers import utc_now
+from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import AtomFeed, OPDSFeed
 
 
 class NavigationFeed(OPDSFeedProtocol):
     def __init__(
         self,
-        title,
-        url,
-        lane,
-        annotator,
+        title: str,
+        url: str,
+        lane: WorkList,
+        annotator: CirculationManagerAnnotator,
         facets: Optional[Facets] = None,
         pagination: Optional[Pagination] = None,
     ) -> None:
@@ -29,13 +31,13 @@ class NavigationFeed(OPDSFeedProtocol):
     @classmethod
     def navigation(
         cls,
-        _db,
-        title,
-        url,
-        worklist,
-        annotator,
-        facets=None,
-    ):
+        _db: Session,
+        title: str,
+        url: str,
+        worklist: WorkList,
+        annotator: CirculationManagerAnnotator,
+        facets: Optional[Facets] = None,
+    ) -> "NavigationFeed":
         """The navigation feed with links to a given lane's sublanes."""
 
         facets = facets or NavigationFacets.default(worklist)
@@ -43,7 +45,7 @@ class NavigationFeed(OPDSFeedProtocol):
         feed.generate_feed()
         return feed
 
-    def generate_feed(self):
+    def generate_feed(self) -> None:
         self._feed.add_metadata("title", text=self.title)
         self._feed.add_metadata("id", text=self.url)
         self._feed.add_metadata("updated", text=AtomFeed._strftime(utc_now()))
@@ -67,13 +69,15 @@ class NavigationFeed(OPDSFeedProtocol):
 
         self.annotator.annotate_feed(self._feed)
 
-    def add_entry(self, url, title, type=OPDSFeed.NAVIGATION_FEED_TYPE):
+    def add_entry(
+        self, url: str, title: str, type: str = OPDSFeed.NAVIGATION_FEED_TYPE
+    ) -> None:
         """Create an OPDS navigation entry for a URL."""
         entry = DataEntry(type=DataEntryTypes.NAVIGATION, title=title, id=url)
         entry.links.append(Link(rel="subsection", href=url, type=type))
         self._feed.data_entries.append(entry)
 
-    def as_response(self, **kwargs) -> Response:
+    def as_response(self, **kwargs: Any) -> OPDSFeedResponse:
         response = super().as_response(**kwargs)
         response.content_type = OPDSFeed.NAVIGATION_FEED_TYPE
         return response

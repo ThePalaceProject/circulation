@@ -63,7 +63,6 @@ class LibraryAnnotatorFixture:
             None,
             self.lane,
             db.default_library(),
-            test_mode=True,
             top_level_title="Test Top Level Title",
         )
 
@@ -460,7 +459,6 @@ class TestLibraryAnnotator:
             None,
             annotator_fixture.lane,
             annotator_fixture.db.default_library(),
-            test_mode=True,
         )
         pool = annotator.active_licensepool_for(work)
 
@@ -500,7 +498,6 @@ class TestLibraryAnnotator:
                 None,
                 lane,
                 annotator_fixture.db.default_library(),
-                test_mode=True,
                 library_identifies_patrons=auth,
             )
             work_entry = WorkEntry(
@@ -549,7 +546,6 @@ class TestLibraryAnnotator:
             None,
             lane,
             annotator_fixture.db.default_library(),
-            test_mode=True,
             library_identifies_patrons=True,
         )
         work_entry = WorkEntry(
@@ -629,7 +625,6 @@ class TestLibraryAnnotator:
                 None,
                 lane,
                 annotator_fixture.db.default_library(),
-                test_mode=True,
                 library_identifies_patrons=auth,
             )
             feed = OPDSAcquisitionFeed("test", "url", [], annotator)
@@ -928,7 +923,7 @@ class TestLibraryAnnotator:
             if x["rel"] == "http://librarysimplified.org/terms/rel/user-profile"
         ]
         annotator = LibraryLoanAndHoldAnnotator(
-            None, None, library=patron.library, patron=patron, test_mode=True
+            None, None, library=patron.library, patron=patron
         )
         expect_url = annotator.url_for(
             "patron_profile",
@@ -1436,7 +1431,7 @@ class TestLibraryAnnotator:
         identifier = pool.identifier
 
         annotator = LibraryLoanAndHoldAnnotator(
-            None, None, annotator_fixture.db.default_library(), test_mode=True
+            None, None, annotator_fixture.db.default_library()
         )
 
         # If there's no way to fulfill the book, borrow_link raises
@@ -1476,7 +1471,6 @@ class TestLibraryAnnotator:
             None,
             lane,
             annotator_fixture.db.default_library(),
-            test_mode=True,
             facets=facets,
         )
         [url] = annotated_links(lane, annotator)["search"]

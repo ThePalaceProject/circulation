@@ -3,7 +3,8 @@ from __future__ import annotations
 import datetime
 import logging
 from collections import defaultdict
-from typing import Optional
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote
 
 from flask import has_request_context
@@ -20,7 +21,7 @@ from core.feed_protocol.types import (
     WorkEntryData,
 )
 from core.model.classification import Subject
-from core.model.contributor import Contributor
+from core.model.contributor import Contribution, Contributor
 from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.library import Library
@@ -33,7 +34,7 @@ from core.util.opds_writer import AtomFeed, OPDSFeed
 
 class ToFeedEntry:
     @classmethod
-    def authors(cls, edition):
+    def authors(cls, edition: Edition) -> Dict[str, List[Author]]:
         """Create one or more <author> and <contributor> tags for the given
         Work.
 
@@ -42,8 +43,8 @@ class ToFeedEntry:
             for bibliographic information, including the list of
             Contributions.
         """
-        authors = {"authors": [], "contributors": []}
-        state = defaultdict(set)
+        authors: Dict[str, List[Any]] = {"authors": [], "contributors": []}
+        state: Dict[Optional[str], Set[Any]] = defaultdict(set)
         for contribution in edition.contributions:
             info = cls.contributor_tag(contribution, state)
             if info is None:
@@ -63,7 +64,9 @@ class ToFeedEntry:
         return authors
 
     @classmethod
-    def contributor_tag(cls, contribution, state):
+    def contributor_tag(
+        cls, contribution: Contribution, state: Dict[Optional[str], Any]
+    ) -> Optional[Tuple[str, Author]]:
         """Build an <author> or <contributor> tag for a Contribution.
 
         :param contribution: A Contribution.
@@ -76,18 +79,19 @@ class ToFeedEntry:
         """
         contributor = contribution.contributor
         role = contribution.role
-        entries = {}
 
         if role in Contributor.AUTHOR_ROLES:
             tag_f = "author"
             marc_role = None
-        else:
+        elif role is not None:
             tag_f = "contributor"
             marc_role = Contributor.MARC_ROLE_CODES.get(role)
             if not marc_role:
                 # This contribution is not one that we publish as
                 # a <atom:contributor> tag. Skip it.
                 return None
+        else:
+            return None
 
         name = contributor.display_name or contributor.sort_name
         name_key = name.lower()
@@ -109,7 +113,9 @@ class ToFeedEntry:
         return tag_f, entry
 
     @classmethod
-    def series(cls, series_name, series_position):
+    def series(
+        cls, series_name: str, series_position: Optional[int]
+    ) -> Optional[FeedEntryType]:
         """Generate a schema:Series tag for the given name and position."""
         if not series_name:
             return None
@@ -120,7 +126,7 @@ class ToFeedEntry:
         return FeedEntryType(**series_details)
 
     @classmethod
-    def rating(cls, type_uri, value):
+    def rating(cls, type_uri: Optional[str], value: float | Decimal) -> FeedEntryType:
         """Generate a schema:Rating tag for the given type and value."""
         return FeedEntryType(ratingValue="%.4f" % value, additionalType=type_uri)
 
@@ -141,7 +147,7 @@ class ToFeedEntry:
         return links
 
     @classmethod
-    def categories(cls, work):
+    def categories(cls, work: Work) -> Dict[str, Any]:
         """Return all relevant classifications of this work.
 
         :return: A dictionary mapping 'scheme' URLs to dictionaries of
@@ -167,7 +173,7 @@ class ToFeedEntry:
 
         simplified_genres = []
         for wg in work.work_genres:
-            simplified_genres.append(wg.genre.name)
+            simplified_genres.append(wg.genre.name)  # type: ignore[attr-defined]
 
         if simplified_genres:
             categories[Subject.SIMPLIFIED_GENRE] = [
@@ -178,7 +184,7 @@ class ToFeedEntry:
         # Add the appeals as a category of schema
         # http://librarysimplified.org/terms/appeal
         schema_url = AtomFeed.SIMPLIFIED_NS + "appeals/"
-        appeals = []
+        appeals: List[Dict[str, Any]] = []
         categories[schema_url] = appeals
         for name, value in (
             (Work.CHARACTER_APPEAL, work.appeal_character),
@@ -187,15 +193,15 @@ class ToFeedEntry:
             (Work.STORY_APPEAL, work.appeal_story),
         ):
             if value:
-                appeal = dict(term=schema_url + name, label=name)
-                weight_field = AtomFeed.schema_("ratingValue")
+                appeal: Dict[str, Any] = dict(term=schema_url + name, label=name)
+                weight_field = "ratingValue"
                 appeal[weight_field] = value
                 appeals.append(appeal)
 
         # Add the audience as a category of schema
         # http://schema.org/audience
         if work.audience:
-            audience_uri = AtomFeed.SCHEMA_NS + "audience"
+            audience_uri = "audience"
             categories[audience_uri] = [dict(term=work.audience, label=work.audience)]
 
         # Any book can have a target age, but the target age
@@ -213,12 +219,12 @@ class ToFeedEntry:
         return categories
 
     @classmethod
-    def content(cls, work):
+    def content(cls, work: Optional[Work]) -> str:
         """Return an HTML summary of this work."""
         summary = ""
         if work:
             if work.summary_text != None:
-                summary = work.summary_text
+                summary = work.summary_text  # type: ignore[assignment]
             elif (
                 work.summary
                 and work.summary.representation
@@ -228,11 +234,11 @@ class ToFeedEntry:
                 if isinstance(content, bytes):
                     content = content.decode("utf-8")
                 work.summary_text = content
-                summary = work.summary_text
+                summary = work.summary_text  # type: ignore[assignment]
         return summary
 
 
-def url_for(name, **kwargs):
+def url_for(name: str, **kwargs: Any) -> str:
     if has_request_context():
         return flask_url_for(name, **kwargs)
     else:
@@ -245,7 +251,9 @@ class OPDSAnnotator:
 
 
 class Annotator(OPDSAnnotator, ToFeedEntry):
-    def annotate_work_entry(self, entry: WorkEntry, updated=None) -> None:
+    def annotate_work_entry(
+        self, entry: WorkEntry, updated: Optional[datetime.datetime] = None
+    ) -> None:
         if entry.computed:
             return
 
@@ -282,8 +290,6 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
             )
 
         content = self.content(work)
-        if isinstance(content, bytes):
-            content = content.decode("utf8")
 
         if edition.medium:
             additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
@@ -299,8 +305,8 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
         # TODO: Is VerboseAnnotator used anywhere?
 
         author_entries = self.authors(edition)
-        computed.contributors = author_entries.get("contributors")
-        computed.authors = author_entries.get("authors")
+        computed.contributors = author_entries.get("contributors", [])
+        computed.authors = author_entries.get("authors", [])
 
         if edition.series:
             computed.series = self.series(edition.series, edition.series_position)
@@ -403,12 +409,11 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
         computed.other_links = other_links
         entry.computed = computed
 
-    def annotate_feed(self, feed: FeedData):
+    def annotate_feed(self, feed: FeedData) -> None:
         pass
 
-    @classmethod
     def active_licensepool_for(
-        cls, work: Work, library: Library | None = None
+        self, work: Work, library: Library | None = None
     ) -> LicensePool | None:
         """Which license pool would be/has been used to issue a license for
         this work?

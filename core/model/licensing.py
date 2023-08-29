@@ -255,9 +255,9 @@ class LicensePool(Base):
 
     open_access = Column(Boolean, index=True)
     last_checked = Column(DateTime(timezone=True), index=True)
-    licenses_owned = Column(Integer, default=0, index=True)
-    licenses_available = Column(Integer, default=0, index=True)
-    licenses_reserved = Column(Integer, default=0)
+    licenses_owned: int = Column(Integer, default=0, index=True)
+    licenses_available: int = Column(Integer, default=0, index=True)
+    licenses_reserved: int = Column(Integer, default=0)
     patrons_in_hold_queue = Column(Integer, default=0)
 
     # Set to True for collections imported using MirrorUploaded

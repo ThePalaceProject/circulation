@@ -1,15 +1,18 @@
 import copy
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from core.feed_protocol.types import FeedData, Link, WorkEntry
 from core.model.configuration import ExternalIntegration
 from core.model.constants import EditionConstants, LinkRelations
+from core.model.patron import Hold, Patron
 
 from .circulation import LibraryAnnotator
 
 
 class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
     @staticmethod
-    def choose_best_hold_for_work(list_of_holds):
+    def choose_best_hold_for_work(list_of_holds: List[Hold]) -> Hold:
         # We don't want holds that are connected to license pools without any licenses owned. Also, we want hold that
         # would result in the least wait time for the patron.
 
@@ -43,7 +46,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
 
         return best
 
-    def drm_device_registration_feed_tags(self, patron) -> dict:
+    def drm_device_registration_feed_tags(self, patron: Patron) -> Dict[str, Any]:
         """Return tags that provide information on DRM device deregistration
         independent of any particular loan. These tags will go under
         the <feed> tag.
@@ -60,7 +63,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         return tags
 
     @property
-    def user_profile_management_protocol_link(self):
+    def user_profile_management_protocol_link(self) -> Link:
         """Create a <link> tag that points to the circulation
         manager's User Profile Management Protocol endpoint
         for the current patron.
@@ -74,7 +77,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             ),
         )
 
-    def annotate_feed(self, feed: FeedData):
+    def annotate_feed(self, feed: FeedData) -> None:
         """Annotate the feed with top-level DRM device registration tags
         and a link to the User Profile Management Protocol endpoint.
         """
@@ -86,7 +89,9 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             for name, value in tags.items():
                 feed.add_metadata(name, feed_entry=value)
 
-    def annotate_work_entry(self, entry: WorkEntry, updated=None):
+    def annotate_work_entry(
+        self, entry: WorkEntry, updated: Optional[datetime] = None
+    ) -> None:
         super().annotate_work_entry(entry, updated=updated)
         if not entry.computed:
             return

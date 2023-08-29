@@ -1,4 +1,6 @@
 from collections import defaultdict
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,8 @@ from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.types import Author, WorkEntry
 from core.model import PresentationCalculationPolicy
 from core.model.classification import Subject
+from core.model.contributor import Contributor
+from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.measurement import Measurement
 from core.model.work import Work
@@ -20,12 +24,14 @@ class VerboseAnnotator(Annotator):
 
     opds_cache_field = Work.verbose_opds_entry.name
 
-    def annotate_work_entry(self, entry, updated=None):
+    def annotate_work_entry(
+        self, entry: WorkEntry, updated: Optional[datetime] = None
+    ) -> None:
         super().annotate_work_entry(entry, updated=updated)
         self.add_ratings(entry)
 
     @classmethod
-    def add_ratings(cls, entry: WorkEntry):
+    def add_ratings(cls, entry: WorkEntry) -> None:
         """Add a quality rating to the work."""
         work = entry.work
         for type_uri, value in [
@@ -37,7 +43,9 @@ class VerboseAnnotator(Annotator):
                 entry.computed.ratings.append(cls.rating(type_uri, value))
 
     @classmethod
-    def categories(cls, work, policy=None):
+    def categories(
+        cls, work: Work, policy: Optional[PresentationCalculationPolicy] = None
+    ) -> Dict[str, Any]:
         """Send out _all_ categories for the work.
 
         (So long as the category type has a URI associated with it in
@@ -79,7 +87,7 @@ class VerboseAnnotator(Annotator):
         return by_scheme
 
     @classmethod
-    def authors(cls, edition):
+    def authors(cls, edition: Edition) -> Dict[str, List[Author]]:
         """Create a detailed <author> tag for each author."""
         return {
             "authors": [
@@ -89,7 +97,7 @@ class VerboseAnnotator(Annotator):
         }
 
     @classmethod
-    def detailed_author(cls, contributor):
+    def detailed_author(cls, contributor: Contributor) -> Author:
         """Turn a Contributor into a detailed <author> tag."""
         author = Author()
         author.name = contributor.display_name

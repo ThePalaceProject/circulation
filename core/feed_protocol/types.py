@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from pydantic import BaseModel
 
@@ -14,15 +14,16 @@ class FeedEntryType(BaseModel):
         extra = "allow"
         arbitrary_types_allowed = True
 
-    def add_attributes(self, attrs: dict):
+    def add_attributes(self, attrs: Dict[str, Any]) -> None:
         for name, data in attrs.items():
             setattr(self, name, data)
 
-    def children(self):
+    def children(self) -> Generator[Tuple[str, "FeedEntryType"], None, None]:
         """Yield all FeedEntryType attributes"""
         for name, value in self:
             if isinstance(value, self.__class__):
                 yield name, value
+        return
 
 
 class Link(FeedEntryType):
@@ -34,11 +35,11 @@ class Link(FeedEntryType):
     role: Optional[str] = None
     title: Optional[str] = None
 
-    def dict(self, **kwargs):
+    def dict(self, **kwargs: Any) -> Dict[str, Any]:
         kwargs["exclude_none"] = True
         return super().dict(**kwargs)
 
-    def link_attribs(self) -> Dict:
+    def link_attribs(self) -> Dict[str, Any]:
         d = dict(href=self.href)
         for key in ["rel", "type"]:
             if (value := getattr(self, key, None)) is not None:
@@ -145,10 +146,12 @@ class FeedData(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
-    def add_link(self, href, **kwargs):
+    def add_link(self, href: str, **kwargs: Any) -> None:
         self.links.append(Link(href=href, **kwargs))
 
-    def add_metadata(self, name, feed_entry=None, **kwargs):
+    def add_metadata(
+        self, name: str, feed_entry: Optional[FeedEntryType] = None, **kwargs: Any
+    ) -> None:
         if not feed_entry:
             self.metadata[name] = FeedEntryType(**kwargs)
         else:
