@@ -843,9 +843,7 @@ class TestCollection:
     ):
         """A partial test of restrict_to_ready_deliverable_works.
 
-        This test covers the following cases:
-        1. The bit that excludes audiobooks from certain data sources.
-        2. Makes sure that self-hosted books and books with unlimited access are not get filtered out that come.
+        This test covers the bit that excludes audiobooks from certain data sources.
 
         The other cases are tested indirectly in lane.py, but could use a more explicit test here.
         """
@@ -868,20 +866,6 @@ class TestCollection:
             title="Feedbooks Audiobook",
         )
         feedbooks_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
-
-        DataSource.lookup(db.session, DataSource.LCP, autocreate=True)
-        self_hosted_lcp_book = db.work(
-            data_source_name=DataSource.LCP,
-            title="Self-hosted LCP book",
-            with_license_pool=True,
-            self_hosted=True,
-        )
-        unlimited_access_book = db.work(
-            data_source_name=DataSource.LCP,
-            title="Self-hosted LCP book",
-            with_license_pool=True,
-            unlimited_access=True,
-        )
 
         def expect(qu, works):
             """Modify the query `qu` by calling
@@ -912,8 +896,6 @@ class TestCollection:
                 overdrive_ebook,
                 overdrive_audiobook,
                 feedbooks_audiobook,
-                self_hosted_lcp_book,
-                unlimited_access_book,
             ],
         )
         # Putting a data source in the list excludes its audiobooks, but
@@ -924,12 +906,10 @@ class TestCollection:
             [
                 overdrive_ebook,
                 feedbooks_audiobook,
-                self_hosted_lcp_book,
-                unlimited_access_book,
             ],
         )
         setting.value = json.dumps([DataSource.OVERDRIVE, DataSource.FEEDBOOKS])
-        expect(qu, [overdrive_ebook, self_hosted_lcp_book, unlimited_access_book])
+        expect(qu, [overdrive_ebook])
 
     def test_delete(self, example_collection_fixture: ExampleCollectionFixture):
         """Verify that Collection.delete will only operate on collections

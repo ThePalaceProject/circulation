@@ -181,7 +181,6 @@ class ExternalIntegration(Base):
     FEEDBOOKS = DataSourceConstants.FEEDBOOKS
     ODL = "ODL"
     ODL2 = "ODL 2.0"
-    LCP = DataSourceConstants.LCP
     PROQUEST = DataSourceConstants.PROQUEST
 
     # These protocols were used on the Content Server when mirroring

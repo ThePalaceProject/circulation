@@ -455,10 +455,6 @@ class CirculationManager:
         self.patron_auth_token = PatronAuthTokenController(self)
         self.playtime_entries = PlaytimeEntriesController(self)
 
-        from api.lcp.controller import LCPController
-
-        self.lcp_controller = LCPController(self)
-
     def setup_configuration_dependent_controllers(self):
         """Set up all the controllers that depend on the
         current site configuration.
