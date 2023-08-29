@@ -17,7 +17,10 @@ from core.external_search import MockExternalSearchIndex
 from core.facets import FacetConstants
 from core.feed_protocol.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.annotator.circulation import AcquisitionHelper
+from core.feed_protocol.annotator.circulation import (
+    AcquisitionHelper,
+    CirculationManagerAnnotator,
+)
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.navigation import NavigationFeed
 from core.feed_protocol.types import FeedData, WorkEntry
@@ -32,7 +35,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
 
 
-class MockAnnotator(Annotator):
+class MockAnnotator(CirculationManagerAnnotator):
     def __init__(self):
         self.lanes_by_work = defaultdict(list)
 
@@ -129,7 +132,7 @@ class TestOPDSAcquisitionFeed:
             "feed title",
             "url",
             wl,
-            Annotator(),
+            CirculationManagerAnnotator(None),
             None,
             None,
             None,
@@ -148,7 +151,12 @@ class TestOPDSAcquisitionFeed:
 
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse containing the feed.
-        feed = OPDSAcquisitionFeed("feed title", "http://url/", [], Annotator())
+        feed = OPDSAcquisitionFeed(
+            "feed title",
+            "http://url/",
+            [],
+            CirculationManagerAnnotator(None),
+        )
         feed.generate_feed()
 
         # Some other piece of code set expectations for how this feed should
@@ -170,7 +178,12 @@ class TestOPDSAcquisitionFeed:
 
         # Verify the ability to convert an AcquisitionFeed object to an
         # OPDSFeedResponse that is to be treated as an error message.
-        feed = OPDSAcquisitionFeed("feed title", "http://url/", [], Annotator())
+        feed = OPDSAcquisitionFeed(
+            "feed title",
+            "http://url/",
+            [],
+            CirculationManagerAnnotator(None),
+        )
         feed.generate_feed()
 
         # Some other piece of code set expectations for how this feed should
@@ -327,6 +340,7 @@ class TestOPDSAcquisitionFeed:
         hold, is_new = pool.on_hold_to(patron, position=1)
 
         tags = AcquisitionHelper.license_tags(pool, None, hold)
+        assert tags is not None
         assert "1" == tags["holds_position"]
         assert "3" == tags["holds_total"]
 
@@ -334,6 +348,7 @@ class TestOPDSAcquisitionFeed:
         # are last in the list.
         hold.position = None
         tags = AcquisitionHelper.license_tags(pool, None, hold)
+        assert tags is not None
         assert "3" == tags["holds_position"]
         assert "3" == tags["holds_total"]
 
@@ -342,6 +357,7 @@ class TestOPDSAcquisitionFeed:
         # be used as the value of opds:total.
         hold.position = 5
         tags = AcquisitionHelper.license_tags(pool, None, hold)
+        assert tags is not None
         assert "5" == tags["holds_position"]
         assert "5" == tags["holds_total"]
 
@@ -351,6 +367,7 @@ class TestOPDSAcquisitionFeed:
         # them in the queue.
         hold.position = 4
         tags = AcquisitionHelper.license_tags(pool, None, hold)
+        assert tags is not None
         assert "4" == tags["holds_position"]
         assert "4" == tags["holds_total"]
 
@@ -362,6 +379,7 @@ class TestOPDSAcquisitionFeed:
         hold.position = 0
         pool.patrons_in_hold_queue = 0
         tags = AcquisitionHelper.license_tags(pool, None, hold)
+        assert tags is not None
         assert "holds_position" not in tags
         assert "1" == tags["holds_total"]
 
@@ -378,6 +396,7 @@ class TestOPDSAcquisitionFeed:
         tags = AcquisitionHelper.license_tags(pool, None, None)
 
         # Assert
+        assert tags is not None
         assert 1 == len(tags.keys())
         assert tags["availability_status"] == "available"
 
@@ -388,6 +407,7 @@ class TestOPDSAcquisitionFeed:
         loan, _ = pool.loan_to(patron)
         tags = AcquisitionHelper.license_tags(pool, loan, None)
 
+        assert tags is not None
         assert "availability_since" in tags
         assert "availability_until" not in tags
 
@@ -403,6 +423,7 @@ class TestOPDSAcquisitionFeed:
         tags = AcquisitionHelper.license_tags(pool, None, None)
 
         # Assert
+        assert tags is not None
         assert 1 == len(tags.keys())
         assert "availability_status" in tags
         assert "available" == tags["availability_status"]
@@ -786,7 +807,12 @@ class TestOPDSAcquisitionFeed:
         the top-level <feed> tag with information about the currently
         selected entrypoint, if any.
         """
-        feed = OPDSAcquisitionFeed("title", "url", [], Annotator())
+        feed = OPDSAcquisitionFeed(
+            "title",
+            "url",
+            [],
+            CirculationManagerAnnotator(None),
+        )
 
         # No entry point, no annotation.
         feed.show_current_entrypoint(None)
@@ -1282,7 +1308,7 @@ class TestNavigationFeed:
         assert "http://navigation" == self_link.href
         assert "self" == self_link.rel
         assert "http://navigation" == feed.metadata["id"].text
-        [fantasy, romance] = sorted(feed.data_entries, key=lambda x: x.title)
+        [fantasy, romance] = sorted(feed.data_entries, key=lambda x: x.title or "")
 
         assert data.fantasy.display_name == fantasy.title
         assert "http://%s/" % data.fantasy.id == fantasy.id

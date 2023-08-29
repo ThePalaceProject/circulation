@@ -1802,8 +1802,6 @@ class LoanController(CirculationManagerController):
                 return feed
             if isinstance(feed, Response):
                 return feed
-            if isinstance(feed, OPDSFeed):
-                content = str(feed)
             else:
                 content = etree.tostring(feed)
             status_code = 200

@@ -3,6 +3,7 @@ from datetime import timedelta
 from core.classifier import Classifier
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.base import Annotator
+from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.types import FeedEntryType, Link, WorkEntry
 from core.model import tuple_to_numericrange
@@ -296,7 +297,7 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            Annotator(),
+            CirculationManagerAnnotator(None),
         )._feed
 
         computed = feed.entries[0].computed
@@ -311,7 +312,7 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            Annotator(),
+            CirculationManagerAnnotator(None),
         )._feed
 
         computed = feed.entries[0].computed
@@ -334,7 +335,7 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            Annotator(),
+            CirculationManagerAnnotator(None),
         )._feed
         computed = feed.entries[0].computed
         assert computed is not None
@@ -353,7 +354,7 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            Annotator(),
+            CirculationManagerAnnotator(None),
         )._feed
         computed = feed.entries[0].computed
         assert computed is not None
@@ -370,7 +371,7 @@ class TestAnnotators:
             db.fresh_str(),
             db.fresh_url(),
             [work],
-            Annotator(),
+            CirculationManagerAnnotator(None),
         )._feed
         computed = feed.entries[0].computed
         assert computed is not None

@@ -32,7 +32,7 @@ from core.feed_protocol.types import (
     Link,
     WorkEntry,
 )
-from core.lane import Facets, Lane, Pagination, WorkList
+from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.lcp.exceptions import LCPError
 from core.model.circulationevent import CirculationEvent
@@ -271,7 +271,7 @@ class CirculationManagerAnnotator(Annotator):
     def feed_url(
         self,
         lane: Optional[WorkList],
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
         pagination: Optional[Pagination] = None,
         default_route: str = "feed",
         extra_kwargs: Optional[Dict[str, Any]] = None,
@@ -707,7 +707,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         facet_view: str = "feed",
         top_level_title: str = "All Books",
         library_identifies_patrons: bool = True,
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
     ) -> None:
         """Constructor.
 
@@ -755,7 +755,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         return url, OPDSFeed.ENTRY_TYPE
 
     def groups_url(
-        self, lane: Optional[WorkList], facets: Optional[Facets] = None
+        self, lane: Optional[WorkList], facets: Optional[FacetsWithEntryPoint] = None
     ) -> str:
         lane_identifier = self._lane_identifier(lane)
         if facets:
@@ -771,13 +771,13 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             **kwargs,
         )
 
-    def default_lane_url(self, facets: Optional[Facets] = None) -> str:
+    def default_lane_url(self, facets: Optional[FacetsWithEntryPoint] = None) -> str:
         return self.groups_url(None, facets=facets)
 
     def feed_url(  # type: ignore [override]
         self,
         lane: Optional[WorkList],
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
         pagination: Optional[Pagination] = None,
         default_route: str = "feed",
     ) -> str:
@@ -791,7 +791,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         lane: Optional[WorkList],
         query: str,
         pagination: Optional[Pagination],
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
     ) -> str:
         lane_identifier = self._lane_identifier(lane)
         kwargs = dict(q=query)
@@ -847,7 +847,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
         return self.lane_url(lane, self.facets), title
 
-    def lane_url(self, lane: WorkList, facets: Optional[Facets] = None) -> str:
+    def lane_url(
+        self, lane: Optional[WorkList], facets: Optional[FacetsWithEntryPoint] = None
+    ) -> str:
         # If the lane has sublanes, the URL identifying the group will
         # take the user to another set of groups for the
         # sublanes. Otherwise it will take the user to a list of the

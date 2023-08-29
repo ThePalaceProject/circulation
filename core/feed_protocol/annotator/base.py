@@ -114,7 +114,7 @@ class ToFeedEntry:
 
     @classmethod
     def series(
-        cls, series_name: str, series_position: Optional[int]
+        cls, series_name: Optional[str], series_position: Optional[int] | Optional[str]
     ) -> Optional[FeedEntryType]:
         """Generate a schema:Series tag for the given name and position."""
         if not series_name:

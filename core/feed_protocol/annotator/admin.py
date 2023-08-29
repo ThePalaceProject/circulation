@@ -13,7 +13,7 @@ from core.model.library import Library
 
 
 class AdminAnnotator(LibraryAnnotator):
-    def __init__(self, circulation: CirculationAPI, library: Library) -> None:
+    def __init__(self, circulation: Optional[CirculationAPI], library: Library) -> None:
         super().__init__(circulation, None, library)
 
     def annotate_work_entry(

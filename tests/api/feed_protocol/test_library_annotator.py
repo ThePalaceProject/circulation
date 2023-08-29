@@ -19,13 +19,13 @@ from core.classifier import (  # type: ignore[attr-defined]
     Fantasy,
     Urban_Fantasy,
 )
-from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
+from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EverythingEntryPoint
 from core.external_search import MockExternalSearchIndex
 from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.circulation import LibraryAnnotator
 from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed_protocol.types import FeedData, WorkEntry
-from core.lane import FacetsWithEntryPoint, Pagination
+from core.lane import Facets, FacetsWithEntryPoint, Pagination
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.model import (
     CirculationEvent,
@@ -177,7 +177,7 @@ class TestLibraryAnnotator:
         default_lane_url = annotator_fixture.annotator.lane_url(None)
         assert default_lane_url == annotator_fixture.annotator.default_lane_url()
 
-        facets = dict(entrypoint="Book")
+        facets = FacetsWithEntryPoint(entrypoint=EbooksEntryPoint)
         default_lane_url = annotator_fixture.annotator.lane_url(None, facets=facets)
         assert default_lane_url == annotator_fixture.annotator.default_lane_url(
             facets=facets
@@ -223,6 +223,7 @@ class TestLibraryAnnotator:
         link = annotator_fixture.annotator.fulfill_link(
             pool, None, lpdm, OPDSFeed.OPEN_ACCESS_REL
         )
+        assert link is not None
         assert OPDSFeed.OPEN_ACCESS_REL == link.rel
 
     # We freeze the test time here, because this test checks that the client token
@@ -259,6 +260,7 @@ class TestLibraryAnnotator:
         link = annotator_fixture.annotator.fulfill_link(
             pool, loan, other_delivery_mechanism
         )
+        assert link is not None
         for name, child in link:
             assert name != "licensor"
 
@@ -286,6 +288,7 @@ class TestLibraryAnnotator:
 
         # The drm:licensor tag is the one we get by calling
         # adobe_id_tags() on that identifier.
+        assert adobe_id_identifier.credential is not None
         expect = annotator_fixture.annotator.adobe_id_tags(
             adobe_id_identifier.credential
         )
@@ -315,7 +318,9 @@ class TestLibraryAnnotator:
         element = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
 
         assert "licensor" in element
-        assert vendor_id_fixture.TEST_VENDOR_ID == element["licensor"].vendor
+        assert vendor_id_fixture.TEST_VENDOR_ID == getattr(
+            element["licensor"], "vendor", None
+        )
 
         token = getattr(element["licensor"], "clientToken", None)
         assert token is not None
@@ -384,7 +389,7 @@ class TestLibraryAnnotator:
         assert "groups" in default_lane_url
         assert str(annotator_fixture.lane.id) not in default_lane_url
 
-        facets = dict(entrypoint="Book")
+        facets = FacetsWithEntryPoint(entrypoint=EbooksEntryPoint)
         default_lane_url = annotator_fixture.annotator.default_lane_url(facets=facets)
         assert "entrypoint=Book" in default_lane_url
 
@@ -399,43 +404,59 @@ class TestLibraryAnnotator:
         assert "groups" in groups_url_fantasy
         assert str(annotator_fixture.lane.id) in groups_url_fantasy
 
-        facets = dict(arg="value")
+        facets = Facets.default(
+            annotator_fixture.db.default_library(), order="someorder"
+        )
         groups_url_facets = annotator_fixture.annotator.groups_url(None, facets=facets)
-        assert "arg=value" in groups_url_facets
+        assert "order=someorder" in groups_url_facets
 
     def test_feed_url(self, annotator_fixture: LibraryAnnotatorFixture):
         # A regular Lane.
         feed_url_fantasy = annotator_fixture.annotator.feed_url(
-            annotator_fixture.lane, dict(facet="value"), dict()
+            annotator_fixture.lane,
+            Facets.default(annotator_fixture.db.default_library(), order="order"),
+            Pagination.default(),
         )
         assert "feed" in feed_url_fantasy
-        assert "facet=value" in feed_url_fantasy
+        assert "order=order" in feed_url_fantasy
         assert str(annotator_fixture.lane.id) in feed_url_fantasy
-        assert annotator_fixture.db.default_library().name in feed_url_fantasy
+
+        default_library = annotator_fixture.db.default_library()
+        assert default_library.name is not None
+        assert default_library.name in feed_url_fantasy
 
         # A QueryGeneratedLane.
         annotator_fixture.annotator.lane = annotator_fixture.contributor_lane
         feed_url_contributor = annotator_fixture.annotator.feed_url(
-            annotator_fixture.contributor_lane, dict(), dict()
+            annotator_fixture.contributor_lane,
+            Facets.default(annotator_fixture.db.default_library()),
+            Pagination.default(),
         )
         assert annotator_fixture.contributor_lane.ROUTE in feed_url_contributor
         assert (
             annotator_fixture.contributor_lane.contributor_key in feed_url_contributor
         )
-        assert annotator_fixture.db.default_library().name in feed_url_contributor
+        default_library = annotator_fixture.db.default_library()
+        assert default_library.name is not None
+        assert default_library.name in feed_url_contributor
 
     def test_search_url(self, annotator_fixture: LibraryAnnotatorFixture):
         search_url = annotator_fixture.annotator.search_url(
-            annotator_fixture.lane, "query", dict(), dict(facet="value")
+            annotator_fixture.lane,
+            "query",
+            Pagination.default(),
+            Facets.default(annotator_fixture.db.default_library(), order="Book"),
         )
         assert "search" in search_url
         assert "query" in search_url
-        assert "facet=value" in search_url
+        assert "order=Book" in search_url
         assert str(annotator_fixture.lane.id) in search_url
 
     def test_facet_url(self, annotator_fixture: LibraryAnnotatorFixture):
         # A regular Lane.
-        facets = dict(collection="main")
+        facets = Facets.default(
+            annotator_fixture.db.default_library(), collection="main"
+        )
         facet_url = annotator_fixture.annotator.facet_url(facets)
         assert "collection=main" in facet_url
         assert str(annotator_fixture.lane.id) in facet_url
@@ -464,6 +485,8 @@ class TestLibraryAnnotator:
 
         feed = self.get_parsed_feed(annotator_fixture, [work])
         [entry] = feed.entries
+        assert entry.computed is not None
+        assert pool is not None
         assert entry.computed.identifier == pool.identifier.urn
 
         [(alternate, type)] = [
@@ -1480,6 +1503,7 @@ class TestLibraryAnnotator:
 
         # When the selected EntryPoint is a default, it's not used --
         # instead, we search everything.
+        assert annotator.facets is not None
         annotator.facets.entrypoint_is_default = True
         links = annotated_links(lane, annotator)
         [url] = links["search"]
@@ -1548,7 +1572,7 @@ class TestLibraryAnnotator:
             loan1.license_pool.identifier,
         )
         # Fulfill, and revoke.
-        [revoke, fulfill] = sorted(loan1_links, key=lambda x: x.rel)
+        [revoke, fulfill] = sorted(loan1_links, key=lambda x: x.rel or "")
         assert "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
         assert "fulfill" in fulfill.href
@@ -1581,7 +1605,7 @@ class TestLibraryAnnotator:
             loan2.license_pool, loan2, None, None, loan2.license_pool.identifier
         )
         # Fulfill and revoke.
-        [revoke, fulfill] = sorted(loan2_links, key=lambda x: x.rel)
+        [revoke, fulfill] = sorted(loan2_links, key=lambda x: x.rel or "")
         assert "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
         assert "fulfill" in fulfill.href
@@ -1618,7 +1642,7 @@ class TestLibraryAnnotator:
             hold.license_pool, None, hold, None, hold.license_pool.identifier
         )
         # Borrow and revoke.
-        [revoke, borrow] = sorted(hold_links, key=lambda x: x.rel)
+        [revoke, borrow] = sorted(hold_links, key=lambda x: x.rel or "")
         assert "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
         assert "borrow" in borrow.href
@@ -1640,7 +1664,7 @@ class TestLibraryAnnotator:
             loan5.license_pool, loan5, None, None, loan5.license_pool.identifier
         )
         # Fulfill and revoke.
-        [revoke, fulfill] = sorted(loan5_links, key=lambda x: x.rel)
+        [revoke, fulfill] = sorted(loan5_links, key=lambda x: x.rel or "")
         assert "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
         assert "fulfill" in fulfill.href

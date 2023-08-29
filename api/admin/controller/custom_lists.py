@@ -351,7 +351,7 @@ class CustomListsController(
             annotator = self.manager.annotator(worklist)
             url_fn = self.url_for_custom_list(library, list)
             feed = OPDSAcquisitionFeed.from_query(
-                query, self._db, list.name, url, pagination, url_fn, annotator
+                query, self._db, list.name or "", url, pagination, url_fn, annotator
             )
             annotator.annotate_feed(feed)
             return feed.as_response(max_age=0)
