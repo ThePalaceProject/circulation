@@ -21,8 +21,8 @@ from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.annotator.circulation import (
     AcquisitionHelper,
     CirculationManagerAnnotator,
+    LibraryAnnotator,
 )
-from core.feed_protocol.annotator.circulation import AcquisitionHelper, LibraryAnnotator
 from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.navigation import NavigationFeed
@@ -977,7 +977,7 @@ class TestOPDSAcquisitionFeed:
 
         assert mock.call_count == 1
         _work, _pool, _edition, _identifier, _annotator = mock.call_args[0]
-        assert _work == None
+        assert _work == work
         assert _pool == None
         assert _edition == work.presentation_edition
         assert _identifier == work.presentation_edition.primary_identifier
