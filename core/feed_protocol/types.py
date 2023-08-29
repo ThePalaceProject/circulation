@@ -63,6 +63,8 @@ class Acquisition(Link):
     availability_since: Optional[str]
     availability_until: Optional[str]
 
+    rights: Optional[str]
+
     lcp_hashed_passphrase: Optional[FeedEntryType]
     drm_licensor: Optional[FeedEntryType]
 

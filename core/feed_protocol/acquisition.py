@@ -57,7 +57,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         url: str,
         works: List[Work],
         annotator: CirculationManagerAnnotator,
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
         pagination: Optional[Pagination] = None,
         precomposed_entries: List[OPDSMessage] = [],
     ) -> None:
@@ -134,7 +134,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
     @classmethod
     def facet_links(
-        cls, annotator: CirculationManagerAnnotator, facets: Facets
+        cls, annotator: CirculationManagerAnnotator, facets: FacetsWithEntryPoint
     ) -> Generator[Dict[str, str], None, None]:
         """Create links for this feed's navigational facet groups.
 
@@ -443,7 +443,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         url: str,
         worklist: WorkList,
         annotator: CirculationManagerAnnotator,
-        facets: Optional[Facets],
+        facets: Optional[FacetsWithEntryPoint],
         pagination: Optional[Pagination],
         search_engine: Optional[ExternalSearchIndex],
     ) -> OPDSAcquisitionFeed:
@@ -471,7 +471,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
     @classmethod
     def active_loans_for(
         cls,
-        circulation: CirculationAPI,
+        circulation: Optional[CirculationAPI],
         patron: Patron,
         annotator: Optional[LibraryAnnotator] = None,
         **response_kwargs: Any,
@@ -590,15 +590,6 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         annotator.active_fulfillments_by_work = active_fulfillments_by_work
         identifier = license_pool.identifier
 
-        # TODO: Error response as is done in _single_entry_response
-        url = annotator.url_for(
-            "loan_or_hold_detail",
-            identifier_type=identifier.type,
-            identifier=identifier.identifier,
-            library_short_name=library.short_name,
-            _external=True,
-        )
-
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
         # TODO: max_age and private response kwargs
@@ -684,7 +675,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         worklist: WorkList,
         annotator: LibraryAnnotator,
         pagination: Optional[Pagination] = None,
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
         search_engine: Optional[ExternalSearchIndex] = None,
         search_debug: bool = False,
     ) -> OPDSAcquisitionFeed:
@@ -776,7 +767,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         query: str,
         annotator: LibraryAnnotator,
         pagination: Optional[Pagination] = None,
-        facets: Optional[Facets] = None,
+        facets: Optional[FacetsWithEntryPoint] = None,
         **response_kwargs: Any,
     ) -> OPDSFeedResponse | ProblemDetail:
         """Run a search against the given search engine and return
