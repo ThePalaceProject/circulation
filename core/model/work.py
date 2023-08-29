@@ -7,7 +7,7 @@ import sys
 from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, List, Union, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Union, cast
 
 import pytz
 from sqlalchemy import (
@@ -287,7 +287,7 @@ class Work(Base):
         return self.presentation_edition.sort_author or self.presentation_edition.author
 
     @property
-    def language(self):
+    def language(self) -> Optional[str]:
         if self.presentation_edition:
             return self.presentation_edition.language
         return None

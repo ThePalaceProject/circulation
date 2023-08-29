@@ -186,9 +186,9 @@ class TestFeedEquivalence:
                 lane,
                 search_index,
                 "query",
+                new_annotator,
                 Pagination.default(),
                 Facets.default(library),
-                new_annotator,
             )
 
             old_annotator = OldLibraryAnnotator(None, lane, library)

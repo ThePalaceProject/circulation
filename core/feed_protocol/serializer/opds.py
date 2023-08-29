@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
+from typing import Any, Dict, List, Optional, cast
 
 from lxml import etree
 
@@ -34,6 +35,7 @@ ATTRIBUTE_MAPPING = {
     "ProviderName": f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName",
     "facetGroup": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
     "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
+    "ratingValue": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
 }
 
 AUTHOR_MAPPING = {
@@ -47,20 +49,26 @@ AUTHOR_MAPPING = {
 class OPDS1Serializer(OPDSFeed):
     """An OPDS 1.2 Atom feed serializer"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def _tag(self, tag_name, *args, mapping=None) -> etree._Element:
+    def _tag(
+        self, tag_name: str, *args: Any, mapping: Optional[Dict[str, str]] = None
+    ) -> etree._Element:
         if not mapping:
             mapping = TAG_MAPPING
         return self.E(mapping.get(tag_name, tag_name), *args)
 
-    def _attr_name(self, attr_name, mapping=None) -> str:
+    def _attr_name(
+        self, attr_name: str, mapping: Optional[Dict[str, str]] = None
+    ) -> str:
         if not mapping:
             mapping = ATTRIBUTE_MAPPING
         return mapping.get(attr_name, attr_name)
 
-    def serialize_feed(self, feed: FeedData, precomposed_entries=None):
+    def serialize_feed(
+        self, feed: FeedData, precomposed_entries: Optional[List[OPDSMessage]] = None
+    ) -> bytes:
         # First we do metadata
         serialized = self.E.feed()
 
@@ -207,7 +215,9 @@ class OPDS1Serializer(OPDSFeed):
 
         return entry
 
-    def _serialize_feed_entry(self, tag: str, feed_entry: FeedEntryType):
+    def _serialize_feed_entry(
+        self, tag: str, feed_entry: FeedEntryType
+    ) -> etree._Element:
         """Serialize a feed entry type in a recursive and blind manner"""
         entry: etree._Element = self._tag(tag)
         for attrib, value in feed_entry:
@@ -228,7 +238,7 @@ class OPDS1Serializer(OPDSFeed):
                     )
         return entry
 
-    def _serialize_author_tag(self, tag: str, author: Author):
+    def _serialize_author_tag(self, tag: str, author: Author) -> etree._Element:
         entry: etree._Element = self._tag(tag)
         attr = partial(self._attr_name, mapping=AUTHOR_MAPPING)
         _tag = partial(self._tag, mapping=AUTHOR_MAPPING)
@@ -255,7 +265,7 @@ class OPDS1Serializer(OPDSFeed):
     def _serialize_acquistion_link(self, link: Acquisition) -> etree._Element:
         element = OPDSFeed.link(**link.link_attribs())
 
-        def _indirect(item: IndirectAcquisition):
+        def _indirect(item: IndirectAcquisition) -> etree._Element:
             tag = self._tag("indirectAcquisition")
             tag.set("type", item.type)
             for child in item.children:
@@ -298,7 +308,7 @@ class OPDS1Serializer(OPDSFeed):
 
         return element
 
-    def _serialize_data_entry(self, entry: DataEntry):
+    def _serialize_data_entry(self, entry: DataEntry) -> etree._Element:
         element = self._tag("entry")
         if entry.title:
             element.append(self._tag("title", entry.title))
@@ -311,4 +321,4 @@ class OPDS1Serializer(OPDSFeed):
 
     @classmethod
     def to_string(cls, element: etree._Element) -> bytes:
-        return etree.tostring(element)
+        return cast(bytes, etree.tostring(element))

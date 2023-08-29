@@ -7,8 +7,7 @@ class FeedProtocol(ABC):
     @abstractmethod
     def generate_feed(
         self,
-        work_entries,
-    ):
+    ) -> None:
         ...
 
     @abstractmethod

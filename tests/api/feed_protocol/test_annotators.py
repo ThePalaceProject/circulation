@@ -151,10 +151,7 @@ class TestAnnotators:
             (Work.APPEALS_URI + Work.STORY_APPEAL, Work.STORY_APPEAL, 0.3),
             (Work.APPEALS_URI + Work.SETTING_APPEAL, Work.SETTING_APPEAL, 0.4),
         ]
-        actual = [
-            (x["term"], x["label"], x["{http://schema.org/}ratingValue"])
-            for x in appeal_tags
-        ]
+        actual = [(x["term"], x["label"], x["ratingValue"]) for x in appeal_tags]
         assert set(expect) == set(actual)
 
     def test_detailed_author(self, annotators_fixture: TestAnnotatorsFixture):
