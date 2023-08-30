@@ -426,7 +426,7 @@ class TestAnnotator:
 
         edition.cover_full_url = "http://coverurl.jpg"
         edition.cover_thumbnail_url = "http://thumburl.gif"
-        work.summary_text = b"Bytes Summary"
+        work.summary_text = "Summary"
         edition.language = None
         work.last_update_time = now
         edition.publisher = "publisher"
@@ -459,8 +459,8 @@ class TestAnnotator:
 
         # Other values
         assert data.imprint == FeedEntryType(text="imprint")
-        assert data.summary.text == "Bytes Summary"
-        assert data.summary.get("type") == "html"
+        assert data.summary and data.summary.text == "Summary"
+        assert data.summary and data.summary.get("type") == "html"
         assert data.publisher == FeedEntryType(text="publisher")
         assert data.issued == FeedEntryType(text=edition.issued.isoformat())
 

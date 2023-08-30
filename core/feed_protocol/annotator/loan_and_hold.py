@@ -85,7 +85,8 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         if self.patron:
             tags = self.drm_device_registration_feed_tags(self.patron)
             link = self.user_profile_management_protocol_link
-            feed.add_link(link.href, rel=link.rel)
+            if link.href is not None:
+                feed.add_link(link.href, rel=link.rel)
             for name, value in tags.items():
                 feed.add_metadata(name, feed_entry=value)
 

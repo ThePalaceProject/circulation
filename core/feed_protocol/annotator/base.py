@@ -101,7 +101,7 @@ class ToFeedEntry:
             return None
 
         # Okay, we're creating a tag.
-        properties = dict()
+        properties: Dict[str, Any] = dict()
         if marc_role:
             properties["role"] = marc_role
         entry = Author(name=name, **properties)
@@ -228,10 +228,7 @@ class ToFeedEntry:
         summary = ""
         if work:
             if work.summary_text is not None:
-                if isinstance(work.summary_text, bytes):
-                    summary = work.summary_text.decode("utf-8")  # type: ignore[assignment]
-                else:
-                    summary = work.summary_text
+                summary = work.summary_text
             elif (
                 work.summary
                 and work.summary.representation
@@ -241,7 +238,7 @@ class ToFeedEntry:
                 if isinstance(content, bytes):
                     content = content.decode("utf-8")
                 work.summary_text = content
-                summary = work.summary_text  # type: ignore[assignment]
+                summary = work.summary_text
         return summary
 
 
@@ -309,7 +306,7 @@ class Annotator(ToFeedEntry):
         content = self.content(work)
         if content:
             computed.summary = FeedEntryType(text=content)
-            computed.summary.type = "html"
+            computed.summary.add_attributes(dict(type="html"))
 
         computed.pwid = edition.permanent_work_id
 
@@ -375,7 +372,7 @@ class Annotator(ToFeedEntry):
                 # This component is not actually distributing the book,
                 # so it should not have a bibframe:distribution tag.
                 computed.distribution = FeedEntryType()
-                computed.distribution.provider_name = data_source
+                computed.distribution.add_attributes(dict(provider_name=data_source))
 
             # We use Atom 'published' for the date the book first became
             # available to people using this application.

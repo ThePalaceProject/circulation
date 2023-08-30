@@ -1572,10 +1572,12 @@ class TestLibraryAnnotator:
         )
         # Fulfill, and revoke.
         [revoke, fulfill] = sorted(loan1_links, key=lambda x: x.rel or "")
-        assert "revoke_loan_or_hold" in revoke.href
-        assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
-        assert "fulfill" in fulfill.href
-        assert "http://opds-spec.org/acquisition" == fulfill.rel
+        assert revoke.href and "revoke_loan_or_hold" in revoke.href
+        assert (
+            revoke.rel and "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
+        )
+        assert fulfill.href and "fulfill" in fulfill.href
+        assert fulfill.rel and "http://opds-spec.org/acquisition" == fulfill.rel
 
         # Allow direct open-access downloads
         # This will also filter out loan revoke links
@@ -1605,9 +1607,9 @@ class TestLibraryAnnotator:
         )
         # Fulfill and revoke.
         [revoke, fulfill] = sorted(loan2_links, key=lambda x: x.rel or "")
-        assert "revoke_loan_or_hold" in revoke.href
+        assert revoke.href and "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
-        assert "fulfill" in fulfill.href
+        assert fulfill.href and "fulfill" in fulfill.href
         assert "http://opds-spec.org/acquisition" == fulfill.rel
 
         assert strftime(loan2.start) == fulfill.availability_since
@@ -1642,9 +1644,9 @@ class TestLibraryAnnotator:
         )
         # Borrow and revoke.
         [revoke, borrow] = sorted(hold_links, key=lambda x: x.rel or "")
-        assert "revoke_loan_or_hold" in revoke.href
+        assert revoke.href and "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
-        assert "borrow" in borrow.href
+        assert borrow.href and "borrow" in borrow.href
         assert "http://opds-spec.org/acquisition/borrow" == borrow.rel
 
         work4_links = annotator.acquisition_links(
@@ -1656,7 +1658,7 @@ class TestLibraryAnnotator:
         )
         # Borrow only.
         [borrow] = work4_links
-        assert "borrow" in borrow.href
+        assert borrow.href and "borrow" in borrow.href
         assert "http://opds-spec.org/acquisition/borrow" == borrow.rel
 
         loan5_links = annotator.acquisition_links(
@@ -1664,9 +1666,9 @@ class TestLibraryAnnotator:
         )
         # Fulfill and revoke.
         [revoke, fulfill] = sorted(loan5_links, key=lambda x: x.rel or "")
-        assert "revoke_loan_or_hold" in revoke.href
+        assert revoke.href and "revoke_loan_or_hold" in revoke.href
         assert "http://librarysimplified.org/terms/rel/revoke" == revoke.rel
-        assert "fulfill" in fulfill.href
+        assert fulfill.href and "fulfill" in fulfill.href
         assert "http://opds-spec.org/acquisition" == fulfill.rel
 
         assert strftime(loan5.start) == fulfill.availability_since
@@ -1756,7 +1758,7 @@ class TestLibraryAnnotator:
         # Instead of sorting, which may be wrong if the id is greater than 10
         # due to how double digits are sorted, extract the links associated
         # with the expected delivery mechanism.
-        if mech1_param in links[0].href:
+        if links[0].href and mech1_param in links[0].href:
             [mech1_link, mech2_link] = links
         else:
             [mech2_link, mech1_link] = links
@@ -1771,8 +1773,8 @@ class TestLibraryAnnotator:
             indirects.append(link.indirect_acquisitions[0])
 
         # The target of the top-level link is different.
-        assert mech1_param in mech1_link.href
-        assert mech2_param in mech2_link.href
+        assert mech1_link.href and mech1_param in mech1_link.href
+        assert mech2_link.href and mech2_param in mech2_link.href
 
         # So is the media type seen in the indirectAcquisition subtag.
         [mech1_indirect, mech2_indirect] = indirects

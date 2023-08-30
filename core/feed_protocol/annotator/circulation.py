@@ -626,7 +626,7 @@ class CirculationManagerAnnotator(Annotator):
     def open_access_link(
         self, pool: LicensePool, lpdm: LicensePoolDeliveryMechanism
     ) -> Acquisition:
-        kw: Dict[str, Optional[str]] = dict(rel=OPDSFeed.OPEN_ACCESS_REL, type="")
+        kw: Dict[str, Any] = dict(rel=OPDSFeed.OPEN_ACCESS_REL, type="")
 
         # Start off assuming that the URL associated with the
         # LicensePoolDeliveryMechanism's Resource is the URL we should
@@ -1331,7 +1331,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             library_short_name=self.library.short_name,
             _external=True,
         )
-        kw = dict(href=url, rel=OPDSFeed.REVOKE_LOAN_REL)
+        kw: Dict[str, Any] = dict(href=url, rel=OPDSFeed.REVOKE_LOAN_REL)
         revoke_link_tag = Acquisition(**kw)
         return revoke_link_tag
 
