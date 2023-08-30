@@ -1,4 +1,4 @@
-"""OPDS 1 paged feed"""
+"""OPDS feeds, they can be serialized to either OPDS 1 or OPDS 2"""
 from __future__ import annotations
 
 import logging
@@ -26,8 +26,9 @@ from core.feed_protocol.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
-from core.feed_protocol.opds import OPDSFeedProtocol
+from core.feed_protocol.opds import BaseOPDSFeed
 from core.feed_protocol.types import FeedData, Link, WorkEntry
+from core.feed_protocol.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, SearchFacets
 from core.model.constants import LinkRelations
 from core.model.edition import Edition
@@ -39,7 +40,7 @@ from core.opds import UnfulfillableWork
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
-from core.util.opds_writer import AtomFeed, OPDSMessage
+from core.util.opds_writer import OPDSMessage
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
     from core.lane import WorkList
 
 
-class OPDSAcquisitionFeed(OPDSFeedProtocol):
+class OPDSAcquisitionFeed(BaseOPDSFeed):
     """An Acquisition Feed which is not tied to any particular format.
     It is simply responsible for creating different types of feeds."""
 
@@ -59,7 +60,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         annotator: CirculationManagerAnnotator,
         facets: Optional[FacetsWithEntryPoint] = None,
         pagination: Optional[Pagination] = None,
-        precomposed_entries: List[OPDSMessage] = [],
+        precomposed_entries: Optional[List[OPDSMessage]] = None,
     ) -> None:
         self.annotator = annotator
         self._facets = facets
@@ -75,7 +76,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         We assume the entries have already been annotated."""
         self._feed.add_metadata("id", text=self.url)
         self._feed.add_metadata("title", text=self.title)
-        self._feed.add_metadata("updated", text=AtomFeed._strftime(utc_now()))
+        self._feed.add_metadata("updated", text=strftime(utc_now()))
         self._feed.add_link(href=self.url, rel="self")
         if annotate:
             self.annotator.annotate_feed(self._feed)
@@ -242,7 +243,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
                 url_generator, entrypoint, selected_entrypoint, is_default, group_name
             )
             if link is not None:
-                feed.add_link(**link)
+                feed.links.append(link)
                 is_default = False
 
     @classmethod
@@ -253,7 +254,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         selected_entrypoint: Optional[Type[EntryPoint]],
         is_default: bool,
         group_name: str,
-    ) -> Optional[Dict[str, str]]:
+    ) -> Optional[Link]:
         """Create arguments for add_link_to_feed for a link that navigates
         between EntryPoints.
         """
@@ -273,7 +274,7 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
         # In OPDS 2 this can become an additional rel value,
         # removing the need for a custom attribute.
         link["facetGroupType"] = FacetConstants.ENTRY_POINT_REL
-        return link
+        return Link(**link)
 
     def add_breadcrumb_links(
         self, lane: WorkList, entrypoint: Optional[Type[EntryPoint]] = None
@@ -283,10 +284,9 @@ class OPDSAcquisitionFeed(OPDSFeedProtocol):
 
         A link with rel="start" points to the start of the site
 
-        A <simplified:entrypoint> section describes the current entry point.
+        An Entrypoint section describes the current entry point.
 
-        A <simplified:breadcrumbs> section contains a sequence of
-        breadcrumb links.
+        A breadcrumbs section contains a sequence of breadcrumb links.
         """
         # Add the top-level link with rel='start'
         annotator = self.annotator
@@ -891,10 +891,6 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
         # This comes in as a tuple, which deviates from the typical behaviour
         identifier, _work = work
 
-        # Unless the client is asking for something impossible
-        # (e.g. the Identifier is not really associated with the
-        # Work), we should be able to use the cached OPDS entry for
-        # the Work.
         active_licensepool: Optional[LicensePool]
         if identifier.licensed_through:
             active_licensepool = identifier.licensed_through[0]

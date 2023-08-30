@@ -6,6 +6,7 @@ from core.feed_protocol.annotator.base import Annotator
 from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.types import FeedEntryType, Link, WorkEntry
+from core.feed_protocol.util import strftime
 from core.model import tuple_to_numericrange
 from core.model.classification import Subject
 from core.model.contributor import Contributor
@@ -15,7 +16,6 @@ from core.model.measurement import Measurement
 from core.model.resource import Hyperlink, Resource
 from core.model.work import Work
 from core.util.datetime_helpers import utc_now
-from core.util.opds_writer import AtomFeed
 from tests.core.test_opds import TestAnnotatorsFixture, annotators_fixture  # noqa
 from tests.fixtures.database import (  # noqa
     DatabaseTransactionFixture,
@@ -465,4 +465,4 @@ class TestAnnotator:
 
         # Missing values
         assert data.language == None
-        assert data.updated == FeedEntryType(text=AtomFeed._strftime(now))
+        assert data.updated == FeedEntryType(text=strftime(now))
