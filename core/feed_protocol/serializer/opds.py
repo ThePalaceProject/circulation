@@ -160,7 +160,7 @@ class OPDS1Serializer(OPDSFeed):
         if feed_entry.identifier:
             entry.append(OPDSFeed.E("id", feed_entry.identifier))
         if feed_entry.distribution and (
-            provider := getattr(feed_entry.distribution, "ProviderName", None)
+            provider := getattr(feed_entry.distribution, "provider_name", None)
         ):
             entry.append(
                 OPDSFeed.E(

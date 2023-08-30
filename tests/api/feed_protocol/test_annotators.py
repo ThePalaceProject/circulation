@@ -459,7 +459,8 @@ class TestAnnotator:
 
         # Other values
         assert data.imprint == FeedEntryType(text="imprint")
-        assert data.summary == FeedEntryType(text="Bytes Summary", type="html")
+        assert data.summary.text == "Bytes Summary"
+        assert data.summary.get("type") == "html"
         assert data.publisher == FeedEntryType(text="publisher")
         assert data.issued == FeedEntryType(text=edition.issued.isoformat())
 

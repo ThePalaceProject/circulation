@@ -14,9 +14,9 @@ from core.util.opds_writer import OPDSFeed
 
 class TestOPDSSerializer:
     def test__serialize_feed_entry(self):
-        grandchild = FeedEntryType(text="grandchild", attr="gcattr")
-        child = FeedEntryType(text="child", attr="chattr", grandchild=grandchild)
-        parent = FeedEntryType(text="parent", attr="pattr", child=child)
+        grandchild = FeedEntryType.create(text="grandchild", attr="gcattr")
+        child = FeedEntryType.create(text="child", attr="chattr", grandchild=grandchild)
+        parent = FeedEntryType.create(text="parent", attr="pattr", child=child)
 
         serialized = OPDS1Serializer()._serialize_feed_entry("parent", parent)
 
@@ -121,14 +121,16 @@ class TestOPDSSerializer:
             updated=FeedEntryType(text="updated"),
             title=FeedEntryType(text="title"),
             subtitle=FeedEntryType(text="subtitle"),
-            series=FeedEntryType(
+            series=FeedEntryType.create(
                 name="series",
                 link=Link(href="http://series", title="series title", rel="series"),
             ),
             imprint=FeedEntryType(text="imprint"),
             authors=[Author(name="author")],
             contributors=[Author(name="contributor")],
-            categories=[FeedEntryType(scheme="scheme", term="term", label="label")],
+            categories=[
+                FeedEntryType.create(scheme="scheme", term="term", label="label")
+            ],
             ratings=[FeedEntryType(text="rating")],
         )
 

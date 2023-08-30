@@ -123,12 +123,16 @@ class ToFeedEntry:
         series_details["name"] = series_name
         if series_position != None:
             series_details["position"] = str(series_position)
-        return FeedEntryType(**series_details)
+        series = FeedEntryType.create(**series_details)
+        return series
 
     @classmethod
     def rating(cls, type_uri: Optional[str], value: float | Decimal) -> FeedEntryType:
         """Generate a FeedEntryType object for the given type and value."""
-        return FeedEntryType(ratingValue="%.4f" % value, additionalType=type_uri)
+        entry = FeedEntryType.create(
+            **dict(ratingValue="%.4f" % value, additionalType=type_uri)
+        )
+        return entry
 
     @classmethod
     def samples(cls, edition: Optional[Edition]) -> list[Hyperlink]:
@@ -223,8 +227,11 @@ class ToFeedEntry:
         """Return an HTML summary of this work."""
         summary = ""
         if work:
-            if work.summary_text != None:
-                summary = work.summary_text  # type: ignore[assignment]
+            if work.summary_text is not None:
+                if isinstance(work.summary_text, bytes):
+                    summary = work.summary_text.decode("utf-8")  # type: ignore[assignment]
+                else:
+                    summary = work.summary_text
             elif (
                 work.summary
                 and work.summary.representation
@@ -281,8 +288,6 @@ class Annotator(ToFeedEntry):
                 )
             )
 
-        content = self.content(work)
-
         if edition.medium:
             additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
             if not additional_type:
@@ -301,8 +306,10 @@ class Annotator(ToFeedEntry):
         if edition.series:
             computed.series = self.series(edition.series, edition.series_position)
 
+        content = self.content(work)
         if content:
-            computed.summary = FeedEntryType(text=content, type="html")
+            computed.summary = FeedEntryType(text=content)
+            computed.summary.type = "html"
 
         computed.pwid = edition.permanent_work_id
 
@@ -313,7 +320,7 @@ class Annotator(ToFeedEntry):
                 category = dict(
                     list(map(str, (k, v))) for k, v in list(category.items())
                 )
-                category_tag = FeedEntryType(scheme=scheme, **category)
+                category_tag = FeedEntryType.create(scheme=scheme, **category)
                 category_tags.append(category_tag)
         computed.categories = category_tags
 
@@ -367,8 +374,8 @@ class Annotator(ToFeedEntry):
                 # created as a stand-in, e.g. by the metadata wrangler.
                 # This component is not actually distributing the book,
                 # so it should not have a bibframe:distribution tag.
-                kwargs = {"ProviderName": data_source}
-                computed.distribution = FeedEntryType(**kwargs)
+                computed.distribution = FeedEntryType()
+                computed.distribution.provider_name = data_source
 
             # We use Atom 'published' for the date the book first became
             # available to people using this application.

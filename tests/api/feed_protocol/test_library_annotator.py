@@ -1429,9 +1429,9 @@ class TestLibraryAnnotator:
 
         # If we remove that attribute, the feed-level tag is the same as the
         # generic tag.
-        assert feed_tag != generic_tag
+        assert feed_tag["licensor"].dict() != generic_tag["licensor"].dict()
         delattr(feed_tag["licensor"], "scheme")
-        assert feed_tag == generic_tag
+        assert feed_tag["licensor"].dict() == generic_tag["licensor"].dict()
 
     def test_borrow_link_raises_unfulfillable_work(
         self, annotator_fixture: LibraryAnnotatorFixture

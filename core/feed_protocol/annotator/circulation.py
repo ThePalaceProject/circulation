@@ -1515,7 +1515,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 vendor_id, token = authdata.short_client_token_for_patron(
                     patron_identifier
                 )
-                drm_licensor = FeedEntryType(
+                drm_licensor = FeedEntryType.create(
                     vendor=vendor_id, clientToken=FeedEntryType(text=token)
                 )
                 cached = {"licensor": drm_licensor}
@@ -1558,7 +1558,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 "authorizationIdentifier"
             ] = self.patron.authorization_identifier
 
-        patron_tag = FeedEntryType(**patron_details)
+        patron_tag = FeedEntryType.create(**patron_details)
         feed.add_metadata("patron", patron_tag)
 
     def add_authentication_document_link(self, feed_obj: FeedData) -> None:
