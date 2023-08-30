@@ -17,6 +17,7 @@ def get_serializer(content_type: Optional[str]) -> OPDS1Serializer | OPDS2Serial
     else:
         return OPDS1Serializer()
 
+
 class BaseOPDSFeed(FeedInterface):
     def __init__(
         self,

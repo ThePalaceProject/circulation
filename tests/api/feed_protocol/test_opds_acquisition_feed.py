@@ -27,7 +27,7 @@ from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotat
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.navigation import NavigationFeed
 from core.feed_protocol.opds import BaseOPDSFeed
-from core.feed_protocol.types import FeedData, WorkEntry, WorkEntryData, Link
+from core.feed_protocol.types import FeedData, Link, WorkEntry, WorkEntryData
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
 from core.model.constants import LinkRelations

@@ -24,17 +24,18 @@ class TestOPDS2Serializer:
                 title=FeedEntryType(text="Title"),
             )
         )
-        feed.entries = [
-            WorkEntry(
-                work=Work(),
-                edition=Edition(),
-                identifier=Identifier(),
-                computed=WorkEntryData(identifier="identifier", pwid="permanent-id"),
-            )
-        ]
+        w = WorkEntry(
+            work=Work(),
+            edition=Edition(),
+            identifier=Identifier(),
+        )
+        w.computed = WorkEntryData(identifier="identifier", pwid="permanent-id")
+        feed.entries = [w]
         feed.links = [Link(href="http://link", rel="link-rel")]
         feed.facet_links = [
-            Link(href="http://facet-link", rel="facet-rel", facetGroup="FacetGroup")
+            Link.create(
+                href="http://facet-link", rel="facet-rel", facetGroup="FacetGroup"
+            )
         ]
 
         serialized = OPDS2Serializer().serialize_feed(feed)
@@ -71,9 +72,9 @@ class TestOPDS2Serializer:
             publisher=FeedEntryType(text="Publisher"),
             imprint=FeedEntryType(text="Imprint"),
             categories=[
-                FeedEntryType(scheme="scheme", label="label"),
+                FeedEntryType.create(scheme="scheme", label="label"),
             ],
-            series=FeedEntryType(name="Series", position="3"),
+            series=FeedEntryType.create(name="Series", position="3"),
             image_links=[Link(href="http://image", rel="image-rel")],
             acquisition_links=[
                 Acquisition(href="http://acquisition", rel="acquisition-rel")
