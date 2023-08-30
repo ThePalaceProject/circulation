@@ -9,8 +9,6 @@ sys.path.append(os.path.abspath(package_dir))
 
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3  # noqa: autoflake
 from core.model import ExternalIntegration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.scripts import OPDSImportScript

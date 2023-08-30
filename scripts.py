@@ -6,6 +6,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional
+from unittest.mock import MagicMock
 
 from sqlalchemy import inspect
 from sqlalchemy.engine import Connection
@@ -55,7 +56,6 @@ from core.model import (
     get_one,
     pg_advisory_lock,
 )
-from core.model.configuration import ExternalIntegrationLink
 from core.scripts import (
     IdentifierInputScript,
     LaneSweeperScript,
@@ -194,7 +194,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
         if not manager:
-            manager = CirculationManager(self._db)
+            manager = CirculationManager(self._db, MagicMock())
         from api.app import app
 
         app.manager = manager
@@ -652,26 +652,14 @@ class CacheMARCFiles(LaneSweeperScript):
             )
             return
 
-        # To find the storage integration for the exporter, first find the
-        # external integration link associated with the exporter's external
-        # integration.
-        integration_link = get_one(
-            self._db,
-            ExternalIntegrationLink,
-            external_integration_id=exporter.integration.id,
-            purpose=ExternalIntegrationLink.MARC,
-        )
-        # Then use the "other" integration value to find the storage integration.
-        storage_integration = get_one(
-            self._db, ExternalIntegration, id=integration_link.other_integration_id
-        )
-
-        if not storage_integration:
-            self.log.info("No storage External Integration was found.")
+        # Find the storage service
+        storage_service = self.services.storage.public()
+        if not storage_service:
+            self.log.info("No storage service was found.")
             return
 
         # First update the file with ALL the records.
-        records = exporter.records(lane, annotator, storage_integration)
+        records = exporter.records(lane, annotator, storage_service)
 
         # Then create a new file with changes since the last update.
         start_time = None
@@ -680,7 +668,7 @@ class CacheMARCFiles(LaneSweeperScript):
             start_time = last_update - timedelta(days=1)
 
             records = exporter.records(
-                lane, annotator, storage_integration, start_time=start_time
+                lane, annotator, storage_service, start_time=start_time
             )
 
 

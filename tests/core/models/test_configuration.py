@@ -421,12 +421,12 @@ class TestExternalIntegrationLink:
 
         storage1 = db.external_integration(
             name="integration1",
-            protocol=ExternalIntegration.S3,
+            protocol="protocol",
         )
         storage2 = db.external_integration(
             name="integration2",
-            protocol=ExternalIntegration.S3,
-            goal=ExternalIntegration.STORAGE_GOAL,
+            protocol="protocol",
+            goal="storage",
             username="username",
             password="password",
         )
@@ -721,17 +721,17 @@ username='someuser'"""
         db = example_externalintegration_fixture.database_fixture
 
         integration1 = db.external_integration(
-            ExternalIntegration.LCP,
+            "protocol",
             ExternalIntegration.LICENSE_GOAL,
             libraries=[db.default_library()],
         )
         integration2 = db.external_integration(
-            ExternalIntegration.S3,
-            ExternalIntegration.STORAGE_GOAL,
+            "storage",
+            "storage goal",
             libraries=[db.default_library()],
         )
 
-        # Set up a a link associating integration2 with integration1.
+        # Set up a link associating integration2 with integration1.
         link1 = db.external_integration_link(
             integration1,
             db.default_library(),

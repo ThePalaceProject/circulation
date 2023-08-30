@@ -58,6 +58,7 @@ from .model.listeners import site_configuration_has_changed
 from .monitor import CollectionMonitor, ReaperMonitor
 from .opds_import import OPDSImporter, OPDSImportMonitor
 from .overdrive import OverdriveCoreAPI
+from .service.container import Services, container_instance
 from .util import fast_query_count
 from .util.datetime_helpers import strptime_utc, utc_now
 from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
@@ -70,6 +71,10 @@ class Script:
         if not hasattr(self, "_session"):
             self._session = production_session()
         return self._session
+
+    @property
+    def services(self) -> Services:
+        return self._services
 
     @property
     def script_name(self):
@@ -110,7 +115,7 @@ class Script:
                     continue
         raise ValueError("Could not parse time: %s" % time_string)
 
-    def __init__(self, _db=None, *args, **kwargs):
+    def __init__(self, _db=None, services: Optional[Services] = None, *args, **kwargs):
         """Basic constructor.
 
         :_db: A database session to be used instead of
@@ -118,6 +123,10 @@ class Script:
         """
         if _db:
             self._session = _db
+
+        if services is None:
+            services = container_instance()
+        self._services = services
 
     def run(self):
         DataSource.well_known_sources(self._db)

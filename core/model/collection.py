@@ -948,10 +948,7 @@ class Collection(Base, HasSessionCache):
         # Collection, assuming it wasn't deleted already.
         if self.external_integration:
             for link in self.external_integration.links:
-                if (
-                    link.other_integration
-                    and link.other_integration.goal == ExternalIntegration.STORAGE_GOAL
-                ):
+                if link.other_integration and link.other_integration.goal == "storage":
                     logging.info(
                         f"Deletion of collection {self.name} is disassociating "
                         f"storage integration {link.other_integration.name}."

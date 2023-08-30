@@ -4,7 +4,7 @@ import datetime
 import logging
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,7 +29,6 @@ from core.model import (
     SessionManager,
     create,
 )
-from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSFeedResponse, Response
@@ -543,6 +542,48 @@ class TestCacheOPDSGroupFeedPerLane:
         assert work.title in feed.content
 
 
+class TestCacheMARCFilesFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.lane = db.lane(genres=["Science Fiction"])
+        self.integration = db.external_integration(
+            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL
+        )
+
+        self.exporter = MARCExporter(None, None, self.integration)
+        self.mock_records = MagicMock()
+        self.mock_services = MagicMock()
+        self.exporter.records = self.mock_records
+
+    def script(self, cmd_args: Optional[list[str]] = None) -> CacheMARCFiles:
+        cmd_args = cmd_args or []
+        return CacheMARCFiles(
+            self.db.session, services=self.mock_services, cmd_args=cmd_args
+        )
+
+    def assert_call(self, call: Any) -> None:
+        assert call.args[0] == self.lane
+        assert isinstance(call.args[1], MARCLibraryAnnotator)
+        assert call.args[2] == self.mock_services.storage.public.return_value
+
+    def create_cached_file(self, end_time: datetime.datetime) -> CachedMARCFile:
+        representation, _ = self.db.representation()
+        cached, _ = create(
+            self.db.session,
+            CachedMARCFile,
+            library=self.db.default_library(),
+            lane=self.lane,
+            representation=representation,
+            end_time=end_time,
+        )
+        return cached
+
+
+@pytest.fixture
+def cache_marc_files(db: DatabaseTransactionFixture) -> TestCacheMARCFilesFixture:
+    return TestCacheMARCFilesFixture(db)
+
+
 class TestCacheMARCFiles:
     def test_should_process_library(self, lane_script_fixture: LaneScriptFixture):
         db = lane_script_fixture.db
@@ -582,125 +623,133 @@ class TestCacheMARCFiles:
         assert True == script.should_process_lane(wl)
         assert False == script.should_process_lane(empty)
 
-    def test_process_lane(self, lane_script_fixture: LaneScriptFixture):
-        db = lane_script_fixture.db
-        lane = db.lane(genres=["Science Fiction"])
-        integration = db.external_integration(
-            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL
-        )
-
-        class MockMARCExporter(MARCExporter):
-            called_with = []
-
-            def records(self, lane, annotator, mirror_integration, start_time=None):
-                self.called_with += [(lane, annotator, mirror_integration, start_time)]
-
-        exporter = MockMARCExporter(None, None, integration)
-
-        # This just needs to be an ExternalIntegration, but a storage integration
-        # makes the most sense in this context.
-        the_linked_integration, ignore = create(
-            db.session,
-            ExternalIntegration,
-            protocol=ExternalIntegration.S3,
-            goal=ExternalIntegration.STORAGE_GOAL,
-        )
-
-        integration_link = db.external_integration_link(
-            integration=integration,
-            other_integration=the_linked_integration,
-            purpose=ExternalIntegrationLink.MARC,
-        )
-
-        script = CacheMARCFiles(db.session, cmd_args=[])
-        script.process_lane(lane, exporter)
+    def test_process_lane_never_run(self, cache_marc_files: TestCacheMARCFilesFixture):
+        script = cache_marc_files.script()
+        script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
 
         # If the script has never been run before, it runs the exporter once
         # to create a file with all records.
-        assert 1 == len(exporter.called_with)
+        assert cache_marc_files.mock_records.call_count == 1
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args)
 
-        assert lane == exporter.called_with[0][0]
-        assert isinstance(exporter.called_with[0][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[0][2]
-        assert None == exporter.called_with[0][3]
-
+    def test_process_lane_cached_update(
+        self, cache_marc_files: TestCacheMARCFilesFixture
+    ):
         # If we have a cached file already, and it's old enough, the script will
         # run the exporter twice, first to update that file and second to create
         # a file with changes since that first file was originally created.
-        exporter.called_with = []
+        db = cache_marc_files.db
+        now = utc_now()
+        last_week = now - datetime.timedelta(days=7)
+        cache_marc_files.create_cached_file(last_week)
+        ConfigurationSetting.for_library_and_externalintegration(
+            db.session,
+            MARCExporter.UPDATE_FREQUENCY,
+            db.default_library(),
+            cache_marc_files.integration,
+        ).value = 3
+
+        script = cache_marc_files.script()
+        script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
+        assert cache_marc_files.mock_records.call_count == 2
+
+        # First call
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args_list[0])
+
+        # Second call
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args_list[1])
+        assert (
+            cache_marc_files.mock_records.call_args_list[1].kwargs["start_time"]
+            < last_week
+        )
+
+    def test_process_lane_cached_recent(
+        self, cache_marc_files: TestCacheMARCFilesFixture
+    ):
+        # If we already have a recent cached file, the script won't do anything.
+        db = cache_marc_files.db
+        now = utc_now()
+        yesterday = now - datetime.timedelta(days=1)
+        cache_marc_files.create_cached_file(yesterday)
+        ConfigurationSetting.for_library_and_externalintegration(
+            db.session,
+            MARCExporter.UPDATE_FREQUENCY,
+            db.default_library(),
+            cache_marc_files.integration,
+        ).value = 3
+
+        script = cache_marc_files.script()
+        script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
+        assert cache_marc_files.mock_records.call_count == 0
+
+    def test_process_lane_cached_recent_force(
+        self, cache_marc_files: TestCacheMARCFilesFixture
+    ):
+        # But we can force it to run anyway.
+        db = cache_marc_files.db
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         last_week = now - datetime.timedelta(days=7)
+        cache_marc_files.create_cached_file(yesterday)
         ConfigurationSetting.for_library_and_externalintegration(
-            db.session, MARCExporter.UPDATE_FREQUENCY, db.default_library(), integration
-        ).value = 3
-        representation, ignore = db.representation()
-        cached, ignore = create(
             db.session,
-            CachedMARCFile,
-            library=db.default_library(),
-            lane=lane,
-            representation=representation,
-            end_time=last_week,
+            MARCExporter.UPDATE_FREQUENCY,
+            db.default_library(),
+            cache_marc_files.integration,
+        ).value = 3
+
+        script = cache_marc_files.script(cmd_args=["--force"])
+        script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
+        assert cache_marc_files.mock_records.call_count == 2
+
+        # First call
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args_list[0])
+
+        # Second call
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args_list[1])
+        assert (
+            cache_marc_files.mock_records.call_args_list[1].kwargs["start_time"]
+            < yesterday
+        )
+        assert (
+            cache_marc_files.mock_records.call_args_list[1].kwargs["start_time"]
+            > last_week
         )
 
-        script.process_lane(lane, exporter)
-
-        assert 2 == len(exporter.called_with)
-
-        assert lane == exporter.called_with[0][0]
-        assert isinstance(exporter.called_with[0][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[0][2]
-        assert None == exporter.called_with[0][3]
-
-        assert lane == exporter.called_with[1][0]
-        assert isinstance(exporter.called_with[1][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[1][2]
-        assert exporter.called_with[1][3] < last_week
-
-        # If we already have a recent cached file, the script won't do anything.
-        cached.end_time = yesterday
-        exporter.called_with = []
-        script.process_lane(lane, exporter)
-        assert [] == exporter.called_with
-
-        # But we can force it to run anyway.
-        script = CacheMARCFiles(db.session, cmd_args=["--force"])
-        script.process_lane(lane, exporter)
-
-        assert 2 == len(exporter.called_with)
-
-        assert lane == exporter.called_with[0][0]
-        assert isinstance(exporter.called_with[0][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[0][2]
-        assert None == exporter.called_with[0][3]
-
-        assert lane == exporter.called_with[1][0]
-        assert isinstance(exporter.called_with[1][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[1][2]
-        assert exporter.called_with[1][3] < yesterday
-        assert exporter.called_with[1][3] > last_week
-
+    def test_process_lane_cached_frequency_zero(
+        self, cache_marc_files: TestCacheMARCFilesFixture
+    ):
         # The update frequency can also be 0, in which case it will always run.
+        # If we already have a recent cached file, the script won't do anything.
+        db = cache_marc_files.db
+        now = utc_now()
+        yesterday = now - datetime.timedelta(days=1)
+        last_week = now - datetime.timedelta(days=7)
+        cache_marc_files.create_cached_file(yesterday)
         ConfigurationSetting.for_library_and_externalintegration(
-            db.session, MARCExporter.UPDATE_FREQUENCY, db.default_library(), integration
+            db.session,
+            MARCExporter.UPDATE_FREQUENCY,
+            db.default_library(),
+            cache_marc_files.integration,
         ).value = 0
-        exporter.called_with = []
-        script = CacheMARCFiles(db.session, cmd_args=[])
-        script.process_lane(lane, exporter)
+        script = cache_marc_files.script()
+        script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
 
-        assert 2 == len(exporter.called_with)
+        assert cache_marc_files.mock_records.call_count == 2
 
-        assert lane == exporter.called_with[0][0]
-        assert isinstance(exporter.called_with[0][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[0][2]
-        assert None == exporter.called_with[0][3]
+        # First call
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args_list[0])
 
-        assert lane == exporter.called_with[1][0]
-        assert isinstance(exporter.called_with[1][1], MARCLibraryAnnotator)
-        assert the_linked_integration == exporter.called_with[1][2]
-        assert exporter.called_with[1][3] < yesterday
-        assert exporter.called_with[1][3] > last_week
+        # Second call
+        cache_marc_files.assert_call(cache_marc_files.mock_records.call_args_list[1])
+        assert (
+            cache_marc_files.mock_records.call_args_list[1].kwargs["start_time"]
+            < yesterday
+        )
+        assert (
+            cache_marc_files.mock_records.call_args_list[1].kwargs["start_time"]
+            > last_week
+        )
 
 
 class TestInstanceInitializationScript:

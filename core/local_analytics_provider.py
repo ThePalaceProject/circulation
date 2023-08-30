@@ -2,6 +2,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
 from .model import CirculationEvent, ExternalIntegration, create, get_one
+from .service.container import Services
 
 
 class LocalAnalyticsProvider:
@@ -41,12 +42,13 @@ class LocalAnalyticsProvider:
         },
     ]
 
-    def __init__(self, integration, library=None):
+    def __init__(self, integration, services: Services, library=None):
         self.integration_id = integration.id
         self.location_source = (
             integration.setting(self.LOCATION_SOURCE).value
             or self.LOCATION_SOURCE_DISABLED
         )
+        self.services = services
         if library:
             self.library_id = library.id
         else:

@@ -1,6 +1,10 @@
 import logging
 from abc import ABC
 from collections import defaultdict
+from typing import Optional
+from unittest.mock import MagicMock
+
+from sqlalchemy.orm import Session
 
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.controller import CirculationManager
@@ -8,6 +12,7 @@ from core.external_search import ExternalSearchIndex
 from core.integration.settings import BaseSettings
 from core.model import DataSource, Hold, Loan, get_one_or_create
 from core.model.configuration import ExternalIntegration
+from core.service.container import Services
 from tests.mocks.search import ExternalSearchIndexFake
 
 
@@ -166,6 +171,11 @@ class MockCirculationAPI(CirculationAPI):
 
 class MockCirculationManager(CirculationManager):
     d_circulation: MockCirculationAPI
+
+    def __init__(self, db: Session, services: Optional[Services] = None):
+        if services is None:
+            services = MagicMock(spec=Services)
+        super().__init__(db, services)
 
     def setup_search(self):
         """Set up a search client."""

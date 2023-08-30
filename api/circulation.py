@@ -15,7 +15,6 @@ from typing import (
     Generic,
     List,
     Literal,
-    Optional,
     Tuple,
     Type,
     TypeVar,
@@ -25,7 +24,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm import Query
 
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration

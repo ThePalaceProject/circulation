@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import datetime
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import pytest
@@ -24,11 +27,13 @@ from core.model import (
     Work,
     get_one,
 )
-from core.s3 import MockS3Uploader
 from core.util.datetime_helpers import datetime_utc, utc_now
-from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import ExternalSearchFixtureFake
 from tests.mocks.search import ExternalSearchIndexFake
+
+if TYPE_CHECKING:
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.s3 import S3ServiceFixture
+    from tests.fixtures.search import ExternalSearchFixtureFake
 
 
 class TestAnnotator:
@@ -467,7 +472,20 @@ class TestAnnotator:
         self._check_field(record, "655", {"a": "Electronic books."}, [" ", "0"])
 
 
-class TestMARCExporter:
+class MarcExporterFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+
+        self.integration = self._integration(db)
+        self.now = utc_now()
+        self.exporter = MARCExporter.from_config(db.default_library())
+        self.annotator = Annotator()
+        self.w1 = db.work(genre="Mystery", with_open_access_download=True)
+        self.w2 = db.work(genre="Mystery", with_open_access_download=True)
+
+        self.search_engine = ExternalSearchIndexFake(db.session)
+        self.search_engine.mock_query_works([self.w1, self.w2])
+
     @staticmethod
     def _integration(db: DatabaseTransactionFixture):
         return db.external_integration(
@@ -476,12 +494,23 @@ class TestMARCExporter:
             libraries=[db.default_library()],
         )
 
+
+@pytest.fixture
+def marc_exporter_fixture(
+    db: DatabaseTransactionFixture,
+    external_search_fake_fixture: ExternalSearchFixtureFake,
+) -> MarcExporterFixture:
+    # external_search_fake_fixture is used only for the integration it creates
+    return MarcExporterFixture(db)
+
+
+class TestMARCExporter:
     def test_from_config(self, db: DatabaseTransactionFixture):
         pytest.raises(
             CannotLoadConfiguration, MARCExporter.from_config, db.default_library()
         )
 
-        integration = self._integration(db)
+        integration = MarcExporterFixture._integration(db)
         exporter = MARCExporter.from_config(db.default_library())
         assert integration == exporter.integration
         assert db.default_library() == exporter.library
@@ -544,7 +573,7 @@ class TestMARCExporter:
         assert "author, new" in cached
 
         # If we pass in an integration, it's passed along to the annotator.
-        integration = self._integration(db)
+        integration = MarcExporterFixture._integration(db)
 
         class MockAnnotator(Annotator):
             integration = None
@@ -586,218 +615,141 @@ class TestMARCExporter:
         new_record = MARCExporter.create_record(new_work, annotator)
         assert record.as_marc() == new_record.as_marc()
 
-    def test_records(
+    @pytest.mark.parametrize("object_type", ["lane", "worklist"])
+    def test_records_lane(
         self,
+        object_type: str,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        s3_service_fixture: S3ServiceFixture,
+        marc_exporter_fixture: MarcExporterFixture,
     ):
-        # external_search_fake_fixture is used only for the integration it creates
-        integration = self._integration(db)
-        now = utc_now()
-        exporter = MARCExporter.from_config(db.default_library())
-        annotator = Annotator()
-        lane = db.lane("Test Lane", genres=["Mystery"])
-        w1 = db.work(genre="Mystery", with_open_access_download=True)
-        w2 = db.work(genre="Mystery", with_open_access_download=True)
-
-        search_engine = ExternalSearchIndexFake(db.session)
-        search_engine.mock_query_works([w1, w2])
+        if object_type == "lane":
+            lane_or_wl = db.lane("Test Lane", genres=["Mystery"])
+        elif object_type == "worklist":
+            lane_or_wl = WorkList()
+            lane_or_wl.initialize(db.default_library(), display_name="All Books")
+        else:
+            raise RuntimeError()
+        exporter = marc_exporter_fixture.exporter
+        annotator = marc_exporter_fixture.annotator
+        search_engine = marc_exporter_fixture.search_engine
 
         # If there's a storage protocol but not corresponding storage integration,
         # it raises an exception.
-        pytest.raises(Exception, exporter.records, lane, annotator)
+        pytest.raises(Exception, exporter.records, lane_or_wl, annotator)
 
-        # If there is a storage integration, the output file is mirrored.
-        mirror_integration = db.external_integration(
-            ExternalIntegration.S3,
-            ExternalIntegration.STORAGE_GOAL,
-            username="username",
-            password="password",
-        )
-
-        mirror = MockS3Uploader()
-
+        storage_service = s3_service_fixture.mock_service()
         exporter.records(
-            lane,
+            lane_or_wl,
             annotator,
-            mirror_integration,
-            mirror=mirror,
+            storage_service,
             query_batch_size=1,
             upload_batch_size=1,
             search_engine=search_engine,
         )
 
         # The file was mirrored and a CachedMARCFile was created to track the mirrored file.
-        assert 1 == len(mirror.uploaded)
+        assert len(storage_service.uploads) == 1
         [cache] = db.session.query(CachedMARCFile).all()
-        assert db.default_library() == cache.library
-        assert lane == cache.lane
-        assert mirror.uploaded[0] == cache.representation
-        assert None == cache.representation.content
-        assert (
-            "https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc"
-            % (
-                db.default_library().short_name,
-                quote(str(cache.representation.fetched_at)),
-                quote(lane.display_name),
-            )
-            == mirror.uploaded[0].mirror_url
+        assert cache.library == db.default_library()
+        if object_type == "lane":
+            assert cache.lane == lane_or_wl
+        else:
+            assert cache.lane is None
+        assert cache.representation.content is None
+        assert storage_service.uploads[0].key == "{}/{}/{}.mrc".format(
+            db.default_library().short_name,
+            str(cache.representation.fetched_at),
+            lane_or_wl.display_name,
         )
-        assert None == cache.start_time
-        assert cache.end_time > now
+        assert quote(storage_service.uploads[0].key) in cache.representation.mirror_url
+        assert cache.start_time is None
+        assert marc_exporter_fixture.now < cache.end_time
 
-        # The content was uploaded in two parts.
-        assert 2 == len(mirror.content[0])
-        complete_file = b"".join(mirror.content[0])
-        records = list(MARCReader(complete_file))
-        assert 2 == len(records)
+        records = list(MARCReader(storage_service.uploads[0].content))
+        assert len(records) == 2
 
         title_fields = [record.get_fields("245") for record in records]
         titles = [fields[0].get_subfields("a")[0] for fields in title_fields]
-        assert {w1.title, w2.title} == set(titles)
+        assert set(titles) == {
+            marc_exporter_fixture.w1.title,
+            marc_exporter_fixture.w2.title,
+        }
 
-        assert w1.title in w1.marc_record
-        assert w2.title in w2.marc_record
+        assert marc_exporter_fixture.w1.title in marc_exporter_fixture.w1.marc_record
+        assert marc_exporter_fixture.w2.title in marc_exporter_fixture.w2.marc_record
 
-        db.session.delete(cache)
-
-        search_engine.mock_query_works([w1, w2])
-        # It also works with a WorkList instead of a Lane, in which case
-        # there will be no lane in the CachedMARCFile.
-        worklist = WorkList()
-        worklist.initialize(db.default_library(), display_name="All Books")
-
-        mirror = MockS3Uploader()
-        exporter.records(
-            worklist,
-            annotator,
-            mirror_integration,
-            mirror=mirror,
-            query_batch_size=1,
-            upload_batch_size=1,
-            search_engine=search_engine,
-        )
-
-        assert 1 == len(mirror.uploaded)
-        [cache] = db.session.query(CachedMARCFile).all()
-        assert db.default_library() == cache.library
-        assert None == cache.lane
-        assert mirror.uploaded[0] == cache.representation
-        assert None == cache.representation.content
-        assert (
-            "https://test-marc-bucket.s3.amazonaws.com/%s/%s/%s.mrc"
-            % (
-                db.default_library().short_name,
-                quote(str(cache.representation.fetched_at)),
-                quote(worklist.display_name),
-            )
-            == mirror.uploaded[0].mirror_url
-        )
-        assert None == cache.start_time
-        assert cache.end_time > now
-
-        assert 2 == len(mirror.content[0])
-        complete_file = b"".join(mirror.content[0])
-        records = list(MARCReader(complete_file))
-        assert 2 == len(records)
-
-        db.session.delete(cache)
-
+    def test_records_start_time(
+        self,
+        db: DatabaseTransactionFixture,
+        s3_service_fixture: S3ServiceFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ):
         # If a start time is set, it's used in the mirror url.
         #
         # (Our mock search engine returns everthing in its 'index',
         # so this doesn't test that the start time is actually used to
         # find works -- that's in the search index tests and the
         # tests of MARCExporterFacets.)
-        start_time = now - datetime.timedelta(days=3)
+        start_time = marc_exporter_fixture.now - datetime.timedelta(days=3)
+        exporter = marc_exporter_fixture.exporter
+        annotator = marc_exporter_fixture.annotator
+        search_engine = marc_exporter_fixture.search_engine
+        lane = db.lane("Test Lane", genres=["Mystery"])
+        storage_service = s3_service_fixture.mock_service()
 
-        mirror = MockS3Uploader()
         exporter.records(
             lane,
             annotator,
-            mirror_integration,
+            storage_service,
             start_time=start_time,
-            mirror=mirror,
             query_batch_size=2,
             upload_batch_size=2,
             search_engine=search_engine,
         )
         [cache] = db.session.query(CachedMARCFile).all()
 
-        assert db.default_library() == cache.library
-        assert lane == cache.lane
-        assert mirror.uploaded[0] == cache.representation
-        assert None == cache.representation.content
-        assert (
-            "https://test-marc-bucket.s3.amazonaws.com/%s/%s-%s/%s.mrc"
-            % (
-                db.default_library().short_name,
-                quote(str(start_time)),
-                quote(str(cache.representation.fetched_at)),
-                quote(lane.display_name),
-            )
-            == mirror.uploaded[0].mirror_url
+        assert cache.library == db.default_library()
+        assert cache.lane == lane
+        assert cache.representation.content is None
+        assert storage_service.uploads[0].key == "{}/{}-{}/{}.mrc".format(
+            db.default_library().short_name,
+            str(start_time),
+            str(cache.representation.fetched_at),
+            lane.display_name,
         )
-        assert start_time == cache.start_time
-        assert cache.end_time > now
-        db.session.delete(cache)
+        assert cache.start_time == start_time
+        assert marc_exporter_fixture.now < cache.end_time
 
+    def test_records_empty_search(
+        self,
+        db: DatabaseTransactionFixture,
+        s3_service_fixture: S3ServiceFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ):
         # If the search engine returns no contents for the lane,
         # nothing will be mirrored, but a CachedMARCFile is still
         # created to track that we checked for updates.
-        search_engine.mock_query_works([])
+        exporter = marc_exporter_fixture.exporter
+        annotator = marc_exporter_fixture.annotator
+        empty_search_engine = ExternalSearchIndexFake(db.session)
+        lane = db.lane("Test Lane", genres=["Mystery"])
+        storage_service = s3_service_fixture.mock_service()
 
-        mirror = MockS3Uploader()
         exporter.records(
             lane,
             annotator,
-            mirror_integration,
-            mirror=mirror,
-            search_engine=search_engine,
+            storage_service,
+            search_engine=empty_search_engine,
         )
 
-        assert [] == mirror.content[0]
+        assert [] == storage_service.uploads
         [cache] = db.session.query(CachedMARCFile).all()
-        assert cache.representation == mirror.uploaded[0]
-        assert db.default_library() == cache.library
-        assert lane == cache.lane
-        assert None == cache.representation.content
-        assert None == cache.start_time
-        assert cache.end_time > now
-
-        db.session.delete(cache)
-
-    def test_get_storage_settings(self, db: DatabaseTransactionFixture):
-        # Two ExternalIntegration, one has a marc_bucket setting, and the
-        # other doesn't.
-        has_marc_bucket = db.external_integration(
-            name="has_marc_bucket",
-            protocol=db.fresh_str(),
-            goal=ExternalIntegration.STORAGE_GOAL,
-            settings={"marc_bucket": "test-marc-bucket"},
-        )
-        db.external_integration(
-            name="no_marc_bucket",
-            protocol=db.fresh_str(),
-            goal=ExternalIntegration.STORAGE_GOAL,
-        )
-
-        # Before we call get_storage_settings, the only option is the default.
-        assert MARCExporter.SETTING["options"] == [
-            MARCExporter.DEFAULT_MIRROR_INTEGRATION
-        ]
-
-        MARCExporter.get_storage_settings(db.session)
-
-        # After we call get_storage_settings, the options are the default and
-        # the ExternalIntegration with a marc_bucket setting.
-        assert len(MARCExporter.SETTING["options"]) == 2
-        [default, from_config] = MARCExporter.SETTING["options"]
-        assert default == MARCExporter.DEFAULT_MIRROR_INTEGRATION
-        assert from_config == {
-            "key": str(has_marc_bucket.id),
-            "label": has_marc_bucket.name,
-        }
+        assert cache.library == db.default_library()
+        assert cache.lane == lane
+        assert cache.representation.content is None
+        assert cache.start_time is None
+        assert marc_exporter_fixture.now < cache.end_time
 
 
 class TestMARCExporterFacets:

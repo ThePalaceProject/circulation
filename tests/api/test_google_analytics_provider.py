@@ -1,5 +1,6 @@
 import unicodedata
 import urllib.parse
+from unittest.mock import MagicMock
 
 import pytest
 from psycopg2.extras import NumericRange
@@ -37,13 +38,13 @@ class TestGoogleAnalyticsProvider:
         )
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            GoogleAnalyticsProvider(integration)
+            GoogleAnalyticsProvider(integration, MagicMock())
         assert "Google Analytics can't be configured without a library." in str(
             excinfo.value
         )
 
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            GoogleAnalyticsProvider(integration, db.default_library())
+            GoogleAnalyticsProvider(integration, MagicMock(), db.default_library())
         assert (
             "Missing tracking id for library %s" % db.default_library().short_name
             in str(excinfo.value)
@@ -55,12 +56,12 @@ class TestGoogleAnalyticsProvider:
             db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = GoogleAnalyticsProvider(integration, db.default_library())
+        ga = GoogleAnalyticsProvider(integration, MagicMock(), db.default_library())
         assert GoogleAnalyticsProvider.DEFAULT_URL == ga.url
         assert "faketrackingid" == ga.tracking_id
 
         integration.url = db.fresh_str()
-        ga = GoogleAnalyticsProvider(integration, db.default_library())
+        ga = GoogleAnalyticsProvider(integration, MagicMock(), db.default_library())
         assert integration.url == ga.url
         assert "faketrackingid" == ga.tracking_id
 
@@ -78,7 +79,7 @@ class TestGoogleAnalyticsProvider:
             db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = MockGoogleAnalyticsProvider(integration, db.default_library())
+        ga = MockGoogleAnalyticsProvider(integration, MagicMock(), db.default_library())
 
         work = db.work(
             title="pi\u00F1ata",
@@ -146,7 +147,7 @@ class TestGoogleAnalyticsProvider:
             db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = MockGoogleAnalyticsProvider(integration, db.default_library())
+        ga = MockGoogleAnalyticsProvider(integration, MagicMock(), db.default_library())
 
         identifier = db.identifier()
         source = DataSource.lookup(db.session, DataSource.GUTENBERG)
@@ -201,7 +202,7 @@ class TestGoogleAnalyticsProvider:
             db.default_library(),
             integration,
         ).value = "faketrackingid"
-        ga = MockGoogleAnalyticsProvider(integration, db.default_library())
+        ga = MockGoogleAnalyticsProvider(integration, MagicMock(), db.default_library())
 
         now = utc_now()
         ga.collect_event(db.default_library(), None, CirculationEvent.NEW_PATRON, now)

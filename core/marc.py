@@ -1,5 +1,6 @@
 import re
 from io import BytesIO
+from typing import Optional
 
 from flask_babel import lazy_gettext as _
 from pymarc import Field, Record, Subfield
@@ -9,7 +10,6 @@ from .classifier import Classifier
 from .config import CannotLoadConfiguration
 from .external_search import ExternalSearchIndex, SortKeyPagination
 from .lane import BaseFacets, Lane
-from .mirror import MirrorUploader
 from .model import (
     CachedMARCFile,
     DeliveryMechanism,
@@ -20,11 +20,7 @@ from .model import (
     Work,
     get_one_or_create,
 )
-
-# this is necessary to ensure these implementations are registered
-from .s3 import MinIOUploader, S3Uploader  # noqa: autoflake
-
-# registered
+from .service.storage.s3 import MultipartS3ContextManager, S3Service
 from .util import LanguageCodes
 from .util.datetime_helpers import utc_now
 
@@ -572,20 +568,6 @@ class MARCExporter:
         },
     ]
 
-    NO_MIRROR_INTEGRATION = "NO_MIRROR"
-    DEFAULT_MIRROR_INTEGRATION = dict(
-        key=NO_MIRROR_INTEGRATION, label=_("None - Do not mirror MARC files")
-    )
-    SETTING = {
-        "key": "mirror_integration_id",
-        "label": _("MARC Mirror"),
-        "description": _(
-            "Storage protocol to use for uploading generated MARC files. The service must already be configured under 'Storage Services'."
-        ),
-        "type": "select",
-        "options": [DEFAULT_MIRROR_INTEGRATION],
-    }
-
     @classmethod
     def from_config(cls, library):
         _db = Session.object_session(library)
@@ -605,27 +587,6 @@ class MARCExporter:
         self._db = _db
         self.library = library
         self.integration = integration
-
-    @classmethod
-    def get_storage_settings(cls, _db):
-        integrations = ExternalIntegration.for_goal(
-            _db, ExternalIntegration.STORAGE_GOAL
-        )
-        cls.SETTING["options"] = [cls.DEFAULT_MIRROR_INTEGRATION]
-        for integration in integrations:
-            # Only add an integration to choose from if it has a
-            # MARC File Bucket field in its settings.
-            configuration_settings = [
-                s for s in integration.settings if s.key == "marc_bucket"
-            ]
-
-            if configuration_settings:
-                if configuration_settings[0].value:
-                    cls.SETTING["options"].append(
-                        dict(key=str(integration.id), label=integration.name)
-                    )
-
-        return cls.SETTING
 
     @classmethod
     def create_record(cls, work, annotator, force_create=False, integration=None):
@@ -674,14 +635,24 @@ class MARCExporter:
         )
         return record
 
+    def _file_key(self, library, lane, end_time, start_time=None):
+        """The path to the hosted MARC file for the given library, lane,
+        and date range."""
+        root = library.short_name
+        if start_time:
+            time_part = str(start_time) + "-" + str(end_time)
+        else:
+            time_part = str(end_time)
+        parts = [root, time_part, lane.display_name]
+        return "/".join(parts) + ".mrc"
+
     def records(
         self,
         lane,
         annotator,
-        mirror_integration,
+        storage_service: Optional[S3Service],
         start_time=None,
         force_refresh=False,
-        mirror=None,
         search_engine=None,
         query_batch_size=500,
         upload_batch_size=7500,
@@ -691,10 +662,9 @@ class MARCExporter:
 
         :param lane: The Lane to export books from.
         :param annotator: The Annotator to use when creating MARC records.
-        :param mirror_integration: The mirror integration to use for MARC files.
+        :param storage_service: The storage service integration to use for MARC files.
         :param start_time: Only include records that were created or modified after this time.
         :param force_refresh: Create new records even when cached records are available.
-        :param mirror: Optional mirror to use instead of loading one from configuration.
         :param query_batch_size: Number of works to retrieve with a single Opensearch query.
         :param upload_batch_size: Number of records to mirror at a time. This is different
           from query_batch_size because S3 enforces a minimum size of 5MB for all parts
@@ -702,18 +672,10 @@ class MARCExporter:
           works for a single query.
         """
 
-        # We mirror the content, if it's not empty. If it's empty, we create a CachedMARCFile
+        # We store the content, if it's not empty. If it's empty, we create a CachedMARCFile
         # and Representation, but don't actually mirror it.
-        if not mirror:
-            storage_protocol = mirror_integration.protocol
-            mirror = MirrorUploader.implementation(mirror_integration)
-            if mirror.NAME != storage_protocol:
-                raise Exception(
-                    "Mirror integration does not match configured storage protocol"
-                )
-
-        if not mirror:
-            raise Exception("No mirror integration is configured")
+        if storage_service is None:
+            raise Exception("No storage service is configured")
 
         search_engine = search_engine or ExternalSearchIndex(self._db)
 
@@ -725,12 +687,12 @@ class MARCExporter:
         facets = MARCExporterFacets(start_time=start_time)
         pagination = SortKeyPagination(size=query_batch_size)
 
-        url = mirror.marc_file_url(self.library, lane, end_time, start_time)
-        representation, ignore = get_one_or_create(
-            self._db, Representation, url=url, media_type=Representation.MARC_MEDIA_TYPE
-        )
+        key = self._file_key(self.library, lane, end_time, start_time)
 
-        with mirror.multipart_upload(representation, url) as upload:
+        with storage_service.multipart(
+            key,
+            content_type=Representation.MARC_MEDIA_TYPE,
+        ) as upload:
             this_batch = BytesIO()
             this_batch_size = 0
             while pagination is not None:
@@ -752,7 +714,7 @@ class MARCExporter:
                 this_batch_size += pagination.this_page_size
                 if this_batch_size >= upload_batch_size:
                     # We've reached or exceeded the upload threshold.
-                    # Upload one part of the multi-part document.
+                    # Upload one part of the multipart document.
                     self._upload_batch(this_batch, upload)
                     this_batch = BytesIO()
                     this_batch_size = 0
@@ -760,10 +722,16 @@ class MARCExporter:
 
             # Upload the final part of the multi-document, if
             # necessary.
-            self._upload_batch(this_batch, upload)
+            self._upload_batch(this_batch, upload)  # type: ignore[unreachable]
 
+        representation, ignore = get_one_or_create(
+            self._db,
+            Representation,
+            url=upload.url,
+            media_type=Representation.MARC_MEDIA_TYPE,
+        )
         representation.fetched_at = end_time
-        if not representation.mirror_exception:
+        if not upload.exception:
             cached, is_new = get_one_or_create(
                 self._db,
                 CachedMARCFile,
@@ -775,8 +743,11 @@ class MARCExporter:
             if not is_new:
                 cached.representation = representation
             cached.end_time = end_time
+            representation.set_as_mirrored(upload.url)
+        else:
+            representation.mirror_exception = str(upload.exception)
 
-    def _upload_batch(self, output, upload):
+    def _upload_batch(self, output: BytesIO, upload: MultipartS3ContextManager):
         "Upload a batch of MARC records as one part of a multi-part upload."
         content = output.getvalue()
         if content:

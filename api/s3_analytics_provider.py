@@ -1,50 +1,22 @@
 import datetime
 import json
-from typing import Any, Dict, List
+import random
+import string
+from typing import Dict, Optional
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.mirror import MirrorUploader
-from core.model import (
-    ExternalIntegration,
-    Library,
-    LicensePool,
-    MediaTypes,
-    Representation,
-    get_one,
-)
-from core.model.configuration import (
-    ConfigurationAttributeType,
-    ConfigurationGrouping,
-    ConfigurationMetadata,
-    ConfigurationOption,
-    ExternalIntegrationLink,
-)
-from core.s3 import S3Uploader, S3UploaderConfiguration
+from core.model import Library, LicensePool, MediaTypes
+from core.model.configuration import ConfigurationGrouping
+from core.service.container import Services
+from core.service.storage.s3 import S3Service
 
 
 class S3AnalyticsProviderConfiguration(ConfigurationGrouping):
     """Contains configuration settings of the S3 Analytics provider."""
-
-    NO_MIRROR_INTEGRATION = "NO_MIRROR"
-
-    DEFAULT_MIRROR_OPTION = ConfigurationOption(NO_MIRROR_INTEGRATION, "None")
-
-    analytics_mirror = ConfigurationMetadata(
-        key="mirror_integration_id",
-        label=_("Analytics Mirror"),
-        description=_(
-            "S3-compatible service to use for storing analytics events. "
-            "The service must already be configured under 'Storage Services'."
-        ),
-        type=ConfigurationAttributeType.SELECT,
-        required=True,
-        default=NO_MIRROR_INTEGRATION,
-        options=[DEFAULT_MIRROR_OPTION],
-    )
 
 
 class S3AnalyticsProvider(LocalAnalyticsProvider):
@@ -56,6 +28,14 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     SETTINGS = (
         LocalAnalyticsProvider.SETTINGS + S3AnalyticsProviderConfiguration.to_settings()
     )
+
+    def __init__(
+        self,
+        integration,
+        services: Services,
+        library=None,
+    ):
+        super().__init__(integration, services, library)
 
     @staticmethod
     def _create_event_object(
@@ -223,95 +203,59 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             default=str,
             ensure_ascii=True,
         )
-        s3_uploader: S3Uploader = self._get_s3_uploader(_db)
-        analytics_file_url = s3_uploader.analytics_file_url(
-            library, license_pool, event_type, time
+        storage = self._get_storage()
+        analytics_file_key = self._get_file_key(library, license_pool, event_type, time)
+
+        storage.store(
+            analytics_file_key,
+            content,
+            MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
         )
 
-        # Create a temporary Representation object because S3Uploader can work only with Representation objects.
-        # NOTE: It won't be stored in the database.
-        representation = Representation(
-            media_type=MediaTypes.APPLICATION_JSON_MEDIA_TYPE, content=content
-        )
-        s3_uploader.mirror_one(representation, analytics_file_url)
+    def _get_file_key(
+        self,
+        library: Library,
+        license_pool: Optional[LicensePool],
+        event_type: str,
+        end_time: datetime.datetime,
+        start_time: Optional[datetime.datetime] = None,
+    ):
+        """The path to the analytics data file for the given library, license
+        pool and date range."""
+        root = library.short_name
+        if start_time:
+            time_part = str(start_time) + "-" + str(end_time)
+        else:
+            time_part = str(end_time)
 
-    def _get_s3_uploader(self, db: Session) -> S3Uploader:
-        """Get an S3Uploader object associated with the provider's selected storage service.
-
-        :param db: Database session
-
-        :return: S3Uploader object associated with the provider's selected storage service
-        """
-        # To find the storage integration for the exporter, first find the
-        # external integration link associated with the provider's external
-        # integration.
-        integration_link = get_one(
-            db,
-            ExternalIntegrationLink,
-            external_integration_id=self.integration_id,
-            purpose=ExternalIntegrationLink.ANALYTICS,
-        )
-
-        if not integration_link:
-            raise CannotLoadConfiguration(
-                "The provider doesn't have an associated storage service"
-            )
-
-        # Then use the "other" integration value to find the storage integration.
-        storage_integration = get_one(
-            db, ExternalIntegration, id=integration_link.other_integration_id
-        )
-
-        if not storage_integration:
-            raise CannotLoadConfiguration(
-                "The provider doesn't have an associated storage service"
-            )
-
-        analytics_bucket = storage_integration.setting(
-            S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
-        ).value
-
-        if not analytics_bucket:
-            raise CannotLoadConfiguration(
-                "The associated storage service does not have {} bucket".format(
-                    S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
-                )
-            )
-
-        s3_uploader = MirrorUploader.implementation(storage_integration)
-
-        return s3_uploader
-
-    @classmethod
-    def get_storage_settings(cls, db: Session) -> List[Dict[str, Any]]:
-        """Return the provider's configuration settings including available storage options.
-
-        :param db: Database session
-
-        :return: List containing the provider's configuration settings
-        """
-        storage_integrations = ExternalIntegration.for_goal(
-            db, ExternalIntegration.STORAGE_GOAL
-        )
-
-        for storage_integration in storage_integrations:
-            configuration_settings = [
-                setting
-                for setting in storage_integration.settings
-                if setting.key == S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
+        # ensure the uniqueness of file name (in case of overlapping events)
+        collection = license_pool.collection_id if license_pool else "NONE"
+        random_string = "".join(random.choices(string.ascii_lowercase, k=10))
+        file_name = "-".join([time_part, event_type, str(collection), random_string])
+        # nest file in directories that allow for easy purging by year, month or day
+        return "/".join(
+            [
+                str(root),
+                str(end_time.year),
+                str(end_time.month),
+                str(end_time.day),
+                file_name + ".json",
             ]
+        )
 
-            if configuration_settings:
-                if configuration_settings[0].value:
-                    S3AnalyticsProviderConfiguration.analytics_mirror.options.append(
-                        ConfigurationOption(
-                            storage_integration.id, storage_integration.name
-                        )
-                    )
+    def _get_storage(self) -> S3Service:
+        """Return the CMs configured storage service.
+        Raises an exception if the storage service is not configured.
 
-        cls.SETTINGS = S3AnalyticsProviderConfiguration.to_settings()
+        :return: StorageServiceBase object
+        """
+        s3_storage_service = self.services.storage.analytics()
+        if s3_storage_service is None:
+            raise CannotLoadConfiguration(
+                "No storage service is configured with an analytics bucket."
+            )
 
-        return cls.SETTINGS
+        return s3_storage_service
 
 
 Provider = S3AnalyticsProvider
