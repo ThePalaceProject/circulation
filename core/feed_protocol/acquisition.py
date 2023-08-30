@@ -131,7 +131,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # Facet links
         facet_links = self.facet_links(self.annotator, self._facets)
         for linkdata in facet_links:
-            self._feed.facet_links.append(Link(**linkdata))
+            l = Link.create(**linkdata)
+            self._feed.facet_links.append(l)
 
     @classmethod
     def facet_links(
@@ -204,9 +205,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     ) -> WorkEntry:
         entry = WorkEntry(
             work=work,
-            license_pool=active_licensepool,
             edition=edition,
             identifier=identifier,
+            license_pool=active_licensepool,
         )
         annotator.annotate_work_entry(entry)
         return entry
@@ -274,7 +275,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # In OPDS 2 this can become an additional rel value,
         # removing the need for a custom attribute.
         link["facetGroupType"] = FacetConstants.ENTRY_POINT_REL
-        return Link(**link)
+        return Link.create(**link)
 
     def add_breadcrumb_links(
         self, lane: WorkList, entrypoint: Optional[Type[EntryPoint]] = None
