@@ -81,7 +81,7 @@ class TestOPDS:
             for x in entry.computed.other_links
             if x.rel == "http://librarysimplified.org/terms/rel/hide"
         ]
-        assert lp.identifier.identifier in suppress_link.href
+        assert suppress_link.href and lp.identifier.identifier in suppress_link.href
         unsuppress_links = [
             x
             for x in entry.computed.other_links
@@ -105,7 +105,7 @@ class TestOPDS:
             for x in entry.computed.other_links
             if x.rel == "http://librarysimplified.org/terms/rel/restore"
         ]
-        assert lp.identifier.identifier in unsuppress_link.href
+        assert unsuppress_link.href and lp.identifier.identifier in unsuppress_link.href
         suppress_links = [
             x
             for x in entry.computed.other_links
@@ -126,7 +126,7 @@ class TestOPDS:
         [entry] = feed._feed.entries
         assert entry.computed is not None
         [edit_link] = [x for x in entry.computed.other_links if x.rel == "edit"]
-        assert lp.identifier.identifier in edit_link.href
+        assert edit_link.href and lp.identifier.identifier in edit_link.href
 
     def test_feed_includes_change_cover_link(self, db: DatabaseTransactionFixture):
         work = db.work(with_open_access_download=True)
@@ -182,7 +182,10 @@ class TestOPDS:
             for x in entry.computed.other_links
             if x.rel == "http://librarysimplified.org/terms/rel/change_cover"
         ]
-        assert lp.identifier.identifier in change_cover_link.href
+        assert (
+            change_cover_link.href
+            and lp.identifier.identifier in change_cover_link.href
+        )
 
     def test_suppressed_feed(self, db: DatabaseTransactionFixture):
         # Test the ability to show a paginated feed of suppressed works.

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, cast
 
 from typing_extensions import Self
 
@@ -52,7 +52,7 @@ class FeedEntryType(BaseModel):
     text: Optional[str] = None
 
     @classmethod
-    def create(cls, **kwargs) -> Self:
+    def create(cls, **kwargs: Any) -> Self:
         """Create a new object with arbitrary data"""
         obj = cls()
         obj.add_attributes(kwargs)
@@ -72,7 +72,7 @@ class FeedEntryType(BaseModel):
 
 @dataclass
 class Link(FeedEntryType):
-    href: str = None
+    href: Optional[str] = None
     rel: Optional[str] = None
     type: Optional[str] = None
 
@@ -99,7 +99,7 @@ class Link(FeedEntryType):
 
 @dataclass
 class IndirectAcquisition(BaseModel):
-    type: str = None
+    type: Optional[str] = None
     children: List["IndirectAcquisition"] = field(default_factory=list)
 
 
@@ -167,20 +167,30 @@ class WorkEntryData(BaseModel):
 
 
 @dataclass
-class WorkEntry(FeedEntryType):
-    work: Optional[Work] = None
-    edition: Optional[Edition] = None
-    identifier: Optional[Identifier] = None
+class WorkEntry(BaseModel):
+    work: Work
+    edition: Edition
+    identifier: Identifier
     license_pool: Optional[LicensePool] = None
 
     # Actual, computed feed data
     computed: Optional[WorkEntryData] = None
 
-    def __post_init__(self) -> None:
-        if None in (self.work, self.edition, self.identifier):
+    def __init__(
+        self,
+        work: Optional[Work] = None,
+        edition: Optional[Edition] = None,
+        identifier: Optional[Identifier] = None,
+        license_pool: Optional[LicensePool] = None,
+    ) -> None:
+        if None in (work, edition, identifier):
             raise ValueError(
                 "Work, Edition or Identifier cannot be None while initializing an entry"
             )
+        self.work = cast(Work, work)
+        self.edition = cast(Edition, edition)
+        self.identifier = cast(Identifier, identifier)
+        self.license_pool = license_pool
 
 
 class DataEntryTypes:
