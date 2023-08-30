@@ -3,15 +3,11 @@ from abc import ABC, abstractmethod
 from flask import Response
 
 
-class FeedProtocol(ABC):
+class FeedInterface(ABC):
     @abstractmethod
-    def generate_feed(
-        self,
-    ) -> None:
+    def generate_feed(self) -> None:
         ...
 
     @abstractmethod
-    def as_response(
-        self,
-    ) -> Response:
+    def as_response(self) -> Response:
         ...

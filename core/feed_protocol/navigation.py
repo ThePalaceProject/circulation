@@ -1,18 +1,20 @@
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
+from typing_extensions import Self
 
 from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
-from core.feed_protocol.opds import OPDSFeedProtocol
+from core.feed_protocol.opds import BaseOPDSFeed
 from core.feed_protocol.types import DataEntry, DataEntryTypes, Link
+from core.feed_protocol.util import strftime
 from core.lane import Facets, Pagination, WorkList
 from core.opds import NavigationFacets
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
-from core.util.opds_writer import AtomFeed, OPDSFeed
+from core.util.opds_writer import OPDSFeed
 
 
-class NavigationFeed(OPDSFeedProtocol):
+class NavigationFeed(BaseOPDSFeed):
     def __init__(
         self,
         title: str,
@@ -37,18 +39,18 @@ class NavigationFeed(OPDSFeedProtocol):
         worklist: WorkList,
         annotator: CirculationManagerAnnotator,
         facets: Optional[Facets] = None,
-    ) -> "NavigationFeed":
+    ) -> Self:
         """The navigation feed with links to a given lane's sublanes."""
 
         facets = facets or NavigationFacets.default(worklist)
-        feed = NavigationFeed(title, url, worklist, annotator, facets=facets)
+        feed = cls(title, url, worklist, annotator, facets=facets)
         feed.generate_feed()
         return feed
 
     def generate_feed(self) -> None:
         self._feed.add_metadata("title", text=self.title)
         self._feed.add_metadata("id", text=self.url)
-        self._feed.add_metadata("updated", text=AtomFeed._strftime(utc_now()))
+        self._feed.add_metadata("updated", text=strftime(utc_now()))
         self._feed.add_link(href=self.url, rel="self")
         if not self.lane.children:
             # We can't generate links to children, since this Worklist

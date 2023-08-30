@@ -23,7 +23,7 @@ from core.feed_protocol.annotator.circulation import (
 )
 from core.feed_protocol.annotator.verbose import VerboseAnnotator
 from core.feed_protocol.navigation import NavigationFeed
-from core.feed_protocol.types import FeedData, WorkEntry
+from core.feed_protocol.types import FeedData, Link, WorkEntry
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
 from core.model.constants import LinkRelations
@@ -216,7 +216,7 @@ class TestOPDSAcquisitionFeed:
 
             def __call__(self, *args):
                 self.calls.append(args)
-                return self.attrs
+                return Link(**self.attrs)
 
         mock = Mock()
         old_entrypoint_link = OPDSAcquisitionFeed._entrypoint_link
@@ -284,18 +284,18 @@ class TestOPDSAcquisitionFeed:
 
         # The link is identified as belonging to an entry point-type
         # facet group.
-        assert l["rel"] == LinkRelations.FACET_REL
-        assert l["facetGroupType"] == FacetConstants.ENTRY_POINT_REL
-        assert "Grupe" == l["facetGroup"]
+        assert l.rel == LinkRelations.FACET_REL
+        assert getattr(l, "facetGroupType") == FacetConstants.ENTRY_POINT_REL
+        assert "Grupe" == getattr(l, "facetGroup")
 
         # This facet is the active one in the group.
-        assert "true" == l["activeFacet"]
+        assert "true" == getattr(l, "activeFacet")
 
         # The URL generator was invoked to create the href.
-        assert l["href"] == g(AudiobooksEntryPoint)
+        assert l.href == g(AudiobooksEntryPoint)
 
         # The facet title identifies it as a way to look at audiobooks.
-        assert EntryPoint.DISPLAY_TITLES[AudiobooksEntryPoint] == l["title"]
+        assert EntryPoint.DISPLAY_TITLES[AudiobooksEntryPoint] == l.title
 
         # Now try some variants.
 
@@ -303,14 +303,14 @@ class TestOPDSAcquisitionFeed:
         l = m(g, AudiobooksEntryPoint, AudiobooksEntryPoint, True, "Grupe")
 
         # This may affect the URL generated for the facet link.
-        assert l["href"] == g(AudiobooksEntryPoint)
+        assert l.href == g(AudiobooksEntryPoint)
 
         # Here, the entry point for which we're generating the link is
         # not the selected one -- EbooksEntryPoint is.
         l = m(g, AudiobooksEntryPoint, EbooksEntryPoint, True, "Grupe")
 
         # This means the 'activeFacet' attribute is not present.
-        assert "activeFacet" not in l
+        assert getattr(l, "activeFacet", None) == None
 
     def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)

@@ -1,29 +1,27 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, List, Optional
 
-from core.feed_protocol.base import FeedProtocol
+from core.feed_protocol.base import FeedInterface
 from core.feed_protocol.serializer.opds import OPDS1Serializer
 from core.feed_protocol.types import FeedData, WorkEntry
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 
-if TYPE_CHECKING:
-    pass
 
-
-class OPDSFeedProtocol(FeedProtocol):
+class BaseOPDSFeed(FeedInterface):
     def __init__(
-        self, title: str, url: str, precomposed_entries: Optional[Any] = None
+        self, title: str, url: str, precomposed_entries: Optional[List[Any]] = None
     ) -> None:
         self.url = url
         self.title = title
-        self._precomposed_entries = precomposed_entries
+        self._precomposed_entries = precomposed_entries or []
         self._feed = FeedData()
         self._serializer = OPDS1Serializer()
+        self.log = logging.getLogger(self.__class__.__name__)
 
     def generate_feed(self) -> None:
-        pass
+        raise NotImplementedError()
 
     def serialize(self) -> bytes:
         return self._serializer.serialize_feed(self._feed)

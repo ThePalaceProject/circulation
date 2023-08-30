@@ -32,6 +32,7 @@ from core.feed_protocol.types import (
     Link,
     WorkEntry,
 )
+from core.feed_protocol.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.lcp.exceptions import LCPError
@@ -51,7 +52,7 @@ from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
 from core.opds import UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
-from core.util.opds_writer import AtomFeed, OPDSFeed
+from core.util.opds_writer import OPDSFeed
 
 
 class AcquisitionHelper:
@@ -111,9 +112,9 @@ class AcquisitionHelper:
 
         acquisition["availability_status"] = status
         if since:
-            acquisition["availability_since"] = AtomFeed._strftime(since)
+            acquisition["availability_since"] = strftime(since)
         if until:
-            acquisition["availability_until"] = AtomFeed._strftime(until)
+            acquisition["availability_until"] = strftime(until)
 
         # Open-access pools do not need to display <opds:holds> or <opds:copies>.
         if (
@@ -186,9 +187,9 @@ class CirculationManagerAnnotator(Annotator):
     def __init__(
         self,
         lane: Optional[WorkList],
-        active_loans_by_work: Dict[Work, Loan] = {},
-        active_holds_by_work: Dict[Work, Hold] = {},
-        active_fulfillments_by_work: Dict[Work, Any] = {},
+        active_loans_by_work: Optional[Dict[Work, Loan]] = None,
+        active_holds_by_work: Optional[Dict[Work, Hold]] = None,
+        active_fulfillments_by_work: Optional[Dict[Work, Any]] = None,
         hidden_content_types: List[str] = [],
     ) -> None:
         if lane:
@@ -197,9 +198,9 @@ class CirculationManagerAnnotator(Annotator):
             logger_name = "Circulation Manager Annotator"
         self.log = logging.getLogger(logger_name)
         self.lane = lane
-        self.active_loans_by_work = active_loans_by_work
-        self.active_holds_by_work = active_holds_by_work
-        self.active_fulfillments_by_work = active_fulfillments_by_work
+        self.active_loans_by_work = active_loans_by_work or {}
+        self.active_holds_by_work = active_holds_by_work or {}
+        self.active_fulfillments_by_work = active_fulfillments_by_work or {}
         self.hidden_content_types = hidden_content_types
         self.facet_view = "feed"
 
@@ -701,9 +702,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         lane: Optional[WorkList],
         library: Library,
         patron: Optional[Patron] = None,
-        active_loans_by_work: Dict[Work, Loan] = {},
-        active_holds_by_work: Dict[Work, Hold] = {},
-        active_fulfillments_by_work: Dict[Work, Any] = {},
+        active_loans_by_work: Optional[Dict[Work, Loan]] = None,
+        active_holds_by_work: Optional[Dict[Work, Hold]] = None,
+        active_fulfillments_by_work: Optional[Dict[Work, Any]] = None,
         facet_view: str = "feed",
         top_level_title: str = "All Books",
         library_identifies_patrons: bool = True,
@@ -735,7 +736,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self.patron = patron
         self.lanes_by_work: Dict[Work, List[Any]] = defaultdict(list)
         self.facet_view = facet_view
-        self._adobe_id_tags: Dict[str, Any] = {}
+        self._adobe_id_cache: Dict[str, Any] = {}
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
@@ -1498,7 +1499,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             cache_key = str(patron_identifier.id)
         else:
             cache_key = patron_identifier
-        cached = self._adobe_id_tags.get(cache_key)
+        cached = self._adobe_id_cache.get(cache_key)
         if cached is None:
             cached = {}
             authdata = None
@@ -1519,7 +1520,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 )
                 cached = {"licensor": drm_licensor}
 
-            self._adobe_id_tags[cache_key] = cached
+            self._adobe_id_cache[cache_key] = cached
         else:
             cached = copy.deepcopy(cached)
         return cached

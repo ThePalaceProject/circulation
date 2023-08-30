@@ -7,8 +7,6 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote
 
-from flask import has_request_context
-from flask import url_for as flask_url_for
 from sqlalchemy.orm import Session, joinedload
 
 from core.classifier import Classifier
@@ -20,6 +18,7 @@ from core.feed_protocol.types import (
     WorkEntry,
     WorkEntryData,
 )
+from core.feed_protocol.util import strftime
 from core.model.classification import Subject
 from core.model.contributor import Contribution, Contributor
 from core.model.datasource import DataSource
@@ -35,18 +34,18 @@ from core.util.opds_writer import AtomFeed, OPDSFeed
 class ToFeedEntry:
     @classmethod
     def authors(cls, edition: Edition) -> Dict[str, List[Author]]:
-        """Create one or more <author> and <contributor> tags for the given
+        """Create one or more author (and contributor) objects for the given
         Work.
 
-        :param work: The Work under consideration.
         :param edition: The Edition to use as a reference
             for bibliographic information, including the list of
             Contributions.
+        :return: A dict with "authors" and "contributors" as a list of Author objects
         """
-        authors: Dict[str, List[Any]] = {"authors": [], "contributors": []}
-        state: Dict[Optional[str], Set[Any]] = defaultdict(set)
+        authors: Dict[str, List[Author]] = {"authors": [], "contributors": []}
+        state: Dict[Optional[str], Set[str]] = defaultdict(set)
         for contribution in edition.contributions:
-            info = cls.contributor_tag(contribution, state)
+            info = cls.contributor(contribution, state)
             if info is None:
                 # contributor_tag decided that this contribution doesn't
                 # need a tag.
@@ -64,27 +63,28 @@ class ToFeedEntry:
         return authors
 
     @classmethod
-    def contributor_tag(
-        cls, contribution: Contribution, state: Dict[Optional[str], Any]
+    def contributor(
+        cls, contribution: Contribution, state: Dict[Optional[str], Set[str]]
     ) -> Optional[Tuple[str, Author]]:
-        """Build an <author> or <contributor> tag for a Contribution.
+        """Build an author (or contributor) object for a Contribution.
 
         :param contribution: A Contribution.
         :param state: A defaultdict of sets, which may be used to keep
             track of what happened during previous calls to
-            contributor_tag for a given Work.
-        :return: A Tag, or None if creating a Tag for this Contribution
+            contributor for a given Work.
+        :return: An Author object, or None if creating an Author for this Contribution
             would be redundant or of low value.
 
         """
         contributor = contribution.contributor
         role = contribution.role
+        current_role: str
 
         if role in Contributor.AUTHOR_ROLES:
-            tag_f = "author"
+            current_role = "author"
             marc_role = None
         elif role is not None:
-            tag_f = "contributor"
+            current_role = "contributor"
             marc_role = Contributor.MARC_ROLE_CODES.get(role)
             if not marc_role:
                 # This contribution is not one that we publish as
@@ -110,13 +110,13 @@ class ToFeedEntry:
         # so that we don't do it again on a subsequent call.
         state[marc_role].add(name_key)
 
-        return tag_f, entry
+        return current_role, entry
 
     @classmethod
     def series(
         cls, series_name: Optional[str], series_position: Optional[int] | Optional[str]
     ) -> Optional[FeedEntryType]:
-        """Generate a schema:Series tag for the given name and position."""
+        """Generate a FeedEntryType object for the given name and position."""
         if not series_name:
             return None
         series_details = dict()
@@ -127,7 +127,7 @@ class ToFeedEntry:
 
     @classmethod
     def rating(cls, type_uri: Optional[str], value: float | Decimal) -> FeedEntryType:
-        """Generate a schema:Rating tag for the given type and value."""
+        """Generate a FeedEntryType object for the given type and value."""
         return FeedEntryType(ratingValue="%.4f" % value, additionalType=type_uri)
 
     @classmethod
@@ -147,13 +147,13 @@ class ToFeedEntry:
         return links
 
     @classmethod
-    def categories(cls, work: Work) -> Dict[str, Any]:
+    def categories(cls, work: Work) -> Dict[str, List[Dict[str, str]]]:
         """Return all relevant classifications of this work.
 
         :return: A dictionary mapping 'scheme' URLs to dictionaries of
             attribute-value pairs.
 
-        Notable attributes: 'term', 'label', 'http://schema.org/ratingValue'
+        Notable attributes: 'term', 'label', 'ratingValue'
         """
         if not work:
             return {}
@@ -238,22 +238,15 @@ class ToFeedEntry:
         return summary
 
 
-def url_for(name: str, **kwargs: Any) -> str:
-    if has_request_context():
-        return flask_url_for(name, **kwargs)
-    else:
-        params = "&".join([f"k=v" for k, v in kwargs.items()])
-        return f"//{name}?{params}"
-
-
-class OPDSAnnotator:
-    pass
-
-
-class Annotator(OPDSAnnotator, ToFeedEntry):
+class Annotator(ToFeedEntry):
     def annotate_work_entry(
         self, entry: WorkEntry, updated: Optional[datetime.datetime] = None
     ) -> None:
+        """
+        Any data that the serializer must consider while generating an "entry"
+        must be populated in this method.
+        The serializer may not use all the data populated based on the protocol it is bound to.
+        """
         if entry.computed:
             return
 
@@ -263,7 +256,6 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
         pool = entry.license_pool
         computed = WorkEntryData()
 
-        # Everything from serializer should come here
         image_links = []
         other_links = []
         for rel, url in [
@@ -302,8 +294,6 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
         if edition.subtitle:
             computed.subtitle = FeedEntryType(text=edition.subtitle)
 
-        # TODO: Is VerboseAnnotator used anywhere?
-
         author_entries = self.authors(edition)
         computed.contributors = author_entries.get("contributors", [])
         computed.authors = author_entries.get("authors", [])
@@ -320,8 +310,6 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
         category_tags = []
         for scheme, categories in list(categories_by_scheme.items()):
             for category in categories:
-                if isinstance(category, (bytes, str)):
-                    category = dict(term=category)
                 category = dict(
                     list(map(str, (k, v))) for k, v in list(category.items())
                 )
@@ -392,9 +380,7 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
                 else:
                     avail_date = avail  # type: ignore[unreachable]
                 if avail_date <= today:  # Avoid obviously wrong values.
-                    computed.published = FeedEntryType(
-                        text=AtomFeed._strftime(avail_date)
-                    )
+                    computed.published = FeedEntryType(text=strftime(avail_date))
 
         if not updated and entry.work.last_update_time:
             # NOTE: This is a default that works in most cases. When
@@ -403,14 +389,16 @@ class Annotator(OPDSAnnotator, ToFeedEntry):
             # reliable value that you can use if you want.
             updated = entry.work.last_update_time
         if updated:
-            computed.updated = FeedEntryType(text=AtomFeed._strftime(updated))
+            computed.updated = FeedEntryType(text=strftime(updated))
 
         computed.image_links = image_links
         computed.other_links = other_links
         entry.computed = computed
 
     def annotate_feed(self, feed: FeedData) -> None:
-        pass
+        """Any additional metadata or links that should be added to the feed (not each entry)
+        should be added to the FeedData object in this method.
+        """
 
     def active_licensepool_for(
         self, work: Work, library: Library | None = None

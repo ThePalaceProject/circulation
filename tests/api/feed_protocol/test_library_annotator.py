@@ -25,6 +25,7 @@ from core.feed_protocol.acquisition import OPDSAcquisitionFeed
 from core.feed_protocol.annotator.circulation import LibraryAnnotator
 from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed_protocol.types import FeedData, WorkEntry
+from core.feed_protocol.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Pagination
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.model import (
@@ -43,12 +44,10 @@ from core.opds import UnfulfillableWork
 from core.opds_import import OPDSXMLParser
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
-from core.util.opds_writer import AtomFeed, OPDSFeed
+from core.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.vendor_id import VendorIDFixture
-
-_strftime = AtomFeed._strftime
 
 
 class LibraryAnnotatorFixture:
@@ -1598,7 +1597,7 @@ class TestLibraryAnnotator:
         # Revert the annotator state
         annotator.identifies_patrons = True
 
-        assert _strftime(loan1.start) == fulfill.availability_since
+        assert strftime(loan1.start) == fulfill.availability_since
         assert loan1.end == fulfill.availability_until == None
 
         loan2_links = annotator.acquisition_links(
@@ -1611,8 +1610,8 @@ class TestLibraryAnnotator:
         assert "fulfill" in fulfill.href
         assert "http://opds-spec.org/acquisition" == fulfill.rel
 
-        assert _strftime(loan2.start) == fulfill.availability_since
-        assert _strftime(loan2.end) == fulfill.availability_until
+        assert strftime(loan2.start) == fulfill.availability_since
+        assert strftime(loan2.end) == fulfill.availability_until
 
         # If a book is ready to be fulfilled, but the library has
         # hidden all of its available content types, the fulfill link does
@@ -1670,7 +1669,7 @@ class TestLibraryAnnotator:
         assert "fulfill" in fulfill.href
         assert "http://opds-spec.org/acquisition" == fulfill.rel
 
-        assert _strftime(loan5.start) == fulfill.availability_since
+        assert strftime(loan5.start) == fulfill.availability_since
         # TODO: This currently fails, it should be uncommented when the CM 21 day loan bug is fixed
         # assert loan5.end == availability.until
         assert None == loan5.end

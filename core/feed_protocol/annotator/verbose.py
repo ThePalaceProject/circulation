@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -45,7 +45,7 @@ class VerboseAnnotator(Annotator):
     @classmethod
     def categories(
         cls, work: Work, policy: Optional[PresentationCalculationPolicy] = None
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, List[Dict[str, str]]]:
         """Send out _all_ categories for the work.
 
         (So long as the category type has a URI associated with it in
