@@ -172,21 +172,6 @@ class TestCirculationAPI:
         loan, hold, is_new = self.borrow(circulation_api)
         assert 3 == circulation_api.analytics.count
 
-    def test_borrowing_of_self_hosted_book_succeeds(
-        self, circulation_api: CirculationAPIFixture
-    ):
-        # Arrange
-        circulation_api.pool.self_hosted = True
-
-        # Act
-        loan, hold, is_new = self.borrow(circulation_api)
-
-        # Assert
-        assert True == is_new
-        assert circulation_api.pool == loan.license_pool
-        assert circulation_api.patron == loan.patron
-        assert hold is None
-
     def test_borrowing_of_unlimited_access_book_succeeds(
         self, circulation_api: CirculationAPIFixture
     ):
@@ -1132,14 +1117,9 @@ class TestCirculationAPI:
         result = try_to_fulfill()
         assert fulfillment == result
 
-    @pytest.mark.parametrize(
-        "open_access, self_hosted", [(True, False), (False, True), (False, False)]
-    )
-    def test_revoke_loan(
-        self, circulation_api: CirculationAPIFixture, open_access, self_hosted
-    ):
+    @pytest.mark.parametrize("open_access", [True, False])
+    def test_revoke_loan(self, circulation_api: CirculationAPIFixture, open_access):
         circulation_api.pool.open_access = open_access
-        circulation_api.pool.self_hosted = self_hosted
 
         circulation_api.patron.last_loan_activity_sync = utc_now()
         circulation_api.pool.loan_to(circulation_api.patron)
@@ -1157,14 +1137,9 @@ class TestCirculationAPI:
         assert 1 == circulation_api.analytics.count
         assert CirculationEvent.CM_CHECKIN == circulation_api.analytics.event_type
 
-    @pytest.mark.parametrize(
-        "open_access, self_hosted", [(True, False), (False, True), (False, False)]
-    )
-    def test_release_hold(
-        self, circulation_api: CirculationAPIFixture, open_access, self_hosted
-    ):
+    @pytest.mark.parametrize("open_access", [True, False])
+    def test_release_hold(self, circulation_api: CirculationAPIFixture, open_access):
         circulation_api.pool.open_access = open_access
-        circulation_api.pool.self_hosted = self_hosted
 
         circulation_api.patron.last_loan_activity_sync = utc_now()
         circulation_api.pool.on_hold_to(circulation_api.patron)

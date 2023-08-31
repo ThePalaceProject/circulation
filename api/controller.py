@@ -758,7 +758,6 @@ class CirculationManagerController(BaseCirculationManagerController):
             and license_pool.licenses_available == 0
             and not license_pool.open_access
             and not license_pool.unlimited_access
-            and not license_pool.self_hosted
         ):
             return FORBIDDEN_BY_POLICY.detailed(
                 _("Library policy prohibits the placement of holds."), status_code=403

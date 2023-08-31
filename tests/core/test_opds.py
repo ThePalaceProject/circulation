@@ -1993,7 +1993,6 @@ class TestAcquisitionFeed:
         # Arrange
         edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False
-        pool.self_hosted = False
         pool.unlimited_access = True
 
         # Act
@@ -2020,23 +2019,6 @@ class TestAcquisitionFeed:
         [tag] = tags
         assert "since" in tag.attrib
         assert "until" not in tag.attrib
-
-    def test_license_tags_show_self_hosted_books(self, db: DatabaseTransactionFixture):
-
-        # Arrange
-        edition, pool = db.edition(with_license_pool=True)
-        pool.self_hosted = True
-        pool.open_access = False
-        pool.licenses_available = 0
-        pool.licenses_owned = 0
-
-        # Act
-        tags = AcquisitionFeed.license_tags(pool, None, None)
-
-        # Assert
-        assert 1 == len(tags)
-        assert "status" in tags[0].attrib
-        assert "available" == tags[0].attrib["status"]
 
     def test_single_entry(self, db: DatabaseTransactionFixture):
         session = db.session

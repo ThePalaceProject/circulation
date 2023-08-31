@@ -1216,7 +1216,7 @@ class Work(Base):
                     # We have an unlimited source for this book.
                     # There's no need to keep looking.
                     break
-            elif p.unlimited_access or p.self_hosted:
+            elif p.unlimited_access:
                 active_license_pool = p
             elif (
                 edition and edition.title and p.licenses_owned and p.licenses_owned > 0
@@ -1693,24 +1693,15 @@ class Work(Base):
         if doc.license_pools:
             for item in doc.license_pools:
                 if not (
-                    item.open_access
-                    or item.unlimited_access
-                    or item.self_hosted
-                    or item.licenses_owned > 0
+                    item.open_access or item.unlimited_access or item.licenses_owned > 0
                 ):
                     continue
 
                 lc: dict = {}
                 _set_value(item, "licensepools", lc)
                 # lc["availability_time"] = getattr(item, "availability_time").timestamp()
-                lc["available"] = (
-                    item.unlimited_access
-                    or item.self_hosted
-                    or item.licenses_available > 0
-                )
-                lc["licensed"] = (
-                    item.unlimited_access or item.self_hosted or item.licenses_owned > 0
-                )
+                lc["available"] = item.unlimited_access or item.licenses_available > 0
+                lc["licensed"] = item.unlimited_access or item.licenses_owned > 0
                 if doc.presentation_edition:
                     lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = item.id
@@ -1895,7 +1886,6 @@ class Work(Base):
                         "available",
                         or_(
                             LicensePool.unlimited_access,
-                            LicensePool.self_hosted,
                             LicensePool.licenses_available > 0,
                         ),
                     ),
@@ -1903,7 +1893,6 @@ class Work(Base):
                         "licensed",
                         or_(
                             LicensePool.unlimited_access,
-                            LicensePool.self_hosted,
                             LicensePool.licenses_owned > 0,
                         ),
                     ),
@@ -1922,7 +1911,6 @@ class Work(Base):
                     or_(
                         LicensePool.open_access,
                         LicensePool.unlimited_access,
-                        LicensePool.self_hosted,
                         LicensePool.licenses_owned > 0,
                     ),
                 )

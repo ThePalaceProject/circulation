@@ -1444,37 +1444,7 @@ class TestWork:
         work = db.work(presentation_edition=edition)
 
         pool.open_access = False
-        pool.self_hosted = False
         pool.unlimited_access = True
-
-        # Make sure all of this will show up in a database query.
-        db.session.flush()
-
-        search_doc = work.to_search_document()
-
-        # Each LicensePool for the Work is listed in
-        # the 'licensepools' section.
-        licensepools = search_doc["licensepools"]
-        assert 1 == len(licensepools)
-        assert licensepools[0]["open_access"] == False
-        assert licensepools[0]["available"] == True
-
-    def test_self_hosted_books_are_available_by_default(
-        self, db: DatabaseTransactionFixture
-    ):
-        # Set up an edition and work.
-        edition, pool = db.edition(
-            authors=[
-                db.fresh_str(),
-                db.fresh_str(),
-            ],
-            with_license_pool=True,
-        )
-        work = db.work(presentation_edition=edition)
-
-        pool.licenses_owned = 0
-        pool.licenses_available = 0
-        pool.self_hosted = True
 
         # Make sure all of this will show up in a database query.
         db.session.flush()

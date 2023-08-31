@@ -47,7 +47,6 @@ class AdminSearchController(AdminController):
     def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
         licenses_filter = or_(
             LicensePool.open_access == True,
-            LicensePool.self_hosted == True,
             LicensePool.licenses_owned != 0,
         )
 
