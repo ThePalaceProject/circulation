@@ -60,9 +60,9 @@ class Edition(Base, EditionConstants):
     # large number of authors which breaks the index and causes failures.  What exactly that threshold is
     # I am not entirely certain.  It appears that 2704 is the size that broke the 1/3 of a buffer page
     # limit. However, I'm not sure how the index size is calculated. I experimented
-    # with different values.  Author field values exceeding 13500 characters in length produced the aforementioned
-    # error with an index row size of 2800.  Author field values below 13000 characters seemed to be okay.
-    SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR = 13000
+    # with different values.  Author field values exceeding 2700 characters in length produced the aforementioned
+    # error with an index row size of 2800.  Author field values below 2650 characters seemed to be okay.
+    SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR = 2650
 
     # This Edition is associated with one particular
     # identifier--the one used by its data source to identify

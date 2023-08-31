@@ -1,3 +1,6 @@
+import random
+import string
+
 from core.model import PresentationCalculationPolicy, get_one_or_create
 from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
@@ -329,8 +332,19 @@ class TestEdition:
         self, db: DatabaseTransactionFixture
     ):
         authors = []
+
+        # author names should be unique and not similar to ensure that the
+        # test mirrors the types of long author lists we'd expect in real data.
+        def generate_random_random_author():
+            return "".join(
+                random.choices(
+                    string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                    k=25,
+                )
+            )
+
         for i in range(0, 500):
-            author, ignore = db.contributor(sort_name=f"AuthorLast{i}, AuthorFirst{i}")
+            author, ignore = db.contributor(sort_name=generate_random_random_author())
             authors.append(author.sort_name)
 
         untruncated_authors = ", ".join([x for x in sorted(authors)])
