@@ -293,7 +293,7 @@ class TestLCPAPI:
 
         # 2. Loan from a different collection
         other_collection = lcp_api_fixture.db.collection(
-            protocol=ExternalIntegration.MANUAL
+            protocol=ExternalIntegration.LCP
         )
         other_external_identifier = "2"
         other_license_pool = lcp_api_fixture.db.licensepool(

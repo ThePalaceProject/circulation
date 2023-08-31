@@ -6,14 +6,13 @@ from copy import deepcopy
 import pytest
 
 from core.analytics import Analytics
-from core.classifier import NO_NUMBER, NO_VALUE, Classifier
+from core.classifier import NO_NUMBER, NO_VALUE
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
     CSVMetadataImporter,
     IdentifierData,
     LinkData,
-    MARCExtractor,
     MeasurementData,
     Metadata,
     ReplacementPolicy,
@@ -37,11 +36,10 @@ from core.model import (
 )
 from core.model.configuration import ExternalIntegrationLink
 from core.s3 import MockS3Uploader
-from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.core.mock import DummyHTTPClient, LogCaptureHandler
 from tests.fixtures.csv_files import CSVFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.marc_files import MARCFilesFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
 
 
@@ -1936,48 +1934,3 @@ class TestAssociateWithIdentifiersBasedOnPermanentWorkID:
         # with the identifier of the audiobook
         equivalent_identifiers = [x.output for x in identifier.equivalencies]
         assert [book.primary_identifier] == equivalent_identifiers
-
-
-class TestMARCExtractor:
-    def test_parse_year(self):
-        m = MARCExtractor.parse_year
-        nineteen_hundred = strptime_utc("1900", "%Y")
-        assert nineteen_hundred == m("1900")
-        assert nineteen_hundred == m("1900.")
-        assert None == m("not a year")
-
-    def test_parser(self, marc_files_fixture: MARCFilesFixture):
-        """Parse a MARC file into Metadata objects."""
-
-        file = marc_files_fixture.sample_data("ils_plympton_01.mrc")
-        metadata_records = MARCExtractor.parse(file, "Plympton")
-
-        assert 36 == len(metadata_records)
-
-        record = metadata_records[1]
-        assert "Strange Case of Dr Jekyll and Mr Hyde" == record.title
-        assert "Stevenson, Robert Louis" == record.contributors[0].sort_name
-        assert "Recovering the Classics" in record.publisher
-        assert "9781682280041" == record.primary_identifier.identifier
-        assert Identifier.ISBN == record.primary_identifier.type
-        subjects = record.subjects
-        assert 2 == len(subjects)
-        for s in subjects:
-            assert Classifier.FAST == s.type
-        assert "Canon" in subjects[0].identifier
-        assert Edition.BOOK_MEDIUM == record.medium
-        assert 2015 == record.issued.year
-        assert "eng" == record.language
-
-        assert 1 == len(record.links)
-        assert (
-            "Utterson and Enfield are worried about their friend"
-            in record.links[0].content
-        )
-
-    def test_name_cleanup(self):
-        """Test basic name cleanup techniques."""
-        m = MARCExtractor.name_cleanup
-        assert "Dante Alighieri" == m("Dante Alighieri,   1265-1321, author.")
-        assert "Stevenson, Robert Louis" == m("Stevenson, Robert Louis.")
-        assert "Wells, H.G." == m("Wells,     H.G.")
