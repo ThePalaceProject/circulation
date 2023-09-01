@@ -325,10 +325,11 @@ class Collection(Base, HasSessionCache):
         that someone who borrows a non-open-access item from this
         collection has it for this number of days.
         """
-        return (
+        value = (
             self.default_loan_period_setting(library, medium)
             or self.STANDARD_DEFAULT_LOAN_PERIOD
         )
+        return int(value) if value is not None else None
 
     @classmethod
     def loan_period_key(cls, medium=EditionConstants.BOOK_MEDIUM):
