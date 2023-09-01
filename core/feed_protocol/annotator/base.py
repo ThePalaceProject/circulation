@@ -204,7 +204,7 @@ class ToFeedEntry:
         # Add the audience as a category of schema
         # http://schema.org/audience
         if work.audience:
-            audience_uri = "audience"
+            audience_uri = "http://schema.org/audience"
             categories[audience_uri] = [dict(term=work.audience, label=work.audience)]
 
         # Any book can have a target age, but the target age

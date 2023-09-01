@@ -961,7 +961,7 @@ class OPDSFeedController(CirculationManagerController):
         )
         return feed.as_response(
             max_age=int(max_age) if max_age else None,
-            requested_content_type=flask.request.content_type,
+            requested_content_type=flask.request.headers.get("Accept"),
         )
 
     def navigation(self, lane_identifier):
@@ -1175,7 +1175,9 @@ class OPDSFeedController(CirculationManagerController):
         )
         if isinstance(response, ProblemDetail):
             return response
-        return response.as_response(requested_content_type=flask.request.content_type)
+        return response.as_response(
+            requested_content_type=flask.request.headers.get("Accept")
+        )
 
     def _qa_feed(
         self, feed_factory, feed_title, controller_name, facet_class, worklist_factory
@@ -1469,7 +1471,9 @@ class LoanController(CirculationManagerController):
         # Then make the feed.
         feed = OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
         response = feed.as_response(
-            max_age=0, private=True, requested_content_type=flask.request.content_type
+            max_age=0,
+            private=True,
+            requested_content_type=flask.request.headers.get("Accept"),
         )
 
         last_modified = patron.last_loan_activity_sync
