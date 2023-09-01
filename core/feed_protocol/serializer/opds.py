@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from functools import partial
 from typing import Any, Dict, List, Optional, cast
 
@@ -14,6 +15,7 @@ from core.feed_protocol.types import (
     IndirectAcquisition,
     WorkEntryData,
 )
+from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 
 TAG_MAPPING = {
@@ -154,9 +156,40 @@ class OPDS1Serializer(OPDSFeed):
                 )
             )
         if feed_entry.issued:
-            entry.append(
-                OPDSFeed.E(f"{{{OPDSFeed.DCTERMS_NS}}}issued", feed_entry.issued.text)
-            )
+            # Entry.issued is the date the ebook came out, as distinct
+            # from Entry.published (which may refer to the print edition
+            # or some original edition way back when).
+            #
+            # For Dublin Core 'issued' we use Entry.issued if we have it
+            # and Entry.published if not. In general this means we use
+            # issued date for Gutenberg and published date for other
+            # sources.
+            #
+            # For the date the book was added to our collection we use
+            # atom:published.
+            #
+            # Note: feedparser conflates dc:issued and atom:published, so
+            # it can't be used to extract this information. However, these
+            # tags are consistent with the OPDS spec.
+            issued = feed_entry.issued
+            if isinstance(issued, datetime.datetime) or isinstance(
+                issued, datetime.date
+            ):
+                now = utc_now()
+                today = datetime.date.today()
+                issued_already = False
+                if isinstance(issued, datetime.datetime):
+                    issued_already = issued <= now
+                elif isinstance(issued, datetime.date):
+                    issued_already = issued <= today
+                if issued_already:
+                    entry.append(
+                        OPDSFeed.E(
+                            f"{{{OPDSFeed.DCTERMS_NS}}}issued",
+                            issued.isoformat().split("T")[0],
+                        )
+                    )
+
         if feed_entry.identifier:
             entry.append(OPDSFeed.E("id", feed_entry.identifier))
         if feed_entry.distribution and (

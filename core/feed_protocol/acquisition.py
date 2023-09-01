@@ -131,13 +131,12 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # Facet links
         facet_links = self.facet_links(self.annotator, self._facets)
         for linkdata in facet_links:
-            l = Link.create(**linkdata)
-            self._feed.facet_links.append(l)
+            self._feed.facet_links.append(linkdata)
 
     @classmethod
     def facet_links(
         cls, annotator: CirculationManagerAnnotator, facets: FacetsWithEntryPoint
-    ) -> Generator[Dict[str, str], None, None]:
+    ) -> Generator[Link, None, None]:
         """Create links for this feed's navigational facet groups.
 
         This does not create links for the entry point facet group,
@@ -165,7 +164,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     @classmethod
     def facet_link(
         cls, href: str, title: str, facet_group_name: str, is_active: bool
-    ) -> Dict[str, str]:
+    ) -> Link:
         """Build a set of attributes for a facet link.
 
         :param href: Destination of the link.
@@ -175,7 +174,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         :param is_active: True if this is the client's currently
            selected facet.
 
-        :return: A dictionary of attributes, suitable for passing as
+        :retusrn: A dictionary of attributes, suitable for passing as
             keyword arguments into OPDSFeed.add_link_to_feed.
         """
         args = dict(href=href, title=title)
@@ -183,7 +182,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         args["facetGroup"] = facet_group_name
         if is_active:
             args["activeFacet"] = "true"
-        return args
+        return Link.create(**args)
 
     def as_error_response(self, **kwargs: Any) -> OPDSFeedResponse:
         """Convert this feed into an OPDSFeedResponse that should be treated
@@ -274,8 +273,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         #
         # In OPDS 2 this can become an additional rel value,
         # removing the need for a custom attribute.
-        link["facetGroupType"] = FacetConstants.ENTRY_POINT_REL
-        return Link.create(**link)
+        link.add_attributes({"facetGroupType": FacetConstants.ENTRY_POINT_REL})
+        return link
 
     def add_breadcrumb_links(
         self, lane: WorkList, entrypoint: Optional[Type[EntryPoint]] = None

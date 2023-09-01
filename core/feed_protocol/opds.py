@@ -20,9 +20,6 @@ class BaseOPDSFeed(FeedInterface):
         self._serializer = OPDS1Serializer()
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def generate_feed(self) -> None:
-        raise NotImplementedError()
-
     def serialize(self) -> bytes:
         return self._serializer.serialize_feed(self._feed)
 

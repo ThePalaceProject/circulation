@@ -9,7 +9,7 @@ import urllib.request
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import has_request_context, url_for
+from flask import url_for
 from sqlalchemy.orm import Session
 
 from api.adobe_vendor_id import AuthdataUtility
@@ -190,7 +190,7 @@ class CirculationManagerAnnotator(Annotator):
         active_loans_by_work: Optional[Dict[Work, Loan]] = None,
         active_holds_by_work: Optional[Dict[Work, Hold]] = None,
         active_fulfillments_by_work: Optional[Dict[Work, Any]] = None,
-        hidden_content_types: List[str] = [],
+        hidden_content_types: Optional[List[str]] = None,
     ) -> None:
         if lane:
             logger_name = "Circulation Manager Annotator for %s" % lane.display_name
@@ -201,7 +201,7 @@ class CirculationManagerAnnotator(Annotator):
         self.active_loans_by_work = active_loans_by_work or {}
         self.active_holds_by_work = active_holds_by_work or {}
         self.active_fulfillments_by_work = active_fulfillments_by_work or {}
-        self.hidden_content_types = hidden_content_types
+        self.hidden_content_types = hidden_content_types or []
         self.facet_view = "feed"
 
     def is_work_entry_solo(self, work: Work) -> bool:
@@ -239,32 +239,7 @@ class CirculationManagerAnnotator(Annotator):
         return self.feed_url(lane)
 
     def url_for(self, *args: Any, **kwargs: Any) -> str:
-        if not has_request_context():
-            new_kwargs = {}
-            for k, v in list(kwargs.items()):
-                if not k.startswith("_"):
-                    new_kwargs[k] = v
-            return self.test_url_for(False, *args, **new_kwargs)
-        else:
-            return url_for(*args, **kwargs)
-
-    def test_url_for(self, cdn: bool = False, *args: Any, **kwargs: Any) -> str:
-        # Generate a plausible-looking URL that doesn't depend on Flask
-        # being set up.
-        if cdn:
-            host = "cdn"
-        else:
-            host = "host"
-        url = ("http://%s/" % host) + "/".join(args)
-        connector = "?"
-        for k, v in sorted(kwargs.items()):
-            if v is None:
-                v = ""
-            v = urllib.parse.quote(str(v))
-            k = urllib.parse.quote(str(k))
-            url += connector + f"{k}={v}"
-            connector = "&"
-        return url
+        return url_for(*args, **kwargs)
 
     def facet_url(self, facets: Facets) -> str:
         return self.feed_url(self.lane, facets=facets, default_route=self.facet_view)
@@ -427,7 +402,9 @@ class CirculationManagerAnnotator(Annotator):
         can_hold: bool = True,
         can_revoke_hold: bool = True,
         set_mechanism_at_borrow: bool = False,
-        direct_fulfillment_delivery_mechanisms: List[LicensePoolDeliveryMechanism] = [],
+        direct_fulfillment_delivery_mechanisms: Optional[
+            List[LicensePoolDeliveryMechanism]
+        ] = None,
         add_open_access_links: bool = True,
     ) -> List[Acquisition]:
         """Generate a number of <link> tags that enumerate all acquisition
@@ -556,7 +533,10 @@ class CirculationManagerAnnotator(Annotator):
                     )
 
         open_access_links: List[Optional[Acquisition]] = []
-        if active_license_pool is not None:
+        if (
+            active_license_pool is not None
+            and direct_fulfillment_delivery_mechanisms is not None
+        ):
             for lpdm in direct_fulfillment_delivery_mechanisms:
                 # These links use the OPDS 'open-access' link relation not
                 # because they are open access in the licensing sense, but

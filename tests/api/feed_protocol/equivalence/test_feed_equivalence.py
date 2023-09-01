@@ -20,6 +20,7 @@ from core.opds import NavigationFeed as OldNavigationFeed
 from tests.api.feed_protocol.test_library_annotator import (  # noqa
     LibraryAnnotatorFixture,
     annotator_fixture,
+    patch_url_for,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -63,7 +64,7 @@ def assert_equal_xmls(xml1: str | etree._Element, xml2: str | etree._Element):
             assert_equal_xmls(tag1[0], tag2[0])
             break
         else:
-            assert False, (format_tags([tag1], tags2), f"Did not find {tag1[1:]}")
+            assert False, format_tags([tag1], tags2)
 
 
 class TestFeedEquivalence:
