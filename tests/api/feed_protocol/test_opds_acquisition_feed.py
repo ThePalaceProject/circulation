@@ -35,6 +35,7 @@ from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
+from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
 
@@ -925,7 +926,9 @@ class TestOPDSAcquisitionFeed:
         assert Facets.GROUP_DISPLAY_TITLES[Facets.COLLECTION_FACET_GROUP_NAME] == group
         assert True == selected
 
-    def test_active_loans_for_with_holds(self, db: DatabaseTransactionFixture):
+    def test_active_loans_for_with_holds(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         patron = db.patron()
         work = db.work(with_license_pool=True)
         hold, _ = work.active_license_pool().on_hold_to(patron)
