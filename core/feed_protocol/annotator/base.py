@@ -27,7 +27,6 @@ from core.model.library import Library
 from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink
 from core.model.work import Work
-from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import AtomFeed, OPDSFeed
 
 
@@ -330,36 +329,8 @@ class Annotator(ToFeedEntry):
         if edition.imprint:
             computed.imprint = FeedEntryType(text=edition.imprint)
 
-        # Entry.issued is the date the ebook came out, as distinct
-        # from Entry.published (which may refer to the print edition
-        # or some original edition way back when).
-        #
-        # For Dublin Core 'issued' we use Entry.issued if we have it
-        # and Entry.published if not. In general this means we use
-        # issued date for Gutenberg and published date for other
-        # sources.
-        #
-        # For the date the book was added to our collection we use
-        # atom:published.
-        #
-        # Note: feedparser conflates dc:issued and atom:published, so
-        # it can't be used to extract this information. However, these
-        # tags are consistent with the OPDS spec.
-        issued = edition.issued or edition.published
-        if isinstance(issued, datetime.datetime) or isinstance(issued, datetime.date):
-            now = utc_now()
-            today = datetime.date.today()
-            issued_already = False
-            if isinstance(issued, datetime.datetime):
-                issued_already = issued <= now
-            elif isinstance(issued, datetime.date):
-                issued_already = issued <= today
-            if issued_already:
-                # Use datetime.isoformat instead of datetime.strftime because
-                # strftime only works on dates after 1890, and we have works
-                # that were issued much earlier than that.
-                # TODO: convert to local timezone, not that it matters much.
-                computed.issued = FeedEntryType(text=issued.isoformat().split("T")[0])
+        if edition.issued or edition.published:
+            computed.issued = edition.issued or edition.published
 
         if identifier:
             computed.identifier = identifier.urn

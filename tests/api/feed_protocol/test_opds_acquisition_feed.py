@@ -468,8 +468,7 @@ class TestOPDSAcquisitionFeed:
         assert entry.computed is not None
         assert entry.computed.issued is not None
 
-        expected = str(work.presentation_edition.issued.date())
-        assert expected == entry.computed.issued.text
+        assert work.presentation_edition.issued == entry.computed.issued
 
     def test_error_when_work_has_no_identifier(self, db: DatabaseTransactionFixture):
         session = db.session

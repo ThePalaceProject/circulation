@@ -6,6 +6,7 @@ from core.lane import Pagination
 from core.model.configuration import ExternalIntegration, ExternalIntegrationLink
 from core.model.datasource import DataSource
 from core.model.measurement import Measurement
+from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -19,7 +20,9 @@ class TestOPDS:
                 r.append(l)
         return r
 
-    def test_feed_includes_staff_rating(self, db: DatabaseTransactionFixture):
+    def test_feed_includes_staff_rating(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
@@ -41,7 +44,9 @@ class TestOPDS:
         assert 3 == float(entry.computed.ratings[1].ratingValue)  # type: ignore[attr-defined]
         assert Measurement.RATING == entry.computed.ratings[1].additionalType  # type: ignore[attr-defined]
 
-    def test_feed_includes_refresh_link(self, db: DatabaseTransactionFixture):
+    def test_feed_includes_refresh_link(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         lp.suppressed = False
@@ -62,7 +67,9 @@ class TestOPDS:
             if x.rel == "http://librarysimplified.org/terms/rel/refresh"
         ]
 
-    def test_feed_includes_suppress_link(self, db: DatabaseTransactionFixture):
+    def test_feed_includes_suppress_link(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         lp.suppressed = False
@@ -113,7 +120,9 @@ class TestOPDS:
         ]
         assert 0 == len(suppress_links)
 
-    def test_feed_includes_edit_link(self, db: DatabaseTransactionFixture):
+    def test_feed_includes_edit_link(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
 
@@ -128,7 +137,9 @@ class TestOPDS:
         [edit_link] = [x for x in entry.computed.other_links if x.rel == "edit"]
         assert edit_link.href and lp.identifier.identifier in edit_link.href
 
-    def test_feed_includes_change_cover_link(self, db: DatabaseTransactionFixture):
+    def test_feed_includes_change_cover_link(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
         library = db.default_library()
@@ -187,7 +198,9 @@ class TestOPDS:
             and lp.identifier.identifier in change_cover_link.href
         )
 
-    def test_suppressed_feed(self, db: DatabaseTransactionFixture):
+    def test_suppressed_feed(
+        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+    ):
         # Test the ability to show a paginated feed of suppressed works.
 
         work1 = db.work(with_open_access_download=True)

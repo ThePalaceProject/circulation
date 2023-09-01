@@ -462,7 +462,7 @@ class TestAnnotator:
         assert data.summary and data.summary.text == "Summary"
         assert data.summary and data.summary.get("type") == "html"
         assert data.publisher == FeedEntryType(text="publisher")
-        assert data.issued == FeedEntryType(text=edition.issued.isoformat())
+        assert data.issued == edition.issued
 
         # Missing values
         assert data.language == None

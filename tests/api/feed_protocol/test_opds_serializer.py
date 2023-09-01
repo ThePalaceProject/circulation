@@ -1,3 +1,6 @@
+import datetime
+
+import pytz
 from lxml import etree
 
 from core.feed_protocol.serializer.opds import OPDS1Serializer
@@ -116,7 +119,7 @@ class TestOPDSSerializer:
             summary=FeedEntryType(text="summary"),
             language=FeedEntryType(text="language"),
             publisher=FeedEntryType(text="publisher"),
-            issued=FeedEntryType(text="issued"),
+            issued=datetime.datetime(2020, 2, 2, tzinfo=pytz.UTC),
             published=FeedEntryType(text="published"),
             updated=FeedEntryType(text="updated"),
             title=FeedEntryType(text="title"),
@@ -163,7 +166,7 @@ class TestOPDSSerializer:
 
         child = element.findall(f"{{{OPDSFeed.DCTERMS_NS}}}issued")
         assert len(child) == 1
-        assert child[0].text == data.issued.text
+        assert child[0].text == data.issued.date().isoformat()
 
         child = element.findall(f"published")
         assert len(child) == 1

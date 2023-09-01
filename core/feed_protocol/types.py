@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Any, Dict, Generator, List, Optional, Tuple, cast
 
 from typing_extensions import Self
@@ -62,7 +65,7 @@ class FeedEntryType(BaseModel):
         for name, data in attrs.items():
             setattr(self, name, data)
 
-    def children(self) -> Generator[Tuple[str, "FeedEntryType"], None, None]:
+    def children(self) -> Generator[Tuple[str, FeedEntryType], None, None]:
         """Yield all FeedEntryType attributes"""
         for name, value in self:
             if isinstance(value, self.__class__):
@@ -100,7 +103,7 @@ class Link(FeedEntryType):
 @dataclass
 class IndirectAcquisition(BaseModel):
     type: Optional[str] = None
-    children: List["IndirectAcquisition"] = field(default_factory=list)
+    children: List[IndirectAcquisition] = field(default_factory=list)
 
 
 @dataclass
@@ -142,11 +145,11 @@ class WorkEntryData(BaseModel):
     additionalType: Optional[str] = None
     identifier: Optional[str] = None
     pwid: Optional[str] = None
+    issued: Optional[datetime | date] = None
 
     summary: Optional[FeedEntryType] = None
     language: Optional[FeedEntryType] = None
     publisher: Optional[FeedEntryType] = None
-    issued: Optional[FeedEntryType] = None
     published: Optional[FeedEntryType] = None
     updated: Optional[FeedEntryType] = None
     title: Optional[FeedEntryType] = None

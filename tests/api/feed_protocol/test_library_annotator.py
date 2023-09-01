@@ -45,6 +45,7 @@ from core.opds_import import OPDSXMLParser
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
+from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.vendor_id import VendorIDFixture
@@ -77,7 +78,9 @@ class LibraryAnnotatorFixture:
 
 
 @pytest.fixture(scope="function")
-def annotator_fixture(db: DatabaseTransactionFixture) -> LibraryAnnotatorFixture:
+def annotator_fixture(
+    db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+) -> LibraryAnnotatorFixture:
     return LibraryAnnotatorFixture(db)
 
 
