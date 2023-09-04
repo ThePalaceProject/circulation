@@ -14,4 +14,7 @@ wait_for_runit "$container"
 
 # Make sure that cron is running in the scripts container
 check_service_status "$container" /etc/service/cron
+
+# Ensure the installed crontab has no problems
+check_crontab "$container"
 exit 0
