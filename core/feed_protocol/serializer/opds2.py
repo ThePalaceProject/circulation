@@ -93,7 +93,7 @@ class OPDS2Serializer:
                     {
                         "scheme": subject.scheme,  # type: ignore[attr-defined]
                         "name": subject.label,  # type: ignore[attr-defined]
-                        "sortAs": subject.label,  # type: ignore[attr-defined] # TODO: Change this!
+                        "sortAs": subject.label,  # type: ignore[attr-defined] # Same as above, don't think we have an alternate
                     }
                 )
             metadata["subject"] = subjects
