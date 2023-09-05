@@ -11,12 +11,9 @@ from api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
     COLLECTION_NAME_ALREADY_IN_USE,
     INCOMPLETE_CONFIGURATION,
-    INTEGRATION_GOAL_CONFLICT,
     MISSING_COLLECTION,
     MISSING_COLLECTION_NAME,
-    MISSING_INTEGRATION,
     MISSING_PARENT,
-    MISSING_SERVICE,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
@@ -27,13 +24,11 @@ from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.model import (
     Collection,
     ConfigurationSetting,
-    ExternalIntegration,
     Library,
     get_one,
     get_one_or_create,
 )
 from core.model.admin import Admin
-from core.model.configuration import ExternalIntegrationLink
 from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail, ProblemError
 
@@ -98,9 +93,7 @@ class CollectionSettingsController(SettingsController):
                 collection_dict[
                     "settings"
                 ] = collection_object.integration_configuration.settings_dict
-                self.load_settings(
-                    protocol["settings"], collection_object, collection_dict["settings"]
-                )
+                self.load_settings(collection_object, collection_dict["settings"])
             collection_dict["self_test_results"] = self._get_prior_test_results(
                 collection_object
             )
@@ -146,29 +139,11 @@ class CollectionSettingsController(SettingsController):
 
         return libraries
 
-    def load_settings(self, protocol_settings, collection_object, collection_settings):
+    def load_settings(self, collection_object, collection_settings):
         """Compile the information about the collection that corresponds to the settings
         externally imposed by the collection's protocol."""
 
         settings = collection_settings
-        for protocol_setting in protocol_settings:
-            if not protocol_setting:
-                continue
-            key = protocol_setting.get("key")
-            if not collection_settings or key not in collection_settings:
-                if key.endswith("mirror_integration_id"):
-                    storage_integration = get_one(
-                        self._db,
-                        ExternalIntegrationLink,
-                        external_integration_id=collection_object.external_integration_id,
-                        # either 'books_mirror' or 'covers_mirror'
-                        purpose=key.rsplit("_", 2)[0],
-                    )
-                    if storage_integration:
-                        value = str(storage_integration.other_integration_id)
-                    else:
-                        value = self.NO_MIRROR_INTEGRATION
-                    settings[key] = value
         settings["external_account_id"] = collection_object.external_account_id
 
     def find_protocol_class(self, collection_object):
@@ -327,16 +302,6 @@ class CollectionSettingsController(SettingsController):
                 if error:
                     return error
                 collection.external_account_id = value
-            elif key.endswith("mirror_integration_id") and value:
-                external_integration_link = self._set_external_integration_link(
-                    self._db,
-                    key,
-                    value,
-                    collection,
-                )
-
-                if isinstance(external_integration_link, ProblemDetail):
-                    return external_integration_link
             elif value is not None:
                 # Only if the key was present in the request should we add it
                 collection_settings[key] = value
@@ -355,49 +320,6 @@ class CollectionSettingsController(SettingsController):
             return ex.problem_detail
         collection.integration_configuration.settings_dict = validated_settings.dict()
         return None
-
-    def _set_external_integration_link(
-        self,
-        _db,
-        key,
-        value,
-        collection,
-    ):
-        """Find or create a ExternalIntegrationLink and either delete it
-        or update the other external integration it links to.
-        """
-        collection_service = get_one(
-            _db, ExternalIntegration, id=collection.external_integration_id
-        )
-
-        storage_service = None
-        other_integration_id = None
-
-        purpose = key.rsplit("_", 2)[0]
-        external_integration_link, ignore = get_one_or_create(
-            _db,
-            ExternalIntegrationLink,
-            library_id=None,
-            external_integration_id=collection_service.id,
-            purpose=purpose,
-        )
-        if not external_integration_link:
-            return MISSING_INTEGRATION
-
-        if value == self.NO_MIRROR_INTEGRATION:
-            _db.delete(external_integration_link)
-        else:
-            storage_service = get_one(_db, ExternalIntegration, id=value)
-            if storage_service:
-                if storage_service.goal != ExternalIntegration.STORAGE_GOAL:
-                    return INTEGRATION_GOAL_CONFLICT
-                other_integration_id = storage_service.id
-            else:
-                return MISSING_SERVICE
-
-        external_integration_link.other_integration_id = other_integration_id
-
-        return external_integration_link
 
     def process_libraries(self, protocol, collection):
         """Go through the libraries that the user is trying to associate with this collection;
