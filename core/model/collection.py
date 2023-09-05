@@ -329,7 +329,7 @@ class Collection(Base, HasSessionCache):
             self.default_loan_period_setting(library, medium)
             or self.STANDARD_DEFAULT_LOAN_PERIOD
         )
-        return int(value) if value is not None else None
+        return value
 
     @classmethod
     def loan_period_key(cls, medium=EditionConstants.BOOK_MEDIUM):

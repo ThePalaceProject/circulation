@@ -333,12 +333,6 @@ class TestCollection:
         example_collection_fixture.set_default_loan_period(audio, 606, library=library)
         assert 606 == test_collection.default_loan_period(library, audio)
 
-        # String values should be coerced to int
-        example_collection_fixture.set_default_loan_period(
-            audio, "690", library=library
-        )
-        assert 690 == test_collection.default_loan_period(library, audio)
-
     def test_default_reservation_period(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
