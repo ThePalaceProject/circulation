@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Dict, Optional, Protocol
 
 import pytest
 from pytest_alembic import MigrationContext
@@ -12,12 +12,12 @@ from tests.migration.conftest import CreateLibrary
 @dataclass
 class IntegrationConfiguration:
     id: int
-    settings: dict
+    settings: Dict[str, Any]
 
 
 class CreateConfiguration(Protocol):
     def __call__(
-        self, connection: Connection, protocol: str, name: str, settings: dict
+        self, connection: Connection, protocol: str, name: str, settings: Dict[str, Any]
     ) -> IntegrationConfiguration:
         ...
 
@@ -25,7 +25,7 @@ class CreateConfiguration(Protocol):
 @pytest.fixture
 def create_integration_configuration() -> CreateConfiguration:
     def insert_config(
-        connection: Connection, protocol: str, name: str, settings: dict
+        connection: Connection, protocol: str, name: str, settings: Dict[str, Any]
     ) -> IntegrationConfiguration:
         connection.execute(
             "INSERT INTO integration_configurations (goal, protocol, name, settings, self_test_results) VALUES (%s, %s, %s, %s, '{}')",
@@ -40,14 +40,14 @@ def create_integration_configuration() -> CreateConfiguration:
 
 
 def fetch_config(
-    connection: Connection, name=None, parent_id=None
+    connection: Connection, name: Optional[str] = None, parent_id: Optional[int] = None
 ) -> IntegrationConfiguration:
     if name is not None:
-        _id, settings = connection.execute(
+        _id, settings = connection.execute(  # type: ignore[misc]
             "SELECT id, settings FROM integration_configurations where name=%s", name
         ).fetchone()
     else:
-        _id, settings = connection.execute(
+        _id, settings = connection.execute(  # type: ignore[misc]
             "SELECT parent_id, settings FROM integration_library_configurations where parent_id=%s",
             parent_id,
         ).fetchone()
@@ -62,7 +62,7 @@ def test_settings_coersion(
     alembic_engine: Engine,
     create_library: CreateLibrary,
     create_integration_configuration: CreateConfiguration,
-):
+) -> None:
     alembic_runner.migrate_down_to(MIGRATION_UID)
     alembic_runner.migrate_down_one()
 

@@ -6,6 +6,7 @@ Create Date: 2023-09-05 06:40:35.739869+00:00
 
 """
 import json
+from typing import Callable, Dict
 
 from alembic import op
 
@@ -21,7 +22,7 @@ def _bool(value):
 
 
 # All the settings types that have non-str types
-ALL_SETTING_TYPES = {
+ALL_SETTING_TYPES: Dict[str, Callable] = {
     "verify_certificate": _bool,
     "default_reservation_period": _bool,
     "loan_limit": int,
@@ -34,6 +35,7 @@ ALL_SETTING_TYPES = {
 
 def _coerce_types(settings: dict) -> None:
     """Coerce the types, in-place"""
+    setting_type: Callable
     for setting_name, setting_type in ALL_SETTING_TYPES.items():
         if setting_name in settings:
             settings[setting_name] = setting_type(settings[setting_name])
