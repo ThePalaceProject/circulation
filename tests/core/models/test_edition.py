@@ -344,7 +344,14 @@ class TestEdition:
             )
 
         for i in range(0, 500):
-            author, ignore = db.contributor(sort_name=generate_random_random_author())
+            author, ignore = db.contributor(
+                sort_name=", ".join(
+                    [
+                        generate_random_random_author(),
+                        generate_random_random_author(),
+                    ]
+                )
+            )
             authors.append(author.sort_name)
 
         untruncated_authors = ", ".join([x for x in sorted(authors)])
@@ -383,8 +390,9 @@ class TestEdition:
             assert not calculated_str.endswith("...")
             assert (
                 len(original_str)
-                < Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+                <= Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
             )
+            assert not original_str.endswith("...")
 
         do_check(author, wr.author)
         do_check(sort_author, wr.sort_author)
