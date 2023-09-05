@@ -325,26 +325,6 @@ class TestAdminWork:
         )
         fixture.assert_supported_methods(url, "GET")
 
-    def test_preview_book_cover(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/preview_book_cover"
-        fixture.assert_authenticated_request_calls(
-            url,
-            fixture.controller.preview_book_cover,  # type: ignore
-            "<identifier_type>",
-            "an/identifier",
-            http_method="POST",
-        )
-
-    def test_change_book_cover(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/change_book_cover"
-        fixture.assert_authenticated_request_calls(
-            url,
-            fixture.controller.change_book_cover,  # type: ignore
-            "<identifier_type>",
-            "an/identifier",
-            http_method="POST",
-        )
-
     def test_custom_lists(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/lists"
         fixture.assert_authenticated_request_calls(

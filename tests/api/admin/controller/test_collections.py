@@ -10,11 +10,9 @@ from api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
     COLLECTION_NAME_ALREADY_IN_USE,
     INCOMPLETE_CONFIGURATION,
-    INTEGRATION_GOAL_CONFLICT,
     MISSING_COLLECTION,
     MISSING_COLLECTION_NAME,
     MISSING_PARENT,
-    MISSING_SERVICE,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
@@ -29,8 +27,6 @@ from core.model import (
     create,
     get_one,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import S3UploaderConfiguration
 from core.selftest import HasSelfTests
 from tests.fixtures.api_admin import SettingsControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -54,127 +50,6 @@ class TestCollectionSettings:
             assert ExternalIntegration.OVERDRIVE in names
             assert ExternalIntegration.OPDS_IMPORT in names
 
-    def test_collections_get_collection_protocols(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        old_prior_test_results = HasSelfTests.prior_test_results
-        setattr(
-            HasSelfTests,
-            "prior_test_results",
-            settings_ctrl_fixture.mock_prior_test_results,
-        )
-
-        l1 = settings_ctrl_fixture.ctrl.db.default_library()
-        [c1] = l1.collections
-
-        # When there is no storage integration configured,
-        # the protocols will not offer a 'mirror_integration_id'
-        # setting for covers or books.
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
-            protocols = response.get("protocols")
-            for protocol in protocols:
-                assert all(
-                    [
-                        not s.get("key").endswith("mirror_integration_id")
-                        for s in protocol["settings"]
-                        if s
-                    ]
-                )
-
-        # When storage integrations are configured, each protocol will
-        # offer a 'mirror_integration_id' setting for covers and books.
-        storage1 = settings_ctrl_fixture.ctrl.db.external_integration(
-            name="integration 1",
-            protocol=ExternalIntegration.S3,
-            goal=ExternalIntegration.STORAGE_GOAL,
-            settings={
-                S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "covers",
-                S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY: "open-access-books",
-                S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY: "protected-access-books",
-            },
-        )
-        storage2 = settings_ctrl_fixture.ctrl.db.external_integration(
-            name="integration 2",
-            protocol="Some other protocol",
-            goal=ExternalIntegration.STORAGE_GOAL,
-            settings={
-                S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "covers",
-                S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY: "open-access-books",
-                S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY: "protected-access-books",
-            },
-        )
-
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            controller = (
-                settings_ctrl_fixture.manager.admin_collection_settings_controller
-            )
-            response = controller.process_collections()
-            protocols = response.get("protocols")
-            for protocol in protocols:
-                mirror_settings = [
-                    x
-                    for x in protocol["settings"]
-                    if x.get("key").endswith("mirror_integration_id")
-                ]
-
-                covers_mirror = mirror_settings[0]
-                open_access_books_mirror = mirror_settings[1]
-                protected_access_books_mirror = mirror_settings[2]
-                assert "Covers Mirror" == covers_mirror["label"]
-                assert "Open Access Books Mirror" == open_access_books_mirror["label"]
-                assert (
-                    "Protected Access Books Mirror"
-                    == protected_access_books_mirror["label"]
-                )
-                covers_mirror_option = covers_mirror["options"]
-                open_books_mirror_option = open_access_books_mirror["options"]
-                protected_books_mirror_option = protected_access_books_mirror["options"]
-
-                # The first option is to disable mirroring on this
-                # collection altogether.
-                no_mirror_covers = covers_mirror_option[0]
-                no_mirror_open_books = open_books_mirror_option[0]
-                no_mirror_protected_books = protected_books_mirror_option[0]
-                assert controller.NO_MIRROR_INTEGRATION == no_mirror_covers["key"]
-                assert controller.NO_MIRROR_INTEGRATION == no_mirror_open_books["key"]
-                assert (
-                    controller.NO_MIRROR_INTEGRATION == no_mirror_protected_books["key"]
-                )
-
-                # The other options are to use one of the storage
-                # integrations to do the mirroring.
-                use_covers_mirror = [
-                    (x["key"], x["label"]) for x in covers_mirror_option[1:]
-                ]
-                use_open_books_mirror = [
-                    (x["key"], x["label"]) for x in open_books_mirror_option[1:]
-                ]
-                use_protected_books_mirror = [
-                    (x["key"], x["label"]) for x in protected_books_mirror_option[1:]
-                ]
-
-                # Expect to have two separate mirrors
-                expect_covers = [
-                    (str(integration.id), integration.name)
-                    for integration in (storage1, storage2)
-                ]
-                assert expect_covers == use_covers_mirror
-                expect_open_books = [
-                    (str(integration.id), integration.name)
-                    for integration in (storage1, storage2)
-                ]
-                assert expect_open_books == use_open_books_mirror
-                expect_protected_books = [
-                    (str(integration.id), integration.name)
-                    for integration in (storage1, storage2)
-                ]
-                assert expect_protected_books == use_protected_books_mirror
-
-        setattr(HasSelfTests, "prior_test_results", old_prior_test_results)
-
     def test_collections_get_collections_with_multiple_collections(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
@@ -191,16 +66,6 @@ class TestCollectionSettings:
         c2 = settings_ctrl_fixture.ctrl.db.collection(
             name="Collection 2",
             protocol=ExternalIntegration.OVERDRIVE,
-        )
-        c2_storage = settings_ctrl_fixture.ctrl.db.external_integration(
-            protocol=ExternalIntegration.S3, goal=ExternalIntegration.STORAGE_GOAL
-        )
-        c2_external_integration_link = (
-            settings_ctrl_fixture.ctrl.db.external_integration_link(
-                integration=c2.external_integration,
-                other_integration=c2_storage,
-                purpose=ExternalIntegrationLink.COVERS,
-            )
         )
 
         c2.external_account_id = "1234"
@@ -265,24 +130,6 @@ class TestCollectionSettings:
             settings1 = coll1.get("settings", {})
             settings2 = coll2.get("settings", {})
             settings3 = coll3.get("settings", {})
-
-            assert controller.NO_MIRROR_INTEGRATION == settings1.get(
-                "covers_mirror_integration_id"
-            )
-            assert controller.NO_MIRROR_INTEGRATION == settings1.get(
-                "books_mirror_integration_id"
-            )
-            # Only added an integration for S3 storage for covers.
-            assert str(c2_storage.id) == settings2.get("covers_mirror_integration_id")
-            assert controller.NO_MIRROR_INTEGRATION == settings2.get(
-                "books_mirror_integration_id"
-            )
-            assert controller.NO_MIRROR_INTEGRATION == settings3.get(
-                "covers_mirror_integration_id"
-            )
-            assert controller.NO_MIRROR_INTEGRATION == settings3.get(
-                "books_mirror_integration_id"
-            )
 
             assert c1.external_account_id == settings1.get("external_account_id")
             assert c2.external_account_id == settings2.get("external_account_id")
@@ -814,101 +661,6 @@ class TestCollectionSettings:
             ("password", "password"),
             ("url", "http://axis.test/"),
         ]
-
-    def test_collections_post_edit_mirror_integration(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        # The collection exists.
-        collection = settings_ctrl_fixture.ctrl.db.collection(
-            name="Collection 1", protocol=ExternalIntegration.AXIS_360
-        )
-
-        # There is a storage integration not associated with the collection.
-        storage = settings_ctrl_fixture.ctrl.db.external_integration(
-            protocol=ExternalIntegration.S3, goal=ExternalIntegration.STORAGE_GOAL
-        )
-
-        # It's possible to associate the storage integration with the
-        # collection for either a books or covers mirror.
-        base_request = self._base_collections_post_request(collection)
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                base_request + [("books_mirror_integration_id", storage.id)]
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
-            assert response.status_code == 200
-
-            # There is an external integration link to associate the collection's
-            # external integration with the storage integration for a books mirror.
-            external_integration_link = get_one(
-                settings_ctrl_fixture.ctrl.db.session,
-                ExternalIntegrationLink,
-                external_integration_id=collection.external_integration.id,
-            )
-            assert isinstance(external_integration_link, ExternalIntegrationLink)
-            assert storage.id == external_integration_link.other_integration_id
-
-        # It's possible to unset the mirror integration.
-        controller = settings_ctrl_fixture.manager.admin_collection_settings_controller
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                base_request
-                + [
-                    (
-                        "books_mirror_integration_id",
-                        str(controller.NO_MIRROR_INTEGRATION),
-                    )
-                ]
-            )
-            response = controller.process_collections()
-            assert response.status_code == 200
-            external_integration_link = get_one(
-                settings_ctrl_fixture.ctrl.db.session,
-                ExternalIntegrationLink,
-                external_integration_id=collection.external_integration.id,
-            )
-            assert None == external_integration_link
-
-        # Providing a nonexistent integration ID gives an error.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                base_request + [("books_mirror_integration_id", -200)]
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
-            assert response == MISSING_SERVICE
-
-    def test_cannot_set_non_storage_integration_as_mirror_integration(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        # The collection exists.
-        collection = settings_ctrl_fixture.ctrl.db.collection(
-            name="Collection 1", protocol=ExternalIntegration.AXIS_360
-        )
-
-        # There is a storage integration not associated with the collection,
-        # which makes it possible to associate storage integrations
-        # with collections through the collections controller.
-        storage = settings_ctrl_fixture.ctrl.db.external_integration(
-            protocol=ExternalIntegration.S3, goal=ExternalIntegration.STORAGE_GOAL
-        )
-
-        # Trying to set a non-storage integration (such as the
-        # integration associated with the collection's licenses) as
-        # the collection's mirror integration gives an error.
-        base_request = self._base_collections_post_request(collection)
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                base_request
-                + [("books_mirror_integration_id", collection.external_integration.id)]
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
-            assert response == INTEGRATION_GOAL_CONFLICT
 
     def test_collections_post_edit_library_specific_configuration(
         self, settings_ctrl_fixture: SettingsControllerFixture
