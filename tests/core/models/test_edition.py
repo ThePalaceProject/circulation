@@ -335,7 +335,7 @@ class TestEdition:
 
         # author names should be unique and not similar to ensure that the
         # test mirrors the types of long author lists we'd expect in real data.
-        def generate_random_random_author():
+        def generate_random_author():
             return "".join(
                 random.choices(
                     string.ascii_uppercase + string.ascii_lowercase + string.digits,
@@ -347,8 +347,8 @@ class TestEdition:
             author, ignore = db.contributor(
                 sort_name=", ".join(
                     [
-                        generate_random_random_author(),
-                        generate_random_random_author(),
+                        generate_random_author(),
+                        generate_random_author(),
                     ]
                 )
             )
