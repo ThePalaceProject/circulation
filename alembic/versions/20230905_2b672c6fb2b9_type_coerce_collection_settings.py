@@ -6,7 +6,9 @@ Create Date: 2023-09-05 06:40:35.739869+00:00
 
 """
 import json
-from typing import Callable, Dict
+from typing import Any, Callable, Dict, Type
+
+from pydantic import parse_obj_as
 
 from alembic import op
 
@@ -22,9 +24,9 @@ def _bool(value):
 
 
 # All the settings types that have non-str types
-ALL_SETTING_TYPES: Dict[str, Callable] = {
-    "verify_certificate": _bool,
-    "default_reservation_period": _bool,
+ALL_SETTING_TYPES: Dict[str, Type[Any]] = {
+    "verify_certificate": bool,
+    "default_reservation_period": bool,
     "loan_limit": int,
     "hold_limit": int,
     "max_retry_count": int,
@@ -38,7 +40,7 @@ def _coerce_types(settings: dict) -> None:
     setting_type: Callable
     for setting_name, setting_type in ALL_SETTING_TYPES.items():
         if setting_name in settings:
-            settings[setting_name] = setting_type(settings[setting_name])
+            settings[setting_name] = parse_obj_as(setting_type, settings[setting_name])
 
 
 def upgrade() -> None:
