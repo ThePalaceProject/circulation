@@ -18,7 +18,6 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.model import ExternalIntegration
-from core.s3 import S3UploaderConfiguration
 from core.util.problem_detail import ProblemError
 from tests.fixtures.api_admin import AdminControllerFixture, SettingsControllerFixture
 
@@ -134,86 +133,6 @@ class TestSettingsController:
         i2, is_new2 = m(protocol_definitions, "allow one", goal)
         assert False == is_new2
         assert DUPLICATE_INTEGRATION == i2
-
-    def test__mirror_integration_settings(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        # If no storage integrations are available, return none
-        mirror_integration_settings = (
-            settings_ctrl_fixture.manager.admin_settings_controller._mirror_integration_settings
-        )
-
-        assert None == mirror_integration_settings()
-
-        # Storages created will appear for settings of any purpose
-        storage1 = settings_ctrl_fixture.ctrl.db.external_integration(
-            "protocol1",
-            ExternalIntegration.STORAGE_GOAL,
-            name="storage1",
-            settings={
-                S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "covers",
-                S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY: "open-access-books",
-                S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY: "protected-access-books",
-            },
-        )
-
-        settings = mirror_integration_settings()
-
-        assert settings[0]["key"] == "covers_mirror_integration_id"
-        assert settings[0]["label"] == "Covers Mirror"
-        assert (
-            settings[0]["options"][0]["key"]
-            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
-        )
-        assert settings[0]["options"][1]["key"] == str(storage1.id)
-        assert settings[1]["key"] == "books_mirror_integration_id"
-        assert settings[1]["label"] == "Open Access Books Mirror"
-        assert (
-            settings[1]["options"][0]["key"]
-            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
-        )
-        assert settings[1]["options"][1]["key"] == str(storage1.id)
-        assert settings[2]["label"] == "Protected Access Books Mirror"
-        assert (
-            settings[2]["options"][0]["key"]
-            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
-        )
-        assert settings[2]["options"][1]["key"] == str(storage1.id)
-
-        storage2 = settings_ctrl_fixture.ctrl.db.external_integration(
-            "protocol2",
-            ExternalIntegration.STORAGE_GOAL,
-            name="storage2",
-            settings={
-                S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY: "covers",
-                S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY: "open-access-books",
-                S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY: "protected-access-books",
-            },
-        )
-        settings = mirror_integration_settings()
-
-        assert settings[0]["key"] == "covers_mirror_integration_id"
-        assert settings[0]["label"] == "Covers Mirror"
-        assert (
-            settings[0]["options"][0]["key"]
-            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
-        )
-        assert settings[0]["options"][1]["key"] == str(storage1.id)
-        assert settings[0]["options"][2]["key"] == str(storage2.id)
-        assert settings[1]["key"] == "books_mirror_integration_id"
-        assert settings[1]["label"] == "Open Access Books Mirror"
-        assert (
-            settings[1]["options"][0]["key"]
-            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
-        )
-        assert settings[1]["options"][1]["key"] == str(storage1.id)
-        assert settings[1]["options"][2]["key"] == str(storage2.id)
-        assert settings[2]["label"] == "Protected Access Books Mirror"
-        assert (
-            settings[2]["options"][0]["key"]
-            == settings_ctrl_fixture.manager.admin_settings_controller.NO_MIRROR_INTEGRATION
-        )
-        assert settings[2]["options"][1]["key"] == str(storage1.id)
 
     def test_check_url_unique(self, settings_ctrl_fixture: SettingsControllerFixture):
         # Verify our ability to catch duplicate integrations for a

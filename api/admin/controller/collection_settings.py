@@ -67,12 +67,6 @@ class CollectionSettingsController(SettingsController):
                 _settings.append(protocol["settings"][v])
             protocol["settings"] = _settings
 
-        # If there are storage integrations, add a mirror integration
-        # setting to every protocol's 'settings' block.
-        mirror_integration_settings = self._mirror_integration_settings()
-        if mirror_integration_settings:
-            for protocol in protocols:
-                protocol["settings"] += mirror_integration_settings
         return protocols
 
     def process_collections(self):
