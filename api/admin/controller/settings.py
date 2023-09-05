@@ -382,10 +382,10 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         config = None
 
         # Validate first
-        protocol_class.library_settings_class()(**info_copy)
+        validated_data = protocol_class.library_settings_class()(**info_copy)
         # Attach the configuration
         config = configuration.for_library(cast(int, library.id), create=True)
-        config.settings_dict = info_copy
+        config.settings_dict = validated_data.dict()
         return config
 
     def _set_integration_library(self, integration, library_info, protocol):

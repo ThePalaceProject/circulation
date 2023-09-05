@@ -178,7 +178,6 @@ class TestCollectionSettings:
     def test_collections_get_collections_with_multiple_collections(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-
         old_prior_test_results = HasSelfTests.prior_test_results
         setattr(
             HasCollectionSelfTests,
@@ -666,6 +665,7 @@ class TestCollectionSettings:
                     ("overdrive_client_key", "user2"),
                     ("overdrive_client_secret", "password"),
                     ("overdrive_website_id", "1234"),
+                    ("max_retry_count", "10"),
                     (
                         "libraries",
                         json.dumps([{"short_name": "L1", "ils_name": "the_ils"}]),
@@ -682,6 +682,11 @@ class TestCollectionSettings:
         # The collection has been changed.
         assert "user2" == collection.integration_configuration.settings_dict.get(
             "overdrive_client_key"
+        )
+
+        # Type coercion stays intact
+        assert 10 == collection.integration_configuration.settings_dict.get(
+            "max_retry_count"
         )
 
         # A library now has access to the collection.
@@ -753,6 +758,50 @@ class TestCollectionSettings:
 
         # The collection now has a parent.
         assert parent == collection.parent
+
+        library = settings_ctrl_fixture.ctrl.db.default_library()
+        collection2 = settings_ctrl_fixture.ctrl.db.collection(
+            name="Collection 2", protocol=ExternalIntegration.ODL
+        )
+        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("id", str(collection2.id)),
+                    ("name", "Collection 2"),
+                    ("protocol", ExternalIntegration.ODL),
+                    ("external_account_id", "1234"),
+                    ("username", "user"),
+                    ("password", "password"),
+                    ("data_source", "datasource"),
+                    ("passphrase_hint", "passphrase_hint"),
+                    ("passphrase_hint_url", "http://passphrase_hint_url.com"),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": library.short_name,
+                                    "ebook_loan_duration": "200",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+            )
+            response = (
+                settings_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
+            )
+            assert response.status_code == 200
+
+        settings_ctrl_fixture.ctrl.db.session.refresh(collection2)
+        assert len(collection2.integration_configuration.library_configurations) == 1
+        # The library configuration value was correctly coerced to int
+        assert (
+            collection2.integration_configuration.library_configurations[
+                0
+            ].settings_dict.get("ebook_loan_duration")
+            == 200
+        )
 
     def _base_collections_post_request(self, collection):
         """A template for POST requests to the collections controller."""

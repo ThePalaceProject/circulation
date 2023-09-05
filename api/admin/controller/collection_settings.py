@@ -356,10 +356,10 @@ class CollectionSettingsController(SettingsController):
 
         # validate then apply
         try:
-            settings_class(**collection_settings)
+            validated_settings = settings_class(**collection_settings)
         except ProblemError as ex:
             return ex.problem_detail
-        collection.integration_configuration.settings_dict = collection_settings
+        collection.integration_configuration.settings_dict = validated_settings.dict()
         return None
 
     def _set_external_integration_link(
