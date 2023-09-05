@@ -42,15 +42,12 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import MockS3Uploader
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.core.mock import (
     AlwaysSuccessfulBibliographicCoverageProvider,
     AlwaysSuccessfulCollectionCoverageProvider,
     AlwaysSuccessfulCoverageProvider,
     AlwaysSuccessfulWorkCoverageProvider,
-    DummyHTTPClient,
     NeverSuccessfulBibliographicCoverageProvider,
     NeverSuccessfulCoverageProvider,
     NeverSuccessfulWorkCoverageProvider,
@@ -1586,19 +1583,6 @@ class TestCollectionCoverageProvider:
         edition, pool = db.edition(with_license_pool=True)
         identifier = edition.primary_identifier
 
-        # All images and open-access content will be fetched through this
-        # 'HTTP client'...
-        http = DummyHTTPClient()
-        http.queue_response(
-            200,
-            content="I am an epub.",
-            media_type=Representation.EPUB_MEDIA_TYPE,
-        )
-
-        # ..and will then be uploaded to this 'mirror'.
-        mirrors = dict(books_mirror=MockS3Uploader())
-        mirror_type = ExternalIntegrationLink.OPEN_ACCESS_BOOKS
-
         class Tripwire(PresentationCalculationPolicy):
             # This class sets a variable if one of its properties is
             # accessed.
@@ -1615,8 +1599,6 @@ class TestCollectionCoverageProvider:
 
         presentation_calculation_policy = Tripwire()
         replacement_policy = ReplacementPolicy(
-            mirrors=mirrors,
-            http_get=http.do_get,
             presentation_calculation_policy=presentation_calculation_policy,
         )
 
@@ -1651,17 +1633,6 @@ class TestCollectionCoverageProvider:
         provider.set_metadata_and_circulation_data(
             identifier, metadata, circulationdata
         )
-
-        # The open-access download was 'downloaded' and 'mirrored'.
-        [mirrored] = mirrors[mirror_type].uploaded
-        assert "http://foo.com/" == mirrored.url
-        assert mirrored.mirror_url.endswith(
-            f"/{identifier.identifier}/{edition.title}.epub"
-        )
-
-        # The book content was removed from the db after it was
-        # mirrored successfully.
-        assert None == mirrored.content
 
         # Our custom PresentationCalculationPolicy was used when
         # determining whether to recalculate the work's

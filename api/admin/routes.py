@@ -156,32 +156,6 @@ def work_classifications(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/preview_book_cover",
-    methods=["POST"],
-)
-@has_library
-@returns_problem_detail
-@requires_admin
-def work_preview_book_cover(identifier_type, identifier):
-    return app.manager.admin_work_controller.preview_book_cover(
-        identifier_type, identifier
-    )
-
-
-@library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/change_book_cover",
-    methods=["POST"],
-)
-@has_library
-@returns_problem_detail
-@requires_admin
-def work_change_book_cover(identifier_type, identifier):
-    return app.manager.admin_work_controller.change_book_cover(
-        identifier_type, identifier
-    )
-
-
-@library_route(
     "/admin/works/<identifier_type>/<path:identifier>/lists", methods=["GET", "POST"]
 )
 @has_library

@@ -29,7 +29,6 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import or_
 
 from ..util.datetime_helpers import utc_now
 from ..util.http import HTTP
@@ -41,7 +40,7 @@ from .constants import (
     MediaTypes,
 )
 from .edition import Edition
-from .licensing import LicensePool, LicensePoolDeliveryMechanism
+from .licensing import LicensePoolDeliveryMechanism
 
 if TYPE_CHECKING:
     from core.model import CachedMARCFile, Work  # noqa: autoflake
@@ -409,41 +408,6 @@ class Hyperlink(Base, LinkRelations):
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
     resource: Resource
-
-    @classmethod
-    def unmirrored(cls, collection):
-        """Find all Hyperlinks associated with an item in the
-        given Collection that could be mirrored but aren't.
-        TODO: We don't cover the case where an image was mirrored but no
-        thumbnail was created of it. (We do cover the case where the thumbnail
-        was created but not mirrored.)
-        """
-        from .identifier import Identifier
-
-        _db = Session.object_session(collection)
-        qu = (
-            _db.query(Hyperlink)
-            .join(Hyperlink.identifier)
-            .join(Identifier.licensed_through)
-            .outerjoin(Hyperlink.resource)
-            .outerjoin(Resource.representation)
-        )
-        qu = qu.filter(LicensePool.collection_id == collection.id)
-        qu = qu.filter(Hyperlink.rel.in_(Hyperlink.MIRRORED))
-        qu = qu.filter(Hyperlink.data_source == collection.data_source)
-        qu = qu.filter(
-            or_(
-                Representation.id == None,
-                Representation.mirror_url == None,
-            )
-        )
-        # Without this ordering, the query does a table scan looking for
-        # items that match. With the ordering, they're all at the front.
-        qu = qu.order_by(
-            Representation.mirror_url.asc().nullsfirst(),
-            Representation.id.asc().nullsfirst(),
-        )
-        return qu
 
     @classmethod
     def generic_uri(cls, data_source, identifier, rel, content=None):
