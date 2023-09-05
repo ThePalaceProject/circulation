@@ -934,17 +934,6 @@ class TestMetadata:
         assert 1 == records.count()
         assert CoverageRecord.SUCCESS == records.all()[0].status
 
-        # No metadata upload failure was recorded, because this metadata
-        # came from Overdrive.
-        records = (
-            db.session.query(CoverageRecord)
-            .filter(CoverageRecord.identifier_id == edition.primary_identifier.id)
-            .filter(
-                CoverageRecord.operation == CoverageRecord.METADATA_UPLOAD_OPERATION
-            )
-        )
-        assert 0 == records.count()
-
         # Apply metadata from a different source.
         metadata = Metadata(data_source=DataSource.GUTENBERG, title=db.fresh_str())
 
@@ -959,17 +948,6 @@ class TestMetadata:
         assert 2 == records.count()
         for record in records.all():
             assert CoverageRecord.SUCCESS == record.status
-
-        # But now there's also a metadata upload failure.
-        records = (
-            db.session.query(CoverageRecord)
-            .filter(CoverageRecord.identifier_id == edition.primary_identifier.id)
-            .filter(
-                CoverageRecord.operation == CoverageRecord.METADATA_UPLOAD_OPERATION
-            )
-        )
-        assert 1 == records.count()
-        assert CoverageRecord.TRANSIENT_FAILURE == records.all()[0].status
 
     def test_update_contributions(self, db: DatabaseTransactionFixture):
         edition = db.edition()
