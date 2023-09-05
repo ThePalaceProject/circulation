@@ -746,8 +746,7 @@ class Edition(Base, EditionConstants):
                     mystr[: (self.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR - 3)]
                     + "..."
                 )
-            else:
-                return mystr
+            return mystr
 
         # Very long author and sort_author strings can cause issues for Postgres indices. See
         # comment above the SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR constant for details.
