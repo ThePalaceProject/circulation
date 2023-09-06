@@ -19,6 +19,6 @@ check_service_status "$container" /etc/service/cron
 check_crontab "$container"
 
 # Run a single script to ensure basic settings are correct
-# The search index script connects to both the DB and OpenSearch
-run_script "$container" "source ../env/bin/activate && ./search_index_refresh"
+# The opds2 import script with a "-h" will only test the DB configuration
+run_script "$container" "source ../env/bin/activate && ./opds2_import_monitor -h"
 exit 0

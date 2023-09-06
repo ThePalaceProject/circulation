@@ -48,7 +48,7 @@ function run_script() {
   container="$1"
   script="$2"
 
-  $(docker exec "$container" /bin/bash -c "$script")
+  output=$(docker exec "$container" /bin/bash -c "$script")
   script_status=$?
   if [[ "$script_status" != 0 ]]; then
     echo "  FAIL: script run failed"
