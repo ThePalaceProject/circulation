@@ -2,7 +2,7 @@ import datetime
 import logging
 from collections import defaultdict
 from typing import Any, Callable, Generator, List, Type
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -35,6 +35,7 @@ from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
+from core.util.problem_detail import ProblemDetail
 from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
@@ -62,7 +63,7 @@ class TestOPDSFeedProtocol:
 
         # Specifically asking for a json type
         response = BaseOPDSFeed.entry_as_response(
-            entry, mime_types=["application/opds+json;q=0.9"]
+            entry, mime_types=[("application/opds+json", 0.9)]
         )
         assert isinstance(response, OPDSEntryResponse)
         assert response.content_type == "application/opds+json"
@@ -948,6 +949,15 @@ class TestOPDSAcquisitionFeed:
             # Mandatory loans item was incorrect
             OPDSAcquisitionFeed.single_entry_loans_feed(None, object())  # type: ignore[arg-type]
         assert "Argument 'item' must be an instance of" in str(raised.value)
+
+        # A work and pool that has no edition, will not have an entry
+        work = db.work(with_open_access_download=True)
+        pool = work.active_license_pool()
+        work.presentation_edition = None
+        pool.presentation_edition = None
+        response = OPDSAcquisitionFeed.single_entry_loans_feed(MagicMock(), pool)
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 403
 
     def test_single_entry_loans_feed_default_annotator(
         self, db: DatabaseTransactionFixture

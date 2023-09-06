@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from werkzeug.datastructures import MIMEAccept
 
@@ -14,13 +14,16 @@ from core.util.opds_writer import OPDSMessage
 
 
 def get_serializer(
-    mime_types: Optional[MIMEAccept | List[str]],
+    mime_types: Optional[MIMEAccept | List[Tuple[str, float]]],
 ) -> OPDS1Serializer | OPDS2Serializer:
     # Loop through and return whichever mimetype is encountered first
+    # MIMEAccept objects are already sorted, so we only sort if we're a list
+    if type(mime_types) == list:
+        mime_types = sorted(mime_types, key=lambda mime: mime[1], reverse=True)
     for mime in mime_types or []:
-        if "application/opds+json" in mime:
+        if "application/opds+json" in mime[0]:
             return OPDS2Serializer()
-        elif "application/atom+xml" in mime:
+        elif "application/atom+xml" in mime[0]:
             return OPDS1Serializer()
     # Default
     return OPDS1Serializer()
@@ -39,7 +42,9 @@ class BaseOPDSFeed(FeedInterface):
         self._feed = FeedData()
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def serialize(self, mime_types: Optional[MIMEAccept | List[str]] = None) -> bytes:
+    def serialize(
+        self, mime_types: Optional[MIMEAccept | List[Tuple[str, float]]] = None
+    ) -> bytes:
         serializer = get_serializer(mime_types)
         return serializer.serialize_feed(self._feed)
 
@@ -47,7 +52,9 @@ class BaseOPDSFeed(FeedInterface):
         self._feed.add_link(href, rel=rel, **kwargs)
 
     def as_response(
-        self, mime_types: Optional[MIMEAccept | List[str]] = None, **kwargs: Any
+        self,
+        mime_types: Optional[MIMEAccept | List[Tuple[str, float]]] = None,
+        **kwargs: Any,
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
         serializer = get_serializer(mime_types)
@@ -63,7 +70,7 @@ class BaseOPDSFeed(FeedInterface):
     def entry_as_response(
         cls,
         entry: WorkEntry,
-        mime_types: Optional[MIMEAccept | List[str]] = None,
+        mime_types: Optional[MIMEAccept | List[Tuple[str, float]]] = None,
         **response_kwargs: Any,
     ) -> OPDSEntryResponse:
         if not entry.computed:
