@@ -52,6 +52,10 @@ class TestPushNotifications:
                 (),
                 {
                     "token": "atoken",
+                    "notification": dict(
+                        title="Only 1 day left on your loan!",
+                        body=f"Your loan on {work.presentation_edition.title} is expiring soon",
+                    ),
                     "data": dict(
                         title="Only 1 day left on your loan!",
                         body=f"Your loan on {work.presentation_edition.title} is expiring soon",
@@ -176,6 +180,9 @@ class TestPushNotifications:
         assert messaging.Message.call_args_list == [
             mock.call(
                 token="test-token-1",
+                notification=dict(
+                    title=f'Your hold on "{work1.title}" is available!',
+                ),
                 data=dict(
                     title=f'Your hold on "{work1.title}" is available!',
                     event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
@@ -189,6 +196,9 @@ class TestPushNotifications:
             ),
             mock.call(
                 token="test-token-2",
+                notification=dict(
+                    title=f'Your hold on "{work1.title}" is available!',
+                ),
                 data=dict(
                     title=f'Your hold on "{work1.title}" is available!',
                     event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
@@ -202,6 +212,9 @@ class TestPushNotifications:
             ),
             mock.call(
                 token="test-token-3",
+                notification=dict(
+                    title=f'Your hold on "{work2.title}" is available!',
+                ),
                 data=dict(
                     title=f'Your hold on "{work2.title}" is available!',
                     event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
