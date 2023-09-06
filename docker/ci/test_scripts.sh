@@ -17,4 +17,8 @@ check_service_status "$container" /etc/service/cron
 
 # Ensure the installed crontab has no problems
 check_crontab "$container"
+
+# Run a single script to ensure basic settings are correct
+# The search index script connects to both the DB and OpenSearch
+run_script "$container" "source ../env/bin/activate && ./search_index_refresh"
 exit 0
