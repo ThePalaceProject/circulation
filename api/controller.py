@@ -1323,7 +1323,7 @@ class OPDS2FeedController(CirculationManagerController):
             self.search_engine,
         )
         return feed.as_response(
-            mime_types=["application/opds+json"],  # Force the type
+            mime_types=[("application/opds+json", 1)],  # Force the type
             max_age=int(max_age) if max_age is not None else None,
         )
 
