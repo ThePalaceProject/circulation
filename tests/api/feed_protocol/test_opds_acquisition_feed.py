@@ -60,9 +60,9 @@ class TestOPDSFeedProtocol:
         # default content type is XML
         assert response.content_type == OPDSEntryResponse().content_type
 
-        # Specifiically asking for a json type
+        # Specifically asking for a json type
         response = BaseOPDSFeed.entry_as_response(
-            entry, requested_content_type="anything/...json..."
+            entry, mime_types=["application/opds+json;q=0.9"]
         )
         assert isinstance(response, OPDSEntryResponse)
         assert response.content_type == "application/opds+json"

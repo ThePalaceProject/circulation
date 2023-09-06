@@ -12,7 +12,6 @@ from typing import (
     Optional,
     Tuple,
     Type,
-    cast,
 )
 
 from sqlalchemy.orm import Query, Session
@@ -590,11 +589,12 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         if isinstance(entry, WorkEntry) and entry.computed:
             return cls.entry_as_response(entry, **response_kwargs)
-        elif entry is None:
-            return None
+        elif isinstance(entry, OPDSMessage):
+            return ProblemDetail(
+                entry.urn, status_code=entry.status_code, detail=entry.message
+            )
 
-        # This is probably an error message
-        return cast(ProblemDetail, entry)
+        return None
 
     @classmethod
     def single_entry(

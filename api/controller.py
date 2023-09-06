@@ -961,7 +961,7 @@ class OPDSFeedController(CirculationManagerController):
         )
         return feed.as_response(
             max_age=int(max_age) if max_age else None,
-            requested_content_type=flask.request.headers.get("Accept"),
+            mime_types=flask.request.accept_mimetypes,
         )
 
     def navigation(self, lane_identifier):
@@ -1175,9 +1175,7 @@ class OPDSFeedController(CirculationManagerController):
         )
         if isinstance(response, ProblemDetail):
             return response
-        return response.as_response(
-            requested_content_type=flask.request.headers.get("Accept")
-        )
+        return response.as_response(mime_types=flask.request.accept_mimetypes)
 
     def _qa_feed(
         self, feed_factory, feed_title, controller_name, facet_class, worklist_factory
@@ -1325,7 +1323,7 @@ class OPDS2FeedController(CirculationManagerController):
             self.search_engine,
         )
         return feed.as_response(
-            requested_content_type="json",
+            mime_types=["application/opds+json"],  # Force the type
             max_age=int(max_age) if max_age is not None else None,
         )
 
@@ -1473,7 +1471,7 @@ class LoanController(CirculationManagerController):
         response = feed.as_response(
             max_age=0,
             private=True,
-            requested_content_type=flask.request.headers.get("Accept"),
+            mime_types=flask.request.accept_mimetypes,
         )
 
         last_modified = patron.last_loan_activity_sync
