@@ -354,7 +354,7 @@ class TestEdition:
             )
             authors.append(author.sort_name)
 
-        untruncated_authors = ", ".join([x for x in sorted(authors)])
+        untruncated_sort_authors = ", ".join([x for x in sorted(authors)])
         wr = db.edition(authors=authors)
         wr.calculate_presentation()
         db.session.commit()
@@ -371,8 +371,11 @@ class TestEdition:
                 > Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
             )
 
-        do_check(untruncated_authors, wr.author)
-        do_check(untruncated_authors, wr.sort_author)
+        do_check(untruncated_sort_authors, wr.sort_author)
+        # Since we'd expect the sort_author and auth to be equal (since sort_author is assigned to the
+        # author field by default if no author is specified) we should verify that the author field also
+        # passes the check.
+        do_check(untruncated_sort_authors, wr.author)
 
     def test_calculate_presentation_shortish_author(
         self, db: DatabaseTransactionFixture
