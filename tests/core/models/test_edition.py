@@ -1,3 +1,6 @@
+import random
+import string
+
 from core.model import PresentationCalculationPolicy, get_one_or_create
 from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
@@ -324,6 +327,78 @@ class TestEdition:
         wr.calculate_presentation()
         assert "Kelly Accumulator, Bob A. Bitshifter" == wr.author
         assert "Accumulator, Kelly ; Bitshifter, Bob" == wr.sort_author
+
+    def test_calculate_presentation_very_long_author(
+        self, db: DatabaseTransactionFixture
+    ):
+        authors = []
+
+        # author names should be unique and not similar to ensure that the
+        # test mirrors the types of long author lists we'd expect in real data.
+        def generate_random_author():
+            return "".join(
+                random.choices(
+                    string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                    k=25,
+                )
+            )
+
+        for i in range(0, 500):
+            author, ignore = db.contributor(
+                sort_name=", ".join(
+                    [
+                        generate_random_author(),
+                        generate_random_author(),
+                    ]
+                )
+            )
+            authors.append(author.sort_name)
+
+        untruncated_sort_authors = ", ".join([x for x in sorted(authors)])
+        wr = db.edition(authors=authors)
+        wr.calculate_presentation()
+        db.session.commit()
+
+        def do_check(original_str: str, truncated_str: str):
+            assert (
+                len(truncated_str)
+                == Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+            )
+            assert truncated_str.endswith("...")
+            assert not original_str.endswith("...")
+            assert (
+                len(original_str)
+                > Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+            )
+
+        do_check(untruncated_sort_authors, wr.sort_author)
+        # Since we'd expect the sort_author and auth to be equal (since sort_author is assigned to the
+        # author field by default if no author is specified) we should verify that the author field also
+        # passes the check.
+        do_check(untruncated_sort_authors, wr.author)
+
+    def test_calculate_presentation_shortish_author(
+        self, db: DatabaseTransactionFixture
+    ):
+        authors = []
+        author, ignore = db.contributor(sort_name=f"AuthorLast, AuthorFirst")
+        authors.append(author.sort_name)
+        wr = db.edition(authors=authors)
+        author, sort_author = wr.calculate_author()
+        wr.calculate_presentation()
+        db.session.commit()
+
+        def do_check(original_str: str, calculated_str: str):
+            assert calculated_str == original_str
+            assert not calculated_str.endswith("...")
+            assert (
+                len(original_str)
+                <= Edition.SAFE_AUTHOR_FIELD_LENGTH_TO_AVOID_PG_INDEX_ERROR
+            )
+            assert not original_str.endswith("...")
+
+        do_check(author, wr.author)
+        do_check(sort_author, wr.sort_author)
 
     def test_set_summary(self, db: DatabaseTransactionFixture):
         e, pool = db.edition(with_license_pool=True)
