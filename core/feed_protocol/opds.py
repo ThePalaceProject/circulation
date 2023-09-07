@@ -18,7 +18,7 @@ def get_serializer(
 ) -> OPDS1Serializer | OPDS2Serializer:
     # Loop through and return whichever mimetype is encountered first
     # Sort values by q-value first
-    if type(mime_types) is not None:
+    if mime_types is not None:
         mime_types = sorted(mime_types, key=lambda mime: mime[1], reverse=True)  # type: ignore[arg-type]
     for mime in mime_types or []:
         if "application/opds+json" in mime[0]:
