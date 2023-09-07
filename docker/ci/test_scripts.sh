@@ -19,6 +19,6 @@ check_service_status "$container" /etc/service/cron
 check_crontab "$container"
 
 # Run a single script to ensure basic settings are correct
-# The opds2 import script with a "-h" will only test the DB configuration
-run_script "$container" "source ../env/bin/activate && ./opds2_import_monitor -h"
+# The opds2 import script will only test the DB configuration
+run_script "$container" "source ../env/bin/activate && ./opds2_import_monitor"
 exit 0
