@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Type
 
 from werkzeug.datastructures import MIMEAccept
 
@@ -14,17 +14,19 @@ from core.util.opds_writer import OPDSMessage
 
 
 def get_serializer(
-    mime_types: Optional[MIMEAccept | List[Tuple[str, float]]],
+    mime_types: Optional[MIMEAccept],
 ) -> OPDS1Serializer | OPDS2Serializer:
     # Loop through and return whichever mimetype is encountered first
     # Sort values by q-value first
-    if mime_types is not None:
-        mime_types = sorted(mime_types, key=lambda mime: mime[1], reverse=True)
-    for mime in mime_types or []:
-        if "application/opds+json" in mime[0]:
-            return OPDS2Serializer()
-        elif "application/atom+xml" in mime[0]:
-            return OPDS1Serializer()
+    serializers: Dict[str, Type[Any]] = {
+        "application/opds+json": OPDS2Serializer,
+        "application/atom+xml": OPDS1Serializer,
+    }
+    if mime_types:
+        match = mime_types.best_match(
+            serializers.keys(), default="application/atom+xml"
+        )
+        return serializers[match]()  # type: ignore[no-any-return]
     # Default
     return OPDS1Serializer()
 
@@ -42,9 +44,7 @@ class BaseOPDSFeed(FeedInterface):
         self._feed = FeedData()
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def serialize(
-        self, mime_types: Optional[MIMEAccept | List[Tuple[str, float]]] = None
-    ) -> bytes:
+    def serialize(self, mime_types: Optional[MIMEAccept] = None) -> bytes:
         serializer = get_serializer(mime_types)
         return serializer.serialize_feed(self._feed)
 
@@ -53,7 +53,7 @@ class BaseOPDSFeed(FeedInterface):
 
     def as_response(
         self,
-        mime_types: Optional[MIMEAccept | List[Tuple[str, float]]] = None,
+        mime_types: Optional[MIMEAccept] = None,
         **kwargs: Any,
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
@@ -70,7 +70,7 @@ class BaseOPDSFeed(FeedInterface):
     def entry_as_response(
         cls,
         entry: WorkEntry,
-        mime_types: Optional[MIMEAccept | List[Tuple[str, float]]] = None,
+        mime_types: Optional[MIMEAccept] = None,
         **response_kwargs: Any,
     ) -> OPDSEntryResponse:
         if not entry.computed:

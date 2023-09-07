@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
+from werkzeug.datastructures import MIMEAccept
 
 from core.entrypoint import (
     AudiobooksEntryPoint,
@@ -63,7 +64,7 @@ class TestOPDSFeedProtocol:
 
         # Specifically asking for a json type
         response = BaseOPDSFeed.entry_as_response(
-            entry, mime_types=[("application/opds+json", 0.9)]
+            entry, mime_types=MIMEAccept([("application/opds+json", 0.9)])
         )
         assert isinstance(response, OPDSEntryResponse)
         assert response.content_type == "application/opds+json"

@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
+from werkzeug.datastructures import MIMEAccept
 
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
@@ -1323,7 +1324,7 @@ class OPDS2FeedController(CirculationManagerController):
             self.search_engine,
         )
         return feed.as_response(
-            mime_types=[("application/opds+json", 1)],  # Force the type
+            mime_types=MIMEAccept([("application/opds+json", 1)]),  # Force the type
             max_age=int(max_age) if max_age is not None else None,
         )
 

@@ -30,13 +30,13 @@ class TestBaseOPDSFeed:
         )
         assert isinstance(get_serializer(request.accept_mimetypes), OPDS1Serializer)
 
-        # The default q-value should be 1
+        # The default q-value should be 1, but opds2 specificity is higher
         request = Request.from_values(
             headers=dict(
                 Accept="application/atom+xml;profile=feed,application/opds+json;q=0.9"
             )
         )
-        assert isinstance(get_serializer(request.accept_mimetypes), OPDS1Serializer)
+        assert isinstance(get_serializer(request.accept_mimetypes), OPDS2Serializer)
 
         # The default q-value should sort above 0.9
         request = Request.from_values(
@@ -55,11 +55,3 @@ class TestBaseOPDSFeed:
         # No valid accept mimetype should default to OPDS1.x
         request = Request.from_values(headers=dict(Accept="text/html"))
         assert isinstance(get_serializer(request.accept_mimetypes), OPDS1Serializer)
-
-        # Sorting occurs on list type values
-        assert isinstance(
-            get_serializer(
-                [("application/opds+json", 0.9), ("application/atom+xml", 1)]
-            ),
-            OPDS1Serializer,
-        )
