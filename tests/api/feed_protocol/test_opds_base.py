@@ -15,6 +15,21 @@ class TestBaseOPDSFeed:
         )
         assert isinstance(get_serializer(request.accept_mimetypes), OPDS2Serializer)
 
+        # Multiple additional key-value pairs don't matter
+        request = Request.from_values(
+            headers=dict(
+                Accept="application/atom+xml;profile=opds-catalog;kind=acquisition;q=0.08, application/opds+json;q=0.9"
+            )
+        )
+        assert isinstance(get_serializer(request.accept_mimetypes), OPDS2Serializer)
+
+        request = Request.from_values(
+            headers=dict(
+                Accept="application/atom+xml;profile=opds-catalog;kind=acquisition"
+            )
+        )
+        assert isinstance(get_serializer(request.accept_mimetypes), OPDS1Serializer)
+
         # The default q-value should be 1
         request = Request.from_values(
             headers=dict(
