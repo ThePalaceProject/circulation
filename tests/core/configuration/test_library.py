@@ -51,4 +51,5 @@ def test_validate_language_codes_error(
     with pytest.raises(ProblemError) as excinfo:
         library_settings(large_collection_languages=["eng", "xyz"])
 
+    assert excinfo.value.problem_detail.detail is not None
     assert '"xyz" is not a valid language code' in excinfo.value.problem_detail.detail
