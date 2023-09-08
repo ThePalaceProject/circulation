@@ -70,7 +70,7 @@ class PushNotifications:
         for token in tokens:
             msg = messaging.Message(
                 token=token.device_token,
-                notification=dict(title=title, body=body),
+                notification=messaging.Notification(title=title, body=body),
                 data=dict(
                     title=title,
                     body=body,
@@ -136,7 +136,7 @@ class PushNotifications:
             for token in tokens:
                 msg = messaging.Message(
                     token=token.device_token,
-                    notification=dict(title=title),
+                    notification=messaging.Notification(title=title),
                     data=dict(
                         title=title,
                         event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,

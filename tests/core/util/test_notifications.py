@@ -52,7 +52,7 @@ class TestPushNotifications:
                 (),
                 {
                     "token": "atoken",
-                    "notification": dict(
+                    "notification": messaging.Notification(
                         title="Only 1 day left on your loan!",
                         body=f"Your loan on {work.presentation_edition.title} is expiring soon",
                     ),
@@ -180,7 +180,7 @@ class TestPushNotifications:
         assert messaging.Message.call_args_list == [
             mock.call(
                 token="test-token-1",
-                notification=dict(
+                notification=messaging.Notification(
                     title=f'Your hold on "{work1.title}" is available!',
                 ),
                 data=dict(
@@ -196,7 +196,7 @@ class TestPushNotifications:
             ),
             mock.call(
                 token="test-token-2",
-                notification=dict(
+                notification=messaging.Notification(
                     title=f'Your hold on "{work1.title}" is available!',
                 ),
                 data=dict(
@@ -212,7 +212,7 @@ class TestPushNotifications:
             ),
             mock.call(
                 token="test-token-3",
-                notification=dict(
+                notification=messaging.Notification(
                     title=f'Your hold on "{work2.title}" is available!',
                 ),
                 data=dict(
