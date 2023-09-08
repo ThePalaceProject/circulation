@@ -638,12 +638,17 @@ class LibrarySettings(BaseSettings):
     ) -> Optional[List[str]]:
         """Verify that collection languages are valid."""
         if value is not None:
+            languages = []
             for language in value:
-                if not LanguageCodes.string_to_alpha_3(language):
+                validated_language = LanguageCodes.string_to_alpha_3(language)
+                if validated_language is None:
                     field_label = cls.get_form_field_label(field.name)
                     raise SettingsValidationError(
                         problem_detail=UNKNOWN_LANGUAGE.detailed(
                             f'"{field_label}": "{language}" is not a valid language code.'
                         )
                     )
+                if validated_language not in languages:
+                    languages.append(validated_language)
+            return languages
         return value
