@@ -10,7 +10,7 @@ class SearchRevisionDirectory:
 
     @staticmethod
     def _create_revisions() -> Mapping[int, SearchSchemaRevision]:
-        return dict(map(lambda r: (r.version, r), [SearchV5()]))
+        return {r.version: r for r in [SearchV5()]}
 
     def __init__(self, available: Mapping[int, SearchSchemaRevision]):
         self._available = available

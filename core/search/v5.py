@@ -18,6 +18,7 @@ from core.search.revision import SearchSchemaRevision
 
 
 class SearchV5(SearchSchemaRevision):
+    SEARCH_VERSION = 5
     """
     The body of this mapping looks for bibliographic information in
     the core document, primarily used for matching search
@@ -99,7 +100,7 @@ return champion;
         AUTHOR_CHAR_FILTER_NAMES.append(name)
 
     def __init__(self):
-        super().__init__(5)
+        super().__init__()
 
         self._normalizers = {}
         self._char_filters = {}

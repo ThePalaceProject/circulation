@@ -4999,7 +4999,7 @@ class TestSearchIndexCoverageProvider:
         directory = search._revision_directory
 
         # Create a new highest version
-        directory._available[10000] = SearchV10000(10000)
+        directory._available[10000] = SearchV10000()
         search._revision = directory._available[10000]
         search._search_service.index_is_populated = lambda x: False
 
@@ -5029,6 +5029,8 @@ class TestSearchIndexCoverageProvider:
 
 
 class SearchV10000(SearchSchemaRevision):
+    SEARCH_VERSION = 10000
+
     def mapping_document(self) -> SearchMappingDocument:
         return {}
 

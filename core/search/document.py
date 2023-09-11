@@ -92,7 +92,7 @@ def date() -> SearchMappingFieldTypeParameterized:
 # See: https://opensearch.org/docs/latest/field-types/supported-field-types/keyword/
 def keyword() -> SearchMappingFieldTypeParameterized:
     mapping = SearchMappingFieldTypeParameterized("keyword")
-    mapping._parameters["normalizer"] = "filterable_string"
+    mapping.parameters["normalizer"] = "filterable_string"
     return mapping
 
 
@@ -226,7 +226,6 @@ class SearchMappingDocument:
     """
 
     def __init__(self):
-        super().__init__()
         self._settings: Dict[str, dict] = {}
         self._fields: Dict[str, SearchMappingFieldType] = {}
         self._scripts: Dict[str, str] = {}
@@ -253,7 +252,4 @@ class SearchMappingDocument:
         return {"settings": self.settings, "mappings": output_mappings}
 
     def serialize_properties(self):
-        output_properties: dict = {}
-        for name, prop in self._fields.items():
-            output_properties[name] = prop.serialize()
-        return output_properties
+        return {name: prop.serialize() for name, prop in self._fields.items()}

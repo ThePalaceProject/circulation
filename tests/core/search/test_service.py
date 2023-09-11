@@ -7,8 +7,11 @@ from tests.fixtures.search import ExternalSearchFixture
 
 
 class BasicMutableRevision(SearchSchemaRevision):
+    SEARCH_VERSION = 0
+
     def __init__(self, version: int):
-        super().__init__(version)
+        self.SEARCH_VERSION = version
+        super().__init__()
         self.document = SearchMappingDocument()
 
     def mapping_document(self) -> SearchMappingDocument:

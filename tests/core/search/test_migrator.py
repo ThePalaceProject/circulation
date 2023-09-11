@@ -10,8 +10,11 @@ from core.search.service import SearchWritePointer
 
 
 class EmptyRevision(SearchSchemaRevision):
+    SEARCH_VERSION = 0
+
     def __init__(self, version: int):
-        super().__init__(version)
+        self.SEARCH_VERSION = version
+        super().__init__()
 
     def mapping_document(self) -> SearchMappingDocument:
         return SearchMappingDocument()

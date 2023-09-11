@@ -11,9 +11,11 @@ class SearchSchemaRevision(ABC):
     """
 
     _version: int
+    # The SEARCH_VERSION variable MUST be populated in the implemented child classes
+    SEARCH_VERSION: int
 
-    def __init__(self, version: int):
-        self._version = version
+    def __init__(self):
+        self._version = self.SEARCH_VERSION
 
     @abstractmethod
     def mapping_document(self) -> SearchMappingDocument:
