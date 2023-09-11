@@ -29,3 +29,31 @@ function check_service_status()
     echo "  OK"
   fi
 }
+
+function check_crontab() {
+  container="$1"
+
+  # Installing the crontab will reveal any errors and exit with an error code
+  $(docker exec "$container" /bin/bash -c "crontab /etc/cron.d/circulation")
+  validate_status=$?
+  if [[ "$validate_status" != 0 ]]; then
+    echo "  FAIL: crontab is incorrect"
+    exit 1
+  else
+    echo "  OK"
+  fi
+}
+
+function run_script() {
+  container="$1"
+  script="$2"
+
+  output=$(docker exec "$container" /bin/bash -c "$script")
+  script_status=$?
+  if [[ "$script_status" != 0 ]]; then
+    echo "  FAIL: script run failed"
+    exit 1
+  else
+    echo "  OK"
+  fi
+}

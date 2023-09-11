@@ -14,4 +14,11 @@ wait_for_runit "$container"
 
 # Make sure that cron is running in the scripts container
 check_service_status "$container" /etc/service/cron
+
+# Ensure the installed crontab has no problems
+check_crontab "$container"
+
+# Run a single script to ensure basic settings are correct
+# The opds2 import script will only test the DB configuration
+run_script "$container" "source ../env/bin/activate && ./opds2_import_monitor"
 exit 0

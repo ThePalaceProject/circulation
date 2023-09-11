@@ -65,12 +65,15 @@ class PushNotifications:
         edition: Edition = loan.license_pool.presentation_edition
         identifier: Identifier = loan.license_pool.identifier
         library_short_name = loan.library and loan.library.short_name
+        title = f"Only {days_to_expiry} {'days' if days_to_expiry != 1 else 'day'} left on your loan!"
+        body = f"Your loan on {edition.title} is expiring soon"
         for token in tokens:
             msg = messaging.Message(
                 token=token.device_token,
+                notification=messaging.Notification(title=title, body=body),
                 data=dict(
-                    title=f"Only {days_to_expiry} {'days' if days_to_expiry != 1 else 'day'} left on your loan!",
-                    body=f"Your loan on {edition.title} is expiring soon",
+                    title=title,
+                    body=body,
                     event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
                     loans_endpoint=f"{url}/{loan.library.short_name}/loans",
                     external_identifier=loan.patron.external_identifier,
@@ -129,11 +132,13 @@ class PushNotifications:
             loans_api = f"{url}/{hold.patron.library.short_name}/loans"
             work: Work = hold.work
             identifier: Identifier = hold.license_pool.identifier
+            title = f'Your hold on "{work.title}" is available!'
             for token in tokens:
                 msg = messaging.Message(
                     token=token.device_token,
+                    notification=messaging.Notification(title=title),
                     data=dict(
-                        title=f'Your hold on "{work.title}" is available!',
+                        title=title,
                         event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
                         loans_endpoint=loans_api,
                         external_identifier=hold.patron.external_identifier,
