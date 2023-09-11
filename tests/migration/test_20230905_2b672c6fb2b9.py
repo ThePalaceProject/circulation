@@ -40,7 +40,10 @@ def create_integration_configuration() -> CreateConfiguration:
 
 
 def fetch_config(
-    connection: Connection, name: Optional[str] = None, parent_id: Optional[int] = None
+    connection: Connection,
+    name: Optional[str] = None,
+    parent_id: Optional[int] = None,
+    library_id: Optional[int] = None,
 ) -> IntegrationConfiguration:
     if name is not None:
         _id, settings = connection.execute(  # type: ignore[misc]
@@ -48,8 +51,9 @@ def fetch_config(
         ).fetchone()
     else:
         _id, settings = connection.execute(  # type: ignore[misc]
-            "SELECT parent_id, settings FROM integration_library_configurations where parent_id=%s",
+            "SELECT parent_id, settings FROM integration_library_configurations where parent_id=%s and library_id=%s",
             parent_id,
+            library_id,
         ).fetchone()
     return IntegrationConfiguration(_id, settings)
 
@@ -74,11 +78,14 @@ def test_settings_coersion(
             dict(
                 verify_certificate="true",
                 loan_limit="20",
+                default_reservation_period="12",
                 key="value",
             ),
         )
 
+        # Test 2 library configs, to the same parent
         library_id = create_library(connection)
+        library_id2 = create_library(connection)
 
         library_settings = dict(
             hold_limit="30",
@@ -93,18 +100,44 @@ def test_settings_coersion(
             config.id,
             json.dumps(library_settings),
         )
+        library_settings = dict(
+            hold_limit="31",
+            max_retry_count="3",
+            ebook_loan_duration="11",
+            default_loan_duration="12",
+            unchanged="value1",
+        )
+        connection.execute(
+            "INSERT INTO integration_library_configurations (library_id, parent_id, settings) VALUES (%s, %s, %s)",
+            library_id2,
+            config.id,
+            json.dumps(library_settings),
+        )
         alembic_runner.migrate_up_one()
 
         axis_config = fetch_config(connection, name="axis-test-1")
         assert axis_config.settings["verify_certificate"] == True
         assert axis_config.settings["loan_limit"] == 20
+        assert axis_config.settings["default_reservation_period"] == 12
         # Unknown settings remain as-is
         assert axis_config.settings["key"] == "value"
 
-        odl_config = fetch_config(connection, parent_id=config.id)
+        odl_config = fetch_config(
+            connection, parent_id=config.id, library_id=library_id
+        )
         assert odl_config.settings["hold_limit"] == 30
         assert odl_config.settings["max_retry_count"] == 2
         assert odl_config.settings["ebook_loan_duration"] == 10
         assert odl_config.settings["default_loan_duration"] == 11
         # Unknown settings remain as-is
         assert odl_config.settings["unchanged"] == "value"
+
+        odl_config2 = fetch_config(
+            connection, parent_id=config.id, library_id=library_id2
+        )
+        assert odl_config2.settings["hold_limit"] == 31
+        assert odl_config2.settings["max_retry_count"] == 3
+        assert odl_config2.settings["ebook_loan_duration"] == 11
+        assert odl_config2.settings["default_loan_duration"] == 12
+        # Unknown settings remain as-is
+        assert odl_config2.settings["unchanged"] == "value1"

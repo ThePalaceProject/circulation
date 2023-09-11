@@ -26,7 +26,7 @@ def _bool(value):
 # All the settings types that have non-str types
 ALL_SETTING_TYPES: Dict[str, Type[Any]] = {
     "verify_certificate": bool,
-    "default_reservation_period": bool,
+    "default_reservation_period": int,
     "loan_limit": int,
     "hold_limit": int,
     "max_retry_count": int,
@@ -63,15 +63,16 @@ def upgrade() -> None:
 
     # Do the same for any Library settings
     results = connection.execute(
-        f"SELECT parent_id, settings from integration_library_configurations;"
+        f"SELECT parent_id, library_id, settings from integration_library_configurations;"
     ).fetchall()
 
-    for settings_id, settings in results:
+    for settings_id, library_id, settings in results:
         _coerce_types(settings)
         connection.execute(
-            "UPDATE integration_library_configurations SET settings=%s where parent_id=%s",
+            "UPDATE integration_library_configurations SET settings=%s where parent_id=%s and library_id=%s",
             json.dumps(settings),
             settings_id,
+            library_id,
         )
 
 
