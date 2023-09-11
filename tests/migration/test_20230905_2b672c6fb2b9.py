@@ -1,6 +1,5 @@
 import json
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict
 
 import pytest
 from pytest_alembic import MigrationContext
@@ -9,13 +8,7 @@ from sqlalchemy.engine import Connection, Engine
 from tests.migration.conftest import CreateLibrary
 
 
-@dataclass
-class IntegrationConfiguration:
-    id: int
-    settings: Dict[str, Any]
-
-
-class CreateConfiguration(Protocol):
+class CreateConfiguration:
     def __call__(
         self,
         connection: Connection,
@@ -23,48 +16,44 @@ class CreateConfiguration(Protocol):
         protocol: str,
         name: str,
         settings: Dict[str, Any],
-    ) -> IntegrationConfiguration:
-        ...
-
-
-@pytest.fixture
-def create_integration_configuration() -> CreateConfiguration:
-    def insert_config(
-        connection: Connection,
-        goal: str,
-        protocol: str,
-        name: str,
-        settings: Dict[str, Any],
-    ) -> IntegrationConfiguration:
-        connection.execute(
-            "INSERT INTO integration_configurations (goal, protocol, name, settings, self_test_results) VALUES (%s, %s, %s, %s, '{}')",
+    ) -> int:
+        integration_configuration = connection.execute(
+            "INSERT INTO integration_configurations (goal, protocol, name, settings, self_test_results) VALUES (%s, %s, %s, %s, '{}') returning id",
             goal,
             protocol,
             name,
             json.dumps(settings),
-        )
-        return fetch_config(connection, name=name)
-
-    return insert_config
-
-
-def fetch_config(
-    connection: Connection,
-    name: Optional[str] = None,
-    parent_id: Optional[int] = None,
-    library_id: Optional[int] = None,
-) -> IntegrationConfiguration:
-    if name is not None:
-        _id, settings = connection.execute(  # type: ignore[misc]
-            "SELECT id, settings FROM integration_configurations where name=%s", name
         ).fetchone()
-    else:
-        _id, settings = connection.execute(  # type: ignore[misc]
-            "SELECT parent_id, settings FROM integration_library_configurations where parent_id=%s and library_id=%s",
-            parent_id,
-            library_id,
-        ).fetchone()
-    return IntegrationConfiguration(_id, settings)
+        assert integration_configuration is not None
+        assert isinstance(integration_configuration.id, int)
+        return integration_configuration.id
+
+
+@pytest.fixture
+def create_integration_configuration() -> CreateConfiguration:
+    return CreateConfiguration()
+
+
+def fetch_config(connection: Connection, _id: int) -> Dict[str, Any]:
+    integration_config = connection.execute(
+        "SELECT settings FROM integration_configurations where id=%s", _id
+    ).fetchone()
+    assert integration_config is not None
+    assert isinstance(integration_config.settings, dict)
+    return integration_config.settings
+
+
+def fetch_library_config(
+    connection: Connection, parent_id: int, library_id: int
+) -> Dict[str, Any]:
+    integration_lib_config = connection.execute(
+        "SELECT parent_id, settings FROM integration_library_configurations where parent_id=%s and library_id=%s",
+        parent_id,
+        library_id,
+    ).fetchone()
+    assert integration_lib_config is not None
+    assert isinstance(integration_lib_config.settings, dict)
+    return integration_lib_config.settings
 
 
 MIGRATION_UID = "2b672c6fb2b9"
@@ -80,7 +69,7 @@ def test_settings_coersion(
     alembic_runner.migrate_down_one()
 
     with alembic_engine.connect() as connection:
-        config = create_integration_configuration(
+        config_id = create_integration_configuration(
             connection,
             "LICENSE_GOAL",
             "Axis 360",
@@ -107,7 +96,7 @@ def test_settings_coersion(
         connection.execute(
             "INSERT INTO integration_library_configurations (library_id, parent_id, settings) VALUES (%s, %s, %s)",
             library_id,
-            config.id,
+            config_id,
             json.dumps(library_settings),
         )
         library_settings = dict(
@@ -120,7 +109,7 @@ def test_settings_coersion(
         connection.execute(
             "INSERT INTO integration_library_configurations (library_id, parent_id, settings) VALUES (%s, %s, %s)",
             library_id2,
-            config.id,
+            config_id,
             json.dumps(library_settings),
         )
 
@@ -130,49 +119,49 @@ def test_settings_coersion(
             default_reservation_period="12",
             key="value",
         )
-        other_config = create_integration_configuration(
+        other_config_id = create_integration_configuration(
             connection, "PATRON_AUTH_GOAL", "Other", "other-test", other_config_settings
         )
         connection.execute(
             "INSERT INTO integration_library_configurations (library_id, parent_id, settings) VALUES (%s, %s, %s)",
             library_id2,
-            other_config.id,
+            other_config_id,
             json.dumps(other_config_settings),
         )
 
         alembic_runner.migrate_up_one()
 
-        axis_config = fetch_config(connection, name="axis-test-1")
-        assert axis_config.settings["verify_certificate"] == True
-        assert axis_config.settings["loan_limit"] == 20
-        assert axis_config.settings["default_reservation_period"] == 12
+        axis_config = fetch_config(connection, config_id)
+        assert axis_config["verify_certificate"] == True
+        assert axis_config["loan_limit"] == 20
+        assert axis_config["default_reservation_period"] == 12
         # Unknown settings remain as-is
-        assert axis_config.settings["key"] == "value"
+        assert axis_config["key"] == "value"
 
-        odl_config = fetch_config(
-            connection, parent_id=config.id, library_id=library_id
+        odl_config = fetch_library_config(
+            connection, parent_id=config_id, library_id=library_id
         )
-        assert odl_config.settings["hold_limit"] == 30
-        assert odl_config.settings["max_retry_count"] == 2
-        assert odl_config.settings["ebook_loan_duration"] == 10
-        assert odl_config.settings["default_loan_duration"] == 11
+        assert odl_config["hold_limit"] == 30
+        assert odl_config["max_retry_count"] == 2
+        assert odl_config["ebook_loan_duration"] == 10
+        assert odl_config["default_loan_duration"] == 11
         # Unknown settings remain as-is
-        assert odl_config.settings["unchanged"] == "value"
+        assert odl_config["unchanged"] == "value"
 
-        odl_config2 = fetch_config(
-            connection, parent_id=config.id, library_id=library_id2
+        odl_config2 = fetch_library_config(
+            connection, parent_id=config_id, library_id=library_id2
         )
-        assert odl_config2.settings["hold_limit"] == 31
-        assert odl_config2.settings["max_retry_count"] == 3
-        assert odl_config2.settings["ebook_loan_duration"] is None
-        assert odl_config2.settings["default_loan_duration"] == 12
+        assert odl_config2["hold_limit"] == 31
+        assert odl_config2["max_retry_count"] == 3
+        assert odl_config2["ebook_loan_duration"] is None
+        assert odl_config2["default_loan_duration"] == 12
         # Unknown settings remain as-is
-        assert odl_config2.settings["unchanged"] == "value1"
+        assert odl_config2["unchanged"] == "value1"
 
         # Other integration is unchanged
-        other_config = fetch_config(connection, name="other-test")
-        assert other_config.settings == other_config_settings
-        other_library_config = fetch_config(
-            connection, parent_id=other_config.id, library_id=library_id2
+        other_config = fetch_config(connection, other_config_id)
+        assert other_config == other_config_settings
+        other_library_config = fetch_library_config(
+            connection, parent_id=other_config_id, library_id=library_id2
         )
-        assert other_library_config.settings == other_config_settings
+        assert other_library_config == other_config_settings
