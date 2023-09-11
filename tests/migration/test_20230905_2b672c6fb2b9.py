@@ -17,7 +17,12 @@ class IntegrationConfiguration:
 
 class CreateConfiguration(Protocol):
     def __call__(
-        self, connection: Connection, protocol: str, name: str, settings: Dict[str, Any]
+        self,
+        connection: Connection,
+        goal: str,
+        protocol: str,
+        name: str,
+        settings: Dict[str, Any],
     ) -> IntegrationConfiguration:
         ...
 
@@ -25,11 +30,15 @@ class CreateConfiguration(Protocol):
 @pytest.fixture
 def create_integration_configuration() -> CreateConfiguration:
     def insert_config(
-        connection: Connection, protocol: str, name: str, settings: Dict[str, Any]
+        connection: Connection,
+        goal: str,
+        protocol: str,
+        name: str,
+        settings: Dict[str, Any],
     ) -> IntegrationConfiguration:
         connection.execute(
             "INSERT INTO integration_configurations (goal, protocol, name, settings, self_test_results) VALUES (%s, %s, %s, %s, '{}')",
-            "LICENSE_GOAL",
+            goal,
             protocol,
             name,
             json.dumps(settings),
@@ -73,6 +82,7 @@ def test_settings_coersion(
     with alembic_engine.connect() as connection:
         config = create_integration_configuration(
             connection,
+            "LICENSE_GOAL",
             "Axis 360",
             "axis-test-1",
             dict(
@@ -103,7 +113,7 @@ def test_settings_coersion(
         library_settings = dict(
             hold_limit="31",
             max_retry_count="3",
-            ebook_loan_duration="11",
+            ebook_loan_duration="",
             default_loan_duration="12",
             unchanged="value1",
         )
@@ -113,6 +123,23 @@ def test_settings_coersion(
             config.id,
             json.dumps(library_settings),
         )
+
+        other_config_settings = dict(
+            verify_certificate="true",
+            loan_limit="20",
+            default_reservation_period="12",
+            key="value",
+        )
+        other_config = create_integration_configuration(
+            connection, "PATRON_AUTH_GOAL", "Other", "other-test", other_config_settings
+        )
+        connection.execute(
+            "INSERT INTO integration_library_configurations (library_id, parent_id, settings) VALUES (%s, %s, %s)",
+            library_id2,
+            other_config.id,
+            json.dumps(other_config_settings),
+        )
+
         alembic_runner.migrate_up_one()
 
         axis_config = fetch_config(connection, name="axis-test-1")
@@ -137,7 +164,15 @@ def test_settings_coersion(
         )
         assert odl_config2.settings["hold_limit"] == 31
         assert odl_config2.settings["max_retry_count"] == 3
-        assert odl_config2.settings["ebook_loan_duration"] == 11
+        assert odl_config2.settings["ebook_loan_duration"] is None
         assert odl_config2.settings["default_loan_duration"] == 12
         # Unknown settings remain as-is
         assert odl_config2.settings["unchanged"] == "value1"
+
+        # Other integration is unchanged
+        other_config = fetch_config(connection, name="other-test")
+        assert other_config.settings == other_config_settings
+        other_library_config = fetch_config(
+            connection, parent_id=other_config.id, library_id=library_id2
+        )
+        assert other_library_config.settings == other_config_settings
