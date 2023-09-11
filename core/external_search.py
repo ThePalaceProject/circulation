@@ -2802,10 +2802,16 @@ class SearchIndexCoverageProvider(RemovesSearchCoverage, WorkPresentationProvide
             self.remove_search_coverage_records()
 
     def on_completely_finished(self):
-        super().on_completely_finished()
         # Tell the search migrator that no more documents are going to show up.
         target: SearchDocumentReceiverType = self.migration or self.receiver
         target.finish()
+
+    def run_once_and_update_timestamp(self):
+        try:
+            result = super().run_once_and_update_timestamp()
+            return result
+        finally:
+            self.on_completely_finished()
 
     def process_batch(self, works) -> List[Work | CoverageFailure]:
         target: SearchDocumentReceiverType = self.migration or self.receiver

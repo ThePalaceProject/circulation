@@ -227,19 +227,12 @@ class BaseCoverageProvider:
         """
         return self.OPERATION
 
-    def on_completely_finished(self):
-        """A method called when run() has completely finished."""
-
     def run(self):
-        try:
-            start = utc_now()
-            result = self.run_once_and_update_timestamp()
-
-            result = result or CoverageProviderProgress()
-            self.finalize_timestampdata(result, start=start)
-            return result
-        finally:
-            self.on_completely_finished()
+        start = utc_now()
+        result = self.run_once_and_update_timestamp()
+        result = result or CoverageProviderProgress()
+        self.finalize_timestampdata(result, start=start)
+        return result
 
     def run_once_and_update_timestamp(self):
         # First prioritize items that have never had a coverage attempt before.

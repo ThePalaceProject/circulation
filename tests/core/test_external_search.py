@@ -56,6 +56,7 @@ from core.model import (
 from core.model.classification import Subject
 from core.model.work import Work
 from core.problem_details import INVALID_INPUT
+from core.scripts import RunWorkCoverageProviderScript
 from core.search.document import SearchMappingDocument
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
@@ -5026,6 +5027,34 @@ class TestSearchIndexCoverageProvider:
         provider = SearchIndexCoverageProvider(db.session, search_index_client=search)
         assert provider.migration is None
         assert provider.receiver is not None
+
+    def test_complete_run_from_script(
+        self, end_to_end_search_fixture: EndToEndSearchFixture
+    ):
+        search = end_to_end_search_fixture.external_search_index
+        db = end_to_end_search_fixture.db
+        work = db.work(title="A Test Work", with_license_pool=True)
+        work.set_presentation_ready(search_index_client=search)
+
+        class _SearchIndexCoverageProvider(SearchIndexCoverageProvider):
+            _did_call_on_completely_finished = False
+
+            def on_completely_finished(self):
+                self._did_call_on_completely_finished = True
+                super().on_completely_finished()
+
+        # Run as the search_index_refresh script would
+        provider = RunWorkCoverageProviderScript(
+            _SearchIndexCoverageProvider, _db=db.session, search_index_client=search
+        )
+        provider.run()
+
+        # The run ran till the end
+        assert provider.providers[0]._did_call_on_completely_finished == True
+        # The single available work was indexed
+        results = search.query_works(None)
+        assert len(results) == 1
+        assert results[0]["work_id"] == work.id
 
 
 class SearchV10000(SearchSchemaRevision):
