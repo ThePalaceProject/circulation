@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Type
 from werkzeug.datastructures import MIMEAccept
 
 from core.feed_protocol.base import FeedInterface
+from core.feed_protocol.serializer.base import SerializerInterface
 from core.feed_protocol.serializer.opds import OPDS1Serializer
 from core.feed_protocol.serializer.opds2 import OPDS2Serializer
 from core.feed_protocol.types import FeedData, WorkEntry
@@ -15,10 +16,10 @@ from core.util.opds_writer import OPDSMessage
 
 def get_serializer(
     mime_types: Optional[MIMEAccept],
-) -> OPDS1Serializer | OPDS2Serializer:
+) -> SerializerInterface[Any]:
     # Loop through and return whichever mimetype is encountered first
     # Sort values by q-value first
-    serializers: Dict[str, Type[Any]] = {
+    serializers: Dict[str, Type[SerializerInterface[Any]]] = {
         "application/opds+json": OPDS2Serializer,
         "application/atom+xml": OPDS1Serializer,
     }
@@ -26,7 +27,7 @@ def get_serializer(
         match = mime_types.best_match(
             serializers.keys(), default="application/atom+xml"
         )
-        return serializers[match]()  # type: ignore[no-any-return]
+        return serializers[match]()
     # Default
     return OPDS1Serializer()
 
@@ -69,14 +70,23 @@ class BaseOPDSFeed(FeedInterface):
     @classmethod
     def entry_as_response(
         cls,
-        entry: WorkEntry,
+        entry: WorkEntry | OPDSMessage,
         mime_types: Optional[MIMEAccept] = None,
         **response_kwargs: Any,
     ) -> OPDSEntryResponse:
+        serializer = get_serializer(mime_types)
+        if isinstance(entry, OPDSMessage):
+            return OPDSEntryResponse(
+                response=serializer.to_string(serializer.serialize_opds_message(entry)),
+                status=entry.status_code,
+                content_type=serializer.content_type(),
+                **response_kwargs,
+            )
+
+        # A WorkEntry
         if not entry.computed:
             logging.getLogger().error(f"Entry data has not been generated for {entry}")
             raise ValueError(f"Entry data has not been generated")
-        serializer = get_serializer(mime_types)
         response = OPDSEntryResponse(
             response=serializer.serialize_work_entry(entry.computed),
             **response_kwargs,

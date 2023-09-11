@@ -590,9 +590,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         if isinstance(entry, WorkEntry) and entry.computed:
             return cls.entry_as_response(entry, **response_kwargs)
         elif isinstance(entry, OPDSMessage):
-            return ProblemDetail(
-                entry.urn, status_code=entry.status_code, detail=entry.message
-            )
+            return cls.entry_as_response(entry, max_age=0)
 
         return None
 

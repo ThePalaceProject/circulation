@@ -14,6 +14,7 @@ from core.feed_protocol.types import (
 from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.work import Work
+from core.util.opds_writer import OPDSMessage
 
 
 class TestOPDS2Serializer:
@@ -207,3 +208,8 @@ class TestOPDS2Serializer:
         assert result["name"] == "Author"
         assert result["sortAs"] == "Author,"
         assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
+
+    def test_serialize_opds_message(self):
+        assert OPDS2Serializer().serialize_opds_message(
+            OPDSMessage("URN", 200, "Description")
+        ) == dict(urn="URN", description="Description")

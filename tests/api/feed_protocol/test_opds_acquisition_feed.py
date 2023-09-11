@@ -36,7 +36,6 @@ from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
-from core.util.problem_detail import ProblemDetail
 from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
@@ -68,6 +67,24 @@ class TestOPDSFeedProtocol:
         )
         assert isinstance(response, OPDSEntryResponse)
         assert response.content_type == "application/opds+json"
+
+        response = BaseOPDSFeed.entry_as_response(
+            OPDSMessage("URN", 204, "Test OPDS Message")
+        )
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 204
+        assert (
+            b"<schema:description>Test OPDS Message</schema:description>"
+            in response.data
+        )
+
+        response = BaseOPDSFeed.entry_as_response(
+            OPDSMessage("URN", 204, "Test OPDS Message"),
+            mime_types=MIMEAccept([("application/opds+json", 1)]),
+        )
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 204
+        assert dict(description="Test OPDS Message", urn="URN") == response.json
 
 
 class MockAnnotator(CirculationManagerAnnotator):
@@ -957,7 +974,7 @@ class TestOPDSAcquisitionFeed:
         work.presentation_edition = None
         pool.presentation_edition = None
         response = OPDSAcquisitionFeed.single_entry_loans_feed(MagicMock(), pool)
-        assert isinstance(response, ProblemDetail)
+        assert isinstance(response, OPDSEntryResponse)
         assert response.status_code == 403
 
     def test_single_entry_loans_feed_default_annotator(

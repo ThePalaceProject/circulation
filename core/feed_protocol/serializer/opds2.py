@@ -1,7 +1,8 @@
 import json
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from core.feed_protocol.serializer.base import SerializerInterface
 from core.feed_protocol.types import (
     Acquisition,
     Author,
@@ -11,6 +12,7 @@ from core.feed_protocol.types import (
     WorkEntryData,
 )
 from core.model import Contributor
+from core.util.opds_writer import OPDSMessage
 
 ALLOWED_ROLES = [
     "translator",
@@ -30,12 +32,12 @@ MARC_CODE_TO_ROLES = {
 }
 
 
-class OPDS2Serializer:
+class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
     def __init__(self) -> None:
         pass
 
     def serialize_feed(
-        self, feed: FeedData, precomposed_entries: List[Any] = []
+        self, feed: FeedData, precomposed_entries: Optional[List[Any]] = None
     ) -> bytes:
         serialized: Dict[str, Any] = {"publications": []}
         serialized["metadata"] = self._serialize_metadata(feed)
@@ -47,7 +49,7 @@ class OPDS2Serializer:
 
         serialized.update(self._serialize_feed_links(feed))
 
-        return json.dumps(serialized, indent=2).encode()
+        return self.to_string(serialized)
 
     def _serialize_metadata(self, feed: FeedData) -> Dict[str, Any]:
         fmeta = feed.metadata
@@ -57,6 +59,9 @@ class OPDS2Serializer:
         if item_count := fmeta.get("items_per_page"):
             metadata["itemsPerPage"] = int(item_count.text or 0)
         return metadata
+
+    def serialize_opds_message(self, entry: OPDSMessage) -> Dict[str, Any]:
+        return dict(urn=entry.urn, description=entry.message)
 
     def serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
         metadata: Dict[str, Any] = {}
@@ -202,3 +207,7 @@ class OPDS2Serializer:
 
     def content_type(self) -> str:
         return "application/opds+json"
+
+    @classmethod
+    def to_string(cls, data: Dict[str, Any]) -> bytes:
+        return json.dumps(data, indent=2).encode()

@@ -12,7 +12,7 @@ from core.feed_protocol.types import (
     Link,
     WorkEntryData,
 )
-from core.util.opds_writer import OPDSFeed
+from core.util.opds_writer import OPDSFeed, OPDSMessage
 
 
 class TestOPDSSerializer:
@@ -224,3 +224,9 @@ class TestOPDSSerializer:
         # This will create an empty <entry> tag
         assert element.tag == "entry"
         assert list(element) == []
+
+    def test_serialize_opds_message(self):
+        message = OPDSMessage("URN", 200, "Description")
+        serializer = OPDS1Serializer()
+        result = serializer.serialize_opds_message(message)
+        assert serializer.to_string(result) == serializer.to_string(message.tag)
