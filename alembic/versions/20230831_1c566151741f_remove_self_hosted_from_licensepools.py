@@ -1,7 +1,7 @@
 """Remove self_hosted from licensepools
 
 Revision ID: 1c566151741f
-Revises: 0df58829fc1a
+Revises: 2b672c6fb2b9
 Create Date: 2023-08-31 16:13:54.935093+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "1c566151741f"
-down_revision = "0df58829fc1a"
+down_revision = "2b672c6fb2b9"
 branch_labels = None
 depends_on = None
 
