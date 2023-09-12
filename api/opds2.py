@@ -9,7 +9,7 @@ from uritemplate import URITemplate
 from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from core.lane import Facets
-from core.model import ConfigurationSetting, ExternalIntegration
+from core.model import ConfigurationSetting, DataSource, ExternalIntegration
 from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import LicensePoolDeliveryMechanism
@@ -94,6 +94,10 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
     def __init__(self, collection) -> None:
         pass
 
+    @classmethod
+    def logger(cls) -> logging.Logger:
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
     def fulfill(
         self,
         patron: Patron,
@@ -120,7 +124,9 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         if not token_auth or token_auth.value is None:
             return fulfillment
 
-        token = self.get_authentication_token(patron, token_auth.value)
+        token = self.get_authentication_token(
+            patron, licensepool.data_source, token_auth.value
+        )
         if isinstance(token, ProblemDetail):
             raise CannotFulfill()
 
@@ -130,24 +136,19 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
 
     @classmethod
     def get_authentication_token(
-        cls, patron: Patron, token_auth_url: str
+        cls, patron: Patron, datasource: DataSource, token_auth_url: str
     ) -> ProblemDetail | str:
         """Get the authentication token for a patron"""
-        log = logging.getLogger("OPDS2API")
+        log = cls.logger()
 
-        patron_id = patron.username if patron.username else patron.external_identifier
-        if patron_id is None:
-            log.error(
-                f"Could not authenticate the patron({patron.authorization_identifier}): "
-                f"both username and external_identifier are None."
-            )
-            return INVALID_CREDENTIALS
-
+        log.debug(f"Getting authentication token for patron({patron.id})")
+        patron_id = patron.identifier_to_remote_service(datasource)
         url = URITemplate(token_auth_url).expand(patron_id=patron_id)
         response = HTTP.get_with_timeout(url)
         if response.status_code != 200:
             log.error(
-                f"Could not authenticate the patron({patron_id}): {str(response.content)}"
+                f"Could not authenticate the patron (authorization identifier: '{patron.authorization_identifier}' "
+                f"external identifier: '{patron_id}'): {str(response.content)}"
             )
             return INVALID_CREDENTIALS
 
