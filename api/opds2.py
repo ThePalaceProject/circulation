@@ -141,7 +141,6 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
         """Get the authentication token for a patron"""
         log = cls.logger()
 
-        log.debug(f"Getting authentication token for patron({patron.id})")
         patron_id = patron.identifier_to_remote_service(datasource)
         url = URITemplate(token_auth_url).expand(patron_id=patron_id)
         response = HTTP.get_with_timeout(url)
