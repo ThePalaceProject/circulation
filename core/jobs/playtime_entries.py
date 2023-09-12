@@ -1,9 +1,11 @@
+import argparse
 import csv
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from tempfile import TemporaryFile
 
+import dateutil.parser
 import pytz
 from sqlalchemy.sql.functions import sum
 
@@ -64,10 +66,37 @@ class PlaytimeEntriesSummationScript(Script):
 
 
 class PlaytimeEntriesEmailReportsScript(Script):
+    @classmethod
+    def arg_parser(cls):
+        # The default start and end dates encompass the previous three months.
+        default_start, default_until = previous_months(number_of_months=3)
+
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        parser.add_argument(
+            "--start",
+            metavar="YYYY-MM-DD",
+            default=default_start,
+            type=dateutil.parser.isoparse,
+            help="Start date for report in ISO 8601 'yyyy-mm-dd' format.",
+        )
+        parser.add_argument(
+            "--until",
+            metavar="YYYY-MM-DD",
+            default=default_until,
+            type=dateutil.parser.isoparse,
+            help="'Until' date for report in ISO 8601 'yyyy-mm-dd' format."
+            " The report will represent entries from the 'start' date up until,"
+            " but not including, this date.",
+        )
+        return parser
+
     def do_run(self):
-        """Send a quarterly report with aggregated playtimes via email"""
-        # 3 months prior, shifted to the 1st of the month
-        start, until = previous_months(number_of_months=3)
+        """Produce a report for the given (or default) date range."""
+        parsed = self.parse_command_line()
+        utc = pytz.utc
+        start, until = utc.localize(parsed.start), utc.localize(parsed.until)
 
         # Let the database do the math for us
         result = (
