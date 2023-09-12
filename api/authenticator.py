@@ -541,12 +541,12 @@ class LibraryAuthenticator:
             # Maybe we should use something custom instead.
             iss=provider_name,
         )
-        return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")  # type: ignore[arg-type]
+        return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
 
     def decode_bearer_token(self, token: str) -> Tuple[str, str]:
         """Extract auth provider name and access token from JSON web token."""
         decoded = jwt.decode(
-            token, self.bearer_token_signing_secret, algorithms=["HS256"]  # type: ignore[arg-type]
+            token, self.bearer_token_signing_secret, algorithms=["HS256"]
         )
         provider_name = decoded["iss"]
         token = decoded["token"]
