@@ -754,6 +754,7 @@ class TestInstanceInitializationScript:
             caplog.set_level(logging.ERROR)
             script.migrate_database = MagicMock(side_effect=CommandError("test"))
             script.initialize_database = MagicMock()
+            script.initialize_search_indexes = MagicMock()
 
             # If the database is initialized, migrate_database() is called.
             inspect().has_table.return_value = True

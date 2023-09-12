@@ -2,13 +2,10 @@ import logging
 from abc import ABC
 from collections import defaultdict
 
-from pydantic import BaseSettings
-
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.controller import CirculationManager
-from core.integration.settings import BaseSettings
-from core.model import DataSource, Hold, Loan
 from core.external_search import ExternalSearchIndex
+from core.integration.settings import BaseSettings
 from core.model import DataSource, Hold, Loan, get_one_or_create
 from core.model.configuration import ExternalIntegration
 from tests.mocks.search import ExternalSearchIndexFake
