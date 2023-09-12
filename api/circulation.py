@@ -37,13 +37,11 @@ from core.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
-from core.mirror import MirrorUploader
 from core.model import (
     CirculationEvent,
     Collection,
     DataSource,
     DeliveryMechanism,
-    ExternalIntegrationLink,
     Hold,
     Library,
     LicensePool,
@@ -943,39 +941,6 @@ class CirculationAPI:
             return True
         return False
 
-    def _try_to_sign_fulfillment_link(
-        self, licensepool: LicensePool, fulfillment: FulfillmentInfo
-    ) -> FulfillmentInfo:
-        """Tries to sign the fulfillment URL (only works in the case when the collection has mirrors set up)
-
-        :param licensepool: License pool
-        :param fulfillment: Fulfillment info
-
-        :return: Fulfillment info with a possibly signed URL
-        """
-        mirror_types = [ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS]
-        mirror = next(
-            iter(
-                [
-                    MirrorUploader.for_collection(licensepool.collection, mirror_type)
-                    for mirror_type in mirror_types
-                ]
-            )
-        )
-
-        if mirror:
-            signed_url = mirror.sign_url(fulfillment.content_link)
-
-            self.log.info(
-                "Fulfillment link {} has been signed and translated into {}".format(
-                    fulfillment.content_link, signed_url
-                )
-            )
-
-            fulfillment.content_link = signed_url
-
-        return fulfillment
-
     def _collect_event(
         self,
         patron: Optional[Patron],
@@ -1103,11 +1068,7 @@ class CirculationAPI:
         now = utc_now()
         api = self.api_for_license_pool(licensepool)
 
-        if (
-            licensepool.open_access
-            or licensepool.self_hosted
-            or (not api and licensepool.unlimited_access)
-        ):
+        if licensepool.open_access or (not api and licensepool.unlimited_access):
             # We can 'loan' open-access content ourselves just by
             # putting a row in the database.
             __transaction = self._db.begin_nested()
@@ -1538,11 +1499,7 @@ class CirculationAPI:
 
         api = self.api_for_license_pool(licensepool)
 
-        if (
-            licensepool.open_access
-            or licensepool.self_hosted
-            or (not api and licensepool.unlimited_access)
-        ):
+        if licensepool.open_access or (not api and licensepool.unlimited_access):
             # We ignore the vendor-specific arguments when doing
             # open-access fulfillment, because we just don't support
             # partial fulfillment of open-access content.
@@ -1555,10 +1512,6 @@ class CirculationAPI:
                 patron, pin, licensepool, delivery_mechanism, fulfillment
             )
 
-            if licensepool.self_hosted:
-                fulfillment = self._try_to_sign_fulfillment_link(
-                    licensepool, fulfillment
-                )
         else:
             if not api:
                 raise CannotFulfill()
@@ -1669,7 +1622,7 @@ class CirculationAPI:
         )
         if loan is not None:
             api = self.api_for_license_pool(licensepool)
-            if not (api is None or licensepool.open_access or licensepool.self_hosted):
+            if not (api is None or licensepool.open_access):
                 try:
                     api.checkin(patron, pin, licensepool)
                 except NotCheckedOut as e:
@@ -1703,7 +1656,7 @@ class CirculationAPI:
             license_pool=licensepool,
             on_multiple="interchangeable",
         )
-        if not licensepool.open_access and not licensepool.self_hosted:
+        if not licensepool.open_access:
             api = self.api_for_license_pool(licensepool)
             if api is None:
                 raise TypeError(f"No api for licensepool: {licensepool}")

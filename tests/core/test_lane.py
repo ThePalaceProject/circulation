@@ -919,9 +919,6 @@ class TestFacets:
         # reasons why a book might or might not be 'available'.
         open_access = db.work(with_open_access_download=True, title="open access")
         open_access.quality = 1
-        self_hosted = db.work(
-            with_license_pool=True, self_hosted=True, title="self hosted"
-        )
         unlimited_access = db.work(
             with_license_pool=True, unlimited_access=True, title="unlimited access"
         )
@@ -949,11 +946,11 @@ class TestFacets:
         for availability, expect in [
             (
                 Facets.AVAILABLE_NOW,
-                [open_access, available, self_hosted, unlimited_access],
+                [open_access, available, unlimited_access],
             ),
             (
                 Facets.AVAILABLE_ALL,
-                [open_access, available, not_available, self_hosted, unlimited_access],
+                [open_access, available, not_available, unlimited_access],
             ),
             (Facets.AVAILABLE_NOT_NOW, [not_available]),
         ]:
@@ -970,7 +967,7 @@ class TestFacets:
         for collection, expect in [
             (
                 Facets.COLLECTION_FULL,
-                [open_access, available, self_hosted, unlimited_access],
+                [open_access, available, unlimited_access],
             ),
             (Facets.COLLECTION_FEATURED, [open_access]),
         ]:

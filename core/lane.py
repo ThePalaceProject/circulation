@@ -812,7 +812,6 @@ class Facets(FacetsWithEntryPoint):
 
         available_now = or_(
             LicensePool.open_access == True,
-            LicensePool.self_hosted == True,
             LicensePool.unlimited_access,
             LicensePool.licenses_available > 0,
         )
@@ -822,13 +821,10 @@ class Facets(FacetsWithEntryPoint):
         elif self.availability == self.AVAILABLE_ALL:
             availability_clause = or_(
                 LicensePool.open_access == True,
-                LicensePool.self_hosted == True,
                 LicensePool.licenses_owned > 0,
                 LicensePool.unlimited_access,
             )
         elif self.availability == self.AVAILABLE_OPEN_ACCESS:
-            # TODO: self-hosted content could be allowed here
-            # depending on what exactly the wording is.
             availability_clause = LicensePool.open_access == True
         elif self.availability == self.AVAILABLE_NOT_NOW:
             # The book must be licensed but currently unavailable.

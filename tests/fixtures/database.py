@@ -343,7 +343,6 @@ class DatabaseTransactionFixture:
         presentation_edition=None,
         collection=None,
         data_source_name=None,
-        self_hosted=False,
         unlimited_access=False,
     ):
         """Create a Work.
@@ -378,16 +377,12 @@ class DatabaseTransactionFixture:
                 data_source_name=data_source_name,
                 series=series,
                 collection=collection,
-                self_hosted=self_hosted,
                 unlimited_access=unlimited_access,
             )
             if with_license_pool:
                 presentation_edition, pool = presentation_edition
                 if with_open_access_download:
                     pool.open_access = True
-                if self_hosted:
-                    pool.open_access = False
-                    pool.self_hosted = True
                 if unlimited_access:
                     pool.open_access = False
                     pool.unlimited_access = True
@@ -446,7 +441,6 @@ class DatabaseTransactionFixture:
         series=None,
         collection=None,
         publication_date=None,
-        self_hosted=False,
         unlimited_access=False,
     ):
         id = identifier_id or self.fresh_str()
@@ -486,7 +480,6 @@ class DatabaseTransactionFixture:
                 data_source_name=data_source_name,
                 with_open_access_download=with_open_access_download,
                 collection=collection,
-                self_hosted=self_hosted,
                 unlimited_access=unlimited_access,
             )
 
@@ -502,7 +495,6 @@ class DatabaseTransactionFixture:
         with_open_access_download=False,
         set_edition_as_presentation=False,
         collection=None,
-        self_hosted=False,
         unlimited_access=False,
     ):
         source = DataSource.lookup(self.session, data_source_name)
@@ -518,7 +510,6 @@ class DatabaseTransactionFixture:
             data_source=source,
             collection=collection,
             availability_time=utc_now(),
-            self_hosted=self_hosted,
             unlimited_access=unlimited_access,
         )
 

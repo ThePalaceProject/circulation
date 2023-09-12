@@ -246,10 +246,6 @@ class TestListeners:
                 "works_when_open_access_property_changes",
                 functools.partial(_set_property, property_name="open_access"),
             ),
-            (
-                "works_when_self_hosted_property_changes",
-                functools.partial(_set_property, property_name="self_hosted"),
-            ),
         ],
     )
     def test_licensepool_storage_status_change(

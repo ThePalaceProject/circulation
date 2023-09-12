@@ -892,7 +892,6 @@ class Collection(Base, HasSessionCache):
                 LicensePool.licenses_owned > 0,
                 LicensePool.open_access,
                 LicensePool.unlimited_access,
-                LicensePool.self_hosted,
             )
         )
 
@@ -906,7 +905,6 @@ class Collection(Base, HasSessionCache):
                 or_(
                     LicensePool.licenses_available > 0,
                     LicensePool.open_access,
-                    LicensePool.self_hosted,
                     LicensePool.unlimited_access,
                 )
             )

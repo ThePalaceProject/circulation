@@ -32,7 +32,6 @@ class CirculationLicenseProvidersRegistry(
         from api.axis import Axis360API
         from api.bibliotheca import BibliothecaAPI
         from api.enki import EnkiAPI
-        from api.lcp.collection import LCPAPI
         from api.odilo import OdiloAPI
         from api.odl import ODLAPI
         from api.odl2 import ODL2API
@@ -47,7 +46,6 @@ class CirculationLicenseProvidersRegistry(
         self.register(OPDSForDistributorsAPI, canonical=OPDSForDistributorsAPI.NAME)
         self.register(ODLAPI, canonical=ODLAPI.NAME)
         self.register(ODL2API, canonical=ODL2API.NAME)
-        self.register(LCPAPI, canonical=LCPAPI.NAME)
 
 
 class OpenAccessLicenseProvidersRegistry(IntegrationRegistry["OPDSImporter"]):

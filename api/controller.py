@@ -455,10 +455,6 @@ class CirculationManager:
         self.patron_auth_token = PatronAuthTokenController(self)
         self.playtime_entries = PlaytimeEntriesController(self)
 
-        from api.lcp.controller import LCPController
-
-        self.lcp_controller = LCPController(self)
-
     def setup_configuration_dependent_controllers(self):
         """Set up all the controllers that depend on the
         current site configuration.
@@ -762,7 +758,6 @@ class CirculationManagerController(BaseCirculationManagerController):
             and license_pool.licenses_available == 0
             and not license_pool.open_access
             and not license_pool.unlimited_access
-            and not license_pool.self_hosted
         ):
             return FORBIDDEN_BY_POLICY.detailed(
                 _("Library policy prohibits the placement of holds."), status_code=403

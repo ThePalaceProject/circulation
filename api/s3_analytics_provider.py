@@ -151,7 +151,10 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "patrons_in_hold_queue": license_pool.patrons_in_hold_queue
             if license_pool
             else None,
-            "self_hosted": license_pool.self_hosted if license_pool else None,
+            # TODO: We no longer support self-hosted books, so this should always be False.
+            #  this value is still included in the response for backwards compatibility,
+            #  but should be removed in a future release.
+            "self_hosted": False,
             "title": work.title if work else None,
             "author": work.author if work else None,
             "series": work.series if work else None,

@@ -298,7 +298,7 @@ class TestS3AnalyticsProvider:
             assert license_pool.licenses_available == event["licenses_available"]
             assert license_pool.licenses_reserved == event["licenses_reserved"]
             assert license_pool.patrons_in_hold_queue == event["patrons_in_hold_queue"]
-            assert license_pool.self_hosted == event["self_hosted"]
+            assert False == event["self_hosted"]
             assert work.title == event["title"]
             assert work.series == event["series"]
             assert work.series_position == event["series_position"]

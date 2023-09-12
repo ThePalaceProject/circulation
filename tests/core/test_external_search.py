@@ -662,7 +662,6 @@ class TestExternalSearchWithWorks:
             with_license_pool=True,
             collection=result.tiny_collection,
         )
-        result.tiny_book.license_pools[0].self_hosted = True
 
         # Both collections contain 'The Adventures of Sherlock
         # Holmes", but each collection licenses the book through a

@@ -143,16 +143,3 @@ class TestAdminSearchController:
             )
             assert "Horror" in response["genres"]
             assert "Spanish" in response["languages"]
-
-        # Same goes for self hosted titles
-        pool.open_access = False
-        pool.self_hosted = True
-        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
-            "/",
-            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
-        ):
-            response = (
-                admin_search_fixture.manager.admin_search_controller.search_field_values()
-            )
-            assert "Horror" in response["genres"]
-            assert "Spanish" in response["languages"]

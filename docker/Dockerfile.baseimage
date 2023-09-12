@@ -4,12 +4,6 @@
 # we push a change to the code base.
 
 ###############################################################################
-# This is a builder image that is used to build the lcpencrypt binary.
-FROM golang:1.17 AS lcp-builder
-
-RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
-
-###############################################################################
 # This is the main base image build. It is based on phusion/baseimage, which is
 # a minimal Ubuntu image. Eventually I'd like to switch to using the official
 # Ubuntu images, but this is the base image that the NYPL docker image uses, so
@@ -18,9 +12,6 @@ RUN go get -v github.com/readium/readium-lcp-server/lcpencrypt
 # Main repo for this image is here:
 # https://github.com/phusion/baseimage-docker
 FROM phusion/baseimage:focal-1.2.0 As baseimage
-
-# Copy LCP binary from builder into image.
-COPY --from=lcp-builder /go/bin/lcpencrypt /go/bin/lcpencrypt
 
 # Make sure base system is up to date
 RUN apt-get update && \

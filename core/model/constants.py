@@ -40,7 +40,6 @@ class DataSourceConstants:
     FEEDBOOKS = "FeedBooks"
     BIBBLIO = "Bibblio"
     ENKI = "Enki"
-    LCP = "LCP"
     PROQUEST = "ProQuest"
 
     DEPRECATED_NAMES = {"3M": BIBLIOTHECA}
