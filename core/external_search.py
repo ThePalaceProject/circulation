@@ -2807,11 +2807,11 @@ class SearchIndexCoverageProvider(RemovesSearchCoverage, WorkPresentationProvide
         target.finish()
 
     def run_once_and_update_timestamp(self):
-        try:
-            result = super().run_once_and_update_timestamp()
-            return result
-        finally:
-            self.on_completely_finished()
+        # We do not catch exceptions here, so that the on_completely finished should not run
+        # if there was a runtime error
+        result = super().run_once_and_update_timestamp()
+        self.on_completely_finished()
+        return result
 
     def process_batch(self, works) -> List[Work | CoverageFailure]:
         target: SearchDocumentReceiverType = self.migration or self.receiver

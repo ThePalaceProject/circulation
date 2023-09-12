@@ -4,13 +4,24 @@ from core.config import CannotLoadConfiguration
 from core.search.revision import SearchSchemaRevision
 from core.search.v5 import SearchV5
 
+REVISIONS = [SearchV5()]
+
 
 class SearchRevisionDirectory:
     """A directory of the supported search index schemas."""
 
     @staticmethod
     def _create_revisions() -> Mapping[int, SearchSchemaRevision]:
-        return {r.version: r for r in [SearchV5()]}
+        numbers = set()
+        revisions = {}
+        for r in REVISIONS:
+            if r.version in numbers:
+                raise ValueError(
+                    f"Revision version {r.version} is defined multiple times"
+                )
+            numbers.add(r.version)
+            revisions[r.version] = r
+        return revisions
 
     def __init__(self, available: Mapping[int, SearchSchemaRevision]):
         self._available = available

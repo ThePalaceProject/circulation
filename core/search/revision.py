@@ -15,6 +15,8 @@ class SearchSchemaRevision(ABC):
     SEARCH_VERSION: int
 
     def __init__(self):
+        if self.SEARCH_VERSION is None:
+            raise ValueError("The SEARCH_VERSION must be defined with an integer value")
         self._version = self.SEARCH_VERSION
 
     @abstractmethod
