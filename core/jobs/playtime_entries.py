@@ -66,10 +66,16 @@ class PlaytimeEntriesSummationScript(Script):
 
 
 class PlaytimeEntriesEmailReportsScript(Script):
+    REPORT_DATE_FORMAT = "%Y-%m-%d"
+
     @classmethod
     def arg_parser(cls):
-        # The default start and end dates encompass the previous three months.
-        default_start, default_until = previous_months(number_of_months=3)
+        # The default `start` and `until` dates encompass the previous three months.
+        # We convert them to strings here so that they are handled the same way
+        # as non-default dates specified as arguments.
+        default_start, default_until = (
+            date.isoformat() for date in previous_months(number_of_months=3)
+        )
 
         parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -95,8 +101,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
     def do_run(self):
         """Produce a report for the given (or default) date range."""
         parsed = self.parse_command_line()
-        utc = pytz.utc
-        start, until = utc.localize(parsed.start), utc.localize(parsed.until)
+        start, until = pytz.utc.localize(parsed.start), pytz.utc.localize(parsed.until)
 
         # Let the database do the math for us
         result = (
@@ -120,8 +125,20 @@ class PlaytimeEntriesEmailReportsScript(Script):
             )
         )
 
+        formatted_start_date = start.strftime(self.REPORT_DATE_FORMAT)
+        formatted_until_date = until.strftime(self.REPORT_DATE_FORMAT)
+        report_date_label = f"{formatted_start_date} - {formatted_until_date}"
+        email_subject = (
+            f"Playtime Summaries {formatted_start_date} - {formatted_until_date}"
+        )
+        attachment_name = (
+            f"playtime-summary-{formatted_start_date}-{formatted_until_date}"
+        )
+
         # Write to a temporary file so we don't overflow the memory
-        with TemporaryFile("w+", prefix=f"playtimereport{until}", suffix="csv") as temp:
+        with TemporaryFile(
+            "w+", prefix=f"playtimereport{formatted_until_date}", suffix="csv"
+        ) as temp:
             # Write the data as a CSV
             writer = csv.writer(temp)
             writer.writerow(
@@ -136,7 +153,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
                     )
                 title = edition and edition.title
                 row = (
-                    f"{start} - {until}",
+                    report_date_label,
                     urn,
                     collection_name,
                     library_name,
@@ -153,10 +170,10 @@ class PlaytimeEntriesEmailReportsScript(Script):
             )
             if recipient:
                 EmailManager.send_email(
-                    f"Playtime Summaries {start} - {until}",
+                    email_subject,
                     receivers=[recipient],
                     text="",
-                    attachments={f"playtime-summary-{start}-{until}": temp.read()},
+                    attachments={attachment_name: temp.read()},
                 )
             else:
                 self.log.error("No reporting email found, logging complete report.")
