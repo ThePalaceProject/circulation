@@ -18,7 +18,6 @@ from core.model.configuration import (
     ConfigurationSetting,
     ConfigurationStorage,
     ExternalIntegration,
-    ExternalIntegrationLink,
     HasExternalIntegration,
 )
 from core.model.datasource import DataSource
@@ -411,61 +410,6 @@ class TestUniquenessConstraints:
         pytest.raises(IntegrityError, db.session.flush)
 
 
-class TestExternalIntegrationLink:
-    def test_relationships(self, db: DatabaseTransactionFixture):
-        # Create a collection with two storage external integrations.
-        collection = db.collection(
-            name="Collection",
-            protocol=ExternalIntegration.OVERDRIVE,
-        )
-
-        storage1 = db.external_integration(
-            name="integration1",
-            protocol="protocol",
-        )
-        storage2 = db.external_integration(
-            name="integration2",
-            protocol="protocol",
-            goal="storage",
-            username="username",
-            password="password",
-        )
-
-        # Two external integration links need to be created to associate
-        # the collection's external integration with the two storage
-        # external integrations.
-        s1_external_integration_link = db.external_integration_link(
-            integration=collection.external_integration,
-            other_integration=storage1,
-            purpose="covers_mirror",
-        )
-        s2_external_integration_link = db.external_integration_link(
-            integration=collection.external_integration,
-            other_integration=storage2,
-            purpose="books_mirror",
-        )
-
-        qu = db.session.query(ExternalIntegrationLink).order_by(
-            ExternalIntegrationLink.other_integration_id
-        )
-        external_integration_links = qu.all()
-
-        assert len(external_integration_links) == 2
-        assert external_integration_links[0].other_integration_id == storage1.id
-        assert external_integration_links[1].other_integration_id == storage2.id
-
-        # When a storage integration is deleted, the related external
-        # integration link row is deleted, and the relationship with the
-        # collection is removed.
-        db.session.delete(storage1)
-
-        qu = db.session.query(ExternalIntegrationLink)
-        external_integration_links = qu.all()
-
-        assert len(external_integration_links) == 1
-        assert external_integration_links[0].other_integration_id == storage2.id
-
-
 class ExampleExternalIntegrationFixture:
     external_integration: ExternalIntegration
     database_fixture: DatabaseTransactionFixture
@@ -530,33 +474,6 @@ class TestExternalIntegration:
         assert "Library {} defines multiple integrations with goal {}".format(
             db.default_library().name, goal
         ) in str(excinfo.value)
-
-    def test_for_collection_and_purpose(
-        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
-    ):
-        db = example_externalintegration_fixture.database_fixture
-        wrong_purpose = "isbn"
-        collection = db.collection()
-
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            ExternalIntegration.for_collection_and_purpose(
-                db.session, collection, wrong_purpose
-            )
-        assert (
-            "No storage integration for collection '%s' and purpose '%s' is configured"
-            % (collection.name, wrong_purpose)
-            in str(excinfo.value)
-        )
-
-        external_integration = db.external_integration("some protocol")
-        collection.external_integration_id = external_integration.id
-        purpose = "covers_mirror"
-        db.external_integration_link(integration=external_integration, purpose=purpose)
-
-        integration = ExternalIntegration.for_collection_and_purpose(
-            db.session, collection=collection, purpose=purpose
-        )
-        assert isinstance(integration, ExternalIntegration)
 
     def test_with_setting_value(
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
@@ -712,51 +629,6 @@ username='someuser'"""
         # Must be the same value if set
         integration.custom_accept_header = "custom header"
         assert integration.custom_accept_header == "custom header"
-
-    def test_delete(
-        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
-    ):
-        """Ensure that ExternalIntegration.delete clears all orphan ExternalIntegrationLinks."""
-        session = example_externalintegration_fixture.database_fixture.session
-        db = example_externalintegration_fixture.database_fixture
-
-        integration1 = db.external_integration(
-            "protocol",
-            ExternalIntegration.LICENSE_GOAL,
-            libraries=[db.default_library()],
-        )
-        integration2 = db.external_integration(
-            "storage",
-            "storage goal",
-            libraries=[db.default_library()],
-        )
-
-        # Set up a link associating integration2 with integration1.
-        link1 = db.external_integration_link(
-            integration1,
-            db.default_library(),
-            integration2,
-            ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
-        )
-        link2 = db.external_integration_link(
-            integration1,
-            db.default_library(),
-            integration2,
-            ExternalIntegrationLink.COVERS,
-        )
-
-        # Delete integration1.
-        session.delete(integration1)
-
-        # Ensure that there are no orphan links.
-        links = session.query(ExternalIntegrationLink).all()
-        for link in (link1, link2):
-            assert link not in links
-
-        # Ensure that the first integration was successfully removed.
-        external_integrations = session.query(ExternalIntegration).all()
-        assert integration1 not in external_integrations
-        assert integration2 in external_integrations
 
 
 SETTING1_KEY = "setting1"

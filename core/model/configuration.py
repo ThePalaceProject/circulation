@@ -30,39 +30,6 @@ if TYPE_CHECKING:
     from core.model import Collection  # noqa: autoflake
 
 
-class ExternalIntegrationLink(Base):
-
-    __tablename__ = "externalintegrationslinks"
-
-    NO_MIRROR_INTEGRATION = "NO_MIRROR"
-    # Possible purposes that a storage external integration can be used for.
-    # These string literals may be stored in the database, so changes to them
-    # may need to be accompanied by a DB migration.
-    COVERS = "covers_mirror"
-    COVERS_KEY = f"{COVERS}_integration_id"
-
-    OPEN_ACCESS_BOOKS = "books_mirror"
-    OPEN_ACCESS_BOOKS_KEY = f"{OPEN_ACCESS_BOOKS}_integration_id"
-
-    PROTECTED_ACCESS_BOOKS = "protected_access_books_mirror"
-    PROTECTED_ACCESS_BOOKS_KEY = f"{PROTECTED_ACCESS_BOOKS}_integration_id"
-
-    ANALYTICS = "analytics_mirror"
-    ANALYTICS_KEY = f"{ANALYTICS}_integration_id"
-
-    MARC = "MARC_mirror"
-
-    id = Column(Integer, primary_key=True)
-    external_integration_id = Column(
-        Integer, ForeignKey("externalintegrations.id"), index=True
-    )
-    library_id = Column(Integer, ForeignKey("libraries.id"), index=True)
-    other_integration_id = Column(
-        Integer, ForeignKey("externalintegrations.id"), index=True
-    )
-    purpose = Column(Unicode, index=True)
-
-
 class ExternalIntegration(Base):
 
     """An external integration contains configuration for connecting
@@ -233,20 +200,6 @@ class ExternalIntegration(Base):
         foreign_keys="Collection.external_integration_id",
     )
 
-    links: Mapped[List[ExternalIntegrationLink]] = relationship(
-        "ExternalIntegrationLink",
-        backref="integration",
-        foreign_keys="ExternalIntegrationLink.external_integration_id",
-        cascade="all, delete-orphan",
-    )
-
-    other_links: Mapped[List[ExternalIntegrationLink]] = relationship(
-        "ExternalIntegrationLink",
-        backref="other_integration",
-        foreign_keys="ExternalIntegrationLink.other_integration_id",
-        cascade="all, delete-orphan",
-    )
-
     libraries: Mapped[List[Library]] = relationship(
         "Library",
         back_populates="integrations",
@@ -268,40 +221,6 @@ class ExternalIntegration(Base):
         integrations = _db.query(cls).filter(cls.goal == goal).order_by(cls.name)
 
         return integrations
-
-    @classmethod
-    def for_collection_and_purpose(cls, _db, collection, purpose):
-        """Find the ExternalIntegration for the collection.
-
-        :param collection: Use the mirror configuration for this Collection.
-        :param purpose: Use the purpose of the mirror configuration.
-        """
-        qu = (
-            _db.query(cls)
-            .join(
-                ExternalIntegrationLink,
-                ExternalIntegrationLink.other_integration_id == cls.id,
-            )
-            .filter(
-                ExternalIntegrationLink.external_integration_id
-                == collection.external_integration_id,
-                ExternalIntegrationLink.purpose == purpose,
-            )
-        )
-        integrations = qu.all()
-        if not integrations:
-            raise CannotLoadConfiguration(
-                "No storage integration for collection '%s' and purpose '%s' is configured."
-                % (collection.name, purpose)
-            )
-        if len(integrations) > 1:
-            raise CannotLoadConfiguration(
-                "Multiple integrations found for collection '%s' and purpose '%s'"
-                % (collection.name, purpose)
-            )
-
-        [integration] = integrations
-        return integration
 
     @classmethod
     def lookup(cls, _db, protocol, goal, library=None):

@@ -37,7 +37,6 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
-    ExternalIntegrationLink,
     Genre,
     Hyperlink,
     Identifier,
@@ -726,31 +725,6 @@ class DatabaseTransactionFixture:
             integration.set_setting(key, value)
 
         return integration
-
-    def external_integration_link(
-        self,
-        integration=None,
-        library=None,
-        other_integration=None,
-        purpose="covers_mirror",
-    ):
-        integration = integration or self.external_integration("some protocol")
-        other_integration = other_integration or self.external_integration(
-            "some other protocol"
-        )
-
-        library_id = library.id if library else None
-
-        external_integration_link, ignore = get_one_or_create(
-            self.session,
-            ExternalIntegrationLink,
-            library_id=library_id,
-            external_integration_id=integration.id,
-            other_integration_id=other_integration.id,
-            purpose=purpose,
-        )
-
-        return external_integration_link
 
     def integration_configuration(
         self, protocol: str, goal=None, libraries=None, name=None, **kwargs

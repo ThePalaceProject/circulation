@@ -546,11 +546,7 @@ from .collection import (
     CollectionMissing,
     collections_identifiers,
 )
-from .configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    ExternalIntegrationLink,
-)
+from .configuration import ConfigurationSetting, ExternalIntegration
 from .contributor import Contribution, Contributor
 from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverageRecord
 from .credential import Credential

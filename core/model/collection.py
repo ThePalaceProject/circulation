@@ -1,7 +1,6 @@
 # Collection, CollectionIdentifier, CollectionMissing
 from __future__ import annotations
 
-import logging
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Optional
 
@@ -947,13 +946,6 @@ class Collection(Base, HasSessionCache):
         # Delete the ExternalIntegration associated with this
         # Collection, assuming it wasn't deleted already.
         if self.external_integration:
-            for link in self.external_integration.links:
-                if link.other_integration and link.other_integration.goal == "storage":
-                    logging.info(
-                        f"Deletion of collection {self.name} is disassociating "
-                        f"storage integration {link.other_integration.name}."
-                    )
-
             _db.delete(self.external_integration)
 
         # Now delete the Collection itself.
