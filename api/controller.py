@@ -150,6 +150,7 @@ if TYPE_CHECKING:
         PatronAuthServiceSelfTestsController,
     )
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
+    from api.admin.controller.quicksight import QuickSightController
     from api.admin.controller.reset_password import ResetPasswordController
     from api.admin.controller.search_service_self_tests import (
         SearchServiceSelfTestsController,
@@ -220,6 +221,7 @@ class CirculationManager:
     admin_announcement_service: AnnouncementSettings
     admin_search_controller: AdminSearchController
     admin_view_controller: ViewController
+    admin_quicksight_controller: QuickSightController
 
     def __init__(self, _db, services: Services):
         self._db = _db

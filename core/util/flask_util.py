@@ -1,7 +1,7 @@
 """Utilities for Flask applications."""
 import datetime
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Generic, TypeVar
 from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
@@ -205,3 +205,28 @@ class CustomBaseModel(BaseModel):
         rather than their Python class member names.
         """
         return self.dict(*args, by_alias=by_alias, **kwargs)
+
+
+T = TypeVar("T")
+
+
+class StrCommaList(list, Generic[T]):
+    """A list of comma separated values, generally received as query parameters in a URL.
+    We expect pydantic to do the type coercion with respect to the Generic Type.
+    The final value is expected to be a List of the right Type.
+
+    Usage: StrCommaList[Type], just like a List[Type] defintion.
+    """
+
+    @classmethod
+    def __get_validators__(cls):
+        """Pydantic specific API"""
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, comma_separated_str):
+        """Validate the data type and split the string by commas"""
+        if not isinstance(comma_separated_str, str):
+            raise TypeError("String required")
+        # Pydantic wil typecast the values based on the Generic type to the List[...]
+        return [value for value in comma_separated_str.split(",")]

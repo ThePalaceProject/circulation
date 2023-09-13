@@ -239,7 +239,14 @@ export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 The FCM credentials can be downloaded once a Google Service account has been created.
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
+##### Quicksight Dashboards
+
+For generating quicksight dashboard links the following environment variable is required
+`QUICKSIGHT_AUTHORIZED_ARNS` - A comma separated list of `arn:aws:quicksight:...` format ARN strings
+
 #### Email
+
+### Email sending
 
 To use the features that require sending emails, for example to reset the password for logged-out users, you will need
 to have a working SMTP server and set some environment variables:
