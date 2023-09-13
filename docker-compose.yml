@@ -1,4 +1,16 @@
 version: "3.9"
+
+# Common set of CM environment variables
+# see: https://github.com/compose-spec/compose-spec/blob/master/spec.md#extension
+x-cm-env-variables: &cm-env-variables
+  SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
+  PALACE_STORAGE_ACCESS_KEY: "palace"
+  PALACE_STORAGE_SECRET_KEY: "test123456789"
+  PALACE_STORAGE_ENDPOINT_URL: "http://minio:9000"
+  PALACE_STORAGE_PUBLIC_ACCESS_BUCKET: "public"
+  PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
+  PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
+
 services:
   # example docker compose configuration for testing and development
 
@@ -9,16 +21,14 @@ services:
       target: webapp
     ports:
       - "6500:80"
-    environment:
-      SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
+    environment: *cm-env-variables
 
   scripts:
     build:
       context: .
       dockerfile: docker/Dockerfile
       target: scripts
-    environment:
-      SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
+    environment: *cm-env-variables
 
   pg:
     image: "postgres:12"
@@ -36,6 +46,7 @@ services:
       MINIO_ROOT_USER: "palace"
       MINIO_ROOT_PASSWORD: "test123456789"
       MINIO_SCHEME: "http"
+      MINIO_DEFAULT_BUCKETS: "public:download,analytics"
 
   os:
     build:

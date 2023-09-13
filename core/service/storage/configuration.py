@@ -12,7 +12,6 @@ class StorageConfiguration(ServiceConfiguration):
     secret_key: Optional[str] = None
 
     public_access_bucket: Optional[str] = None
-    protected_access_bucket: Optional[str] = None
     analytics_bucket: Optional[str] = None
 
     endpoint_url: Optional[AnyHttpUrl] = None
