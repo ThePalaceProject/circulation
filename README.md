@@ -151,9 +151,9 @@ CREATE USER palace with password 'test';
 grant all privileges on database circ to palace;
 ```
 
-#### Environment variables
+### Environment variables
 
-##### Database
+#### Database
 
 To let the application know which database to use, set the `SIMPLIFIED_PRODUCTION_DATABASE` environment variable.
 
@@ -161,7 +161,32 @@ To let the application know which database to use, set the `SIMPLIFIED_PRODUCTIO
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
 ```
 
-##### Patron `Basic Token` authentication
+#### Storage Service
+
+The application optionally uses a s3 compatible storage service to store files. To configure the application to use
+a storage service, you can set the following environment variables:
+
+- `PALACE_STORAGE_PUBLIC_ACCESS_BUCKET`: Required if you want to use the storage service to serve files directly to
+  users. This is the name of the bucket that will be used to serve files. This bucket should be configured to allow
+  public access to the files.
+- `PALACE_STORAGE_ANALYTICS_BUCKET`: Required if you want to use the storage service to store analytics data.
+- `PALACE_STORAGE_ACCESS_KEY`: The access key (optional).
+    - If this key is set it will be passed to boto3 when connecting to the storage service.
+    - If it is not set boto3 will attempt to find credentials as outlined in their
+      [documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
+- `PALACE_STORAGE_SECRET_KEY`: The secret key (optional).
+- `PALACE_STORAGE_REGION`: The region of the storage service (default: `us-east-1`).
+- `PALACE_STORAGE_ENDPOINT_URL`: The endpoint of the storage service (optional). This is used if you are using a
+  s3 compatible storage service like [minio](https://min.io/).
+- `PALACE_STORAGE_URL_TEMPLATE`: The url template to use when generating urls for files stored in the storage service
+  (optional).
+    - The default value is `https://{bucket}.s3.{region}.amazonaws.com/{key}`.
+    - The following variables can be used in the template:
+        - `{bucket}`: The name of the bucket.
+        - `{key}`: The key of the file.
+        - `{region}`: The region of the storage service.
+
+#### Patron `Basic Token` authentication
 
 Enables/disables patron "basic token" authentication through setting the designated environment variable to any
 (case-insensitive) value of "true"/"yes"/"on"/"1" or "false"/"no"/"off"/"0", respectively.
@@ -172,7 +197,7 @@ If the value is the empty string or the variable is not present in the environme
 export SIMPLIFIED_ENABLE_BASIC_TOKEN_AUTH=true
 ```
 
-##### Firebase Cloud Messaging
+#### Firebase Cloud Messaging
 
 For Firebase Cloud Messaging (FCM) support (e.g., for notifications), `one` (and only one) of the following should be set:
 - `SIMPLIFIED_FCM_CREDENTIALS_JSON` - the JSON-format Google Cloud Platform (GCP) service account key  or
@@ -191,7 +216,7 @@ export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 The FCM credentials can be downloaded once a Google Service account has been created.
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
-### Email sending
+#### Email
 
 To use the features that require sending emails, for example to reset the password for logged-out users, you will need
 to have a working SMTP server and set some environment variables:
@@ -204,7 +229,7 @@ export SIMPLIFIED_MAIL_PASSWORD=password
 export SIMPLIFIED_MAIL_SENDER=sender@example.com
 ```
 
-### Running the Application
+## Running the Application
 
 As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
 in order to guarantee that it will use the Python version you expect. To use a particular Python version,
