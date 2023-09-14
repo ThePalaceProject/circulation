@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Optional, TypeVar
 
-from core.feed_protocol.types import FeedData, WorkEntryData
+from core.feed.types import FeedData, WorkEntryData
 from core.util.opds_writer import OPDSMessage
 
 T = TypeVar("T")

@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Optional
 
 from api.circulation import CirculationAPI
-from core.feed_protocol.annotator.circulation import LibraryAnnotator
-from core.feed_protocol.annotator.verbose import VerboseAnnotator
-from core.feed_protocol.types import FeedData, Link, WorkEntry
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.annotator.verbose import VerboseAnnotator
+from core.feed.types import FeedData, Link, WorkEntry
 from core.lane import Pagination
 from core.mirror import MirrorUploader
 from core.model import DataSource

@@ -10,7 +10,7 @@ from urllib.parse import quote
 from sqlalchemy.orm import Session, joinedload
 
 from core.classifier import Classifier
-from core.feed_protocol.types import (
+from core.feed.types import (
     Author,
     FeedData,
     FeedEntryType,
@@ -18,7 +18,7 @@ from core.feed_protocol.types import (
     WorkEntry,
     WorkEntryData,
 )
-from core.feed_protocol.util import strftime
+from core.feed.util import strftime
 from core.model.classification import Subject
 from core.model.contributor import Contribution, Contributor
 from core.model.datasource import DataSource

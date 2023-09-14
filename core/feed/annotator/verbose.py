@@ -4,8 +4,8 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.types import Author, WorkEntry
+from core.feed.annotator.base import Annotator
+from core.feed.types import Author, WorkEntry
 from core.model import PresentationCalculationPolicy
 from core.model.classification import Subject
 from core.model.contributor import Contributor

@@ -24,7 +24,7 @@ from api.admin.problem_details import (
 from api.controller import CirculationManagerController
 from api.problem_details import CANNOT_DELETE_SHARED_LIST
 from core.app_server import load_pagination_from_request
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
+from core.feed.acquisition import OPDSAcquisitionFeed
 from core.lane import Lane, WorkList
 from core.model import (
     Collection,

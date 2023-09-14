@@ -1,12 +1,12 @@
 from datetime import timedelta
 
 from core.classifier import Classifier
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
-from core.feed_protocol.annotator.verbose import VerboseAnnotator
-from core.feed_protocol.types import FeedEntryType, Link, WorkEntry
-from core.feed_protocol.util import strftime
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.base import Annotator
+from core.feed.annotator.circulation import CirculationManagerAnnotator
+from core.feed.annotator.verbose import VerboseAnnotator
+from core.feed.types import FeedEntryType, Link, WorkEntry
+from core.feed.util import strftime
 from core.model import tuple_to_numericrange
 from core.model.classification import Subject
 from core.model.contributor import Contributor

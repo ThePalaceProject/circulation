@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import core
 from api.admin.config import Configuration as AdminUiConfig
-from core.feed_protocol.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
+from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 
 from .lane import Facets, Pagination
 from .log import LogConfiguration

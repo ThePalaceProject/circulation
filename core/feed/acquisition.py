@@ -20,15 +20,15 @@ from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.entrypoint import EntryPoint
 from core.external_search import ExternalSearchIndex, QueryParseException
 from core.facets import FacetConstants
-from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.annotator.circulation import (
+from core.feed.annotator.base import Annotator
+from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
-from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
-from core.feed_protocol.opds import BaseOPDSFeed
-from core.feed_protocol.types import FeedData, Link, WorkEntry
-from core.feed_protocol.util import strftime
+from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
+from core.feed.opds import BaseOPDSFeed
+from core.feed.types import FeedData, Link, WorkEntry
+from core.feed.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, SearchFacets
 from core.model.constants import LinkRelations
 from core.model.edition import Edition

@@ -4,8 +4,8 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.admin import AdminAnnotator
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.admin import AdminAnnotator
 from core.lane import Pagination
 from core.model.licensing import LicensePool
 

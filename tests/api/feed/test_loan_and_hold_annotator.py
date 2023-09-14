@@ -7,9 +7,9 @@ from core.classifier import (  # type: ignore[attr-defined]
     Fantasy,
     Urban_Fantasy,
 )
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
-from core.feed_protocol.types import WorkEntry, WorkEntryData
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
+from core.feed.types import WorkEntry, WorkEntryData
 from core.lane import WorkList
 from core.model import ExternalIntegration, get_one
 from core.model.constants import EditionConstants, LinkRelations

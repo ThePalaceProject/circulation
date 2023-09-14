@@ -5,11 +5,11 @@ from typing import Any, Dict, List, Optional, Type
 
 from werkzeug.datastructures import MIMEAccept
 
-from core.feed_protocol.base import FeedInterface
-from core.feed_protocol.serializer.base import SerializerInterface
-from core.feed_protocol.serializer.opds import OPDS1Serializer
-from core.feed_protocol.serializer.opds2 import OPDS2Serializer
-from core.feed_protocol.types import FeedData, WorkEntry
+from core.feed.base import FeedInterface
+from core.feed.serializer.base import SerializerInterface
+from core.feed.serializer.opds import OPDS1Serializer
+from core.feed.serializer.opds2 import OPDS2Serializer
+from core.feed.types import FeedData, WorkEntry
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSMessage
 

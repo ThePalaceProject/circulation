@@ -8,16 +8,16 @@ from api.app import app
 from api.opds import LibraryAnnotator as OldLibraryAnnotator
 from api.opds import LibraryLoanAndHoldAnnotator as OldLibraryLoanAndHoldAnnotator
 from core.external_search import MockExternalSearchIndex
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.admin import AdminFeed
-from core.feed_protocol.annotator.admin import AdminAnnotator
-from core.feed_protocol.annotator.circulation import LibraryAnnotator
-from core.feed_protocol.navigation import NavigationFeed
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.admin import AdminFeed
+from core.feed.annotator.admin import AdminAnnotator
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.navigation import NavigationFeed
 from core.lane import Facets, Pagination
 from core.model.work import Work
 from core.opds import AcquisitionFeed
 from core.opds import NavigationFeed as OldNavigationFeed
-from tests.api.feed_protocol.test_library_annotator import (  # noqa
+from tests.api.feed.test_library_annotator import (  # noqa
     LibraryAnnotatorFixture,
     annotator_fixture,
     patch_url_for,

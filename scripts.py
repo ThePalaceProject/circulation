@@ -32,7 +32,7 @@ from api.opds_for_distributors import (
 from api.overdrive import OverdriveAPI
 from core.entrypoint import EntryPoint
 from core.external_search import ExternalSearchIndex
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
+from core.feed.acquisition import OPDSAcquisitionFeed
 from core.lane import Facets, FeaturedFacets, Lane, Pagination
 from core.log import LogConfiguration
 from core.marc import MARCExporter

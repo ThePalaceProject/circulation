@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, cast
 
 from lxml import etree
 
-from core.feed_protocol.serializer.base import SerializerInterface
-from core.feed_protocol.types import (
+from core.feed.serializer.base import SerializerInterface
+from core.feed.types import (
     Acquisition,
     Author,
     DataEntry,

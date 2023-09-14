@@ -1,7 +1,7 @@
 import json
 
-from core.feed_protocol.serializer.opds2 import OPDS2Serializer
-from core.feed_protocol.types import (
+from core.feed.serializer.opds2 import OPDS2Serializer
+from core.feed.types import (
     Acquisition,
     Author,
     FeedData,

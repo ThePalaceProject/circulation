@@ -12,9 +12,9 @@ from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.app_server import load_facets_from_request
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import SortKeyPagination
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.circulation import LibraryAnnotator
-from core.feed_protocol.navigation import NavigationFeed
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.navigation import NavigationFeed
 from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.model import CachedFeed, Edition
 from core.opds import NavigationFacets

@@ -2,8 +2,8 @@ import json
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
-from core.feed_protocol.serializer.base import SerializerInterface
-from core.feed_protocol.types import (
+from core.feed.serializer.base import SerializerInterface
+from core.feed.types import (
     Acquisition,
     Author,
     FeedData,

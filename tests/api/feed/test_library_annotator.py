@@ -21,11 +21,11 @@ from core.classifier import (  # type: ignore[attr-defined]
 )
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EverythingEntryPoint
 from core.external_search import MockExternalSearchIndex
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.circulation import LibraryAnnotator
-from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
-from core.feed_protocol.types import FeedData, WorkEntry
-from core.feed_protocol.util import strftime
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
+from core.feed.types import FeedData, WorkEntry
+from core.feed.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Pagination
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.model import (
@@ -45,7 +45,7 @@ from core.opds_import import OPDSXMLParser
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
-from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
+from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.vendor_id import VendorIDFixture

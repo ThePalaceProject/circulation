@@ -23,9 +23,9 @@ from api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import SortKeyPagination, mock_search_index
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.circulation import LibraryAnnotator
-from core.feed_protocol.types import WorkEntry
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.types import WorkEntry
 from core.lane import Facets, FeaturedFacets
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (

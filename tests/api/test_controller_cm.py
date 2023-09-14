@@ -6,7 +6,7 @@ from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
 from api.problem_details import *
 from core.external_search import MockExternalSearchIndex
-from core.feed_protocol.annotator.circulation import (
+from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )

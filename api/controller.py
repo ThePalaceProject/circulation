@@ -38,12 +38,12 @@ from core.app_server import (
 )
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import ExternalSearchIndex, SortKeyPagination
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.circulation import (
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
-from core.feed_protocol.navigation import NavigationFeed
+from core.feed.navigation import NavigationFeed
 from core.lane import (
     BaseFacets,
     Facets,

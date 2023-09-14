@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from flask import has_request_context
 
-from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
+from core.feed.annotator.circulation import CirculationManagerAnnotator
 
 
 def _patched_url_for(*args: Any, _original=None, **kwargs: Any) -> str:
@@ -41,7 +41,7 @@ class PatchedUrlFor:
 def patch_url_for():
     """Patch the url_for method for annotators"""
     with patch(
-        "core.feed_protocol.annotator.circulation.CirculationManagerAnnotator.url_for",
+        "core.feed.annotator.circulation.CirculationManagerAnnotator.url_for",
         new=partial(_patched_url_for, _original=CirculationManagerAnnotator.url_for),
     ) as patched:
         yield PatchedUrlFor(patched)

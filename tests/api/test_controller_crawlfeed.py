@@ -14,8 +14,8 @@ from api.lanes import (
 )
 from api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
 from core.external_search import MockSearchResult, SortKeyPagination
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import CirculationManagerAnnotator
 from core.problem_details import INVALID_INPUT
 from core.util.flask_util import Response
 from core.util.problem_detail import ProblemDetail

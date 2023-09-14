@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 from typing_extensions import Self
 from werkzeug.datastructures import MIMEAccept
 
-from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
-from core.feed_protocol.opds import BaseOPDSFeed
-from core.feed_protocol.types import DataEntry, DataEntryTypes, Link
-from core.feed_protocol.util import strftime
+from core.feed.annotator.circulation import CirculationManagerAnnotator
+from core.feed.opds import BaseOPDSFeed
+from core.feed.types import DataEntry, DataEntryTypes, Link
+from core.feed.util import strftime
 from core.lane import Facets, Pagination, WorkList
 from core.opds import NavigationFacets
 from core.util.datetime_helpers import utc_now

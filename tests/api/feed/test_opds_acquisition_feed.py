@@ -17,18 +17,18 @@ from core.entrypoint import (
 )
 from core.external_search import MockExternalSearchIndex
 from core.facets import FacetConstants
-from core.feed_protocol.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
-from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.annotator.circulation import (
+from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
+from core.feed.annotator.base import Annotator
+from core.feed.annotator.circulation import (
     AcquisitionHelper,
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
-from core.feed_protocol.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
-from core.feed_protocol.annotator.verbose import VerboseAnnotator
-from core.feed_protocol.navigation import NavigationFeed
-from core.feed_protocol.opds import BaseOPDSFeed
-from core.feed_protocol.types import FeedData, Link, WorkEntry, WorkEntryData
+from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
+from core.feed.annotator.verbose import VerboseAnnotator
+from core.feed.navigation import NavigationFeed
+from core.feed.opds import BaseOPDSFeed
+from core.feed.types import FeedData, Link, WorkEntry, WorkEntryData
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
 from core.model.constants import LinkRelations
@@ -36,7 +36,7 @@ from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
-from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
+from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchPatchFixture
 

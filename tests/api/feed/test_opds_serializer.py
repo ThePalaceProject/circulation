@@ -3,8 +3,8 @@ import datetime
 import pytz
 from lxml import etree
 
-from core.feed_protocol.serializer.opds import OPDS1Serializer
-from core.feed_protocol.types import (
+from core.feed.serializer.opds import OPDS1Serializer
+from core.feed.types import (
     Acquisition,
     Author,
     FeedEntryType,

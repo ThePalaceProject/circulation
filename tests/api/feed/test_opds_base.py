@@ -1,8 +1,8 @@
 from flask import Request
 
-from core.feed_protocol.opds import get_serializer
-from core.feed_protocol.serializer.opds import OPDS1Serializer
-from core.feed_protocol.serializer.opds2 import OPDS2Serializer
+from core.feed.opds import get_serializer
+from core.feed.serializer.opds import OPDS1Serializer
+from core.feed.serializer.opds2 import OPDS2Serializer
 
 
 class TestBaseOPDSFeed:

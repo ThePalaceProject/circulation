@@ -1,12 +1,12 @@
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.admin import AdminFeed
-from core.feed_protocol.annotator.admin import AdminAnnotator
-from core.feed_protocol.types import FeedData
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.admin import AdminFeed
+from core.feed.annotator.admin import AdminAnnotator
+from core.feed.types import FeedData
 from core.lane import Pagination
 from core.model.configuration import ExternalIntegration, ExternalIntegrationLink
 from core.model.datasource import DataSource
 from core.model.measurement import Measurement
-from tests.api.feed_protocol.fixtures import PatchedUrlFor, patch_url_for  # noqa
+from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

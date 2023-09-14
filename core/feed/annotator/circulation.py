@@ -23,8 +23,8 @@ from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
-from core.feed_protocol.annotator.base import Annotator
-from core.feed_protocol.types import (
+from core.feed.annotator.base import Annotator
+from core.feed.types import (
     Acquisition,
     FeedData,
     FeedEntryType,
@@ -32,7 +32,7 @@ from core.feed_protocol.types import (
     Link,
     WorkEntry,
 )
-from core.feed_protocol.util import strftime
+from core.feed.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.lcp.exceptions import LCPError

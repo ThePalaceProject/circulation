@@ -15,8 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 from api.admin.problem_details import *
 from api.admin.validator import Validator
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
-from core.feed_protocol.acquisition import OPDSAcquisitionFeed
-from core.feed_protocol.annotator.admin import AdminAnnotator
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.admin import AdminAnnotator
 from core.lane import Lane
 from core.metadata_layer import LinkData, Metadata, ReplacementPolicy
 from core.mirror import MirrorUploader
