@@ -441,7 +441,6 @@ class TestOPDSAcquisitionFeed:
         # Arrange
         edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False
-        pool.self_hosted = False
         pool.unlimited_access = True
 
         # Act
@@ -462,23 +461,6 @@ class TestOPDSAcquisitionFeed:
         assert tags is not None
         assert "availability_since" in tags
         assert "availability_until" not in tags
-
-    def test_license_tags_show_self_hosted_books(self, db: DatabaseTransactionFixture):
-        # Arrange
-        edition, pool = db.edition(with_license_pool=True)
-        pool.self_hosted = True
-        pool.open_access = False
-        pool.licenses_available = 0
-        pool.licenses_owned = 0
-
-        # Act
-        tags = AcquisitionHelper.license_tags(pool, None, None)
-
-        # Assert
-        assert tags is not None
-        assert 1 == len(tags.keys())
-        assert "availability_status" in tags
-        assert "available" == tags["availability_status"]
 
     def test_single_entry(self, db: DatabaseTransactionFixture):
         session = db.session
