@@ -12,7 +12,10 @@ from api.admin.controller.custom_lists import CustomListsController
 from api.admin.dashboard_stats import generate_statistics
 from api.admin.model.dashboard_statistics import StatisticsResponse
 from api.admin.templates import admin_sign_in_again as sign_in_again_template
-from api.admin.model.quicksight import QuicksightGenerateUrlResponse
+from api.admin.model.quicksight import (
+    QuicksightGenerateUrlRequest,
+    QuicksightGenerateUrlResponse,
+)
 from api.app import api_spec, app
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
@@ -320,7 +323,9 @@ def stats():
 
 @app.route("/admin/quicksight_embed/<dashboard_id>")
 @api_spec.validate(
-    resp=SpecResponse(HTTP_200=QuicksightGenerateUrlResponse), tags=["admin.quicksight"]
+    resp=SpecResponse(HTTP_200=QuicksightGenerateUrlResponse),
+    tags=["admin.quicksight"],
+    query=QuicksightGenerateUrlRequest,
 )
 @returns_json_or_response_or_problem_detail
 @requires_admin

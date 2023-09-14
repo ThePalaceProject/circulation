@@ -73,6 +73,7 @@ class QuickSightController(CirculationManagerController):
         )
 
         try:
+            delimiter = "|"
             client = boto3.client("quicksight", region_name=region)
             response = client.generate_embed_url_for_anonymous_user(
                 AwsAccountId=aws_account_id,
@@ -81,7 +82,12 @@ class QuickSightController(CirculationManagerController):
                 ExperienceConfiguration={
                     "Dashboard": {"InitialDashboardId": dashboard_id}
                 },
-                SessionTags=[dict(Key="library_name", Value=l.name) for l in libraries],
+                SessionTags=[
+                    dict(
+                        Key="library_name",
+                        Value=delimiter.join([l.name for l in libraries]),
+                    )
+                ],
             )
         except Exception as ex:
             log.error(f"Error while fetching the Quisksight Embed url: {ex}")
