@@ -44,13 +44,13 @@ class TestBaseOPDSFeed:
         )
         assert isinstance(get_serializer(request.accept_mimetypes), OPDS1Serializer)
 
-        # Same q-values respect order fo arrival
+        # Same q-values respect order of definition in the code
         request = Request.from_values(
             headers=dict(
                 Accept="application/opds+json;q=0.9,application/atom+xml;q=0.9"
             )
         )
-        assert isinstance(get_serializer(request.accept_mimetypes), OPDS2Serializer)
+        assert isinstance(get_serializer(request.accept_mimetypes), OPDS1Serializer)
 
         # No valid accept mimetype should default to OPDS1.x
         request = Request.from_values(headers=dict(Accept="text/html"))
