@@ -17,11 +17,10 @@ from core.util.opds_writer import OPDSMessage
 def get_serializer(
     mime_types: Optional[MIMEAccept],
 ) -> SerializerInterface[Any]:
-    # Loop through and return whichever mimetype is encountered first
-    # Sort values by q-value first
+    # Ordering matters for poor matches (eg. */*), so we will keep OPDS1 first
     serializers: Dict[str, Type[SerializerInterface[Any]]] = {
-        "application/opds+json": OPDS2Serializer,
         "application/atom+xml": OPDS1Serializer,
+        "application/opds+json": OPDS2Serializer,
     }
     if mime_types:
         match = mime_types.best_match(

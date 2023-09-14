@@ -912,7 +912,7 @@ class OPDSFeedController(CirculationManagerController):
             annotator=annotator,
             facets=facets,
             search_engine=search_engine,
-        ).as_response()
+        ).as_response(mime_types=flask.request.accept_mimetypes)
 
     def feed(self, lane_identifier, feed_class=OPDSAcquisitionFeed):
         """Build or retrieve a paginated acquisition feed.
