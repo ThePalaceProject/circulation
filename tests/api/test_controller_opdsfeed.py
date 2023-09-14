@@ -505,7 +505,9 @@ class TestOPDSFeedController:
             @classmethod
             def search(cls, **kwargs):
                 self.called_with = kwargs
-                return "An OPDS feed"
+                resp = MagicMock()
+                resp.as_response.return_value = "An OPDS feed"
+                return resp
 
         with circulation_fixture.request_context_with_library(
             "/?q=t&size=99&after=22&media=Music"

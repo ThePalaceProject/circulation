@@ -204,7 +204,7 @@ class ToFeedEntry:
         # Add the audience as a category of schema
         # http://schema.org/audience
         if work.audience:
-            audience_uri = "audience"
+            audience_uri = "http://schema.org/audience"
             categories[audience_uri] = [dict(term=work.audience, label=work.audience)]
 
         # Any book can have a target age, but the target age
@@ -294,6 +294,8 @@ class Annotator(ToFeedEntry):
 
         if edition.subtitle:
             computed.subtitle = FeedEntryType(text=edition.subtitle)
+        if edition.sort_title:
+            computed.sort_title = FeedEntryType(text=edition.sort_title)
 
         author_entries = self.authors(edition)
         computed.contributors = author_entries.get("contributors", [])

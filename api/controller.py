@@ -21,11 +21,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
+from werkzeug.datastructures import MIMEAccept
 
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
-from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
+from api.opds2 import OPDS2NavigationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
@@ -956,6 +957,7 @@ class OPDSFeedController(CirculationManagerController):
         )
         return feed.as_response(
             max_age=int(max_age) if max_age else None,
+            mime_types=flask.request.accept_mimetypes,
         )
 
     def navigation(self, lane_identifier):
@@ -1156,7 +1158,7 @@ class OPDSFeedController(CirculationManagerController):
         # Run a search.
         annotator = self.manager.annotator(lane, facets)
         info = OpenSearchDocument.search_info(lane)
-        return feed_class.search(
+        response = feed_class.search(
             _db=self._db,
             title=info["name"],
             url=make_url(),
@@ -1167,6 +1169,9 @@ class OPDSFeedController(CirculationManagerController):
             pagination=pagination,
             facets=facets,
         )
+        if isinstance(response, ProblemDetail):
+            return response
+        return response.as_response(mime_types=flask.request.accept_mimetypes)
 
     def _qa_feed(
         self, feed_factory, feed_title, controller_name, facet_class, worklist_factory
@@ -1300,23 +1305,22 @@ class OPDS2FeedController(CirculationManagerController):
         params: FeedRequestParameters = self._parse_feed_request()
         if params.problem:
             return params.problem
-        annotator = OPDS2PublicationsAnnotator(
-            flask.request.url, params.facets, params.pagination, params.library
-        )
         lane = self.load_lane(None)
+        annotator = self.manager.annotator(lane, params.facets)
         max_age = flask.request.args.get("max_age")
-        feed = AcquisitonFeedOPDS2.publications(
+        feed = OPDSAcquisitionFeed.page(
             self._db,
+            lane.display_name,
+            flask.request.url,
             lane,
+            annotator,
             params.facets,
             params.pagination,
             self.search_engine,
-            annotator,
-            max_age=int(max_age) if max_age is not None else None,
         )
-
-        return Response(
-            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        return feed.as_response(
+            mime_types=MIMEAccept([("application/opds+json", 1)]),  # Force the type
+            max_age=int(max_age) if max_age is not None else None,
         )
 
     def navigation(self):
@@ -1459,7 +1463,17 @@ class LoanController(CirculationManagerController):
                 )
 
         # Then make the feed.
-        return OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
+        feed = OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
+        response = feed.as_response(
+            max_age=0,
+            private=True,
+            mime_types=flask.request.accept_mimetypes,
+        )
+
+        last_modified = patron.last_loan_activity_sync
+        if last_modified:
+            response.last_modified = last_modified
+        return response
 
     def borrow(self, identifier_type, identifier, mechanism_id=None):
         """Create a new loan or hold for a book.

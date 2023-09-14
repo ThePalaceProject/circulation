@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from lxml import etree
 
+from core.feed_protocol.serializer.base import SerializerInterface
 from core.feed_protocol.types import (
     Acquisition,
     Author,
@@ -48,7 +49,7 @@ AUTHOR_MAPPING = {
 }
 
 
-class OPDS1Serializer(OPDSFeed):
+class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
     """An OPDS 1.2 Atom feed serializer"""
 
     def __init__(self) -> None:
@@ -93,7 +94,7 @@ class OPDS1Serializer(OPDSFeed):
         if precomposed_entries:
             for precomposed in precomposed_entries:
                 if isinstance(precomposed, OPDSMessage):
-                    serialized.append(precomposed.tag)
+                    serialized.append(self.serialize_opds_message(precomposed))
 
         for link in feed.links:
             serialized.append(self._serialize_feed_entry("link", link))
@@ -236,6 +237,9 @@ class OPDS1Serializer(OPDSFeed):
 
         return entry
 
+    def serialize_opds_message(self, entry: OPDSMessage) -> etree._Element:
+        return entry.tag
+
     def _serialize_series_entry(self, series: FeedEntryType) -> etree._Element:
         entry = self._tag("series")
         if name := getattr(series, "name", None):
@@ -354,3 +358,6 @@ class OPDS1Serializer(OPDSFeed):
     @classmethod
     def to_string(cls, element: etree._Element) -> bytes:
         return cast(bytes, etree.tostring(element))
+
+    def content_type(self) -> str:
+        return OPDSFeed.ACQUISITION_FEED_TYPE

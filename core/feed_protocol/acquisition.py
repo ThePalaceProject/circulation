@@ -475,7 +475,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         patron: Patron,
         annotator: Optional[LibraryAnnotator] = None,
         **response_kwargs: Any,
-    ) -> OPDSFeedResponse:
+    ) -> OPDSAcquisitionFeed:
         """A patron specific feed that only contains the loans and holds of a patron"""
         db = Session.object_session(patron)
         active_loans_by_work = {}
@@ -516,12 +516,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         feed = OPDSAcquisitionFeed("Active loans and holds", url, works, annotator)
         feed.generate_feed()
-        response = feed.as_response(max_age=0, private=True)
-
-        last_modified = patron.last_loan_activity_sync
-        if last_modified:
-            response.last_modified = last_modified
-        return response
+        return feed
 
     @classmethod
     def single_entry_loans_feed(
@@ -592,9 +587,10 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
-        # TODO: max_age and private response kwargs
         if isinstance(entry, WorkEntry) and entry.computed:
             return cls.entry_as_response(entry, **response_kwargs)
+        elif isinstance(entry, OPDSMessage):
+            return cls.entry_as_response(entry, max_age=0)
 
         return None
 
@@ -769,7 +765,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         pagination: Optional[Pagination] = None,
         facets: Optional[FacetsWithEntryPoint] = None,
         **response_kwargs: Any,
-    ) -> OPDSFeedResponse | ProblemDetail:
+    ) -> OPDSAcquisitionFeed | ProblemDetail:
         """Run a search against the given search engine and return
         the results as a Flask Response.
 
@@ -833,8 +829,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # technically searching the this lane; you are searching the
         # library's entire collection, using _some_ of the constraints
         # imposed by this lane (notably language and audience).
-
-        return OPDSFeedResponse(response=feed.serialize(), **response_kwargs)
+        return feed
 
     @classmethod
     def from_query(

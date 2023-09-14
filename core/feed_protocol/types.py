@@ -125,6 +125,10 @@ class Acquisition(Link):
 
     indirect_acquisitions: List[IndirectAcquisition] = field(default_factory=list)
 
+    # Signal if the acquisition is for a loan or a hold for the patron
+    is_loan: bool = False
+    is_hold: bool = False
+
 
 @dataclass
 class Author(FeedEntryType):
@@ -153,6 +157,7 @@ class WorkEntryData(BaseModel):
     published: Optional[FeedEntryType] = None
     updated: Optional[FeedEntryType] = None
     title: Optional[FeedEntryType] = None
+    sort_title: Optional[FeedEntryType] = None
     subtitle: Optional[FeedEntryType] = None
     series: Optional[FeedEntryType] = None
     imprint: Optional[FeedEntryType] = None

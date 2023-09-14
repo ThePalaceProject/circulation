@@ -36,6 +36,8 @@ class OPDS2SchemaValidationMixin:
 
 class OPDS2SchemaValidation(OPDS2ImportMonitor, OPDS2SchemaValidationMixin):
     def import_one_feed(self, feed):
+        if type(feed) in (str, bytes):
+            feed = json.loads(feed)
         self.validate_schema("core/resources/opds2_schema/feed.schema.json", feed)
         return [], []
 

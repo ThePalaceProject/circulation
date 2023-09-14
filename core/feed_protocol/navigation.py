@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 from typing_extensions import Self
+from werkzeug.datastructures import MIMEAccept
 
 from core.feed_protocol.annotator.circulation import CirculationManagerAnnotator
 from core.feed_protocol.opds import BaseOPDSFeed
@@ -79,7 +82,11 @@ class NavigationFeed(BaseOPDSFeed):
         entry.links.append(Link(rel="subsection", href=url, type=type))
         self._feed.data_entries.append(entry)
 
-    def as_response(self, **kwargs: Any) -> OPDSFeedResponse:
-        response = super().as_response(**kwargs)
+    def as_response(
+        self,
+        mime_types: Optional[MIMEAccept] = None,
+        **kwargs: Any,
+    ) -> OPDSFeedResponse:
+        response = super().as_response(mime_types=mime_types, **kwargs)
         response.content_type = OPDSFeed.NAVIGATION_FEED_TYPE
         return response
