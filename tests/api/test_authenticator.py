@@ -924,18 +924,19 @@ class TestLibraryAuthenticator:
             assert response == "foo"
             assert saml.authenticated_patron.call_count == 1
 
-    # TODO: We can remove this patch once basic token authentication is fully deployed.
-    @patch.object(Configuration, "basic_token_auth_is_enabled", return_value=True)
     def test_authenticated_patron_bearer_access_token(
         self,
-        basic_token_auth_is_enabled_mock,
         db: DatabaseTransactionFixture,
         mock_basic: MockBasicFixture,
     ):
         basic = mock_basic()
-        authenticator = LibraryAuthenticator(
-            _db=db.session, library=db.default_library(), basic_auth_provider=basic
-        )
+        # TODO: We can remove this patch once basic token authentication is fully deployed.
+        with patch.object(
+            Configuration, "basic_token_auth_is_enabled", return_value=True
+        ):
+            authenticator = LibraryAuthenticator(
+                _db=db.session, library=db.default_library(), basic_auth_provider=basic
+            )
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "pass")
         auth = Authorization(auth_type="bearer", token=token)
@@ -956,39 +957,37 @@ class TestLibraryAuthenticator:
         )
         assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem
 
-    # TODO: We can remove this patch once basic token authentication is fully deployed.
-    @patch.object(Configuration, "basic_token_auth_is_enabled", return_value=True)
     def test_get_credential_from_header(
         self,
-        basic_token_auth_is_enabled_mock,
         db: DatabaseTransactionFixture,
         mock_basic: MockBasicFixture,
     ):
+        def get_library_authenticator(
+            basic_auth_provider: BasicAuthenticationProvider | None,
+        ) -> LibraryAuthenticator:
+            # TODO: We can remove this patch once basic token authentication is fully deployed.
+            with patch.object(
+                Configuration, "basic_token_auth_is_enabled", return_value=True
+            ):
+                return LibraryAuthenticator(
+                    _db=db.session,
+                    library=db.default_library(),
+                    basic_auth_provider=basic_auth_provider,
+                )
+
         basic = mock_basic()
 
         # We can pull the password out of a Basic Auth credential
         # if a Basic Auth authentication provider is configured.
-        authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
-            basic_auth_provider=basic,
-        )
+        authenticator = get_library_authenticator(basic_auth_provider=basic)
         credential = Authorization(auth_type="basic", data=dict(password="foo"))
         assert "foo" == authenticator.get_credential_from_header(credential)
 
         # We can't pull the password out if no basic auth provider
-        authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
-            basic_auth_provider=None,
-        )
+        authenticator = get_library_authenticator(basic_auth_provider=None)
         assert authenticator.get_credential_from_header(credential) is None
 
-        authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
-            basic_auth_provider=basic,
-        )
+        authenticator = get_library_authenticator(basic_auth_provider=basic)
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
         credential = Authorization(auth_type="bearer", token=token)
