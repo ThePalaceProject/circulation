@@ -161,6 +161,17 @@ To let the application know which database to use, set the `SIMPLIFIED_PRODUCTIO
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
 ```
 
+##### Patron `Basic Token` authentication
+
+Enables/disables patron "basic token" authentication through setting the designated environment variable to any
+(case-insensitive) value of "true"/"yes"/"on"/"1" or "false"/"no"/"off"/"0", respectively.
+If the value is the empty string or the variable is not present in the environment, it is disabled by default.
+- `SIMPLIFIED_ENABLE_BASIC_TOKEN_AUTH`
+
+```sh
+export SIMPLIFIED_ENABLE_BASIC_TOKEN_AUTH=true
+```
+
 ##### Firebase Cloud Messaging
 
 For Firebase Cloud Messaging (FCM) support (e.g., for notifications), `one` (and only one) of the following should be set:
