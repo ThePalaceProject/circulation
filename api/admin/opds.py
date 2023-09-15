@@ -2,9 +2,7 @@ from sqlalchemy import and_
 
 from api.opds import LibraryAnnotator
 from core.lane import Pagination
-from core.mirror import MirrorUploader
 from core.model import DataSource, LicensePool
-from core.model.configuration import ExternalIntegrationLink
 from core.opds import AcquisitionFeed, VerboseAnnotator
 
 
@@ -65,22 +63,6 @@ class AdminAnnotator(LibraryAnnotator):
                 _external=True,
             ),
         )
-
-        # If there is a storage integration for the collection, changing the cover is allowed.
-        mirror = MirrorUploader.for_collection(
-            active_license_pool.collection, ExternalIntegrationLink.COVERS
-        )
-        if mirror:
-            feed.add_link_to_entry(
-                entry,
-                rel="http://librarysimplified.org/terms/rel/change_cover",
-                href=self.url_for(
-                    "work_change_book_cover",
-                    identifier_type=identifier.type,
-                    identifier=identifier.identifier,
-                    _external=True,
-                ),
-            )
 
     def suppressed_url(self, pagination):
         kwargs = dict(list(pagination.items()))

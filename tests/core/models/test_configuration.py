@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 import sqlalchemy
-from flask_babel import lazy_gettext as _
 from sqlalchemy.exc import IntegrityError
 
 from core.config import CannotLoadConfiguration, Configuration
@@ -413,39 +412,6 @@ class TestUniquenessConstraints:
 
 
 class TestExternalIntegrationLink:
-    def test_collection_mirror_settings(self):
-        settings = ExternalIntegrationLink.COLLECTION_MIRROR_SETTINGS
-
-        assert settings[0]["key"] == ExternalIntegrationLink.COVERS_KEY
-        assert settings[0]["label"] == "Covers Mirror"
-        assert (
-            settings[0]["options"][0]["key"]
-            == ExternalIntegrationLink.NO_MIRROR_INTEGRATION
-        )
-        assert settings[0]["options"][0]["label"] == _(
-            "None - Do not mirror cover images"
-        )
-
-        assert settings[1]["key"] == ExternalIntegrationLink.OPEN_ACCESS_BOOKS_KEY
-        assert settings[1]["label"] == "Open Access Books Mirror"
-        assert (
-            settings[1]["options"][0]["key"]
-            == ExternalIntegrationLink.NO_MIRROR_INTEGRATION
-        )
-        assert settings[1]["options"][0]["label"] == _(
-            "None - Do not mirror free books"
-        )
-
-        assert settings[2]["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
-        assert settings[2]["label"] == "Protected Access Books Mirror"
-        assert (
-            settings[2]["options"][0]["key"]
-            == ExternalIntegrationLink.NO_MIRROR_INTEGRATION
-        )
-        assert settings[2]["options"][0]["label"] == _(
-            "None - Do not mirror self-hosted, commercially licensed books"
-        )
-
     def test_relationships(self, db: DatabaseTransactionFixture):
         # Create a collection with two storage external integrations.
         collection = db.collection(

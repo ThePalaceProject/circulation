@@ -27,13 +27,7 @@ from .config import CannotLoadConfiguration, Configuration, ConfigurationConstan
 from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
 from .lane import Lane
-from .metadata_layer import (
-    LinkData,
-    MetaToModelUtility,
-    ReplacementPolicy,
-    TimestampData,
-)
-from .mirror import MirrorUploader
+from .metadata_layer import TimestampData
 from .model import (
     BaseCoverageRecord,
     CachedFeed,
@@ -44,14 +38,12 @@ from .model import (
     DataSource,
     Edition,
     ExternalIntegration,
-    Hyperlink,
     Identifier,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Patron,
     PresentationCalculationPolicy,
-    Representation,
     SessionManager,
     Subject,
     Timestamp,
@@ -62,7 +54,6 @@ from .model import (
     get_one_or_create,
     production_session,
 )
-from .model.configuration import ExternalIntegrationLink
 from .model.listeners import site_configuration_has_changed
 from .monitor import CollectionMonitor, ReaperMonitor
 from .opds_import import OPDSImporter, OPDSImportMonitor
@@ -2060,174 +2051,6 @@ class OPDSImportScript(CollectionInputScript):
             **self.importer_kwargs,
         )
         monitor.run()
-
-
-class MirrorResourcesScript(CollectionInputScript):
-    """Make sure that all mirrorable resources in a collection have
-    in fact been mirrored.
-    """
-
-    # This object contains the actual logic of mirroring.
-    MIRROR_UTILITY = MetaToModelUtility()
-
-    @classmethod
-    def arg_parser(cls):
-        parser = super().arg_parser()
-        parser.add_argument(
-            "--collection-type",
-            help="Collection type. Valid values are: OPEN_ACCESS (default), PROTECTED_ACCESS.",
-            type=CollectionType,
-            choices=list(CollectionType),
-            default=CollectionType.OPEN_ACCESS,
-        )
-        return parser
-
-    def do_run(self, cmd_args=None):
-        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
-        collections = parsed.collections
-        collection_type = parsed.collection_type
-        if not collections:
-            # Assume they mean all collections.
-            collections = self._db.query(Collection).all()
-
-        # But only process collections that have an associated MirrorUploader.
-        for collection, policy in self.collections_with_uploader(
-            collections, collection_type
-        ):
-            self.process_collection(collection, policy)
-
-    def collections_with_uploader(
-        self, collections, collection_type=CollectionType.OPEN_ACCESS
-    ):
-        """Filter out collections that have no MirrorUploader.
-
-        :yield: 2-tuples (Collection, ReplacementPolicy). The
-            ReplacementPolicy is the appropriate one for this script
-            to use for that Collection.
-        """
-        for collection in collections:
-            covers = MirrorUploader.for_collection(
-                collection, ExternalIntegrationLink.COVERS
-            )
-            books_mirror_type = (
-                ExternalIntegrationLink.OPEN_ACCESS_BOOKS
-                if collection_type == CollectionType.OPEN_ACCESS
-                else ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
-            )
-            books = MirrorUploader.for_collection(collection, books_mirror_type)
-            if covers or books:
-                mirrors = {
-                    ExternalIntegrationLink.COVERS: covers,
-                    books_mirror_type: books,
-                }
-                policy = self.replacement_policy(mirrors)
-                yield collection, policy
-            else:
-                self.log.info("Skipping %r as it has no MirrorUploader.", collection)
-
-    @classmethod
-    def replacement_policy(cls, mirrors):
-        """Create a ReplacementPolicy for this script that uses the
-        given mirrors.
-        """
-        return ReplacementPolicy(
-            mirrors=mirrors,
-            link_content=True,
-            even_if_not_apparently_updated=True,
-            http_get=Representation.cautious_http_get,
-        )
-
-    def process_collection(self, collection, policy, unmirrored=None):
-        """Make sure every mirrorable resource in this collection has
-        been mirrored.
-
-        :param unmirrored: A replacement for Hyperlink.unmirrored,
-            for use in tests.
-
-        """
-        unmirrored = unmirrored or Hyperlink.unmirrored
-        for link in unmirrored(collection):
-            self.process_item(collection, link, policy)
-            self._db.commit()
-
-    @classmethod
-    def derive_rights_status(cls, license_pool, resource):
-        """Make a best guess about the rights status for the given
-        resource.
-
-        This relies on the information having been available at one point,
-        but having been stored in the database at a slight remove.
-        """
-        rights_status = None
-        if not license_pool:
-            return None
-        if resource:
-            lpdm = resource.as_delivery_mechanism_for(license_pool)
-            # When this Resource was associated with this LicensePool,
-            # the rights information was recorded in its
-            # LicensePoolDeliveryMechanism.
-            if lpdm:
-                rights_status = lpdm.rights_status
-        if not rights_status:
-            # We could not find a LicensePoolDeliveryMechanism for
-            # this particular resource, but if every
-            # LicensePoolDeliveryMechanism has the same rights
-            # status, we can assume it's that one.
-            statuses = list({x.rights_status for x in license_pool.delivery_mechanisms})
-            if len(statuses) == 1:
-                [rights_status] = statuses
-        if rights_status:
-            rights_status = rights_status.uri
-        return rights_status
-
-    def process_item(self, collection, link_obj, policy):
-        """Determine the URL that needs to be mirrored and (for books)
-        the rationale that lets us mirror that URL. Then mirror it.
-        """
-        identifier = link_obj.identifier
-        license_pool, ignore = LicensePool.for_foreign_id(
-            self._db,
-            collection.data_source,
-            identifier.type,
-            identifier.identifier,
-            collection=collection,
-            autocreate=False,
-        )
-        if not license_pool:
-            # This shouldn't happen.
-            self.log.warning(
-                "Could not find LicensePool for %r, skipping it rather than mirroring something we shouldn't."
-            )
-            return
-        resource = link_obj.resource
-
-        if link_obj.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
-            rights_status = self.derive_rights_status(license_pool, resource)
-            if not rights_status:
-                self.log.warning(
-                    "Could not unambiguously determine rights status for %r, skipping.",
-                    link_obj,
-                )
-                return
-        else:
-            # For resources like book covers, the rights status is
-            # irrelevant -- we rely on fair use.
-            rights_status = None
-
-        # Mock up a LinkData that MetaToModelUtility can use to
-        # mirror this link (or decide not to mirror it).
-        linkdata = LinkData(
-            rel=link_obj.rel, href=resource.url, rights_uri=rights_status
-        )
-
-        # Mirror the link (or not).
-        self.MIRROR_UTILITY.mirror_link(
-            model_object=license_pool,
-            data_source=collection.data_source,
-            link=linkdata,
-            link_obj=link_obj,
-            policy=policy,
-        )
 
 
 class CheckContributorNamesInDB(IdentifierInputScript):

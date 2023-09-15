@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, TypeVar
 
-from flask_babel import lazy_gettext as _
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
@@ -63,61 +62,6 @@ class ExternalIntegrationLink(Base):
         Integer, ForeignKey("externalintegrations.id"), index=True
     )
     purpose = Column(Unicode, index=True)
-
-    mirror_settings = [
-        {
-            "key": COVERS_KEY,
-            "type": COVERS,
-            "description_type": "cover images",
-            "label": "Covers Mirror",
-        },
-        {
-            "key": OPEN_ACCESS_BOOKS_KEY,
-            "type": OPEN_ACCESS_BOOKS,
-            "description_type": "free books",
-            "label": "Open Access Books Mirror",
-        },
-        {
-            "key": PROTECTED_ACCESS_BOOKS_KEY,
-            "type": PROTECTED_ACCESS_BOOKS,
-            "description_type": "self-hosted, commercially licensed books",
-            "label": "Protected Access Books Mirror",
-        },
-        {
-            "key": ANALYTICS_KEY,
-            "type": ANALYTICS,
-            "description_type": "Analytics",
-            "label": "Analytics Mirror",
-        },
-    ]
-    settings = []
-
-    for mirror_setting in mirror_settings:
-        mirror_type = mirror_setting["type"]
-        mirror_description_type = mirror_setting["description_type"]
-        mirror_label = mirror_setting["label"]
-
-        settings.append(
-            {
-                "key": f"{mirror_type.lower()}_integration_id",
-                "label": _(mirror_label),
-                "description": _(
-                    "Any {} encountered while importing content from this collection "
-                    "can be mirrored to a server you control.".format(
-                        mirror_description_type
-                    )
-                ),
-                "type": "select",
-                "options": [
-                    {
-                        "key": NO_MIRROR_INTEGRATION,
-                        "label": _(f"None - Do not mirror {mirror_description_type}"),
-                    }
-                ],
-            }
-        )
-
-    COLLECTION_MIRROR_SETTINGS = settings
 
 
 class ExternalIntegration(Base):

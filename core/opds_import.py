@@ -40,7 +40,6 @@ from .metadata_layer import (
     SubjectData,
     TimestampData,
 )
-from .mirror import MirrorUploader
 from .model import (
     Collection,
     CoverageRecord,
@@ -57,7 +56,7 @@ from .model import (
     Subject,
     get_one,
 )
-from .model.configuration import ExternalIntegrationLink, HasExternalIntegration
+from .model.configuration import HasExternalIntegration
 from .monitor import CollectionMonitor
 from .util.datetime_helpers import datetime_utc, to_utc, utc_now
 from .util.http import HTTP, BadResponseException
@@ -307,7 +306,6 @@ class OPDSImporter(CirculationConfigurationMixin):
         http_get=None,
         content_modifier=None,
         map_from_collection=None,
-        mirrors=None,
     ):
         """:param collection: LicensePools created by this OPDS import
         will be associated with the given Collection. If this is None,
@@ -321,9 +319,6 @@ class OPDSImporter(CirculationConfigurationMixin):
         here. This is only for use when you are importing OPDS
         metadata without any particular Collection in mind.
 
-        :param mirrors: A dictionary of different MirrorUploader objects for
-        different purposes.
-
         :param http_get: Use this method to make an HTTP GET request. This
         can be replaced with a stub method for testing purposes.
 
@@ -332,8 +327,6 @@ class OPDSImporter(CirculationConfigurationMixin):
         come in from the network.
 
         :param map_from_collection
-
-        :param mirrors
         """
         self._db = _db
         self.log = logging.getLogger("OPDS Importer")
@@ -357,32 +350,10 @@ class OPDSImporter(CirculationConfigurationMixin):
         self.data_source_name = data_source_name
         self.identifier_mapping = identifier_mapping
 
-        # Check to see if a mirror for each purpose was passed in.
-        # If not, then attempt to create one.
-        covers_mirror = (
-            mirrors.get(ExternalIntegrationLink.COVERS, None) if mirrors else None
-        )
-        books_mirror = (
-            mirrors.get(ExternalIntegrationLink.OPEN_ACCESS_BOOKS, None)
-            if mirrors
-            else None
-        )
         self.primary_identifier_source = None
         if collection:
-            if not covers_mirror:
-                # If this Collection is configured to mirror the assets it
-                # discovers, this will create a MirrorUploader for that
-                # Collection for its purpose. Otherwise, this will return None.
-                covers_mirror = MirrorUploader.for_collection(
-                    collection, ExternalIntegrationLink.COVERS
-                )
-            if not books_mirror:
-                books_mirror = MirrorUploader.for_collection(
-                    collection, ExternalIntegrationLink.OPEN_ACCESS_BOOKS
-                )
             self.primary_identifier_source = collection.primary_identifier_source
 
-        self.mirrors = dict(covers_mirror=covers_mirror, books_mirror=books_mirror)
         self.content_modifier = content_modifier
 
         # In general, we are cautious when mirroring resources so that
@@ -587,9 +558,7 @@ class OPDSImporter(CirculationConfigurationMixin):
             link_content=True,
             formats=True,
             even_if_not_apparently_updated=True,
-            mirrors=self.mirrors,
             content_modifier=self.content_modifier,
-            http_get=self.http_get,
         )
         metadata.apply(
             edition=edition,

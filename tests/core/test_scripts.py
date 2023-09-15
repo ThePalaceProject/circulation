@@ -18,8 +18,7 @@ from core.classifier import Classifier
 from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
 from core.external_search import Filter, MockExternalSearchIndex
 from core.lane import Lane, WorkList
-from core.metadata_layer import LinkData, TimestampData
-from core.mirror import MirrorUploader
+from core.metadata_layer import TimestampData
 from core.model import (
     CachedFeed,
     Collection,
@@ -28,11 +27,9 @@ from core.model import (
     CoverageRecord,
     DataSource,
     ExternalIntegration,
-    Hyperlink,
     Identifier,
     Library,
     LicensePool,
-    RightsStatus,
     Timestamp,
     Work,
     WorkCoverageRecord,
@@ -40,20 +37,17 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.classification import Classification, Subject
-from core.model.configuration import ExternalIntegrationLink
 from core.model.customlist import CustomList
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
 from core.overdrive import OverdriveAdvantageAccount
-from core.s3 import MinIOUploader, MinIOUploaderConfiguration, S3Uploader
 from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
     CollectionInputScript,
-    CollectionType,
     ConfigureCollectionScript,
     ConfigureIntegrationScript,
     ConfigureLaneScript,
@@ -68,7 +62,6 @@ from core.scripts import (
     LibraryInputScript,
     ListCollectionMetadataIdentifiersScript,
     LoanNotificationsScript,
-    MirrorResourcesScript,
     MockStdin,
     OPDSImportScript,
     PatronInputScript,
@@ -2004,347 +1997,6 @@ class TestListCollectionMetadataIdentifiersScript:
         assert expected(c1) in output
         assert expected(c2) in output
         assert "2 collections found.\n" in output
-
-
-class TestMirrorResourcesScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        has_uploader = db.collection()
-        mock_uploader = object()
-
-        class Mock(MirrorResourcesScript):
-
-            processed = []
-
-            def collections_with_uploader(self, collections, collection_type):
-                # Pretend that `has_uploader` is the only Collection
-                # with an uploader.
-                for collection in collections:
-                    if collection == has_uploader:
-                        yield collection, mock_uploader
-
-            def process_collection(self, collection, policy):
-                self.processed.append((collection, policy))
-
-        script = Mock(db.session)
-
-        # If there are no command-line arguments, process_collection
-        # is called on every Collection in the system that is okayed
-        # by collections_with_uploader.
-        script.do_run(cmd_args=[])
-        processed = script.processed.pop()
-        assert (has_uploader, mock_uploader) == processed
-        assert [] == script.processed
-
-        # If a Collection is named on the command line,
-        # process_collection is called on that Collection _if_ it has
-        # an uploader.
-        args = ["--collection=%s" % db.default_collection().name]
-        script.do_run(cmd_args=args)
-        assert [] == script.processed
-
-        script.do_run(cmd_args=["--collection=%s" % has_uploader.name])
-        processed = script.processed.pop()
-        assert (has_uploader, mock_uploader) == processed
-
-    @pytest.mark.parametrize(
-        "name,collection_type,book_mirror_type,protocol,uploader_class,settings",
-        [
-            (
-                "containing_open_access_books_with_s3_uploader",
-                CollectionType.OPEN_ACCESS,
-                ExternalIntegrationLink.OPEN_ACCESS_BOOKS,
-                ExternalIntegration.S3,
-                S3Uploader,
-                None,
-            ),
-            (
-                "containing_protected_access_books_with_s3_uploader",
-                CollectionType.PROTECTED_ACCESS,
-                ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
-                ExternalIntegration.S3,
-                S3Uploader,
-                None,
-            ),
-            (
-                "containing_open_access_books_with_minio_uploader",
-                CollectionType.OPEN_ACCESS,
-                ExternalIntegrationLink.OPEN_ACCESS_BOOKS,
-                ExternalIntegration.MINIO,
-                MinIOUploader,
-                {MinIOUploaderConfiguration.ENDPOINT_URL: "http://localhost"},
-            ),
-            (
-                "containing_protected_access_books_with_minio_uploader",
-                CollectionType.PROTECTED_ACCESS,
-                ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
-                ExternalIntegration.MINIO,
-                MinIOUploader,
-                {MinIOUploaderConfiguration.ENDPOINT_URL: "http://localhost"},
-            ),
-        ],
-    )
-    def test_collections(
-        self,
-        db,
-        name,
-        collection_type,
-        book_mirror_type,
-        protocol,
-        uploader_class,
-        settings,
-    ):
-        class Mock(MirrorResourcesScript):
-
-            mock_policy = object()
-
-            @classmethod
-            def replacement_policy(cls, uploader):
-                cls.replacement_policy_called_with = uploader
-                return cls.mock_policy
-
-        script = Mock()
-
-        # The default collection does not have an uploader.
-        # This new collection does.
-        has_uploader = db.collection()
-        mirror = db.external_integration(protocol, ExternalIntegration.STORAGE_GOAL)
-
-        if settings:
-            for key, value in settings.items():
-                mirror.setting(key).value = value
-
-        integration_link = db.external_integration_link(
-            integration=has_uploader._external_integration,
-            other_integration=mirror,
-            purpose=ExternalIntegrationLink.COVERS,
-        )
-
-        # Calling collections_with_uploader will do nothing for collections
-        # that don't have an uploader. It will make a MirrorUploader for
-        # the other collection, pass it into replacement_policy,
-        # and yield the result.
-        result = script.collections_with_uploader(
-            [
-                db.default_collection(),
-                has_uploader,
-                db.default_collection(),
-            ],
-            collection_type,
-        )
-
-        [(collection, policy)] = result
-        assert has_uploader == collection
-        assert Mock.mock_policy == policy
-        # The mirror uploader was associated with a purpose of "covers", so we only
-        # expect to have one MirrorUploader.
-        assert Mock.replacement_policy_called_with[book_mirror_type] == None
-        assert isinstance(
-            Mock.replacement_policy_called_with[ExternalIntegrationLink.COVERS],
-            MirrorUploader,
-        )
-
-        # Add another storage for books.
-        another_mirror = db.external_integration(
-            protocol, ExternalIntegration.STORAGE_GOAL
-        )
-
-        integration_link = db.external_integration_link(
-            integration=has_uploader._external_integration,
-            other_integration=another_mirror,
-            purpose=book_mirror_type,
-        )
-
-        result = script.collections_with_uploader(
-            [
-                db.default_collection(),
-                has_uploader,
-                db.default_collection(),
-            ],
-            collection_type,
-        )
-
-        [(collection, policy)] = result
-        assert has_uploader == collection
-        assert Mock.mock_policy == policy
-        # There should be two MirrorUploaders, one for each purpose.
-        assert isinstance(
-            Mock.replacement_policy_called_with[ExternalIntegrationLink.COVERS],
-            uploader_class,
-        )
-        assert isinstance(
-            Mock.replacement_policy_called_with[book_mirror_type], uploader_class
-        )
-
-    def test_replacement_policy(self):
-        uploader = object()
-        p = MirrorResourcesScript.replacement_policy(uploader)
-        assert uploader == p.mirrors
-        assert True == p.link_content
-        assert True == p.even_if_not_apparently_updated
-        assert False == p.rights
-
-    def test_process_collection(self, db: DatabaseTransactionFixture):
-        class MockScript(MirrorResourcesScript):
-            process_item_called_with = []
-
-            def process_item(self, collection, link, policy):
-                self.process_item_called_with.append((collection, link, policy))
-
-        # Mock the Hyperlink.unmirrored method
-        link1 = object()
-        link2 = object()
-
-        def unmirrored(collection):
-            assert collection == db.default_collection()
-            yield link1
-            yield link2
-
-        script = MockScript(db.session)
-        policy = object()
-        script.process_collection(db.default_collection(), policy, unmirrored)
-
-        # Process_collection called unmirrored() and then called process_item
-        # on every item yielded by unmirrored()
-        call1, call2 = script.process_item_called_with
-        assert (db.default_collection(), link1, policy) == call1
-        assert (db.default_collection(), link2, policy) == call2
-
-    def test_derive_rights_status(self, db: DatabaseTransactionFixture):
-        """Test our ability to determine the rights status of a Resource,
-        in the absence of immediate information from the server.
-        """
-        m = MirrorResourcesScript.derive_rights_status
-        work = db.work(with_open_access_download=True)
-        [pool] = work.license_pools
-        [lpdm] = pool.delivery_mechanisms
-        resource = lpdm.resource
-
-        expect = lpdm.rights_status.uri
-
-        # Given the LicensePool, we can figure out the Resource's
-        # rights status based on what was previously recovered. This lets
-        # us know whether it's okay to mirror that Resource.
-        assert expect == m(pool, resource)
-
-        # In theory, a Resource can be associated with several
-        # LicensePoolDeliveryMechanisms. That's why a LicensePool is
-        # necessary -- to see which LicensePoolDeliveryMechanism we're
-        # looking at.
-        assert None == m(None, resource)
-
-        # If there's no Resource-specific information, but a
-        # LicensePool has only one rights URI among all of its
-        # LicensePoolDeliveryMechanisms, then we can assume all Resources
-        # for that LicensePool use that same set of rights.
-        w2 = db.work(with_license_pool=True)
-        [pool2] = w2.license_pools
-        assert pool2.delivery_mechanisms[0].rights_status.uri == m(pool2, None)
-
-        # If there's more than one possibility, or the LicensePool has
-        # no LicensePoolDeliveryMechanisms at all, then we just don't
-        # know.
-        pool2.set_delivery_mechanism(
-            content_type="text/plain", drm_scheme=None, rights_uri=RightsStatus.CC_BY_ND
-        )
-        assert None == m(pool2, None)
-
-        pool2.delivery_mechanisms = []
-        assert None == m(pool2, None)
-
-    def test_process_item(self, db: DatabaseTransactionFixture):
-        """Test the code that actually sets up the mirror operation."""
-        # Every time process_item() is called, it's either going to ask
-        # this thing to mirror the item, or it's going to decide not to.
-        class MockMirrorUtility:
-            def __init__(self):
-                self.mirrored = []
-
-            def mirror_link(self, **kwargs):
-                self.mirrored.append(kwargs)
-
-        mirror = MockMirrorUtility()
-
-        class MockScript(MirrorResourcesScript):
-            MIRROR_UTILITY = mirror
-            RIGHTS_STATUS = None
-
-            def derive_rights_status(self, license_pool, resource):
-                """Always return the same rights status information.
-                To start out, act like no rights information is available.
-                """
-                self.derive_rights_status_called_with = (license_pool, resource)
-                return self.RIGHTS_STATUS
-
-        # Resource and Hyperlink are a pain to use for real, so here
-        # are some cheap mocks.
-        class MockResource:
-            def __init__(self, url):
-                self.url = url
-
-        class MockLink:
-            def __init__(self, rel, href, identifier):
-                self.rel = rel
-                self.resource = MockResource(href)
-                self.identifier = identifier
-
-        script = MockScript(db.session)
-        m = script.process_item
-
-        # If we can't tie the Hyperlink to a LicensePool in the given
-        # Collection, no upload happens. (This shouldn't happen
-        # because Hyperlink.unmirrored only finds Hyperlinks
-        # associated with Identifiers licensed through a Collection.)
-        identifier = db.identifier()
-        policy = object()
-        download_link = MockLink(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD, db.fresh_url(), identifier
-        )
-        db.default_collection().data_source = DataSource.GUTENBERG
-        m(db.default_collection(), download_link, policy)
-        assert [] == mirror.mirrored
-
-        # This HyperLink does match a LicensePool, but it's not
-        # in the collection we're mirroring, so mirroring it might not be
-        # appropriate.
-        work = db.work(
-            with_open_access_download=True, collection=db.default_collection()
-        )
-        pool = work.license_pools[0]
-        download_link.identifier = pool.identifier
-        wrong_collection = db.collection()
-        wrong_collection.data_source = DataSource.GUTENBERG
-        m(wrong_collection, download_link, policy)
-        assert [] == mirror.mirrored
-
-        # For "open-access" downloads of actual books, if we can't
-        # determine the actual rights status of the book, then we
-        # don't do anything.
-        m(db.default_collection(), download_link, policy)
-        assert [] == mirror.mirrored
-        assert (pool, download_link.resource) == script.derive_rights_status_called_with
-
-        # If we _can_ determine the rights status, a mirror attempt is made.
-        script.RIGHTS_STATUS = object()
-        m(db.default_collection(), download_link, policy)
-        attempt = mirror.mirrored.pop()
-        assert policy == attempt["policy"]
-        assert pool.data_source == attempt["data_source"]
-        assert pool == attempt["model_object"]
-        assert download_link == attempt["link_obj"]
-
-        link = attempt["link"]
-        assert isinstance(link, LinkData)
-        assert download_link.resource.url == link.href
-
-        # For other types of links, we rely on fair use, so the "rights
-        # status" doesn't matter.
-        script.RIGHTS_STATUS = None
-        thumb_link = MockLink(
-            Hyperlink.THUMBNAIL_IMAGE, db.fresh_url(), pool.identifier
-        )
-        m(db.default_collection(), thumb_link, policy)
-        attempt = mirror.mirrored.pop()
-        assert thumb_link.resource.url == attempt["link"].href
 
 
 class TestRebuildSearchIndexScript:

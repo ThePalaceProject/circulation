@@ -25,7 +25,6 @@ from core.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
-from core.mirror import MirrorUploader
 from core.model.configuration import ConfigurationSetting, HasExternalIntegration
 from core.model.integration import IntegrationConfiguration
 
@@ -165,7 +164,6 @@ class OPDS2Importer(
         http_get: Callable | None = None,
         content_modifier: Callable | None = None,
         map_from_collection: dict | None = None,
-        mirrors: dict[str, MirrorUploader] | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -184,7 +182,6 @@ class OPDS2Importer(
         :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
             as they come in from the network.
         :param map_from_collection: Identifier mapping
-        :param mirrors: A dictionary of different MirrorUploader objects for different purposes
         """
         super().__init__(
             db,
@@ -194,7 +191,6 @@ class OPDS2Importer(
             http_get,
             content_modifier,
             map_from_collection,
-            mirrors,
         )
 
         if not isinstance(parser, RWPMManifestParser):

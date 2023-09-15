@@ -3,8 +3,7 @@ import feedparser
 from api.admin.opds import AdminAnnotator, AdminFeed
 from api.opds import AcquisitionFeed
 from core.lane import Pagination
-from core.model import DataSource, ExternalIntegration, Measurement
-from core.model.configuration import ExternalIntegrationLink
+from core.model import DataSource, Measurement
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -129,62 +128,6 @@ class TestOPDS:
         [entry] = feedparser.parse(str(feed))["entries"]
         [edit_link] = [x for x in entry["links"] if x["rel"] == "edit"]
         assert lp.identifier.identifier in edit_link["href"]
-
-    def test_feed_includes_change_cover_link(self, db: DatabaseTransactionFixture):
-        work = db.work(with_open_access_download=True)
-        lp = work.license_pools[0]
-        library = db.default_library()
-
-        feed = AcquisitionFeed(
-            db.session,
-            "test",
-            "url",
-            [work],
-            AdminAnnotator(None, library, test_mode=True),
-        )
-        [entry] = feedparser.parse(str(feed))["entries"]
-
-        # Since there's no storage integration, the change cover link isn't included.
-        assert [] == [
-            x
-            for x in entry["links"]
-            if x["rel"] == "http://librarysimplified.org/terms/rel/change_cover"
-        ]
-
-        # There is now a covers storage integration that is linked to the external
-        # integration for a collection that the work is in. It will use that
-        # covers mirror and the change cover link is included.
-        storage = db.external_integration(
-            ExternalIntegration.S3, ExternalIntegration.STORAGE_GOAL
-        )
-        storage.username = "user"
-        storage.password = "pass"
-
-        collection = db.collection()
-        purpose = ExternalIntegrationLink.COVERS
-        external_integration_link = db.external_integration_link(
-            integration=collection._external_integration,
-            other_integration=storage,
-            purpose=purpose,
-        )
-        library.collections.append(collection)
-        work = db.work(with_open_access_download=True, collection=collection)
-        lp = work.license_pools[0]
-        feed = AcquisitionFeed(
-            db.session,
-            "test",
-            "url",
-            [work],
-            AdminAnnotator(None, library, test_mode=True),
-        )
-        [entry] = feedparser.parse(str(feed))["entries"]
-
-        [change_cover_link] = [
-            x
-            for x in entry["links"]
-            if x["rel"] == "http://librarysimplified.org/terms/rel/change_cover"
-        ]
-        assert lp.identifier.identifier in change_cover_link["href"]
 
     def test_suppressed_feed(self, db: DatabaseTransactionFixture):
         # Test the ability to show a paginated feed of suppressed works.

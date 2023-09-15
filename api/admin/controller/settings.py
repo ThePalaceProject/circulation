@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Type, cast
@@ -47,7 +46,6 @@ from core.model import (
     get_one_or_create,
 )
 from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.s3 import S3UploaderConfiguration
 from core.selftest import BaseHasSelfTests
 from core.util.problem_detail import ProblemDetail
 
@@ -531,65 +529,6 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
             self_test_results = dict(exception=message % args)
 
         return self_test_results
-
-    def _mirror_integration_settings(self):
-        """Create a setting interface for selecting a storage integration to
-        be used when mirroring items from a collection.
-        """
-        integrations = (
-            self._db.query(ExternalIntegration)
-            .filter(ExternalIntegration.goal == ExternalIntegration.STORAGE_GOAL)
-            .order_by(ExternalIntegration.name)
-        )
-
-        if not integrations.all():
-            return
-
-        mirror_integration_settings = copy.deepcopy(
-            ExternalIntegrationLink.COLLECTION_MIRROR_SETTINGS
-        )
-        for integration in integrations:
-            book_covers_bucket = integration.setting(
-                S3UploaderConfiguration.BOOK_COVERS_BUCKET_KEY
-            ).value
-            open_access_bucket = integration.setting(
-                S3UploaderConfiguration.OA_CONTENT_BUCKET_KEY
-            ).value
-            protected_access_bucket = integration.setting(
-                S3UploaderConfiguration.PROTECTED_CONTENT_BUCKET_KEY
-            ).value
-
-            analytics_bucket = integration.setting(
-                S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
-            ).value
-
-            for setting in mirror_integration_settings:
-                if (
-                    setting["key"] == ExternalIntegrationLink.COVERS_KEY
-                    and book_covers_bucket
-                ):
-                    setting["options"].append(
-                        {"key": str(integration.id), "label": integration.name}
-                    )
-                elif setting["key"] == ExternalIntegrationLink.OPEN_ACCESS_BOOKS_KEY:
-                    if open_access_bucket:
-                        setting["options"].append(
-                            {"key": str(integration.id), "label": integration.name}
-                        )
-                elif (
-                    setting["key"] == ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS_KEY
-                ):
-                    if protected_access_bucket:
-                        setting["options"].append(
-                            {"key": str(integration.id), "label": integration.name}
-                        )
-                elif setting["key"] == ExternalIntegrationLink.ANALYTICS_KEY:
-                    if protected_access_bucket:
-                        setting["options"].append(
-                            {"key": str(integration.id), "label": integration.name}
-                        )
-
-        return mirror_integration_settings
 
     def _create_integration(self, protocol_definitions, protocol, goal):
         """Create a new ExternalIntegration for the given protocol and

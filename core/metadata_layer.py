@@ -41,7 +41,6 @@ from .model import (
     get_one,
     get_one_or_create,
 )
-from .model.configuration import ExternalIntegrationLink
 from .model.licensing import LicenseFunctions, LicenseStatus
 from .util import LanguageCodes
 from .util.datetime_helpers import to_utc, utc_now
@@ -63,10 +62,8 @@ class ReplacementPolicy:
         formats=False,
         rights=False,
         link_content=False,
-        mirrors=None,
         content_modifier=None,
         analytics=None,
-        http_get=None,
         even_if_not_apparently_updated=False,
         presentation_calculation_policy=None,
     ):
@@ -78,10 +75,8 @@ class ReplacementPolicy:
         self.formats = formats
         self.link_content = link_content
         self.even_if_not_apparently_updated = even_if_not_apparently_updated
-        self.mirrors = mirrors
         self.content_modifier = content_modifier
         self.analytics = analytics
-        self.http_get = http_get
         self.presentation_calculation_policy = (
             presentation_calculation_policy or PresentationCalculationPolicy()
         )
@@ -489,16 +484,6 @@ class LinkData:
             content,
         )
 
-    def mirror_type(self):
-        """Returns the type of mirror that should be used for the link."""
-        if self.rel in [Hyperlink.IMAGE, Hyperlink.THUMBNAIL_IMAGE]:
-            return ExternalIntegrationLink.COVERS
-
-        if self.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
-            return ExternalIntegrationLink.OPEN_ACCESS_BOOKS
-        elif self.rel == Hyperlink.GENERIC_OPDS_ACQUISITION:
-            return ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS
-
 
 class MeasurementData:
     def __init__(self, quantity_measured, value, weight=1, taken_at=None):
@@ -684,234 +669,7 @@ class TimestampData:
         )
 
 
-class MetaToModelUtility:
-    """
-    Contains functionality common to both CirculationData and Metadata.
-    """
-
-    log = logging.getLogger("Abstract metadata layer - mirror code")
-
-    def mirror_link(self, model_object, data_source, link, link_obj, policy):
-        """Retrieve a copy of the given link and make sure it gets
-        mirrored. If it's a full-size image, create a thumbnail and
-        mirror that too.
-
-        The model_object can be either a pool or an edition.
-        """
-        if link_obj.rel not in Hyperlink.MIRRORED:
-            # we only host locally open-source epubs and cover images
-            if link.href:
-                # The log message only makes sense if the resource is
-                # hosted elsewhere.
-                self.log.info("Not mirroring %s: rel=%s", link.href, link_obj.rel)
-            return
-
-        if link.rights_uri and link.rights_uri == RightsStatus.IN_COPYRIGHT:
-            self.log.info(f"Not mirroring {link.href}: rights status={link.rights_uri}")
-            return
-
-        mirror_type = link.mirror_type()
-
-        if mirror_type in policy.mirrors:
-            mirror = policy.mirrors[mirror_type]
-            if not mirror:
-                return
-        else:
-            self.log.info("No mirror uploader with key %s found" % mirror_type)
-            return
-
-        http_get = policy.http_get
-
-        _db = Session.object_session(link_obj)
-        original_url = link.href
-
-        self.log.info("About to mirror %s" % original_url)
-        pools = []
-        edition = None
-        title = None
-        identifier = None
-        if model_object:
-            if isinstance(model_object, LicensePool):
-                pools = [model_object]
-                identifier = model_object.identifier
-
-                if (
-                    identifier
-                    and identifier.primarily_identifies
-                    and identifier.primarily_identifies[0]
-                ):
-                    edition = identifier.primarily_identifies[0]
-            elif isinstance(model_object, Edition):
-                pools = model_object.license_pools
-                identifier = model_object.primary_identifier
-                edition = model_object
-        if edition and edition.title:
-            title = edition.title
-        else:
-            title = getattr(self, "title", None) or None
-
-        if (not identifier) or (
-            link_obj.identifier and identifier != link_obj.identifier
-        ):
-            # insanity found
-            self.log.warning(
-                "Tried to mirror a link with an invalid identifier %r" % identifier
-            )
-            return
-
-        max_age = None
-        if policy.link_content:
-            # We want to fetch the representation again, even if we
-            # already have a recent usable copy. If we fetch it and it
-            # hasn't changed, we'll keep using the one we have.
-            max_age = 0
-
-        # This will fetch a representation of the original and
-        # store it in the database.
-        representation, is_new = Representation.get(
-            _db,
-            link.href,
-            do_get=http_get,
-            presumed_media_type=link.media_type,
-            max_age=max_age,
-        )
-
-        # Make sure the (potentially newly-fetched) representation is
-        # associated with the resource.
-        link_obj.resource.representation = representation
-
-        # If we couldn't fetch this representation, don't mirror it,
-        # and if this was an open/protected access link, then suppress the associated
-        # license pool until someone fixes it manually.
-        # The license pool to suppress will be either the passed-in model_object (if it's of type pool),
-        # or the license pool associated with the passed-in model object (if it's of type edition).
-        if representation.fetch_exception:
-            if pools and link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
-                for pool in pools:
-                    pool.suppressed = True
-                    pool.license_exception = (
-                        "Fetch exception: %s" % representation.fetch_exception
-                    )
-                    self.log.error(pool.license_exception)
-            return
-
-        # If we fetched the representation and it hasn't changed,
-        # the previously mirrored version is fine. Don't mirror it
-        # again.
-        if representation.status_code == 304 and representation.mirror_url:
-            self.log.info(
-                "Representation has not changed, assuming mirror at %s is up to date.",
-                representation.mirror_url,
-            )
-            return
-
-        if representation.status_code // 100 not in (2, 3):
-            self.log.info(
-                "Representation %s gave %s status code, not mirroring.",
-                representation.url,
-                representation.status_code,
-            )
-            return
-
-        if policy.content_modifier:
-            policy.content_modifier(representation)
-
-        # The metadata may have some idea about the media type for this
-        # LinkObject, but it could be wrong. If the representation we
-        # actually just saw is a mirrorable media type, that takes
-        # precedence. If we were expecting this link to be mirrorable
-        # but we actually saw something that's not, assume our original
-        # metadata was right and the server told us the wrong media type.
-        if representation.media_type and representation.mirrorable_media_type:
-            link.media_type = representation.media_type
-
-        if not representation.mirrorable_media_type:
-            if link.media_type:
-                self.log.info(
-                    "Saw unsupported media type for %s: %s. Assuming original media type %s is correct",
-                    representation.url,
-                    representation.media_type,
-                    link.media_type,
-                )
-                representation.media_type = link.media_type
-            else:
-                self.log.info(
-                    "Not mirroring %s: unsupported media type %s",
-                    representation.url,
-                    representation.media_type,
-                )
-                return
-
-        # Determine the best URL to use when mirroring this
-        # representation.
-        if (
-            link.media_type in Representation.BOOK_MEDIA_TYPES
-            or link.media_type in Representation.AUDIOBOOK_MEDIA_TYPES
-        ):
-            url_title = title or identifier.identifier
-            extension = representation.extension()
-            mirror_url = mirror.book_url(
-                identifier,
-                data_source=data_source,
-                title=url_title,
-                extension=extension,
-                open_access=link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD,
-            )
-        else:
-            filename = representation.default_filename(
-                link_obj, representation.media_type
-            )
-            mirror_url = mirror.cover_image_url(data_source, identifier, filename)
-
-        # Mirror it.
-        collection = pools[0].collection if pools else None
-        mirror.mirror_one(representation, mirror_to=mirror_url, collection=collection)
-
-        # If we couldn't mirror an open/protected access link representation, suppress
-        # the license pool until someone fixes it manually.
-        if representation.mirror_exception:
-            if pools and link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
-                for pool in pools:
-                    pool.suppressed = True
-                    pool.license_exception = (
-                        "Mirror exception: %s" % representation.mirror_exception
-                    )
-                    self.log.error(pool.license_exception)
-
-        if link_obj.rel == Hyperlink.IMAGE:
-            # Create and mirror a thumbnail.
-            thumbnail_filename = representation.default_filename(
-                link_obj, Representation.PNG_MEDIA_TYPE
-            )
-            thumbnail_url = mirror.cover_image_url(
-                data_source,
-                identifier,
-                thumbnail_filename,
-                Edition.MAX_THUMBNAIL_HEIGHT,
-            )
-            thumbnail, is_new = representation.scale(
-                max_height=Edition.MAX_THUMBNAIL_HEIGHT,
-                max_width=Edition.MAX_THUMBNAIL_WIDTH,
-                destination_url=thumbnail_url,
-                destination_media_type=Representation.PNG_MEDIA_TYPE,
-                force=True,
-            )
-            if is_new:
-                # A thumbnail was created distinct from the original
-                # image. Mirror it as well.
-                mirror.mirror_one(
-                    thumbnail, mirror_to=thumbnail_url, collection=collection
-                )
-
-        if link_obj.rel in Hyperlink.SELF_HOSTED_BOOKS:
-            # If we mirrored book content successfully, remove it from
-            # the database to save space. We do keep images in case we
-            # ever need to resize them or mirror them elsewhere.
-            if representation.mirrored_at and not representation.mirror_exception:
-                representation.content = None
-
-
-class CirculationData(MetaToModelUtility):
+class CirculationData:
     """Information about actual copies of a book that can be delivered to
     patrons.
 
@@ -1189,8 +947,7 @@ class CirculationData(MetaToModelUtility):
 
         data_source = self.data_source(_db)
         identifier = self.primary_identifier(_db)
-        # First, make sure all links in self.links are mirrored (if necessary)
-        # and associated with the book's identifier.
+        # First, make sure all links in self.links are associated with the book's identifier.
 
         # TODO: be able to handle the case where the URL to a link changes or
         # a link disappears.
@@ -1205,13 +962,6 @@ class CirculationData(MetaToModelUtility):
                     content=link.content,
                 )
                 link_objects[link] = link_obj
-
-        for link in self.links:
-            if link.rel in Hyperlink.CIRCULATION_ALLOWED:
-                link_obj = link_objects[link]
-                if replace.mirrors:
-                    # We need to mirror this resource.
-                    self.mirror_link(pool, data_source, link, link_obj, replace)
 
         # Next, make sure the DeliveryMechanisms associated
         # with the book reflect the formats in self.formats.
@@ -1328,7 +1078,7 @@ class CirculationData(MetaToModelUtility):
         return self.last_checked >= pool.last_checked
 
 
-class Metadata(MetaToModelUtility):
+class Metadata:
 
     """A (potentially partial) set of metadata for a published work."""
 
@@ -1952,68 +1702,26 @@ class Metadata(MetaToModelUtility):
         if self.circulation:
             self.circulation.apply(_db, collection, replace)
 
-        # obtains a presentation_edition for the title, which will later be used to get a mirror link.
+        # obtains a presentation_edition for the title
         has_image = any([link.rel == Hyperlink.IMAGE for link in self.links])
         for link in self.links:
             link_obj = link_objects[link]
 
             if link_obj.rel == Hyperlink.THUMBNAIL_IMAGE and has_image:
-                # This is a thumbnail but we also have a full-sized image link,
-                # so we don't need to separately mirror the thumbnail.
+                # This is a thumbnail but we also have a full-sized image link
                 continue
 
-            if replace.mirrors:
-                # We need to mirror this resource. If it's an image, a
-                # thumbnail may be provided as a side effect.
-                self.mirror_link(edition, data_source, link, link_obj, replace)
             elif link.thumbnail:
-                # We don't need to mirror this image, but we do need
-                # to make sure that its thumbnail exists locally and
+                # We need to make sure that its thumbnail exists locally and
                 # is associated with the original image.
                 self.make_thumbnail(data_source, link, link_obj)
 
-        # Make sure the work we just did shows up. This needs to happen after mirroring
-        # so mirror urls are available.
+        # Make sure the work we just did shows up.
         made_changes = edition.calculate_presentation(
             policy=replace.presentation_calculation_policy
         )
         if made_changes:
             work_requires_new_presentation_edition = True
-
-        # The metadata wrangler doesn't need information from these data sources.
-        # We don't need to send it information it originally provided, and
-        # Overdrive makes metadata accessible to everyone without buying licenses
-        # for the book, so the metadata wrangler can obtain it directly from
-        # Overdrive.
-        # TODO: Remove Bibliotheca and Axis 360 from this list.
-        METADATA_UPLOAD_BLACKLIST = [
-            DataSource.METADATA_WRANGLER,
-            DataSource.OVERDRIVE,
-            DataSource.BIBLIOTHECA,
-            DataSource.AXIS_360,
-        ]
-        if work_requires_new_presentation_edition and (
-            data_source.name not in METADATA_UPLOAD_BLACKLIST
-        ):
-            # Create a transient failure CoverageRecord for this edition
-            # so it will be processed by the MetadataUploadCoverageProvider.
-            internal_processing = DataSource.lookup(_db, DataSource.INTERNAL_PROCESSING)
-
-            # If there's already a CoverageRecord, don't change it to transient failure.
-            # TODO: Once the metadata wrangler can handle it, we'd like to re-sync the
-            # metadata every time there's a change. For now,
-            cr = CoverageRecord.lookup(
-                edition,
-                internal_processing,
-                operation=CoverageRecord.METADATA_UPLOAD_OPERATION,
-            )
-            if not cr:
-                CoverageRecord.add_for(
-                    edition,
-                    internal_processing,
-                    operation=CoverageRecord.METADATA_UPLOAD_OPERATION,
-                    status=CoverageRecord.TRANSIENT_FAILURE,
-                )
 
         # Update the coverage record for this edition and data
         # source. We omit the collection information, even if we know

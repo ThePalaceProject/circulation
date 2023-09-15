@@ -130,7 +130,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         http_get=None,
         content_modifier=None,
         map_from_collection=None,
-        mirrors=None,
     ):
         """Initialize a new instance of ODL2Importer class.
 
@@ -161,9 +160,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
 
         :param map_from_collection: Identifier mapping
         :type map_from_collection: Dict
-
-        :param mirrors: A dictionary of different MirrorUploader objects for different purposes
-        :type mirrors: Dict[MirrorUploader]
         """
         super().__init__(
             db,
@@ -174,7 +170,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             http_get,
             content_modifier,
             map_from_collection,
-            mirrors,
         )
         self._logger = logging.getLogger(__name__)
 
