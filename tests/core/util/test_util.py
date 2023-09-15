@@ -14,6 +14,7 @@ from core.util import (
     MetadataSimilarity,
     MoneyUtility,
     TitleProcessor,
+    ansible_boolean,
     english_bigrams,
     fast_query_count,
     slugify,
@@ -478,3 +479,65 @@ class TestMoneyUtility:
     def test_parsing_bad_value_raises_valueerror(self, bad_value):
         with pytest.raises(ValueError):
             MoneyUtility.parse(bad_value)
+
+
+class TestAnsibleBoolean:
+    _truthy_values = ["TRUE", "T", "ON", "YES", "Y", "1"]
+    _falsy_values = ["FALSE", "F", "OFF", "NO", "N", "0"]
+    # Values are case-insensitive.
+    TRUTHY = [True] + _truthy_values + [v.lower() for v in _truthy_values]
+    FALSY = [False] + _falsy_values + [v.lower() for v in _falsy_values]
+    MISSING = [None, ""]
+
+    @pytest.mark.parametrize(
+        "expected_result, example_values, default_value",
+        [
+            [True, TRUTHY, False],
+            [True, TRUTHY, True],
+            [True, TRUTHY, None],
+            [True, MISSING, True],
+            [False, FALSY, False],
+            [False, FALSY, True],
+            [False, FALSY, None],
+            [False, MISSING, False],
+        ],
+    )
+    def test_ansible_boolean_true_or_false(
+        self, expected_result, example_values, default_value
+    ):
+        for value in example_values:
+            assert expected_result == ansible_boolean(value, default=default_value)
+            assert expected_result == ansible_boolean(
+                value, default=default_value, label="some label"
+            )
+
+    @pytest.mark.parametrize(
+        "example_value, default_value, expected_exception, expected_message",
+        [
+            ["TRUE", "", TypeError, "'default' must be a boolean, when specified"],
+            ["TRUE", "X", TypeError, "'default' must be a boolean, when specified"],
+            ["TRUE", 0, TypeError, "'default' must be a boolean, when specified"],
+            ["TRUE", "TRUE", TypeError, "'default' must be a boolean, when specified"],
+            [1, None, TypeError, "must be a string"],
+            [3.3, None, TypeError, "must be a string"],
+            ["!", None, ValueError, "does not map to True or False"],
+            ["x", None, ValueError, "does not map to True or False"],
+            [
+                None,
+                None,
+                ValueError,
+                "must be non-null and non-empty if no default is specified",
+            ],
+            [
+                "",
+                None,
+                ValueError,
+                "must be non-null and non-empty if no default is specified",
+            ],
+        ],
+    )
+    def test_ansible_boolean_exceptions(
+        self, example_value, default_value, expected_exception, expected_message
+    ):
+        with pytest.raises(expected_exception, match=expected_message):
+            ansible_boolean(example_value, default=default_value)

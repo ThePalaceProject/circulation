@@ -401,7 +401,9 @@ class LibraryAuthenticator:
         ):
             raise CannotLoadConfiguration("Two basic auth providers configured")
         self.basic_auth_provider = provider
-        if self.library is not None:
+        # TODO: We can remove the configuration test once
+        #  basic token authentication is fully deployed.
+        if self.library is not None and Configuration.basic_token_auth_is_enabled():
             self.access_token_authentication_provider = (
                 BasicTokenAuthenticationProvider(
                     self._db, self.library, self.basic_auth_provider

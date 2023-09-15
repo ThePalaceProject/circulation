@@ -582,6 +582,39 @@ def chunks(lst, chunk_size, start_index=0):
         yield lst[i : i + chunk_size]
 
 
+def ansible_boolean(
+    value: Optional[str | bool],
+    label: Optional[str] = None,
+    default: Optional[bool] = None,
+) -> bool:
+    """Map Ansible "truthy" and "falsy" values to a Python boolean.
+
+    :param value: The value from which to map.
+    :param label: Optional name or label associated with the value.
+    :param default: Default result if value is empty string or None.
+    """
+    _value_label = f"Value of '{label}'" if label else "Value"
+    if default is not None and not isinstance(default, bool):
+        raise TypeError("'default' must be a boolean, when specified.")
+    if isinstance(value, bool):
+        return value
+    if value is None or value == "":
+        if default is not None:
+            return default
+        raise ValueError(
+            f"{_value_label} must be non-null and non-empty if no default is specified."
+        )
+    if not isinstance(value, str):
+        raise TypeError(f"{_value_label} must be a string or boolean.")
+
+    if value.upper() in ("TRUE", "T", "ON", "YES", "Y", "1"):
+        return True
+    if value.upper() in ("FALSE", "F", "OFF", "NO", "N", "0"):
+        return False
+
+    raise ValueError(f"{_value_label} does not map to True or False.")
+
+
 class ValuesMeta(type):
     """Metaclass to allow operators on simple constants defining classes"""
 

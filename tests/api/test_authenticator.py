@@ -31,6 +31,7 @@ from api.authentication.basic import (
     Keyboards,
     LibraryIdentifierRestriction,
 )
+from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.authenticator import (
     Authenticator,
     BaseSAMLAuthenticationProvider,
@@ -924,12 +925,18 @@ class TestLibraryAuthenticator:
             assert saml.authenticated_patron.call_count == 1
 
     def test_authenticated_patron_bearer_access_token(
-        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
     ):
         basic = mock_basic()
-        authenticator = LibraryAuthenticator(
-            _db=db.session, library=db.default_library(), basic_auth_provider=basic
-        )
+        # TODO: We can remove this patch once basic token authentication is fully deployed.
+        with patch.object(
+            Configuration, "basic_token_auth_is_enabled", return_value=True
+        ):
+            authenticator = LibraryAuthenticator(
+                _db=db.session, library=db.default_library(), basic_auth_provider=basic
+            )
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "pass")
         auth = Authorization(auth_type="bearer", token=token)
@@ -951,44 +958,56 @@ class TestLibraryAuthenticator:
         assert UNSUPPORTED_AUTHENTICATION_MECHANISM == problem
 
     def test_get_credential_from_header(
-        self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
+        self,
+        db: DatabaseTransactionFixture,
+        mock_basic: MockBasicFixture,
     ):
+        def get_library_authenticator(
+            basic_auth_provider: BasicAuthenticationProvider | None,
+        ) -> LibraryAuthenticator:
+            # TODO: We can remove this patch once basic token authentication is fully deployed.
+            with patch.object(
+                Configuration, "basic_token_auth_is_enabled", return_value=True
+            ):
+                return LibraryAuthenticator(
+                    _db=db.session,
+                    library=db.default_library(),
+                    basic_auth_provider=basic_auth_provider,
+                )
+
         basic = mock_basic()
 
         # We can pull the password out of a Basic Auth credential
         # if a Basic Auth authentication provider is configured.
-        authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
-            basic_auth_provider=basic,
-        )
+        authenticator = get_library_authenticator(basic_auth_provider=basic)
         credential = Authorization(auth_type="basic", data=dict(password="foo"))
         assert "foo" == authenticator.get_credential_from_header(credential)
 
         # We can't pull the password out if no basic auth provider
-        authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
-            basic_auth_provider=None,
-        )
+        authenticator = get_library_authenticator(basic_auth_provider=None)
         assert authenticator.get_credential_from_header(credential) is None
 
-        authenticator = LibraryAuthenticator(
-            _db=db.session,
-            library=db.default_library(),
-            basic_auth_provider=basic,
-        )
+        authenticator = get_library_authenticator(basic_auth_provider=basic)
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
         credential = Authorization(auth_type="bearer", token=token)
         assert authenticator.get_credential_from_header(credential) == "passworx"
 
+    @pytest.mark.parametrize(
+        "token_auth_enabled, auth_count",
+        [
+            [True, 2],
+            [False, 1],
+        ],
+    )
     def test_create_authentication_document(
         self,
         db: DatabaseTransactionFixture,
         mock_basic: MockBasicFixture,
         announcement_fixture: AnnouncementFixture,
         library_fixture: LibraryFixture,
+        token_auth_enabled: bool,
+        auth_count: int,
     ):
         class MockAuthenticator(LibraryAuthenticator):
             """Mock the _geographic_areas method."""
@@ -1003,11 +1022,16 @@ class TestLibraryAuthenticator:
         library_settings = library_fixture.settings(library)
         basic = mock_basic()
         library.name = "A Fabulous Library"
-        authenticator = MockAuthenticator(
-            _db=db.session,
-            library=library,
-            basic_auth_provider=basic,
-        )
+        # TODO: We can remove this patch once basic token authentication is fully deployed.
+        with patch.object(
+            Configuration, "basic_token_auth_is_enabled"
+        ) as token_auth_enabled_method:
+            token_auth_enabled_method.return_value = token_auth_enabled
+            authenticator = MockAuthenticator(
+                _db=db.session,
+                library=library,
+                basic_auth_provider=basic,
+            )
 
         def annotate_authentication_document(library, doc, url_for):
             doc["modified"] = "Kilroy was here"
@@ -1103,7 +1127,17 @@ class TestLibraryAuthenticator:
             # The main thing we need to test is that the
             # authentication sub-documents are assembled properly and
             # placed in the right position.
-            [token_doc, basic_doc] = doc["authentication"]
+            # TODO: token doc will be here only when correct environment variable set to true.
+            # If basic token auth is enabled, then there should be two authentication
+            # mechanisms and the first should be for token auth.
+            authenticators = doc["authentication"]
+            assert auth_count > 0
+            assert auth_count == len(authenticators)
+            # TODO: We can remove this `if` block/restructure once basic token authentication is fully deployed.
+            if token_auth_enabled:
+                token_doc = authenticators[0]
+                assert BasicTokenAuthenticationProvider.FLOW_TYPE == token_doc["type"]
+            basic_doc = authenticators[auth_count - 1]
 
             expect_basic = basic.authentication_flow_document(db.session)
             assert expect_basic == basic_doc

@@ -11,7 +11,7 @@ from sqlalchemy.exc import ArgumentError
 # from this module, alongside CannotLoadConfiguration.
 from core.exceptions import IntegrationException
 
-from .util import LanguageCodes
+from .util import LanguageCodes, ansible_boolean
 from .util.datetime_helpers import to_utc, utc_now
 
 
@@ -39,6 +39,10 @@ class Configuration(ConfigurationConstants):
     # Environment variables that contain URLs to the database
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
+
+    # TODO: We can remove this variable once basic token authentication is fully deployed.
+    # Patron token authentication enabled switch.
+    BASIC_TOKEN_AUTH_ENABLED_ENVVAR = "SIMPLIFIED_ENABLE_BASIC_TOKEN_AUTH"
 
     # Environment variables for Firebase Cloud Messaging (FCM) service account key
     FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE = "SIMPLIFIED_FCM_CREDENTIALS_FILE"
@@ -206,6 +210,26 @@ class Configuration(ConfigurationConstants):
         # Calling __to_string__ will hide the password.
         logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
+
+    # TODO: We can remove this method once basic token authentication is fully deployed.
+    @classmethod
+    def basic_token_auth_is_enabled(cls) -> bool:
+        """Is basic token authentication enabled?
+
+        Return False, if the variable is unset or is an empty string.
+        Raises CannotLoadConfiguration, if the setting is invalid.
+        :raise CannotLoadConfiguration: If the setting contains an unsupported value.
+        """
+        try:
+            return ansible_boolean(
+                os.environ.get(cls.BASIC_TOKEN_AUTH_ENABLED_ENVVAR),
+                label=cls.BASIC_TOKEN_AUTH_ENABLED_ENVVAR,
+                default=False,
+            )
+        except (TypeError, ValueError) as e:
+            raise CannotLoadConfiguration(
+                f"Invalid value for {cls.BASIC_TOKEN_AUTH_ENABLED_ENVVAR} environment variable."
+            ) from e
 
     @classmethod
     def fcm_credentials(cls) -> Dict[str, str]:
