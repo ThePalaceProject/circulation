@@ -16,6 +16,7 @@ from core.util.flask_util import (
     Response,
     _snake_to_camel_case,
     boolean_value,
+    str_comma_list_validator,
 )
 from core.util.opds_writer import OPDSFeed
 
@@ -206,3 +207,14 @@ def test_snake_to_camel_case():
     # Error case
     with pytest.raises(ValueError):
         _snake_to_camel_case("_")
+
+
+def test_str_comma_list_validator():
+    assert str_comma_list_validator(5) == ["5"]
+    assert str_comma_list_validator(1.2) == ["1.2"]
+    assert str_comma_list_validator("1,2,3") == ["1", "2", "3"]
+    assert str_comma_list_validator("") == [""]
+
+    # Unsupported types
+    assert pytest.raises(TypeError, str_comma_list_validator, None)
+    assert pytest.raises(TypeError, str_comma_list_validator, [])
