@@ -8,14 +8,16 @@ from werkzeug.urls import url_quote_plus
 
 from api.controller import CirculationManager
 from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
-from api.opds import LibraryAnnotator
 from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.app_server import load_facets_from_request
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import SortKeyPagination
-from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.navigation import NavigationFeed
+from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.model import CachedFeed, Edition
-from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
+from core.opds import NavigationFacets
 from core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 from tests.fixtures.library import LibraryFixture
@@ -107,9 +109,6 @@ class TestOPDSFeedController:
             # index.
 
             assert 200 == response.status_code
-            assert (
-                "max-age=%d" % Lane.MAX_CACHE_AGE in response.headers["Cache-Control"]
-            )
             feed = feedparser.parse(response.data)
             assert {x.title for x in circulation_fixture.works} == {
                 x["title"] for x in feed["entries"]
@@ -171,7 +170,9 @@ class TestOPDSFeedController:
             @classmethod
             def page(cls, **kwargs):
                 self.called_with = kwargs
-                return Response("An OPDS feed")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("An OPDS feed")
+                return resp
 
         sort_key = ["sort", "pagination", "key"]
         with circulation_fixture.request_context_with_library(
@@ -227,9 +228,6 @@ class TestOPDSFeedController:
         assert circulation_fixture.manager.external_search == kwargs.pop(
             "search_engine"
         )
-
-        # max age
-        assert 10 == kwargs.pop("max_age")
 
         # No other arguments were passed into page().
         assert {} == kwargs
@@ -293,7 +291,9 @@ class TestOPDSFeedController:
                 # the grouped feed controller is activated.
                 self.groups_called_with = kwargs
                 self.page_called_with = None
-                return Response("A grouped feed")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("A grouped feed")
+                return resp
 
             @classmethod
             def page(cls, **kwargs):
@@ -301,7 +301,9 @@ class TestOPDSFeedController:
                 # ends up being called instead.
                 self.groups_called_with = None
                 self.page_called_with = kwargs
-                return Response("A paginated feed")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("A paginated feed")
+                return resp
 
         # Earlier we tested an authenticated request for a patron with an
         # external type. Now try an authenticated request for a patron with
@@ -327,7 +329,6 @@ class TestOPDSFeedController:
 
             # The Response returned by Mock.groups() has been converted
             # into a Flask response.
-            assert 200 == response.status_code
             assert "A grouped feed" == response.get_data(as_text=True)
 
             # While we're in request context, generate the URL we
@@ -504,7 +505,9 @@ class TestOPDSFeedController:
             @classmethod
             def search(cls, **kwargs):
                 self.called_with = kwargs
-                return "An OPDS feed"
+                resp = MagicMock()
+                resp.as_response.return_value = "An OPDS feed"
+                return resp
 
         with circulation_fixture.request_context_with_library(
             "/?q=t&size=99&after=22&media=Music"
@@ -783,7 +786,7 @@ class TestOPDSFeedController:
 
         # For the most part, we're verifying that the expected values
         # are passed in to _qa_feed.
-        assert AcquisitionFeed.groups == kwargs.pop("feed_factory")  # type: ignore
+        assert OPDSAcquisitionFeed.groups == kwargs.pop("feed_factory")  # type: ignore
         assert JackpotFacets == kwargs.pop("facet_class")  # type: ignore
         assert "qa_feed" == kwargs.pop("controller_name")  # type: ignore
         assert "QA test feed" == kwargs.pop("feed_title")  # type: ignore
@@ -822,7 +825,7 @@ class TestOPDSFeedController:
 
         # For the most part, we're verifying that the expected values
         # are passed in to _qa_feed.
-        assert AcquisitionFeed.groups == kwargs.pop("feed_factory")  # type: ignore
+        assert OPDSAcquisitionFeed.groups == kwargs.pop("feed_factory")  # type: ignore
         assert JackpotFacets == kwargs.pop("facet_class")  # type: ignore
         assert "qa_feed" == kwargs.pop("controller_name")  # type: ignore
         assert "QA test feed" == kwargs.pop("feed_title")  # type: ignore
@@ -865,7 +868,7 @@ class TestOPDSFeedController:
 
         # Note that the feed_method is different from the one in qa_feed.
         # We want to generate an ungrouped feed rather than a grouped one.
-        assert AcquisitionFeed.page == kwargs.pop("feed_factory")  # type: ignore
+        assert OPDSAcquisitionFeed.page == kwargs.pop("feed_factory")  # type: ignore
         assert HasSeriesFacets == kwargs.pop("facet_class")  # type: ignore
         assert "qa_series_feed" == kwargs.pop("controller_name")  # type: ignore
         assert "QA series test feed" == kwargs.pop("feed_title")  # type: ignore

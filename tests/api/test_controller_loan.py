@@ -885,7 +885,7 @@ class TestLoanController:
             authenticated = controller.authenticated_patron_from_request()
             loan_fixture.pool.loan_to(authenticated)
             with patch(
-                "api.controller.LibraryLoanAndHoldAnnotator.single_item_feed"
+                "api.controller.OPDSAcquisitionFeed.single_entry_loans_feed"
             ) as feed, patch.object(circulation, "fulfill") as fulfill:
                 # Complex setup
                 # The fulfillmentInfo should not be have response type

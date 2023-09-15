@@ -16,13 +16,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import core
 from api.admin.config import Configuration as AdminUiConfig
+from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 
 from .lane import Facets, Pagination
 from .log import LogConfiguration
 from .model import Identifier
-from .opds import AcquisitionFeed, LookupAcquisitionFeed
 from .problem_details import *
-from .util.flask_util import OPDSFeedResponse
 from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
 
@@ -303,16 +302,15 @@ class URNLookupController:
         if isinstance(handler, ProblemDetail):
             # In a subclass, self.process_urns may return a ProblemDetail
             return handler
-
         opds_feed = LookupAcquisitionFeed(
-            self._db,
             "Lookup results",
             this_url,
             handler.works,
             annotator,
             precomposed_entries=handler.precomposed_entries,
         )
-        return OPDSFeedResponse(str(opds_feed))
+        opds_feed.generate_feed(annotate=False)
+        return opds_feed.as_response()
 
     def process_urns(self, urns, **process_urn_kwargs):
         """Process a number of URNs by instantiating a URNLookupHandler
@@ -342,15 +340,14 @@ class URNLookupController:
         # work) tuples, but an AcquisitionFeed's .works is just a
         # list of works.
         works = [work for (identifier, work) in handler.works]
-        opds_feed = AcquisitionFeed(
-            self._db,
+        opds_feed = OPDSAcquisitionFeed(
             urn,
             this_url,
             works,
             annotator,
             precomposed_entries=handler.precomposed_entries,
         )
-        return OPDSFeedResponse(str(opds_feed))
+        return opds_feed.as_response()
 
 
 class URNLookupHandler:

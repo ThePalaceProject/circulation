@@ -21,11 +21,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
+from werkzeug.datastructures import MIMEAccept
 
 from api.authentication.access_token import AccessTokenProvider
 from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
-from api.opds2 import OPDS2NavigationsAnnotator, OPDS2PublicationsAnnotator
+from api.opds2 import OPDS2NavigationsAnnotator
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
@@ -37,6 +38,12 @@ from core.app_server import (
 )
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import ExternalSearchIndex, SortKeyPagination
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import (
+    CirculationManagerAnnotator,
+    LibraryAnnotator,
+)
+from core.feed.navigation import NavigationFeed
 from core.lane import (
     BaseFacets,
     Facets,
@@ -76,7 +83,7 @@ from core.model.devicetokens import (
     InvalidTokenTypeError,
 )
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
-from core.opds import AcquisitionFeed, NavigationFacets, NavigationFeed
+from core.opds import NavigationFacets
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
@@ -112,11 +119,6 @@ from .lanes import (
 )
 from .odl import ODLAPI
 from .odl2 import ODL2API
-from .opds import (
-    CirculationManagerAnnotator,
-    LibraryAnnotator,
-    LibraryLoanAndHoldAnnotator,
-)
 from .problem_details import *
 
 if TYPE_CHECKING:
@@ -842,7 +844,7 @@ class IndexController(CirculationManagerController):
 
 
 class OPDSFeedController(CirculationManagerController):
-    def groups(self, lane_identifier, feed_class=AcquisitionFeed):
+    def groups(self, lane_identifier, feed_class=OPDSAcquisitionFeed):
         """Build or retrieve a grouped acquisition feed.
 
         :param lane_identifier: An identifier that uniquely identifiers
@@ -910,9 +912,9 @@ class OPDSFeedController(CirculationManagerController):
             annotator=annotator,
             facets=facets,
             search_engine=search_engine,
-        )
+        ).as_response(mime_types=flask.request.accept_mimetypes)
 
-    def feed(self, lane_identifier, feed_class=AcquisitionFeed):
+    def feed(self, lane_identifier, feed_class=OPDSAcquisitionFeed):
         """Build or retrieve a paginated acquisition feed.
 
         :param lane_identifier: An identifier that uniquely identifiers
@@ -943,7 +945,7 @@ class OPDSFeedController(CirculationManagerController):
 
         annotator = self.manager.annotator(lane, facets=facets)
         max_age = flask.request.args.get("max_age")
-        return feed_class.page(
+        feed = feed_class.page(
             _db=self._db,
             title=lane.display_name,
             url=url,
@@ -952,7 +954,10 @@ class OPDSFeedController(CirculationManagerController):
             facets=facets,
             pagination=pagination,
             search_engine=search_engine,
+        )
+        return feed.as_response(
             max_age=int(max_age) if max_age else None,
+            mime_types=flask.request.accept_mimetypes,
         )
 
     def navigation(self, lane_identifier):
@@ -987,7 +992,7 @@ class OPDSFeedController(CirculationManagerController):
             worklist=lane,
             annotator=annotator,
             facets=facets,
-        )
+        ).as_response()
 
     def crawlable_library_feed(self):
         """Build or retrieve a crawlable acquisition feed for the
@@ -1043,7 +1048,7 @@ class OPDSFeedController(CirculationManagerController):
         return self._crawlable_feed(title=title, url=url, worklist=lane)
 
     def _crawlable_feed(
-        self, title, url, worklist, annotator=None, feed_class=AcquisitionFeed
+        self, title, url, worklist, annotator=None, feed_class=OPDSAcquisitionFeed
     ):
         """Helper method to create a crawlable feed.
 
@@ -1052,7 +1057,7 @@ class OPDSFeedController(CirculationManagerController):
         :param worklist: A crawlable Lane which controls which works show up
             in the feed.
         :param annotator: A custom Annotator to use when generating the feed.
-        :param feed_class: A drop-in replacement for AcquisitionFeed
+        :param feed_class: A drop-in replacement for OPDSAcquisitionFeed
             for use in tests.
         """
         pagination = load_pagination_from_request(
@@ -1080,7 +1085,7 @@ class OPDSFeedController(CirculationManagerController):
             facets=facets,
             pagination=pagination,
             search_engine=search_engine,
-        )
+        ).as_response()
 
     def _load_search_facets(self, lane):
         entrypoints = list(flask.request.library.entrypoints)
@@ -1098,7 +1103,7 @@ class OPDSFeedController(CirculationManagerController):
             default_entrypoint=default_entrypoint,
         )
 
-    def search(self, lane_identifier, feed_class=AcquisitionFeed):
+    def search(self, lane_identifier, feed_class=OPDSAcquisitionFeed):
         """Search for books."""
         lane = self.load_lane(lane_identifier)
         if isinstance(lane, ProblemDetail):
@@ -1153,7 +1158,7 @@ class OPDSFeedController(CirculationManagerController):
         # Run a search.
         annotator = self.manager.annotator(lane, facets)
         info = OpenSearchDocument.search_info(lane)
-        return feed_class.search(
+        response = feed_class.search(
             _db=self._db,
             title=info["name"],
             url=make_url(),
@@ -1164,6 +1169,9 @@ class OPDSFeedController(CirculationManagerController):
             pagination=pagination,
             facets=facets,
         )
+        if isinstance(response, ProblemDetail):
+            return response
+        return response.as_response(mime_types=flask.request.accept_mimetypes)
 
     def _qa_feed(
         self, feed_factory, feed_title, controller_name, facet_class, worklist_factory
@@ -1218,7 +1226,7 @@ class OPDSFeedController(CirculationManagerController):
             max_age=CachedFeed.IGNORE_CACHE,
         )
 
-    def qa_feed(self, feed_class=AcquisitionFeed):
+    def qa_feed(self, feed_class=OPDSAcquisitionFeed):
         """Create an OPDS feed containing the information necessary to
         run a full set of integration tests against this server and
         the vendors it relies on.
@@ -1238,7 +1246,7 @@ class OPDSFeedController(CirculationManagerController):
             worklist_factory=factory,
         )
 
-    def qa_series_feed(self, feed_class=AcquisitionFeed):
+    def qa_series_feed(self, feed_class=OPDSAcquisitionFeed):
         """Create an OPDS feed containing books that belong to _some_
         series, without regard to _which_ series.
 
@@ -1297,23 +1305,22 @@ class OPDS2FeedController(CirculationManagerController):
         params: FeedRequestParameters = self._parse_feed_request()
         if params.problem:
             return params.problem
-        annotator = OPDS2PublicationsAnnotator(
-            flask.request.url, params.facets, params.pagination, params.library
-        )
         lane = self.load_lane(None)
+        annotator = self.manager.annotator(lane, params.facets)
         max_age = flask.request.args.get("max_age")
-        feed = AcquisitonFeedOPDS2.publications(
+        feed = OPDSAcquisitionFeed.page(
             self._db,
+            lane.display_name,
+            flask.request.url,
             lane,
+            annotator,
             params.facets,
             params.pagination,
             self.search_engine,
-            annotator,
-            max_age=int(max_age) if max_age is not None else None,
         )
-
-        return Response(
-            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
+        return feed.as_response(
+            mime_types=MIMEAccept([("application/opds+json", 1)]),  # Force the type
+            max_age=int(max_age) if max_age is not None else None,
         )
 
     def navigation(self):
@@ -1456,7 +1463,17 @@ class LoanController(CirculationManagerController):
                 )
 
         # Then make the feed.
-        return LibraryLoanAndHoldAnnotator.active_loans_for(self.circulation, patron)
+        feed = OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
+        response = feed.as_response(
+            max_age=0,
+            private=True,
+            mime_types=flask.request.accept_mimetypes,
+        )
+
+        last_modified = patron.last_loan_activity_sync
+        if last_modified:
+            response.last_modified = last_modified
+        return response
 
     def borrow(self, identifier_type, identifier, mechanism_id=None):
         """Create a new loan or hold for a book.
@@ -1504,7 +1521,7 @@ class LoanController(CirculationManagerController):
             response_kwargs["status"] = 201
         else:
             response_kwargs["status"] = 200
-        return LibraryLoanAndHoldAnnotator.single_item_feed(
+        return OPDSAcquisitionFeed.single_entry_loans_feed(
             self.circulation, loan_or_hold, **response_kwargs
         )
 
@@ -1790,7 +1807,7 @@ class LoanController(CirculationManagerController):
         if mechanism.delivery_mechanism.is_streaming:
             # If this is a streaming delivery mechanism, create an OPDS entry
             # with a fulfillment link to the streaming reader url.
-            feed = LibraryLoanAndHoldAnnotator.single_item_feed(
+            feed = OPDSAcquisitionFeed.single_entry_loans_feed(
                 self.circulation, loan, fulfillment=fulfillment
             )
             if isinstance(feed, ProblemDetail):
@@ -1799,8 +1816,6 @@ class LoanController(CirculationManagerController):
                 return feed
             if isinstance(feed, Response):
                 return feed
-            if isinstance(feed, OPDSFeed):  # type: ignore
-                content = str(feed)
             else:
                 content = etree.tostring(feed)
             status_code = 200
@@ -1917,7 +1932,9 @@ class LoanController(CirculationManagerController):
 
         work = pool.work
         annotator = self.manager.annotator(None)
-        return AcquisitionFeed.single_entry(self._db, work, annotator)
+        return OPDSAcquisitionFeed.entry_as_response(
+            OPDSAcquisitionFeed.single_entry(work, annotator)
+        )
 
     def detail(self, identifier_type, identifier):
         if flask.request.method == "DELETE":
@@ -1949,7 +1966,7 @@ class LoanController(CirculationManagerController):
                 item = loan
             else:
                 item = hold
-            return LibraryLoanAndHoldAnnotator.single_item_feed(self.circulation, item)
+            return OPDSAcquisitionFeed.single_entry_loans_feed(self.circulation, item)
 
 
 class AnnotationController(CirculationManagerController):
@@ -2042,7 +2059,7 @@ class WorkController(CirculationManagerController):
         return languages, audiences
 
     def contributor(
-        self, contributor_name, languages, audiences, feed_class=AcquisitionFeed
+        self, contributor_name, languages, audiences, feed_class=OPDSAcquisitionFeed
     ):
         """Serve a feed of books written by a particular author"""
         library = flask.request.library
@@ -2096,7 +2113,7 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        )
+        ).as_response()
 
     def permalink(self, identifier_type, identifier):
         """Serve an entry for a single book.
@@ -2129,18 +2146,23 @@ class WorkController(CirculationManagerController):
             item = loan or hold
             pool = pool or pools[0]
 
-            return LibraryLoanAndHoldAnnotator.single_item_feed(
+            return OPDSAcquisitionFeed.single_entry_loans_feed(
                 self.circulation, item or pool
             )
         else:
             annotator = self.manager.annotator(lane=None)
 
-            return AcquisitionFeed.single_entry(
-                self._db, work, annotator, max_age=OPDSFeed.DEFAULT_MAX_AGE
+            return OPDSAcquisitionFeed.entry_as_response(
+                OPDSAcquisitionFeed.single_entry(work, annotator),
+                max_age=OPDSFeed.DEFAULT_MAX_AGE,
             )
 
     def related(
-        self, identifier_type, identifier, novelist_api=None, feed_class=AcquisitionFeed
+        self,
+        identifier_type,
+        identifier,
+        novelist_api=None,
+        feed_class=OPDSAcquisitionFeed,
     ):
         """Serve a groups feed of books related to a given book."""
 
@@ -2185,12 +2207,17 @@ class WorkController(CirculationManagerController):
             url=url,
             worklist=lane,
             annotator=annotator,
+            pagination=None,
             facets=facets,
             search_engine=search_engine,
-        )
+        ).as_response()
 
     def recommendations(
-        self, identifier_type, identifier, novelist_api=None, feed_class=AcquisitionFeed
+        self,
+        identifier_type,
+        identifier,
+        novelist_api=None,
+        feed_class=OPDSAcquisitionFeed,
     ):
         """Serve a feed of recommendations related to a given book."""
 
@@ -2242,9 +2269,9 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        )
+        ).as_response()
 
-    def series(self, series_name, languages, audiences, feed_class=AcquisitionFeed):
+    def series(self, series_name, languages, audiences, feed_class=OPDSAcquisitionFeed):
         """Serve a feed of books in a given series."""
         library = flask.request.library
         if not series_name:
@@ -2281,7 +2308,7 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        )
+        ).as_response()
 
 
 class ProfileController(CirculationManagerController):

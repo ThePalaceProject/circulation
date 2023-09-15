@@ -2,6 +2,7 @@ import datetime
 import json
 import urllib.parse
 from typing import Any, Dict
+from unittest.mock import MagicMock
 
 import feedparser
 import flask
@@ -18,15 +19,16 @@ from api.lanes import (
     SeriesLane,
 )
 from api.novelist import MockNoveListAPI
-from api.opds import LibraryAnnotator
 from api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import SortKeyPagination, mock_search_index
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import LibraryAnnotator
+from core.feed.types import WorkEntry
 from core.lane import Facets, FeaturedFacets
 from core.metadata_layer import ContributorData, Metadata
 from core.model import (
-    CachedFeed,
     DataSource,
     Edition,
     Identifier,
@@ -37,7 +39,6 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.work import Work
-from core.opds import AcquisitionFeed
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import Response
@@ -138,11 +139,6 @@ class TestWorkController:
         ]
         assert 10 == len(facet_links)
 
-        # The feed was cached.
-        cached = work_fixture.db.session.query(CachedFeed).one()
-        assert CachedFeed.CONTRIBUTOR_TYPE == cached.type
-        assert "John Bull-eng,spa-Children,Young+Adult" == cached.unique_key
-
         # At this point we don't want to generate real feeds anymore.
         # We can't do a real end-to-end test without setting up a real
         # search index, which is obnoxiously slow.
@@ -164,7 +160,9 @@ class TestWorkController:
             @classmethod
             def page(cls, **kwargs):
                 self.called_with = kwargs
-                return Response("An OPDS feed")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("An OPDS feed")
+                return resp
 
         # Test a basic request with custom faceting, pagination, and a
         # language and audience restriction. This will exercise nearly
@@ -291,12 +289,12 @@ class TestWorkController:
                 work_fixture.identifier.type, work_fixture.identifier.identifier
             )
             annotator = LibraryAnnotator(None, None, work_fixture.db.default_library())
-            expect = AcquisitionFeed.single_entry(
-                work_fixture.db.session, work_fixture.english_1, annotator
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work_fixture.english_1, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed)
 
         assert 200 == response.status_code
-        assert expect == response.get_data()
+        assert expect.data == response.get_data()
         assert OPDSFeed.ENTRY_TYPE == response.headers["Content-Type"]
 
     def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
@@ -334,9 +332,9 @@ class TestWorkController:
                 work_fixture.db.default_library(),
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = AcquisitionFeed.single_entry(
-                work_fixture.db.session, work, annotator
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed).data
 
             response = work_fixture.manager.work_controller.permalink(
                 identifier_type, identifier
@@ -382,9 +380,9 @@ class TestWorkController:
                 work_fixture.db.default_library(),
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = AcquisitionFeed.single_entry(
-                work_fixture.db.session, work, annotator
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed).data
 
             response = work_fixture.manager.work_controller.permalink(
                 identifier_type, identifier
@@ -475,9 +473,9 @@ class TestWorkController:
                 work_fixture.db.default_library(),
                 active_loans_by_work=active_loans_by_work,
             )
-            expect = AcquisitionFeed.single_entry(
-                work_fixture.db.session, work, annotator
-            ).data
+            feed = OPDSAcquisitionFeed.single_entry(work, annotator)
+            assert isinstance(feed, WorkEntry)
+            expect = OPDSAcquisitionFeed.entry_as_response(feed).data
 
             response = work_fixture.manager.work_controller.permalink(
                 identifier_type, identifier
@@ -561,7 +559,9 @@ class TestWorkController:
             @classmethod
             def page(cls, **kwargs):
                 cls.called_with = kwargs
-                return Response("A bunch of titles")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("A bunch of titles")
+                return resp
 
         kwargs["feed_class"] = Mock
         with work_fixture.request_context_with_library(
@@ -754,7 +754,9 @@ class TestWorkController:
             @classmethod
             def groups(cls, **kwargs):
                 cls.called_with = kwargs
-                return Response("An OPDS feed")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("An OPDS feed")
+                return resp
 
         mock_api.setup_method(metadata)
         with work_fixture.request_context_with_library("/?entrypoint=Audio"):
@@ -818,7 +820,7 @@ class TestWorkController:
                 **url_kwargs,
             )
         assert kwargs.pop("url") == expect_url
-
+        assert kwargs.pop("pagination") == None
         # That's it!
         assert {} == kwargs
 
@@ -910,14 +912,6 @@ class TestWorkController:
         assert "Sort by" == series_position["opds:facetgroup"]
         assert "true" == series_position["opds:activefacet"]
 
-        # The feed was cached.
-        cached = work_fixture.db.session.query(CachedFeed).one()
-        assert CachedFeed.SERIES_TYPE == cached.type
-        assert (
-            "Like As If Whatever Mysteries-eng,spa-Children,Young+Adult"
-            == cached.unique_key
-        )
-
         # At this point we don't want to generate real feeds anymore.
         # We can't do a real end-to-end test without setting up a real
         # search index, which is obnoxiously slow.
@@ -938,7 +932,9 @@ class TestWorkController:
             @classmethod
             def page(cls, **kwargs):
                 self.called_with = kwargs
-                return Response("An OPDS feed")
+                resp = MagicMock()
+                resp.as_response.return_value = Response("An OPDS feed")
+                return resp
 
         # Test a basic request with custom faceting, pagination, and a
         # language and audience restriction. This will exercise nearly

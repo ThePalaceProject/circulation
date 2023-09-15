@@ -1,6 +1,7 @@
 import json
 from contextlib import contextmanager
 from typing import Any
+from unittest.mock import MagicMock
 
 import feedparser
 from flask import url_for
@@ -11,10 +12,10 @@ from api.lanes import (
     CrawlableFacets,
     DynamicLane,
 )
-from api.opds import CirculationManagerAnnotator
 from api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
 from core.external_search import MockSearchResult, SortKeyPagination
-from core.opds import AcquisitionFeed
+from core.feed.acquisition import OPDSAcquisitionFeed
+from core.feed.annotator.circulation import CirculationManagerAnnotator
 from core.problem_details import INVALID_INPUT
 from core.util.flask_util import Response
 from core.util.problem_detail import ProblemDetail
@@ -30,7 +31,7 @@ class TestCrawlableFeed:
         controller = circulation_fixture.manager.opds_feeds
         original = controller._crawlable_feed
 
-        def mock(title, url, worklist, annotator=None, feed_class=AcquisitionFeed):
+        def mock(title, url, worklist, annotator=None, feed_class=OPDSAcquisitionFeed):
             self._crawlable_feed_called_with = dict(
                 title=title,
                 url=url,
@@ -70,7 +71,7 @@ class TestCrawlableFeed:
         assert expect_url == kwargs.pop("url")
         assert library.name == kwargs.pop("title")
         assert None == kwargs.pop("annotator")
-        assert AcquisitionFeed == kwargs.pop("feed_class")
+        assert OPDSAcquisitionFeed == kwargs.pop("feed_class")
 
         # A CrawlableCollectionBasedLane has been set up to show
         # everything in any of the requested library's collections.
@@ -173,7 +174,7 @@ class TestCrawlableFeed:
         assert expect_url == kwargs.pop("url")
         assert customlist.name == kwargs.pop("title")
         assert None == kwargs.pop("annotator")
-        assert AcquisitionFeed == kwargs.pop("feed_class")
+        assert OPDSAcquisitionFeed == kwargs.pop("feed_class")
 
         # A CrawlableCustomListBasedLane was created to fetch only
         # the works in the custom list.
@@ -190,7 +191,9 @@ class TestCrawlableFeed:
             @classmethod
             def page(cls, **kwargs):
                 self.page_called_with = kwargs
-                return Response("An OPDS feed")
+                feed = MagicMock()
+                feed.as_response.return_value = Response("An OPDS feed")
+                return feed
 
         work = circulation_fixture.db.work(with_open_access_download=True)
 

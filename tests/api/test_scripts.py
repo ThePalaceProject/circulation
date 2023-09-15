@@ -337,7 +337,9 @@ class TestCacheFacetListsPerLane:
             @classmethod
             def page(cls, **kwargs):
                 cls.called_with = kwargs
-                return "here's your feed"
+                resp = MagicMock()
+                resp.as_response.return_value = "here's your feed"
+                return resp
 
         # Test our ability to generate a single feed.
         script = CacheFacetListsPerLane(db.session, testing=True, cmd_args=[])
@@ -355,7 +357,6 @@ class TestCacheFacetListsPerLane:
             assert db.session == args["_db"]  # type: ignore
             assert lane == args["worklist"]  # type: ignore
             assert lane.display_name == args["title"]  # type: ignore
-            assert 0 == args["max_age"]  # type: ignore
 
             # The Pagination object was passed into
             # MockAcquisitionFeed.page, and it was also used to make the
@@ -415,7 +416,9 @@ class TestCacheOPDSGroupFeedPerLane:
             @classmethod
             def groups(cls, **kwargs):
                 cls.called_with = kwargs
-                return "here's your feed"
+                resp = MagicMock()
+                resp.as_response.return_value = "here's your feed"
+                return resp
 
         # Test our ability to generate a single feed.
         script = CacheOPDSGroupFeedPerLane(db.session, testing=True, cmd_args=[])
@@ -433,7 +436,6 @@ class TestCacheOPDSGroupFeedPerLane:
             assert db.session == args["_db"]  # type: ignore
             assert lane == args["worklist"]  # type: ignore
             assert lane.display_name == args["title"]  # type: ignore
-            assert 0 == args["max_age"]  # type: ignore
             assert pagination == None
 
             # The Facets object was passed into
@@ -503,6 +505,8 @@ class TestCacheOPDSGroupFeedPerLane:
         (no_entry_point,) = script.facets(lane)
         assert None == no_entry_point.entrypoint
 
+    # We no longer cache the feeds
+    @pytest.mark.skip
     def test_do_run(self, lane_script_fixture: LaneScriptFixture):
         db = lane_script_fixture.db
 

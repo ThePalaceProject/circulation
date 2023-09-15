@@ -1354,11 +1354,6 @@ class CirculationAPI:
         if api is not None:
             api.update_availability(pool)
 
-        if pool.licenses_available is None:
-            # We don't know how many licenses are available, so we
-            # can't tell whether the patron is at their limit.
-            self.log.warning(f"License pool {pool} has unknown availability.")
-            return
         currently_available = pool.licenses_available > 0
         if currently_available and at_loan_limit:
             raise PatronLoanLimitReached(limit=patron.library.settings.loan_limit)
