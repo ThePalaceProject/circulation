@@ -23,6 +23,8 @@ class BasicTokenAuthenticationProvider(AuthenticationProvider):
     It is a companion to the basic authentication, and has no meaning without it.
     """
 
+    FLOW_TYPE = "http://thepalaceproject.org/authtype/basic-token"
+
     def __init__(
         self,
         _db: Session,
@@ -105,7 +107,7 @@ class BasicTokenAuthenticationProvider(AuthenticationProvider):
 
     @property
     def flow_type(self) -> str:
-        return "http://thepalaceproject.org/authtype/basic-token"
+        return self.FLOW_TYPE
 
     @classmethod
     def description(cls) -> str:
