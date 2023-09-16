@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from typing import List
 from unittest.mock import MagicMock, call, patch
 
+import pytest
 import pytz
+from freezegun import freeze_time
 
 from api.model.time_tracking import PlaytimeTimeEntry
 from core.config import Configuration
@@ -307,3 +311,45 @@ class TestPlaytimeEntriesEmailReportsScript:
             assert script._log.error.call_count == 1
             assert script._log.warning.call_count == 1
             assert "date,urn,collection," in script._log.warning.call_args[0][0]
+
+    @pytest.mark.parametrize(
+        "current_utc_time, start_arg, expected_start, until_arg, expected_until",
+        [
+            # [datetime(2020, 1, 1, 0, 0, 0), None, datetime(2019, 10, 1, 0, 0, 0), None, datetime(2020, 1, 1, 0, 0, 0)],
+            # [datetime(2020, 1, 31, 0, 0, 0), None, datetime(2019, 10, 1, 0, 0, 0), None, datetime(2020, 1, 1, 0, 0, 0)],
+            [
+                datetime(2020, 1, 1, 0, 0, 0),
+                None,
+                datetime(2019, 10, 1, 0, 0, 0),
+                None,
+                datetime(2020, 1, 1, 0, 0, 0),
+            ],
+            [
+                datetime(2020, 1, 31, 0, 0, 0),
+                None,
+                datetime(2019, 10, 1, 0, 0, 0),
+                None,
+                datetime(2020, 1, 1, 0, 0, 0),
+            ],
+        ],
+    )
+    def test_parse_command_line(
+        self,
+        db: DatabaseTransactionFixture,
+        current_utc_time,
+        start_arg,
+        expected_start,
+        until_arg,
+        expected_until,
+    ):
+        start_args = ["--start", start_arg] if start_arg else []
+        until_args = ["--until", until_arg] if until_arg else []
+        cmd_args = start_args + until_args
+
+        at_time: str | datetime = current_utc_time or utc_now()
+        with freeze_time(at_time):
+            parsed = PlaytimeEntriesEmailReportsScript.parse_command_line(
+                db.session, cmd_args
+            )
+        assert expected_start == parsed.start
+        assert expected_until == parsed.until
