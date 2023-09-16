@@ -154,3 +154,137 @@ class TestPreviousMonths:
             actual_start, actual_until = previous_months(number_of_months=months)
             assert actual_start == start
             assert actual_until == until
+
+    @pytest.mark.parametrize(
+        "current_datetime, start, until, months",
+        [
+            (
+                datetime_utc(2000, 1, 15),
+                datetime.date(1999, 12, 1),
+                datetime.date(2000, 1, 1),
+                1,
+            ),
+            (
+                datetime_utc(2000, 1, 15),
+                datetime.date(1999, 11, 1),
+                datetime.date(2000, 1, 1),
+                2,
+            ),
+            (
+                datetime_utc(2000, 1, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 1, 1),
+                3,
+            ),
+            (
+                datetime_utc(2000, 2, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 2, 1),
+                4,
+            ),
+            (
+                datetime_utc(2000, 3, 31),
+                datetime.date(2000, 2, 1),
+                datetime.date(2000, 3, 1),
+                1,
+            ),
+            (
+                datetime_utc(2000, 3, 31),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 3, 1),
+                5,
+            ),
+            (
+                datetime_utc(2000, 4, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 4, 1),
+                6,
+            ),
+            (
+                datetime_utc(2000, 5, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 5, 1),
+                7,
+            ),
+            (
+                datetime_utc(2000, 6, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 6, 1),
+                8,
+            ),
+            (
+                datetime_utc(2000, 7, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 7, 1),
+                9,
+            ),
+            (
+                datetime_utc(2000, 8, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 8, 1),
+                10,
+            ),
+            (
+                datetime_utc(2000, 9, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 9, 1),
+                11,
+            ),
+            (
+                datetime_utc(2000, 10, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 10, 1),
+                12,
+            ),
+            (
+                datetime_utc(2000, 11, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 11, 1),
+                13,
+            ),
+            (
+                datetime_utc(2000, 12, 15),
+                datetime.date(1999, 10, 1),
+                datetime.date(2000, 12, 1),
+                14,
+            ),
+            (
+                datetime_utc(2000, 12, 15),
+                datetime.date(2000, 6, 1),
+                datetime.date(2000, 12, 1),
+                6,
+            ),
+            (
+                datetime_utc(2000, 12, 15),
+                datetime.date(2000, 6, 1),
+                datetime.date(2000, 12, 1),
+                6,
+            ),
+            (
+                datetime_utc(2000, 12, 15),
+                datetime.date(1999, 6, 1),
+                datetime.date(2000, 12, 1),
+                18,
+            ),
+            (
+                datetime_utc(2000, 12, 15),
+                datetime.date(1990, 6, 1),
+                datetime.date(2000, 12, 1),
+                126,
+            ),
+            (
+                datetime_utc(2000, 12, 15),
+                datetime.date(1999, 12, 1),
+                datetime.date(2000, 12, 1),
+                12,
+            ),
+        ],
+    )
+    def test_boundaries_at_different_current_times(
+        self, current_datetime, start, until, months
+    ):
+        with patch("core.util.datetime_helpers.utc_now") as mock_utc_now:
+            mock_utc_now.return_value = current_datetime
+            actual_start, actual_until = previous_months(number_of_months=months)
+            assert actual_start == start
+            assert actual_until == until
