@@ -156,7 +156,7 @@ class TestPreviousMonths:
             assert actual_until == until
 
     @pytest.mark.parametrize(
-        "current_datetime, start, until, months",
+        "current_datetime, expected_start, expected_until, months",
         [
             (
                 datetime_utc(2000, 1, 15),
@@ -281,10 +281,13 @@ class TestPreviousMonths:
         ],
     )
     def test_boundaries_at_different_current_times(
-        self, current_datetime, start, until, months
+        self, current_datetime, expected_start, expected_until, months
     ):
         with patch("core.util.datetime_helpers.utc_now") as mock_utc_now:
             mock_utc_now.return_value = current_datetime
-            actual_start, actual_until = previous_months(number_of_months=months)
-            assert actual_start == start
-            assert actual_until == until
+            computed_start, computed_until = previous_months(number_of_months=months)
+            assert computed_start == expected_start
+            assert computed_until == expected_until
+            # Both dates should be the 1st of the month.
+            assert 1 == computed_start.day
+            assert 1 == computed_until.day

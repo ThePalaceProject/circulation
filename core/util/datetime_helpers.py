@@ -64,19 +64,19 @@ def strptime_utc(date_string, format):
 
 
 def previous_months(number_of_months: int) -> Tuple[datetime.date, datetime.date]:
-    """Calculate date interval for matching the previous designate number of months.
+    """Calculate date boundaries for matching the specified previous number of months.
 
     :param number_of_months: The number of months in the interval.
-    :returns: A date interval consisting of a 2-tuple of `start` and `until`
-        dates, such that matching dates are on the half-closed/half-open
-        interval [start, until) (i.e., start <= match < until).
-        - `start` date: designates the first date of the period. Only dates/datetimes
-        greater than or equal to this date should match.
-        - `until` date: designates the date just beyond the end of the period. Only
-        dates/datetimes less than `until` should match.
+    :returns: Date interval boundaries, consisting of a 2-tuple of
+        `start` and `until` dates.
 
-    Start will be the first day of the designated month.
-    Until will be the first day of the current month.
+    These boundaries should be used such that matching dates are on the
+    half-closed/half-open interval `[start, until)` (i.e., start <= match < until).
+    Only dates/datetimes greater than or equal to `start` and less than
+    (NOT less than or equal to) `until` should be considered as matching.
+
+    `start` will be the first day of the designated month.
+    `until` will be the first day of the current month.
     """
     now = utc_now()
     start = now - relativedelta(months=number_of_months)
