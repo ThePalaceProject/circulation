@@ -1,8 +1,8 @@
 import datetime
-import math
 from typing import Optional, Tuple
 
 import pytz
+from dateutil.relativedelta import relativedelta
 
 # datetime helpers
 # As part of the python 3 conversion, the datetime object went through a
@@ -63,12 +63,23 @@ def strptime_utc(date_string, format):
     return to_utc(datetime.datetime.strptime(date_string, format))
 
 
-def previous_months(number_of_months) -> Tuple[datetime.date, datetime.date]:
+def previous_months(number_of_months: int) -> Tuple[datetime.date, datetime.date]:
+    """Calculate date boundaries for matching the specified previous number of months.
+
+    :param number_of_months: The number of months in the interval.
+    :returns: Date interval boundaries, consisting of a 2-tuple of
+        `start` and `until` dates.
+
+    These boundaries should be used such that matching dates are on the
+    half-closed/half-open interval `[start, until)` (i.e., start <= match < until).
+    Only dates/datetimes greater than or equal to `start` and less than
+    (NOT less than or equal to) `until` should be considered as matching.
+
+    `start` will be the first day of the designated month.
+    `until` will be the first day of the current month.
+    """
     now = utc_now()
-    # Start from the first of number_of_months ago, where 0=12
-    expected_year = now.year - math.floor(number_of_months / 12)
-    expected_month = ((now.month - number_of_months) % 12) or 12
-    start = now.replace(year=expected_year, month=expected_month, day=1)
-    # Until the first of this month
+    start = now - relativedelta(months=number_of_months)
+    start = start.replace(day=1)
     until = now.replace(day=1)
     return start.date(), until.date()
