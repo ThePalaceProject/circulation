@@ -395,7 +395,7 @@ def delete_patron_devices():
     return app.manager.patron_devices.delete_patron_device()
 
 
-@library_dir_route("/patrons/me/token", methods=["GET"])
+@library_dir_route("/patrons/me/token", methods=["POST"])
 @api_spec.validate(resp=SpecResponse(HTTP_200=PatronAuthAccessToken), tags=["patron"])
 @has_library
 @requires_auth
