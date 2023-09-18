@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import argparse
 import csv
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from tempfile import TemporaryFile
+from typing import TYPE_CHECKING
 
 import dateutil.parser
 import pytz
@@ -16,6 +19,9 @@ from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import previous_months, utc_now
 from core.util.email import EmailManager
 from scripts import Script
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Query
 
 
 class PlaytimeEntriesSummationScript(Script):
@@ -98,32 +104,25 @@ class PlaytimeEntriesEmailReportsScript(Script):
         )
         return parser
 
+    @classmethod
+    def parse_command_line(cls, _db=None, cmd_args=None, *args, **kwargs):
+        parsed = super().parse_command_line(_db=_db, cmd_args=cmd_args, *args, **kwargs)
+        utc_start = pytz.utc.localize(parsed.start)
+        utc_until = pytz.utc.localize(parsed.until)
+        if utc_start >= utc_until:
+            cls.arg_parser().error(
+                f"start date ({utc_start.strftime(cls.REPORT_DATE_FORMAT)}) must be before "
+                f"until date ({utc_until.strftime(cls.REPORT_DATE_FORMAT)})."
+            )
+        return argparse.Namespace(
+            **{**vars(parsed), **dict(start=utc_start, until=utc_until)}
+        )
+
     def do_run(self):
         """Produce a report for the given (or default) date range."""
         parsed = self.parse_command_line()
-        start, until = pytz.utc.localize(parsed.start), pytz.utc.localize(parsed.until)
-
-        # Let the database do the math for us
-        result = (
-            self._db.query(PlaytimeSummary)
-            .with_entities(
-                PlaytimeSummary.identifier_str,
-                PlaytimeSummary.collection_name,
-                PlaytimeSummary.library_name,
-                PlaytimeSummary.identifier_id,
-                sum(PlaytimeSummary.total_seconds_played),
-            )
-            .filter(
-                PlaytimeSummary.timestamp >= start,
-                PlaytimeSummary.timestamp < until,
-            )
-            .group_by(
-                PlaytimeSummary.identifier_str,
-                PlaytimeSummary.collection_name,
-                PlaytimeSummary.library_name,
-                PlaytimeSummary.identifier_id,
-            )
-        )
+        start = parsed.start
+        until = parsed.until
 
         formatted_start_date = start.strftime(self.REPORT_DATE_FORMAT)
         formatted_until_date = until.strftime(self.REPORT_DATE_FORMAT)
@@ -145,7 +144,13 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 ["date", "urn", "collection", "library", "title", "total seconds"]
             )
 
-            for urn, collection_name, library_name, identifier_id, total in result:
+            for (
+                urn,
+                collection_name,
+                library_name,
+                identifier_id,
+                total,
+            ) in self._fetch_report_records(start=start, until=until):
                 edition = None
                 if identifier_id:
                     edition = get_one(
@@ -178,3 +183,25 @@ class PlaytimeEntriesEmailReportsScript(Script):
             else:
                 self.log.error("No reporting email found, logging complete report.")
                 self.log.warning(temp.read())
+
+    def _fetch_report_records(self, start: datetime, until: datetime) -> Query:
+        return (
+            self._db.query(PlaytimeSummary)
+            .with_entities(
+                PlaytimeSummary.identifier_str,
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
+                PlaytimeSummary.identifier_id,
+                sum(PlaytimeSummary.total_seconds_played),
+            )
+            .filter(
+                PlaytimeSummary.timestamp >= start,
+                PlaytimeSummary.timestamp < until,
+            )
+            .group_by(
+                PlaytimeSummary.identifier_str,
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
+                PlaytimeSummary.identifier_id,
+            )
+        )
