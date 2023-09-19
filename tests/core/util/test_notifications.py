@@ -30,7 +30,8 @@ def push_notf_fixture(db: DatabaseTransactionFixture) -> PushNotificationsFixtur
 class TestPushNotifications:
     def test_send_loan_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
-        patron = db.patron()
+        patron = db.patron(external_identifier="xyz1")
+        patron.authorization_identifier = "abc1"
 
         device_token, _ = get_one_or_create(
             db.session,
@@ -78,7 +79,9 @@ class TestPushNotifications:
 
     def test_send_activity_sync(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
+        # Only patron 1 will get authorization identifiers
         patron1 = db.patron()
+        patron1.authorization_identifier = "auth1"
         patron2 = db.patron()
         patron3 = db.patron()
 
@@ -132,7 +135,6 @@ class TestPushNotifications:
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
                         external_identifier=patron2.external_identifier,
-                        authorization_identifier=patron2.authorization_identifier,
                     ),
                 ),
                 mock.call(
@@ -141,7 +143,6 @@ class TestPushNotifications:
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
                         external_identifier=patron2.external_identifier,
-                        authorization_identifier=patron2.authorization_identifier,
                     ),
                 ),
             ]
@@ -150,7 +151,9 @@ class TestPushNotifications:
 
     def test_holds_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
+        # Only patron1 will get an identifier
         patron1 = db.patron()
+        patron1.authorization_identifier = "auth1"
         patron2 = db.patron()
         DeviceToken.create(
             db.session, DeviceTokenTypes.FCM_ANDROID, "test-token-1", patron1
@@ -220,7 +223,6 @@ class TestPushNotifications:
                     event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
                     loans_endpoint=loans_api,
                     external_identifier=hold2.patron.external_identifier,
-                    authorization_identifier=hold2.patron.authorization_identifier,
                     identifier=hold2.license_pool.identifier.identifier,
                     type=hold2.license_pool.identifier.type,
                     library=hold2.patron.library.short_name,
