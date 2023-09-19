@@ -67,22 +67,26 @@ class PushNotifications:
         library_short_name = loan.library and loan.library.short_name
         title = f"Only {days_to_expiry} {'days' if days_to_expiry != 1 else 'day'} left on your loan!"
         body = f"Your loan on {edition.title} is expiring soon"
+        data = dict(
+            title=title,
+            body=body,
+            event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
+            loans_endpoint=f"{url}/{loan.library.short_name}/loans",
+            type=identifier.type,
+            identifier=identifier.identifier,
+            library=library_short_name,
+            days_to_expiry=days_to_expiry,
+        )
+        if loan.patron.external_identifier:
+            data["external_identifier"] = loan.patron.external_identifier
+        if loan.patron.authorization_identifier:
+            data["authorization_identifier"] = loan.patron.authorization_identifier
+
         for token in tokens:
             msg = messaging.Message(
                 token=token.device_token,
                 notification=messaging.Notification(title=title, body=body),
-                data=dict(
-                    title=title,
-                    body=body,
-                    event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
-                    loans_endpoint=f"{url}/{loan.library.short_name}/loans",
-                    external_identifier=loan.patron.external_identifier,
-                    authorization_identifier=loan.patron.authorization_identifier,
-                    identifier=identifier.identifier,
-                    type=identifier.type,
-                    library=library_short_name,
-                    days_to_expiry=days_to_expiry,
-                ),
+                data=data,
             )
             resp = messaging.send(msg, dry_run=cls.TESTING_MODE, app=cls.fcm_app())
             responses.append(resp)
@@ -102,15 +106,19 @@ class PushNotifications:
         for patron in patrons:
             tokens = cls.notifiable_tokens(patron)
             loans_api = f"{url}/{patron.library.short_name}/loans"
+            data = dict(
+                event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
+                loans_endpoint=loans_api,
+            )
+            if patron.external_identifier:
+                data["external_identifier"] = patron.external_identifier
+            if patron.authorization_identifier:
+                data["authorization_identifier"] = patron.authorization_identifier
+
             for token in tokens:
                 msg = messaging.Message(
                     token=token.device_token,
-                    data=dict(
-                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                        loans_endpoint=loans_api,
-                        external_identifier=patron.external_identifier,
-                        authorization_identifier=patron.authorization_identifier,
-                    ),
+                    data=data,
                 )
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
@@ -133,20 +141,24 @@ class PushNotifications:
             work: Work = hold.work
             identifier: Identifier = hold.license_pool.identifier
             title = f'Your hold on "{work.title}" is available!'
+            data = dict(
+                title=title,
+                event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                loans_endpoint=loans_api,
+                identifier=identifier.identifier,
+                type=identifier.type,
+                library=hold.patron.library.short_name,
+            )
+            if hold.patron.external_identifier:
+                data["external_identifier"] = hold.patron.external_identifier
+            if hold.patron.authorization_identifier:
+                data["authorization_identifier"] = hold.patron.authorization_identifier
+
             for token in tokens:
                 msg = messaging.Message(
                     token=token.device_token,
                     notification=messaging.Notification(title=title),
-                    data=dict(
-                        title=title,
-                        event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
-                        loans_endpoint=loans_api,
-                        external_identifier=hold.patron.external_identifier,
-                        authorization_identifier=hold.patron.authorization_identifier,
-                        identifier=identifier.identifier,
-                        type=identifier.type,
-                        library=hold.patron.library.short_name,
-                    ),
+                    data=data,
                 )
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
