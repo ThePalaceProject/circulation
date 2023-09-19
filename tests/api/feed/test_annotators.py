@@ -155,6 +155,27 @@ class TestAnnotators:
         actual = [(x["term"], x["label"], x["ratingValue"]) for x in appeal_tags]
         assert set(expect) == set(actual)
 
+    def test_authors(self, annotators_fixture: TestAnnotatorsFixture):
+        db = annotators_fixture.db
+        edition = db.edition()
+        [c_orig] = list(edition.contributors)
+
+        c1 = edition.add_contributor("c1", Contributor.AUTHOR_ROLE, _sort_name="c1")
+        # No name contributor
+        c_none = edition.add_contributor("c2", Contributor.AUTHOR_ROLE)
+        c_none.display_name = ""
+        c_none._sort_name = ""
+
+        authors = Annotator.authors(edition)
+        # The default, c1 and c_none
+        assert len(edition.contributions) == 3
+        # Only default and c1 are used in the feed, because c_none has no name
+        assert len(authors["authors"]) == 2
+        assert set(map(lambda x: x.name, authors["authors"])) == {
+            c1.sort_name,
+            c_orig.sort_name,
+        }
+
     def test_detailed_author(self, annotators_fixture: TestAnnotatorsFixture):
         data, db, session = (
             annotators_fixture,

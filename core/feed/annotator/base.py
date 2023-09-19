@@ -93,8 +93,8 @@ class ToFeedEntry:
             return None
 
         name = contributor.display_name or contributor.sort_name
-        name_key = name.lower()
-        if name_key in state[marc_role]:
+        name_key = name and name.lower()
+        if not name_key or name_key in state[marc_role]:
             # We've already credited this person with this
             # MARC role. Returning a tag would be redundant.
             return None
@@ -108,7 +108,6 @@ class ToFeedEntry:
         # Record the fact that we credited this person with this role,
         # so that we don't do it again on a subsequent call.
         state[marc_role].add(name_key)
-
         return current_role, entry
 
     @classmethod

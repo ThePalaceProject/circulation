@@ -221,7 +221,9 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
             entry.append(rating_tag)
 
         for author in feed_entry.authors:
-            entry.append(self._serialize_author_tag("author", author))
+            # Author must at a minimum have a name
+            if author.name:
+                entry.append(self._serialize_author_tag("author", author))
         for contributor in feed_entry.contributors:
             entry.append(self._serialize_author_tag("contributor", contributor))
 
