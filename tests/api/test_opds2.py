@@ -175,7 +175,6 @@ class TestTokenAuthenticationFulfillmentProcessor:
     @patch("api.opds2.HTTP")
     def test_fulfill(self, mock_http, db: DatabaseTransactionFixture):
         patron = db.patron()
-        patron.username = "username"
         collection: Collection = db.collection(
             protocol=ExternalIntegration.OPDS2_IMPORT
         )
@@ -207,10 +206,14 @@ class TestTokenAuthenticationFulfillmentProcessor:
         processor = TokenAuthenticationFulfillmentProcessor(collection)
         ff_info = processor.fulfill(patron, "", work.license_pools[0], None, ff_info)
 
+        patron_id = patron.identifier_to_remote_service(
+            work.license_pools[0].data_source
+        )
+
         assert mock_http.get_with_timeout.call_count == 1
         assert (
             mock_http.get_with_timeout.call_args[0][0]
-            == "http://example.org/token?userName=username"
+            == f"http://example.org/token?userName={patron_id}"
         )
 
         assert (
@@ -265,9 +268,9 @@ class TestTokenAuthenticationFulfillmentProcessor:
         resp.raw = io.BytesIO(b"plaintext-auth-token")
         mock_http.get_with_timeout.return_value = resp
         patron = db.patron()
-        patron.username = "test"
+        datasource = DataSource.lookup(db.session, "test", autocreate=True)
         token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
-            patron, "http://example.org/token"
+            patron, datasource, "http://example.org/token"
         )
 
         assert token == "plaintext-auth-token"
@@ -280,9 +283,9 @@ class TestTokenAuthenticationFulfillmentProcessor:
         resp = Response()
         resp.status_code = 400
         mock_http.get_with_timeout.return_value = resp
-
+        datasource = DataSource.lookup(db.session, "test", autocreate=True)
         token = TokenAuthenticationFulfillmentProcessor.get_authentication_token(
-            db.patron(), "http://example.org/token"
+            db.patron(), datasource, "http://example.org/token"
         )
 
         assert token == INVALID_CREDENTIALS
