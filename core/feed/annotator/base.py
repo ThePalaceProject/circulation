@@ -95,7 +95,8 @@ class ToFeedEntry:
         name = contributor.display_name or contributor.sort_name
         name_key = name and name.lower()
         if not name_key or name_key in state[marc_role]:
-            # We've already credited this person with this
+            # Either there is not valid name present or
+            # we've already credited this person with this
             # MARC role. Returning a tag would be redundant.
             return None
 
