@@ -61,7 +61,6 @@ from .problem_details import INVALID_INPUT
 from .search.migrator import (
     SearchDocumentReceiver,
     SearchDocumentReceiverType,
-    SearchMigrationException,
     SearchMigrationInProgress,
     SearchMigrator,
 )
@@ -220,36 +219,9 @@ class ExternalSearchIndex(HasSelfTests):
         # initialize the cached data if not already done so
         CachedData.initialize(_db)
 
-        # Try to perform a migration to the requested schema version. This might be a no-op if everything
-        # is already up-to-date, or if we're downgrading to an already-populated index. It also might fail
-        # if we're upgrading to a new schema version; it'll go as far as it can and leave the system in
-        # a good state, but we'll have to submit new search documents and re-run the migration later to fully
-        # upgrade.
-
-        try:
-            # Get references to the read and write pointers.
-            self._search_read_pointer = self._search_service.read_pointer_name()
-            self._search_write_pointer = self._search_service.write_pointer_name()
-            self._search_migrator = SearchMigrator(
-                revisions=self._revision_directory,
-                service=self._search_service,
-            )
-            migration = self._search_migrator.migrate(
-                base_name=self._revision_base_name, version=self._revision.version
-            )
-            if migration:
-                migration.cancel()
-        except SearchMigrationException as e:
-            # Search migration exceptions might indicate that migration can be resumed. This
-            # can happen if we're attempting to migrate to a new version that is not yet indexed;
-            # the migrator will leave the system in a good state to prevent downtime, but we'll
-            # need to submit new search documents and run the migration again.
-            if e.fatal:
-                raise CannotLoadConfiguration(
-                    "Error migrating search index: %s" % repr(e)
-                )
-        except Exception as e:
-            raise CannotLoadConfiguration("Error migrating search index: %s" % repr(e))
+        # Get references to the read and write pointers.
+        self._search_read_pointer = self._search_service.read_pointer_name()
+        self._search_write_pointer = self._search_service.write_pointer_name()
 
     def search_service(self) -> SearchService:
         """Get the underlying search service."""
@@ -257,7 +229,11 @@ class ExternalSearchIndex(HasSelfTests):
 
     def start_migration(self) -> Optional[SearchMigrationInProgress]:
         """Update to the latest schema, indexing the given works."""
-        return self._search_migrator.migrate(
+        migrator = SearchMigrator(
+            revisions=self._revision_directory,
+            service=self._search_service,
+        )
+        return migrator.migrate(
             base_name=self._revision_base_name, version=self._revision.version
         )
 

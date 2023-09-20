@@ -25,7 +25,7 @@ from psycopg2.extras import NumericRange
 from sqlalchemy.sql import Delete as sqlaDelete
 
 from core.classifier import Classifier
-from core.config import CannotLoadConfiguration, Configuration
+from core.config import Configuration
 from core.external_search import (
     ExternalSearchIndex,
     Filter,
@@ -47,7 +47,6 @@ from core.model import (
     CustomList,
     DataSource,
     Edition,
-    ExternalIntegration,
     Genre,
     LicensePool,
     WorkCoverageRecord,
@@ -74,7 +73,7 @@ from tests.fixtures.search import (
     ExternalSearchFixture,
     ExternalSearchFixtureFake,
 )
-from tests.mocks.search import SearchServiceFailureMode, SearchServiceFake
+from tests.mocks.search import SearchServiceFailureMode
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 
@@ -82,33 +81,6 @@ RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
 class TestExternalSearch:
     # TODO: would be good to check the put_script calls, but the
     # current constructor makes put_script difficult to mock.
-
-    def test_opensearch_error_in_constructor_becomes_cannotloadconfiguration(
-        self, db: DatabaseTransactionFixture
-    ):
-        integration = db.external_integration(
-            ExternalIntegration.OPENSEARCH,
-            goal=ExternalIntegration.SEARCH_GOAL,
-            url="http://does-not-exist.com/",
-            settings={
-                ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
-                ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "a search term",
-            },
-        )
-
-        search = SearchServiceFake()
-        search.set_failing_mode(SearchServiceFailureMode.FAIL_ENTIRELY)
-
-        """If we're unable to establish a connection to the Opensearch
-        server, CannotLoadConfiguration (which the circulation manager can
-        understand) is raised instead of an Opensearch-specific exception.
-        """
-
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            ExternalSearchIndex(_db=db.session, custom_client_service=search)
-
-        assert "Error migrating search index: " in str(excinfo.value)
-        assert "Search index is on fire." in str(excinfo.value)
 
     def test_query_works(self):
         # Verify that query_works operates by calling query_works_multi.

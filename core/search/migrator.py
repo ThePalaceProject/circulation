@@ -175,4 +175,4 @@ class SearchMigrator:
         except Exception as e:
             raise SearchMigrationException(
                 fatal=True, message=f"Service raised exception: {repr(e)}"
-            )
+            ) from e
