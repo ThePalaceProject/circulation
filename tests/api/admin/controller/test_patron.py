@@ -33,7 +33,7 @@ class TestPatronController:
 
         class MockAuthenticator:
             def __init__(self, providers):
-                self.providers = providers
+                self.unique_patron_lookup_providers = providers
 
         class MockAuthenticationProvider:
             def __init__(self, patron_dict):
@@ -73,7 +73,7 @@ class TestPatronController:
             )
 
         # Authenticator can't find patron with this identifier
-        authenticator.providers.append(auth_provider)
+        authenticator.unique_patron_lookup_providers.append(auth_provider)
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
             flask.request.form = form
             response = m(authenticator)
