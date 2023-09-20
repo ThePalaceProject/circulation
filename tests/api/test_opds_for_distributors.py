@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-import core.opds_import
 from api.circulation_exceptions import *
 from api.opds_for_distributors import (
     OPDSForDistributorsAPI,
@@ -29,6 +28,7 @@ from core.model import (
     RightsStatus,
     Timestamp,
     create,
+    get_one,
 )
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
@@ -708,9 +708,7 @@ class TestOPDSForDistributorsImporter:
             collection=collection2,
         )
 
-        with patch(
-            "core.opds_import.get_one", wraps=core.opds_import.get_one
-        ) as get_one_mock:
+        with patch("core.opds_import.get_one", wraps=get_one) as get_one_mock:
             importer1_lp, _ = importer1.update_work_for_edition(edition)
             importer2_lp, _ = importer2.update_work_for_edition(edition)
 
