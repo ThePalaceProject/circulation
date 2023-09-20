@@ -1,7 +1,7 @@
 import random
 from io import StringIO
 from typing import Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests_mock
@@ -118,7 +118,7 @@ class TestOPDSImporter:
         assert Representation.cautious_http_get == importer.http_get
 
         # But you can pass in anything you want.
-        do_get = object()
+        do_get = MagicMock()
         importer = OPDSImporter(session, collection=None, http_get=do_get)
         assert do_get == importer.http_get
 
@@ -229,6 +229,7 @@ class TestOPDSImporter:
         assert data_source_name == c2._data_source
 
         [failure] = list(failures.values())
+        assert isinstance(failure, CoverageFailure)
         assert (
             "202: I'm working to locate a source for this identifier."
             == failure.exception
@@ -260,10 +261,10 @@ class TestOPDSImporter:
 
         # First book doesn't have <dcterms:identifier>, so <id> must be used as identifier
         book_1 = metadata.get("https://root.uri/1")
-        assert book_1 != None
+        assert book_1 is not None
         # Second book have <id> and <dcterms:identifier>, so <dcters:identifier> must be used as id
         book_2 = metadata.get("urn:isbn:9781468316438")
-        assert book_2 != None
+        assert book_2 is not None
         # Verify if id was add in the end of identifier
         book_2_identifiers = book_2.identifiers
         found = False
@@ -271,10 +272,10 @@ class TestOPDSImporter:
             if entry.identifier == "https://root.uri/2":
                 found = True
                 break
-        assert found == True
+        assert found is True
         # Third book has more than one dcterms:identifers, all of then must be present as metadata identifier
         book_3 = metadata.get("urn:isbn:9781683351993")
-        assert book_2 != None
+        assert book_3 is not None
         # Verify if id was add in the end of identifier
         book_3_identifiers = book_3.identifiers
         expected_identifier = [
@@ -857,7 +858,7 @@ class TestOPDSImporter:
             session, collection=None
         ).import_from_feed(feed)
 
-        [crow, mouse] = sorted(imported_editions, key=lambda x: x.title)
+        [crow, mouse] = sorted(imported_editions, key=lambda x: str(x.title))
 
         # By default, this feed is treated as though it came from the
         # metadata wrangler. No Work has been created.
@@ -873,7 +874,7 @@ class TestOPDSImporter:
         # Three links have been added to the identifier of the 'mouse'
         # edition.
         image, thumbnail, description = sorted(
-            mouse.primary_identifier.links, key=lambda x: x.rel
+            mouse.primary_identifier.links, key=lambda x: str(x.rel)
         )
 
         # A Representation was imported for the summary with known
@@ -896,22 +897,24 @@ class TestOPDSImporter:
 
         # Two links were added to the identifier of the 'crow' edition.
         [broken_image, working_image] = sorted(
-            crow.primary_identifier.links, key=lambda x: x.resource.url
+            crow.primary_identifier.links, key=lambda x: str(x.resource.url)
         )
 
         # Because these images did not have a specified media type or a
         # distinctive extension, and we have not actually retrieved
         # the URLs yet, we were not able to determine their media type,
         # so they have no associated Representation.
+        assert broken_image.resource.url is not None
         assert broken_image.resource.url.endswith("/broken-cover-image")
+        assert working_image.resource.url is not None
         assert working_image.resource.url.endswith("/working-cover-image")
-        assert None == broken_image.resource.representation
-        assert None == working_image.resource.representation
+        assert broken_image.resource.representation is None
+        assert working_image.resource.representation is None
 
         # Three measurements have been added to the 'mouse' edition.
         popularity, quality, rating = sorted(
             (x for x in mouse.primary_identifier.measurements if x.is_most_recent),
-            key=lambda x: x.quantity_measured,
+            key=lambda x: str(x.quantity_measured),
         )
 
         assert DataSource.METADATA_WRANGLER == popularity.data_source.name
@@ -927,7 +930,7 @@ class TestOPDSImporter:
         assert 0.6 == rating.value
 
         seven, children, courtship, fantasy, pz, magic, new_york = sorted(
-            mouse.primary_identifier.classifications, key=lambda x: x.subject.name
+            mouse.primary_identifier.classifications, key=lambda x: str(x.subject.name)
         )
 
         pz_s = pz.subject
@@ -1556,8 +1559,8 @@ class TestOPDSImporter:
             "Simulate an OPDS feed that contains no open-access links."
             open_access_links = []
 
-        # We don't be making any HTTP requests, even simulated ones.
-        do_get = object()
+        # We won't be making any HTTP requests, even simulated ones.
+        do_get = MagicMock()
 
         # Here, there are no links at all.
         importer = NoLinks(session, None, do_get)
@@ -1628,7 +1631,7 @@ class TestOPDSImporter:
         result = good_link_importer.assert_importable_content(
             "feed", "url", max_get_attempts=5
         )
-        assert "this is a book" == result
+        assert True == result
 
         # The first link didn't work, but the second one did,
         # so we didn't try the third one.
@@ -2055,7 +2058,7 @@ class TestOPDSImportMonitor:
         assert (
             "some content",
             feed_url,
-        ) == monitor.importer.assert_importable_content_called_with
+        ) == monitor.importer.assert_importable_content_called_with  # type: ignore[attr-defined]
         assert "looks good" == found_content.result
 
     def test_hook_methods(self, opds_importer_fixture: OPDSImporterFixture):
@@ -2355,7 +2358,7 @@ class TestOPDSImportMonitor:
         monitor.queue_response([["second next link"], "second page"])
         monitor.queue_response([["next link"], "first page"])
 
-        progress = monitor.run_once(object())
+        progress = monitor.run_once(MagicMock())
 
         # Feeds are imported in reverse order
         assert ["last page", "second page", "first page"] == monitor.imports

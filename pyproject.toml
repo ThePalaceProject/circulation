@@ -84,6 +84,8 @@ module = [
     "core.model.hassessioncache",
     "core.model.integration",
     "core.model.library",
+    "core.opds2_import",
+    "core.opds_import",
     "core.selftest",
     "core.settings.*",
     "core.util.authentication_for_opds",

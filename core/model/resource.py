@@ -10,7 +10,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -43,7 +43,7 @@ from .edition import Edition
 from .licensing import LicensePoolDeliveryMechanism
 
 if TYPE_CHECKING:
-    from core.model import CachedMARCFile, Work  # noqa: autoflake
+    from core.model import CachedMARCFile
 
 
 class Resource(Base):
@@ -1019,12 +1019,14 @@ class Representation(Base, MediaTypes):
         return json.dumps(dict(d))
 
     @classmethod
-    def simple_http_get(cls, url, headers, **kwargs) -> Tuple[int, Any, Any]:
+    def simple_http_get(
+        cls, url, headers, **kwargs
+    ) -> Tuple[int, Dict[str, str], bytes]:
         """The most simple HTTP-based GET."""
         if not "allow_redirects" in kwargs:
             kwargs["allow_redirects"] = True
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
-        return response.status_code, response.headers, response.content
+        return response.status_code, response.headers, response.content  # type: ignore[return-value]
 
     @classmethod
     def simple_http_post(cls, url, headers, **kwargs):

@@ -72,7 +72,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can generate many Measurements.
     measurements: Mapped[List[Measurement]] = relationship(
-        "Measurement", backref="data_source"
+        "Measurement", back_populates="data_source"
     )
 
     # One DataSource can provide many Classifications.

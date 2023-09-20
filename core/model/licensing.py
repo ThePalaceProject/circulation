@@ -2024,7 +2024,7 @@ class RightsStatus(Base):
         return status
 
     @classmethod
-    def rights_uri_from_string(cls, rights):
+    def rights_uri_from_string(cls, rights: str) -> str:
         rights = rights.lower()
         if rights == "public domain in the usa.":
             return RightsStatus.PUBLIC_DOMAIN_USA
