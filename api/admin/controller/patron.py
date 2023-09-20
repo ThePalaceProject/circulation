@@ -35,13 +35,14 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
 
         patron_data = PatronData(authorization_identifier=identifier)
         complete_patron_data = None
+        patron_lookup_providers = list(authenticator.unique_patron_lookup_providers)
 
-        if not authenticator.providers:
+        if not patron_lookup_providers:
             return NO_SUCH_PATRON.detailed(
                 _("This library has no authentication providers, so it has no patrons.")
             )
 
-        for provider in authenticator.providers:
+        for provider in patron_lookup_providers:
             complete_patron_data = provider.remote_patron_lookup(patron_data)
             if complete_patron_data:
                 return complete_patron_data

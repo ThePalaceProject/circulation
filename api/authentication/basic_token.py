@@ -36,6 +36,10 @@ class BasicTokenAuthenticationProvider(AuthenticationProvider):
         # An access token provider is a companion authentication to the basic providers
         self.basic_provider = basic_provider
 
+    @property
+    def patron_lookup_provider(self):
+        return self.basic_provider
+
     def authenticated_patron(
         self, _db: Session, token: dict | str
     ) -> Patron | ProblemDetail | None:

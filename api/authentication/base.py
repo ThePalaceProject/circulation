@@ -79,6 +79,14 @@ class AuthenticationProvider(
         # it should override this value and set it to False.
         ...
 
+    @property
+    def patron_lookup_provider(self):
+        """Return the provider responsible for patron lookup.
+
+        By default, we'll put ourself forward for this task.
+        """
+        return self
+
     @abstractmethod
     def authenticated_patron(
         self, _db: Session, header: dict | str
