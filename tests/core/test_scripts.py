@@ -1825,6 +1825,7 @@ class TestWhereAreMyBooksScript:
     ):
         # This work is not presentation-ready.
         work = db.work(with_license_pool=True)
+        end_to_end_search_fixture.external_search_index.initialize_indices()
         work.presentation_ready = False
         script = MockWhereAreMyBooks(
             _db=db.session, search=end_to_end_search_fixture.external_search_index
@@ -1843,6 +1844,7 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but no delivery mechanisms.
         work = db.work(with_license_pool=True)
+        end_to_end_search_fixture.external_search_index.initialize_indices()
         for lpdm in work.license_pools[0].delivery_mechanisms:
             db.session.delete(lpdm)
         self.check_explanation(
@@ -1858,6 +1860,7 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but it's suppressed.
         work = db.work(with_license_pool=True)
+        end_to_end_search_fixture.external_search_index.initialize_indices()
         work.license_pools[0].suppressed = True
         self.check_explanation(
             suppressed=1,
@@ -1872,6 +1875,7 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but no licenses owned.
         work = db.work(with_license_pool=True)
+        end_to_end_search_fixture.external_search_index.initialize_indices()
         work.license_pools[0].licenses_owned = 0
         self.check_explanation(
             not_owned=1,
