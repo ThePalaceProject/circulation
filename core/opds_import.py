@@ -16,14 +16,12 @@ from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
 from api.selftest import HasCollectionSelfTests
-from core.integration.goals import Goals
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from core.model.integration import IntegrationConfiguration
 
 from .classifier import Classifier
 from .config import IntegrationException
@@ -93,59 +91,6 @@ def parse_identifier(db, identifier):
         )
 
     return parsed_identifier
-
-
-class AccessNotAuthenticated(Exception):
-    """No authentication is configured for this service"""
-
-
-class SimplifiedOPDSLookup:
-    """Tiny integration class for the Simplified 'lookup' protocol."""
-
-    LOOKUP_ENDPOINT = "lookup"
-
-    @classmethod
-    def check_content_type(cls, response):
-        content_type = response.headers.get("content-type")
-        if content_type != OPDSFeed.ACQUISITION_FEED_TYPE:
-            raise BadResponseException.from_response(
-                response.url, "Wrong media type: %s" % content_type, response
-            )
-
-    @classmethod
-    def from_protocol(cls, _db, protocol, goal=Goals.LICENSE_GOAL, library=None):
-        config = get_one(_db, IntegrationConfiguration, protocol=protocol, goal=goal)
-        if config is not None and library is not None:
-            config = config.for_library(library.id)
-        if config is None:
-            return None
-        return cls(config.settings_dict["url"])
-
-    def __init__(self, base_url):
-        if not base_url.endswith("/"):
-            base_url += "/"
-        self.base_url = base_url
-
-    @property
-    def lookup_endpoint(self):
-        return self.LOOKUP_ENDPOINT
-
-    def _get(self, url, **kwargs):
-        """Make an HTTP request. This method is overridden in the mock class."""
-        kwargs["timeout"] = kwargs.get("timeout", 300)
-        kwargs["allowed_response_codes"] = kwargs.get("allowed_response_codes", [])
-        kwargs["allowed_response_codes"] += ["2xx", "3xx"]
-        return HTTP.get_with_timeout(url, **kwargs)
-
-    def urn_args(self, identifiers):
-        return "&".join({"urn=%s" % i.urn for i in identifiers})
-
-    def lookup(self, identifiers):
-        """Retrieve an OPDS feed with metadata for the given identifiers."""
-        args = self.urn_args(identifiers)
-        url = self.base_url + self.lookup_endpoint + "?" + args
-        logging.info("Lookup URL: %s", url)
-        return self._get(url)
 
 
 class OPDSXMLParser(XMLParser):
