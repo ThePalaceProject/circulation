@@ -82,6 +82,10 @@ class ExternalSearchFixture:
         work.set_presentation_ready()
         return work
 
+    def init_indices(self):
+        client = ExternalSearchIndex(self.db.session)
+        client.initialize_indices()
+
 
 @pytest.fixture(scope="function")
 def external_search_fixture(

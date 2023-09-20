@@ -408,6 +408,7 @@ class TestCacheOPDSGroupFeedPerLane:
         external_search_fixture: ExternalSearchFixture,
     ):
         db = lane_script_fixture.db
+        external_search_fixture.init_indices()
         # When it's time to generate a feed, AcquisitionFeed.groups
         # is called with the right arguments.
 
@@ -818,8 +819,8 @@ class TestInstanceInitializationScript:
         def mockable_search(*args):
             return _mockable_search
 
-        # Initially this should be an empty index
-        assert search.search_service().read_pointer() == f"{base_name}-empty"
+        # Initially this should not exist, if InstanceInit has not been run
+        assert search.search_service().read_pointer() == None
 
         with patch("scripts.ExternalSearchIndex", new=mockable_search):
             # To fake "no migration is available", mock all the values
