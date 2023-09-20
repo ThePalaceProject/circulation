@@ -33,8 +33,6 @@ from core.util.http import RemoteIntegrationException
 from core.util.log import elapsed_time_logging
 from core.util.problem_detail import ProblemDetail, ProblemError
 
-from .authentication.base import AuthenticationProvider
-from .authentication.basic import BasicAuthenticationProvider
 from .config import CannotLoadConfiguration, Configuration
 from .integration.registry.patron_auth import PatronAuthRegistry
 from .problem_details import *
@@ -428,6 +426,34 @@ class LibraryAuthenticator:
             yield self.access_token_authentication_provider
         if self.basic_auth_provider:
             yield self.basic_auth_provider
+        yield from self.saml_providers_by_name.values()
+
+    @property
+    def unique_patron_lookup_providers(self) -> Iterable[AuthenticationProvider]:
+        """Iterator over unique patron data providers for registered AuthenticationProviders.
+
+        We want to these providers to be unique to avoid performing the same
+        lookup multiple times. Otherwise, this would be likely to happen when
+        the lookup failed for a given provider.
+        """
+
+        # For `BasicTokenAuthenticationProvider`s, the lookup provider is
+        # its `basic_provider`. `BasicAuthenticationProvider`s are their
+        # own lookup providers.
+        basic_providers = filter(
+            None,
+            [
+                (
+                    self.access_token_authentication_provider.basic_provider
+                    if self.access_token_authentication_provider
+                    else None
+                ),
+                self.basic_auth_provider,
+            ],
+        )
+        # De-dupe, but preserve provider order.
+        unique_basic_provider = dict.fromkeys(basic_providers)
+        yield from unique_basic_provider
         yield from self.saml_providers_by_name.values()
 
     def authenticated_patron(

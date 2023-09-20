@@ -937,6 +937,15 @@ class TestLibraryAuthenticator:
             authenticator = LibraryAuthenticator(
                 _db=db.session, library=db.default_library(), basic_auth_provider=basic
             )
+
+        token_auth_provider, basic_auth_provider = authenticator.providers
+        [patron_lookup_provider] = authenticator.unique_patron_lookup_providers
+        assert (
+            cast(BasicTokenAuthenticationProvider, token_auth_provider).basic_provider
+            == basic_auth_provider
+        )
+        assert patron_lookup_provider == basic_auth_provider
+
         patron = db.patron()
         token = AccessTokenProvider.generate_token(db.session, patron, "pass")
         auth = Authorization(auth_type="bearer", token=token)
