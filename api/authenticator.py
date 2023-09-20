@@ -428,32 +428,29 @@ class LibraryAuthenticator:
             yield self.basic_auth_provider
         yield from self.saml_providers_by_name.values()
 
+    def _unique_basic_lookup_providers(
+        self, auth_providers: Iterable[AuthenticationProvider | None]
+    ) -> Iterable[AuthenticationProvider]:
+        providers: filter[AuthenticationProvider] = filter(
+            None,
+            (p.patron_lookup_provider for p in auth_providers if p is not None),
+        )
+        # De-dupe, but preserve provider order.
+        return dict.fromkeys(list(providers)).keys()
+
     @property
     def unique_patron_lookup_providers(self) -> Iterable[AuthenticationProvider]:
         """Iterator over unique patron data providers for registered AuthenticationProviders.
 
-        We want to these providers to be unique to avoid performing the same
-        lookup multiple times. Otherwise, this would be likely to happen when
-        the lookup failed for a given provider.
+        We want a unique list of providers in order to avoid hitting the same
+        provider multiple times, most likely in the case of failing lookups.
         """
-
-        # For `BasicTokenAuthenticationProvider`s, the lookup provider is
-        # its `basic_provider`. `BasicAuthenticationProvider`s are their
-        # own lookup providers.
-        basic_providers = filter(
-            None,
+        yield from self._unique_basic_lookup_providers(
             [
-                (
-                    self.access_token_authentication_provider.basic_provider
-                    if self.access_token_authentication_provider
-                    else None
-                ),
+                self.access_token_authentication_provider,
                 self.basic_auth_provider,
-            ],
+            ]
         )
-        # De-dupe, but preserve provider order.
-        unique_basic_provider = dict.fromkeys(basic_providers)
-        yield from unique_basic_provider
         yield from self.saml_providers_by_name.values()
 
     def authenticated_patron(
