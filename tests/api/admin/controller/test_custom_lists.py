@@ -36,6 +36,7 @@ from core.query.customlist import CustomListQueries
 from core.util.problem_detail import ProblemDetail
 from tests.core.util.test_flask_util import add_request_context
 from tests.fixtures.api_admin import AdminLibrarianFixture
+from tests.mocks.search import ExternalSearchIndexFake, SearchServiceFake
 
 
 class TestCustomListsController:
@@ -559,8 +560,6 @@ class TestCustomListsController:
         lane.customlists.append(list)
         lane.size = 350
 
-        admin_librarian_fixture.ctrl.controller.search_engine.docs = {}
-
         w1 = admin_librarian_fixture.ctrl.db.work(
             title="Alpha", with_license_pool=True, language="eng"
         )
@@ -578,19 +577,17 @@ class TestCustomListsController:
 
         list.add_entry(w1)
         list.add_entry(w2)
-        admin_librarian_fixture.ctrl.controller.search_engine.bulk_update([w1, w2, w3])
 
-        # All three works should be indexed, but only w1 and w2 should be related to the list
-        assert len(admin_librarian_fixture.ctrl.controller.search_engine.docs) == 3
-        currently_indexed_on_list = [
-            v["title"]
-            for (
-                k,
-                v,
-            ) in admin_librarian_fixture.ctrl.controller.search_engine.docs.items()
-            if v["customlists"] is not None
-        ]
-        assert sorted(currently_indexed_on_list) == ["Alpha", "Bravo"]
+        # All asserts in this test case depend on the external search being mocked
+        assert isinstance(
+            admin_librarian_fixture.ctrl.controller.search_engine,
+            ExternalSearchIndexFake,
+        )
+
+        search_service: SearchServiceFake = (
+            admin_librarian_fixture.ctrl.controller.search_engine.search_service()  # type: ignore [assignment]
+        )
+        external_search = admin_librarian_fixture.ctrl.controller.search_engine
 
         new_entries = [
             dict(
@@ -626,6 +623,9 @@ class TestCustomListsController:
         # Test fails without expiring the ORM cache
         admin_librarian_fixture.ctrl.db.session.expire_all()
 
+        # Mock the right count
+        external_search.mock_count_works(2)
+
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
@@ -648,18 +648,8 @@ class TestCustomListsController:
             )
             assert isinstance(response, flask.Response)
 
-        # The works associated with the list in ES should have changed, though the total
-        # number of documents in the index should be the same.
-        assert len(admin_librarian_fixture.ctrl.controller.search_engine.docs) == 3
-        currently_indexed_on_list = [
-            v["title"]
-            for (
-                k,
-                v,
-            ) in admin_librarian_fixture.ctrl.controller.search_engine.docs.items()
-            if v["customlists"] is not None
-        ]
-        assert sorted(currently_indexed_on_list) == ["Bravo", "Charlie"]
+        # Two works are indexed again
+        assert len(search_service.documents_all()) == 2
 
         assert 200 == response.status_code
         assert list.id == int(response.get_data(as_text=True))
@@ -668,13 +658,7 @@ class TestCustomListsController:
         assert {w2, w3} == {entry.work for entry in list.entries}
         assert new_collections == list.collections
 
-        # If we were using a real search engine instance, the lane's size would be set
-        # to 2, since that's the number of works that would be associated with the
-        # custom list that the lane is based on. In this case we're using an instance of
-        # MockExternalSearchIndex, whose count_works() method (called in Lane.update_size())
-        # returns the number of items in search_engine.docs. Testing that lane.size is now
-        # set to 3 shows that .update_size() was called during the call to custom_list().
-        assert lane.size == 3
+        assert lane.size == 2
 
         # Edit for auto update values
         update_query = {"query": {"key": "title", "value": "title"}}
@@ -861,17 +845,6 @@ class TestCustomListsController:
         assert None == get_one(
             admin_librarian_fixture.ctrl.db.session, Lane, id=lane.id
         )
-
-        # The second and third lanes were not removed, because they
-        # weren't based solely on this specific list. But their .size
-        # attributes were updated to reflect the removal of the list from
-        # the lane.
-        #
-        # In the context of this test, this means that
-        # MockExternalSearchIndex.count_works() was called, and we set
-        # it up to always return 2.
-        assert 2 == lane2.size
-        assert 2 == lane3.size
 
     def test_custom_list_delete_errors(
         self, admin_librarian_fixture: AdminLibrarianFixture

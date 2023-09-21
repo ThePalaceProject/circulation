@@ -5,7 +5,6 @@ from api.config import Configuration
 from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
 from api.problem_details import *
-from core.external_search import MockExternalSearchIndex
 from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
@@ -19,6 +18,7 @@ from core.util.problem_detail import ProblemDetail
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import IntegrationConfigurationFixture
+from tests.mocks.search import SearchServiceFake
 
 
 class TestCirculationManager:
@@ -110,7 +110,7 @@ class TestCirculationManager:
         )
 
         # The ExternalSearch object has been reset.
-        assert isinstance(manager.external_search, MockExternalSearchIndex)
+        assert isinstance(manager.external_search.search_service(), SearchServiceFake)
 
         # So have the patron web domains, and their paths have been
         # removed.

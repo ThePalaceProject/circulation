@@ -879,6 +879,17 @@ class InstanceInitializationScript:
         alembic_conf = self._get_alembic_config(connection)
         command.stamp(alembic_conf, "head")
 
+    def initialize_search_indexes(self, _db: Session) -> bool:
+        try:
+            search = ExternalSearchIndex(_db)
+        except CannotLoadConfiguration as ex:
+            self.log.error(
+                "No search integration found yet, cannot initialize search indices."
+            )
+            self.log.error(f"Error: {ex}")
+            return False
+        return search.initialize_indices()
+
     def initialize(self, connection: Connection):
         """Initialize the database if necessary."""
         inspector = inspect(connection)
@@ -897,6 +908,9 @@ class InstanceInitializationScript:
             self.log.info("Database schema does not exist. Initializing.")
             self.initialize_database(connection)
             self.log.info("Initialization complete.")
+
+        with Session(connection) as session:
+            self.initialize_search_indexes(session)
 
     def run(self) -> None:
         """

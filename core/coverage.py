@@ -230,7 +230,6 @@ class BaseCoverageProvider:
     def run(self):
         start = utc_now()
         result = self.run_once_and_update_timestamp()
-
         result = result or CoverageProviderProgress()
         self.finalize_timestampdata(result, start=start)
         return result

@@ -28,7 +28,7 @@ from core.classifier import (  # type: ignore[attr-defined]
     Urban_Fantasy,
 )
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
-from core.external_search import MockExternalSearchIndex, WorkSearchResult
+from core.external_search import WorkSearchResult
 from core.lane import FacetsWithEntryPoint, WorkList
 from core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from core.model import (
@@ -57,6 +57,7 @@ from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import AtomFeed, OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.search import ExternalSearchFixtureFake
 from tests.fixtures.vendor_id import VendorIDFixture
 
 _strftime = AtomFeed._strftime
@@ -1052,7 +1053,9 @@ class TestLibraryAnnotator:
         assert ("eng", "All+Ages,Children") == result
 
     def test_work_entry_includes_contributor_links(
-        self, annotator_fixture: LibraryAnnotatorFixture
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         """ContributorLane links are added to works with contributors"""
         work = annotator_fixture.db.work(with_open_access_download=True)
@@ -1071,7 +1074,7 @@ class TestLibraryAnnotator:
         work.presentation_edition.add_contributor("Oprah", Contributor.AUTHOR_ROLE)
         work.calculate_presentation(
             PresentationCalculationPolicy(regenerate_opds_entries=True),
-            MockExternalSearchIndex(),
+            external_search_fake_fixture.external_search,
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         contributor_links = [l for l in entry.links if l.rel == "contributor"]
@@ -1089,7 +1092,7 @@ class TestLibraryAnnotator:
         annotator_fixture.db.session.commit()
         work.calculate_presentation(
             PresentationCalculationPolicy(regenerate_opds_entries=True),
-            MockExternalSearchIndex(),
+            external_search_fake_fixture.external_search,
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         assert [] == [l for l in entry.links if l.rel == "contributor"]

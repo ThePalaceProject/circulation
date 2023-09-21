@@ -3,11 +3,13 @@ import logging
 import xml.etree.ElementTree as ET
 from io import StringIO
 from typing import Any, Callable, Generator, List, Type
+from unittest.mock import MagicMock, Mock
 
 import feedparser
 import pytest
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from opensearch_dsl.response import Hit
 from psycopg2.extras import NumericRange
 from sqlalchemy.orm import Session
 
@@ -19,7 +21,7 @@ from core.entrypoint import (
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from core.external_search import MockExternalSearchIndex
+from core.external_search import ExternalSearchIndex
 from core.facets import FacetConstants
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import (
@@ -54,7 +56,8 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse, Response
 from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
-from tests.fixtures.search import ExternalSearchPatchFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 class TestBaseAnnotator:
@@ -542,6 +545,9 @@ class TestOPDSFixture:
     history: Lane
     ya: Lane
 
+    def _fake_hit(self, work: Work):
+        return Hit({"_source": dict(work_id=work.id)})
+
 
 @pytest.fixture
 def opds_fixture(db: DatabaseTransactionFixture) -> TestOPDSFixture:
@@ -736,7 +742,7 @@ class TestOPDS:
     def test_lane_feed_contains_facet_links(
         self,
         opds_fixture: TestOPDSFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             opds_fixture,
@@ -747,8 +753,18 @@ class TestOPDS:
         lane = db.lane()
         facets = Facets.default(db.default_library())
 
+        migration = end_to_end_search_fixture.external_search_index.start_migration()
+        assert migration is not None
+        migration.finish()
+
         cached_feed = AcquisitionFeed.page(
-            session, "title", "http://the-url.com/", lane, MockAnnotator, facets=facets
+            session,
+            "title",
+            "http://the-url.com/",
+            lane,
+            MockAnnotator,
+            facets=facets,
+            search_engine=end_to_end_search_fixture.external_search_index,
         )
 
         u = str(cached_feed)
@@ -1229,7 +1245,11 @@ class TestOPDS:
         )
         assert "<entry>foo</entry>" in feed
 
-    def test_page_feed(self, opds_fixture: TestOPDSFixture):
+    def test_page_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1242,8 +1262,13 @@ class TestOPDS:
         work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
-        search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work1, work2])
+        search_engine = end_to_end_search_fixture.external_search_index
+        docs = search_engine.start_migration()
+        assert docs is not None
+        docs.add_documents(
+            search_engine.create_search_documents_from_works([work1, work2])
+        )
+        docs.finish()
 
         facets = Facets.default(db.default_library())
         pagination = Pagination(size=1)
@@ -1304,7 +1329,11 @@ class TestOPDS:
             assert lane.display_name == links[i + 1].get("title")
             assert MockAnnotator.lane_url(lane) == links[i + 1].get("href")
 
-    def test_page_feed_for_worklist(self, opds_fixture: TestOPDSFixture):
+    def test_page_feed_for_worklist(
+        self,
+        opds_fixture: TestOPDSFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1317,8 +1346,13 @@ class TestOPDS:
         work1 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
         work2 = db.work(genre=Contemporary_Romance, with_open_access_download=True)
 
-        search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work1, work2])
+        search_engine = end_to_end_search_fixture.external_search_index
+        docs = search_engine.start_migration()
+        assert docs is not None
+        docs.add_documents(
+            search_engine.create_search_documents_from_works([work1, work2])
+        )
+        docs.finish()
 
         facets = Facets.default(db.default_library())
         pagination = Pagination(size=1)
@@ -1449,7 +1483,10 @@ class TestOPDS:
         assert 1 == len(parsed["entries"])
         assert [] == self._links(parsed, "next")
 
-    def test_groups_feed(self, opds_fixture: TestOPDSFixture):
+    def test_groups_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1468,8 +1505,13 @@ class TestOPDS:
         # of the work don't matter. It just needs to have a LicensePool
         # so it'll show up in the OPDS feed.
         work = db.work(title="An epic tome", with_open_access_download=True)
-        search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work])
+        search_engine = MagicMock(spec=ExternalSearchIndex)
+        # We expect 1 hit per lane
+        search_engine.query_works_multi.return_value = [
+            [data._fake_hit(work)],
+            [data._fake_hit(work)],
+            [data._fake_hit(work)],
+        ]
 
         # The lane setup does matter a lot -- that's what controls
         # how many times the search functionality is invoked.
@@ -1499,6 +1541,8 @@ class TestOPDS:
         # constructor.
         assert isinstance(cached_groups, OPDSFeedResponse)
         assert private == cached_groups.private
+        # One query per lane available
+        assert len(search_engine.query_works_multi.call_args[0][0]) == 3
 
         parsed = feedparser.parse(cached_groups.data)
 
@@ -1543,21 +1587,27 @@ class TestOPDS:
             assert lane.display_name == links[i + 1].get("title")
             assert annotator.lane_url(lane) == links[i + 1].get("href")
 
-    def test_empty_groups_feed(self, opds_fixture: TestOPDSFixture):
+    def test_empty_groups_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
             opds_fixture.db.session,
         )
+        search_engine = end_to_end_search_fixture.external_search_index
+        docs = search_engine.start_migration()
+        assert docs is not None
+        docs.finish()
 
         # Test the case where a grouped feed turns up nothing.
 
         # A Lane, and a Work not in the Lane.
         test_lane = db.lane("Test Lane", genres=["Mystery"])
 
-        # Mock search index and Annotator.
-        search_engine = MockExternalSearchIndex()
-
+        # Mock Annotator.
         class Mock(MockAnnotator):
             def annotate_feed(self, feed, worklist):
                 self.called = True
@@ -1588,7 +1638,11 @@ class TestOPDS:
         # but our mock Annotator got a chance to modify the feed in place.
         assert True == annotator.called
 
-    def test_search_feed(self, opds_fixture: TestOPDSFixture):
+    def test_search_feed(
+        self,
+        opds_fixture: TestOPDSFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1602,8 +1656,8 @@ class TestOPDS:
         work2 = db.work(genre=Epic_Fantasy, with_open_access_download=True)
 
         pagination = Pagination(size=1)
-        search_client = MockExternalSearchIndex()
-        search_client.bulk_update([work1, work2])
+        search_client = ExternalSearchIndexFake(session)
+        search_client.mock_query_works([work1, work2])
         facets = SearchFacets(order="author", min_score=10)
 
         private = object()
@@ -1675,7 +1729,11 @@ class TestOPDS:
         breadcrumbs = root.find("{%s}breadcrumbs" % AtomFeed.SIMPLIFIED_NS)
         assert None == breadcrumbs
 
-    def test_cache(self, opds_fixture: TestOPDSFixture):
+    def test_cache(
+        self,
+        opds_fixture: TestOPDSFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
         data, db, session = (
             opds_fixture,
             opds_fixture.db,
@@ -1689,8 +1747,14 @@ class TestOPDS:
         )
         fantasy_lane = data.fantasy
 
-        search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work1])
+        search_engine = end_to_end_search_fixture.external_search_index
+        docs = search_engine.start_migration()
+        assert docs is not None
+        errors = docs.add_documents(
+            search_engine.create_search_documents_from_works([work1])
+        )
+        assert errors == []
+        docs.finish()
 
         def make_page():
             return AcquisitionFeed.page(
@@ -1714,7 +1778,9 @@ class TestOPDS:
             genre=Epic_Fantasy,
             with_open_access_download=True,
         )
-        search_engine.bulk_update([work2])
+        recv = search_engine.start_updating_search_documents()
+        recv.add_documents(search_engine.create_search_documents_from_works([work2]))
+        recv.finish()
 
         # The new work does not show up in the feed because
         # we get the old cached version.
@@ -1736,9 +1802,19 @@ class TestAcquisitionFeed:
     def test_page(
         self,
         db,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         session = db.session
+        client = external_search_fake_fixture.search.search_multi_client()
+
+        # The search client is supposed to return a set of result sets.
+        fake_work = MagicMock()
+        fake_work.work_id = 23
+        client.execute = Mock(return_value=[[fake_work]])
+        # The code calls "add" on the search client, which is supposed to return a new
+        # search client with the old search client embedded into it. We don't do that
+        # here as we're completely faking the search results anyway.
+        client.add = Mock(return_value=client)
 
         # Verify that AcquisitionFeed.page() returns an appropriate OPDSFeedResponse
 
@@ -1753,6 +1829,7 @@ class TestAcquisitionFeed:
             MockAnnotator,
             max_age=10,
             private=private,
+            search_engine=external_search_fake_fixture.external_search,
         )
 
         # The result is an OPDSFeedResponse. The 'private' argument,
@@ -1925,7 +2002,6 @@ class TestAcquisitionFeed:
         assert "{http://opds-spec.org/2010/catalog}activeFacet" not in l
 
     def test_license_tags_no_loan_or_hold(self, db: DatabaseTransactionFixture):
-
         edition, pool = db.edition(with_license_pool=True)
         availability, holds, copies = AcquisitionFeed.license_tags(pool, None, None)
         assert dict(status="available") == availability.attrib
@@ -1933,7 +2009,6 @@ class TestAcquisitionFeed:
         assert dict(total="1", available="1") == copies.attrib
 
     def test_license_tags_hold_position(self, db: DatabaseTransactionFixture):
-
         # When a book is placed on hold, it typically takes a while
         # for the LicensePool to be updated with the new number of
         # holds. This test verifies the normal and exceptional
@@ -1989,7 +2064,6 @@ class TestAcquisitionFeed:
     def test_license_tags_show_unlimited_access_books(
         self, db: DatabaseTransactionFixture
     ):
-
         # Arrange
         edition, pool = db.edition(with_license_pool=True)
         pool.open_access = False
@@ -2852,13 +2926,14 @@ class TestEntrypointLinkInsertion:
     def test_groups(
         self,
         entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         data, db, session = (
             entrypoint_link_insertion_fixture,
             entrypoint_link_insertion_fixture.db,
             entrypoint_link_insertion_fixture.db.session,
         )
+        end_to_end_search_fixture.external_search_index.start_migration().finish()  # type: ignore [union-attr]
 
         # When AcquisitionFeed.groups() generates a grouped
         # feed, it will link to different entry points into the feed,
@@ -2876,6 +2951,7 @@ class TestEntrypointLinkInsertion:
                 data.annotator,
                 max_age=0,
                 facets=facets,
+                search_engine=end_to_end_search_fixture.external_search_index,
             )
             return data.mock.called_with
 

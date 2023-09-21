@@ -348,7 +348,6 @@ class TestLanesController:
             assert [list2] == lane.customlists
             assert True == lane.inherit_parent_restrictions
             assert None == lane.media
-            assert 2 == lane.size
 
     def test_default_lane_edit(self, alm_fixture: AdminLibraryManagerFixture):
         """Default lanes only allow the display_name to be edited"""

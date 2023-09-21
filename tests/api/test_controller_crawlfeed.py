@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import feedparser
 from flask import url_for
+from opensearch_dsl.response.hit import Hit
 
 from api.lanes import (
     CrawlableCollectionBasedLane,
@@ -13,7 +14,7 @@ from api.lanes import (
     DynamicLane,
 )
 from api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
-from core.external_search import MockSearchResult, SortKeyPagination
+from core.external_search import SortKeyPagination
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.circulation import CirculationManagerAnnotator
 from core.problem_details import INVALID_INPUT
@@ -207,7 +208,14 @@ class TestCrawlableFeed:
                 # It's not necessary for this test to call it with a
                 # realistic value, but we might as well.
                 results = [
-                    MockSearchResult(work.sort_title, work.sort_author, {}, work.id)
+                    Hit(
+                        {
+                            "_source": {
+                                "work_id": work.id,
+                            },
+                            "_sort": [work.sort_title, work.sort_author, work.id],
+                        }
+                    )
                 ]
                 pagination.page_loaded(results)
                 return [work]

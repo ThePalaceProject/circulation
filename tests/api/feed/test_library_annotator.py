@@ -20,7 +20,6 @@ from core.classifier import (  # type: ignore[attr-defined]
     Urban_Fantasy,
 )
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EverythingEntryPoint
-from core.external_search import MockExternalSearchIndex
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
@@ -800,7 +799,6 @@ class TestLibraryAnnotator:
         work.presentation_edition.add_contributor("Oprah", Contributor.AUTHOR_ROLE)
         work.calculate_presentation(
             PresentationCalculationPolicy(regenerate_opds_entries=True),
-            MockExternalSearchIndex(),
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         contributor_links = [
@@ -820,7 +818,6 @@ class TestLibraryAnnotator:
         annotator_fixture.db.session.commit()
         work.calculate_presentation(
             PresentationCalculationPolicy(regenerate_opds_entries=True),
-            MockExternalSearchIndex(),
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         assert [] == [l.link for l in entry.computed.authors if l.link]

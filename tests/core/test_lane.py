@@ -16,12 +16,7 @@ from core.entrypoint import (
     EntryPoint,
     EverythingEntryPoint,
 )
-from core.external_search import (
-    Filter,
-    MockExternalSearchIndex,
-    WorkSearchResult,
-    mock_search_index,
-)
+from core.external_search import Filter, WorkSearchResult, mock_search_index
 from core.lane import (
     DatabaseBackedFacets,
     DatabaseBackedWorkList,
@@ -57,7 +52,7 @@ from core.util.opds_writer import OPDSFeed
 from tests.core.mock import LogCaptureHandler
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchPatchFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 
 
 class TestFacetsWithEntryPoint:
@@ -2271,7 +2266,7 @@ class TestWorkList:
     def test_groups(
         self,
         db: DatabaseTransactionFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         w1 = MockWork(1)
         w2 = MockWork(2)
@@ -2301,7 +2296,9 @@ class TestWorkList:
         # 2-tuples; one for each work featured by one of its children
         # WorkLists. Note that the same work appears twice, through two
         # different children.
-        [wwl1, wwl2, wwl3] = wl.groups(db.session)
+        [wwl1, wwl2, wwl3] = wl.groups(
+            db.session, search_engine=external_search_fake_fixture.external_search
+        )
         assert (w1, child1) == wwl1
         assert (w2, child2) == wwl2
         assert (w1, child2) == wwl3
@@ -4086,7 +4083,11 @@ class TestLane:
         ] == target.audiences
         assert [Edition.BOOK_MEDIUM] == target.media
 
-    def test_search(self, db: DatabaseTransactionFixture):
+    def test_search(
+        self,
+        db: DatabaseTransactionFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
         # Searching a Lane calls search() on its search_target.
         #
         # TODO: This test could be trimmed down quite a bit with
@@ -4095,8 +4096,11 @@ class TestLane:
         work = db.work(with_license_pool=True)
 
         lane = db.lane()
-        search_client = MockExternalSearchIndex()
-        search_client.bulk_update([work])
+        search_client = end_to_end_search_fixture.external_search_index
+        docs = end_to_end_search_fixture.external_search_index.start_migration()
+        assert docs is not None
+        docs.add_documents(search_client.create_search_documents_from_works([work]))
+        docs.finish()
 
         pagination = Pagination(offset=0, size=1)
 
@@ -4299,6 +4303,7 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
+        fixture.external_search_index.start_migration().finish()  # type: ignore [union-attr]
 
         # Tell the fixture to call our populate_works method.
         # In this library, the groups feed includes at most two books
@@ -4361,8 +4366,17 @@ class TestWorkListGroupsEndToEnd:
             discredited_nonfiction,
             children,
         ]:
-            t1 = [x.id for x in lane.works(session, facets)]
+            t1 = [
+                x.id
+                for x in lane.works(
+                    session,
+                    facets,
+                    search_engine=end_to_end_search_fixture.external_search_index,
+                )
+            ]
             t2 = [x.id for x in lane.works_from_database(session, facets)]
+            print(f"t1: {t1}")
+            print(f"t2: {t2}")
             assert t1 == t2
 
         def assert_contents(g, expect):
@@ -4396,7 +4410,7 @@ class TestWorkListGroupsEndToEnd:
             return lane.groups(
                 session,
                 facets=facets,
-                search_engine=fixture.external_search.search,
+                search_engine=fixture.external_search_index,
                 debug=True,
                 **kwargs,
             )
@@ -4602,10 +4616,11 @@ def random_seed_fixture() -> RandomSeedFixture:
 class TestWorkListGroups:
     def test_groups_for_lanes_adapts_facets(
         self,
-        db: DatabaseTransactionFixture,
         random_seed_fixture: RandomSeedFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
+        db = end_to_end_search_fixture.db
+
         # Verify that _groups_for_lanes gives each of a WorkList's
         # non-queryable children the opportunity to adapt the incoming
         # FeaturedFacets objects to its own needs.

@@ -21,6 +21,7 @@ from core.model.classification import Classification
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Loan
 from core.query.customlist import CustomListQueries
+from core.search.coverage_remover import RemovesSearchCoverage
 from core.util.notifications import PushNotifications
 
 from .config import CannotLoadConfiguration, Configuration, ConfigurationConstants
@@ -48,7 +49,6 @@ from .model import (
     Subject,
     Timestamp,
     Work,
-    WorkCoverageRecord,
     create,
     get_one,
     get_one_or_create,
@@ -2463,7 +2463,9 @@ class WhereAreMyBooksScript(CollectionInputScript):
     is being configured.
     """
 
-    def __init__(self, _db=None, output=None, search=None):
+    def __init__(
+        self, _db=None, output=None, search: Optional[ExternalSearchIndex] = None
+    ):
         _db = _db or self._db
         super().__init__(_db)
         self.output = output or sys.stdout
@@ -2636,6 +2638,11 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
 
 class UpdateLaneSizeScript(LaneSweeperScript):
+    def __init__(self, _db, *args, **kwargs):
+        super().__init__(_db, *args, **kwargs)
+        search = kwargs.get("search_index_client", None)
+        self._search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
+
     def should_process_lane(self, lane):
         """We don't want to process generic WorkLists -- there's nowhere
         to store the data.
@@ -2652,7 +2659,7 @@ class UpdateLaneSizeScript(LaneSweeperScript):
         # This is done because calling site_configuration_has_changed repeatedly
         # was causing performance problems, when we have lots of lanes to update.
         lane._suppress_before_flush_listeners = True
-        lane.update_size(self._db)
+        lane.update_size(self._db, search_engine=self._search)
         self.log.info("%s: %d", lane.full_identifier, lane.size)
 
     def do_run(self, *args, **kwargs):
@@ -2665,50 +2672,16 @@ class UpdateCustomListSizeScript(CustomListSweeperScript):
         custom_list.update_size(self._db)
 
 
-class RemovesSearchCoverage:
-    """Mix-in class for a script that might remove all coverage records
-    for the search engine.
-    """
-
-    def remove_search_coverage_records(self):
-        """Delete all search coverage records from the database.
-
-        :return: The number of records deleted.
-        """
-        wcr = WorkCoverageRecord
-        clause = wcr.operation == wcr.UPDATE_SEARCH_INDEX_OPERATION
-        count = self._db.query(wcr).filter(clause).count()
-
-        # We want records to be updated in ascending order in order to avoid deadlocks.
-        # To guarantee lock order, we explicitly acquire locks by using a subquery with FOR UPDATE (with_for_update).
-        # Please refer for my details to this SO article:
-        # https://stackoverflow.com/questions/44660368/postgres-update-with-order-by-how-to-do-it
-        self._db.execute(
-            wcr.__table__.delete().where(
-                wcr.id.in_(
-                    self._db.query(wcr.id)
-                    .with_for_update()
-                    .filter(clause)
-                    .order_by(WorkCoverageRecord.id)
-                )
-            )
-        )
-
-        return count
-
-
 class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCoverage):
     """Completely delete the search index and recreate it."""
 
     def __init__(self, *args, **kwargs):
         search = kwargs.get("search_index_client", None)
-        self.search = search or ExternalSearchIndex(self._db)
+        self.search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
         super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
 
     def do_run(self):
-        # Calling setup_index will destroy the index and recreate it
-        # empty.
-        self.search.setup_index()
+        self.search.clear_search_documents()
 
         # Remove all search coverage records so the
         # SearchIndexCoverageProvider will start from scratch.

@@ -4,9 +4,11 @@ from collections import defaultdict
 
 from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
 from api.controller import CirculationManager
-from core.external_search import MockExternalSearchIndex
+from core.external_search import ExternalSearchIndex
 from core.integration.settings import BaseSettings
-from core.model import DataSource, Hold, Loan
+from core.model import DataSource, Hold, Loan, get_one_or_create
+from core.model.configuration import ExternalIntegration
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 class MockBaseCirculationAPI(BaseCirculationAPI, ABC):
@@ -167,7 +169,20 @@ class MockCirculationManager(CirculationManager):
 
     def setup_search(self):
         """Set up a search client."""
-        return MockExternalSearchIndex()
+        integration, _ = get_one_or_create(
+            self._db,
+            ExternalIntegration,
+            goal=ExternalIntegration.SEARCH_GOAL,
+            protocol=ExternalIntegration.OPENSEARCH,
+        )
+        integration.set_setting(
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "test_index"
+        )
+        integration.set_setting(
+            ExternalSearchIndex.TEST_SEARCH_TERM_KEY, "a search term"
+        )
+        integration.url = "http://does-not-exist.com/"
+        return ExternalSearchIndexFake(self._db)
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""

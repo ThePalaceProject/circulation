@@ -7,8 +7,9 @@ import pytest
 from api.app import app
 from api.opds2 import OPDS2PublicationsAnnotator
 from core.classifier import Classifier
-from core.external_search import MockExternalSearchIndex, SortKeyPagination
+from core.external_search import ExternalSearchIndex, SortKeyPagination
 from core.lane import Facets, Lane, Pagination, SearchFacets
+from core.model import ExternalIntegration
 from core.model.classification import Subject
 from core.model.datasource import DataSource
 from core.model.edition import Edition
@@ -17,21 +18,25 @@ from core.model.resource import Hyperlink
 from core.opds2 import AcquisitonFeedOPDS2, OPDS2Annotator
 from core.util.flask_util import OPDSFeedResponse
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import EndToEndSearchFixture
+from tests.mocks.search import SearchServiceFake
 
 
 class TestOPDS2FeedFixture:
     transaction: DatabaseTransactionFixture
-    search_engine: MockExternalSearchIndex
+    search_engine: ExternalSearchIndex
     fiction: Lane
+    search_fixture: EndToEndSearchFixture
 
 
 @pytest.fixture
 def opds2_feed_fixture(
-    db: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture, end_to_end_search_fixture: EndToEndSearchFixture
 ) -> TestOPDS2FeedFixture:
     data = TestOPDS2FeedFixture()
     data.transaction = db
-    data.search_engine = MockExternalSearchIndex()
+    data.search_fixture = end_to_end_search_fixture
+    data.search_engine = data.search_fixture.external_search_index
     data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
@@ -49,7 +54,14 @@ class TestOPDS2Feed:
         work = transaction.work(
             with_open_access_download=True, authors="Author Name", fiction=True
         )
-        data.search_engine.bulk_update([work])
+
+        docs = data.search_engine.start_migration()
+        assert docs is not None
+        docs.add_documents(
+            data.search_engine.create_search_documents_from_works([work])
+        )
+        docs.finish()
+
         result = AcquisitonFeedOPDS2.publications(
             session,
             data.fiction,
@@ -69,7 +81,6 @@ class TestOPDS2Feed:
             opds2_feed_fixture.transaction,
             opds2_feed_fixture.transaction.session,
         )
-
         works = [
             transaction.work(
                 with_open_access_download=True,
@@ -96,7 +107,12 @@ class TestOPDS2Feed:
                 fiction=True,
             ),
         ]
-        data.search_engine.bulk_update(works)
+
+        docs = data.search_engine.start_migration()
+        assert docs is not None
+        docs.add_documents(data.search_engine.create_search_documents_from_works(works))
+        docs.finish()
+
         annotator = OPDS2Annotator(
             "/",
             Facets.default(transaction.default_library()),
@@ -148,9 +164,10 @@ class TestOPDS2Feed:
 
 class TestOPDS2AnnotatorFixture:
     transaction: DatabaseTransactionFixture
-    search_engine: MockExternalSearchIndex
+    search_engine: ExternalSearchIndex
     fiction: Lane
     annotator: OPDS2Annotator
+    search_integration: ExternalIntegration
 
 
 @pytest.fixture
@@ -159,7 +176,18 @@ def opds2_annotator_fixture(
 ) -> TestOPDS2AnnotatorFixture:
     data = TestOPDS2AnnotatorFixture()
     data.transaction = db
-    data.search_engine = MockExternalSearchIndex()
+    data.search_integration = db.external_integration(
+        ExternalIntegration.OPENSEARCH,
+        goal=ExternalIntegration.SEARCH_GOAL,
+        url="http://does-not-matter.com",  # It doesn't matter what URL we specify, because the search service is fake
+        settings={
+            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
+            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
+        },
+    )
+    data.search_engine = ExternalSearchIndex(
+        _db=db.session, custom_client_service=SearchServiceFake()
+    )
     data.fiction = db.lane("Fiction")
     data.fiction.fiction = True
     data.fiction.audiences = [Classifier.AUDIENCE_ADULT]
@@ -210,7 +238,12 @@ class TestOPDS2Annotator:
             edition.data_source,
             media_type="image/png",
         )
-        data.search_engine.bulk_update([work])
+
+        docs = data.search_engine.start_updating_search_documents()
+        docs.add_documents(
+            data.search_engine.create_search_documents_from_works([work])
+        )
+        docs.finish()
         result = data.annotator.metadata_for_work(work)
         assert isinstance(result, dict)
 
@@ -246,7 +279,11 @@ class TestOPDS2Annotator:
         edition.series = "A series"
         edition.series_position = 4
 
-        data.search_engine.bulk_update([work])
+        docs = data.search_engine.start_updating_search_documents()
+        docs.add_documents(
+            data.search_engine.create_search_documents_from_works([work])
+        )
+        docs.finish()
         result = data.annotator.metadata_for_work(work)
         assert isinstance(result, dict)
 

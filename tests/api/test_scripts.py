@@ -16,11 +16,7 @@ from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
-from core.external_search import (
-    ExternalSearchIndex,
-    MockExternalSearchIndex,
-    mock_search_index,
-)
+from core.external_search import ExternalSearchIndex, mock_search_index
 from core.lane import Facets, FeaturedFacets, Pagination, WorkList
 from core.marc import MARCExporter
 from core.model import (
@@ -51,6 +47,8 @@ from scripts import (
 )
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.mocks.search import fake_hits
 
 if TYPE_CHECKING:
     from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
@@ -76,7 +74,6 @@ class TestAdobeAccountIDResetScript:
             AuthdataUtility.ADOBE_ACCOUNT_ID_PATRON_IDENTIFIER,
             "Some other type",
         ):
-
             credential = Credential.lookup(
                 db.session, data_source, type, patron, set_value, True
             )
@@ -326,9 +323,13 @@ class TestCacheFacetListsPerLane:
     def test_do_generate(
         self,
         lane_script_fixture: LaneScriptFixture,
-        external_search_fixture: ExternalSearchFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         db = lane_script_fixture.db
+        migration = end_to_end_search_fixture.external_search_index.start_migration()
+        assert migration is not None
+        migration.finish()
+
         # When it's time to generate a feed, AcquisitionFeed.page
         # is called with the right arguments.
         class MockAcquisitionFeed:
@@ -407,6 +408,7 @@ class TestCacheOPDSGroupFeedPerLane:
         external_search_fixture: ExternalSearchFixture,
     ):
         db = lane_script_fixture.db
+        external_search_fixture.init_indices()
         # When it's time to generate a feed, AcquisitionFeed.groups
         # is called with the right arguments.
 
@@ -507,7 +509,11 @@ class TestCacheOPDSGroupFeedPerLane:
 
     # We no longer cache the feeds
     @pytest.mark.skip
-    def test_do_run(self, lane_script_fixture: LaneScriptFixture):
+    def test_do_run(
+        self,
+        lane_script_fixture: LaneScriptFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         db = lane_script_fixture.db
 
         work = db.work(fiction=True, with_license_pool=True, genre="Science Fiction")
@@ -519,8 +525,10 @@ class TestCacheOPDSGroupFeedPerLane:
             fiction=True,
             genres=["Science Fiction"],
         )
-        search_engine = MockExternalSearchIndex()
-        search_engine.bulk_update([work])
+        search_engine = external_search_fake_fixture.external_search
+        search_engine.query_works_multi = MagicMock(  # type: ignore [method-assign]
+            return_value=[fake_hits([work]), fake_hits([work])]
+        )
         with mock_search_index(search_engine):
             script = CacheOPDSGroupFeedPerLane(db.session, cmd_args=[])
             script.do_run(cmd_args=[])
@@ -720,8 +728,9 @@ class TestInstanceInitializationScript:
         # as necessary.
         with patch("scripts.inspect") as inspect:
             script = InstanceInitializationScript()
-            script.migrate_database = MagicMock()
-            script.initialize_database = MagicMock()
+            script.migrate_database = MagicMock()  # type: ignore[method-assign]
+            script.initialize_database = MagicMock()  # type: ignore[method-assign]
+            script.initialize_search_indexes = MagicMock()  # type: ignore[method-assign]
 
             # If the database is uninitialized, initialize_database() is called.
             inspect().has_table.return_value = False
@@ -746,6 +755,7 @@ class TestInstanceInitializationScript:
             caplog.set_level(logging.ERROR)
             script.migrate_database = MagicMock(side_effect=CommandError("test"))
             script.initialize_database = MagicMock()
+            script.initialize_search_indexes = MagicMock()
 
             # If the database is initialized, migrate_database() is called.
             inspect().has_table.return_value = True
@@ -792,6 +802,67 @@ class TestInstanceInitializationScript:
         assert conf.config_file_name.endswith("alembic.ini")
         assert conf.attributes["connection"] == mock_connection.engine
         assert conf.attributes["configure_logger"] is False
+
+    def test_initialize_search_indexes(
+        self, end_to_end_search_fixture: EndToEndSearchFixture
+    ):
+        db = end_to_end_search_fixture.db
+        search = end_to_end_search_fixture.external_search_index
+        base_name = search._revision_base_name
+        script = InstanceInitializationScript()
+
+        _mockable_search = ExternalSearchIndex(db.session)
+        _mockable_search.start_migration = MagicMock()  # type: ignore [method-assign]
+        _mockable_search.search_service = MagicMock()  # type: ignore [method-assign]
+        _mockable_search.log = MagicMock()
+
+        def mockable_search(*args):
+            return _mockable_search
+
+        # Initially this should not exist, if InstanceInit has not been run
+        assert search.search_service().read_pointer() == None
+
+        with patch("scripts.ExternalSearchIndex", new=mockable_search):
+            # To fake "no migration is available", mock all the values
+
+            _mockable_search.start_migration.return_value = None
+            _mockable_search.search_service().is_pointer_empty.return_value = True
+            # Migration should fail
+            assert script.initialize_search_indexes(db.session) == False
+            # Logs were emitted
+            assert _mockable_search.log.warning.call_count == 1
+            assert (
+                "no migration was available"
+                in _mockable_search.log.warning.call_args[0][0]
+            )
+
+            _mockable_search.search_service.reset_mock()
+            _mockable_search.start_migration.reset_mock()
+            _mockable_search.log.reset_mock()
+
+            # In case there is no need for a migration, read pointer exists as a non-empty pointer
+            _mockable_search.search_service().is_pointer_empty.return_value = False
+            # Initialization should pass, as a no-op
+            assert script.initialize_search_indexes(db.session) == True
+            assert _mockable_search.start_migration.call_count == 0
+
+        # Initialization should work now
+        assert script.initialize_search_indexes(db.session) == True
+        # Then we have the latest version index
+        assert (
+            search.search_service().read_pointer()
+            == search._revision.name_for_index(base_name)
+        )
+
+    def test_initialize_search_indexes_no_integration(
+        self, db: DatabaseTransactionFixture
+    ):
+        script = InstanceInitializationScript()
+        script._log = MagicMock()
+        # No integration mean no migration
+        assert script.initialize_search_indexes(db.session) == False
+        assert script._log.error.call_count == 2
+        assert "No search integration" in script._log.error.call_args[0][0]
 
 
 class TestLanguageListScript:
