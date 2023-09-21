@@ -15,7 +15,6 @@ from core.entrypoint import (
     EverythingEntryPoint,
     MediumEntryPoint,
 )
-from core.external_search import MockExternalSearchIndex
 from core.facets import FacetConstants
 from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from core.feed.annotator.base import Annotator
@@ -38,7 +37,6 @@ from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import ExternalSearchPatchFixture
 
 
 class TestOPDSFeedProtocol:
@@ -170,7 +168,6 @@ class TestOPDSAcquisitionFeed:
     def test_page(
         self,
         db,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
         session = db.session
 
@@ -187,7 +184,7 @@ class TestOPDSAcquisitionFeed:
             CirculationManagerAnnotator(None),
             None,
             None,
-            None,
+            MagicMock(),
         ).as_response(max_age=10, private=private)
 
         # The result is an OPDSFeedResponse. The 'private' argument,
@@ -1065,7 +1062,6 @@ class TestEntrypointLinkInsertion:
     def test_groups(
         self,
         entrypoint_link_insertion_fixture: TestEntrypointLinkInsertionFixture,
-        external_search_patch_fixture: ExternalSearchPatchFixture,
     ):
         data, db, session = (
             entrypoint_link_insertion_fixture,
@@ -1081,7 +1077,8 @@ class TestEntrypointLinkInsertion:
             was called with.
             """
             data.mock.called_with = None
-            search = MockExternalSearchIndex()
+            search = MagicMock()
+            search.query_works_multi.return_value = [[]]
             feed = OPDSAcquisitionFeed.groups(
                 session,
                 "title",
@@ -1142,7 +1139,7 @@ class TestEntrypointLinkInsertion:
                 data.annotator(),
                 facets,
                 pagination,
-                MockExternalSearchIndex(),
+                MagicMock(),
             )
 
             return data.mock.called_with

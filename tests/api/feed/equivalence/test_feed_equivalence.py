@@ -7,7 +7,6 @@ from api.admin.opds import AdminFeed as OldAdminFeed
 from api.app import app
 from api.opds import LibraryAnnotator as OldLibraryAnnotator
 from api.opds import LibraryLoanAndHoldAnnotator as OldLibraryLoanAndHoldAnnotator
-from core.external_search import MockExternalSearchIndex
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.admin import AdminFeed
 from core.feed.annotator.admin import AdminAnnotator
@@ -23,6 +22,8 @@ from tests.api.feed.test_library_annotator import (  # noqa
     patch_url_for,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import ExternalSearchFixture
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 def format_tags(tags1, tags2):
@@ -68,7 +69,11 @@ def assert_equal_xmls(xml1: str | etree._Element, xml2: str | etree._Element):
 
 
 class TestFeedEquivalence:
-    def test_page_feed(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_page_feed(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
         db = annotator_fixture.db
         lane = annotator_fixture.lane
         library = db.default_library()
@@ -76,8 +81,8 @@ class TestFeedEquivalence:
         work1 = db.work(with_license_pool=True)
         work2 = db.work(with_open_access_download=True)
 
-        search_index = MockExternalSearchIndex()
-        search_index.bulk_update([work1, work2])
+        search_index = ExternalSearchIndexFake(db.session)
+        search_index.mock_query_works_multi([work1, work2])
 
         with app.test_request_context("/"):
             new_annotator = LibraryAnnotator(None, lane, library)
@@ -121,7 +126,11 @@ class TestFeedEquivalence:
 
         assert_equal_xmls(str(old_feed), str(new_feed))
 
-    def test_groups_feed(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_groups_feed(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
         db = annotator_fixture.db
         lane = annotator_fixture.lane
         de_lane = db.lane(parent=lane, languages=["de"])
@@ -130,8 +139,8 @@ class TestFeedEquivalence:
         work1 = db.work(with_license_pool=True)
         work2 = db.work(with_open_access_download=True, language="de")
 
-        search_index = MockExternalSearchIndex()
-        search_index.bulk_update([work1, work2])
+        search_index = ExternalSearchIndexFake(db.session)
+        search_index.mock_query_works_multi([work1, work2], [work1, work2])
 
         patron = db.patron()
         work1.active_license_pool(library).loan_to(patron)
@@ -163,7 +172,11 @@ class TestFeedEquivalence:
 
         assert_equal_xmls(str(old_feed), new_feed.serialize().decode())
 
-    def test_search_feed(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_search_feed(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
         db = annotator_fixture.db
         lane = annotator_fixture.lane
         de_lane = db.lane(parent=lane, languages=["de"])
@@ -172,8 +185,8 @@ class TestFeedEquivalence:
         work1 = db.work(with_license_pool=True)
         work2 = db.work(with_open_access_download=True, language="de")
 
-        search_index = MockExternalSearchIndex()
-        search_index.bulk_update([work1, work2])
+        search_index = ExternalSearchIndexFake(db.session)
+        search_index.mock_query_works_multi([work1, work2])
 
         patron = db.patron()
         work1.active_license_pool(library).loan_to(patron)
@@ -207,7 +220,11 @@ class TestFeedEquivalence:
 
             assert_equal_xmls(str(old_feed), str(new_feed))
 
-    def test_from_query_feed(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_from_query_feed(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
         db = annotator_fixture.db
         lane = annotator_fixture.lane
         de_lane = db.lane(parent=lane, languages=["de"])
@@ -216,8 +233,8 @@ class TestFeedEquivalence:
         work1 = db.work(with_license_pool=True)
         work2 = db.work(with_open_access_download=True, language="de")
 
-        search_index = MockExternalSearchIndex()
-        search_index.bulk_update([work1, work2])
+        search_index = ExternalSearchIndexFake(db.session)
+        search_index.mock_query_works_multi([work1, work2])
 
         patron = db.patron()
         work1.active_license_pool(library).loan_to(patron)
@@ -254,7 +271,11 @@ class TestFeedEquivalence:
 
 
 class TestAdminAnnotator:
-    def test_suppressed(self, annotator_fixture: LibraryAnnotatorFixture):
+    def test_suppressed(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        external_search_fixture: ExternalSearchFixture,
+    ):
         db = annotator_fixture.db
         library = db.default_library()
 
