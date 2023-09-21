@@ -97,7 +97,6 @@ class TestODL2Importer(TestODLImporter):
         return ODL2Importer(
             db.session,
             collection=odl_test_fixture.collection(library),
-            http_get=mock_get.get,
         )
 
     @pytest.fixture()

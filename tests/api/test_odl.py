@@ -823,6 +823,7 @@ class TestODLAPI:
         config = odl_api_test_fixture.collection.integration_configuration.for_library(
             library.id
         )
+        assert config is not None
         DatabaseTransactionFixture.set_settings(
             config,
             **{

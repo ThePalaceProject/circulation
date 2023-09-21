@@ -62,7 +62,6 @@ class ReplacementPolicy:
         formats=False,
         rights=False,
         link_content=False,
-        content_modifier=None,
         analytics=None,
         even_if_not_apparently_updated=False,
         presentation_calculation_policy=None,
@@ -75,7 +74,6 @@ class ReplacementPolicy:
         self.formats = formats
         self.link_content = link_content
         self.even_if_not_apparently_updated = even_if_not_apparently_updated
-        self.content_modifier = content_modifier
         self.analytics = analytics
         self.presentation_calculation_policy = (
             presentation_calculation_policy or PresentationCalculationPolicy()

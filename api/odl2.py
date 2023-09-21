@@ -134,10 +134,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         collection: Collection,
         parser: Optional[RWPMManifestParser] = None,
         data_source_name: str | None = None,
-        identifier_mapping: Dict[Identifier, Identifier] | None = None,
-        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
-        content_modifier: Optional[Callable[..., None]] = None,
-        map_from_collection: Optional[bool] = None,
     ):
         """Initialize a new instance of ODL2Importer class.
 
@@ -158,26 +154,12 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
         :type data_source_name: str
-
-        :param identifier_mapping: Dictionary used for mapping external identifiers into a set of internal ones
-        :type identifier_mapping: Dict
-
-        :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
-            as they come in from the network.
-        :type content_modifier: Callable
-
-        :param map_from_collection: Identifier mapping
-        :type map_from_collection: Dict
         """
         super().__init__(
             db,
             collection,
             parser if parser else RWPMManifestParser(ODLFeedParserFactory()),
             data_source_name,
-            identifier_mapping,
-            http_get,
-            content_modifier,
-            map_from_collection,
         )
         self._logger = logging.getLogger(__name__)
 

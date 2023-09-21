@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import traceback
+from abc import ABC, abstractmethod
 from datetime import datetime
 from io import BytesIO
 from typing import (
@@ -81,43 +82,6 @@ from core.util.xmlparser import XMLParser
 
 if TYPE_CHECKING:
     from core.model import Work
-
-
-@overload
-def parse_identifier(db: Session, identifier: str) -> Identifier:
-    ...
-
-
-@overload
-def parse_identifier(db: Session, identifier: Optional[str]) -> Optional[Identifier]:
-    ...
-
-
-def parse_identifier(db: Session, identifier: Optional[str]) -> Optional[Identifier]:
-    """Parse the identifier and return an Identifier object representing it.
-
-    :param db: Database session
-    :type db: sqlalchemy.orm.session.Session
-
-    :param identifier: String containing the identifier
-    :type identifier: str
-
-    :return: Identifier object
-    :rtype: Optional[core.model.identifier.Identifier]
-    """
-    parsed_identifier = None
-
-    try:
-        result = Identifier.parse_urn(db, identifier)
-
-        if result is not None:
-            parsed_identifier, _ = result
-    except Exception:
-        logging.error(
-            f"An unexpected exception occurred during parsing identifier {identifier}"
-        )
-
-    return parsed_identifier
 
 
 class OPDSXMLParser(XMLParser):
@@ -226,91 +190,26 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
-class OPDSImporter(
-    CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings]
+class BaseOPDSImporter(
+    CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings],
+    ABC,
 ):
-    """Imports editions and license pools from an OPDS feed.
-    Creates Edition, LicensePool and Work rows in the database, if those
-    don't already exist.
-
-    Should be used when a circulation server asks for data from
-    our internal content server, and also when our content server asks for data
-    from external content servers.
-    """
-
-    COULD_NOT_CREATE_LICENSE_POOL = (
-        "No existing license pool for this identifier and no way of creating one."
-    )
-
-    NAME = ExternalIntegration.OPDS_IMPORT
-    DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
-
-    NO_DEFAULT_AUDIENCE = ""
-
-    # Subclasses of OPDSImporter may define a different parser class that's
-    # a subclass of OPDSXMLParser. For example, a subclass may want to use
-    # tags from an additional namespace.
-    PARSER_CLASS = OPDSXMLParser
-
-    # Subclasses of OPDSImporter may define a list of status codes
-    # that should be treated as indicating success, rather than failure,
-    # when they show up in <simplified:message> tags.
-    SUCCESS_STATUS_CODES: list[int] | None = None
-
-    @classmethod
-    def settings_class(cls) -> Type[OPDSImporterSettings]:
-        return OPDSImporterSettings
-
-    @classmethod
-    def library_settings_class(cls) -> Type[OPDSImporterLibrarySettings]:
-        return OPDSImporterLibrarySettings
-
-    @classmethod
-    def label(cls) -> str:
-        return "OPDS Importer"
-
-    @classmethod
-    def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
-
     def __init__(
         self,
         _db: Session,
-        collection: Optional[Collection],
-        data_source_name: Optional[str] = None,
-        identifier_mapping: Optional[Dict[Identifier, Identifier]] = None,
+        collection: Collection,
+        data_source_name: Optional[str],
         http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
-        content_modifier: Optional[Callable[..., None]] = None,
-        map_from_collection: Optional[bool] = None,
     ):
-        """:param collection: LicensePools created by this OPDS import
-        will be associated with the given Collection. If this is None,
-        no LicensePools will be created -- only Editions.
-
-        :param data_source_name: Name of the source of this OPDS feed.
-        All Editions created by this import will be associated with
-        this DataSource. If there is no DataSource with this name, one
-        will be created. NOTE: If `collection` is provided, its
-        .data_source will take precedence over any value provided
-        here. This is only for use when you are importing OPDS
-        metadata without any particular Collection in mind.
-
-        :param http_get: Use this method to make an HTTP GET request. This
-        can be replaced with a stub method for testing purposes.
-
-        :param content_modifier: A function that may modify-in-place
-        representations (such as images and EPUB documents) as they
-        come in from the network.
-
-        :param map_from_collection
-        """
         self._db = _db
-        self.log = logging.getLogger("OPDS Importer")
-        self._collection_id = collection.id if collection else None
-        self._integration_configuration_id = (
-            collection.integration_configuration.id if collection else None
-        )
-        if self.collection and not data_source_name:
+        if collection.id is None:
+            raise ValueError(
+                f"Unable to create importer for Collection with id = None. Collection: {collection.name}."
+            )
+        self._collection_id = collection.id
+        self._integration_configuration_id = collection.integration_configuration_id
+        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
+        if data_source_name is None:
             # Use the Collection data_source for OPDS import.
             data_source = self.collection.data_source
             if data_source:
@@ -320,35 +219,64 @@ class OPDSImporter(
                     "Cannot perform an OPDS import on a Collection that has no associated DataSource!"
                 )
         else:
-            # Use the given data_source or default to the Metadata
-            # Wrangler.
-            data_source_name = data_source_name or DataSource.METADATA_WRANGLER
+            # Use the given data_source
+            data_source_name = data_source_name
         self.data_source_name = data_source_name
-        self.identifier_mapping = identifier_mapping
-
-        self.primary_identifier_source = None
-        if collection:
-            self.primary_identifier_source = collection.primary_identifier_source
-
-        self.content_modifier = content_modifier
 
         # In general, we are cautious when mirroring resources so that
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
-        self.map_from_collection = map_from_collection
 
-    @property
-    def collection(self) -> Optional[Collection]:
-        """Returns an associated Collection object
+    @abstractmethod
+    def extract_feed_data(
+        self, feed: str | bytes, feed_url: Optional[str] = None
+    ) -> Tuple[Dict[str, Metadata], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+        ...
 
-        :return: Associated Collection object
-        :rtype: Optional[Collection]
+    @abstractmethod
+    def extract_last_update_dates(
+        self, feed: str | bytes | FeedParserDict
+    ) -> List[Tuple[Optional[str], Optional[datetime]]]:
+        ...
+
+    @abstractmethod
+    def extract_next_links(self, feed: str | bytes) -> List[str]:
+        ...
+
+    @abstractmethod
+    def assert_importable_content(
+        self, feed: str, feed_url: str, max_get_attempts: int = 5
+    ) -> Literal[True]:
+        ...
+
+    @overload
+    def parse_identifier(self, identifier: str) -> Identifier:
+        ...
+
+    @overload
+    def parse_identifier(self, identifier: Optional[str]) -> Optional[Identifier]:
+        ...
+
+    def parse_identifier(self, identifier: Optional[str]) -> Optional[Identifier]:
+        """Parse the identifier and return an Identifier object representing it.
+
+        :param identifier: String containing the identifier
+
+        :return: Identifier object
         """
-        if self._collection_id:
-            return Collection.by_id(self._db, id=self._collection_id)
+        parsed_identifier = None
 
-        return None
+        try:
+            result = Identifier.parse_urn(self._db, identifier)
+            if result is not None:
+                parsed_identifier, _ = result
+        except Exception:
+            self.log.error(
+                f"An unexpected exception occurred during parsing identifier {identifier}"
+            )
+
+        return parsed_identifier
 
     @property
     def data_source(self) -> DataSource:
@@ -363,93 +291,91 @@ class OPDSImporter(
             offers_licenses=offers_licenses,
         )
 
-    def assert_importable_content(
-        self, feed: str, feed_url: str, max_get_attempts: int = 5
-    ) -> Literal[True]:
-        """Raise an exception if the given feed contains nothing that can,
-        even theoretically, be turned into a LicensePool.
+    @property
+    def collection(self) -> Collection:
+        collection = Collection.by_id(self._db, self._collection_id)
+        if collection is None:
+            raise ValueError("Unable to load collection.")
+        return collection
 
-        By default, this means the feed must link to open-access content
-        that can actually be retrieved.
+    def import_edition_from_metadata(self, metadata: Metadata) -> Edition:
+        """For the passed-in Metadata object, see if can find or create an Edition
+        in the database. Also create a LicensePool if the Metadata has
+        CirculationData in it.
         """
-        metadata, failures = self.extract_feed_data(feed, feed_url)
-        get_attempts = 0
+        # Locate or create an Edition for this book.
+        edition, is_new_edition = metadata.edition(self._db)
 
-        # Find an open-access link, and try to GET it just to make
-        # sure OPDS feed isn't hiding non-open-access stuff behind an
-        # open-access link.
+        policy = ReplacementPolicy(
+            subjects=True,
+            links=True,
+            contributions=True,
+            rights=True,
+            link_content=True,
+            formats=True,
+            even_if_not_apparently_updated=True,
+        )
+        metadata.apply(
+            edition=edition,
+            collection=self.collection,
+            replace=policy,
+        )
+
+        return edition  # type: ignore[no-any-return]
+
+    def update_work_for_edition(
+        self,
+        edition: Edition,
+        is_open_access: bool = True,
+    ) -> tuple[LicensePool | None, Work | None]:
+        """If possible, ensure that there is a presentation-ready Work for the
+        given edition's primary identifier.
+
+        :param edition: The edition whose license pool and work we're interested in.
+        :param is_open_access: Whether this is an open access edition.
+        :return: 2-Tuple of license pool (optional) and work (optional) for edition.
+        """
+
+        work = None
+
+        # Looks up a license pool for the primary identifier associated with
+        # the given edition. If this is not an open access book, then the
+        # collection is also used as criteria for the lookup. Open access
+        # books don't require a collection match, according to this explanation
+        # from prior work:
+        #   Find a LicensePool for the primary identifier. Any LicensePool will
+        #   do--the collection doesn't have to match, since all
+        #   LicensePools for a given identifier have the same Work.
         #
-        # To avoid taking forever or antagonizing API providers, we'll
-        # give up after `max_get_attempts` failures.
-        for link in self._open_access_links(list(metadata.values())):
-            url = link.href
-            success = self._is_open_access_link(url, link.media_type)
-            if success:
-                return True
-            get_attempts += 1
-            if get_attempts >= max_get_attempts:
-                error = (
-                    "Was unable to GET supposedly open-access content such as %s (tried %s times)"
-                    % (url, get_attempts)
-                )
-                explanation = "This might be an OPDS For Distributors feed, or it might require different authentication credentials."
-                raise IntegrationException(error, explanation)
-
-        raise IntegrationException(
-            "No open-access links were found in the OPDS feed.",
-            "This might be an OPDS for Distributors feed.",
+        # If we have CirculationData, a pool was created when we
+        # imported the edition. If there was already a pool from a
+        # different data source or a different collection, that's fine
+        # too.
+        collection_criteria = {} if is_open_access else {"collection": self.collection}
+        pool = get_one(
+            self._db,
+            LicensePool,
+            identifier=edition.primary_identifier,
+            on_multiple="interchangeable",
+            **collection_criteria,
         )
 
-    @classmethod
-    def _open_access_links(
-        cls, metadatas: List[Metadata]
-    ) -> Generator[LinkData, None, None]:
-        """Find all open-access links in a list of Metadata objects.
+        if pool:
+            if not pool.work or not pool.work.presentation_ready:
+                # There is no presentation-ready Work for this
+                # LicensePool. Try to create one.
+                work, ignore = pool.calculate_work()
+            else:
+                # There is a presentation-ready Work for this LicensePool.
+                # Use it.
+                work = pool.work
 
-        :param metadatas: A list of Metadata objects.
-        :yield: A sequence of `LinkData` objects.
-        """
-        for item in metadatas:
-            if not item.circulation:
-                continue
-            for link in item.circulation.links:
-                if link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
-                    yield link
-
-    def _is_open_access_link(
-        self, url: str, type: Optional[str]
-    ) -> str | Literal[False]:
-        """Is `url` really an open-access link?
-
-        That is, can we make a normal GET request and get something
-        that looks like a book?
-        """
-        headers = {}
-        if type:
-            headers["Accept"] = type
-        status, headers, body = self.http_get(url, headers=headers)
-        if status == 200 and len(body) > 1024 * 10:
-            # We could also check the media types, but this is good
-            # enough for now.
-            return "Found a book-like thing at %s" % url
-        self.log.error(
-            "Supposedly open-access link %s didn't give us a book. Status=%s, body length=%s",
-            url,
-            status,
-            len(body),
-        )
-        return False
-
-    def _parse_identifier(self, identifier: str) -> Identifier:
-        """Parse the identifier and return an Identifier object representing it.
-
-        :param identifier: String containing the identifier
-        :type identifier: str
-
-        :return: Identifier object
-        :rtype: Identifier
-        """
-        return parse_identifier(self._db, identifier)
+        # If a presentation-ready Work already exists, there's no
+        # rush. We might have new metadata that will change the Work's
+        # presentation, but when we called Metadata.apply() the work
+        # was set up to have its presentation recalculated in the
+        # background, and that's good enough.
+        return pool, work
 
     def import_from_feed(
         self, feed: str | bytes, feed_url: Optional[str] = None
@@ -536,85 +462,156 @@ class OPDSImporter(
             failures,
         )
 
-    def import_edition_from_metadata(self, metadata: Metadata) -> Edition:
-        """For the passed-in Metadata object, see if can find or create an Edition
-        in the database. Also create a LicensePool if the Metadata has
-        CirculationData in it.
-        """
-        # Locate or create an Edition for this book.
-        edition, is_new_edition = metadata.edition(self._db)
 
-        policy = ReplacementPolicy(
-            subjects=True,
-            links=True,
-            contributions=True,
-            rights=True,
-            link_content=True,
-            formats=True,
-            even_if_not_apparently_updated=True,
-            content_modifier=self.content_modifier,
-        )
-        metadata.apply(
-            edition=edition,
-            collection=self.collection,
-            replace=policy,
-        )
+class OPDSImporter(BaseOPDSImporter):
+    """Imports editions and license pools from an OPDS feed.
+    Creates Edition, LicensePool and Work rows in the database, if those
+    don't already exist.
 
-        return edition  # type: ignore[no-any-return]
+    Should be used when a circulation server asks for data from
+    our internal content server, and also when our content server asks for data
+    from external content servers.
+    """
 
-    def update_work_for_edition(
+    NAME = ExternalIntegration.OPDS_IMPORT
+    DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
+
+    # Subclasses of OPDSImporter may define a different parser class that's
+    # a subclass of OPDSXMLParser. For example, a subclass may want to use
+    # tags from an additional namespace.
+    PARSER_CLASS = OPDSXMLParser
+
+    @classmethod
+    def settings_class(cls) -> Type[OPDSImporterSettings]:
+        return OPDSImporterSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[OPDSImporterLibrarySettings]:
+        return OPDSImporterLibrarySettings
+
+    @classmethod
+    def label(cls) -> str:
+        return "OPDS Importer"
+
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION  # type: ignore[no-any-return]
+
+    def __init__(
         self,
-        edition: Edition,
-        is_open_access: bool = True,
-    ) -> tuple[LicensePool | None, Work | None]:
-        """If possible, ensure that there is a presentation-ready Work for the
-        given edition's primary identifier.
+        _db: Session,
+        collection: Collection,
+        data_source_name: Optional[str] = None,
+        identifier_mapping: Optional[Dict[Identifier, Identifier]] = None,
+        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+        map_from_collection: Optional[bool] = None,
+    ):
+        """:param collection: LicensePools created by this OPDS import
+        will be associated with the given Collection. If this is None,
+        no LicensePools will be created -- only Editions.
 
-        :param edition: The edition whose license pool and work we're interested in.
-        :param is_open_access: Whether this is an open access edition.
-        :return: 2-Tuple of license pool (optional) and work (optional) for edition.
+        :param data_source_name: Name of the source of this OPDS feed.
+        All Editions created by this import will be associated with
+        this DataSource. If there is no DataSource with this name, one
+        will be created. NOTE: If `collection` is provided, its
+        .data_source will take precedence over any value provided
+        here. This is only for use when you are importing OPDS
+        metadata without any particular Collection in mind.
+
+        :param http_get: Use this method to make an HTTP GET request. This
+        can be replaced with a stub method for testing purposes.
+
+        :param map_from_collection
         """
+        super().__init__(_db, collection, data_source_name)
+        self.identifier_mapping = identifier_mapping
 
-        work = None
+        self.primary_identifier_source = None
+        if collection:
+            self.primary_identifier_source = collection.primary_identifier_source
 
-        # Looks up a license pool for the primary identifier associated with
-        # the given edition. If this is not an open access book, then the
-        # collection is also used as criteria for the lookup. Open access
-        # books don't require a collection match, according to this explanation
-        # from prior work:
-        #   Find a LicensePool for the primary identifier. Any LicensePool will
-        #   do--the collection doesn't have to match, since all
-        #   LicensePools for a given identifier have the same Work.
+        # In general, we are cautious when mirroring resources so that
+        # we don't, e.g. accidentally get our IP banned from
+        # gutenberg.org.
+        self.http_get = http_get or Representation.cautious_http_get
+        self.map_from_collection = map_from_collection
+
+    def assert_importable_content(
+        self, feed: str, feed_url: str, max_get_attempts: int = 5
+    ) -> Literal[True]:
+        """Raise an exception if the given feed contains nothing that can,
+        even theoretically, be turned into a LicensePool.
+
+        By default, this means the feed must link to open-access content
+        that can actually be retrieved.
+        """
+        metadata, failures = self.extract_feed_data(feed, feed_url)
+        get_attempts = 0
+
+        # Find an open-access link, and try to GET it just to make
+        # sure OPDS feed isn't hiding non-open-access stuff behind an
+        # open-access link.
         #
-        # If we have CirculationData, a pool was created when we
-        # imported the edition. If there was already a pool from a
-        # different data source or a different collection, that's fine
-        # too.
-        collection_criteria = {} if is_open_access else {"collection": self.collection}
-        pool = get_one(
-            self._db,
-            LicensePool,
-            identifier=edition.primary_identifier,
-            on_multiple="interchangeable",
-            **collection_criteria,
+        # To avoid taking forever or antagonizing API providers, we'll
+        # give up after `max_get_attempts` failures.
+        for link in self._open_access_links(list(metadata.values())):
+            url = link.href
+            success = self._is_open_access_link(url, link.media_type)
+            if success:
+                return True
+            get_attempts += 1
+            if get_attempts >= max_get_attempts:
+                error = (
+                    "Was unable to GET supposedly open-access content such as %s (tried %s times)"
+                    % (url, get_attempts)
+                )
+                explanation = "This might be an OPDS For Distributors feed, or it might require different authentication credentials."
+                raise IntegrationException(error, explanation)
+
+        raise IntegrationException(
+            "No open-access links were found in the OPDS feed.",
+            "This might be an OPDS for Distributors feed.",
         )
 
-        if pool:
-            if not pool.work or not pool.work.presentation_ready:
-                # There is no presentation-ready Work for this
-                # LicensePool. Try to create one.
-                work, ignore = pool.calculate_work()
-            else:
-                # There is a presentation-ready Work for this LicensePool.
-                # Use it.
-                work = pool.work
+    @classmethod
+    def _open_access_links(
+        cls, metadatas: List[Metadata]
+    ) -> Generator[LinkData, None, None]:
+        """Find all open-access links in a list of Metadata objects.
 
-        # If a presentation-ready Work already exists, there's no
-        # rush. We might have new metadata that will change the Work's
-        # presentation, but when we called Metadata.apply() the work
-        # was set up to have its presentation recalculated in the
-        # background, and that's good enough.
-        return pool, work
+        :param metadatas: A list of Metadata objects.
+        :yield: A sequence of `LinkData` objects.
+        """
+        for item in metadatas:
+            if not item.circulation:
+                continue
+            for link in item.circulation.links:
+                if link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
+                    yield link
+
+    def _is_open_access_link(
+        self, url: str, type: Optional[str]
+    ) -> str | Literal[False]:
+        """Is `url` really an open-access link?
+
+        That is, can we make a normal GET request and get something
+        that looks like a book?
+        """
+        headers = {}
+        if type:
+            headers["Accept"] = type
+        status, headers, body = self.http_get(url, headers=headers)
+        if status == 200 and len(body) > 1024 * 10:
+            # We could also check the media types, but this is good
+            # enough for now.
+            return "Found a book-like thing at %s" % url
+        self.log.error(
+            "Supposedly open-access link %s didn't give us a book. Status=%s, body length=%s",
+            url,
+            status,
+            len(body),
+        )
+        return False
 
     def extract_next_links(self, feed: str | bytes | FeedParserDict) -> List[str]:
         if isinstance(feed, (bytes, str)):
@@ -1228,11 +1225,6 @@ class OPDSImporter(
             # Identifier so we can't turn it into a CoverageFailure.
             return None
 
-        if cls.SUCCESS_STATUS_CODES and message.status_code in cls.SUCCESS_STATUS_CODES:
-            # This message is telling us that nothing went wrong. It
-            # should be treated as a success.
-            return identifier  # type: ignore[no-any-return]
-
         if message.status_code == 200:
             # By default, we treat a message with a 200 status code
             # as though nothing had been returned at all.
@@ -1647,7 +1639,7 @@ class OPDSImportMonitor(
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[OPDSImporter],
+        import_class: Type[BaseOPDSImporter],
         force_reimport: bool = False,
         **import_class_kwargs: Any,
     ) -> None:
@@ -1764,17 +1756,6 @@ class OPDSImportMonitor(
 
         return headers
 
-    def _parse_identifier(self, identifier: Optional[str]) -> Optional[Identifier]:
-        """Extract the publication's identifier from its metadata.
-
-        :param identifier: String containing the identifier
-        :type identifier: str
-
-        :return: Identifier object
-        :rtype: Identifier
-        """
-        return parse_identifier(self._db, identifier)
-
     def opds_url(self, collection: Collection) -> Optional[str]:
         """Returns the OPDS import URL for the given collection.
 
@@ -1806,7 +1787,7 @@ class OPDSImportMonitor(
 
         new_data = False
         for raw_identifier, remote_updated in last_update_dates:
-            identifier = self._parse_identifier(raw_identifier)
+            identifier = self.importer.parse_identifier(raw_identifier)
             if not identifier:
                 # Maybe this is new, maybe not, but we can't associate
                 # the information with an Identifier, so we can't do
