@@ -294,7 +294,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             receivers=["reporting@test.email"],
             text="",
             attachments={
-                f"playtime-summary-{cutoff}-{until}": ""
+                f"playtime-summary-{cutoff}-{until}.csv": ""
             },  # Mock objects do not write data
         )
 

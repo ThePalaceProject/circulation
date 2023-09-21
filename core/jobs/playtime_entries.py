@@ -130,13 +130,14 @@ class PlaytimeEntriesEmailReportsScript(Script):
         email_subject = (
             f"Playtime Summaries {formatted_start_date} - {formatted_until_date}"
         )
-        attachment_name = (
-            f"playtime-summary-{formatted_start_date}-{formatted_until_date}"
-        )
+        attachment_extension = "csv"
+        attachment_name = f"playtime-summary-{formatted_start_date}-{formatted_until_date}.{attachment_extension}"
 
         # Write to a temporary file so we don't overflow the memory
         with TemporaryFile(
-            "w+", prefix=f"playtimereport{formatted_until_date}", suffix="csv"
+            "w+",
+            prefix=f"playtimereport{formatted_until_date}",
+            suffix=attachment_extension,
         ) as temp:
             # Write the data as a CSV
             writer = csv.writer(temp)
