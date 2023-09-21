@@ -2354,13 +2354,13 @@ files = [
 
 [[package]]
 name = "nameparser"
-version = "1.1.2"
+version = "1.1.3"
 description = "A simple Python module for parsing human names into their individual components."
 optional = false
 python-versions = "*"
 files = [
-    {file = "nameparser-1.1.2-py2.py3-none-any.whl", hash = "sha256:ea2e01d1d9d04c0648be230f161f27316a1b5be431a1cc64e8799fac548fb3bc"},
-    {file = "nameparser-1.1.2.tar.gz", hash = "sha256:f4b6c7c1048d528bd6aa2b27cf42a06447d2b31e45a95b20449513078f1d86ef"},
+    {file = "nameparser-1.1.3-py2.py3-none-any.whl", hash = "sha256:08ccda98681d59751c82052d52f185bc52f99d43e87d46b85c015a9096ecfa66"},
+    {file = "nameparser-1.1.3.tar.gz", hash = "sha256:aa2400ad71ccf8070675b40311a257c934659f91854b154e1ba6c264761c049d"},
 ]
 
 [[package]]
@@ -4227,4 +4227,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "4cf46205d47e3b72a365ff6f418785517c863a8b2770616ff1cebc61a316a21b"
+content-hash = "ff1163d40ccb76664a6fa54331c0e6bd740a5f1a71094ed2a37326cf624099ad"
