@@ -436,7 +436,7 @@ class LoanInfo(CirculationInfo):
         identifier_type: Optional[str],
         identifier: Optional[str],
         start_date: Optional[datetime.datetime],
-        end_date: datetime.datetime,
+        end_date: Optional[datetime.datetime],
         fulfillment_info: Optional[FulfillmentInfo] = None,
         external_identifier: Optional[str] = None,
         locked_to: Optional[DeliveryMechanismInfo] = None,

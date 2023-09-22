@@ -1,15 +1,18 @@
+from __future__ import annotations
+
 import binascii
 import datetime
 import json
 import logging
 import uuid
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import dateutil
-import sqlalchemy
 from flask import url_for
 from flask_babel import lazy_gettext as _
+from lxml.etree import Element
 from pydantic import HttpUrl, PositiveInt
+from requests import Response
 from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
 
@@ -218,20 +221,22 @@ class ODLAPI(
     ]
 
     @classmethod
-    def settings_class(cls):
+    def settings_class(cls) -> Type[ODLSettings]:
         return ODLSettings
 
     @classmethod
-    def library_settings_class(cls):
+    def library_settings_class(cls) -> Type[ODLLibrarySettings]:
         return ODLLibrarySettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls) -> str:
+        return cls.NAME
 
-    def description(self):
-        return self.DESCRIPTION
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION  # type: ignore[no-any-return]
 
-    def __init__(self, _db, collection):
+    def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
         if collection.protocol != self.NAME:
             raise ValueError(
@@ -252,9 +257,7 @@ class ODLAPI(
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Optional[Hasher] = None
 
-    def external_integration(
-        self, db: sqlalchemy.orm.session.Session
-    ) -> ExternalIntegration:
+    def external_integration(self, db: Session) -> ExternalIntegration:
         """Return an external integration associated with this object.
 
         :param db: Database session
@@ -262,7 +265,9 @@ class ODLAPI(
         """
         return self.collection.external_integration
 
-    def internal_format(self, delivery_mechanism):
+    def internal_format(  # type: ignore[override]
+        self, delivery_mechanism: Optional[LicensePoolDeliveryMechanism]
+    ) -> Optional[LicensePoolDeliveryMechanism]:
         """Each consolidated copy is only available in one format, so we don't need
         a mapping to internal formats.
         """
@@ -280,23 +285,22 @@ class ODLAPI(
             raise ValueError(f"Collection not found: {self.collection_id}")
         return collection
 
-    def _get_hasher(self):
+    def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance
 
         :return: Hasher instance
-        :rtype: hash.Hasher
         """
         config = self.configuration()
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                config.encryption_algorithm
+                config.encryption_algorithm  # type: ignore[arg-type]
                 if config.encryption_algorithm
                 else ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM
             )
 
         return self._hasher_instance
 
-    def _get(self, url, headers=None):
+    def _get(self, url: str, headers: Optional[Dict[str, str]] = None) -> Response:
         """Make a normal HTTP request, but include an authentication
         header with the credentials for the collection.
         """
@@ -309,11 +313,11 @@ class ODLAPI(
 
         return HTTP.get_with_timeout(url, headers=headers)
 
-    def _url_for(self, *args, **kwargs):
+    def _url_for(self, *args: Any, **kwargs: Any) -> str:
         """Wrapper around flask's url_for to be overridden for tests."""
         return url_for(*args, **kwargs)
 
-    def get_license_status_document(self, loan):
+    def get_license_status_document(self, loan: Loan) -> Dict[str, Any]:
         """Get the License Status Document for a loan.
 
         For a new loan, create a local loan with no external identifier and
@@ -360,9 +364,10 @@ class ODLAPI(
             )
 
             config = self.configuration()
-            url_template = URITemplate(loan.license.checkout_url)
+            checkout_url = str(loan.license.checkout_url)
+            url_template = URITemplate(checkout_url)
             url = url_template.expand(
-                id=id,
+                id=str(id),
                 checkout_id=checkout_id,
                 patron_id=patron_id,
                 expires=expires.isoformat(),
@@ -384,9 +389,9 @@ class ODLAPI(
             raise BadResponseException(
                 url, "License Status Document had an unknown status value."
             )
-        return status_doc
+        return status_doc  # type: ignore[no-any-return]
 
-    def checkin(self, patron, pin, licensepool):
+    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> bool:  # type: ignore[override]
         """Return a loan early."""
         _db = Session.object_session(patron)
 
@@ -397,10 +402,10 @@ class ODLAPI(
         )
         if loan.count() < 1:
             raise NotCheckedOut()
-        loan = loan.one()
-        return self._checkin(loan)
+        loan_result = loan.one()
+        return self._checkin(loan_result)
 
-    def _checkin(self, loan):
+    def _checkin(self, loan: Loan) -> bool:
         _db = Session.object_session(loan)
         doc = self.get_license_status_document(loan)
         status = doc.get("status")
@@ -427,7 +432,7 @@ class ODLAPI(
             # must be returned through the DRM system. If that's true, the
             # app will already be doing that on its own, so we'll silently
             # do nothing.
-            return
+            return False
 
         # Hit the distributor's return link.
         self._get(return_url)
@@ -439,12 +444,18 @@ class ODLAPI(
         # However, it might be because the loan has already been fulfilled
         # and must be returned through the DRM system, which the app will
         # do on its own, so we can ignore the problem.
-        loan = get_one(_db, Loan, id=loan.id)
-        if loan:
-            return
+        new_loan = get_one(_db, Loan, id=loan.id)
+        if new_loan:
+            return False
         return True
 
-    def checkout(self, patron, pin, licensepool, internal_format):
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        internal_format: Optional[str],
+    ) -> LoanInfo:
         """Create a new loan."""
         _db = Session.object_session(patron)
 
@@ -457,18 +468,20 @@ class ODLAPI(
             raise AlreadyCheckedOut()
 
         hold = get_one(_db, Hold, patron=patron, license_pool_id=licensepool.id)
-        loan = self._checkout(patron, licensepool, hold)
+        loan_obj = self._checkout(patron, licensepool, hold)
         return LoanInfo(
             licensepool.collection,
             licensepool.data_source.name,
             licensepool.identifier.type,
             licensepool.identifier.identifier,
-            loan.start,
-            loan.end,
-            external_identifier=loan.external_identifier,
+            loan_obj.start,
+            loan_obj.end,
+            external_identifier=loan_obj.external_identifier,
         )
 
-    def _checkout(self, patron: Patron, licensepool, hold=None):
+    def _checkout(
+        self, patron: Patron, licensepool: LicensePool, hold: Optional[Hold] = None
+    ) -> Loan:
         _db = Session.object_session(patron)
 
         if not any(l for l in licensepool.licenses if not l.is_inactive):
@@ -483,7 +496,9 @@ class ODLAPI(
         # If there's a holds queue, the patron must have a non-expired hold
         # with position 0 to check out the book.
         if (
-            not hold or hold.position > 0 or (hold.end and hold.end < utc_now())
+            not hold
+            or (hold.position and hold.position > 0)
+            or (hold.end and hold.end < utc_now())
         ) and licensepool.licenses_available < 1:
             raise NoAvailableCopies()
 
@@ -534,27 +549,28 @@ class ODLAPI(
         self.update_licensepool(licensepool)
         return loan
 
-    def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
-        """Get the actual resource file to the patron.
-
-        :param kwargs: A container for arguments to fulfill()
-           which are not relevant to this vendor.
-
-        :return: a FulfillmentInfo object.
-        """
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        internal_format: Optional[str] = None,
+        part: Optional[str] = None,
+        fulfill_part_url: Optional[Callable[[Optional[str]], str]] = None,
+    ) -> FulfillmentInfo:
+        """Get the actual resource file to the patron."""
         _db = Session.object_session(patron)
 
         loan = (
             _db.query(Loan)
             .filter(Loan.patron == patron)
             .filter(Loan.license_pool_id == licensepool.id)
-        )
-        loan = loan.one()
+        ).one()
         return self._fulfill(loan, internal_format)
 
     @staticmethod
     def _find_content_link_and_type(
-        links: List[Dict],
+        links: List[Dict[str, str]],
         drm_scheme: Optional[str],
     ) -> Tuple[Optional[str], Optional[str]]:
         """Find a content link with the type information corresponding to the selected delivery mechanism.
@@ -647,7 +663,7 @@ class ODLAPI(
             .count()
         )
 
-    def _update_hold_data(self, hold: Hold):
+    def _update_hold_data(self, hold: Hold) -> None:
         pool: LicensePool = hold.license_pool
         holdinfo = HoldInfo(
             pool.collection,
@@ -665,7 +681,7 @@ class ODLAPI(
 
     def _update_hold_end_date(
         self, holdinfo: HoldInfo, pool: LicensePool, library: Library
-    ):
+    ) -> None:
         _db = Session.object_session(pool)
 
         # First make sure the hold position is up-to-date, since we'll
@@ -751,7 +767,7 @@ class ODLAPI(
                 days=default_reservation_period
             )
 
-    def _update_hold_position(self, holdinfo: HoldInfo, pool: LicensePool):
+    def _update_hold_position(self, holdinfo: HoldInfo, pool: LicensePool) -> None:
         _db = Session.object_session(pool)
         loans_count = (
             _db.query(Loan)
@@ -774,7 +790,7 @@ class ODLAPI(
             # Add 1 since position 0 indicates the hold is ready.
             holdinfo.hold_position = holds_count + 1
 
-    def update_licensepool(self, licensepool: LicensePool):
+    def update_licensepool(self, licensepool: LicensePool) -> None:
         # Update the pool and the next holds in the queue when a license is reserved.
         licensepool.update_availability_from_licenses(
             analytics=self.analytics,
@@ -786,11 +802,17 @@ class ODLAPI(
                 # This hold just got a reserved license.
                 self._update_hold_data(hold)
 
-    def place_hold(self, patron, pin, licensepool, notification_email_address):
+    def place_hold(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        notification_email_address: Optional[str],
+    ) -> HoldInfo:
         """Create a new hold."""
         return self._place_hold(patron, licensepool)
 
-    def _place_hold(self, patron, licensepool):
+    def _place_hold(self, patron: Patron, licensepool: LicensePool) -> HoldInfo:
         _db = Session.object_session(patron)
 
         # Make sure pool info is updated.
@@ -810,14 +832,19 @@ class ODLAPI(
         if hold is not None:
             raise AlreadyOnHold()
 
-        licensepool.patrons_in_hold_queue += 1
+        patrons_in_hold_queue = (
+            licensepool.patrons_in_hold_queue
+            if licensepool.patrons_in_hold_queue
+            else 0
+        )
+        licensepool.patrons_in_hold_queue = patrons_in_hold_queue + 1
         holdinfo = HoldInfo(
             licensepool.collection,
             licensepool.data_source.name,
             licensepool.identifier.type,
             licensepool.identifier.identifier,
             utc_now(),
-            0,
+            None,
             0,
         )
         library = patron.library
@@ -825,7 +852,7 @@ class ODLAPI(
 
         return holdinfo
 
-    def release_hold(self, patron, pin, licensepool):
+    def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Cancel a hold."""
         _db = Session.object_session(patron)
 
@@ -837,9 +864,9 @@ class ODLAPI(
         )
         if not hold:
             raise NotOnHold()
-        return self._release_hold(hold)
+        self._release_hold(hold)
 
-    def _release_hold(self, hold):
+    def _release_hold(self, hold: Hold) -> Literal[True]:
         # If the book was ready and the patron revoked the hold instead
         # of checking it out, but no one else had the book on hold, the
         # book is now available for anyone to check out. If someone else
@@ -852,7 +879,7 @@ class ODLAPI(
         self.update_licensepool(licensepool)
         return True
 
-    def patron_activity(self, patron, pin):
+    def patron_activity(self, patron: Patron, pin: str) -> List[LoanInfo | HoldInfo]:
         """Look up non-expired loans for this collection in the database."""
         _db = Session.object_session(patron)
         loans = (
@@ -904,7 +931,9 @@ class ODLAPI(
             for hold in remaining_holds
         ]
 
-    def update_loan(self, loan, status_doc=None):
+    def update_loan(
+        self, loan: Loan, status_doc: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Check a loan's status, and if it is no longer active, delete the loan
         and update its pool's availability.
         """
@@ -918,7 +947,8 @@ class ODLAPI(
         # but if the document came from a notification it hasn't been checked yet.
         if status not in self.STATUS_VALUES:
             raise BadResponseException(
-                "The License Status Document had an unknown status value."
+                str(loan.license.checkout_url),
+                "The License Status Document had an unknown status value.",
             )
 
         if status in [
@@ -937,7 +967,9 @@ class ODLAPI(
             _db.delete(loan)
             self.update_licensepool(loan.license_pool)
 
-    def update_availability(self, licensepool):
+    def update_availability(  # type: ignore[empty-body]
+        self, licensepool: LicensePool
+    ) -> Tuple[LicensePool, bool, bool]:
         pass
 
 
@@ -975,11 +1007,13 @@ class ODLImporter(OPDSImporter):
     }
 
     @classmethod
-    def fetch_license_info(cls, document_link: str, do_get: Callable) -> Optional[dict]:
+    def fetch_license_info(
+        cls, document_link: str, do_get: Callable[..., Tuple[int, Any, bytes]]
+    ) -> Optional[Dict[str, Any]]:
         status_code, _, response = do_get(document_link, headers={})
         if status_code in (200, 201):
             license_info_document = json.loads(response)
-            return license_info_document
+            return license_info_document  # type: ignore[no-any-return]
         else:
             logging.warning(
                 f"License Info Document is not available. "
@@ -990,9 +1024,9 @@ class ODLImporter(OPDSImporter):
     @classmethod
     def parse_license_info(
         cls,
-        license_info_document: dict,
+        license_info_document: Dict[str, Any],
         license_info_link: str,
-        checkout_link: str,
+        checkout_link: Optional[str],
     ) -> Optional[LicenseData]:
         """Check the license's attributes passed as parameters:
         - if they're correct, turn them into a LicenseData object
@@ -1078,11 +1112,11 @@ class ODLImporter(OPDSImporter):
     def get_license_data(
         cls,
         license_info_link: str,
-        checkout_link: str,
-        feed_license_identifier: str,
-        feed_license_expires: str,
-        feed_concurrency: int,
-        do_get: Callable,
+        checkout_link: Optional[str],
+        feed_license_identifier: Optional[str],
+        feed_license_expires: Optional[datetime.datetime],
+        feed_concurrency: Optional[int],
+        do_get: Callable[..., Tuple[int, Any, bytes]],
     ) -> Optional[LicenseData]:
         license_info_document = cls.fetch_license_info(license_info_link, do_get)
 
@@ -1130,8 +1164,12 @@ class ODLImporter(OPDSImporter):
 
     @classmethod
     def _detail_for_elementtree_entry(
-        cls, parser, entry_tag, feed_url=None, do_get=None
-    ):
+        cls,
+        parser: OPDSXMLParser,
+        entry_tag: Element,
+        feed_url: Optional[str] = None,
+        do_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+    ) -> Dict[str, Any]:
         do_get = do_get or Representation.cautious_http_get
 
         # TODO: Review for consistency when updated ODL spec is ready.
@@ -1152,7 +1190,7 @@ class ODLImporter(OPDSImporter):
             # By default, dcterms:format includes the media type of a
             # DRM-free resource.
             content_type = full_content_type
-            drm_schemes = []
+            drm_schemes: List[str | None] = []
 
             # But it may instead describe an audiobook protected with
             # the Feedbooks access-control scheme.
@@ -1207,10 +1245,10 @@ class ODLImporter(OPDSImporter):
                 expires = subtag(terms[0], "odl:expires")
 
             if concurrent_checkouts is not None:
-                concurrent_checkouts = int(concurrent_checkouts)
+                concurrent_checkouts_int = int(concurrent_checkouts)
 
             if expires is not None:
-                expires = to_utc(dateutil.parser.parse(expires))
+                expires_datetime = to_utc(dateutil.parser.parse(expires))
 
             if not odl_status_link:
                 parsed_license = None
@@ -1219,8 +1257,8 @@ class ODLImporter(OPDSImporter):
                     odl_status_link,
                     checkout_link,
                     identifier,
-                    expires,
-                    concurrent_checkouts,
+                    expires_datetime,
+                    concurrent_checkouts_int,
                     do_get,
                 )
 
@@ -1248,7 +1286,13 @@ class ODLImportMonitor(OPDSImportMonitor):
     PROTOCOL = ODLImporter.NAME
     SERVICE_NAME = "ODL Import Monitor"
 
-    def __init__(self, _db, collection, import_class, **import_class_kwargs):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        import_class: Type[OPDSImporter],
+        **import_class_kwargs: Any,
+    ):
         # Always force reimport ODL collections to get up to date license information
         super().__init__(
             _db, collection, import_class, force_reimport=True, **import_class_kwargs
@@ -1262,11 +1306,17 @@ class ODLHoldReaper(CollectionMonitor):
     SERVICE_NAME = "ODL Hold Reaper"
     PROTOCOL = ODLAPI.NAME
 
-    def __init__(self, _db, collection=None, api=None, **kwargs):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        api: Optional[ODLAPI] = None,
+        **kwargs: Any,
+    ):
         super().__init__(_db, collection, **kwargs)
         self.api = api or ODLAPI(_db, collection)
 
-    def run_once(self, progress):
+    def run_once(self, progress: TimestampData) -> TimestampData:
         # Find holds that have expired.
         expired_holds = (
             self._db.query(Hold)

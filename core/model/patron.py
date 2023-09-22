@@ -32,7 +32,7 @@ from .credential import Credential
 
 if TYPE_CHECKING:
     from core.model.library import Library
-    from core.model.licensing import LicensePool, LicensePoolDeliveryMechanism
+    from core.model.licensing import License, LicensePool, LicensePoolDeliveryMechanism
 
     from .devicetokens import DeviceToken
 
@@ -544,6 +544,7 @@ class Loan(Base, LoanAndHoldMixin):
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
     license_id = Column(Integer, ForeignKey("licenses.id"), index=True, nullable=True)
+    license: Mapped[License] = relationship("License", back_populates="loans")
 
     fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
     fulfillment: Mapped[Optional[LicensePoolDeliveryMechanism]] = relationship(
