@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from mypy_boto3_s3 import S3Client
 from pydantic import AnyHttpUrl
 
+from core.config import CannotLoadConfiguration
 from core.service.configuration import ServiceConfiguration
 from core.service.storage.container import Storage
 from core.service.storage.s3 import S3Service
@@ -41,6 +42,23 @@ class TestS3Service:
         assert service.url_template == s3_service_fixture.url_template
 
     @pytest.mark.parametrize(
+        "url_template",
+        [
+            # No region passed into the constructor, but the URL template
+            # contains a region.
+            "https://{bucket}.s3.{region}.amazonaws.com/{key}",
+            # No key in the URL template.
+            "https://no-key-in-template.com/",
+        ],
+    )
+    def test_constructor_exception(
+        self, url_template: str, s3_service_fixture: S3ServiceFixture
+    ):
+        """The S3Service constructor raises an exception if the URL template is invalid."""
+        with pytest.raises(CannotLoadConfiguration):
+            s3_service_fixture.service(url_template=url_template, region=None)
+
+    @pytest.mark.parametrize(
         "template,key,expected",
         [
             (
@@ -57,6 +75,11 @@ class TestS3Service:
                 "https://test.com/{bucket}/{key}",
                 "s p a c e s/🔥/slashes%",
                 "https://test.com/bucket/s%20p%20a%20c%20e%20s/%F0%9F%94%A5/slashes%25",
+            ),
+            (
+                "https://cdn.com/{key}",
+                "filename.ext",
+                "https://cdn.com/filename.ext",
             ),
         ],
     )

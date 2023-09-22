@@ -15,6 +15,9 @@ def test_region_validation_success():
     configuration = StorageConfiguration(region="us-west-2")
     assert configuration.region == "us-west-2"
 
+    configuration = StorageConfiguration(region=None)
+    assert configuration.region is None
+
 
 @pytest.mark.parametrize(
     "url",

@@ -7,7 +7,7 @@ from core.service.configuration import ServiceConfiguration
 
 
 class StorageConfiguration(ServiceConfiguration):
-    region: str = "us-east-1"
+    region: Optional[str] = None
     access_key: Optional[str] = None
     secret_key: Optional[str] = None
 
@@ -21,7 +21,11 @@ class StorageConfiguration(ServiceConfiguration):
     )
 
     @validator("region")
-    def validate_region(cls, v: str) -> str:
+    def validate_region(cls, v: Optional[str]) -> Optional[str]:
+        # No validation if region is not provided.
+        if v is None:
+            return None
+
         session = boto3.session.Session()
         regions = session.get_available_regions(service_name="s3")
         if v not in regions:

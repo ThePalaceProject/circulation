@@ -4,11 +4,14 @@ import dataclasses
 import logging
 import sys
 from io import BytesIO
+from string import Formatter
 from types import TracebackType
 from typing import TYPE_CHECKING, BinaryIO, List, Optional, Type
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
+
+from core.config import CannotLoadConfiguration
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -138,7 +141,7 @@ class S3Service:
     def __init__(
         self,
         client: S3Client,
-        region: str,
+        region: Optional[str],
         bucket: str,
         url_template: str,
     ) -> None:
@@ -148,11 +151,24 @@ class S3Service:
         self.url_template = url_template
         self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
 
+        # Validate the URL template.
+        formatter = Formatter()
+        field_tuple = formatter.parse(self.url_template)
+        field_names = [field[1] for field in field_tuple]
+        if "region" in field_names and self.region is None:
+            raise CannotLoadConfiguration(
+                "URL template requires a region, but no region was provided."
+            )
+        if "key" not in field_names:
+            raise CannotLoadConfiguration(
+                "URL template requires a key, but no key was provided."
+            )
+
     @classmethod
     def factory(
         cls,
         client: S3Client,
-        region: str,
+        region: Optional[str],
         bucket: Optional[str],
         url_template: str,
     ) -> Optional[Self]:

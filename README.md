@@ -175,7 +175,7 @@ a storage service, you can set the following environment variables:
     - If it is not set boto3 will attempt to find credentials as outlined in their
       [documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
 - `PALACE_STORAGE_SECRET_KEY`: The secret key (optional).
-- `PALACE_STORAGE_REGION`: The region of the storage service (default: `us-east-1`).
+- `PALACE_STORAGE_REGION`: The AWS region of the storage service (optional).
 - `PALACE_STORAGE_ENDPOINT_URL`: The endpoint of the storage service (optional). This is used if you are using a
   s3 compatible storage service like [minio](https://min.io/).
 - `PALACE_STORAGE_URL_TEMPLATE`: The url template to use when generating urls for files stored in the storage service
