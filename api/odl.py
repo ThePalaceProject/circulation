@@ -1244,11 +1244,12 @@ class ODLImporter(OPDSImporter):
                 concurrent_checkouts = subtag(terms[0], "odl:concurrent_checkouts")
                 expires = subtag(terms[0], "odl:expires")
 
-            if concurrent_checkouts is not None:
-                concurrent_checkouts_int = int(concurrent_checkouts)
-
-            if expires is not None:
-                expires_datetime = to_utc(dateutil.parser.parse(expires))
+            concurrent_checkouts_int = (
+                int(concurrent_checkouts) if concurrent_checkouts is not None else None
+            )
+            expires_datetime = (
+                to_utc(dateutil.parser.parse(expires)) if expires is not None else None
+            )
 
             if not odl_status_link:
                 parsed_license = None
