@@ -357,7 +357,10 @@ class OPDSForDistributorsImporter(OPDSImporter):
         pool, work = super().update_work_for_edition(
             *args, is_open_access=False, **kwargs
         )
-        pool.unlimited_access = True
+
+        if pool:
+            pool.unlimited_access = True
+
         return pool, work
 
     @classmethod
