@@ -512,9 +512,10 @@ class OPDSImporter(
                 if work:
                     works[key] = work
             except Exception as e:
+                collection_name = self.collection.name if self.collection else "None"
                 logging.warning(
                     f"Non-fatal exception: Failed to import item - import will continue: "
-                    f"identifier={key}; collection={self.collection.name}; "
+                    f"identifier={key}; collection={collection_name}/{self._collection_id}; "
                     f"data_source={self.data_source}; exception={e}",
                     stack_info=True,
                 )
