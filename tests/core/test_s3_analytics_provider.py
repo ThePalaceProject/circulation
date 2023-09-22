@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import json
-from unittest.mock import create_autospec, patch
+from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,31 +14,38 @@ from core.model import (
     CirculationEvent,
     DataSource,
     ExternalIntegration,
-    ExternalIntegrationLink,
     MediaTypes,
     create,
 )
-from core.s3 import S3Uploader, S3UploaderConfiguration
-from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.services import MockServicesFixture
 
 
 class S3AnalyticsFixture:
-    def __init__(self, db: DatabaseTransactionFixture) -> None:
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: MockServicesFixture
+    ) -> None:
         self.db = db
-        self._analytics_integration, _ = create(
+        self.analytics_integration, _ = create(
             db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol=S3AnalyticsProvider.__module__,
         )
-        self._analytics_provider = S3AnalyticsProvider(
-            self._analytics_integration, db.default_library()
+        self.services = services_fixture.services
+        self.analytics_storage = services_fixture.storage.analytics
+        self.analytics_provider = S3AnalyticsProvider(
+            self.analytics_integration, self.services, db.default_library()
         )
 
 
 @pytest.fixture(scope="function")
-def s3_analytics_fixture(db: DatabaseTransactionFixture):
-    return S3AnalyticsFixture(db)
+def s3_analytics_fixture(
+    db: DatabaseTransactionFixture, mock_services_fixture: MockServicesFixture
+):
+    return S3AnalyticsFixture(db, mock_services_fixture)
 
 
 class TestS3AnalyticsProvider:
@@ -51,63 +61,22 @@ class TestS3AnalyticsProvider:
         """
         return str(timestamp)
 
-    def test_exception_is_raised_when_there_is_no_external_integration_link(
+    def test_exception_is_raised_when_no_analytics_bucket_configured(
         self, s3_analytics_fixture: S3AnalyticsFixture
     ):
-        # Act, Assert
-        with pytest.raises(CannotLoadConfiguration):
-            s3_analytics_fixture._analytics_provider.collect_event(
-                s3_analytics_fixture.db.default_library(),
-                None,
-                CirculationEvent.NEW_PATRON,
-                datetime.datetime.utcnow(),
-            )
+        # The services container returns None when there is no analytics storage service configured,
+        # so we override the analytics storage service with None to simulate this situation.
+        s3_analytics_fixture.services.storage.analytics.override(None)
 
-    def test_exception_is_raised_when_there_is_no_storage_integration(
-        self, s3_analytics_fixture: S3AnalyticsFixture
-    ):
-        # Arrange
-        # Create an external integration link but don't create a storage integration
-        create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegrationLink,
-            external_integration_id=s3_analytics_fixture._analytics_integration.id,
-            purpose=ExternalIntegrationLink.ANALYTICS,
+        provider = S3AnalyticsProvider(
+            s3_analytics_fixture.analytics_integration,
+            s3_analytics_fixture.services,
+            s3_analytics_fixture.db.default_library(),
         )
 
         # Act, Assert
         with pytest.raises(CannotLoadConfiguration):
-            s3_analytics_fixture._analytics_provider.collect_event(
-                s3_analytics_fixture.db.default_library(),
-                None,
-                CirculationEvent.NEW_PATRON,
-                datetime.datetime.utcnow(),
-            )
-
-    def test_exception_is_raised_when_there_is_no_analytics_bucket(
-        self, s3_analytics_fixture: S3AnalyticsFixture
-    ):
-        # Arrange
-        # Create a storage service
-        storage_integration, _ = create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.STORAGE_GOAL,
-            protocol=ExternalIntegration.S3,
-        )
-
-        # Create an external integration link to the storage service
-        create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegrationLink,
-            external_integration_id=s3_analytics_fixture._analytics_integration.id,
-            other_integration_id=storage_integration.id,
-            purpose=ExternalIntegrationLink.ANALYTICS,
-        )
-
-        # Act, Assert
-        with pytest.raises(CannotLoadConfiguration):
-            s3_analytics_fixture._analytics_provider.collect_event(
+            provider.collect_event(
                 s3_analytics_fixture.db.default_library(),
                 None,
                 CirculationEvent.NEW_PATRON,
@@ -117,189 +86,116 @@ class TestS3AnalyticsProvider:
     def test_analytics_data_without_associated_license_pool_is_correctly_stored_in_s3(
         self, s3_analytics_fixture: S3AnalyticsFixture
     ):
-        # Arrange
-        # Create an S3 Analytics integration
-        analytics_integration, _ = create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=S3AnalyticsProvider.__module__,
-        )
-        # Create an S3 Analytics provider
-        provider = S3AnalyticsProvider(
-            analytics_integration, s3_analytics_fixture.db.default_library()
-        )
+        # Set up event's metadata
+        event_time = datetime.datetime.utcnow()
+        event_time_formatted = self.timestamp_to_string(event_time)
+        event_type = CirculationEvent.NEW_PATRON
 
-        # Create an S3 storage service
-        storage_integration, _ = create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.STORAGE_GOAL,
-            protocol=ExternalIntegration.S3,
-        )
-        # Set up a bucket name used for storing analytics data
-        storage_integration.setting(
-            S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
-        ).value = "analytics"
+        s3_analytics_fixture.analytics_provider._get_file_key = MagicMock()
 
-        # Create a link to the S3 storage service
-        create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegrationLink,
-            external_integration_id=analytics_integration.id,
-            other_integration_id=storage_integration.id,
-            purpose=ExternalIntegrationLink.ANALYTICS,
+        # Act
+        s3_analytics_fixture.analytics_provider.collect_event(
+            s3_analytics_fixture.db.default_library(), None, event_type, event_time
         )
 
-        # Set up a mock instead of real S3Uploader class acting as the S3 storage service
-        s3_uploader = create_autospec(spec=S3Uploader)
+        # Assert
+        s3_analytics_fixture.analytics_provider._get_file_key.assert_called_once_with(
+            s3_analytics_fixture.db.default_library(), None, event_type, event_time
+        )
+        s3_analytics_fixture.analytics_storage.store.assert_called_once()
+        (
+            key,
+            content,
+            content_type,
+        ) = s3_analytics_fixture.analytics_storage.store.call_args.args
 
-        with patch("core.mirror.MirrorUploader.implementation") as mock_implementation:
-            mock_implementation.return_value = s3_uploader
-            # Set up event's metadata
-            event_time = datetime.datetime.utcnow()
-            event_time_formatted = self.timestamp_to_string(event_time)
-            event_type = CirculationEvent.NEW_PATRON
+        assert content_type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
+        assert key == s3_analytics_fixture.analytics_provider._get_file_key.return_value
+        event = json.loads(content)
 
-            # Act
-            provider.collect_event(
-                s3_analytics_fixture.db.default_library(), None, event_type, event_time
-            )
-
-            # Assert
-            s3_uploader.analytics_file_url.assert_called_once_with(
-                s3_analytics_fixture.db.default_library(), None, event_type, event_time
-            )
-            s3_uploader.mirror_one.assert_called_once()
-            representation, _ = s3_uploader.mirror_one.call_args[0]
-
-            assert MediaTypes.APPLICATION_JSON_MEDIA_TYPE == representation.media_type
-
-            content = representation.content
-            event = json.loads(content)
-
-            assert event_type == event["type"]
-            assert event_time_formatted == event["start"]
-            assert event_time_formatted == event["end"]
-            assert s3_analytics_fixture.db.default_library().id == event["library_id"]
+        assert event["type"] == event_type
+        assert event["start"] == event_time_formatted
+        assert event["end"] == event_time_formatted
+        assert event["library_id"] == s3_analytics_fixture.db.default_library().id
 
     def test_analytics_data_with_associated_license_pool_is_correctly_stored_in_s3(
         self, s3_analytics_fixture: S3AnalyticsFixture
     ):
-        # Arrange
-        # Create an S3 Analytics integration
-        analytics_integration, _ = create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=S3AnalyticsProvider.__module__,
+        # Create a test book
+        work = s3_analytics_fixture.db.work(
+            data_source_name=DataSource.GUTENBERG,
+            title="Test Book",
+            authors=("Test Author 1", "Test Author 2"),
+            genre="Test Genre",
+            language="eng",
+            audience=Classifier.AUDIENCE_ADULT,
+            with_license_pool=True,
         )
-        # Create an S3 Analytics provider
-        provider = S3AnalyticsProvider(
-            analytics_integration, s3_analytics_fixture.db.default_library()
-        )
+        license_pool = work.license_pools[0]
+        edition = work.presentation_edition
 
-        # Create an S3 storage service
-        storage_integration, _ = create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.STORAGE_GOAL,
-            protocol=ExternalIntegration.S3,
-        )
-        # Set up a bucket name used for storing analytics data
-        storage_integration.setting(
-            S3UploaderConfiguration.ANALYTICS_BUCKET_KEY
-        ).value = "analytics"
+        # Set up event's metadata
+        event_time = datetime.datetime.utcnow()
+        event_time_formatted = self.timestamp_to_string(event_time)
+        event_type = CirculationEvent.CM_CHECKOUT
 
-        # Create a link to the S3 storage service
-        create(
-            s3_analytics_fixture.db.session,
-            ExternalIntegrationLink,
-            external_integration_id=analytics_integration.id,
-            other_integration_id=storage_integration.id,
-            purpose=ExternalIntegrationLink.ANALYTICS,
+        s3_analytics_fixture.analytics_provider._get_file_key = MagicMock()
+
+        # Act
+        s3_analytics_fixture.analytics_provider.collect_event(
+            s3_analytics_fixture.db.default_library(),
+            license_pool,
+            event_type,
+            event_time,
         )
 
-        # Set up a mock instead of real S3Uploader class acting as the S3 storage service
-        s3_uploader = create_autospec(spec=S3Uploader)
-        with patch("core.mirror.MirrorUploader.implementation") as mock_implementation:
-            mock_implementation.return_value = s3_uploader
-            # Create a test book
-            work = s3_analytics_fixture.db.work(
-                data_source_name=DataSource.GUTENBERG,
-                title="Test Book",
-                authors=("Test Author 1", "Test Author 2"),
-                genre="Test Genre",
-                language="eng",
-                audience=Classifier.AUDIENCE_ADULT,
-                with_license_pool=True,
-            )
-            license_pool = work.license_pools[0]
-            edition = work.presentation_edition
+        # Assert
+        s3_analytics_fixture.analytics_storage.store.assert_called_once()
+        (
+            key,
+            content,
+            content_type,
+        ) = s3_analytics_fixture.analytics_storage.store.call_args.args
 
-            # Set up event's metadata
-            event_time = datetime.datetime.utcnow()
-            event_time_formatted = self.timestamp_to_string(event_time)
-            event_type = CirculationEvent.CM_CHECKOUT
+        assert content_type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
+        assert key == s3_analytics_fixture.analytics_provider._get_file_key.return_value
 
-            # Act
-            provider.collect_event(
-                s3_analytics_fixture.db.default_library(),
-                license_pool,
-                event_type,
-                event_time,
-            )
+        event = json.loads(content)
+        data_source = license_pool.data_source if license_pool else None
+        identifier = license_pool.identifier if license_pool else None
+        collection = license_pool.collection if license_pool else None
+        work = license_pool.work if license_pool else None
 
-            # Assert
-            s3_uploader.analytics_file_url.assert_called_once_with(
-                s3_analytics_fixture.db.default_library(),
-                license_pool,
-                event_type,
-                event_time,
-            )
-            s3_uploader.mirror_one.assert_called_once()
-            representation, _ = s3_uploader.mirror_one.call_args[0]
-
-            assert MediaTypes.APPLICATION_JSON_MEDIA_TYPE == representation.media_type
-
-            content = representation.content
-            event = json.loads(content)
-            data_source = license_pool.data_source if license_pool else None
-            identifier = license_pool.identifier if license_pool else None
-            collection = license_pool.collection if license_pool else None
-            work = license_pool.work if license_pool else None
-
-            assert event_type == event["type"]
-            assert event_time_formatted == event["start"]
-            assert event_time_formatted == event["end"]
-            assert s3_analytics_fixture.db.default_library().id == event["library_id"]
-            assert license_pool.id == event["license_pool_id"]
-            assert edition.publisher == event["publisher"]
-            assert edition.imprint == event["imprint"]
-            assert edition.issued == event["issued"]
-            assert edition.published == event["published"]
-            assert edition.medium == event["medium"]
-            assert collection.name == event["collection"]
-            assert identifier.type == event["identifier_type"]
-            assert identifier.identifier == event["identifier"]
-            assert data_source.name == event["data_source"]
-            assert work.audience == event["audience"]
-            assert work.fiction == event["fiction"]
-            assert work.summary_text == event["summary_text"]
-            assert work.quality == event["quality"]
-            assert work.rating == event["rating"]
-            assert work.popularity == event["popularity"]
-            assert work.genres[0].name == event["genre"]
-            assert (
-                self.timestamp_to_string(license_pool.availability_time)
-                == event["availability_time"]
-            )
-            assert license_pool.licenses_owned == event["licenses_owned"]
-            assert license_pool.licenses_available == event["licenses_available"]
-            assert license_pool.licenses_reserved == event["licenses_reserved"]
-            assert license_pool.patrons_in_hold_queue == event["patrons_in_hold_queue"]
-            assert False == event["self_hosted"]
-            assert work.title == event["title"]
-            assert work.series == event["series"]
-            assert work.series_position == event["series_position"]
-            assert work.language == event["language"]
+        assert event["type"] == event_type
+        assert event["start"] == event_time_formatted
+        assert event["end"] == event_time_formatted
+        assert event["library_id"] == s3_analytics_fixture.db.default_library().id
+        assert event["license_pool_id"] == license_pool.id
+        assert event["publisher"] == edition.publisher
+        assert event["imprint"] == edition.imprint
+        assert event["issued"] == edition.issued
+        assert event["published"] == edition.published
+        assert event["medium"] == edition.medium
+        assert event["collection"] == collection.name
+        assert event["identifier_type"] == identifier.type
+        assert event["identifier"] == identifier.identifier
+        assert event["data_source"] == data_source.name
+        assert event["audience"] == work.audience
+        assert event["fiction"] == work.fiction
+        assert event["summary_text"] == work.summary_text
+        assert event["quality"] == work.quality
+        assert event["rating"] == work.rating
+        assert event["popularity"] == work.popularity
+        assert event["genre"] == work.genres[0].name
+        assert event["availability_time"] == self.timestamp_to_string(
+            license_pool.availability_time
+        )
+        assert event["licenses_owned"] == license_pool.licenses_owned
+        assert event["licenses_available"] == license_pool.licenses_available
+        assert event["licenses_reserved"] == license_pool.licenses_reserved
+        assert event["patrons_in_hold_queue"] == license_pool.patrons_in_hold_queue
+        assert event["self_hosted"] is False
+        assert event["title"] == work.title
+        assert event["series"] == work.series
+        assert event["series_position"] == work.series_position
+        assert event["language"] == work.language

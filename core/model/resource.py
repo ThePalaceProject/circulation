@@ -546,7 +546,7 @@ class Representation(Base, MediaTypes):
     # A Representation may be a CachedMARCFile.
     marc_file: Mapped[CachedMARCFile] = relationship(
         "CachedMARCFile",
-        backref="representation",
+        back_populates="representation",
         cascade="all, delete-orphan",
     )
 

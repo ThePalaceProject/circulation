@@ -11,9 +11,6 @@ sys.path.append(os.path.abspath(package_dir))
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 
 from api.odl2 import ODL2Importer
-
-# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3  # noqa: autoflake
 from core.opds2_import import RWPMManifestParser
 from core.opds_schema import ODL2SchemaValidation
 from core.scripts import RunCollectionMonitorScript

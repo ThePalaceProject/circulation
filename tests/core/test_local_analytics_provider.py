@@ -1,9 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import CirculationEvent, ExternalIntegration, create, get_one
 from core.util.datetime_helpers import utc_now
-from tests.fixtures.database import DatabaseTransactionFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.services import MockServicesFixture
 
 
 class TestInitializeLocalAnalyticsProvider:
@@ -49,7 +56,11 @@ class LocalAnalyticsProviderFixture:
     integration: ExternalIntegration
     la: LocalAnalyticsProvider
 
-    def __init__(self, transaction: DatabaseTransactionFixture):
+    def __init__(
+        self,
+        transaction: DatabaseTransactionFixture,
+        mock_services_fixture: MockServicesFixture,
+    ):
         self.transaction = transaction
         self.integration, ignore = create(
             transaction.session,
@@ -57,16 +68,17 @@ class LocalAnalyticsProviderFixture:
             goal=ExternalIntegration.ANALYTICS_GOAL,
             protocol="core.local_analytics_provider",
         )
+        self.services = mock_services_fixture.services
         self.la = LocalAnalyticsProvider(
-            self.integration, transaction.default_library()
+            self.integration, self.services, transaction.default_library()
         )
 
 
 @pytest.fixture()
 def local_analytics_provider_fixture(
-    db,
+    db: DatabaseTransactionFixture, mock_services_fixture: MockServicesFixture
 ) -> LocalAnalyticsProviderFixture:
-    return LocalAnalyticsProviderFixture(db)
+    return LocalAnalyticsProviderFixture(db, mock_services_fixture)
 
 
 class TestLocalAnalyticsProvider:
@@ -123,7 +135,7 @@ class TestLocalAnalyticsProvider:
 
         # It's possible to instantiate the LocalAnalyticsProvider
         # without a library.
-        la = LocalAnalyticsProvider(data.integration)
+        la = LocalAnalyticsProvider(data.integration, data.services)
 
         # In that case, it will process events for any library.
         for library in [database.default_library(), library2]:
@@ -184,7 +196,7 @@ class TestLocalAnalyticsProvider:
         data.integration.setting(
             p.LOCATION_SOURCE
         ).value = p.LOCATION_SOURCE_NEIGHBORHOOD
-        la = p(data.integration, database.default_library())
+        la = p(data.integration, data.services, database.default_library())
 
         event, is_new = la.collect_event(
             database.default_library(),

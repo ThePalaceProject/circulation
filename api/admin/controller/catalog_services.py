@@ -6,15 +6,12 @@ from api.admin.controller.settings import SettingsController
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     INTEGRATION_NAME_ALREADY_IN_USE,
-    MISSING_INTEGRATION,
     MISSING_SERVICE,
     MULTIPLE_SERVICES_FOR_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
 from core.marc import MARCExporter
-from core.model import ExternalIntegration, get_one, get_one_or_create
-from core.model.configuration import ExternalIntegrationLink
-from core.s3 import S3UploaderConfiguration
+from core.model import ExternalIntegration, get_one
 from core.util.problem_detail import ProblemDetail
 
 
@@ -25,10 +22,6 @@ class CatalogServicesController(SettingsController):
         self.protocols = self._get_integration_protocols(
             service_apis, protocol_name_attr="NAME"
         )
-        self.update_protocol_settings()
-
-    def update_protocol_settings(self):
-        self.protocols[0]["settings"] = [MARCExporter.get_storage_settings(self._db)]
 
     def process_catalog_services(self):
         self.require_system_admin()
@@ -42,7 +35,6 @@ class CatalogServicesController(SettingsController):
         services = self._get_integration_info(
             ExternalIntegration.CATALOG_GOAL, self.protocols
         )
-        self.update_protocol_settings()
         return dict(
             catalog_services=services,
             protocols=self.protocols,
@@ -91,10 +83,6 @@ class CatalogServicesController(SettingsController):
         if isinstance(result, ProblemDetail):
             return result
 
-        external_integration_link = self._set_external_integration_link(service)
-        if isinstance(external_integration_link, ProblemDetail):
-            return external_integration_link
-
         library_error = self.check_libraries(service)
         if library_error:
             self._db.rollback()
@@ -104,39 +92,6 @@ class CatalogServicesController(SettingsController):
             return Response(str(service.id), 201)
         else:
             return Response(str(service.id), 200)
-
-    def _set_external_integration_link(self, service):
-        """Either set or delete the external integration link between the
-        service and the storage integration.
-        """
-        mirror_integration_id = flask.request.form.get("mirror_integration_id")
-
-        # If no storage integration was selected, then delete the existing
-        # external integration link.
-        current_integration_link, ignore = get_one_or_create(
-            self._db,
-            ExternalIntegrationLink,
-            library_id=None,
-            external_integration_id=service.id,
-            purpose=ExternalIntegrationLink.MARC,
-        )
-
-        if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
-            if current_integration_link:
-                self._db.delete(current_integration_link)
-        else:
-            storage_integration = get_one(
-                self._db, ExternalIntegration, id=mirror_integration_id
-            )
-            # Only get storage integrations that have a MARC file option set
-            if (
-                not storage_integration
-                or not storage_integration.setting(
-                    S3UploaderConfiguration.MARC_BUCKET_KEY
-                ).value
-            ):
-                return MISSING_INTEGRATION
-            current_integration_link.other_integration_id = storage_integration.id
 
     def validate_form_fields(self, protocol):
         """Verify that the protocol which the user has selected is in the list

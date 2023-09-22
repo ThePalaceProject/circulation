@@ -87,6 +87,7 @@ from core.opds import NavigationFacets
 from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
+from core.service.container import Services
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -166,7 +167,6 @@ if TYPE_CHECKING:
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
     )
-    from api.admin.controller.storage_services import StorageServicesController
     from api.admin.controller.timestamps import TimestampsController
     from api.admin.controller.view import ViewController
     from api.admin.controller.work_editor import WorkController as AdminWorkController
@@ -220,14 +220,14 @@ class CirculationManager:
     admin_logging_services_controller: LoggingServicesController
     admin_search_service_self_tests_controller: SearchServiceSelfTestsController
     admin_search_services_controller: SearchServicesController
-    admin_storage_services_controller: StorageServicesController
     admin_catalog_services_controller: CatalogServicesController
     admin_announcement_service: AnnouncementSettings
     admin_search_controller: AdminSearchController
     admin_view_controller: ViewController
 
-    def __init__(self, _db):
+    def __init__(self, _db, services: Services):
         self._db = _db
+        self.services = services
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )

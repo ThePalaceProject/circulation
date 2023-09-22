@@ -18,7 +18,6 @@ from core.configuration.ignored_identifier import IgnoredIdentifierSettings
 from core.model.hybrid import hybrid_property
 
 from ..config import CannotLoadConfiguration, Configuration
-from ..mirror import MirrorUploader
 from ..util.string_helpers import random_string
 from . import Base, get_one, get_one_or_create
 from .constants import DataSourceConstants
@@ -90,10 +89,6 @@ class ExternalIntegration(Base):
     METADATA_GOAL = "metadata"
 
     # These integrations are associated with external services such as
-    # S3 that provide access to book covers.
-    STORAGE_GOAL = MirrorUploader.STORAGE_GOAL
-
-    # These integrations are associated with external services such as
     # Opensearch that provide indexed search.
     SEARCH_GOAL = "search"
 
@@ -163,11 +158,6 @@ class ExternalIntegration(Base):
     NYPL_SHADOWCAT = "Shadowcat"
     NYT = "New York Times"
     CONTENT_SERVER = "Content Server"
-
-    # Integrations with STORAGE_GOAL
-    S3 = "Amazon S3"
-    MINIO = "MinIO"
-    LCP = "LCP"
 
     # Integrations with SEARCH_GOAL
     OPENSEARCH = "Opensearch"

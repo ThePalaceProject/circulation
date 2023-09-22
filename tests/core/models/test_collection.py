@@ -7,11 +7,7 @@ from core.config import Configuration
 from core.model import create, get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
-from core.model.configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    ExternalIntegrationLink,
-)
+from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.coverage import CoverageRecord, WorkCoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
@@ -934,28 +930,6 @@ class TestCollection:
         )
         setting2.value = "value2"
 
-        # Also it has links to another independent ExternalIntegration (S3 storage in this case).
-        s3_storage = db.external_integration(
-            ExternalIntegration.S3,
-            ExternalIntegration.STORAGE_GOAL,
-            libraries=[db.default_library()],
-        )
-        link1 = db.external_integration_link(
-            integration,
-            db.default_library(),
-            s3_storage,
-            ExternalIntegrationLink.PROTECTED_ACCESS_BOOKS,
-        )
-        link2 = db.external_integration_link(
-            integration,
-            db.default_library(),
-            s3_storage,
-            ExternalIntegrationLink.COVERS,
-        )
-
-        integration.links.append(link1)
-        integration.links.append(link2)
-
         # It's got a Work that has a LicensePool, which has a License,
         # which has a loan.
         work = db.work(with_license_pool=True)
@@ -1047,19 +1021,14 @@ class TestCollection:
         # has any LicensePools), but not the second.
         assert [work] == index.removed
 
-        # The collection ExternalIntegration, its settings, and links to other integrations have been deleted.
+        # The collection ExternalIntegration and its settings have been deleted.
         # The storage ExternalIntegration remains.
         external_integrations = db.session.query(ExternalIntegration).all()
         assert integration not in external_integrations
-        assert s3_storage in external_integrations
 
         settings = db.session.query(ConfigurationSetting).all()
         for setting in (setting1, setting2):
             assert setting not in settings
-
-        links = db.session.query(ExternalIntegrationLink).all()
-        for link in (link1, link2):
-            assert link not in links
 
         # If no search_index is passed into delete() (the default behavior),
         # we try to instantiate the normal ExternalSearchIndex object. Since

@@ -50,7 +50,6 @@ def setup_admin_controllers(manager: CirculationManager):
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
     )
-    from api.admin.controller.storage_services import StorageServicesController
     from api.admin.controller.timestamps import TimestampsController
     from api.admin.controller.view import ViewController
     from api.admin.controller.work_editor import WorkController
@@ -100,7 +99,6 @@ def setup_admin_controllers(manager: CirculationManager):
         SearchServiceSelfTestsController(manager)
     )
     manager.admin_search_services_controller = SearchServicesController(manager)
-    manager.admin_storage_services_controller = StorageServicesController(manager)
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
     manager.admin_announcement_service = AnnouncementSettings(manager)
     manager.admin_search_controller = AdminSearchController(manager)

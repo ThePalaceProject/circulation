@@ -9,9 +9,6 @@ package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
 from api.odl import ODLImporter, ODLImportMonitor
-
-# NOTE: We need to import it explicitly to initialize MirrorUploader.IMPLEMENTATION_REGISTRY
-from core import s3  # noqa
 from core.scripts import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(

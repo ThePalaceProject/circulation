@@ -17,6 +17,7 @@ from core.model import (
     SessionManager,
     pg_advisory_lock,
 )
+from core.service.container import container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
 from scripts import InstanceInitializationScript
@@ -72,8 +73,9 @@ def initialize_circulation_manager():
         pass
     else:
         if getattr(app, "manager", None) is None:
+            container = container_instance()
             try:
-                app.manager = CirculationManager(app._db)
+                app.manager = CirculationManager(app._db, container)
             except Exception:
                 logging.exception("Error instantiating circulation manager!")
                 raise

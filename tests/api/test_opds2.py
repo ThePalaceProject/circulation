@@ -1,6 +1,6 @@
 import io
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
@@ -315,7 +315,7 @@ class TestOPDS2WithTokens:
         work = works[0]
         identifier = work.presentation_edition.primary_identifier
 
-        manager = CirculationManager(controller_fixture.db.session)
+        manager = CirculationManager(controller_fixture.db.session, MagicMock())
         patron = controller_fixture.db.patron()
 
         # Borrow the book from the library

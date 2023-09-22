@@ -67,7 +67,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         # Set up an application context so we have access to url_for.
         from api.app import app
 
-        app.manager = manager or CirculationManager(self._db)
+        app.manager = manager or CirculationManager(self._db, self.services)
         base_url = ConfigurationSetting.sitewide(
             self._db, Configuration.BASE_URL_KEY
         ).value

@@ -6,6 +6,7 @@ import uuid
 from flask_babel import lazy_gettext as _
 
 from core.model import ConfigurationSetting, ExternalIntegration, Session
+from core.service.container import Services
 from core.util.http import HTTP
 
 from .config import CannotLoadConfiguration
@@ -63,7 +64,7 @@ class GoogleAnalyticsProvider:
         {"key": TRACKING_ID, "label": _("Tracking ID"), "required": True},
     ]
 
-    def __init__(self, integration, library=None):
+    def __init__(self, integration, services: Services, library=None):
         _db = Session.object_session(integration)
         if not library:
             raise CannotLoadConfiguration(

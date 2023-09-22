@@ -680,29 +680,6 @@ class TestAdminSearchServicesSelfTests:
         fixture.assert_supported_methods(url, "GET", "POST")
 
 
-class TestAdminStorageServices:
-    CONTROLLER_NAME = "admin_storage_services_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
-    def test_process_services(self, fixture: AdminRouteFixture):
-        url = "/admin/storage_services"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_services  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self, fixture: AdminRouteFixture):
-        url = "/admin/storage_service/<service_id>"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "DELETE")
-
-
 class TestAdminCatalogServices:
     CONTROLLER_NAME = "admin_catalog_services_controller"
 

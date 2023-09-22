@@ -6,8 +6,7 @@ from api.admin.problem_details import INCOMPLETE_CONFIGURATION, MISSING_ANALYTIC
 from api.google_analytics_provider import GoogleAnalyticsProvider
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import ExternalIntegration, ExternalIntegrationLink
-from core.s3 import S3UploaderConfiguration
+from core.model import ExternalIntegration
 from core.util import first_or_default
 from core.util.problem_detail import ProblemDetail
 
@@ -32,11 +31,6 @@ class AnalyticsServicesController(SettingsController):
                 if protocol["name"] == S3AnalyticsProvider.__module__
             ]
         )
-
-        if s3_analytics_provider:
-            s3_analytics_provider[
-                "settings"
-            ] = S3AnalyticsProvider.get_storage_settings(self._db)
 
     def process_analytics_services(self):
         if flask.request.method == "GET":
@@ -100,14 +94,6 @@ class AnalyticsServicesController(SettingsController):
             return protocol_error
 
         service.name = name
-
-        external_integration_link = self._set_storage_external_integration_link(
-            service,
-            ExternalIntegrationLink.ANALYTICS,
-            S3UploaderConfiguration.ANALYTICS_BUCKET_KEY,
-        )
-        if isinstance(external_integration_link, ProblemDetail):
-            return external_integration_link
 
         if is_new:
             return Response(str(service.id), 201)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib
 import logging
 from collections import defaultdict
@@ -7,6 +9,7 @@ from sqlalchemy.orm.session import Session
 
 from .config import CannotLoadConfiguration
 from .model import ExternalIntegration
+from .service.container import container_instance
 from .util.datetime_helpers import utc_now
 from .util.log import log_elapsed_time
 
@@ -26,7 +29,7 @@ class Analytics:
     GLOBAL_ENABLED: Optional[bool] = None
     LIBRARY_ENABLED: Set[int] = set()
 
-    def __new__(cls, _db, refresh=False) -> "Analytics":
+    def __new__(cls, _db: Session, refresh: bool = False) -> Analytics:
         instance = cls._singleton_instance
         if instance is None:
             refresh = True
@@ -44,15 +47,16 @@ class Analytics:
         cls._singleton_instance = None
 
     @log_elapsed_time(log_method=log.debug, message_prefix="Initializing instance")
-    def _initialize_instance(self, _db):
+    def _initialize_instance(self, _db: Session) -> None:
         """Initialize an instance (usually the singleton) of the class.
 
         We don't use __init__ because it would be run whether or not
         a new instance were instantiated.
         """
+        services = container_instance()
         sitewide_providers = []
         library_providers = defaultdict(list)
-        initialization_exceptions: Dict[int, Exception] = {}
+        initialization_exceptions: Dict[int, Exception | str] = {}
         global_enabled = False
         library_enabled = set()
         # Find a list of all the ExternalIntegrations set up with a
@@ -68,12 +72,12 @@ class Analytics:
                 provider_class = self._provider_class_from_module(module)
                 if provider_class:
                     if not libraries:
-                        provider = provider_class(integration)
+                        provider = provider_class(integration, services)
                         sitewide_providers.append(provider)
                         global_enabled = True
                     else:
                         for library in libraries:
-                            provider = provider_class(integration, library)
+                            provider = provider_class(integration, services, library)
                             library_providers[library.id].append(provider)
                             library_enabled.add(library.id)
                 else:
