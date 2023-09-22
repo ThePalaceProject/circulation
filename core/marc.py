@@ -673,7 +673,7 @@ class MARCExporter:
         """
 
         # We store the content, if it's not empty. If it's empty, we create a CachedMARCFile
-        # and Representation, but don't actually mirror it.
+        # and Representation, but don't actually store it.
         if storage_service is None:
             raise Exception("No storage service is configured")
 

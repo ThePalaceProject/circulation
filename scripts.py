@@ -6,7 +6,6 @@ import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional
-from unittest.mock import MagicMock
 
 from sqlalchemy import inspect
 from sqlalchemy.engine import Connection
@@ -194,7 +193,7 @@ class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
         super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
         if not manager:
-            manager = CirculationManager(self._db, MagicMock())
+            manager = CirculationManager(self._db, self.services)
         from api.app import app
 
         app.manager = manager
