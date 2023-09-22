@@ -967,9 +967,7 @@ class ODLAPI(
             _db.delete(loan)
             self.update_licensepool(loan.license_pool)
 
-    def update_availability(  # type: ignore[empty-body]
-        self, licensepool: LicensePool
-    ) -> Tuple[LicensePool, bool, bool]:
+    def update_availability(self, licensepool: LicensePool) -> None:
         pass
 
 

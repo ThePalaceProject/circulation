@@ -1698,7 +1698,7 @@ class OPDSImportMonitor(
     def external_integration(self, _db: Session) -> Optional[ExternalIntegration]:
         return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:  # type: ignore[override]
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         """Retrieve the first page of the OPDS feed"""
         first_page = self.run_test(
             "Retrieve the first page of the OPDS feed (%s)" % self.feed_url,
@@ -1992,7 +1992,7 @@ class OPDSImportMonitor(
         # pick up where we left off.
         return reversed(feeds)
 
-    def run_once(self, progress_ignore: bool) -> TimestampData:
+    def run_once(self, progress: TimestampData) -> TimestampData:
         feeds = self._get_feeds()
         total_imported = 0
         total_failures = 0

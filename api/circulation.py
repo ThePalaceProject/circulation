@@ -752,9 +752,7 @@ class BaseCirculationAPI(
         ...
 
     @abstractmethod
-    def update_availability(
-        self, licensepool: LicensePool
-    ) -> Tuple[LicensePool, bool, bool]:
+    def update_availability(self, licensepool: LicensePool) -> None:
         """Update availability information for a book."""
         ...
 

@@ -81,6 +81,7 @@ module = [
     "api.lcp.hash",
     "api.odl",
     "api.odl2",
+    "api.opds_for_distributors",
     "core.feed.*",
     "core.integration.*",
     "core.model.announcements",

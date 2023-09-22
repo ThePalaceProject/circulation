@@ -5,6 +5,7 @@ import datetime
 from io import StringIO
 from typing import TYPE_CHECKING
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -302,7 +303,7 @@ class TestHasCollectionSelfTests:
                 return "1"
 
         mock = Mock()
-        results = [x for x in mock._run_self_tests()]
+        results = [x for x in mock._run_self_tests(MagicMock())]
         assert ["1"] == [x.result for x in results]
         assert True == mock._no_delivery_mechanisms_called
 
