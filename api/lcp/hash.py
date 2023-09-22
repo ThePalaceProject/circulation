@@ -1,5 +1,5 @@
 import hashlib
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 
 from core.exceptions import BaseError
@@ -14,20 +14,19 @@ class HashingError(BaseError):
     """Raised in the case of errors occurred during hashing"""
 
 
-class Hasher(metaclass=ABCMeta):
+class Hasher(ABC):
     """Base class for all implementations of different hashing algorithms"""
 
-    def __init__(self, hashing_algorithm):
+    def __init__(self, hashing_algorithm: HashingAlgorithm) -> None:
         """Initializes a new instance of Hasher class
 
         :param hashing_algorithm: Hashing algorithm
-        :type hashing_algorithm: HashingAlgorithm
         """
         self._hashing_algorithm = hashing_algorithm
 
     @abstractmethod
-    def hash(self, value):
-        raise NotImplementedError()
+    def hash(self, value: str) -> str:
+        ...
 
 
 class UniversalHasher(Hasher):
@@ -49,5 +48,5 @@ class UniversalHasher(Hasher):
 
 
 class HasherFactory:
-    def create(self, hashing_algorithm):
+    def create(self, hashing_algorithm: HashingAlgorithm) -> Hasher:
         return UniversalHasher(hashing_algorithm)
