@@ -1503,7 +1503,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 drm_licensor = FeedEntryType.create(
                     vendor=vendor_id, clientToken=FeedEntryType(text=token)
                 )
-                cached = {"licensor": drm_licensor}
+                cached = {"drm_licensor": drm_licensor}
 
             self._adobe_id_cache[cache_key] = cached
         else:
@@ -1525,7 +1525,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             hashed_passphrase: LCPHashedPassphrase = (
                 lcp_credential_factory.get_hashed_passphrase(db, active_loan.patron)
             )
-            response["hashed_passphrase"] = FeedEntryType(text=hashed_passphrase.hashed)
+            response["lcp_hashed_passphrase"] = FeedEntryType(
+                text=hashed_passphrase.hashed
+            )
         except LCPError:
             # The patron's passphrase wasn't generated yet and not present in the database.
             pass
@@ -1544,7 +1546,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             ] = self.patron.authorization_identifier
 
         patron_tag = FeedEntryType.create(**patron_details)
-        feed.add_metadata("patron", patron_tag)
+        feed.metadata.patron = patron_tag
 
     def add_authentication_document_link(self, feed_obj: FeedData) -> None:
         """Create a <link> tag that points to the circulation

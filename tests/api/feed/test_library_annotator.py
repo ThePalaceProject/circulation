@@ -262,8 +262,7 @@ class TestLibraryAnnotator:
             pool, loan, other_delivery_mechanism
         )
         assert link is not None
-        for name, child in link:
-            assert name != "licensor"
+        assert link.drm_licensor == None
 
         # No new Credential has been associated with the patron.
         assert old_credentials == patron.credentials
@@ -273,8 +272,8 @@ class TestLibraryAnnotator:
         link = annotator_fixture.annotator.fulfill_link(
             pool, loan, adobe_delivery_mechanism
         )
-        licensor = getattr(link, "licensor", None)
-        assert None != licensor
+        assert link is not None
+        assert link.drm_licensor is not None
 
         # An Adobe ID-specific identifier has been created for the patron.
         [adobe_id_identifier] = [
@@ -293,7 +292,8 @@ class TestLibraryAnnotator:
         expect = annotator_fixture.annotator.adobe_id_tags(
             adobe_id_identifier.credential
         )
-        assert expect.get("licensor") == licensor
+        assert link is not None
+        assert expect.get("drm_licensor") == link.drm_licensor
 
     def test_no_adobe_id_tags_when_vendor_id_not_configured(
         self, annotator_fixture: LibraryAnnotatorFixture
@@ -318,12 +318,12 @@ class TestLibraryAnnotator:
         patron_identifier = "patron identifier"
         element = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
 
-        assert "licensor" in element
+        assert "drm_licensor" in element
         assert vendor_id_fixture.TEST_VENDOR_ID == getattr(
-            element["licensor"], "vendor", None
+            element["drm_licensor"], "vendor", None
         )
 
-        token = getattr(element["licensor"], "clientToken", None)
+        token = getattr(element["drm_licensor"], "clientToken", None)
         assert token is not None
         # token.text is a token which we can decode, since we know
         # the secret.
@@ -338,7 +338,7 @@ class TestLibraryAnnotator:
         # object that renders to the same data.
         same_tag = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
         assert same_tag is not element
-        assert same_tag["licensor"].dict() == element["licensor"].dict()
+        assert same_tag["drm_licensor"].dict() == element["drm_licensor"].dict()
 
         # If the Adobe Vendor ID configuration is present but
         # incomplete, adobe_id_tags does nothing.
@@ -375,15 +375,16 @@ class TestLibraryAnnotator:
         link = annotator_fixture.annotator.fulfill_link(
             pool, loan, other_delivery_mechanism
         )
-        assert not hasattr(link, "hashed_passphrase")
+        assert link is not None
+        assert link.lcp_hashed_passphrase is None
 
         # The fulfill link for lcp DRM includes hashed_passphrase
         link = annotator_fixture.annotator.fulfill_link(
             pool, loan, lcp_delivery_mechanism
         )
-        hashed_passphrase = getattr(link, "hashed_passphrase", None)
-        assert hashed_passphrase is not None
-        assert hashed_passphrase.text == hashed_password.hashed
+        assert link is not None
+        assert link.lcp_hashed_passphrase is not None
+        assert link.lcp_hashed_passphrase.text == hashed_password.hashed
 
     def test_default_lane_url(self, annotator_fixture: LibraryAnnotatorFixture):
         default_lane_url = annotator_fixture.annotator.default_lane_url()
@@ -1411,14 +1412,14 @@ class TestLibraryAnnotator:
         # The feed-level tag has the drm:scheme attribute set.
         assert (
             "http://librarysimplified.org/terms/drm/scheme/ACS"
-            == feed_tag["licensor"].scheme
+            == feed_tag["drm_licensor"].scheme
         )
 
         # If we remove that attribute, the feed-level tag is the same as the
         # generic tag.
-        assert feed_tag["licensor"].dict() != generic_tag["licensor"].dict()
-        delattr(feed_tag["licensor"], "scheme")
-        assert feed_tag["licensor"].dict() == generic_tag["licensor"].dict()
+        assert feed_tag["drm_licensor"].dict() != generic_tag["drm_licensor"].dict()
+        delattr(feed_tag["drm_licensor"], "scheme")
+        assert feed_tag["drm_licensor"].dict() == generic_tag["drm_licensor"].dict()
 
     def test_borrow_link_raises_unfulfillable_work(
         self, annotator_fixture: LibraryAnnotatorFixture
