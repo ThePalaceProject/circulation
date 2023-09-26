@@ -221,7 +221,7 @@ class TestOPDSImporter:
         assert data_source_name == c1._data_source
         assert data_source_name == c2._data_source
 
-        [failure] = list(failures.values())
+        [[failure]] = list(failures.values())
         assert isinstance(failure, CoverageFailure)
         assert (
             "202: I'm working to locate a source for this identifier."
@@ -1118,7 +1118,7 @@ class TestOPDSImporter:
             failures,
         ) = opds_importer_fixture.importer().import_from_feed(feed)
 
-        [failure] = list(failures.values())
+        [[failure]] = list(failures.values())
         assert isinstance(failure, CoverageFailure)
         assert True == failure.transient
         assert "404: I've never heard of this work." == failure.exception
@@ -1144,7 +1144,7 @@ class TestOPDSImporter:
         assert 1 == len(imported_editions)
 
         # The other failed to import, and became a CoverageFailure
-        failure = failures["http://www.gutenberg.org/ebooks/10441"]
+        [failure] = failures["http://www.gutenberg.org/ebooks/10441"]
         assert isinstance(failure, CoverageFailure)
         assert False == failure.transient
         assert "Utter failure!" in failure.exception
@@ -1174,7 +1174,7 @@ class TestOPDSImporter:
         assert 1 == len(works)
 
         # There's an error message for the work that failed.
-        failure = failures["http://www.gutenberg.org/ebooks/10441"]
+        [failure] = failures["http://www.gutenberg.org/ebooks/10441"]
         assert isinstance(failure, CoverageFailure)
         assert False == failure.transient
         assert "Utter work failure!" in failure.exception

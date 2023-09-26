@@ -231,7 +231,7 @@ class BaseOPDSImporter(
     @abstractmethod
     def extract_feed_data(
         self, feed: str | bytes, feed_url: Optional[str] = None
-    ) -> Tuple[Dict[str, Metadata], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+    ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
         ...
 
     @abstractmethod
@@ -383,7 +383,7 @@ class BaseOPDSImporter(
         List[Edition],
         List[LicensePool],
         List[Work],
-        Dict[str, CoverageFailure | List[CoverageFailure]],
+        Dict[str, List[CoverageFailure]],
     ]:
         # Keep track of editions that were imported. Pools and works
         # for those editions may be looked up or created.
@@ -423,7 +423,10 @@ class BaseOPDSImporter(
                     transient=False,
                     collection=self.collection,
                 )
-                failures[key] = failure
+                if key in failures:
+                    failures[key].append(failure)
+                else:
+                    failures[key] = [failure]
                 # clean up any edition might have created
                 if key in imported_editions:
                     del imported_editions[key]
@@ -453,7 +456,10 @@ class BaseOPDSImporter(
                     transient=False,
                     collection=self.collection,
                 )
-                failures[key] = failure
+                if key in failures:
+                    failures[key].append(failure)
+                else:
+                    failures[key] = [failure]
 
         return (
             list(imported_editions.values()),
@@ -676,7 +682,7 @@ class OPDSImporter(BaseOPDSImporter):
 
     def extract_feed_data(
         self, feed: str | bytes, feed_url: Optional[str] = None
-    ) -> Tuple[Dict[str, Metadata], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+    ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
         """Turn an OPDS feed into lists of Metadata and CirculationData objects,
         with associated messages and next_links.
         """
@@ -696,10 +702,10 @@ class OPDSImporter(BaseOPDSImporter):
             )
 
         # translate the id in failures to identifier.urn
-        identified_failures: Dict[str, CoverageFailure | List[CoverageFailure]] = {}
+        identified_failures = {}
         for urn, failure in list(fp_failures.items()) + list(xml_failures.items()):
             identifier, failure = self.handle_failure(urn, failure)
-            identified_failures[identifier.urn] = failure
+            identified_failures[identifier.urn] = [failure]
 
         # Use one loop for both, since the id will be the same for both dictionaries.
         metadata = {}
@@ -1913,7 +1919,7 @@ class OPDSImportMonitor(
 
     def import_one_feed(
         self, feed: bytes | str
-    ) -> Tuple[List[Edition], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+    ) -> Tuple[List[Edition], Dict[str, List[CoverageFailure]]]:
         """Import every book mentioned in an OPDS feed."""
 
         # Because we are importing into a Collection, we will immediately
@@ -1933,13 +1939,7 @@ class OPDSImportMonitor(
             )
 
         # Create CoverageRecords for the failures.
-        for urn, failure in list(failures.items()):
-            failure_items: List[CoverageFailure]
-            if isinstance(failure, list):
-                failure_items = failure
-            else:
-                failure_items = [failure]
-
+        for urn, failure_items in list(failures.items()):
             for failure_item in failure_items:
                 failure_item.to_coverage_record(
                     operation=CoverageRecord.IMPORT_OPERATION

@@ -3,7 +3,17 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Literal, Optional, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+)
 from urllib.parse import urljoin, urlparse
 
 import webpub_manifest_parser.opds2.ast as opds2_ast
@@ -168,6 +178,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
         collection: Collection,
         parser: RWPMManifestParser,
         data_source_name: str | None = None,
+        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -185,7 +196,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
         :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
             as they come in from the network.
         """
-        super().__init__(db, collection, data_source_name)
+        super().__init__(db, collection, data_source_name, http_get)
         self._parser = parser
 
     def assert_importable_content(
@@ -825,7 +836,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
 
     def _record_coverage_failure(
         self,
-        failures: dict[str, list[CoverageFailure] | CoverageFailure],
+        failures: dict[str, list[CoverageFailure]],
         identifier: Identifier,
         error_message: str,
         transient: bool = True,
@@ -851,7 +862,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
             transient=transient,
             collection=self.collection,
         )
-        failures[identifier.identifier].append(failure)  # type: ignore[union-attr]
+        failures[identifier.identifier].append(failure)
 
         return failure
 
@@ -924,7 +935,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None
-    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure] | CoverageFailure]]:
+    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
         """Turn an OPDS 2.0 feed into lists of Metadata and CirculationData objects.
         :param feed: OPDS 2.0 feed
         :param feed_url: Feed URL used to resolve relative links
@@ -932,7 +943,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
         parser_result = self._parser.parse_manifest(feed)
         feed = parser_result.root
         publication_metadata_dictionary = {}
-        failures: dict[str, list[CoverageFailure] | CoverageFailure] = {}
+        failures: dict[str, list[CoverageFailure]] = {}
 
         if feed.links:
             self._parse_feed_links(feed.links)

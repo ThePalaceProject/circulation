@@ -22,8 +22,7 @@ from core.model import (
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
-from tests.fixtures.api_odl_files import ODLAPIFilesFixture
+from tests.fixtures.api_odl import ODL2APIFilesFixture, ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import APIFilesFixture
 

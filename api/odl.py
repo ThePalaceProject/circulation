@@ -5,6 +5,7 @@ import datetime
 import json
 import logging
 import uuid
+from abc import ABC
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import dateutil
@@ -60,7 +61,12 @@ from core.model import (
 from core.model.licensing import LicenseStatus
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor
-from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
+from core.opds_import import (
+    BaseOPDSImporter,
+    OPDSImporter,
+    OPDSImportMonitor,
+    OPDSXMLParser,
+)
 from core.util.datetime_helpers import to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.string_helpers import base64
@@ -970,20 +976,7 @@ class ODLXMLParser(OPDSXMLParser):
     NAMESPACES = dict(OPDSXMLParser.NAMESPACES, odl="http://opds-spec.org/odl")
 
 
-class ODLImporter(OPDSImporter):
-    """Import information and formats from an ODL feed.
-
-    The only change from OPDSImporter is that this importer extracts
-    format information from 'odl:license' tags.
-    """
-
-    NAME = ODLAPI.NAME
-    PARSER_CLASS = ODLXMLParser
-
-    # The media type for a License Info Document, used to get information
-    # about the license.
-    LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
-
+class BaseODLImporter(BaseOPDSImporter, ABC):
     FEEDBOOKS_AUDIO = "{}; protection={}".format(
         MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
@@ -1154,6 +1147,21 @@ class ODLImporter(OPDSImporter):
             parsed_license.status = LicenseStatus.unavailable
 
         return parsed_license
+
+
+class ODLImporter(OPDSImporter, BaseODLImporter):
+    """Import information and formats from an ODL feed.
+
+    The only change from OPDSImporter is that this importer extracts
+    format information from 'odl:license' tags.
+    """
+
+    NAME = ODLAPI.NAME
+    PARSER_CLASS = ODLXMLParser
+
+    # The media type for a License Info Document, used to get information
+    # about the license.
+    LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
     @classmethod
     def _detail_for_elementtree_entry(
