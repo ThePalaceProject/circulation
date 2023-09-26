@@ -96,20 +96,37 @@ class TestOPDSSerializer:
             copies_total="1",
             availability_status="available",
             indirect_acquisitions=[IndirectAcquisition(type="indirect")],
+            lcp_hashed_passphrase=FeedEntryType(text="passphrase"),
+            drm_licensor=FeedEntryType.create(
+                vendor="vendor", clientToken=FeedEntryType(text="token")
+            ),
         )
         element = OPDS1Serializer()._serialize_acquistion_link(link)
         assert element.tag == "link"
         assert dict(element.attrib) == dict(href=link.href)
 
-        for child in element:
-            if child.tag == f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition":
-                assert child.get("type") == "indirect"
-            elif child.tag == f"{{{OPDSFeed.OPDS_NS}}}holds":
-                assert child.get("total") == "0"
-            elif child.tag == f"{{{OPDSFeed.OPDS_NS}}}copies":
-                assert child.get("total") == "1"
-            elif child.tag == f"{{{OPDSFeed.OPDS_NS}}}availability":
-                assert child.get("status") == "available"
+        tests = [
+            (
+                f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition",
+                lambda child: child.get("type") == "indirect",
+            ),
+            (f"{{{OPDSFeed.OPDS_NS}}}holds", lambda child: child.get("total") == "0"),
+            (f"{{{OPDSFeed.OPDS_NS}}}copies", lambda child: child.get("total") == "1"),
+            (
+                f"{{{OPDSFeed.OPDS_NS}}}availability",
+                lambda child: child.get("status") == "available",
+            ),
+            ("hashed_passphrase", lambda child: child.text == "passphrase"),
+            (
+                f"{{{OPDSFeed.DRM_NS}}}licensor",
+                lambda child: child.get(f"{{{OPDSFeed.DRM_NS}}}vendor") == "vendor"
+                and child[0].text == "token",
+            ),
+        ]
+        for tag, test_fn in tests:
+            children = element.findall(tag)
+            assert len(children) == 1
+            assert test_fn(children[0])
 
     def test_serialize_work_entry(self):
         data = WorkEntryData(

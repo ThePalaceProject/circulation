@@ -54,10 +54,10 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
     def _serialize_metadata(self, feed: FeedData) -> Dict[str, Any]:
         fmeta = feed.metadata
         metadata: Dict[str, Any] = {}
-        if title := fmeta.get("title"):
-            metadata["title"] = title.text
-        if item_count := fmeta.get("items_per_page"):
-            metadata["itemsPerPage"] = int(item_count.text or 0)
+        if fmeta.title:
+            metadata["title"] = fmeta.title
+        if fmeta.items_per_page is not None:
+            metadata["itemsPerPage"] = fmeta.items_per_page
         return metadata
 
     def serialize_opds_message(self, entry: OPDSMessage) -> Dict[str, Any]:
