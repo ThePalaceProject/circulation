@@ -201,6 +201,17 @@ class WorkEntry(BaseModel):
         self.license_pool = license_pool
 
 
+@dataclass
+class FeedMetadata(BaseModel):
+    title: Optional[str] = None
+    id: Optional[str] = None
+    updated: Optional[str] = None
+    items_per_page: Optional[int] = None
+    patron: Optional[FeedEntryType] = None
+    drm_licensor: Optional[FeedEntryType] = None
+    lcp_hashed_passphrase: Optional[FeedEntryType] = None
+
+
 class DataEntryTypes:
     NAVIGATION = "navigation"
 
@@ -222,7 +233,7 @@ class FeedData(BaseModel):
     facet_links: List[Link] = field(default_factory=list)
     entries: List[WorkEntry] = field(default_factory=list)
     data_entries: List[DataEntry] = field(default_factory=list)
-    metadata: Dict[str, FeedEntryType] = field(default_factory=dict)
+    metadata: FeedMetadata = field(default_factory=lambda: FeedMetadata())
     entrypoint: Optional[str] = None
 
     class Config:
@@ -230,11 +241,3 @@ class FeedData(BaseModel):
 
     def add_link(self, href: str, **kwargs: Any) -> None:
         self.links.append(Link(href=href, **kwargs))
-
-    def add_metadata(
-        self, name: str, feed_entry: Optional[FeedEntryType] = None, **kwargs: Any
-    ) -> None:
-        if not feed_entry:
-            self.metadata[name] = FeedEntryType(**kwargs)
-        else:
-            self.metadata[name] = feed_entry

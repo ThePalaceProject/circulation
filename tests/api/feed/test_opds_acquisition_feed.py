@@ -1402,11 +1402,11 @@ class TestNavigationFeed:
 
         feed = response._feed
 
-        assert "Navigation" == feed.metadata["title"].text
+        assert "Navigation" == feed.metadata.title
         [self_link] = feed.links
         assert "http://navigation" == self_link.href
         assert "self" == self_link.rel
-        assert "http://navigation" == feed.metadata["id"].text
+        assert "http://navigation" == feed.metadata.id
         [fantasy, romance] = sorted(feed.data_entries, key=lambda x: x.title or "")
 
         assert data.fantasy.display_name == fantasy.title
@@ -1436,11 +1436,11 @@ class TestNavigationFeed:
             session, "Navigation", "http://navigation", data.fantasy, MockAnnotator()
         )
         parsed = feed._feed
-        assert "Navigation" == parsed.metadata["title"].text
+        assert "Navigation" == parsed.metadata.title
         [self_link] = parsed.links
         assert "http://navigation" == self_link.href
         assert "self" == self_link.rel
-        assert "http://navigation" == parsed.metadata["id"].text
+        assert "http://navigation" == parsed.metadata.id
         [fantasy] = parsed.data_entries
 
         assert "All " + data.fantasy.display_name == fantasy.title

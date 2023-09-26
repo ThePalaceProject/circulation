@@ -74,9 +74,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     def generate_feed(self, annotate: bool = True) -> None:
         """Generate the feed metadata and links.
         We assume the entries have already been annotated."""
-        self._feed.add_metadata("id", text=self.url)
-        self._feed.add_metadata("title", text=self.title)
-        self._feed.add_metadata("updated", text=strftime(utc_now()))
+        self._feed.metadata.id = self.url
+        self._feed.metadata.title = self.title
+        self._feed.metadata.updated = strftime(utc_now())
         self._feed.add_link(href=self.url, rel="self")
         if annotate:
             self.annotator.annotate_feed(self._feed)

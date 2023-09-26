@@ -6,6 +6,7 @@ from core.feed.types import (
     Author,
     FeedData,
     FeedEntryType,
+    FeedMetadata,
     IndirectAcquisition,
     Link,
     WorkEntry,
@@ -20,9 +21,9 @@ from core.util.opds_writer import OPDSMessage
 class TestOPDS2Serializer:
     def test_serialize_feed(self):
         feed = FeedData(
-            metadata=dict(
-                items_per_page=FeedEntryType(text="20"),
-                title=FeedEntryType(text="Title"),
+            metadata=FeedMetadata(
+                title="Title",
+                items_per_page=20,
             )
         )
         w = WorkEntry(
