@@ -28,7 +28,6 @@ from api.lcp.hash import Hasher, HasherFactory, HashingAlgorithm
 from core import util
 from core.analytics import Analytics
 from core.importers import BaseImporterSettings
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -58,7 +57,6 @@ from core.model import (
     Session,
     get_one,
 )
-from core.model.configuration import HasExternalIntegration
 from core.model.licensing import LicenseStatus
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor
@@ -167,8 +165,6 @@ class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
 
 class ODLAPI(
     BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
-    HasExternalIntegration,
-    HasLibraryIntegrationConfiguration,
 ):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level

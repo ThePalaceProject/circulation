@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, List, Optional, Type
 
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
@@ -18,7 +18,7 @@ from core.integration.settings import (
 )
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
-from core.model.configuration import ExternalIntegration, HasExternalIntegration
+from core.model.configuration import ExternalIntegration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 
     from api.circulation import HoldInfo
-    from core.model import Collection, Identifier, LicensePool
+    from core.model import Collection, LicensePool
     from core.model.patron import Hold, Loan, Patron
 
 
@@ -115,7 +115,7 @@ class ODL2API(ODLAPI):
         return super()._place_hold(patron, licensepool)
 
 
-class ODL2Importer(OPDS2Importer, HasExternalIntegration):
+class ODL2Importer(OPDS2Importer):
     """Import information and formats from an ODL feed.
 
     The only change from OPDS2Importer is that this importer extracts
