@@ -262,7 +262,7 @@ class TestLibraryAnnotator:
             pool, loan, other_delivery_mechanism
         )
         assert link is not None
-        assert link.drm_licensor == None
+        assert link.drm_licensor is None
 
         # No new Credential has been associated with the patron.
         assert old_credentials == patron.credentials

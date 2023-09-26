@@ -89,8 +89,6 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
                 feed.add_link(link.href, rel=link.rel)
             if "drm_licensor" in tags:
                 feed.metadata.drm_licensor = tags["drm_licensor"]
-            if "lcp_hashed_passphrase" in tags:
-                feed.metadata.lcp_hashed_passphrase = tags["lcp_hashed_passphrase"]
 
     def annotate_work_entry(
         self, entry: WorkEntry, updated: Optional[datetime] = None
