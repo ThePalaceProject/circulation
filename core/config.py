@@ -289,10 +289,10 @@ class Configuration(ConfigurationConstants):
         return {"key": key, "secret": secret}
 
     @classmethod
-    def quicksight_authorized_arns(cls) -> List[str]:
+    def quicksight_authorized_arns(cls) -> Dict[str, List[str]]:
         """Split the comma separated arns"""
         arns_str = os.environ.get(cls.QUICKSIGHT_AUTHORIZED_ARNS_KEY, "")
-        return arns_str.split(",")
+        return json.loads(arns_str)
 
     @classmethod
     def localization_languages(cls):

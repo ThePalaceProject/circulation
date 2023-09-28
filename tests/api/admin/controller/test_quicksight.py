@@ -38,10 +38,16 @@ class TestQuicksightController:
         ) as mock_boto, mock.patch(
             "api.admin.controller.quicksight.Configuration.quicksight_authorized_arns"
         ) as mock_qs_arns:
-            arns = [
-                "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid1",
-                "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid2",
-            ]
+            arns = dict(
+                primary=[
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid1",
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid2",
+                ],
+                secondary=[
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid2",
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid1",
+                ],
+            )
             mock_qs_arns.return_value = arns
             generate_method: mock.MagicMock = (
                 mock_boto.client().generate_embed_url_for_anonymous_user
@@ -52,7 +58,7 @@ class TestQuicksightController:
                 f"/?library_ids={default.id},{library1.id},30000",
                 admin=system_admin,
             ) as ctx:
-                response = ctrl.generate_quicksight_url("uuid1")
+                response = ctrl.generate_quicksight_url("primary")
 
                 # Assert the right client was created, with a region
                 assert mock_boto.client.call_args == mock.call(
@@ -63,7 +69,7 @@ class TestQuicksightController:
                 assert generate_method.call_args == mock.call(
                     AwsAccountId="aws-account-id",
                     Namespace="default",
-                    AuthorizedResourceArns=arns,
+                    AuthorizedResourceArns=arns["primary"],
                     ExperienceConfiguration={
                         "Dashboard": {"InitialDashboardId": "uuid1"}
                     },
@@ -81,12 +87,12 @@ class TestQuicksightController:
                 admin=admin1,
             ) as ctx:
                 generate_method.reset_mock()
-                ctrl.generate_quicksight_url("uuid2")
+                ctrl.generate_quicksight_url("secondary")
 
                 assert generate_method.call_args == mock.call(
                     AwsAccountId="aws-account-id",
                     Namespace="default",
-                    AuthorizedResourceArns=arns,
+                    AuthorizedResourceArns=arns["secondary"],
                     ExperienceConfiguration={
                         "Dashboard": {"InitialDashboardId": "uuid2"}
                     },
@@ -111,10 +117,12 @@ class TestQuicksightController:
         ) as mock_boto, mock.patch(
             "api.admin.controller.quicksight.Configuration.quicksight_authorized_arns"
         ) as mock_qs_arns:
-            arns = [
-                "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid1",
-                "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid2",
-            ]
+            arns = dict(
+                primary=[
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid1",
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid2",
+                ]
+            )
             mock_qs_arns.return_value = arns
 
             with quicksight_fixture.request_context_with_admin(
@@ -122,7 +130,7 @@ class TestQuicksightController:
                 admin=admin,
             ) as ctx:
                 with pytest.raises(ProblemError) as raised:
-                    ctrl.generate_quicksight_url("uuid-none")
+                    ctrl.generate_quicksight_url("secondary")
                 assert (
                     raised.value.problem_detail.detail
                     == "The requested Dashboard ARN is not recognized by this server."
@@ -130,7 +138,7 @@ class TestQuicksightController:
 
                 mock_qs_arns.return_value = []
                 with pytest.raises(ProblemError) as raised:
-                    ctrl.generate_quicksight_url("uuid1")
+                    ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
                     == "Quicksight has not been configured for this server."
@@ -142,7 +150,7 @@ class TestQuicksightController:
             ) as ctx:
                 mock_qs_arns.return_value = arns
                 with pytest.raises(ProblemError) as raised:
-                    ctrl.generate_quicksight_url("uuid1")
+                    ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
                     == "No library was found for this Admin that matched the request."
@@ -157,7 +165,7 @@ class TestQuicksightController:
                     status=400, embed_url="http://embed"
                 )
                 with pytest.raises(ProblemError) as raised:
-                    ctrl.generate_quicksight_url("uuid1")
+                    ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
                     == "Error while fetching the Quisksight Embed url."
@@ -168,7 +176,7 @@ class TestQuicksightController:
                     status=200,
                 )
                 with pytest.raises(ProblemError) as raised:
-                    ctrl.generate_quicksight_url("uuid1")
+                    ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
                     == "Error while fetching the Quisksight Embed url."
@@ -179,8 +187,18 @@ class TestQuicksightController:
                     ""
                 )
                 with pytest.raises(ProblemError) as raised:
-                    ctrl.generate_quicksight_url("uuid1")
+                    ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
                     == "Error while fetching the Quisksight Embed url."
                 )
+
+    def test_get_dashboard_names(self, quicksight_fixture: QuickSightControllerFixture):
+        with mock.patch(
+            "api.admin.controller.quicksight.Configuration.quicksight_authorized_arns"
+        ) as mock_qs_arns:
+            mock_qs_arns.return_value = dict(primary=[], secondary=[], tertiary=[])
+            ctrl = quicksight_fixture.manager.admin_quicksight_controller
+            assert ctrl.get_dashboard_names() == {
+                "names": ["primary", "secondary", "tertiary"]
+            }

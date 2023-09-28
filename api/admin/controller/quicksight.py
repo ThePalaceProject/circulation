@@ -5,6 +5,7 @@ import boto3
 import flask
 
 from api.admin.model.quicksight import (
+    QuicksightDashboardNamesResponse,
     QuicksightGenerateUrlRequest,
     QuicksightGenerateUrlResponse,
 )
@@ -18,13 +19,13 @@ from core.util.problem_detail import ProblemError
 
 
 class QuickSightController(CirculationManagerController):
-    def generate_quicksight_url(self, dashboard_id) -> Dict:
+    def generate_quicksight_url(self, dashboard_name) -> Dict:
         log = logging.getLogger(self.__class__.__name__)
         admin: Admin = getattr(flask.request, "admin")
         request_data = QuicksightGenerateUrlRequest(**flask.request.args)
 
-        authorized_arns = Configuration.quicksight_authorized_arns()
-        if not authorized_arns:
+        all_authorized_arns = Configuration.quicksight_authorized_arns()
+        if not all_authorized_arns:
             log.error("No Quicksight ARNs were configured for this server.")
             raise ProblemError(
                 INTERNAL_SERVER_ERROR.detailed(
@@ -32,20 +33,22 @@ class QuickSightController(CirculationManagerController):
                 )
             )
 
-        for arn in authorized_arns:
-            # format aws:arn:quicksight:<region>:<account id>:<dashboard>
-            arn_parts = arn.split(":")
-            if f"dashboard/{dashboard_id}" == arn_parts[5]:
-                # Pull the region and account id from the ARN
-                aws_account_id = arn_parts[4]
-                region = arn_parts[3]
-                break
-        else:
+        authorized_arns = all_authorized_arns.get(dashboard_name)
+        if not authorized_arns:
             raise ProblemError(
                 INVALID_INPUT.detailed(
                     "The requested Dashboard ARN is not recognized by this server."
                 )
             )
+
+        # The first dashboard id is the primary ARN
+        dashboard_arn = authorized_arns[0]
+        # format aws:arn:quicksight:<region>:<account id>:<dashboard>
+        arn_parts = dashboard_arn.split(":")
+        # Pull the region and account id from the ARN
+        aws_account_id = arn_parts[4]
+        region = arn_parts[3]
+        dashboard_id = arn_parts[5].split("/", 1)[1]  # drop the "dashboard/" part
 
         allowed_libraries = []
         for library in self._db.query(Library).all():
@@ -107,3 +110,8 @@ class QuickSightController(CirculationManagerController):
             )
 
         return QuicksightGenerateUrlResponse(embed_url=embed_url).api_dict()
+
+    def get_dashboard_names(self):
+        """Get the named dashboard IDs defined in the configuration"""
+        config = Configuration.quicksight_authorized_arns()
+        return QuicksightDashboardNamesResponse(names=list(config.keys())).api_dict()

@@ -17,3 +17,7 @@ class QuicksightGenerateUrlRequest(CustomBaseModel):
 
 class QuicksightGenerateUrlResponse(CustomBaseModel):
     embed_url: str = Field(description="The dashboard embed url.")
+
+
+class QuicksightDashboardNamesResponse(CustomBaseModel):
+    names: List[str] = Field(description="The named quicksight dashboard ids")
