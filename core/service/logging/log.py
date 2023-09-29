@@ -4,12 +4,14 @@ import json
 import logging
 import socket
 from logging import Handler
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from botocore.client import BaseClient
 from watchtower import CloudWatchLogHandler
 
 from core.service.logging.configuration import LogLevel
+
+if TYPE_CHECKING:
+    from mypy_boto3_logs import CloudWatchLogsClient
 
 
 class JSONFormatter(logging.Formatter):
@@ -78,7 +80,7 @@ def create_cloudwatch_handler(
     create: bool,
     formatter: logging.Formatter,
     level: LogLevel,
-    client: Callable[[], BaseClient],
+    client: Callable[[], CloudWatchLogsClient],
     group: str,
     interval: int,
     create_group: bool,

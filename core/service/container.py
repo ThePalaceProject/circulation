@@ -1,5 +1,6 @@
 from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
+from dependency_injector.providers import Container
 
 from core.service.logging.configuration import LoggingConfiguration
 from core.service.logging.container import Logging
@@ -11,12 +12,12 @@ class Services(DeclarativeContainer):
 
     config = providers.Configuration()
 
-    storage = providers.Container(
+    storage = Container(
         Storage,
         config=config.storage,
     )
 
-    logging = providers.Container(
+    logging = Container(
         Logging,
         config=config.logging,
     )

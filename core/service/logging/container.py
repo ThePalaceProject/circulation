@@ -1,6 +1,10 @@
+from logging import Handler
+from typing import TYPE_CHECKING, Optional
+
 import boto3
 from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
+from dependency_injector.providers import Provider, Singleton
 
 from core.service.logging.log import (
     JSONFormatter,
@@ -9,11 +13,14 @@ from core.service.logging.log import (
     setup_logging,
 )
 
+if TYPE_CHECKING:
+    from mypy_boto3_logs import CloudWatchLogsClient
+
 
 class Logging(DeclarativeContainer):
     config = providers.Configuration()
 
-    cloudwatch_client = providers.Singleton(
+    cloudwatch_client: Provider[CloudWatchLogsClient] = Singleton(
         boto3.client,
         service_name="logs",
         aws_access_key_id=config.cloudwatch_access_key,
@@ -21,9 +28,9 @@ class Logging(DeclarativeContainer):
         region_name=config.cloudwatch_region,
     )
 
-    json_formatter = providers.Singleton(JSONFormatter)
+    json_formatter: Provider[JSONFormatter] = Singleton(JSONFormatter)
 
-    cloudwatch_handler = providers.Singleton(
+    cloudwatch_handler: Provider[Optional[Handler]] = providers.Singleton(
         create_cloudwatch_handler,
         create=config.cloudwatch,
         formatter=json_formatter,
@@ -34,7 +41,7 @@ class Logging(DeclarativeContainer):
         create_group=config.cloudwatch_create_group,
     )
 
-    stream_handler = providers.Singleton(
+    stream_handler: Provider[Handler] = providers.Singleton(
         create_stream_handler, formatter=json_formatter, level=config.level
     )
 

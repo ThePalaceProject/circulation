@@ -169,6 +169,7 @@ mypy-boto3-cloudformation = {version = ">=1.28.0,<1.29.0", optional = true, mark
 mypy-boto3-dynamodb = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"essential\""}
 mypy-boto3-ec2 = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"essential\""}
 mypy-boto3-lambda = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"essential\""}
+mypy-boto3-logs = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"logs\""}
 mypy-boto3-rds = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"essential\""}
 mypy-boto3-s3 = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"essential\" or extra == \"s3\""}
 mypy-boto3-sqs = {version = ">=1.28.0,<1.29.0", optional = true, markers = "extra == \"essential\""}
@@ -2589,6 +2590,20 @@ files = [
 typing-extensions = {version = ">=4.1.0", markers = "python_version < \"3.12\""}
 
 [[package]]
+name = "mypy-boto3-logs"
+version = "1.28.52"
+description = "Type annotations for boto3.CloudWatchLogs 1.28.52 service generated with mypy-boto3-builder 7.19.0"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "mypy-boto3-logs-1.28.52.tar.gz", hash = "sha256:b51e9b97961223bfe2314ce16887bbd229857b3960a61d372480d6d688168b7e"},
+    {file = "mypy_boto3_logs-1.28.52-py3-none-any.whl", hash = "sha256:d180d3ece8aeb349ae504fa9eddb1afb0d9574a237e9d728c6502a8b8e2d9147"},
+]
+
+[package.dependencies]
+typing-extensions = {version = ">=4.1.0", markers = "python_version < \"3.12\""}
+
+[[package]]
 name = "mypy-boto3-rds"
 version = "1.28.41"
 description = "Type annotations for boto3.RDS 1.28.41 service generated with mypy-boto3-builder 7.18.2"
@@ -4637,4 +4652,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "543db762875b9735cacabcd6e288c82155e9bc0f0d707547ef803d4ccac9786e"
+content-hash = "c2b590a718bdfee2f46331e169fbbeaed5458e659fdb77aaffb24b8dc8865264"
