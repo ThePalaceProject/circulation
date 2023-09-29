@@ -4175,13 +4175,13 @@ Flask = ">=2.0.0"
 
 [[package]]
 name = "types-jsonschema"
-version = "4.19.0.0"
+version = "4.19.0.3"
 description = "Typing stubs for jsonschema"
 optional = false
-python-versions = "*"
+python-versions = ">=3.8"
 files = [
-    {file = "types-jsonschema-4.19.0.0.tar.gz", hash = "sha256:55ba17305fa35c674389a5c47f98b4c314441bdeadaf8541144acdf14dc5c4b0"},
-    {file = "types_jsonschema-4.19.0.0-py3-none-any.whl", hash = "sha256:c7d9553807c31a572bdbdc4e18ab1b2afa648e588aeca52fa931605b0fc1150e"},
+    {file = "types-jsonschema-4.19.0.3.tar.gz", hash = "sha256:e0fc0f5d51fd0988bf193be42174a5376b0096820ff79505d9c1b66de23f0581"},
+    {file = "types_jsonschema-4.19.0.3-py3-none-any.whl", hash = "sha256:5cedbb661e5ca88d95b94b79902423e3f97a389c245e5fe0ab384122f27d56b9"},
 ]
 
 [package.dependencies]
