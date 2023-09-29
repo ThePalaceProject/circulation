@@ -1189,13 +1189,13 @@ Flask = ">=0.9"
 
 [[package]]
 name = "flask-pydantic-spec"
-version = "0.4.5"
+version = "0.5.0"
 description = "generate OpenAPI document and validate request & response with Python annotations."
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "flask_pydantic_spec-0.4.5-py3-none-any.whl", hash = "sha256:c1479a9dd3c1263592c3d9b40eb170d53d8c8ffb0b6d19652cd53da7de7a8877"},
-    {file = "flask_pydantic_spec-0.4.5.tar.gz", hash = "sha256:0c80540e5dfaf07913fc9fb490d583577c84428dbb526e08249602ca31876a3c"},
+    {file = "flask_pydantic_spec-0.5.0-py3-none-any.whl", hash = "sha256:3add259e5736d8e1b2b6a9db307ee55b2b3a0154d81633d4c3bcc933b20acb9a"},
+    {file = "flask_pydantic_spec-0.5.0.tar.gz", hash = "sha256:8d1f3d173c2a288e61e01bd64752374c6007338a5cd0ab78a5a8ba860c27295e"},
 ]
 
 [package.dependencies]
@@ -4637,4 +4637,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "d0ec3817759aa3c0fb1f4189505f7e054c0663b00e8d8f66921880fec831811d"
+content-hash = "543db762875b9735cacabcd6e288c82155e9bc0f0d707547ef803d4ccac9786e"
