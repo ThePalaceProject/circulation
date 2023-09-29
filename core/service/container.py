@@ -1,6 +1,8 @@
 from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
 
+from core.service.logging.configuration import LoggingConfiguration
+from core.service.logging.container import Logging
 from core.service.storage.configuration import StorageConfiguration
 from core.service.storage.container import Storage
 
@@ -14,10 +16,20 @@ class Services(DeclarativeContainer):
         config=config.storage,
     )
 
+    logging = providers.Container(
+        Logging,
+        config=config.logging,
+    )
+
 
 def create_container() -> Services:
     container = Services()
-    container.config.from_dict({"storage": StorageConfiguration().dict()})
+    container.config.from_dict(
+        {
+            "storage": StorageConfiguration().dict(),
+            "logging": LoggingConfiguration().dict(),
+        }
+    )
     return container
 
 

@@ -24,7 +24,6 @@ from core.config import Configuration
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.feed.annotator.base import Annotator
 from core.lane import Facets, Pagination, SearchFacets, WorkList
-from core.log import LogConfiguration
 from core.model import ConfigurationSetting, Identifier
 from core.problem_details import INVALID_INPUT, INVALID_URN
 from core.util.opds_writer import OPDSFeed, OPDSMessage

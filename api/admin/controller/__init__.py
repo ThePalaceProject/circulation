@@ -43,7 +43,6 @@ def setup_admin_controllers(manager: CirculationManager):
     from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.sitewide_services import (
-        LoggingServicesController,
         SearchServicesController,
         SitewideServicesController,
     )
@@ -94,7 +93,6 @@ def setup_admin_controllers(manager: CirculationManager):
         IndividualAdminSettingsController(manager)
     )
     manager.admin_sitewide_services_controller = SitewideServicesController(manager)
-    manager.admin_logging_services_controller = LoggingServicesController(manager)
     manager.admin_search_service_self_tests_controller = (
         SearchServiceSelfTestsController(manager)
     )

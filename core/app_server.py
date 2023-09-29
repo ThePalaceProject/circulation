@@ -12,14 +12,12 @@ from flask import make_response, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec import FlaskPydanticSpec
 from psycopg2 import DatabaseError
-from sqlalchemy.exc import SQLAlchemyError
 
 import core
 from api.admin.config import Configuration as AdminUiConfig
 from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 
 from .lane import Facets, Pagination
-from .log import LogConfiguration
 from .model import Identifier
 from .problem_details import *
 from .util.opds_writer import OPDSMessage
@@ -185,31 +183,7 @@ class ErrorHandler:
         debug = self.app.config["DEBUG"] or self.debug
 
         if hasattr(self.app, "manager") and hasattr(self.app.manager, "_db"):
-            # There is an active database session.
-
-            # Use it to determine whether we are in debug mode, in
-            # which case we _should_ provide the client with a lot of
-            # information about the problem, without worrying
-            # whether it contains sensitive information.
-            _db = self.app.manager._db
-            try:
-                LogConfiguration.from_configuration(_db)
-                (
-                    log_level,
-                    database_log_level,
-                    handlers,
-                    errors,
-                ) = LogConfiguration.from_configuration(self.app.manager._db)
-                debug = debug or (
-                    LogConfiguration.DEBUG in (log_level, database_log_level)
-                )
-            except SQLAlchemyError as e:
-                # The database session could not be used, possibly due to
-                # the very error under consideration. Go with the
-                # preexisting value for `debug`.
-                pass
-
-            # Then roll the session back.
+            # If there is an active database session, then roll the session back.
             self.app.manager._db.rollback()
         tb = traceback.format_exc()
 
