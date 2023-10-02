@@ -818,6 +818,8 @@ class InstanceInitializationScript:
     def __init__(self) -> None:
         self._log: Optional[logging.Logger] = None
         self._container = container_instance()
+
+        # Call init_resources() to initialize the logging configuration.
         self._container.init_resources()
 
     @property

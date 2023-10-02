@@ -125,6 +125,8 @@ class Script:
             self._session = _db
 
         self._services = container_instance() if services is None else services
+
+        # Call init_resources() to initialize the logging configuration.
         self._services.init_resources()
 
     def run(self):
