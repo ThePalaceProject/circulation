@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import firebase_admin
@@ -26,6 +27,8 @@ class PushNotifications:
     _base_url = None
 
     VALID_TOKEN_TYPES = [DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS]
+
+    log = logging.getLogger("PushNotifications")
 
     @classmethod
     def notifiable_tokens(cls, patron: Patron) -> list[DeviceToken]:
@@ -137,6 +140,10 @@ class PushNotifications:
         url = cls.base_url(_db)
         for hold in holds:
             tokens = cls.notifiable_tokens(hold.patron)
+            cls.log.info(
+                f"Notifying patron {hold.patron.authorization_identifier or hold.patron.username} for hold: {hold.work.title}. "
+                f"Patron has {len(tokens)} device tokens."
+            )
             loans_api = f"{url}/{hold.patron.library.short_name}/loans"
             work: Work = hold.work
             identifier: Identifier = hold.license_pool.identifier
@@ -163,5 +170,8 @@ class PushNotifications:
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
             msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
+        )
+        cls.log.info(
+            f"FCM notifications: Successes {batch.success_count}, failures {batch.failure_count}."
         )
         return [resp.message_id for resp in batch.responses]
