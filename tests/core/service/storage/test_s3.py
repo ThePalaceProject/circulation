@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
-from mypy_boto3_s3 import S3Client
 from pydantic import AnyHttpUrl
 
 from core.config import CannotLoadConfiguration
@@ -16,6 +15,8 @@ from core.service.storage.container import Storage
 from core.service.storage.s3 import S3Service
 
 if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
     from tests.fixtures.s3 import S3ServiceFixture
 
 

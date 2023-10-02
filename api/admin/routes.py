@@ -553,22 +553,6 @@ def announcements_for_all():
     return app.manager.admin_announcement_service.process_many()
 
 
-@app.route("/admin/logging_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def logging_services():
-    return app.manager.admin_logging_services_controller.process_services()
-
-
-@app.route("/admin/logging_service/<key>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def logging_service(key):
-    return app.manager.admin_logging_services_controller.process_delete(key)
-
-
 @app.route("/admin/discovery_service_library_registrations", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin

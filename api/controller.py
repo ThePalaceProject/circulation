@@ -53,7 +53,6 @@ from core.lane import (
     SearchFacets,
     WorkList,
 )
-from core.log import LogConfiguration
 from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
 from core.model import (
@@ -160,7 +159,6 @@ if TYPE_CHECKING:
     from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.sitewide_services import (
-        LoggingServicesController,
         SearchServicesController,
         SitewideServicesController,
     )
@@ -217,7 +215,6 @@ class CirculationManager:
     admin_library_settings_controller: LibrarySettingsController
     admin_individual_admin_settings_controller: IndividualAdminSettingsController
     admin_sitewide_services_controller: SitewideServicesController
-    admin_logging_services_controller: LoggingServicesController
     admin_search_service_self_tests_controller: SearchServiceSelfTestsController
     admin_search_services_controller: SearchServicesController
     admin_catalog_services_controller: CatalogServicesController
@@ -300,7 +297,6 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        LogConfiguration.initialize(self._db)
         self.analytics = Analytics(self._db, refresh=True)
 
         with elapsed_time_logging(

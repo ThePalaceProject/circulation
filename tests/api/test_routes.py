@@ -1,11 +1,6 @@
 import pytest
-from flask import Response
-from werkzeug.exceptions import MethodNotAllowed
 
 from api import routes
-from api.routes import exception_handler
-from api.routes import h as error_handler_object
-from core.app_server import ErrorHandler
 from tests.fixtures.api_routes import RouteTestFixture
 
 
@@ -411,44 +406,3 @@ class TestHealthCheck:
         # not a mock method -- the Response returned by the mock
         # system would have an explanatory message in its .data.
         assert "" == response.get_data(as_text=True)
-
-
-class TestExceptionHandler:
-    def test_exception_handling(self, route_test: RouteTestFixture):
-        # The exception handler deals with most exceptions by running them
-        # through ErrorHandler.handle()
-        assert isinstance(error_handler_object, ErrorHandler)
-
-        # Temporarily replace the ErrorHandler used by the
-        # exception_handler function -- this is what we imported as
-        # error_handler_object.
-        class MockErrorHandler:
-            def handle(self, exception):
-                self.handled = exception
-                return Response("handled it", 500)
-
-        routes.h: MockErrorHandler = MockErrorHandler()  # type: ignore[misc]
-
-        # Simulate a request that causes an unhandled exception.
-        with route_test.controller_fixture.app.test_request_context():
-            value_error = ValueError()
-            result = exception_handler(value_error)
-
-            # The exception was passed into MockErrorHandler.handle.
-            assert value_error == routes.h.handled
-
-            # The Response is created was passed along.
-            assert "handled it" == result.get_data(as_text=True)
-            assert 500 == result.status_code
-
-        # werkzeug HTTPExceptions are _not_ run through
-        # handle(). werkzeug handles the conversion to a Response
-        # object representing a more specific (and possibly even
-        # non-error) HTTP response.
-        with route_test.controller_fixture.app.test_request_context():
-            exception = MethodNotAllowed()
-            response = exception_handler(exception)
-            assert 405 == response.status_code
-
-        # Restore the normal error handler.
-        routes.h = error_handler_object
