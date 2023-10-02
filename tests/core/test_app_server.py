@@ -522,7 +522,7 @@ class TestErrorHandler:
                 response = handler.handle(exception)
             assert isinstance(response, Response)
             assert 500 == response.status_code
-            assert "An internal error occured" == response.data.decode("utf8")
+            assert "An internal error occurred" == response.data.decode("utf8")
 
     def test_unhandled_error_debug(self, error_handler_fixture: ErrorHandlerFixture):
         # Set the sitewide log level to DEBUG to get a stack trace
