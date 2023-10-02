@@ -1,12 +1,14 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import boto3
 from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
 from dependency_injector.providers import Provider, Singleton
-from mypy_boto3_s3 import S3Client
 
 from core.service.storage.s3 import S3Service
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
 
 
 class Storage(DeclarativeContainer):
