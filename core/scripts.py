@@ -2645,7 +2645,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
 
 class UpdateLaneSizeScript(LaneSweeperScript):
-    def __init__(self, _db, *args, **kwargs):
+    def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, *args, **kwargs)
         search = kwargs.get("search_index_client", None)
         self._search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
