@@ -2,42 +2,57 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import Any, Callable, Dict, Generator, List, Set, Tuple, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+)
 
 import feedparser
 from flask_babel import lazy_gettext as _
-from requests import Response
 
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
+from api.circulation_exceptions import (
+    CannotFulfill,
+    LibraryAuthorizationFailedException,
+)
 from api.selftest import HasCollectionSelfTests
-from core.coverage import CoverageFailure
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
-from core.metadata_layer import CirculationData, FormatData, TimestampData
+from core.metadata_layer import FormatData, TimestampData
 from core.model import (
     Collection,
     Credential,
     DeliveryMechanism,
-    Edition,
     ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
-    LicensePoolDeliveryMechanism,
     Loan,
-    Patron,
     RightsStatus,
     Session,
-    Work,
     get_one,
 )
 from core.opds_import import BaseOPDSImporterSettings, OPDSImporter, OPDSImportMonitor
-from core.selftest import SelfTestResult
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
 
-from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from .circulation_exceptions import *
+if TYPE_CHECKING:
+    from requests import Response
+
+    from api.circulation import HoldInfo
+    from core.coverage import CoverageFailure
+    from core.metadata_layer import CirculationData
+    from core.model import Edition, LicensePoolDeliveryMechanism, Patron, Work
+    from core.selftest import SelfTestResult
 
 
 class OPDSForDistributorsSettings(BaseOPDSImporterSettings):

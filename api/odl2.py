@@ -6,12 +6,9 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Ty
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
 from sqlalchemy.orm import Session
-from webpub_manifest_parser.core.ast import Metadata
 from webpub_manifest_parser.odl import ODLFeedParserFactory
-from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from api.circulation import HoldInfo
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
 from api.odl import ODLAPI, ODLImporter, ODLSettings
 from core.integration.settings import (
@@ -20,13 +17,18 @@ from core.integration.settings import (
     FormField,
 )
 from core.metadata_layer import FormatData
-from core.model import Collection, Edition, Identifier, LicensePool, RightsStatus
+from core.model import Edition, RightsStatus
 from core.model.configuration import ExternalIntegration, HasExternalIntegration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
 if TYPE_CHECKING:
+    from webpub_manifest_parser.core.ast import Metadata
+    from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
+
+    from api.circulation import HoldInfo
+    from core.model import Collection, Identifier, LicensePool
     from core.model.patron import Hold, Loan, Patron
 
 
