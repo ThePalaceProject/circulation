@@ -1,4 +1,5 @@
 """Implement logic common to more than one of the Simplified applications."""
+from __future__ import annotations
 
 import gzip
 import logging
@@ -6,12 +7,13 @@ import sys
 import traceback
 from functools import wraps
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import flask
-from flask import make_response, url_for
-from flask_babel import lazy_gettext as _
+from flask import Response, make_response, url_for
 from flask_pydantic_spec import FlaskPydanticSpec
 from psycopg2 import DatabaseError
+from werkzeug.exceptions import HTTPException
 
 import core
 from api.admin.config import Configuration as AdminUiConfig
@@ -20,8 +22,12 @@ from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from .lane import Facets, Pagination
 from .model import Identifier
 from .problem_details import *
+from .service.logging.configuration import LogLevel
 from .util.opds_writer import OPDSMessage
 from .util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from api.util.flask import PalaceFlask
 
 
 def load_facets_from_request(
@@ -165,33 +171,36 @@ def compressible(f):
 
 
 class ErrorHandler:
-    def __init__(self, app, debug=False):
+    def __init__(self, app: PalaceFlask, log_level: LogLevel):
         """Constructor.
 
-        :param app: A flask.app object.
-        :param debug: Set this to True to give detailed debugging
-           information on errors, even if the site is not configured
-           to do so.
+        :param app: The Flask application object.
+        :param log_level: The log level set for this application.
         """
         self.app = app
-        self.debug = debug
+        self.debug = log_level == LogLevel.debug
+        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
 
-    def handle(self, exception):
+    def handle(self, exception: Exception) -> Response | HTTPException:
         """Something very bad has happened. Notify the client."""
+        if isinstance(exception, HTTPException):
+            # This isn't an exception we need to handle, it's werkzeug's way
+            # of interrupting normal control flow with a specific HTTP response.
+            # Return the exception and it will be used as the response.
+            return exception
+
         # By default, when reporting errors, err on the side of
         # terseness, to avoid leaking sensitive information.
-        debug = self.app.config["DEBUG"] or self.debug
-
         if hasattr(self.app, "manager") and hasattr(self.app.manager, "_db"):
             # If there is an active database session, then roll the session back.
             self.app.manager._db.rollback()
-        tb = traceback.format_exc()
 
+        tb = traceback.format_exc()
         if isinstance(exception, DatabaseError):
             # The database session may have become tainted. For now
             # the simplest thing to do is to kill the entire process
             # and let uwsgi restart it.
-            logging.error(
+            self.log.error(
                 "Database error: %s Treating as fatal to avoid holding on to a tainted session!",
                 exception,
                 exc_info=exception,
@@ -203,15 +212,15 @@ class ErrorHandler:
                 sys.exit()
 
         # By default, the error will be logged at log level ERROR.
-        log_method = logging.error
+        log_method = self.log.error
 
         # Okay, it's not a database error. Turn it into a useful HTTP error
         # response.
         if hasattr(exception, "as_problem_detail_document"):
             # This exception can be turned directly into a problem
             # detail document.
-            document = exception.as_problem_detail_document(debug)
-            if not debug:
+            document = exception.as_problem_detail_document(self.debug)
+            if not self.debug:
                 document.debug_message = None
             else:
                 if document.debug_message:
@@ -223,17 +232,17 @@ class ErrorHandler:
                 # service. It's a serious problem, but probably not
                 # indicative of a bug in our software. Log it at log level
                 # WARN.
-                log_method = logging.warning
+                log_method = self.log.warning
             response = make_response(document.response)
         else:
             # There's no way to turn this exception into a problem
             # document. This is probably indicative of a bug in our
             # software.
-            if debug:
+            if self.debug:
                 body = tb
             else:
-                body = _("An internal error occured")
-            response = make_response(str(body), 500, {"Content-Type": "text/plain"})
+                body = "An internal error occured"
+            response = make_response(body, 500, {"Content-Type": "text/plain"})
 
         log_method("Exception in web app: %s", exception, exc_info=exception)
         return response

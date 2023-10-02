@@ -7,6 +7,7 @@ from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
 
 from api.config import Configuration
+from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
@@ -97,8 +98,18 @@ from .admin import routes as admin_routes  # noqa
 def initialize_application() -> PalaceFlask:
     with app.app_context(), flask_babel.force_locale("en"):
         initialize_database()
+
+        # Load the application service container
         container = container_instance()
+
+        # Initialize the application services, this initializes the logging
+        # configuration for the application.
         container.init_resources()
+
+        # Initialize the applications error handler.
+        error_handler = ErrorHandler(app, container.config.logging.level())
+        app.register_error_handler(Exception, error_handler.handle)
+
         # TODO: Remove this lock once our settings are moved to integration settings.
         # We need this lock, so that only one instance of the application is
         # initialized at a time. This prevents database conflicts when multiple

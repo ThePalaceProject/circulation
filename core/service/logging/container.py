@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from logging import Handler
 from typing import TYPE_CHECKING, Optional
 
@@ -32,10 +34,9 @@ class Logging(DeclarativeContainer):
 
     cloudwatch_handler: Provider[Optional[Handler]] = providers.Singleton(
         create_cloudwatch_handler,
-        create=config.cloudwatch,
         formatter=json_formatter,
         level=config.level,
-        client=cloudwatch_client.provider,
+        client=cloudwatch_client,
         group=config.cloudwatch_group,
         interval=config.cloudwatch_interval,
         create_group=config.cloudwatch_create_group,
@@ -50,5 +51,6 @@ class Logging(DeclarativeContainer):
         level=config.level,
         verbose_level=config.verbose_level,
         stream=stream_handler,
-        cloudwatch=cloudwatch_handler,
+        cloudwatch_enable=config.cloudwatch,
+        cloudwatch_callable=cloudwatch_handler.provider,
     )

@@ -4,7 +4,7 @@ import json
 import logging
 import socket
 from logging import Handler
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable
 
 from watchtower import CloudWatchLogHandler
 
@@ -77,21 +77,17 @@ class LogLoopPreventionFilter(logging.Filter):
 
 
 def create_cloudwatch_handler(
-    create: bool,
     formatter: logging.Formatter,
     level: LogLevel,
-    client: Callable[[], CloudWatchLogsClient],
+    client: CloudWatchLogsClient,
     group: str,
     interval: int,
     create_group: bool,
-) -> Optional[logging.Handler]:
-    if not create:
-        return None
-
+) -> logging.Handler:
     handler = CloudWatchLogHandler(
         log_group_name=group,
         send_interval=interval,
-        boto3_client=client(),
+        boto3_client=client,
         create_log_group=create_group,
     )
 
@@ -114,12 +110,13 @@ def setup_logging(
     level: LogLevel,
     verbose_level: LogLevel,
     stream: Handler,
-    cloudwatch: Optional[Handler],
+    cloudwatch_enable: bool,
+    cloudwatch_callable: Callable[[], Handler],
 ) -> None:
     # Set up the root logger
     log_handlers = [stream]
-    if cloudwatch is not None:
-        log_handlers.append(cloudwatch)
+    if cloudwatch_enable:
+        log_handlers.append(cloudwatch_callable())
     logging.basicConfig(force=True, level=level.value, handlers=log_handlers)
 
     # Set the loggers for various verbose libraries to the database
