@@ -95,8 +95,8 @@ class PushNotifications:
                 data=data,
             )
             resp = messaging.send(msg, dry_run=cls.TESTING_MODE, app=cls.fcm_app())
-            cls.log(
-                f"Sent notification for {loan.patron.authorization_identifier} ID: {resp}"
+            cls.log.info(
+                f"Sent loan expiry notification for {loan.patron.authorization_identifier} ID: {resp}"
             )
             responses.append(resp)
         return responses
