@@ -2728,7 +2728,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
     """
 
     def __init__(self, _db=None, *args, **kwargs):
-        super().__init__(_db, args, kwargs)
+        super().__init__(_db, *args, **kwargs)
         self._data: List[List[str]] = list()
 
     def _create_overdrive_api(self, collection: Collection):
