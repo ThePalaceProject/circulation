@@ -189,12 +189,14 @@ class ErrorHandler:
             # Return the exception and it will be used as the response.
             return exception
 
-        # By default, when reporting errors, err on the side of
-        # terseness, to avoid leaking sensitive information.
         if hasattr(self.app, "manager") and hasattr(self.app.manager, "_db"):
             # If there is an active database session, then roll the session back.
             self.app.manager._db.rollback()
 
+        # By default, when reporting errors, we err on the side of
+        # terseness, to avoid leaking sensitive information. We only
+        # log a stack trace in the case we have debugging turned on.
+        # Otherwise, we just display a generic error message.
         tb = traceback.format_exc()
         if isinstance(exception, DatabaseError):
             # The database session may have become tainted. For now
@@ -238,10 +240,7 @@ class ErrorHandler:
             # There's no way to turn this exception into a problem
             # document. This is probably indicative of a bug in our
             # software.
-            if self.debug:
-                body = tb
-            else:
-                body = "An internal error occured"
+            body = tb if self.debug else "An internal error occurred"
             response = make_response(body, 500, {"Content-Type": "text/plain"})
 
         log_method("Exception in web app: %s", exception, exc_info=exception)

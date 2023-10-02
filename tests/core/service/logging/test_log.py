@@ -110,7 +110,7 @@ def test_create_cloudwatch_handler() -> None:
     assert handler.log_group_name == "test_group"
     assert handler.log_stream_name == "test_stream"
     assert handler.send_interval == 13
-    assert any([isinstance(f, LogLoopPreventionFilter) for f in handler.filters])
+    assert any(isinstance(f, LogLoopPreventionFilter) for f in handler.filters)
     assert handler.formatter == mock_formatter
     assert handler.level == logging.INFO
 
@@ -121,6 +121,7 @@ def test_create_stream_handler() -> None:
     handler = create_stream_handler(formatter=mock_formatter, level=LogLevel.debug)
 
     assert isinstance(handler, logging.StreamHandler)
+    assert not any(isinstance(f, LogLoopPreventionFilter) for f in handler.filters)
     assert handler.formatter == mock_formatter
     assert handler.level == logging.DEBUG
 

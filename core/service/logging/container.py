@@ -52,6 +52,6 @@ class Logging(DeclarativeContainer):
         level=config.level,
         verbose_level=config.verbose_level,
         stream=stream_handler,
-        cloudwatch_enable=config.cloudwatch,
+        cloudwatch_enabled=config.cloudwatch_enabled,
         cloudwatch_callable=cloudwatch_handler.provider,
     )

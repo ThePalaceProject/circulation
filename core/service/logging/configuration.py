@@ -19,7 +19,7 @@ class LoggingConfiguration(ServiceConfiguration):
     level: LogLevel = LogLevel.info
     verbose_level: LogLevel = LogLevel.warning
 
-    cloudwatch: bool = False
+    cloudwatch_enabled: bool = False
     cloudwatch_region: Optional[str] = None
     cloudwatch_group: str = "palace"
     cloudwatch_stream: str = DEFAULT_LOG_STREAM_NAME
@@ -32,11 +32,10 @@ class LoggingConfiguration(ServiceConfiguration):
     def validate_cloudwatch_region(
         cls, v: Optional[str], values: Dict[str, Any]
     ) -> Optional[str]:
-        if not values.get("cloudwatch"):
+        if not values.get("cloudwatch_enabled"):
             # If cloudwatch is not enabled, no validation is needed.
             return None
 
-        # If cloudwatch is enabled, region must be provided.
         if v is None:
             raise ValueError(f"Region must be provided if cloudwatch is enabled.")
 

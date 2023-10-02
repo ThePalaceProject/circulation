@@ -114,12 +114,12 @@ def setup_logging(
     level: LogLevel,
     verbose_level: LogLevel,
     stream: Handler,
-    cloudwatch_enable: bool,
+    cloudwatch_enabled: bool,
     cloudwatch_callable: Callable[[], Handler],
 ) -> None:
     # Set up the root logger
     log_handlers = [stream]
-    if cloudwatch_enable:
+    if cloudwatch_enabled:
         log_handlers.append(cloudwatch_callable())
     logging.basicConfig(force=True, level=level.value, handlers=log_handlers)
 

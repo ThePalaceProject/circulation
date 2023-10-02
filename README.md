@@ -195,7 +195,7 @@ the logging:
 - `PALACE_LOG_LEVEL`: The log level to use for the application. The default is `INFO`.
 - `PALACE_LOG_VERBOSE_LEVEL`: The log level to use for particularly verbose loggers. Keeping these loggers at a
   higher log level by default makes it easier to troubleshoot issues. The default is `WARNING`.
-- `PALACE_LOG_CLOUDWATCH`: Enable / disable sending logs to CloudWatch. The default is `false`.
+- `PALACE_LOG_CLOUDWATCH_ENABLED`: Enable / disable sending logs to CloudWatch. The default is `false`.
 - `PALACE_LOG_CLOUDWATCH_REGION`: The AWS region of the CloudWatch logs. This must be set if using CloudWatch logs.
 - `PALACE_LOG_CLOUDWATCH_GROUP`: The name of the CloudWatch log group to send logs to. Default is `palace`.
 - `PALACE_LOG_CLOUDWATCH_STREAM`: The name of the CloudWatch log stream to send logs to. Default is
