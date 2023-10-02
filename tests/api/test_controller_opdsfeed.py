@@ -1,10 +1,10 @@
 import json
 from typing import Any, Dict
 from unittest.mock import MagicMock
+from urllib.parse import quote_plus
 
 import feedparser
 from flask import url_for
-from werkzeug.urls import url_quote_plus
 
 from api.controller import CirculationManager
 from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
@@ -148,7 +148,7 @@ class TestOPDSFeedController:
                 last_item.sort_author,
                 last_item.id,
             ]
-            expect = "key=%s" % url_quote_plus(json.dumps(expected_pagination_key))
+            expect = "key=%s" % quote_plus(json.dumps(expected_pagination_key))
             assert expect in next_link
 
             search_link = by_rel["search"]
