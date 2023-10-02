@@ -81,11 +81,13 @@ def create_cloudwatch_handler(
     level: LogLevel,
     client: CloudWatchLogsClient,
     group: str,
+    stream: str,
     interval: int,
     create_group: bool,
 ) -> logging.Handler:
     handler = CloudWatchLogHandler(
         log_group_name=group,
+        log_stream_name=stream,
         send_interval=interval,
         boto3_client=client,
         create_log_group=create_group,

@@ -162,10 +162,6 @@ class ExternalIntegration(Base):
     # Integrations with ANALYTICS_GOAL
     GOOGLE_ANALYTICS = "Google Analytics"
 
-    # Integrations with LOGGING_GOAL
-    INTERNAL_LOGGING = "Internal logging"
-    CLOUDWATCH = "AWS Cloudwatch Logs"
-
     # Integrations with CATALOG_GOAL
     MARC_EXPORT = "MARC Export"
 

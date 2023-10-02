@@ -38,6 +38,7 @@ class Logging(DeclarativeContainer):
         level=config.level,
         client=cloudwatch_client,
         group=config.cloudwatch_group,
+        stream=config.cloudwatch_stream,
         interval=config.cloudwatch_interval,
         create_group=config.cloudwatch_create_group,
     )

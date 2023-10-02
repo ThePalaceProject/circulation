@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 
 import boto3
 from pydantic import PositiveInt, validator
+from watchtower import DEFAULT_LOG_STREAM_NAME
 
 from core.service.configuration import ServiceConfiguration
 
@@ -21,6 +22,7 @@ class LoggingConfiguration(ServiceConfiguration):
     cloudwatch: bool = False
     cloudwatch_region: Optional[str] = None
     cloudwatch_group: str = "palace"
+    cloudwatch_stream: str = DEFAULT_LOG_STREAM_NAME
     cloudwatch_interval: PositiveInt = 60
     cloudwatch_create_group: bool = True
     cloudwatch_access_key: Optional[str] = None
