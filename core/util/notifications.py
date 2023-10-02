@@ -85,6 +85,9 @@ class PushNotifications:
         if loan.patron.authorization_identifier:
             data["authorization_identifier"] = loan.patron.authorization_identifier
 
+        cls.log.info(
+            f"Patron {loan.patron.authorization_identifier} has {len(tokens)} device tokens."
+        )
         for token in tokens:
             msg = messaging.Message(
                 token=token.device_token,
@@ -92,6 +95,9 @@ class PushNotifications:
                 data=data,
             )
             resp = messaging.send(msg, dry_run=cls.TESTING_MODE, app=cls.fcm_app())
+            cls.log(
+                f"Sent notification for {loan.patron.authorization_identifier} ID: {resp}"
+            )
             responses.append(resp)
         return responses
 
@@ -118,6 +124,10 @@ class PushNotifications:
             if patron.authorization_identifier:
                 data["authorization_identifier"] = patron.authorization_identifier
 
+            cls.log.info(
+                f"Must sync patron activity for {patron.authorization_identifier}, has {len(tokens)} device tokens."
+            )
+
             for token in tokens:
                 msg = messaging.Message(
                     token=token.device_token,
@@ -126,6 +136,9 @@ class PushNotifications:
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
             msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
+        )
+        cls.log.info(
+            f"Activity Sync Notifications: Successes {batch.success_count}, failures {batch.failure_count}."
         )
         return [resp.message_id for resp in batch.responses]
 
@@ -172,6 +185,6 @@ class PushNotifications:
             msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
         )
         cls.log.info(
-            f"FCM notifications: Successes {batch.success_count}, failures {batch.failure_count}."
+            f"Hold Notifications: Successes {batch.success_count}, failures {batch.failure_count}."
         )
         return [resp.message_id for resp in batch.responses]
