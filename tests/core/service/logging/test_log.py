@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from functools import partial
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from freezegun import freeze_time
@@ -137,8 +137,12 @@ def test_setup_logging_cloudwatch_disabled() -> None:
         stream=mock_stream_handler,
         cloudwatch_callable=mock_cloudwatch_callable,
     )
-    setup(cloudwatch_enable=False)
-    assert mock_cloudwatch_callable.call_count == 0
 
-    setup(cloudwatch_enable=True)
-    assert mock_cloudwatch_callable.call_count == 1
+    # We patch logging so that we don't actually modify the global logging
+    # configuration.
+    with patch("core.service.logging.log.logging"):
+        setup(cloudwatch_enable=False)
+        assert mock_cloudwatch_callable.call_count == 0
+
+        setup(cloudwatch_enable=True)
+        assert mock_cloudwatch_callable.call_count == 1

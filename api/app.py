@@ -102,8 +102,8 @@ def initialize_application() -> PalaceFlask:
         # Load the application service container
         container = container_instance()
 
-        # Initialize the application services, this initializes the logging
-        # configuration for the application.
+        # Initialize the application services container, this will make sure
+        # that the logging system is initialized.
         container.init_resources()
 
         # Initialize the applications error handler.
