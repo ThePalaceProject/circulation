@@ -26,10 +26,12 @@ class ViewController(AdminController):
                 redirect_url = flask.request.url
                 if collection:
                     redirect_url = redirect_url.replace(
-                        collection, quote_plus(collection)
+                        collection, quote_plus(collection, safe="()")
                     )
                 if book:
-                    redirect_url = redirect_url.replace(book, quote_plus(book))
+                    redirect_url = redirect_url.replace(
+                        book, quote_plus(book, safe="()")
+                    )
                 return redirect(
                     url_for("admin_sign_in", redirect=redirect_url, _external=True)
                 )

@@ -148,7 +148,9 @@ class TestOPDSFeedController:
                 last_item.sort_author,
                 last_item.id,
             ]
-            expect = "key=%s" % quote_plus(json.dumps(expected_pagination_key))
+            expect = "key=%s" % quote_plus(
+                json.dumps(expected_pagination_key), safe=","
+            )
             assert expect in next_link
 
             search_link = by_rel["search"]
