@@ -29,4 +29,4 @@ def test_cloudwatch_region_valid() -> None:
         cloudwatch_enabled=True, cloudwatch_region="us-east-2"
     )
     assert config.cloudwatch_region == "us-east-2"
-    assert config.cloudwatch_region is True
+    assert config.cloudwatch_enabled is True

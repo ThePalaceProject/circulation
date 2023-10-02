@@ -142,8 +142,8 @@ def test_setup_logging_cloudwatch_disabled() -> None:
     # We patch logging so that we don't actually modify the global logging
     # configuration.
     with patch("core.service.logging.log.logging"):
-        setup(cloudwatch_enable=False)
+        setup(cloudwatch_enabled=False)
         assert mock_cloudwatch_callable.call_count == 0
 
-        setup(cloudwatch_enable=True)
+        setup(cloudwatch_enabled=True)
         assert mock_cloudwatch_callable.call_count == 1
