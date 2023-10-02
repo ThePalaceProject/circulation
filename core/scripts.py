@@ -125,6 +125,7 @@ class Script:
             self._session = _db
 
         self._services = container_instance() if services is None else services
+        self._services.init_resources()
 
     def run(self):
         DataSource.well_known_sources(self._db)
