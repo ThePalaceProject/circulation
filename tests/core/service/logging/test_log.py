@@ -7,6 +7,7 @@ from functools import partial
 from unittest.mock import MagicMock
 
 import pytest
+from freezegun import freeze_time
 from watchtower import CloudWatchLogHandler
 
 from core.service.logging.configuration import LogLevel
@@ -20,6 +21,7 @@ from core.service.logging.log import (
 
 
 class TestJSONFormatter:
+    @freeze_time("1990-05-05")
     def test_format(self) -> None:
         formatter = JSONFormatter()
 
@@ -42,6 +44,7 @@ class TestJSONFormatter:
         )
         data = json.loads(formatter.format(record))
         assert "some logger" == data["name"]
+        assert "1990-05-05T00:00:00+00:00" == data["timestamp"]
         assert "DEBUG" == data["level"]
         assert "A message" == data["message"]
         assert "pathname" == data["filename"]

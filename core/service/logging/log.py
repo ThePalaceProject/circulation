@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from watchtower import CloudWatchLogHandler
 
 from core.service.logging.configuration import LogLevel
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from mypy_boto3_logs import CloudWatchLogsClient
@@ -54,6 +55,7 @@ class JSONFormatter(logging.Formatter):
             level=record.levelname,
             filename=record.filename,
             message=message,
+            timestamp=utc_now().isoformat(),
         )
         if record.exc_info:
             data["traceback"] = self.formatException(record.exc_info)
