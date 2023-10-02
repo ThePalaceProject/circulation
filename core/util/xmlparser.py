@@ -1,7 +1,15 @@
+from __future__ import annotations
+
 from io import BytesIO
-from typing import Dict
+from typing import TYPE_CHECKING, Dict, List, Optional, TypeVar
 
 from lxml import etree
+
+if TYPE_CHECKING:
+    from lxml.etree import Element
+
+
+T = TypeVar("T")
 
 
 class XMLParser:
@@ -11,44 +19,56 @@ class XMLParser:
     NAMESPACES: Dict[str, str] = {}
 
     @classmethod
-    def _xpath(cls, tag, expression, namespaces=None):
+    def _xpath(
+        cls, tag: Element, expression: str, namespaces: Optional[Dict[str, str]] = None
+    ) -> List[Element]:
         if not namespaces:
             namespaces = cls.NAMESPACES
         """Wrapper to do a namespaced XPath expression."""
         return tag.xpath(expression, namespaces=namespaces)
 
     @classmethod
-    def _xpath1(cls, tag, expression, namespaces=None):
+    def _xpath1(
+        cls, tag: Element, expression: str, namespaces: Optional[Dict[str, str]] = None
+    ) -> Optional[Element]:
         """Wrapper to do a namespaced XPath expression."""
         values = cls._xpath(tag, expression, namespaces=namespaces)
         if not values:
             return None
         return values[0]
 
-    def _cls(self, tag_name, class_name):
+    def _cls(self, tag_name: str, class_name: str) -> str:
         """Return an XPath expression that will find a tag with the given CSS class."""
         return (
             'descendant-or-self::node()/%s[contains(concat(" ", normalize-space(@class), " "), " %s ")]'
             % (tag_name, class_name)
         )
 
-    def text_of_optional_subtag(self, tag, name, namespaces=None):
+    def text_of_optional_subtag(
+        self, tag: Element, name: str, namespaces: Optional[Dict[str, str]] = None
+    ) -> Optional[str]:
         tag = self._xpath1(tag, name, namespaces=namespaces)
         if tag is None or tag.text is None:
             return None
         else:
             return str(tag.text)
 
-    def text_of_subtag(self, tag, name, namespaces=None):
+    def text_of_subtag(
+        self, tag: Element, name: str, namespaces: Optional[Dict[str, str]] = None
+    ) -> str:
         return str(tag.xpath(name, namespaces=namespaces)[0].text)
 
-    def int_of_subtag(self, tag, name, namespaces=None):
+    def int_of_subtag(
+        self, tag: Element, name: str, namespaces: Optional[Dict[str, str]] = None
+    ) -> int:
         return int(self.text_of_subtag(tag, name, namespaces=namespaces))
 
-    def int_of_optional_subtag(self, tag, name, namespaces=None):
+    def int_of_optional_subtag(
+        self, tag: Element, name: str, namespaces: Optional[Dict[str, str]] = None
+    ) -> Optional[int]:
         v = self.text_of_optional_subtag(tag, name, namespaces=namespaces)
         if not v:
-            return v
+            return None
         return int(v)
 
     def process_all(self, xml, xpath, namespaces=None, handler=None, parser=None):

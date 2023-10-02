@@ -523,7 +523,7 @@ class LicenseData(LicenseFunctions):
     def __init__(
         self,
         identifier: str,
-        checkout_url: str,
+        checkout_url: Optional[str],
         status_url: str,
         status: LicenseStatus,
         checkouts_available: int,

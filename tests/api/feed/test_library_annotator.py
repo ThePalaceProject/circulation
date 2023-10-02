@@ -946,7 +946,7 @@ class TestLibraryAnnotator:
         tree = etree.fromstring(response.get_data(as_text=True))
         parser = OPDSXMLParser()
         licensor = parser._xpath1(tree, "//atom:feed/drm:licensor")
-
+        assert licensor is not None
         adobe_patron_identifier = AuthdataUtility._adobe_patron_identifier(patron)
 
         # The DRM licensing information includes the Adobe vendor ID
@@ -1021,7 +1021,11 @@ class TestLibraryAnnotator:
         )
         assert 2 == len(acquisitions)
 
-        availabilities = [parser._xpath1(x, "opds:availability") for x in acquisitions]
+        availabilities = []
+        for x in acquisitions:
+            availability = parser._xpath1(x, "opds:availability")
+            assert availability is not None
+            availabilities.append(availability)
 
         # One of these availability tags has 'since' but not 'until'.
         # The other one has both.

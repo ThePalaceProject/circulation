@@ -7,7 +7,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, overload
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -391,16 +391,16 @@ class Identifier(Base, IdentifierConstants):
         return True
 
     @property
-    def urn(self):
-        identifier_text = quote(self.identifier)
+    def urn(self) -> str:
+        identifier_text = quote(self.identifier or "")
         if self.type == Identifier.ISBN:
             return self.ISBN_URN_SCHEME_PREFIX + identifier_text
         elif self.type == Identifier.URI:
-            return self.identifier
+            return self.identifier or ""
         elif self.type == Identifier.GUTENBERG_ID:
             return self.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
         else:
-            identifier_type = quote(self.type)
+            identifier_type = quote(self.type or "")
             return self.URN_SCHEME_PREFIX + "{}/{}".format(
                 identifier_type, identifier_text
             )
@@ -560,6 +560,26 @@ class Identifier(Base, IdentifierConstants):
                 pass
 
         return cls.for_foreign_id(_db, identifier_type, identifier_string)
+
+    @classmethod
+    @overload
+    def parse_urn(
+        cls,
+        _db: Session,
+        identifier_string: str,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier, bool]:
+        ...
+
+    @classmethod
+    @overload
+    def parse_urn(
+        cls,
+        _db: Session,
+        identifier_string: str | None,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier | None, bool | None]:
+        ...
 
     @classmethod
     def parse_urn(

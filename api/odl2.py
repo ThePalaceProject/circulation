@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type
 
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
+from sqlalchemy.orm import Session
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
@@ -23,7 +24,12 @@ from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
 if TYPE_CHECKING:
-    from core.model.patron import Patron
+    from webpub_manifest_parser.core.ast import Metadata
+    from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
+
+    from api.circulation import HoldInfo
+    from core.model import Collection, Identifier, LicensePool
+    from core.model.patron import Hold, Loan, Patron
 
 
 class ODL2Settings(ODLSettings):
@@ -71,16 +77,18 @@ class ODL2API(ODLAPI):
     NAME = ExternalIntegration.ODL2
 
     @classmethod
-    def settings_class(cls):
+    def settings_class(cls) -> Type[ODL2Settings]:
         return ODL2Settings
 
-    def __init__(self, _db, collection):
+    def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
         config = self.configuration()
-        self.loan_limit = config.loan_limit
-        self.hold_limit = config.hold_limit
+        self.loan_limit = config.loan_limit  # type: ignore[attr-defined]
+        self.hold_limit = config.hold_limit  # type: ignore[attr-defined]
 
-    def _checkout(self, patron: Patron, licensepool, hold=None):
+    def _checkout(
+        self, patron: Patron, licensepool: LicensePool, hold: Optional[Hold] = None
+    ) -> Loan:
         # If the loan limit is not None or 0
         if self.loan_limit:
             loans = list(
@@ -93,7 +101,7 @@ class ODL2API(ODLAPI):
                 raise PatronLoanLimitReached(limit=self.loan_limit)
         return super()._checkout(patron, licensepool, hold)
 
-    def _place_hold(self, patron: Patron, licensepool):
+    def _place_hold(self, patron: Patron, licensepool: LicensePool) -> HoldInfo:
         # If the hold limit is not None or 0
         if self.hold_limit:
             holds = list(
@@ -117,19 +125,19 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
     NAME = ODL2API.NAME
 
     @classmethod
-    def settings_class(cls):
+    def settings_class(cls) -> Type[ODL2Settings]:  # type: ignore[override]
         return ODL2Settings
 
     def __init__(
         self,
-        db,
-        collection,
-        parser=None,
-        data_source_name=None,
-        identifier_mapping=None,
-        http_get=None,
-        content_modifier=None,
-        map_from_collection=None,
+        db: Session,
+        collection: Collection,
+        parser: Optional[RWPMManifestParser] = None,
+        data_source_name: str | None = None,
+        identifier_mapping: Dict[Identifier, Identifier] | None = None,
+        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+        content_modifier: Optional[Callable[..., None]] = None,
+        map_from_collection: Optional[bool] = None,
     ):
         """Initialize a new instance of ODL2Importer class.
 
@@ -173,20 +181,19 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         )
         self._logger = logging.getLogger(__name__)
 
-    def _extract_publication_metadata(self, feed, publication, data_source_name):
+    def _extract_publication_metadata(
+        self,
+        feed: OPDS2Feed,
+        publication: OPDS2Publication,
+        data_source_name: Optional[str],
+    ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
 
         :param publication: Feed object
-        :type publication: opds2_ast.OPDS2Feed
-
         :param publication: Publication object
-        :type publication: opds2_ast.OPDS2Publication
-
         :param data_source_name: Data source's name
-        :type data_source_name: str
 
         :return: Publication's metadata
-        :rtype: Metadata
         """
         metadata = super()._extract_publication_metadata(
             feed, publication, data_source_name
@@ -195,7 +202,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         licenses = []
         medium = None
 
-        skipped_license_formats = self.configuration().skipped_license_formats
+        skipped_license_formats = self.configuration().skipped_license_formats  # type: ignore[attr-defined]
         if skipped_license_formats:
             skipped_license_formats = set(skipped_license_formats)
 
@@ -251,6 +258,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                     if not medium:
                         medium = Edition.medium_from_media_type(license_format)
 
+                    drm_schemes: List[str | None]
                     if license_format in ODLImporter.LICENSE_FORMATS:
                         # Special case to handle DeMarque audiobooks which include the protection
                         # in the content type. When we see a license format of
@@ -291,9 +299,6 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
 
         return metadata
 
-    def external_integration(self, db):
-        return self.collection.external_integration
-
 
 class ODL2ImportMonitor(OPDS2ImportMonitor):
     """Import information from an ODL feed."""
@@ -301,7 +306,13 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
     PROTOCOL = ODL2Importer.NAME
     SERVICE_NAME = "ODL 2.x Import Monitor"
 
-    def __init__(self, _db, collection, import_class, **import_class_kwargs):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        import_class: Type[ODL2Importer],
+        **import_class_kwargs: Any,
+    ) -> None:
         # Always force reimport ODL collections to get up to date license information
         super().__init__(
             _db, collection, import_class, force_reimport=True, **import_class_kwargs

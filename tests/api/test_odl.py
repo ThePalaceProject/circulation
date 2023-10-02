@@ -1242,7 +1242,7 @@ class TestODLAPI:
         odl_api_test_fixture.checkout(patron=loan_patron)
         odl_api_test_fixture.pool.on_hold_to(odl_api_test_fixture.patron, position=1)
 
-        assert True == odl_api_test_fixture.api.release_hold(
+        odl_api_test_fixture.api.release_hold(
             odl_api_test_fixture.patron, "pin", odl_api_test_fixture.pool
         )
         assert 0 == odl_api_test_fixture.pool.licenses_available
@@ -1253,7 +1253,7 @@ class TestODLAPI:
         odl_api_test_fixture.pool.on_hold_to(odl_api_test_fixture.patron, position=0)
         odl_api_test_fixture.checkin(patron=loan_patron)
 
-        assert True == odl_api_test_fixture.api.release_hold(
+        odl_api_test_fixture.api.release_hold(
             odl_api_test_fixture.patron, "pin", odl_api_test_fixture.pool
         )
         assert 1 == odl_api_test_fixture.pool.licenses_available
@@ -1266,7 +1266,7 @@ class TestODLAPI:
             db.patron(), position=2
         )
 
-        assert True == odl_api_test_fixture.api.release_hold(
+        odl_api_test_fixture.api.release_hold(
             odl_api_test_fixture.patron, "pin", odl_api_test_fixture.pool
         )
         assert 0 == odl_api_test_fixture.pool.licenses_available

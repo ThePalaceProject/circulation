@@ -855,12 +855,14 @@ class TestOPDS:
         entries = OPDSXMLParser._xpath(with_times, "/atom:feed/atom:entry")
         parsed = []
         for entry in entries:
-            title = OPDSXMLParser._xpath1(entry, "atom:title").text
+            title_element = OPDSXMLParser._xpath1(entry, "atom:title")
+            assert title_element is not None
+            title = title_element.text
             issued = OPDSXMLParser._xpath1(entry, "dcterms:issued")
-            if issued != None:
+            if issued is not None:
                 issued = issued.text
             published = OPDSXMLParser._xpath1(entry, "atom:published")
-            if published != None:
+            if published is not None:
                 published = published.text
             parsed.append(
                 dict(
