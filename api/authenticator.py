@@ -464,7 +464,7 @@ class LibraryAuthenticator:
             ProblemDetail if an error occurs.
         """
         provider: AuthenticationProvider | None = None
-        provider_token: Dict[str, str] | str | None = None
+        provider_token: Dict[str, str | None] | str | None = None
         if self.basic_auth_provider and auth.type.lower() == "basic":
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.

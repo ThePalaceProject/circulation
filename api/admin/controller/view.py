@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from urllib.parse import quote_plus
+
 import flask
 from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
-from werkzeug.urls import url_quote_plus
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.controller.base import AdminController
@@ -25,10 +26,12 @@ class ViewController(AdminController):
                 redirect_url = flask.request.url
                 if collection:
                     redirect_url = redirect_url.replace(
-                        collection, url_quote_plus(collection)
+                        collection, quote_plus(collection, safe="()")
                     )
                 if book:
-                    redirect_url = redirect_url.replace(book, url_quote_plus(book))
+                    redirect_url = redirect_url.replace(
+                        book, quote_plus(book, safe="()")
+                    )
                 return redirect(
                     url_for("admin_sign_in", redirect=redirect_url, _external=True)
                 )
