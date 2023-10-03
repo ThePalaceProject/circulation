@@ -63,7 +63,6 @@ from tests.fixtures.time import Time
 
 
 class MockMonitor(Monitor):
-
     SERVICE_NAME = "Dummy monitor for test"
 
     def __init__(self, _db, collection=None):

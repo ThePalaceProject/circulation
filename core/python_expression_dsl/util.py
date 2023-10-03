@@ -57,7 +57,6 @@ def _parse_number(tokens: ParseResults) -> Number:
 def _parse_unary_expression(
     expression_type: Type[UE], tokens: ParseResults
 ) -> Optional[UE]:
-
     """Transform the token into an unary expression.
 
     :param tokens: ParseResults objects

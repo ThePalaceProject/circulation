@@ -52,7 +52,6 @@ class SitewideConfigurationSettingsController(SettingsController):
         return Response(str(_("Deleted")), 200)
 
     def validate_form_fields(self, setting, fields):
-
         MISSING_FIELD_MESSAGES = dict(
             key=MISSING_SITEWIDE_SETTING_KEY, value=MISSING_SITEWIDE_SETTING_VALUE
         )

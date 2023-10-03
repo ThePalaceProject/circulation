@@ -22,7 +22,6 @@ class LocalAnalyticsExporter:
     """Export large numbers of analytics events in CSV format."""
 
     def export(self, _db, start, end, locations=None, library=None):
-
         # Get the results from the database.
         query = self.analytics_query(start, end, locations, library)
         results = _db.execute(query)

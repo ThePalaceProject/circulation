@@ -556,7 +556,6 @@ class LicenseData(LicenseFunctions):
 
 
 class TimestampData:
-
     CLEAR_VALUE = Timestamp.CLEAR_VALUE
 
     def __init__(
@@ -1998,7 +1997,7 @@ class CSVMetadataImporter:
                         primary_identifier = identifier
 
         subjects = []
-        for (field_name, (subject_type, weight)) in list(self.subject_fields.items()):
+        for field_name, (subject_type, weight) in list(self.subject_fields.items()):
             values = self.list_field(row, field_name)
             for value in values:
                 subjects.append(

@@ -383,7 +383,6 @@ class GradeLevelClassifier(Classifier):
 
     @classmethod
     def target_age(cls, identifier, name, require_explicit_grade_marker=False):
-
         if (identifier and "education" in identifier) or (name and "education" in name):
             # This is a book about teaching, e.g. fifth grade.
             return cls.range_tuple(None, None)
@@ -498,7 +497,6 @@ class AgeClassifier(Classifier):
 
     @classmethod
     def audience(cls, identifier, name, require_explicit_age_marker=False):
-
         target_age = cls.target_age(identifier, name, require_explicit_age_marker)
         return cls.default_audience_for_target_age(target_age)
 

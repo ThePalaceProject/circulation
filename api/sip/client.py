@@ -223,7 +223,6 @@ class Constants:
 
 
 class SIPClient(Constants):
-
     log = client_logger
 
     # Maximum retries of a SIP message before failing.

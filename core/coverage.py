@@ -1277,7 +1277,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
         if license_pool:
             if not license_pool.work or not license_pool.work.presentation_ready:
-                for (v, default) in (("exclude_search", self.EXCLUDE_SEARCH_INDEX),):
+                for v, default in (("exclude_search", self.EXCLUDE_SEARCH_INDEX),):
                     if not v in calculate_work_kwargs:
                         calculate_work_kwargs[v] = default
 

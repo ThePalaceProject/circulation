@@ -22,7 +22,6 @@ from .templates import (
 
 
 class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
-
     NAME = "Password Auth"
 
     SIGN_IN_TEMPLATE = sign_in_template.format(

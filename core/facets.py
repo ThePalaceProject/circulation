@@ -2,7 +2,6 @@ from flask_babel import lazy_gettext as _
 
 
 class FacetConstants:
-
     # A special constant, basically an additional rel, indicating that
     # an OPDS facet group represents different entry points into a
     # WorkList.
@@ -154,7 +153,6 @@ class FacetConfig(FacetConstants):
 
     @classmethod
     def from_library(cls, library):
-
         enabled_facets = dict()
         for group in list(FacetConstants.DEFAULT_ENABLED_FACETS.keys()):
             enabled_facets[group] = library.enabled_facets(group)

@@ -2,7 +2,6 @@ from . import *
 
 
 class LCCClassifier(Classifier):
-
     TOP_LEVEL = re.compile("^([A-Z]{1,2})")
     FICTION = {"PN", "PQ", "PR", "PS", "PT", "PZ"}
     JUVENILE = {"PZ"}

@@ -101,7 +101,6 @@ def test_key_rename(
     create_config_setting: CreateConfigSetting,
     create_collection: CreateCollection,
 ) -> None:
-
     alembic_runner.migrate_down_to("a9ed3f76d649")
     with alembic_engine.connect() as connection:
         integration_id = create_external_integration(

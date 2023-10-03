@@ -570,7 +570,6 @@ class TestOpdsRegistrationService:
     def test__send_registration_request(
         self, remote_registry_fixture: RemoteRegistryFixture, requests_mock: Mocker
     ):
-
         # If everything goes well, the return value of do_post is
         # passed through.
         url = "http://url.com"

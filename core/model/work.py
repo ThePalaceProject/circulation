@@ -476,7 +476,6 @@ class Work(Base):
                 )
                 for needs_merge in list(licensepools_for_work.keys()):
                     if needs_merge != work:
-
                         # Make sure that Work we're about to merge has
                         # nothing but LicensePools whose permanent
                         # work ID matches the permanent work ID of the

@@ -79,7 +79,6 @@ class BaseCirculationManagerController:
         return patron
 
     def authenticated_patron(self, authorization_header: Authorization):
-
         """Look up the patron authenticated by the given authorization header.
 
         The header could contain a barcode and pin or a token for an

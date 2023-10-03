@@ -2188,6 +2188,7 @@ class TestOPDSImportMonitor:
         feed = data.content_server_mini_feed
 
         http = DummyHTTPClient()
+
         # If there's new data, follow_one_link extracts the next links.
         def follow():
             return monitor.follow_one_link("http://url", do_get=http.do_get)

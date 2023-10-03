@@ -684,6 +684,7 @@ class TestIdentifierCoverageProvider:
         """Test various acceptable and unacceptable values for the class
         variable INPUT_IDENTIFIER_TYPES.
         """
+
         # It's okay to set INPUT_IDENTIFIER_TYPES to None it means you
         # will cover any and all identifier types.
         class Base(IdentifierCoverageProvider):

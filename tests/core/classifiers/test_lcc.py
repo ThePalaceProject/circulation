@@ -4,7 +4,6 @@ from core.classifier.lcc import LCCClassifier as LCC
 
 class TestLCC:
     def test_name_for(self):
-
         child = Classifier.AUDIENCE_CHILDREN
         adult = Classifier.AUDIENCE_ADULT
 

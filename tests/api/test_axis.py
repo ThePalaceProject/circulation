@@ -74,7 +74,6 @@ if TYPE_CHECKING:
 
 
 class Axis360Fixture:
-
     # Sample bibliographic and availability data you can use in a test
     # without having to parse it from an XML file.
     BIBLIOGRAPHIC_DATA = Metadata(
@@ -595,7 +594,10 @@ class TestAxis360API:
 
         # If there is a LicensePool but it has no owned licenses,
         # it's already been reaped, so nothing happens.
-        edition, pool, = axis360.db.edition(
+        (
+            edition,
+            pool,
+        ) = axis360.db.edition(
             data_source_name=DataSource.AXIS_360,
             identifier_type=id1.type,
             identifier_id=id1.identifier,
@@ -607,7 +609,10 @@ class TestAxis360API:
         # collection from the collection associated with this
         # Axis360API object, so it's not affected.
         collection2 = axis360.db.collection()
-        edition2, pool2, = axis360.db.edition(
+        (
+            edition2,
+            pool2,
+        ) = axis360.db.edition(
             data_source_name=DataSource.AXIS_360,
             identifier_type=id1.type,
             identifier_id=id1.identifier,

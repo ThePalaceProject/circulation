@@ -34,7 +34,6 @@ GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)
 
 class TestLowercased:
     def test_constructor(self):
-
         l = Lowercased("A string")
 
         # A string is lowercased.
@@ -65,7 +64,6 @@ class TestGenreData:
 
 class TestClassifier:
     def test_default_target_age_for_audience(self):
-
         assert (None, None) == Classifier.default_target_age_for_audience(
             Classifier.AUDIENCE_CHILDREN
         )

@@ -9,7 +9,6 @@ from core.service.storage.container import Storage
 
 
 class Services(DeclarativeContainer):
-
     config = providers.Configuration()
 
     storage = Container(

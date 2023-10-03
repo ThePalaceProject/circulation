@@ -150,7 +150,6 @@ class FillInAuthorScript(MetadataCalculationScript):
 
 
 class CacheRepresentationPerLane(TimestampScript, LaneSweeperScript):
-
     name = "Cache one representation per lane"
 
     @classmethod
@@ -496,7 +495,6 @@ class CacheFacetListsPerLane(CacheRepresentationPerLane):
 
 
 class CacheOPDSGroupFeedPerLane(CacheRepresentationPerLane):
-
     name = "Cache OPDS grouped feed for each lane"
 
     def should_process_lane(self, lane):
@@ -1119,7 +1117,6 @@ class DisappearingBookReportScript(Script):
 
 
 class NYTBestSellerListsScript(TimestampScript):
-
     name = "Update New York Times best-seller lists"
 
     def __init__(self, include_history=False):
@@ -1132,7 +1129,6 @@ class NYTBestSellerListsScript(TimestampScript):
         # For every best-seller list...
         names = self.api.list_of_lists()
         for l in sorted(names["results"], key=lambda x: x["list_name_encoded"]):
-
             name = l["list_name_encoded"]
             self.log.info("Handling list %s" % name)
             best = self.api.best_seller_list(l)

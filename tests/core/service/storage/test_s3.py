@@ -302,9 +302,9 @@ class S3ServiceIntegrationFixture:
 
 
 @pytest.fixture
-def s3_service_integration_fixture() -> Generator[
-    S3ServiceIntegrationFixture, None, None
-]:
+def s3_service_integration_fixture() -> (
+    Generator[S3ServiceIntegrationFixture, None, None]
+):
     fixture = S3ServiceIntegrationFixture()
     yield fixture
     fixture.close()

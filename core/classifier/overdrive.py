@@ -2,7 +2,6 @@ from . import *
 
 
 class OverdriveClassifier(Classifier):
-
     # These genres are only used to describe video titles.
     VIDEO_GENRES = [
         "Action",

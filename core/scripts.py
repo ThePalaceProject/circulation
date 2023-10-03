@@ -362,8 +362,8 @@ class RunThreadedCollectionCoverageProviderScript(Script):
 
         for collection in collections:
             provider = self.provider_class(collection, **self.provider_kwargs)
-            with (
-                pool or DatabasePool(self.worker_size, self.session_factory)
+            with pool or DatabasePool(
+                self.worker_size, self.session_factory
             ) as job_queue:
                 query_size, batch_size = self.get_query_and_batch_sizes(provider)
                 # Without a commit, the query to count which items need
@@ -798,7 +798,6 @@ class RunCoverageProviderScript(IdentifierInputScript):
     def __init__(
         self, provider, _db=None, cmd_args=None, *provider_args, **provider_kwargs
     ):
-
         super().__init__(_db)
         parsed_args = self.parse_command_line(self._db, cmd_args)
         if parsed_args.identifier_type:
@@ -1581,7 +1580,6 @@ class AddClassificationScript(IdentifierInputScript):
 
 
 class WorkProcessingScript(IdentifierInputScript):
-
     name = "Work processing script"
 
     def __init__(
@@ -1812,7 +1810,6 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
         the ordering of the rows follows all the joined tables"""
 
         for subject in self._unchecked_subjects():
-
             last_work: Optional[Work] = None  # Last work object of the previous page
             # IDs of the last work, for paging
             work_id, license_id, iden_id, classn_id = (
@@ -2114,7 +2111,6 @@ class CheckContributorNamesInDB(IdentifierInputScript):
         return query.order_by(Edition.id)
 
     def do_run(self, batch_size=10):
-
         self.query = self.make_query(
             self._db,
             self.parsed_args.identifier_type,
@@ -2846,7 +2842,8 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
 
     def _update_list_with_new_entries(self, custom_list: CustomList):
         """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
-        Only json type queries are supported right now, without any support for additional facets"""
+        Only json type queries are supported right now, without any support for additional facets
+        """
 
         start_page = 1
         json_query = None
@@ -2902,7 +2899,6 @@ class DeleteInvisibleLanesScript(LibraryInputScript):
     """Delete lanes that are flagged as invisible"""
 
     def process_library(self, library):
-
         try:
             for lane in self._db.query(Lane).filter(Lane.library_id == library.id):
                 if not lane.visible:

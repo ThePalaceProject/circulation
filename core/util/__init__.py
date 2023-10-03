@@ -232,7 +232,6 @@ class MetadataSimilarity:
 
 
 class TitleProcessor:
-
     title_stopwords = ["The ", "A ", "An "]
 
     @classmethod
@@ -264,7 +263,6 @@ class TitleProcessor:
 
 
 class Bigrams:
-
     all_letters = re.compile("^[a-z]+$")
 
     def __init__(self, bigrams):
@@ -523,7 +521,6 @@ english_bigrams.proportional = Counter(english_bigram_frequencies)
 
 
 class MoneyUtility:
-
     DEFAULT_CURRENCY = "USD"
 
     @classmethod

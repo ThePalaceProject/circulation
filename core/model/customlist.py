@@ -359,7 +359,6 @@ customlist_sharedlibrary: Table = Table(
 
 
 class CustomListEntry(Base):
-
     __tablename__ = "customlistentries"
     id = Column(Integer, primary_key=True)
     list_id = Column(Integer, ForeignKey("customlists.id"), index=True)

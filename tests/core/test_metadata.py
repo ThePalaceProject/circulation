@@ -696,7 +696,6 @@ class TestMetadata:
         assert edition.series_position == metadata.series_position
 
     def test_update(self, db: DatabaseTransactionFixture):
-
         # Tests that Metadata.update correctly prefers new fields to old, unless
         # new fields aren't defined.
 
@@ -841,7 +840,6 @@ class TestMetadata:
         assert_registered(full=False)
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
-
         # Set up an Edition.
         edition, pool = db.edition(with_license_pool=True)
 
@@ -893,7 +891,6 @@ class TestMetadata:
         assert equivalency.output.identifier == "def"
 
     def test_apply_no_value(self, db: DatabaseTransactionFixture):
-
         edition_old, pool = db.edition(with_license_pool=True)
 
         metadata = Metadata(
@@ -1152,7 +1149,6 @@ class TestCirculationData:
 
 class TestTimestampData:
     def test_constructor(self):
-
         # By default, all fields are set to None
         d = TimestampData()
         for i in (
@@ -1235,7 +1231,6 @@ class TestTimestampData:
             assert i == None
 
     def test_finalize_full(self, db: DatabaseTransactionFixture):
-
         # You can call finalize() with a complete set of arguments.
         d = TimestampData()
         d.finalize(

@@ -138,7 +138,6 @@ class Axis360API(
     Axis360APIConstants,
     HasLibraryIntegrationConfiguration,
 ):
-
     NAME = ExternalIntegration.AXIS_360
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP

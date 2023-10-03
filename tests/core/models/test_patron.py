@@ -112,7 +112,6 @@ class TestHold:
         assert work == hold.work
 
     def test_until(self, db: DatabaseTransactionFixture):
-
         one_day = datetime.timedelta(days=1)
         two_days = datetime.timedelta(days=2)
 

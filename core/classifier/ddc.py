@@ -8,7 +8,6 @@ resource_dir = os.path.join(base_dir, "..", "resources")
 
 
 class DeweyDecimalClassifier(Classifier):
-
     NAMES = json.load(open(os.path.join(resource_dir, "dewey_1000.json")))
 
     # Add some other values commonly found in MARC records.

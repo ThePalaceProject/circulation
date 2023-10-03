@@ -232,6 +232,7 @@ class AcquisitonFeedOPDS2(OPDS2Feed):
         max_age: Optional[int] = None,
     ):
         """The publication feed, cached"""
+
         # do some caching magic
         # then do the publication
         def refresh():

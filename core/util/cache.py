@@ -70,7 +70,8 @@ class CachedData:
     Cache data using the CachedData.cache instance
     This must be initialized somewhere in the vicinity of its usage with CacheData.initialize(_db)
     While writing methods to cache, always lock the body to the _db is used and updated in a threadsafe manner
-    Always expunge objects before returning the data, to avoid stale/cross-thread session usage"""
+    Always expunge objects before returning the data, to avoid stale/cross-thread session usage
+    """
 
     # Instance of itself
     cache: Optional[CachedData] = None

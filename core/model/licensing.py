@@ -1773,7 +1773,6 @@ class DeliveryMechanism(Base, HasSessionCache):
         return (self.content_type, self.drm_scheme)
 
     def __repr__(self):
-
         if self.default_client_can_fulfill:
             fulfillable = "fulfillable"
         else:

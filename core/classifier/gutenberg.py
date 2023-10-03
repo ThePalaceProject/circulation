@@ -2,7 +2,6 @@ from . import *
 
 
 class GutenbergBookshelfClassifier(Classifier):
-
     # Any classification that includes the string "Fiction" will be
     # counted as fiction. This is just the leftovers.
     FICTION = {

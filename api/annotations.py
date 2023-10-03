@@ -37,7 +37,6 @@ jsonld.set_document_loader(load_document)
 
 
 class AnnotationWriter:
-
     CONTENT_TYPE = 'application/ld+json; profile="http://www.w3.org/ns/anno.jsonld"'
 
     JSONLD_CONTEXT = "http://www.w3.org/ns/anno.jsonld"

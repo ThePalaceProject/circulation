@@ -98,7 +98,6 @@ class BibliothecaSettings(BaseSettings):
 
 
 class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
-
     dont_display_reserves: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),

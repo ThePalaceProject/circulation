@@ -19,7 +19,6 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestSelfTestResult:
-
     now = utc_now()
     future = now + datetime.timedelta(seconds=5)
 
@@ -228,6 +227,7 @@ class TestHasSelfTests:
 
     def test_run_test_success(self):
         o = MockSelfTest()
+
         # This self-test method will succeed.
         def successful_test(arg, kwarg):
             return arg, kwarg
@@ -240,6 +240,7 @@ class TestHasSelfTests:
 
     def test_run_test_failure(self):
         o = MockSelfTest()
+
         # This self-test method will fail.
         def unsuccessful_test(arg, kwarg):
             raise IntegrationException(arg, kwarg)

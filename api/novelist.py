@@ -38,7 +38,6 @@ from core.util.http import HTTP
 
 
 class NoveListAPI:
-
     PROTOCOL = ExternalIntegration.NOVELIST
     NAME = _("Novelist API")
 

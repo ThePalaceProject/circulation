@@ -972,9 +972,9 @@ class TemporaryDirectoryConfigurationFixture:
 
 
 @pytest.fixture(scope="function")
-def temporary_directory_configuration() -> Iterable[
-    TemporaryDirectoryConfigurationFixture
-]:
+def temporary_directory_configuration() -> (
+    Iterable[TemporaryDirectoryConfigurationFixture]
+):
     fix = TemporaryDirectoryConfigurationFixture.create()
     yield fix
     fix.close()

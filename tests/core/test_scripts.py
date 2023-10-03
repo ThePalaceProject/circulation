@@ -2112,7 +2112,6 @@ class TestRebuildSearchIndexScript:
 
 
 class TestSearchIndexCoverageRemover:
-
     SERVICE_NAME = "Search Index Coverage Remover"
 
     def test_do_run(self, db: DatabaseTransactionFixture):

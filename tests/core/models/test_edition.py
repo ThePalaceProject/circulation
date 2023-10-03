@@ -150,7 +150,6 @@ class TestEdition:
         )
 
     def test_sort_by_priority(self, db: DatabaseTransactionFixture):
-
         # Make editions created by the license source, the metadata
         # wrangler, and library staff.
         admin = db.edition(
@@ -184,7 +183,6 @@ class TestEdition:
         assert ids(expect) == ids(actual)
 
     def test_equivalent_identifiers(self, db: DatabaseTransactionFixture):
-
         edition = db.edition()
         identifier = db.identifier()
         session = db.session
@@ -203,7 +201,6 @@ class TestEdition:
         )
 
     def test_recursive_edition_equivalence(self, db: DatabaseTransactionFixture):
-
         # Here's a Edition for a Project Gutenberg text.
         gutenberg, gutenberg_pool = db.edition(
             data_source_name=DataSource.GUTENBERG,

@@ -12,7 +12,6 @@ from core.util.problem_detail import ProblemError
 
 
 class AnnouncementListValidator:
-
     DATE_FORMAT = "%Y-%m-%d"
 
     def __init__(

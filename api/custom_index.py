@@ -82,7 +82,6 @@ class CustomIndexView:
 
 
 class COPPAGate(CustomIndexView):
-
     PROTOCOL = "COPPA Age Gate"
 
     URI = "http://librarysimplified.org/terms/restrictions/coppa"

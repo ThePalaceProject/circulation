@@ -281,7 +281,6 @@ class Resource(Base):
 
     @classmethod
     def best_covers_among(cls, resources):
-
         """Choose the best covers from a list of Resources."""
         champions = []
         champion_key = None

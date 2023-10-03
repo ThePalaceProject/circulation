@@ -39,7 +39,6 @@ class TestMetadataSimilarity:
         assert 1 == MetadataSimilarity.title_similarity("foo bar.", "FOO BAR")
 
     def test_histogram_distance(self):
-
         # These two sets of titles generate exactly the same histogram.
         # Their distance is 0.
         a1 = ["The First Title", "The Second Title"]
@@ -422,7 +421,6 @@ class TestFastQueryCount:
 
 class TestSlugify:
     def test_slugify(self):
-
         # text are slugified.
         assert "hey-im-a-feed" == slugify("Hey! I'm a feed!!")
         assert "you-and-me-n-every_feed" == slugify("You & Me n Every_Feed")

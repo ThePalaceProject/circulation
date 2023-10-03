@@ -5,14 +5,12 @@ from tests.fixtures.api_routes import RouteTestFixture
 
 
 class TestAppConfiguration:
-
     # Test the configuration of the real Flask app.
     def test_configuration(self):
         assert False == routes.app.url_map.merge_slashes
 
 
 class TestIndex:
-
     CONTROLLER_NAME = "index_controller"
 
     @pytest.fixture(scope="function")
@@ -30,7 +28,6 @@ class TestIndex:
 
 
 class TestOPDSFeed:
-
     CONTROLLER_NAME = "opds_feeds"
 
     @pytest.fixture(scope="function")
@@ -117,7 +114,6 @@ class TestMARCRecord:
 
 
 class TestProfileController:
-
     CONTROLLER_NAME = "profiles"
 
     @pytest.fixture(scope="function")
@@ -134,7 +130,6 @@ class TestProfileController:
 
 
 class TestLoansController:
-
     CONTROLLER_NAME = "loans"
 
     @pytest.fixture(scope="function")
@@ -221,7 +216,6 @@ class TestLoansController:
 
 
 class TestAnnotationsController:
-
     CONTROLLER_NAME = "annotations"
 
     @pytest.fixture(scope="function")
@@ -254,7 +248,6 @@ class TestAnnotationsController:
 
 
 class TestURNLookupController:
-
     CONTROLLER_NAME = "urn_lookup"
 
     @pytest.fixture(scope="function")
@@ -268,7 +261,6 @@ class TestURNLookupController:
 
 
 class TestWorkController:
-
     CONTROLLER_NAME = "work_controller"
 
     @pytest.fixture(scope="function")
@@ -395,7 +387,6 @@ class TestApplicationVersionController:
 
 
 class TestHealthCheck:
-
     # This code isn't in a controller, and it doesn't really do anything,
     # so we check that it returns a specific result.
     def test_health_check(self, route_test: RouteTestFixture):
