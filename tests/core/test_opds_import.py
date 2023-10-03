@@ -1264,43 +1264,6 @@ class TestOPDSImporter:
         # based on its <dcterms:format> tag.
         assert Edition.AUDIO_MEDIUM == edition.medium
 
-    def test_build_identifier_mapping(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
-        )
-        """Reverse engineers an identifier_mapping based on a list of URNs"""
-
-        collection = db.collection(protocol=ExternalIntegration.AXIS_360)
-        lp = db.licensepool(
-            None, collection=collection, data_source_name=DataSource.AXIS_360
-        )
-
-        # Create a couple of ISBN equivalencies.
-        isbn1 = db.identifier(
-            identifier_type=Identifier.ISBN, foreign_id=db.isbn_take()
-        )
-        isbn2 = db.identifier(
-            identifier_type=Identifier.ISBN, foreign_id=db.isbn_take()
-        )
-        source = DataSource.lookup(session, DataSource.AXIS_360)
-        [lp.identifier.equivalent_to(source, isbn, 1) for isbn in [isbn1, isbn2]]
-
-        # The importer is initialized without an identifier mapping.
-        importer = OPDSImporter(session, collection)
-        assert None == importer.identifier_mapping
-
-        # We can build one.
-        importer.build_identifier_mapping([isbn1.urn])
-        expected = {isbn1: lp.identifier}
-        assert expected == importer.identifier_mapping
-
-        # If we already have one, it's overwritten.
-        importer.build_identifier_mapping([isbn2.urn])
-        overwrite = {isbn2: lp.identifier}
-        assert importer.identifier_mapping == overwrite
-
     def test_update_work_for_edition_having_no_work(
         self, db: DatabaseTransactionFixture, opds_importer_fixture: OPDSImporterFixture
     ):

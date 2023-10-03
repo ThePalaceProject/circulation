@@ -29,7 +29,6 @@ from feedparser import FeedParserDict
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import HttpUrl
-from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
@@ -60,7 +59,6 @@ from core.model import (
     CoverageRecord,
     DataSource,
     Edition,
-    Equivalency,
     ExternalIntegration,
     Hyperlink,
     Identifier,
@@ -510,7 +508,6 @@ class OPDSImporter(BaseOPDSImporter):
         data_source_name: Optional[str] = None,
         identifier_mapping: Optional[Dict[Identifier, Identifier]] = None,
         http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
-        map_from_collection: Optional[bool] = None,
     ):
         """:param collection: LicensePools created by this OPDS import
         will be associated with the given Collection. If this is None,
@@ -526,8 +523,6 @@ class OPDSImporter(BaseOPDSImporter):
 
         :param http_get: Use this method to make an HTTP GET request. This
         can be replaced with a stub method for testing purposes.
-
-        :param map_from_collection
         """
         super().__init__(_db, collection, data_source_name)
         self.identifier_mapping = identifier_mapping
@@ -540,7 +535,6 @@ class OPDSImporter(BaseOPDSImporter):
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
-        self.map_from_collection = map_from_collection
 
     def assert_importable_content(
         self, feed: str, feed_url: str, max_get_attempts: int = 5
@@ -645,41 +639,6 @@ class OPDSImporter(BaseOPDSImporter):
         ]
         return [x for x in dates if x and x[1]]
 
-    def build_identifier_mapping(self, external_urns: List[str]) -> None:
-        """Uses the given Collection and a list of URNs to reverse
-        engineer an identifier mapping.
-
-        NOTE: It would be better if .identifier_mapping weren't
-        instance data, since a single OPDSImporter might import
-        multiple pages of a feed. However, the code as written should
-        work.
-        """
-        if not self.collection:
-            return
-
-        mapping = dict()
-        identifiers_by_urn, failures = Identifier.parse_urns(
-            self._db, external_urns, autocreate=False
-        )
-        external_identifiers = list(identifiers_by_urn.values())
-
-        internal_identifier = aliased(Identifier)
-        qu = (
-            self._db.query(Identifier, internal_identifier)
-            .join(Identifier.inbound_equivalencies)
-            .join(internal_identifier, Equivalency.input)
-            .join(internal_identifier.licensed_through)
-            .filter(
-                Identifier.id.in_([x.id for x in external_identifiers]),
-                LicensePool.collection == self.collection,
-            )
-        )
-
-        for external_identifier, internal_identifier in qu:
-            mapping[external_identifier] = internal_identifier
-
-        self.identifier_mapping = mapping
-
     def extract_feed_data(
         self, feed: str | bytes, feed_url: Optional[str] = None
     ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
@@ -694,12 +653,6 @@ class OPDSImporter(BaseOPDSImporter):
         xml_data_meta, xml_failures = self.extract_metadata_from_elementtree(
             feed, data_source=data_source, feed_url=feed_url, do_get=self.http_get
         )
-
-        if self.map_from_collection:
-            # Build the identifier_mapping based on the Collection.
-            self.build_identifier_mapping(
-                list(fp_metadata.keys()) + list(fp_failures.keys())
-            )
 
         # translate the id in failures to identifier.urn
         identified_failures = {}
