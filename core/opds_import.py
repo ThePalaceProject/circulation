@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import traceback
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from typing import (
@@ -392,7 +393,8 @@ class BaseOPDSImporter(
 
         # If parsing the overall feed throws an exception, we should address that before
         # moving on. Let the exception propagate.
-        metadata_objs, failures = self.extract_feed_data(feed, feed_url)
+        metadata_objs, extracted_failures = self.extract_feed_data(feed, feed_url)
+        failures = defaultdict(list, extracted_failures)
         # make editions.  if have problem, make sure associated pool and work aren't created.
         for key, metadata in metadata_objs.items():
             # key is identifier.urn here
@@ -422,10 +424,7 @@ class BaseOPDSImporter(
                     transient=False,
                     collection=self.collection,
                 )
-                if key in failures:
-                    failures[key].append(failure)
-                else:
-                    failures[key] = [failure]
+                failures[key].append(failure)
                 # clean up any edition might have created
                 if key in imported_editions:
                     del imported_editions[key]
@@ -455,10 +454,7 @@ class BaseOPDSImporter(
                     transient=False,
                     collection=self.collection,
                 )
-                if key in failures:
-                    failures[key].append(failure)
-                else:
-                    failures[key] = [failure]
+                failures[key].append(failure)
 
         return (
             list(imported_editions.values()),
