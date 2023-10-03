@@ -34,7 +34,6 @@ from core.entrypoint import EntryPoint
 from core.external_search import ExternalSearchIndex
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.lane import Facets, FeaturedFacets, Lane, Pagination
-from core.log import LogConfiguration
 from core.marc import MARCExporter
 from core.model import (
     LOCK_ID_DB_INIT,
@@ -64,6 +63,7 @@ from core.scripts import (
 )
 from core.scripts import Script as CoreScript
 from core.scripts import TimestampScript
+from core.service.container import container_instance
 from core.util import LanguageCodes
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
@@ -817,7 +817,10 @@ class InstanceInitializationScript:
 
     def __init__(self) -> None:
         self._log: Optional[logging.Logger] = None
-        LogConfiguration.initialize(None)
+        self._container = container_instance()
+
+        # Call init_resources() to initialize the logging configuration.
+        self._container.init_resources()
 
     @property
     def log(self) -> logging.Logger:

@@ -126,6 +126,9 @@ class Script:
 
         self._services = container_instance() if services is None else services
 
+        # Call init_resources() to initialize the logging configuration.
+        self._services.init_resources()
+
     def run(self):
         DataSource.well_known_sources(self._db)
         start_time = utc_now()
@@ -2645,7 +2648,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
 
 class UpdateLaneSizeScript(LaneSweeperScript):
-    def __init__(self, _db, *args, **kwargs):
+    def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, *args, **kwargs)
         search = kwargs.get("search_index_client", None)
         self._search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
@@ -2727,7 +2730,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
     """
 
     def __init__(self, _db=None, *args, **kwargs):
-        super().__init__(_db, args, kwargs)
+        super().__init__(_db, *args, **kwargs)
         self._data: List[List[str]] = list()
 
     def _create_overdrive_api(self, collection: Collection):

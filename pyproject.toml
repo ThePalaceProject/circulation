@@ -78,12 +78,18 @@ module = [
     "api.circulation",
     "api.discovery.*",
     "api.integration.*",
+    "api.lcp.hash",
+    "api.odl",
+    "api.odl2",
+    "api.opds_for_distributors",
     "core.feed.*",
     "core.integration.*",
     "core.model.announcements",
     "core.model.hassessioncache",
     "core.model.integration",
     "core.model.library",
+    "core.opds2_import",
+    "core.opds_import",
     "core.selftest",
     "core.service.*",
     "core.settings.*",
@@ -230,7 +236,7 @@ tox-docker = "^4.1"
 tox-gh-actions = "^3.0"
 
 [tool.poetry.group.dev.dependencies]
-boto3-stubs = {version = "^1.28", extras = ["boto3", "essential", "s3"]}
+boto3-stubs = {version = "^1.28", extras = ["boto3", "essential", "logs", "s3"]}
 freezegun = "~1.2.2"
 Jinja2 = "^3.1.2"
 mypy = "^1.4.1"

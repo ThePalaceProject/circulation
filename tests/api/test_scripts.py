@@ -798,7 +798,7 @@ class TestInstanceInitializationScript:
     def test_initialize_alembic_exception(self, caplog: LogCaptureFixture):
         # Test that we handle a CommandError exception being returned by Alembic.
         with patch("scripts.inspect") as inspect:
-            with patch("scripts.LogConfiguration"):
+            with patch("scripts.container_instance"):
                 script = InstanceInitializationScript()
 
             caplog.set_level(logging.ERROR)

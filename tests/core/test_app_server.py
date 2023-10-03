@@ -1,7 +1,9 @@
 import gzip
 import json
+from functools import partial
 from io import BytesIO
-from typing import Iterable
+from typing import Callable, Iterable
+from unittest.mock import MagicMock, PropertyMock
 
 import flask
 import pytest
@@ -11,6 +13,7 @@ from flask_babel import lazy_gettext as _
 
 import core
 from api.admin.config import Configuration as AdminUiConfig
+from api.util.flask import PalaceFlask
 from core.app_server import (
     ApplicationVersionController,
     ErrorHandler,
@@ -20,13 +23,12 @@ from core.app_server import (
     load_facets_from_request,
     load_pagination_from_request,
 )
-from core.config import Configuration
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.feed.annotator.base import Annotator
 from core.lane import Facets, Pagination, SearchFacets, WorkList
-from core.log import LogConfiguration
-from core.model import ConfigurationSetting, Identifier
+from core.model import Identifier
 from core.problem_details import INVALID_INPUT, INVALID_URN
+from core.service.logging.configuration import LogLevel
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -483,7 +485,8 @@ class CanBeProblemDetailDocument(Exception):
 
 class ErrorHandlerFixture:
     transaction: DatabaseTransactionFixture
-    app: Flask
+    app: PalaceFlask
+    handler: Callable[..., ErrorHandler]
 
 
 @pytest.fixture()
@@ -492,38 +495,25 @@ def error_handler_fixture(
 ) -> ErrorHandlerFixture:
     session = db.session
 
-    class MockManager:
-        """Simulate an application manager object such as
-        the circulation manager's CirculationManager.
-
-        This gives ErrorHandler access to a database connection.
-        """
-
-        _db = session
+    mock_manager = MagicMock()
+    type(mock_manager)._db = PropertyMock(return_value=session)
 
     data = ErrorHandlerFixture()
     data.transaction = db
-    data.app = Flask(ErrorHandlerFixture.__name__)
-    data.app.manager = MockManager()  # type: ignore[attr-defined]
+    data.app = PalaceFlask(ErrorHandlerFixture.__name__)
     Babel(data.app)
+    data.app.manager = mock_manager
+    data.handler = partial(ErrorHandler, app=data.app, log_level=LogLevel.error)
     return data
 
 
 class TestErrorHandler:
-    def activate_debug_mode(self, session):
-        """Set a site-wide setting that controls whether
-        detailed exception information is provided.
-        """
-        ConfigurationSetting.sitewide(
-            session, Configuration.DATABASE_LOG_LEVEL
-        ).value = LogConfiguration.DEBUG
-
     def raise_exception(self, cls=Exception):
         """Simulate an exception that happens deep within the stack."""
         raise cls()
 
     def test_unhandled_error(self, error_handler_fixture: ErrorHandlerFixture):
-        handler = ErrorHandler(error_handler_fixture.app)
+        handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
             response = None
             try:
@@ -532,13 +522,12 @@ class TestErrorHandler:
                 response = handler.handle(exception)
             assert isinstance(response, Response)
             assert 500 == response.status_code
-            assert "An internal error occured" == response.data.decode("utf8")
+            assert "An internal error occurred" == response.data.decode("utf8")
 
     def test_unhandled_error_debug(self, error_handler_fixture: ErrorHandlerFixture):
         # Set the sitewide log level to DEBUG to get a stack trace
         # instead of a generic error message.
-        handler = ErrorHandler(error_handler_fixture.app)
-        self.activate_debug_mode(error_handler_fixture.transaction.session)
+        handler = error_handler_fixture.handler(log_level=LogLevel.debug)
 
         with error_handler_fixture.app.test_request_context("/"):
             response = None
@@ -553,13 +542,14 @@ class TestErrorHandler:
     def test_handle_error_as_problem_detail_document(
         self, error_handler_fixture: ErrorHandlerFixture
     ):
-        handler = ErrorHandler(error_handler_fixture.app)
+        handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)
             except Exception as exception:
                 response = handler.handle(exception)
 
+            assert isinstance(response, Response)
             assert 400 == response.status_code
             data = json.loads(response.data.decode("utf8"))
             assert INVALID_URN.title == data["title"]
@@ -573,14 +563,14 @@ class TestErrorHandler:
     ):
         # When in debug mode, the debug_message is preserved and a
         # stack trace is appended to it.
-        handler = ErrorHandler(error_handler_fixture.app)
-        self.activate_debug_mode(error_handler_fixture.transaction.session)
+        handler = error_handler_fixture.handler(log_level=LogLevel.debug)
         with error_handler_fixture.app.test_request_context("/"):
             try:
                 self.raise_exception(CanBeProblemDetailDocument)
             except Exception as exception:
                 response = handler.handle(exception)
 
+            assert isinstance(response, Response)
             assert 400 == response.status_code
             data = json.loads(response.data.decode("utf8"))
             assert INVALID_URN.title == data["title"]

@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, overload
 
 import pytz
 from dateutil.relativedelta import relativedelta
@@ -33,6 +33,16 @@ def utc_now() -> datetime.datetime:
     :return: datetime object
     """
     return datetime.datetime.now(tz=pytz.UTC)
+
+
+@overload
+def to_utc(dt: datetime.datetime) -> datetime.datetime:
+    ...
+
+
+@overload
+def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+    ...
 
 
 def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:

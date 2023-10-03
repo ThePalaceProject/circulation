@@ -1226,6 +1226,7 @@ class TestLibraryAnnotator:
         tree = etree.fromstring(response.get_data(as_text=True))
         parser = OPDSXMLParser()
         licensor = parser._xpath1(tree, "//atom:feed/drm:licensor")
+        assert licensor is not None
 
         adobe_patron_identifier = AuthdataUtility._adobe_patron_identifier(patron)
 
@@ -1294,7 +1295,11 @@ class TestLibraryAnnotator:
         )
         assert 2 == len(acquisitions)
 
-        availabilities = [parser._xpath1(x, "opds:availability") for x in acquisitions]
+        availabilities = []
+        for acquisition in acquisitions:
+            availability = parser._xpath1(acquisition, "opds:availability")
+            assert availability is not None
+            availabilities.append(availability)
 
         # One of these availability tags has 'since' but not 'until'.
         # The other one has both.
@@ -1862,6 +1867,7 @@ class TestLibraryAnnotator:
         opds_parser = OPDSXMLParser()
 
         availability = opds_parser._xpath1(fulfill, "opds:availability")
+        assert availability is not None
         assert _strftime(loan1.start) == availability.attrib.get("since")
         assert loan1.end == availability.attrib.get("until")
         assert None == loan1.end

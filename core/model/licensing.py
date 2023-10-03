@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, List, Literal, Tuple, overload
+from typing import TYPE_CHECKING, List, Literal, Optional, Tuple, overload
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
@@ -139,12 +139,12 @@ class License(Base, LicenseFunctions):
 
     # One License can have many Loans.
     loans: Mapped[List[Loan]] = relationship(
-        "Loan", backref="license", cascade="all, delete-orphan"
+        "Loan", back_populates="license", cascade="all, delete-orphan"
     )
 
     __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
 
-    def loan_to(self, patron: Patron, **kwargs):
+    def loan_to(self, patron: Patron, **kwargs) -> Tuple[Loan, bool]:
         loan, is_new = self.license_pool.loan_to(patron, **kwargs)
         loan.license = self
         return loan, is_new
@@ -1021,7 +1021,7 @@ class LicensePool(Base):
         end=None,
         fulfillment=None,
         external_identifier=None,
-    ):
+    ) -> Tuple[Loan, bool]:
         _db = Session.object_session(patron)
         kwargs = dict(start=start or utc_now(), end=end)
         loan, is_new = get_one_or_create(
@@ -1067,7 +1067,7 @@ class LicensePool(Base):
             hold.external_identifier = external_identifier
         return hold, new
 
-    def best_available_license(self):
+    def best_available_license(self) -> License | None:
         """Determine the next license that should be lent out for this pool.
 
         Time-limited licenses and perpetual licenses are the best. It doesn't matter which
@@ -1084,7 +1084,7 @@ class LicensePool(Base):
         The worst option would be pay-per-use, but we don't yet support any distributors that
         offer that model.
         """
-        best = None
+        best: Optional[License] = None
         now = utc_now()
 
         for license in self.licenses:
@@ -1094,7 +1094,10 @@ class LicensePool(Base):
             active_loan_count = len(
                 [l for l in license.loans if not l.end or l.end > now]
             )
-            if active_loan_count >= license.checkouts_available:
+            checkouts_available = (
+                license.checkouts_available if license.checkouts_available else 0
+            )
+            if active_loan_count >= checkouts_available:
                 continue
 
             if (
@@ -1103,13 +1106,13 @@ class LicensePool(Base):
                 or (
                     license.is_time_limited
                     and best.is_time_limited
-                    and license.expires < best.expires
+                    and license.expires < best.expires  # type: ignore[operator]
                 )
                 or (license.is_perpetual and not best.is_time_limited)
                 or (
                     license.is_loan_limited
                     and best.is_loan_limited
-                    and license.checkouts_left > best.checkouts_left
+                    and license.checkouts_left > best.checkouts_left  # type: ignore[operator]
                 )
             ):
                 best = license
@@ -2024,7 +2027,7 @@ class RightsStatus(Base):
         return status
 
     @classmethod
-    def rights_uri_from_string(cls, rights):
+    def rights_uri_from_string(cls, rights: str) -> str:
         rights = rights.lower()
         if rights == "public domain in the usa.":
             return RightsStatus.PUBLIC_DOMAIN_USA

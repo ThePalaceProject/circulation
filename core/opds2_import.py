@@ -3,15 +3,16 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, Optional, Tuple, Type
 from urllib.parse import urljoin, urlparse
 
 import sqlalchemy
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
+from sqlalchemy.orm import Session
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
-from webpub_manifest_parser.core.ast import Manifestlike
+from webpub_manifest_parser.core.ast import Link, Manifestlike
 from webpub_manifest_parser.errors import BaseError
 from webpub_manifest_parser.opds2.registry import (
     OPDS2LinkRelationsRegistry,
@@ -79,7 +80,7 @@ class RWPMManifestParser:
         self._manifest_parser_factory = manifest_parser_factory
 
     def parse_manifest(
-        self, manifest: str | dict | Manifestlike
+        self, manifest: str | dict[str, Any] | Manifestlike
     ) -> ManifestParserResult:
         """Parse the feed into an RPWM-like AST object.
 
@@ -145,25 +146,27 @@ class OPDS2Importer(
     NEXT_LINK_RELATION: str = "next"
 
     @classmethod
-    def settings_class(self):
+    def settings_class(cls) -> Type[OPDS2ImporterSettings]:
         return OPDS2ImporterSettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls) -> str:
+        return cls.NAME
 
-    def description(self):
-        return self.DESCRIPTION
+    @classmethod
+    def description(cls) -> str:
+        return cls.DESCRIPTION
 
     def __init__(
         self,
-        db: sqlalchemy.orm.session.Session,
+        db: Session,
         collection: Collection,
         parser: RWPMManifestParser,
         data_source_name: str | None = None,
-        identifier_mapping: dict | None = None,
-        http_get: Callable | None = None,
-        content_modifier: Callable | None = None,
-        map_from_collection: dict | None = None,
+        identifier_mapping: Dict[Identifier, Identifier] | None = None,
+        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+        content_modifier: Optional[Callable[..., None]] = None,
+        map_from_collection: Optional[bool] = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -307,20 +310,16 @@ class OPDS2Importer(
 
         return contributor_metadata_list
 
-    def _extract_link(self, link, feed_self_url, default_link_rel=None):
+    def _extract_link(
+        self, link: Link, feed_self_url: str, default_link_rel: Optional[str] = None
+    ) -> LinkData:
         """Extract a LinkData object from webpub-manifest-parser's link.
 
         :param link: webpub-manifest-parser's link
-        :type link: ast_core.Link
-
         :param feed_self_url: Feed's self URL
-        :type feed_self_url: str
-
         :param default_link_rel: Default link's relation
-        :type default_link_rel: Optional[str]
 
         :return: Link metadata
-        :rtype: LinkData
         """
         self._logger.debug(f"Started extracting link metadata from {encode(link)}")
 
@@ -599,7 +598,7 @@ class OPDS2Importer(
         self,
         feed: opds2_ast.OPDS2Feed,
         publication: opds2_ast.OPDS2Publication,
-        data_source_name: str,
+        data_source_name: Optional[str],
     ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
 
@@ -783,6 +782,8 @@ class OPDS2Importer(
         :param db: Database session
         :return: External integration associated with this object
         """
+        if self.collection is None:
+            raise ValueError("Collection is not set")
         return self.collection.external_integration
 
     def integration_configuration(self) -> IntegrationConfiguration:
@@ -854,7 +855,7 @@ class OPDS2Importer(
 
     def _record_coverage_failure(
         self,
-        failures: dict[str, list[CoverageFailure]],
+        failures: dict[str, list[CoverageFailure] | CoverageFailure],
         identifier: Identifier,
         error_message: str,
         transient: bool = True,
@@ -880,7 +881,7 @@ class OPDS2Importer(
             transient=transient,
             collection=self.collection,
         )
-        failures[identifier.identifier].append(failure)
+        failures[identifier.identifier].append(failure)  # type: ignore[union-attr]
 
         return failure
 
@@ -917,11 +918,11 @@ class OPDS2Importer(
         next_links = parsed_feed.links.get_by_rel(self.NEXT_LINK_RELATION)
         next_links = [next_link.href for next_link in next_links]
 
-        return next_links
+        return next_links  # type: ignore[no-any-return]
 
     def extract_last_update_dates(
         self, feed: str | opds2_ast.OPDS2Feed
-    ) -> list[tuple[str, datetime]]:
+    ) -> list[tuple[Optional[str], Optional[datetime]]]:
         """Extract last update date of the feed.
 
         :param feed: OPDS 2.0 feed
@@ -947,13 +948,13 @@ class OPDS2Importer(
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
                 auth_setting = ConfigurationSetting.for_externalintegration(
-                    ExternalIntegration.TOKEN_AUTH, self.collection.external_integration
+                    ExternalIntegration.TOKEN_AUTH, self.external_integration(self._db)
                 )
                 auth_setting.value = link.href
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None
-    ) -> tuple[dict, dict]:
+    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure] | CoverageFailure]]:
         """Turn an OPDS 2.0 feed into lists of Metadata and CirculationData objects.
         :param feed: OPDS 2.0 feed
         :param feed_url: Feed URL used to resolve relative links
@@ -961,7 +962,7 @@ class OPDS2Importer(
         parser_result = self._parser.parse_manifest(feed)
         feed = parser_result.root
         publication_metadata_dictionary = {}
-        failures: dict[str, list[CoverageFailure]] = {}
+        failures: dict[str, list[CoverageFailure] | CoverageFailure] = {}
 
         if feed.links:
             self._parse_feed_links(feed.links)
@@ -1011,7 +1012,9 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
     PROTOCOL = ExternalIntegration.OPDS2_IMPORT
     MEDIA_TYPE = OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
 
-    def _verify_media_type(self, url, status_code, headers, feed):
+    def _verify_media_type(
+        self, url: str, status_code: int, headers: Dict[str, str], feed: bytes
+    ) -> None:
         # Make sure we got an OPDS feed, and not an error page that was
         # sent with a 200 status code.
         media_type = headers.get("content-type")
@@ -1024,7 +1027,7 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
                 url, message=message, debug_message=feed, status_code=status_code
             )
 
-    def _get_accept_header(self):
+    def _get_accept_header(self) -> str:
         return "{}, {};q=0.9, */*;q=0.1".format(
             OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
         )

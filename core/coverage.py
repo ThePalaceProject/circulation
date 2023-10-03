@@ -8,7 +8,6 @@ from sqlalchemy.sql.functions import func
 
 from core.model.coverage import EquivalencyCoverageRecord
 
-from . import log  # This sets the appropriate log format.
 from .metadata_layer import ReplacementPolicy, TimestampData
 from .model import (
     BaseCoverageRecord,

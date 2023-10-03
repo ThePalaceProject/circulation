@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.expression import and_, or_
 
-from . import log  # This sets the appropriate log format and level.
 from .config import Configuration
 from .metadata_layer import TimestampData
 from .model import (

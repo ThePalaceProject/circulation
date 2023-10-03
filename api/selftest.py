@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
-from typing import Iterable, Optional, Tuple, Union
+from typing import Generator, Iterable, Optional, Tuple, Union
 
 from sqlalchemy.orm.session import Session
 
@@ -157,7 +157,7 @@ class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelf
         else:
             return "All titles in this collection have delivery mechanisms."
 
-    def _run_self_tests(self):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         yield self.run_test(
             "Checking for titles that have no delivery mechanisms.",
             self._no_delivery_mechanisms_test,

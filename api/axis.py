@@ -272,7 +272,7 @@ class Axis360API(
             )
 
         # Run the tests defined by HasCollectionSelfTests
-        for result in super()._run_self_tests():
+        for result in super()._run_self_tests(_db):
             yield result
 
     def refresh_bearer_token(self):
