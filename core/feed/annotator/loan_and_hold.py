@@ -2,12 +2,11 @@ import copy
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.types import FeedData, Link, WorkEntry
 from core.model.configuration import ExternalIntegration
 from core.model.constants import EditionConstants, LinkRelations
 from core.model.patron import Hold, Patron
-
-from .circulation import LibraryAnnotator
 
 
 class LibraryLoanAndHoldAnnotator(LibraryAnnotator):

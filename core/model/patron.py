@@ -22,19 +22,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
+from core.classifier import Classifier
+from core.model import Base, get_one_or_create, numericrange_to_tuple
+from core.model.credential import Credential
 from core.model.hybrid import hybrid_property
-
-from ..classifier import Classifier
-from ..user_profile import ProfileStorage
-from ..util.datetime_helpers import utc_now
-from . import Base, get_one_or_create, numericrange_to_tuple
-from .credential import Credential
+from core.user_profile import ProfileStorage
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
+    from core.model.devicetokens import DeviceToken
     from core.model.library import Library
     from core.model.licensing import License, LicensePool, LicensePoolDeliveryMechanism
-
-    from .devicetokens import DeviceToken
 
 
 class LoanAndHoldMixin:
@@ -327,7 +325,7 @@ class Patron(Base):
             return None
 
         _db = Session.object_session(self)
-        from ..lane import Lane
+        from core.lane import Lane
 
         qu = (
             _db.query(Lane)

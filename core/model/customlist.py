@@ -21,15 +21,15 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
-from ..util.datetime_helpers import utc_now
-from . import Base, get_one_or_create
-from .datasource import DataSource
-from .identifier import Identifier
-from .licensing import LicensePool
-from .work import Work
+from core.model import Base, get_one_or_create
+from core.model.datasource import DataSource
+from core.model.identifier import Identifier
+from core.model.licensing import LicensePool
+from core.model.work import Work
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
-    from . import Collection, Library
+    from core.model import Collection, Library
 
 
 @total_ordering
@@ -390,7 +390,7 @@ class CustomListEntry(Base):
 
         new_work = None
         if not metadata:
-            from ..metadata_layer import Metadata
+            from core.metadata_layer import Metadata
 
             metadata = Metadata.from_edition(edition)
 

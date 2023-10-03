@@ -1,8 +1,8 @@
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
-from .model import CirculationEvent, ExternalIntegration, create, get_one
-from .service.container import Services
+from core.model import CirculationEvent, ExternalIntegration, create, get_one
+from core.service.container import Services
 
 
 class LocalAnalyticsProvider:

@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.expression import and_, or_
 
-from .config import Configuration
-from .metadata_layer import TimestampData
-from .model import (
+from core.config import Configuration
+from core.metadata_layer import TimestampData
+from core.model import (
     Base,
     CachedFeed,
     CirculationEvent,
@@ -31,8 +31,8 @@ from .model import (
     get_one,
     get_one_or_create,
 )
-from .model.configuration import ConfigurationSetting
-from .util.datetime_helpers import utc_now
+from core.model.configuration import ConfigurationSetting
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Query
@@ -942,7 +942,7 @@ class WorkReaper(ReaperMonitor):
     MODEL_CLASS = Work
 
     def __init__(self, *args, **kwargs):
-        from .external_search import ExternalSearchIndex
+        from core.external_search import ExternalSearchIndex
 
         search_index_client = kwargs.pop("search_index_client", None)
         super().__init__(*args, **kwargs)

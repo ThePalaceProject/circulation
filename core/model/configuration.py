@@ -12,14 +12,13 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
+from core.config import CannotLoadConfiguration, Configuration
+from core.model import Base, get_one, get_one_or_create
+from core.model.constants import DataSourceConstants
+from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
-
-from ..config import CannotLoadConfiguration, Configuration
-from ..util.string_helpers import random_string
-from . import Base, get_one, get_one_or_create
-from .constants import DataSourceConstants
-from .hassessioncache import HasSessionCache
-from .library import Library, externalintegrations_libraries
+from core.model.library import Library, externalintegrations_libraries
+from core.util.string_helpers import random_string
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the

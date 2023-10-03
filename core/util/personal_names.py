@@ -4,7 +4,7 @@ import unicodedata
 from fuzzywuzzy import fuzz
 from nameparser import HumanName
 
-from .permanent_work_id import WorkIDCalculator
+from core.util.permanent_work_id import WorkIDCalculator
 
 """Fallback algorithms for dealing with personal names when VIAF fails us."""
 

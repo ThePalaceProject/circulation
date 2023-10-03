@@ -26,6 +26,11 @@ from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
 from sqlalchemy.orm import Query
 
+from api.circulation_exceptions import *
+from api.integration.registry.license_providers import (
+    CirculationLicenseProvidersRegistry,
+)
+from api.util.patron import PatronUtility
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.integration.base import HasLibraryIntegrationConfiguration
@@ -54,10 +59,6 @@ from core.model import (
 )
 from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
-
-from .circulation_exceptions import *
-from .integration.registry.license_providers import CirculationLicenseProvidersRegistry
-from .util.patron import PatronUtility
 
 if TYPE_CHECKING:
     pass
@@ -898,10 +899,9 @@ class CirculationAPI:
         :return: Mapping of protocols to fulfillment post-processors.
         """
         from api.opds2 import TokenAuthenticationFulfillmentProcessor
+        from api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
         from core.opds2_import import OPDS2Importer
         from core.opds_import import OPDSImporter
-
-        from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 
         return {
             OPDSImporter.NAME: SAMLWAYFlessAcquisitionLinkProcessor,

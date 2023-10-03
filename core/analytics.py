@@ -7,11 +7,11 @@ from typing import Any, Dict, Optional, Set
 
 from sqlalchemy.orm.session import Session
 
-from .config import CannotLoadConfiguration
-from .model import ExternalIntegration
-from .service.container import container_instance
-from .util.datetime_helpers import utc_now
-from .util.log import log_elapsed_time
+from core.config import CannotLoadConfiguration
+from core.model import ExternalIntegration
+from core.service.container import container_instance
+from core.util.datetime_helpers import utc_now
+from core.util.log import log_elapsed_time
 
 
 class Analytics:

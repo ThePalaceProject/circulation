@@ -115,7 +115,7 @@ class MediumEntryPoint(EntryPoint):
         """Modify a query against Work+LicensePool+Edition
         to match only items with the right medium.
         """
-        from .model import Edition
+        from core.model import Edition
 
         return qu.filter(Edition.medium == cls.INTERNAL_NAME)
 

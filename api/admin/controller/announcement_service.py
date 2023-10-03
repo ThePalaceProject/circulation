@@ -4,13 +4,12 @@ from typing import Any, Callable, Dict
 
 import flask
 
+from api.admin.announcement_list_validator import AnnouncementListValidator
+from api.admin.controller.settings import SettingsController
 from api.config import Configuration
 from core.model.announcements import Announcement
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail, ProblemError
-
-from ..announcement_list_validator import AnnouncementListValidator
-from .settings import SettingsController
 
 
 class AnnouncementSettings(SettingsController):

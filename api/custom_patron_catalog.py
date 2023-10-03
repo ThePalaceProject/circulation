@@ -6,11 +6,10 @@ from __future__ import annotations
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
+from api.config import CannotLoadConfiguration
 from core.lane import Lane
 from core.model import ConfigurationSetting, ExternalIntegration, get_one
 from core.util.opds_writer import OPDSFeed
-
-from .config import CannotLoadConfiguration
 
 
 class CustomPatronCatalog:

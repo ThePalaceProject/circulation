@@ -30,13 +30,9 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, select
 from sqlalchemy.sql.functions import func
 
-from core.model.classification import Classification, Subject
-
-from ..classifier import Classifier, WorkClassifier
-from ..config import CannotLoadConfiguration
-from ..util import LanguageCodes
-from ..util.datetime_helpers import utc_now
-from . import (
+from core.classifier import Classifier, WorkClassifier
+from core.config import CannotLoadConfiguration
+from core.model import (
     Base,
     PresentationCalculationPolicy,
     flush,
@@ -45,13 +41,16 @@ from . import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from .constants import DataSourceConstants
-from .contributor import Contribution, Contributor
-from .coverage import CoverageRecord, WorkCoverageRecord
-from .datasource import DataSource
-from .edition import Edition
-from .identifier import Identifier, RecursiveEquivalencyCache
-from .measurement import Measurement
+from core.model.classification import Classification, Subject
+from core.model.constants import DataSourceConstants
+from core.model.contributor import Contribution, Contributor
+from core.model.coverage import CoverageRecord, WorkCoverageRecord
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.identifier import Identifier, RecursiveEquivalencyCache
+from core.model.measurement import Measurement
+from core.util import LanguageCodes
+from core.util.datetime_helpers import utc_now
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -360,8 +359,8 @@ class Work(Base):
 
     @classmethod
     def for_unchecked_subjects(cls, _db):
-        from .classification import Classification, Subject
-        from .licensing import LicensePool
+        from core.model.classification import Classification, Subject
+        from core.model.licensing import LicensePool
 
         """Find all Works whose LicensePools have an Identifier that
         is classified under an unchecked Subject.
@@ -389,7 +388,7 @@ class Work(Base):
         Counter tallying the number of affected LicensePools
         associated with a given work.
         """
-        from .licensing import LicensePool
+        from core.model.licensing import LicensePool
 
         qu = (
             _db.query(LicensePool)
@@ -616,7 +615,7 @@ class Work(Base):
     @classmethod
     def with_genre(cls, _db, genre):
         """Find all Works classified under the given genre."""
-        from .classification import Genre
+        from core.model.classification import Genre
 
         if isinstance(genre, (bytes, str)):
             genre, ignore = Genre.lookup(_db, genre)
@@ -642,7 +641,7 @@ class Work(Base):
            Identifiers. By default, this method will be very strict
            about equivalencies.
         """
-        from .licensing import LicensePool
+        from core.model.licensing import LicensePool
 
         identifier_ids = [identifier.id for identifier in identifiers]
         if not identifier_ids:
@@ -675,8 +674,8 @@ class Work(Base):
     @classmethod
     def reject_covers(cls, _db, works_or_identifiers, search_index_client=None):
         """Suppresses the currently visible covers of a number of Works"""
-        from .licensing import LicensePool
-        from .resource import Hyperlink, Resource
+        from core.model.licensing import LicensePool
+        from core.model.resource import Hyperlink, Resource
 
         works = list(set(works_or_identifiers))
         if not isinstance(works[0], cls):
@@ -751,7 +750,7 @@ class Work(Base):
            determine how far to go when looking for equivalent
            Identifiers.
         """
-        from .licensing import LicensePool
+        from core.model.licensing import LicensePool
 
         _db = Session.object_session(self)
         identifier_ids_subquery = (
@@ -1174,7 +1173,7 @@ class Work(Base):
         return "\n".join(l)
 
     def calculate_opds_entries(self, verbose=True):
-        from ..opds import AcquisitionFeed, Annotator, VerboseAnnotator
+        from core.opds import AcquisitionFeed, Annotator, VerboseAnnotator
 
         _db = Session.object_session(self)
         simple = AcquisitionFeed.single_entry(_db, self, Annotator, force_create=True)
@@ -1187,7 +1186,7 @@ class Work(Base):
         )
 
     def calculate_marc_record(self):
-        from ..marc import Annotator, MARCExporter
+        from core.marc import Annotator, MARCExporter
 
         _db = Session.object_session(self)
         record = MARCExporter.create_record(
@@ -1386,7 +1385,7 @@ class Work(Base):
 
     def assign_genres_from_weights(self, genre_weights):
         # Assign WorkGenre objects to the remainder.
-        from .classification import Genre
+        from core.model.classification import Genre
 
         changed = False
         _db = Session.object_session(self)
@@ -1844,9 +1843,9 @@ class Work(Base):
 
         # This subquery gets Collection IDs for collections
         # that own more than zero licenses for this book.
-        from .classification import Genre, Subject
-        from .customlist import CustomListEntry
-        from .licensing import LicensePool
+        from core.model.classification import Genre, Subject
+        from core.model.customlist import CustomListEntry
+        from core.model.licensing import LicensePool
 
         # We need information about LicensePools for a few reasons:
         #
@@ -2016,7 +2015,7 @@ class Work(Base):
         )
 
         # Normalize by dividing each weight by the sum of the weights for that Identifier's Classifications.
-        from .classification import Classification
+        from core.model.classification import Classification
 
         weight_column = (
             func.sum(Classification.weight)
@@ -2204,7 +2203,7 @@ class Work(Base):
         return qu
 
     def classifications_with_genre(self):
-        from .classification import Classification, Subject
+        from core.model.classification import Classification, Subject
 
         _db = Session.object_session(self)
         identifier = self.presentation_edition.primary_identifier
@@ -2217,7 +2216,7 @@ class Work(Base):
         )
 
     def top_genre(self):
-        from .classification import Genre
+        from core.model.classification import Genre
 
         _db = Session.object_session(self)
         genre = (
@@ -2234,7 +2233,7 @@ class Work(Base):
         _db = Session.object_session(self)
         if search_index is None:
             try:
-                from ..external_search import ExternalSearchIndex
+                from core.external_search import ExternalSearchIndex
 
                 search_index = ExternalSearchIndex(_db)
             except CannotLoadConfiguration as e:

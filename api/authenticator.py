@@ -19,7 +19,10 @@ from api.authentication.access_token import AccessTokenProvider
 from api.authentication.base import AuthenticationProvider
 from api.authentication.basic import BasicAuthenticationProvider
 from api.authentication.basic_token import BasicTokenAuthenticationProvider
+from api.config import CannotLoadConfiguration, Configuration
 from api.custom_patron_catalog import CustomPatronCatalog
+from api.integration.registry.patron_auth import PatronAuthRegistry
+from api.problem_details import *
 from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
@@ -32,10 +35,6 @@ from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.http import RemoteIntegrationException
 from core.util.log import elapsed_time_logging
 from core.util.problem_detail import ProblemDetail, ProblemError
-
-from .config import CannotLoadConfiguration, Configuration
-from .integration.registry.patron_auth import PatronAuthRegistry
-from .problem_details import *
 
 if sys.version_info >= (3, 11):
     from typing import Self

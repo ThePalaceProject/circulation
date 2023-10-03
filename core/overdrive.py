@@ -15,16 +15,15 @@ from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
 from api.circulation_exceptions import CannotFulfill
+from core.config import CannotLoadConfiguration, Configuration
+from core.coverage import BibliographicCoverageProvider
+from core.importers import BaseImporterSettings
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-
-from .config import CannotLoadConfiguration, Configuration
-from .coverage import BibliographicCoverageProvider
-from .importers import BaseImporterSettings
-from .metadata_layer import (
+from core.metadata_layer import (
     CirculationData,
     ContributorData,
     FormatData,
@@ -34,7 +33,7 @@ from .metadata_layer import (
     Metadata,
     SubjectData,
 )
-from .model import (
+from core.model import (
     Classification,
     Collection,
     Contributor,
@@ -51,10 +50,10 @@ from .model import (
     Subject,
     get_one_or_create,
 )
-from .model.configuration import HasExternalIntegration
-from .util.datetime_helpers import strptime_utc, utc_now
-from .util.http import HTTP, BadResponseException
-from .util.string_helpers import base64
+from core.model.configuration import HasExternalIntegration
+from core.util.datetime_helpers import strptime_utc, utc_now
+from core.util.http import HTTP, BadResponseException
+from core.util.string_helpers import base64
 
 if TYPE_CHECKING:
     pass

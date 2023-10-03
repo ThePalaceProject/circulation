@@ -12,9 +12,9 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
-from ..util.personal_names import display_name_to_sort_name
-from . import Base, flush, get_one, get_one_or_create
-from .hybrid import hybrid_property
+from core.model import Base, flush, get_one, get_one_or_create
+from core.model.hybrid import hybrid_property
+from core.util.personal_names import display_name_to_sort_name
 
 if TYPE_CHECKING:
     from core.model import Edition  # noqa: autoflake

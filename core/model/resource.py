@@ -30,17 +30,17 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
 
-from ..util.datetime_helpers import utc_now
-from ..util.http import HTTP
-from . import Base, get_one, get_one_or_create
-from .constants import (
+from core.model import Base, get_one, get_one_or_create
+from core.model.constants import (
     DataSourceConstants,
     IdentifierConstants,
     LinkRelations,
     MediaTypes,
 )
-from .edition import Edition
-from .licensing import LicensePoolDeliveryMechanism
+from core.model.edition import Edition
+from core.model.licensing import LicensePoolDeliveryMechanism
+from core.util.datetime_helpers import utc_now
+from core.util.http import HTTP
 
 if TYPE_CHECKING:
     from core.model import CachedMARCFile
@@ -75,7 +75,7 @@ class Resource(Base):
 
     # Many Works may use this resource (as opposed to other resources
     # linked to them with rel="description") as their summary.
-    from .work import Work
+    from core.model.work import Work
 
     summary_works: Mapped[List[Work]] = relationship(
         "Work", backref="summary", foreign_keys=[Work.summary_id]

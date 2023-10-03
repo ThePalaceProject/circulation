@@ -16,7 +16,7 @@ import core.flask_sqlalchemy_session
 
 # For backwards compatibility, import items that were moved to
 # languages.py
-from .languages import LanguageCodes, LookupTable
+from core.util.languages import LanguageCodes, LookupTable
 
 
 def batch(iterable, size=1):

@@ -17,19 +17,16 @@ from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from core.model.classification import Classification
-from core.model.devicetokens import DeviceToken, DeviceTokenTypes
-from core.model.patron import Loan
-from core.query.customlist import CustomListQueries
-from core.search.coverage_remover import RemovesSearchCoverage
-from core.util.notifications import PushNotifications
-
-from .config import CannotLoadConfiguration, Configuration, ConfigurationConstants
-from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
-from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
-from .lane import Lane
-from .metadata_layer import TimestampData
-from .model import (
+from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
+from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
+from core.external_search import (
+    ExternalSearchIndex,
+    Filter,
+    SearchIndexCoverageProvider,
+)
+from core.lane import Lane
+from core.metadata_layer import TimestampData
+from core.model import (
     BaseCoverageRecord,
     CachedFeed,
     Collection,
@@ -54,15 +51,24 @@ from .model import (
     get_one_or_create,
     production_session,
 )
-from .model.listeners import site_configuration_has_changed
-from .monitor import CollectionMonitor, ReaperMonitor
-from .opds_import import OPDSImporter, OPDSImportMonitor
-from .overdrive import OverdriveCoreAPI
-from .service.container import Services, container_instance
-from .util import fast_query_count
-from .util.datetime_helpers import strptime_utc, utc_now
-from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
-from .util.worker_pools import DatabasePool
+from core.model.classification import Classification
+from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.listeners import site_configuration_has_changed
+from core.model.patron import Loan
+from core.monitor import CollectionMonitor, ReaperMonitor
+from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.overdrive import OverdriveCoreAPI
+from core.query.customlist import CustomListQueries
+from core.search.coverage_remover import RemovesSearchCoverage
+from core.service.container import Services, container_instance
+from core.util import fast_query_count
+from core.util.datetime_helpers import strptime_utc, utc_now
+from core.util.notifications import PushNotifications
+from core.util.personal_names import (
+    contributor_name_match_ratio,
+    display_name_to_sort_name,
+)
+from core.util.worker_pools import DatabasePool
 
 
 class Script:
@@ -718,7 +724,7 @@ class LaneSweeperScript(LibraryInputScript):
     """Do something to each lane in a library."""
 
     def process_library(self, library):
-        from .lane import WorkList
+        from core.lane import WorkList
 
         top_level = WorkList.top_level_for_library(self._db, library)
         queue = [top_level]

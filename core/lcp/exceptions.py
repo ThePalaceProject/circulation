@@ -1,4 +1,4 @@
-from ..exceptions import BaseError
+from core.exceptions import BaseError
 
 
 class LCPError(BaseError):

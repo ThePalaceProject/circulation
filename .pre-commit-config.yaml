@@ -24,6 +24,11 @@ repos:
           - --py38-plus
           - --keep-runtime-typing
 
+  - repo: https://github.com/MarcoGorelli/absolufy-imports
+    rev: v0.3.0
+    hooks:
+      - id: absolufy-imports
+
   - repo: https://github.com/myint/autoflake
     rev: v2.2.1
     hooks:

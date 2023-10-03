@@ -33,18 +33,17 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
+from core.configuration.library import LibrarySettings
+from core.entrypoint import EntryPoint
+from core.facets import FacetConstants
+from core.model import Base, get_one
+from core.model.announcements import Announcement
+from core.model.customlist import customlist_sharedlibrary
+from core.model.edition import Edition
+from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
-
-from ..configuration.library import LibrarySettings
-from ..entrypoint import EntryPoint
-from ..facets import FacetConstants
-from . import Base, get_one
-from .announcements import Announcement
-from .customlist import customlist_sharedlibrary
-from .edition import Edition
-from .hassessioncache import HasSessionCache
-from .licensing import LicensePool
-from .work import Work
+from core.model.licensing import LicensePool
+from core.model.work import Work
 
 if TYPE_CHECKING:
     from core.lane import Lane
@@ -59,8 +58,6 @@ if TYPE_CHECKING:
         ExternalIntegration,
         Patron,
     )
-
-    from ..lane import Lane
 
 
 class Library(Base, HasSessionCache):
@@ -364,7 +361,7 @@ class Library(Base, HasSessionCache):
         # a server restart.
         value = Library._has_root_lane_cache.get(self.id, None)
         if value is None:
-            from ..lane import Lane
+            from core.lane import Lane
 
             _db = Session.object_session(self)
             root_lanes = (
@@ -393,7 +390,7 @@ class Library(Base, HasSessionCache):
         :param show_suppressed: Include titles that have nothing but
         suppressed LicensePools.
         """
-        from .collection import Collection
+        from core.model.collection import Collection
 
         collection_ids = collection_ids or [
             x.id for x in self.all_collections if x.id is not None

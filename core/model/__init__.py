@@ -20,8 +20,8 @@ from sqlalchemy.sql.expression import literal_column, table
 
 Base = declarative_base()
 
-from .. import classifier
-from .constants import (
+from core import classifier
+from core.model.constants import (
     DataSourceConstants,
     EditionConstants,
     IdentifierConstants,
@@ -425,9 +425,9 @@ class SessionManager:
             session.execute(text(sql))
 
         # Create initial content.
-        from .classification import Genre
-        from .datasource import DataSource
-        from .licensing import DeliveryMechanism
+        from core.model.classification import Genre
+        from core.model.datasource import DataSource
+        from core.model.licensing import DeliveryMechanism
 
         list(DataSource.well_known_sources(session))
 
@@ -523,35 +523,46 @@ from api.saml.metadata.federations.model import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
-
-from .admin import Admin, AdminRole
-from .cachedfeed import CachedFeed, CachedMARCFile, WillNotGenerateExpensiveFeed
-from .circulationevent import CirculationEvent
-from .classification import Classification, Genre, Subject
-from .collection import (
+from core.model.admin import Admin, AdminRole
+from core.model.cachedfeed import (
+    CachedFeed,
+    CachedMARCFile,
+    WillNotGenerateExpensiveFeed,
+)
+from core.model.circulationevent import CirculationEvent
+from core.model.classification import Classification, Genre, Subject
+from core.model.collection import (
     Collection,
     CollectionIdentifier,
     CollectionMissing,
     collections_identifiers,
 )
-from .configuration import (
+from core.model.configuration import (
     ConfigurationSetting,
     ExternalIntegration,
     ExternalIntegrationLink,
 )
-from .contributor import Contribution, Contributor
-from .coverage import BaseCoverageRecord, CoverageRecord, Timestamp, WorkCoverageRecord
-from .credential import Credential
-from .customlist import CustomList, CustomListEntry
-from .datasource import DataSource
-from .devicetokens import DeviceToken
-from .discovery_service_registration import DiscoveryServiceRegistration
-from .edition import Edition
-from .hassessioncache import HasSessionCache
-from .identifier import Equivalency, Identifier
-from .integration import IntegrationConfiguration, IntegrationLibraryConfiguration
-from .library import Library
-from .licensing import (
+from core.model.contributor import Contribution, Contributor
+from core.model.coverage import (
+    BaseCoverageRecord,
+    CoverageRecord,
+    Timestamp,
+    WorkCoverageRecord,
+)
+from core.model.credential import Credential
+from core.model.customlist import CustomList, CustomListEntry
+from core.model.datasource import DataSource
+from core.model.devicetokens import DeviceToken
+from core.model.discovery_service_registration import DiscoveryServiceRegistration
+from core.model.edition import Edition
+from core.model.hassessioncache import HasSessionCache
+from core.model.identifier import Equivalency, Identifier
+from core.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
+from core.model.library import Library
+from core.model.licensing import (
     DeliveryMechanism,
     License,
     LicensePool,
@@ -559,9 +570,9 @@ from .licensing import (
     PolicyException,
     RightsStatus,
 )
-from .listeners import *
-from .measurement import Measurement
-from .patron import (
+from core.model.listeners import *
+from core.model.measurement import Measurement
+from core.model.patron import (
     Annotation,
     Hold,
     Loan,
@@ -569,9 +580,14 @@ from .patron import (
     Patron,
     PatronProfileStorage,
 )
-from .resource import Hyperlink, Representation, Resource, ResourceTransformation
-from .time_tracking import PlaytimeEntry, PlaytimeSummary
-from .work import Work, WorkGenre
+from core.model.resource import (
+    Hyperlink,
+    Representation,
+    Resource,
+    ResourceTransformation,
+)
+from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
+from core.model.work import Work, WorkGenre
 
 # Import order important here to avoid an import cycle.
 from core.lane import Lane, LaneGenre  # isort:skip

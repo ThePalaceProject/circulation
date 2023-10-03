@@ -33,9 +33,9 @@ from tests.api.mockapi.odilo import MockOdiloAPI
 from tests.core.mock import MockRequestsResponse
 
 if TYPE_CHECKING:
-    from ..fixtures.api_odilo_files import OdiloFilesFixture
-    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
-    from ..fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.api_odilo_files import OdiloFilesFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class OdiloFixture:

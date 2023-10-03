@@ -10,6 +10,16 @@ import flask
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.exc import StaleDataError
 
+from api.circulation import (
+    BaseCirculationAPI,
+    BaseCirculationEbookLoanSettings,
+    DeliveryMechanismInfo,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
+from api.circulation_exceptions import *
+from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
@@ -37,17 +47,6 @@ from core.overdrive import (
 from core.scripts import Script
 from core.util.datetime_helpers import strptime_utc
 from core.util.http import HTTP
-
-from .circulation import (
-    BaseCirculationAPI,
-    BaseCirculationEbookLoanSettings,
-    DeliveryMechanismInfo,
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-)
-from .circulation_exceptions import *
-from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class OverdriveAPIConstants:

@@ -29,24 +29,23 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
+from core.model import Base, create, get_one, get_one_or_create
+from core.model.configuration import ConfigurationSetting, ExternalIntegration
+from core.model.constants import EditionConstants
+from core.model.coverage import CoverageRecord, WorkCoverageRecord
+from core.model.datasource import DataSource
+from core.model.edition import Edition
+from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
+from core.model.identifier import Identifier
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-
-from ..util.string_helpers import base64
-from . import Base, create, get_one, get_one_or_create
-from .configuration import ConfigurationSetting, ExternalIntegration
-from .constants import EditionConstants
-from .coverage import CoverageRecord, WorkCoverageRecord
-from .datasource import DataSource
-from .edition import Edition
-from .hassessioncache import HasSessionCache
-from .identifier import Identifier
-from .library import Library
-from .licensing import LicensePool, LicensePoolDeliveryMechanism
-from .work import Work
+from core.model.library import Library
+from core.model.licensing import LicensePool, LicensePoolDeliveryMechanism
+from core.model.work import Work
+from core.util.string_helpers import base64
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the

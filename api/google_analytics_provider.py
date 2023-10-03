@@ -5,11 +5,10 @@ import uuid
 
 from flask_babel import lazy_gettext as _
 
+from api.config import CannotLoadConfiguration
 from core.model import ConfigurationSetting, ExternalIntegration, Session
 from core.service.container import Services
 from core.util.http import HTTP
-
-from .config import CannotLoadConfiguration
 
 
 class GoogleAnalyticsProvider:

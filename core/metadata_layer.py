@@ -16,9 +16,9 @@ from dateutil.parser import parse
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
-from .analytics import Analytics
-from .classifier import NO_NUMBER, NO_VALUE
-from .model import (
+from core.analytics import Analytics
+from core.classifier import NO_NUMBER, NO_VALUE
+from core.model import (
     Classification,
     Collection,
     Contributor,
@@ -41,11 +41,11 @@ from .model import (
     get_one,
     get_one_or_create,
 )
-from .model.licensing import LicenseFunctions, LicenseStatus
-from .util import LanguageCodes
-from .util.datetime_helpers import to_utc, utc_now
-from .util.median import median
-from .util.personal_names import display_name_to_sort_name
+from core.model.licensing import LicenseFunctions, LicenseStatus
+from core.util import LanguageCodes
+from core.util.datetime_helpers import to_utc, utc_now
+from core.util.median import median
+from core.util.personal_names import display_name_to_sort_name
 
 
 class ReplacementPolicy:

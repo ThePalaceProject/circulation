@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 
-from . import Base
-from .constants import DataSourceConstants
+from core.model import Base
+from core.model.constants import DataSourceConstants
 
 if TYPE_CHECKING:
-    from .datasource import DataSource
+    from core.model.datasource import DataSource
 
 
 class Measurement(Base):
