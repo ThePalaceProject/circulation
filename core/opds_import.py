@@ -74,6 +74,7 @@ from core.monitor import CollectionMonitor
 from core.selftest import SelfTestResult
 from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
+from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
@@ -190,6 +191,7 @@ class OPDSImporterLibrarySettings(BaseSettings):
 
 class BaseOPDSImporter(
     CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings],
+    LoggerMixin,
     ABC,
 ):
     def __init__(
@@ -206,7 +208,6 @@ class BaseOPDSImporter(
             )
         self._collection_id = collection.id
         self._integration_configuration_id = collection.integration_configuration_id
-        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
         if data_source_name is None:
             # Use the Collection data_source for OPDS import.
             data_source = self.collection.data_source
