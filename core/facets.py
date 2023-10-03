@@ -50,6 +50,7 @@ class FacetConstants:
         ORDER_TITLE,
         ORDER_AUTHOR,
         ORDER_ADDED_TO_COLLECTION,
+        ORDER_LAST_UPDATE,
     ]
 
     ORDER_ASCENDING = "asc"
@@ -112,7 +113,12 @@ class FacetConstants:
     # Unless a library offers an alternate configuration, patrons will
     # see these facet groups.
     DEFAULT_ENABLED_FACETS = {
-        ORDER_FACET_GROUP_NAME: [ORDER_AUTHOR, ORDER_TITLE, ORDER_ADDED_TO_COLLECTION],
+        ORDER_FACET_GROUP_NAME: [
+            ORDER_AUTHOR,
+            ORDER_TITLE,
+            ORDER_ADDED_TO_COLLECTION,
+            ORDER_LAST_UPDATE,
+        ],
         AVAILABILITY_FACET_GROUP_NAME: [
             AVAILABLE_ALL,
             AVAILABLE_NOW,
