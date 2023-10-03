@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import re
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -277,8 +276,6 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         super().__init__(
             library_id, integration_id, settings, library_settings, analytics
         )
-
-        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
 
         self.identifier_re = settings.identifier_regular_expression
         self.password_re = settings.password_regular_expression

@@ -27,6 +27,7 @@ from core.model import Collection, ExternalIntegration
 from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
+from core.util.log import LoggerMixin
 from core.util.opds_writer import AtomFeed
 
 if sys.version_info >= (3, 10):
@@ -371,7 +372,7 @@ class HasSelfTests(BaseHasSelfTests, ABC):
         return None
 
 
-class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, ABC):
+class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
     # Typing specific
     collection: Any
 
@@ -423,9 +424,4 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, ABC):
 
     @abstractmethod
     def integration(self, _db: Session) -> Optional[IntegrationConfiguration]:
-        ...
-
-    @classmethod
-    @abstractmethod
-    def logger(cls) -> logging.Logger:
         ...

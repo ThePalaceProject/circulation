@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC
 from typing import Generator, Iterable, Optional, Tuple, Union
 
@@ -131,10 +130,6 @@ class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelf
 
     def integration(self, _db: Session) -> IntegrationConfiguration | None:
         return self.collection.integration_configuration
-
-    @classmethod
-    def logger(cls) -> logging.Logger:
-        return logging.Logger(cls.__name__)
 
     def _no_delivery_mechanisms_test(self):
         # Find works in the tested collection that have no delivery

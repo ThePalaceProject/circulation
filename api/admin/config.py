@@ -1,4 +1,3 @@
-import logging
 import os
 from enum import Enum
 from typing import Optional
@@ -7,6 +6,7 @@ from urllib.parse import urljoin
 from requests import RequestException
 
 from core.util.http import HTTP, RequestNetworkException
+from core.util.log import LoggerMixin
 
 
 class OperationalMode(str, Enum):
@@ -14,7 +14,7 @@ class OperationalMode(str, Enum):
     development = "development"
 
 
-class Configuration:
+class Configuration(LoggerMixin):
     APP_NAME = "Palace Collection Manager"
     PACKAGE_NAME = "@thepalaceproject/circulation-admin"
     PACKAGE_VERSION = "1.10.0"
@@ -61,10 +61,6 @@ class Configuration:
             if os.path.isdir(cls.package_development_directory())
             else OperationalMode.production
         )
-
-    @classmethod
-    def logger(cls) -> logging.Logger:
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     @classmethod
     def package_name(cls) -> str:

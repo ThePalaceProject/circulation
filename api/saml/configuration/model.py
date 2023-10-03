@@ -1,5 +1,4 @@
 import html
-import logging
 from datetime import datetime
 from enum import Enum
 from threading import Lock
@@ -39,6 +38,7 @@ from core.integration.settings import (
 )
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
+from core.util.log import LoggerMixin
 
 
 class SAMLConfigurationError(BaseError):
@@ -92,7 +92,7 @@ class FederatedIdentityProviderOptions:
         return {entity_id: label for entity_id, label in identity_providers}
 
 
-class SAMLWebSSOAuthSettings(AuthProviderSettings):
+class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
     service_provider_xml_metadata: str = FormField(
@@ -275,10 +275,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings):
         ),
         alias="debug",
     )
-
-    @classmethod
-    def logger(cls):
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     @classmethod
     def validate_xml_metadata(cls, v: str, metadata_type: str):
