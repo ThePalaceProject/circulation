@@ -1,5 +1,6 @@
 import functools
 import logging
+import sys
 import time
 from contextlib import contextmanager
 from typing import Callable, Optional
@@ -58,11 +59,18 @@ def elapsed_time_logging(
         log_method(f"{prefix}Completed. (elapsed time: {elapsed_time:0.4f} seconds)")
 
 
+# Once we drop python 3.8 this can go away
+if sys.version_info >= (3, 9):
+    cache_decorator = functools.cache
+else:
+    cache_decorator = functools.lru_cache
+
+
 class LoggerMixin:
     """Mixin that adds a standardized logger"""
 
     @classmethod
-    @functools.cache
+    @cache_decorator
     def logger(cls) -> logging.Logger:
         return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
