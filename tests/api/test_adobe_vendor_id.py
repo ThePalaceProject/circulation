@@ -382,7 +382,6 @@ class TestAuthdataUtility:
         assert "lib|0|1234|IQlGTjZ:J0VzNTI;WCEjKVoqX1M@" == token
 
     def test_decode_two_part_short_client_token_uses_adobe_base64_encoding(self):
-
         # The base64 encoding of this signature has a plus sign in it.
         signature = "LbU}66%\\-4zt>R>_)\n2Q"
         encoded_signature = AuthdataUtility.adobe_base64_encode(signature)

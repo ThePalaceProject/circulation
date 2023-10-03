@@ -328,7 +328,6 @@ class TestFacetsWithEntryPoint:
         assert [] == m(None)
 
     def test_modify_search_filter(self):
-
         # When an entry point is selected, search filters are modified so
         # that they only find works that fit that entry point.
         filter = Filter()
@@ -949,7 +948,6 @@ class TestFacets:
             ),
             (Facets.AVAILABLE_NOT_NOW, [not_available]),
         ]:
-
             facets = Facets(db.default_library(), None, availability, None, None, None)
             modified = facets.modify_database_query(db.session, qu)
             assert (availability, sorted(x.title for x in modified)) == (
@@ -2307,7 +2305,6 @@ class TestWorkList:
         # Verify that the Facets object passed into groups() is
         # propagated to the methods called by groups().
         class MockWorkList(WorkList):
-
             overview_facets_called_with = None
 
             def works(self, _db, pagination, facets):
@@ -4576,7 +4573,6 @@ class TestWorkListGroupsEndToEnd:
         # the WorkList.
 
         class MockWorkList:
-
             display_name = "Mock"
             visible = True
             priority = 2

@@ -57,7 +57,6 @@ class TestHyperlink:
 
 class TestResource:
     def test_as_delivery_mechanism_for(self, db: DatabaseTransactionFixture):
-
         # Calling as_delivery_mechanism_for on a Resource that is used
         # to deliver a specific LicensePool returns the appropriate
         # LicensePoolDeliveryMechanism.
@@ -447,7 +446,6 @@ class TestRepresentation:
         assert "" == m("no/such-media-type")
 
     def test_default_filename(self, db: DatabaseTransactionFixture):
-
         # Here's a common sort of URL.
         url = "http://example.com/foo/bar/baz.txt"
         representation, ignore = db.representation(url)
@@ -498,7 +496,6 @@ class TestRepresentation:
         assert "cover.png" == filename
 
     def test_cautious_http_get(self):
-
         h = DummyHTTPClient()
         h.queue_response(200, content="yay")
 

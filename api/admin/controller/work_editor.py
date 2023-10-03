@@ -34,7 +34,6 @@ from .base import AdminPermissionsControllerMixin
 
 
 class WorkController(CirculationManagerController, AdminPermissionsControllerMixin):
-
     STAFF_WEIGHT = 1000
 
     def details(self, identifier_type, identifier):

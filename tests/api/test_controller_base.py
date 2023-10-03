@@ -32,7 +32,6 @@ from tests.fixtures.library import LibraryFixture
 
 class TestBaseController:
     def test_unscoped_session(self, circulation_fixture: CirculationControllerFixture):
-
         """Compare to TestScopedSession.test_scoped_session to see
         how database sessions will be handled in production.
         """
@@ -200,7 +199,6 @@ class TestBaseController:
     def test_handle_conditional_request(
         self, circulation_fixture: CirculationControllerFixture
     ):
-
         # First, test success: the client provides If-Modified-Since
         # and it is _not_ earlier than the 'last modified' date known by
         # the server.

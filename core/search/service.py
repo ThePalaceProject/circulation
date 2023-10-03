@@ -69,7 +69,8 @@ class SearchServiceFailedDocument:
 
 class SearchService(ABC):
     """The interface we need from services like Opensearch. Essentially, it provides the operations we want with
-    sensible types, rather than the untyped pile of JSON the actual search client provides."""
+    sensible types, rather than the untyped pile of JSON the actual search client provides.
+    """
 
     @abstractmethod
     def read_pointer_name(self) -> str:

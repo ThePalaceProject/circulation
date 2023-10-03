@@ -28,7 +28,6 @@ class MockResponse:
 
 
 class MockAPI(MilleniumPatronAPI):
-
     queue: List[Any]
     requests_made: List[Any]
 

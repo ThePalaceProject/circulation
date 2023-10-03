@@ -131,7 +131,7 @@ class TestOPDSForDistributorsAPI:
         # BEARER_TOKEN access control scheme, then X is a supported
         # media type for an OPDS For Distributors collection.
         supported = opds_dist_api_fixture.api.SUPPORTED_MEDIA_TYPES
-        for (format, drm) in DeliveryMechanism.default_client_can_fulfill_lookup:
+        for format, drm in DeliveryMechanism.default_client_can_fulfill_lookup:
             if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None:
                 assert format in supported
 
@@ -624,7 +624,6 @@ class TestOPDSForDistributorsImporter:
     def test__add_format_data(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
     ):
-
         # Mock SUPPORTED_MEDIA_TYPES for purposes of test.
         api = OPDSForDistributorsAPI
         old_value = api.SUPPORTED_MEDIA_TYPES

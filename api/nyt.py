@@ -24,7 +24,6 @@ from .config import CannotLoadConfiguration, IntegrationException
 
 
 class NYTAPI:
-
     DATE_FORMAT = "%Y-%m-%d"
 
     # NYT best-seller lists are associated with dates, but fields like
@@ -60,7 +59,6 @@ class NYTAPI:
 
 
 class NYTBestSellerAPI(NYTAPI, HasSelfTests):
-
     PROTOCOL = ExternalIntegration.NYT
     GOAL = ExternalIntegration.METADATA_GOAL
     NAME = _("NYT Best Seller API")

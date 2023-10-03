@@ -22,7 +22,8 @@ from tests.fixtures.api_controller import (
 class ScopedHolder:
     """A scoped holder used to store some state in the test. This is necessary because
     we want to do some unusual things with scoped sessions, and don't necessary have access
-    to a database transaction fixture in all of the various methods that will be called."""
+    to a database transaction fixture in all of the various methods that will be called.
+    """
 
     def __init__(self):
         self.identifiers = 0

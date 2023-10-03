@@ -140,7 +140,6 @@ class TestContributor:
         assert d == out_display
 
     def test_default_names(self, db: DatabaseTransactionFixture):
-
         # Pass in a default display name and it will always be used.
         self._names(
             "Jones, Bob", "Jones", "Sally Smith", default_display_name="Sally Smith"

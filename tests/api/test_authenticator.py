@@ -1322,7 +1322,6 @@ class TestLibraryAuthenticator:
 
 
 class TestBasicAuthenticationProvider:
-
     credentials = dict(username="user", password="")
 
     def test_authenticated_patron_passes_on_none(

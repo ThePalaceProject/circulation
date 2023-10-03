@@ -16,7 +16,6 @@ from core.util import MoneyUtility
 
 
 class Configuration(CoreConfiguration):
-
     DEFAULT_OPDS_FORMAT = "simple_opds_entry"
 
     # The list of patron web urls allowed to access this CM

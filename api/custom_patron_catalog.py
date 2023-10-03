@@ -153,7 +153,6 @@ CustomPatronCatalog.register(CustomRootLane)
 
 
 class COPPAGate(CustomPatronCatalog):
-
     PROTOCOL = "COPPA Age Gate"
 
     AUTHENTICATION_TYPE = "http://librarysimplified.org/terms/authentication/gate/coppa"

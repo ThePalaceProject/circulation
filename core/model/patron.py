@@ -60,7 +60,6 @@ class LoanAndHoldMixin:
 
 
 class Patron(Base):
-
     __tablename__ = "patrons"
     id = Column(Integer, primary_key=True)
 

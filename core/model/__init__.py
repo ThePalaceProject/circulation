@@ -344,7 +344,6 @@ def json_serializer(*args, **kwargs) -> str:
 
 
 class SessionManager:
-
     # A function that calculates recursively equivalent identifiers
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"

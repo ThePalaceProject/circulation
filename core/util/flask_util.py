@@ -152,7 +152,6 @@ class OPDSFeedResponse(Response):
         max_age=None,
         private=None,
     ):
-
         mimetype = mimetype or OPDSFeed.ACQUISITION_FEED_TYPE
         status = status or 200
         if max_age is None:

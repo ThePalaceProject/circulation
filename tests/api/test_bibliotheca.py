@@ -875,7 +875,6 @@ class TestCheckoutResponseParser:
 
 
 class TestErrorParser:
-
     BIBLIOTHECA_ERROR_RESPONSE_BODY_TEMPLATE = (
         '<Error xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
         "<Code>Gen-001</Code><Message>"
@@ -1048,7 +1047,6 @@ class TestErrorParser:
 
 
 class TestBibliothecaEventParser:
-
     # Sample event feed to test out the parser.
     TWO_EVENTS = """<LibraryEventBatch xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <PublishId>1b0d6667-a10e-424a-9f73-fb6f6d41308e</PublishId>
@@ -2017,7 +2015,6 @@ class TestBibliographicCoverageProvider(TestBibliothecaAPI):
         assert True == pool.work.presentation_ready
 
     def test_internal_formats(self):
-
         m = ItemListParser.internal_formats
 
         def _check_format(input, expect_medium, expect_format, expect_drm):

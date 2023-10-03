@@ -83,7 +83,6 @@ class TestHasSessionCache:
     def test_by_cache_key_miss_triggers_cache_miss_hook(
         self, mock_db, mock_class, mock
     ):
-
         db = mock_db()
         cache_miss_hook = MagicMock(side_effect=lambda: (mock, True))
         created, is_new = mock_class.by_cache_key(db, mock.cache_key(), cache_miss_hook)

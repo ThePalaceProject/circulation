@@ -369,7 +369,6 @@ class TestOdiloCirculationAPI:
         odilo.api.log.info("Test resource not found on remote ok!")
 
     def test_make_absolute_url(self, odilo: OdiloFixture):
-
         # A relative URL is made absolute using the API's base URL.
         relative = "/relative-url"
         absolute = odilo.api._make_absolute_url(relative)

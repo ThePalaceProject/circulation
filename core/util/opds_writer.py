@@ -20,7 +20,6 @@ class ElementMaker(builder.ElementMaker):
 
 
 class AtomFeed:
-
     ATOM_TYPE = "application/atom+xml"
 
     ATOM_LIKE_TYPES = [ATOM_TYPE, "application/xml"]
@@ -174,7 +173,6 @@ class AtomFeed:
 
 
 class OPDSFeed(AtomFeed):
-
     ACQUISITION_FEED_TYPE = (
         AtomFeed.ATOM_TYPE + ";profile=opds-catalog;kind=acquisition"
     )

@@ -1854,7 +1854,6 @@ class TestODLImporter:
 
         # First import the license when it is not expired
         with freeze_time(license_expiry - datetime.timedelta(days=1)):
-
             # Import the test feed.
             (
                 imported_editions,
@@ -1881,7 +1880,6 @@ class TestODLImporter:
 
         # Reimport the license when it is expired
         with freeze_time(license_expiry + datetime.timedelta(days=1)):
-
             # Import the test feed.
             (
                 imported_editions,

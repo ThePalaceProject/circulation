@@ -27,13 +27,11 @@ class CannotLoadConfiguration(IntegrationException):
 
 
 class ConfigurationConstants:
-
     TRUE = "true"
     FALSE = "false"
 
 
 class Configuration(ConfigurationConstants):
-
     log = logging.getLogger("Configuration file loader")
 
     # Environment variables that contain URLs to the database

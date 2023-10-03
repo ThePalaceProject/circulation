@@ -11,7 +11,6 @@ class OpenSearchDocument:
 
     @classmethod
     def search_info(cls, lane):
-
         d = dict(name="Search")
         tags = []
 

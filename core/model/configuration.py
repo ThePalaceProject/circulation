@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 
 class ExternalIntegrationLink(Base):
-
     __tablename__ = "externalintegrationslinks"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
@@ -298,7 +297,6 @@ class ExternalIntegration(Base):
 
     @classmethod
     def lookup(cls, _db, protocol, goal, library=None):
-
         integrations = _db.query(cls).filter(cls.protocol == protocol, cls.goal == goal)
 
         if library:
@@ -647,7 +645,6 @@ class ConfigurationSetting(Base, HasSessionCache):
 
     @hybrid_property
     def value(self):
-
         """What's the current value of this configuration setting?
         If not present, the value may be inherited from some other
         ConfigurationSetting.

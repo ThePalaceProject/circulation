@@ -15,7 +15,6 @@ from ..fixtures.database import DatabaseTransactionFixture
 
 
 class NoveListFixture:
-
     db: DatabaseTransactionFixture
     files: NoveListFilesFixture
     integration: ExternalIntegration

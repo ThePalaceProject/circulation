@@ -4,7 +4,6 @@ from . import *
 
 
 class SimplifiedGenreClassifier(Classifier):
-
     NONE = NO_VALUE
 
     @classmethod

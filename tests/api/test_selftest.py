@@ -271,7 +271,6 @@ class TestRunSelfTestsScript:
         assert ["result 1", "result 2"] == script.processed
 
     def test_process_result(self, db: DatabaseTransactionFixture):
-
         # Test a successful test that returned a result.
         success = SelfTestResult("i succeeded")
         success.success = True

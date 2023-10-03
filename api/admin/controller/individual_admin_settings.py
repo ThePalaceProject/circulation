@@ -74,7 +74,6 @@ class IndividualAdminSettingsController(SettingsController):
             roles = []
             show_admin = True
             for role in admin.roles:
-
                 # System admin sees all
                 if highest_role.role == AdminRole.SYSTEM_ADMIN:
                     append_role(roles, role)
@@ -318,7 +317,8 @@ class IndividualAdminSettingsController(SettingsController):
 
     def handle_roles(self, admin, roles, settingUp):
         """Compare the admin's existing set of roles against the roles submitted in the form, and,
-        unless there's a problem with the roles or the permissions, modify the admin's roles accordingly"""
+        unless there's a problem with the roles or the permissions, modify the admin's roles accordingly
+        """
 
         # User = person submitting the form; admin = person who the form is about
 

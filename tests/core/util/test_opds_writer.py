@@ -9,7 +9,6 @@ from core.util.opds_writer import AtomFeed, OPDSMessage
 
 class TestOPDSMessage:
     def test_equality(self):
-
         a = OPDSMessage("urn", 200, "message")
         assert a == a
         assert a != None

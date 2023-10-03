@@ -35,7 +35,6 @@ CachedFeedKeys = namedtuple(
 
 
 class CachedFeed(Base):
-
     __tablename__ = "cachedfeeds"
     id = Column(Integer, primary_key=True)
 

@@ -431,7 +431,6 @@ class Identifier(Base, IdentifierConstants):
 
     @classmethod
     def type_and_identifier_for_urn(cls, identifier_string: str) -> tuple[str, str]:
-
         for parser in Identifier.PARSERS:
             result = parser.parse(identifier_string)
             if result:

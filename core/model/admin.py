@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 
 
 class Admin(Base, HasSessionCache):
-
     __tablename__ = "admins"
 
     id = Column(Integer, primary_key=True)
@@ -158,6 +157,7 @@ class Admin(Base, HasSessionCache):
         # First check if the admin is a manager of _all_ libraries.
         if self.is_sitewide_library_manager():
             return True
+
         # If not, they could still be a manager of _this_ library.
         def lookup_hook():
             return (
@@ -186,6 +186,7 @@ class Admin(Base, HasSessionCache):
         # Check if the admin is a librarian for _all_ libraries.
         if self.is_sitewide_librarian():
             return True
+
         # If not, they might be a librarian of _this_ library.
         def lookup_hook():
             return (
@@ -272,7 +273,6 @@ class Admin(Base, HasSessionCache):
 
 
 class AdminRole(Base, HasSessionCache):
-
     __tablename__ = "adminroles"
 
     id = Column(Integer, primary_key=True)
