@@ -1,4 +1,5 @@
 import functools
+import logging
 import time
 from contextlib import contextmanager
 from typing import Callable, Optional
@@ -55,3 +56,11 @@ def elapsed_time_logging(
         toc = time.perf_counter()
         elapsed_time = toc - tic
         log_method(f"{prefix}Completed. (elapsed time: {elapsed_time:0.4f} seconds)")
+
+
+class LoggerMixin:
+    """Mixin that adds a standardized logger"""
+
+    @classmethod
+    def logger(cls):
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
