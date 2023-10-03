@@ -33,7 +33,7 @@ from core.opds import OPDSFeed
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.http import RemoteIntegrationException
-from core.util.log import elapsed_time_logging
+from core.util.log import LoggerMixin, elapsed_time_logging
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 if sys.version_info >= (3, 11):
@@ -82,16 +82,13 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
         return doc
 
 
-class Authenticator:
+class Authenticator(LoggerMixin):
     """Route requests to the appropriate LibraryAuthenticator."""
 
     def __init__(
         self, _db, libraries: Iterable[Library], analytics: Analytics | None = None
     ):
         # Create authenticators
-        self.log = logging.getLogger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}"
-        )
         self.library_authenticators: dict[str, LibraryAuthenticator] = {}
         self.populate_authenticators(_db, libraries, analytics)
 
@@ -145,7 +142,7 @@ class Authenticator:
         return self.invoke_authenticator_method("decode_bearer_token", *args, **kwargs)
 
 
-class LibraryAuthenticator:
+class LibraryAuthenticator(LoggerMixin):
     """Use the registered AuthenticationProviders to turn incoming
     credentials into Patron objects.
     """
@@ -263,8 +260,6 @@ class LibraryAuthenticator:
         )
         if basic_auth_provider:
             self.register_basic_auth_provider(basic_auth_provider)
-
-        self.log = logging.getLogger("Authenticator")
 
         if saml_providers:
             for provider in saml_providers:

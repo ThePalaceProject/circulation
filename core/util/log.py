@@ -62,5 +62,10 @@ class LoggerMixin:
     """Mixin that adds a standardized logger"""
 
     @classmethod
-    def logger(cls):
+    @functools.cache
+    def logger(cls) -> logging.Logger:
         return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
+    @property
+    def log(self) -> logging.Logger:
+        return self.logger()

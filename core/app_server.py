@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import gzip
-import logging
 import sys
 import traceback
 from functools import wraps
@@ -22,6 +21,7 @@ from core.lane import Facets, Pagination
 from core.model import Identifier
 from core.problem_details import *
 from core.service.logging.configuration import LogLevel
+from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSMessage
 from core.util.problem_detail import ProblemDetail
 
@@ -169,7 +169,7 @@ def compressible(f):
     return compressor
 
 
-class ErrorHandler:
+class ErrorHandler(LoggerMixin):
     def __init__(self, app: PalaceFlask, log_level: LogLevel):
         """Constructor.
 
@@ -178,7 +178,6 @@ class ErrorHandler:
         """
         self.app = app
         self.debug = log_level == LogLevel.debug
-        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
 
     def handle(self, exception: Exception) -> Response | HTTPException:
         """Something very bad has happened. Notify the client."""

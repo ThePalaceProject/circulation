@@ -1,5 +1,4 @@
 import json
-import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, NamedTuple, Optional, Type, TypeVar
 
@@ -28,6 +27,7 @@ from core.model import (
 )
 from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from core.util.cache import memoize
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemError
 
 T = TypeVar("T", bound=HasIntegrationConfiguration)
@@ -44,7 +44,7 @@ class ChangedLibrariesTuple(NamedTuple):
     removed: List[IntegrationLibraryConfiguration]
 
 
-class IntegrationSettingsController(ABC, Generic[T]):
+class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     def __init__(
         self,
         manager: CirculationManager,
@@ -52,7 +52,6 @@ class IntegrationSettingsController(ABC, Generic[T]):
     ):
         self._db = manager._db
         self.registry = registry or self.default_registry()
-        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
 
     @abstractmethod
     def default_registry(self) -> IntegrationRegistry[T]:
