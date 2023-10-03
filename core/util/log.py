@@ -67,13 +67,23 @@ else:
 
 
 class LoggerMixin:
-    """Mixin that adds a standardized logger"""
+    """Mixin that adds a logger with a standardized name"""
 
     @classmethod
     @cache_decorator
     def logger(cls) -> logging.Logger:
+        """
+        Returns a logger named after the module and name of the class.
+
+        This is cached so that we don't create a new logger every time
+        it is called.
+        """
         return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     @property
     def log(self) -> logging.Logger:
+        """
+        A convenience property that returns the logger for the class,
+        so it is easier to access the logger from an instance.
+        """
         return self.logger()
