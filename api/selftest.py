@@ -84,7 +84,7 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
         :raise: _NoValidLibrarySelfTestPatron when a valid patron is not found.
         """
         _db = _db or Session.object_session(library)
-        from .authenticator import LibraryAuthenticator
+        from api.authenticator import LibraryAuthenticator
 
         library_authenticator = LibraryAuthenticator.from_config(_db, library)
         auth = library_authenticator.basic_auth_provider

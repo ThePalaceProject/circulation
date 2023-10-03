@@ -6,11 +6,11 @@ from flask_babel import lazy_gettext as _
 from pymarc import Field, Record, Subfield
 from sqlalchemy.orm.session import Session
 
-from .classifier import Classifier
-from .config import CannotLoadConfiguration
-from .external_search import ExternalSearchIndex, SortKeyPagination
-from .lane import BaseFacets, Lane
-from .model import (
+from core.classifier import Classifier
+from core.config import CannotLoadConfiguration
+from core.external_search import ExternalSearchIndex, SortKeyPagination
+from core.lane import BaseFacets, Lane
+from core.model import (
     CachedMARCFile,
     DeliveryMechanism,
     Edition,
@@ -20,9 +20,9 @@ from .model import (
     Work,
     get_one_or_create,
 )
-from .service.storage.s3 import MultipartS3ContextManager, S3Service
-from .util import LanguageCodes
-from .util.datetime_helpers import utc_now
+from core.service.storage.s3 import MultipartS3ContextManager, S3Service
+from core.util import LanguageCodes
+from core.util.datetime_helpers import utc_now
 
 
 class Annotator:

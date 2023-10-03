@@ -10,13 +10,11 @@ from lxml import etree
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.session import Session
 
+from core.classifier import Classifier
+from core.entrypoint import EntryPoint
 from core.external_search import ExternalSearchIndex, QueryParseException
-from core.problem_details import INVALID_INPUT
-
-from .classifier import Classifier
-from .entrypoint import EntryPoint
-from .facets import FacetConstants
-from .lane import (
+from core.facets import FacetConstants
+from core.lane import (
     Facets,
     FacetsWithEntryPoint,
     FeaturedFacets,
@@ -24,7 +22,7 @@ from .lane import (
     Pagination,
     SearchFacets,
 )
-from .model import (
+from core.model import (
     CachedFeed,
     Contributor,
     DataSource,
@@ -36,9 +34,10 @@ from .model import (
     Subject,
     Work,
 )
-from .util.datetime_helpers import utc_now
-from .util.flask_util import OPDSEntryResponse, OPDSFeedResponse
-from .util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
+from core.problem_details import INVALID_INPUT
+from core.util.datetime_helpers import utc_now
+from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from core.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 # Import related models when doing type checking
 if TYPE_CHECKING:

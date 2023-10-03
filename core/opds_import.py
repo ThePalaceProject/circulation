@@ -33,18 +33,17 @@ from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
 from api.selftest import HasCollectionSelfTests
+from core.classifier import Classifier
+from core.config import IntegrationException
+from core.coverage import CoverageFailure
+from core.importers import BaseImporterSettings
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-
-from .classifier import Classifier
-from .config import IntegrationException
-from .coverage import CoverageFailure
-from .importers import BaseImporterSettings
-from .metadata_layer import (
+from core.metadata_layer import (
     CirculationData,
     ContributorData,
     IdentifierData,
@@ -55,7 +54,7 @@ from .metadata_layer import (
     SubjectData,
     TimestampData,
 )
-from .model import (
+from core.model import (
     Collection,
     CoverageRecord,
     DataSource,
@@ -71,17 +70,17 @@ from .model import (
     Subject,
     get_one,
 )
-from .model.configuration import HasExternalIntegration
-from .monitor import CollectionMonitor
-from .selftest import SelfTestResult
-from .util.datetime_helpers import datetime_utc, to_utc, utc_now
-from .util.http import HTTP, BadResponseException
-from .util.opds_writer import OPDSFeed, OPDSMessage
-from .util.string_helpers import base64
-from .util.xmlparser import XMLParser
+from core.model.configuration import HasExternalIntegration
+from core.monitor import CollectionMonitor
+from core.selftest import SelfTestResult
+from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
+from core.util.http import HTTP, BadResponseException
+from core.util.opds_writer import OPDSFeed, OPDSMessage
+from core.util.string_helpers import base64
+from core.util.xmlparser import XMLParser
 
 if TYPE_CHECKING:
-    from .model import Work
+    from core.model import Work
 
 
 @overload

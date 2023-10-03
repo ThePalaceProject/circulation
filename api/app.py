@@ -6,7 +6,15 @@ import flask_babel
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
 
+from api.admin.controller import setup_admin_controllers
 from api.config import Configuration
+from api.controller import CirculationManager
+from api.util.flask import PalaceFlask
+from api.util.profilers import (
+    PalaceCProfileProfiler,
+    PalacePyInstrumentProfiler,
+    PalaceXrayProfiler,
+)
 from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
 from core.local_analytics_provider import LocalAnalyticsProvider
@@ -20,15 +28,6 @@ from core.service.container import Services, container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
 from scripts import InstanceInitializationScript
-
-from .admin.controller import setup_admin_controllers
-from .controller import CirculationManager
-from .util.flask import PalaceFlask
-from .util.profilers import (
-    PalaceCProfileProfiler,
-    PalacePyInstrumentProfiler,
-    PalaceXrayProfiler,
-)
 
 app = PalaceFlask(__name__)
 app._db = None  # type: ignore [assignment]
@@ -91,8 +90,8 @@ def initialize_database():
     app._db = _db
 
 
-from . import routes  # noqa
-from .admin import routes as admin_routes  # noqa
+from api import routes  # noqa
+from api.admin import routes as admin_routes  # noqa
 
 
 def initialize_application() -> PalaceFlask:

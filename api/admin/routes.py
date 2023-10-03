@@ -8,15 +8,14 @@ from flask_pydantic_spec import Request as SpecRequest
 from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
+from api.admin.controller.custom_lists import CustomListsController
 from api.admin.dashboard_stats import generate_statistics
 from api.admin.model.dashboard_statistics import StatisticsResponse
+from api.admin.templates import admin_sign_in_again as sign_in_again_template
 from api.app import api_spec, app
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
 from core.util.problem_detail import ProblemDetail, ProblemDetailModel
-
-from .controller.custom_lists import CustomListsController
-from .templates import admin_sign_in_again as sign_in_again_template
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.

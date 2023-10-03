@@ -14,6 +14,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Query
 from sqlalchemy.orm.session import Session
 
+from api.config import CannotLoadConfiguration
+from api.discovery.opds_registration import OpdsRegistrationService
+from api.integration.registry.discovery import DiscoveryRegistry
 from core.integration.goals import Goals
 from core.model import Credential, DataSource, IntegrationConfiguration, Library, Patron
 from core.model.discovery_service_registration import (
@@ -21,10 +24,6 @@ from core.model.discovery_service_registration import (
     RegistrationStatus,
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
-
-from .config import CannotLoadConfiguration
-from .discovery.opds_registration import OpdsRegistrationService
-from .integration.registry.discovery import DiscoveryRegistry
 
 if sys.version_info >= (3, 11):
     from typing import Self

@@ -1,6 +1,6 @@
 import re
 
-from . import Classifier
+from core.classifier import Classifier
 
 
 class GradeLevelClassifier(Classifier):

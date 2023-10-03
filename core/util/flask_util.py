@@ -8,9 +8,9 @@ from flask import Response as FlaskResponse
 from lxml import etree
 from pydantic import BaseModel, Extra
 
-from . import problem_detail
-from .datetime_helpers import utc_now
-from .opds_writer import OPDSFeed
+from core.util import problem_detail
+from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import OPDSFeed
 
 
 def problem_raw(type, status, title, detail=None, instance=None, headers={}):

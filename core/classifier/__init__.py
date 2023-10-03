@@ -1094,7 +1094,7 @@ class WorkClassifier:
     def add(self, classification):
         """Prepare a single Classification for consideration."""
         try:
-            from ..model import DataSource, Subject
+            from core.model import DataSource, Subject
         except ValueError:
             from model import DataSource, Subject
 
@@ -1548,7 +1548,7 @@ class WorkClassifier:
         objects, not GenreData objects, when weighting genres.
         """
         try:
-            from ..model import Genre
+            from core.model import Genre
         except ValueError:
             from model import Genre
         genre, ignore = Genre.lookup(self._db, genre_data.name)
@@ -1618,18 +1618,25 @@ Classifier.classifiers[Classifier.FREEFORM_AUDIENCE] = FreeformAudienceClassifie
 Classifier.classifiers[Classifier.AXIS_360_AUDIENCE] = AgeOrGradeClassifier
 
 # Finally, import classifiers described in submodules.
-from .age import AgeClassifier, GradeLevelClassifier, InterestLevelClassifier
-from .bic import BICClassifier
-from .bisac import BISACClassifier
-from .ddc import DeweyDecimalClassifier
-from .gutenberg import GutenbergBookshelfClassifier
-from .keyword import (
+from core.classifier.age import (
+    AgeClassifier,
+    GradeLevelClassifier,
+    InterestLevelClassifier,
+)
+from core.classifier.bic import BICClassifier
+from core.classifier.bisac import BISACClassifier
+from core.classifier.ddc import DeweyDecimalClassifier
+from core.classifier.gutenberg import GutenbergBookshelfClassifier
+from core.classifier.keyword import (
     Eg,
     FASTClassifier,
     KeywordBasedClassifier,
     LCSHClassifier,
     TAGClassifier,
 )
-from .lcc import LCCClassifier
-from .overdrive import OverdriveClassifier
-from .simplified import SimplifiedFictionClassifier, SimplifiedGenreClassifier
+from core.classifier.lcc import LCCClassifier
+from core.classifier.overdrive import OverdriveClassifier
+from core.classifier.simplified import (
+    SimplifiedFictionClassifier,
+    SimplifiedGenreClassifier,
+)

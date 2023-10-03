@@ -9,9 +9,9 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_
 
-from ..util import is_session
-from ..util.datetime_helpers import utc_now
-from . import Base, get_one, get_one_or_create
+from core.model import Base, get_one, get_one_or_create
+from core.util import is_session
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from core.model import Collection, DataSource, Patron
@@ -127,7 +127,7 @@ class Credential(Base):
         collection=None,
         force_refresh=False,
     ) -> Credential:
-        from .datasource import DataSource
+        from core.model.datasource import DataSource
 
         if isinstance(data_source, str):
             data_source = DataSource.lookup(_db, data_source)
@@ -187,7 +187,7 @@ class Credential(Base):
         :param auto_create_datasource: Boolean value indicating whether
             a data source should be created in the case it doesn't
         """
-        from .patron import Patron
+        from core.model.patron import Patron
 
         if not is_session(_db):
             raise ValueError('"_db" argument must be a valid SQLAlchemy session')
@@ -202,7 +202,7 @@ class Credential(Base):
         if not isinstance(auto_create_datasource, bool):
             raise ValueError('"auto_create_datasource" argument must be boolean')
 
-        from .datasource import DataSource
+        from core.model.datasource import DataSource
 
         data_source = DataSource.lookup(
             _db, data_source_name, autocreate=auto_create_datasource

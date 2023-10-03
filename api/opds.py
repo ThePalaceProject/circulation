@@ -10,7 +10,12 @@ from typing import Any, List
 
 from flask import url_for
 
+from api.adobe_vendor_id import AuthdataUtility
+from api.annotations import AnnotationWriter
+from api.circulation import BaseCirculationAPI, FulfillmentInfo
+from api.config import CannotLoadConfiguration, Configuration
 from api.lanes import DynamicLane
+from api.novelist import NoveListAPI
 from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.analytics import Analytics
 from core.classifier import Classifier
@@ -41,12 +46,6 @@ from core.util.datetime_helpers import from_timestamp
 from core.util.flask_util import OPDSEntryResponse
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
-
-from .adobe_vendor_id import AuthdataUtility
-from .annotations import AnnotationWriter
-from .circulation import BaseCirculationAPI, FulfillmentInfo
-from .config import CannotLoadConfiguration, Configuration
-from .novelist import NoveListAPI
 
 
 class CirculationManagerAnnotator(Annotator):

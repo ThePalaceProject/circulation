@@ -42,10 +42,9 @@ from tests.api.mockapi.circulation import (
     MockCirculationAPI,
     MockRemoteAPI,
 )
-
-from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
-from ..fixtures.library import LibraryFixture
+from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class CirculationAPIFixture:

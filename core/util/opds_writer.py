@@ -3,7 +3,7 @@ import datetime
 import pytz
 from lxml import builder, etree
 
-from .datetime_helpers import utc_now
+from core.util.datetime_helpers import utc_now
 
 
 class ElementMaker(builder.ElementMaker):

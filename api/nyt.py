@@ -7,6 +7,7 @@ from dateutil import tz
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
+from api.config import CannotLoadConfiguration, IntegrationException
 from core.external_list import TitleFromExternalList
 from core.metadata_layer import ContributorData, IdentifierData, Metadata
 from core.model import (
@@ -19,8 +20,6 @@ from core.model import (
     get_one_or_create,
 )
 from core.selftest import HasSelfTests
-
-from .config import CannotLoadConfiguration, IntegrationException
 
 
 class NYTAPI:

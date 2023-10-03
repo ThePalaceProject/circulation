@@ -8,6 +8,9 @@ from flask_babel import lazy_gettext as _
 from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation_exceptions import *
+from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
@@ -41,10 +44,6 @@ from core.monitor import CollectionMonitor, TimelineMonitor
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.personal_names import sort_name_to_display_name
-
-from .circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from .circulation_exceptions import *
-from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class OdiloRepresentationExtractor:

@@ -16,6 +16,16 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from pymarc import parse_xml_to_array
 
+from api.circulation import (
+    BaseCirculationAPI,
+    BaseCirculationLoanSettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
+from api.circulation_exceptions import *
+from api.selftest import HasCollectionSelfTests, SelfTestResult
+from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
@@ -63,17 +73,6 @@ from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_n
 from core.util.http import HTTP
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
-
-from .circulation import (
-    BaseCirculationAPI,
-    BaseCirculationLoanSettings,
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-)
-from .circulation_exceptions import *
-from .selftest import HasCollectionSelfTests, SelfTestResult
-from .web_publication_manifest import FindawayManifest, SpineItem
 
 
 class BibliothecaSettings(BaseSettings):

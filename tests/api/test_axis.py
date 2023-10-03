@@ -64,13 +64,12 @@ from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
-
-from ..fixtures.library import LibraryFixture
+from tests.fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
-    from ..fixtures.api_axis_files import AxisFilesFixture
-    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
-    from ..fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.api_axis_files import AxisFilesFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class Axis360Fixture:

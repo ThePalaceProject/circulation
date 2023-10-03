@@ -4,16 +4,15 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import HttpUrl
 
-from core.integration.settings import ConfigurationFormItem, FormField
-from core.model import Patron
-from core.util.http import HTTP
-
-from .authentication.base import PatronData
-from .authentication.basic import (
+from api.authentication.base import PatronData
+from api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
+from core.integration.settings import ConfigurationFormItem, FormField
+from core.model import Patron
+from core.util.http import HTTP
 
 
 class KansasAuthSettings(BasicAuthProviderSettings):

@@ -2,6 +2,7 @@ from typing import Type
 
 from sqlalchemy import and_, or_
 
+from api.odl import ODLAPI
 from core.model import (
     Annotation,
     Collection,
@@ -12,8 +13,6 @@ from core.model import (
 )
 from core.monitor import ReaperMonitor
 from core.util.datetime_helpers import utc_now
-
-from .odl import ODLAPI
 
 
 class LoanlikeReaperMonitor(ReaperMonitor):

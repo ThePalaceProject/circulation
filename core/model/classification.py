@@ -19,14 +19,14 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
-from .. import classifier
-from ..classifier import (  # type: ignore[attr-defined]
+from core import classifier
+from core.classifier import (  # type: ignore[attr-defined]
     COMICS_AND_GRAPHIC_NOVELS,
     Classifier,
     Erotica,
     GenreData,
 )
-from . import (
+from core.model import (
     Base,
     get_one,
     get_one_or_create,
@@ -34,8 +34,8 @@ from . import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from .constants import DataSourceConstants
-from .hassessioncache import HasSessionCache
+from core.model.constants import DataSourceConstants
+from core.model.hassessioncache import HasSessionCache
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the

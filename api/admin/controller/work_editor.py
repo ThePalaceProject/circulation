@@ -4,7 +4,9 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import *
+from api.controller import CirculationManagerController
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.admin import AdminAnnotator
@@ -28,9 +30,6 @@ from core.model import (
 from core.util import LanguageCodes
 from core.util.datetime_helpers import strptime_utc, utc_now
 from core.util.problem_detail import ProblemDetail
-
-from ...controller import CirculationManagerController
-from .base import AdminPermissionsControllerMixin
 
 
 class WorkController(CirculationManagerController, AdminPermissionsControllerMixin):

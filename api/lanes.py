@@ -2,6 +2,8 @@ import logging
 from typing import Optional
 
 import core.classifier as genres
+from api.config import CannotLoadConfiguration, Configuration
+from api.novelist import NoveListAPI
 from core import classifier
 from core.classifier import Classifier, GenreData, fiction_genres, nonfiction_genres
 from core.lane import (
@@ -23,9 +25,6 @@ from core.model import (
     get_one,
 )
 from core.util import LanguageCodes
-
-from .config import CannotLoadConfiguration, Configuration
-from .novelist import NoveListAPI
 
 
 def load_lanes(_db, library):

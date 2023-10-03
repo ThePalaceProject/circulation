@@ -1,5 +1,12 @@
 from typing import List, Optional, Type, Union
 
+from api.authentication.base import PatronData
+from api.authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
+from api.config import CannotLoadConfiguration
 from core.analytics import Analytics
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -7,14 +14,6 @@ from core.integration.settings import (
     FormField,
 )
 from core.model import Patron
-
-from .authentication.base import PatronData
-from .authentication.basic import (
-    BasicAuthenticationProvider,
-    BasicAuthProviderLibrarySettings,
-    BasicAuthProviderSettings,
-)
-from .config import CannotLoadConfiguration
 
 
 class SimpleAuthSettings(BasicAuthProviderSettings):

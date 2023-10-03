@@ -10,13 +10,13 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.sql.expression import and_
 
-from ..util.datetime_helpers import utc_now
-from ..util.flask_util import OPDSFeedResponse
-from . import Base, flush, get_one, get_one_or_create
-from .work import Work
+from core.model import Base, flush, get_one, get_one_or_create
+from core.model.work import Work
+from core.util.datetime_helpers import utc_now
+from core.util.flask_util import OPDSFeedResponse
 
 if TYPE_CHECKING:
-    from . import Representation
+    from core.model import Representation
 
 # This named tuple makes it easy to manage the return value of
 # CachedFeed._prepare_keys.
@@ -333,7 +333,7 @@ class CachedFeed(Base):
         work = getattr(worklist, "work", None)
 
         # Either lane_id or unique_key must be set, but not both.
-        from ..lane import Lane
+        from core.lane import Lane
 
         if isinstance(worklist, Lane):
             lane_id = worklist.id

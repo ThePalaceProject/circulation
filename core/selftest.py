@@ -23,11 +23,11 @@ from typing import (
 
 from sqlalchemy.orm import Session
 
-from .model import Collection, ExternalIntegration
-from .model.integration import IntegrationConfiguration
-from .util.datetime_helpers import utc_now
-from .util.http import IntegrationException
-from .util.opds_writer import AtomFeed
+from core.model import Collection, ExternalIntegration
+from core.model.integration import IntegrationConfiguration
+from core.util.datetime_helpers import utc_now
+from core.util.http import IntegrationException
+from core.util.opds_writer import AtomFeed
 
 if sys.version_info >= (3, 10):
     from typing import ParamSpec
@@ -310,7 +310,7 @@ class HasSelfTests(BaseHasSelfTests, ABC):
     ) -> None:
         """Store the results of a self-test in the database."""
         integration: Optional[ExternalIntegration]
-        from .external_search import ExternalSearchIndex
+        from core.external_search import ExternalSearchIndex
 
         if isinstance(self, ExternalSearchIndex):
             integration = self.search_integration(_db)
@@ -341,7 +341,7 @@ class HasSelfTests(BaseHasSelfTests, ABC):
         instance = constructor_method(*args, **kwargs)
         integration: Optional[ExternalIntegration]
 
-        from .external_search import ExternalSearchIndex
+        from core.external_search import ExternalSearchIndex
 
         if isinstance(instance, ExternalSearchIndex):
             integration = instance.search_integration(_db)

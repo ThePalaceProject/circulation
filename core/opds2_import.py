@@ -21,16 +21,13 @@ from webpub_manifest_parser.opds2.registry import (
 from webpub_manifest_parser.utils import encode, first_or_default
 
 from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
+from core.coverage import CoverageFailure
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from core.model.configuration import ConfigurationSetting, HasExternalIntegration
-from core.model.integration import IntegrationConfiguration
-
-from .coverage import CoverageFailure
-from .metadata_layer import (
+from core.metadata_layer import (
     CirculationData,
     ContributorData,
     FormatData,
@@ -39,7 +36,7 @@ from .metadata_layer import (
     Metadata,
     SubjectData,
 )
-from .model import (
+from core.model import (
     Collection,
     Contributor,
     DeliveryMechanism,
@@ -55,9 +52,11 @@ from .model import (
     Subject,
     get_one,
 )
-from .opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
-from .util.http import BadResponseException
-from .util.opds_writer import OPDSFeed
+from core.model.configuration import ConfigurationSetting, HasExternalIntegration
+from core.model.integration import IntegrationConfiguration
+from core.opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
+from core.util.http import BadResponseException
+from core.util.opds_writer import OPDSFeed
 
 if TYPE_CHECKING:
     from webpub_manifest_parser.core import ast as core_ast

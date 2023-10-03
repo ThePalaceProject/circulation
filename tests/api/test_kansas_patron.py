@@ -7,9 +7,8 @@ from lxml import etree
 from api.authentication.base import PatronData
 from api.authentication.basic import BasicAuthProviderLibrarySettings
 from api.kansas_patron import KansasAuthenticationAPI, KansasAuthSettings
-
-from ..fixtures.api_kansas_files import KansasPatronFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.api_kansas_files import KansasPatronFilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockResponse:

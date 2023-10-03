@@ -6,10 +6,8 @@ from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
-from core.model.coverage import EquivalencyCoverageRecord
-
-from .metadata_layer import ReplacementPolicy, TimestampData
-from .model import (
+from core.metadata_layer import ReplacementPolicy, TimestampData
+from core.model import (
     BaseCoverageRecord,
     Collection,
     CollectionMissing,
@@ -24,8 +22,9 @@ from .model import (
     WorkCoverageRecord,
     get_one,
 )
-from .util.datetime_helpers import utc_now
-from .util.worker_pools import DatabaseJob
+from core.model.coverage import EquivalencyCoverageRecord
+from core.util.datetime_helpers import utc_now
+from core.util.worker_pools import DatabaseJob
 
 
 class CoverageFailure:

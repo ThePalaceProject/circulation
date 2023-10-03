@@ -3,11 +3,10 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
+from api.circulation_exceptions import *
+from api.problem_details import *
 from core.model import Library, Patron
 from core.util.problem_detail import ProblemDetail
-
-from .circulation_exceptions import *
-from .problem_details import *
 
 
 class BaseCirculationManagerController:

@@ -18,13 +18,11 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, literal, literal_column, or_
 
-from ..util.datetime_helpers import utc_now
-from . import Base, SessionBulkOperation, get_one, get_one_or_create
+from core.model import Base, SessionBulkOperation, get_one, get_one_or_create
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
-    from core.model import Collection, DataSource, Identifier, Work
-
-    from . import Equivalency
+    from core.model import Collection, DataSource, Equivalency, Identifier, Work
 
 
 class BaseCoverageRecord:
@@ -296,7 +294,7 @@ class Timestamp(Base):
 
     def to_data(self):
         """Convert this Timestamp to an unfinalized TimestampData."""
-        from ..metadata_layer import TimestampData
+        from core.metadata_layer import TimestampData
 
         return TimestampData(
             start=self.start,
@@ -399,9 +397,9 @@ class CoverageRecord(Base, BaseCoverageRecord):
     def lookup(
         cls, edition_or_identifier, data_source, operation=None, collection=None
     ):
-        from .datasource import DataSource
-        from .edition import Edition
-        from .identifier import Identifier
+        from core.model.datasource import DataSource
+        from core.model.edition import Edition
+        from core.model.identifier import Identifier
 
         cls.assert_coverage_operation(operation, collection)
 
@@ -438,8 +436,8 @@ class CoverageRecord(Base, BaseCoverageRecord):
         status=BaseCoverageRecord.SUCCESS,
         collection=None,
     ):
-        from .edition import Edition
-        from .identifier import Identifier
+        from core.model.edition import Edition
+        from core.model.identifier import Identifier
 
         cls.assert_coverage_operation(operation, collection)
 
@@ -479,7 +477,7 @@ class CoverageRecord(Base, BaseCoverageRecord):
         """Create and update CoverageRecords so that every Identifier in
         `identifiers` has an identical record.
         """
-        from .identifier import Identifier
+        from core.model.identifier import Identifier
 
         if not identifiers:
             # Nothing to do.
@@ -683,7 +681,7 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
         """Create and update WorkCoverageRecords so that every Work in
         `works` has an identical record.
         """
-        from .work import Work
+        from core.model.work import Work
 
         if not works:
             # Nothing to do.

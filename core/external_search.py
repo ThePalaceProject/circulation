@@ -29,22 +29,18 @@ from opensearch_dsl.query import Range, Regexp, Term, Terms
 from opensearchpy import OpenSearch
 from spellchecker import SpellChecker
 
-from core.search.coverage_remover import RemovesSearchCoverage
-from core.util import Values
-from core.util.languages import LanguageNames
-
-from .classifier import (
+from core.classifier import (
     AgeClassifier,
     Classifier,
     GradeLevelClassifier,
     KeywordBasedClassifier,
 )
-from .config import CannotLoadConfiguration
-from .coverage import CoverageFailure, WorkPresentationProvider
-from .facets import FacetConstants
-from .lane import Pagination
-from .metadata_layer import IdentifierData
-from .model import (
+from core.config import CannotLoadConfiguration
+from core.coverage import CoverageFailure, WorkPresentationProvider
+from core.facets import FacetConstants
+from core.lane import Pagination
+from core.metadata_layer import IdentifierData
+from core.model import (
     Collection,
     ConfigurationSetting,
     Contributor,
@@ -57,22 +53,25 @@ from .model import (
     WorkCoverageRecord,
     numericrange_to_tuple,
 )
-from .problem_details import INVALID_INPUT
-from .search.migrator import (
+from core.problem_details import INVALID_INPUT
+from core.search.coverage_remover import RemovesSearchCoverage
+from core.search.migrator import (
     SearchDocumentReceiver,
     SearchDocumentReceiverType,
     SearchMigrationInProgress,
     SearchMigrator,
 )
-from .search.revision import SearchSchemaRevision
-from .search.revision_directory import SearchRevisionDirectory
-from .search.service import SearchService, SearchServiceOpensearch1
-from .selftest import HasSelfTests
-from .util.cache import CachedData
-from .util.datetime_helpers import from_timestamp
-from .util.personal_names import display_name_to_sort_name
-from .util.problem_detail import ProblemDetail
-from .util.stopwords import ENGLISH_STOPWORDS
+from core.search.revision import SearchSchemaRevision
+from core.search.revision_directory import SearchRevisionDirectory
+from core.search.service import SearchService, SearchServiceOpensearch1
+from core.selftest import HasSelfTests
+from core.util import Values
+from core.util.cache import CachedData
+from core.util.datetime_helpers import from_timestamp
+from core.util.languages import LanguageNames
+from core.util.personal_names import display_name_to_sort_name
+from core.util.problem_detail import ProblemDetail
+from core.util.stopwords import ENGLISH_STOPWORDS
 
 
 @contextlib.contextmanager

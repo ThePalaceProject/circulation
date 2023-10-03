@@ -43,14 +43,13 @@ from core.overdrive import OverdriveConstants
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.api.mockapi.overdrive import MockOverdriveAPI
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
-
-from ..fixtures.database import DatabaseTransactionFixture
-from ..fixtures.library import LibraryFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
-    from ..fixtures.api_overdrive_files import OverdriveAPIFilesFixture
-    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
-    from ..fixtures.time import Time
+    from tests.fixtures.api_overdrive_files import OverdriveAPIFilesFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
+    from tests.fixtures.time import Time
 
 
 class OverdriveAPIFixture:

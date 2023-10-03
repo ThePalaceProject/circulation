@@ -14,25 +14,28 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
+from core.model import Base, flush, get_one, get_one_or_create
+from core.model.circulationevent import CirculationEvent
+from core.model.constants import (
+    DataSourceConstants,
+    EditionConstants,
+    LinkRelations,
+    MediaTypes,
+)
+from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
-
-from ..util.datetime_helpers import utc_now
-from . import Base, flush, get_one, get_one_or_create
-from .circulationevent import CirculationEvent
-from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
-from .hassessioncache import HasSessionCache
-from .patron import Hold, Loan, Patron
+from core.model.patron import Hold, Loan, Patron
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
+    from core.analytics import Analytics
     from core.model import (  # noqa: autoflake
         Collection,
         DataSource,
         Identifier,
         Resource,
     )
-
-    from ..analytics import Analytics
 
 
 class PolicyException(Exception):
@@ -359,9 +362,9 @@ class LicensePool(Base):
         autocreate=True,
     ) -> Tuple[LicensePool | None, bool]:
         """Find or create a LicensePool for the given foreign ID."""
-        from .collection import CollectionMissing
-        from .datasource import DataSource
-        from .identifier import Identifier
+        from core.model.collection import CollectionMissing
+        from core.model.datasource import DataSource
+        from core.model.identifier import Identifier
 
         if not collection:
             raise CollectionMissing()
@@ -419,7 +422,7 @@ class LicensePool(Base):
     @classmethod
     def with_no_work(cls, _db):
         """Find LicensePools that have no corresponding Work."""
-        from .work import Work
+        from core.model.work import Work
 
         return _db.query(LicensePool).outerjoin(Work).filter(Work.id == None).all()
 
@@ -547,7 +550,7 @@ class LicensePool(Base):
         :return: A boolean explaining whether any of the presentation
         information associated with this LicensePool actually changed.
         """
-        from .edition import Edition
+        from core.model.edition import Edition
 
         _db = Session.object_session(self)
         old_presentation_edition = self.presentation_edition
@@ -560,7 +563,7 @@ class LicensePool(Base):
 
         # Note: We can do a cleaner solution, if we refactor to not use metadata's
         # methods to update editions.  For now, we're choosing to go with the below approach.
-        from ..metadata_layer import IdentifierData, Metadata, ReplacementPolicy
+        from core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
 
         if len(all_editions) == 1:
             # There's only one edition associated with this
@@ -1157,7 +1160,7 @@ class LicensePool(Base):
         from calling set_presentation_edition() and assumes we've
         already done that work.
         """
-        from .work import Work
+        from core.model.work import Work
 
         if not self.identifier:
             # A LicensePool with no Identifier should never have a Work.
@@ -1328,7 +1331,7 @@ class LicensePool(Base):
     @property
     def open_access_links(self):
         """Yield all open-access Resources for this LicensePool."""
-        from .identifier import Identifier
+        from core.model.identifier import Identifier
 
         open_access = LinkRelations.OPEN_ACCESS_DOWNLOAD
         _db = Session.object_session(self)

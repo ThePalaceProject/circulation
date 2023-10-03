@@ -9,16 +9,15 @@ import requests
 from flask_babel import lazy_gettext as _
 from pydantic import HttpUrl
 
-from core.integration.settings import ConfigurationFormItem, FormField
-from core.model import Patron
-
-from .authentication.base import PatronData
-from .authentication.basic import (
+from api.authentication.base import PatronData
+from api.authentication.basic import (
     BasicAuthenticationProvider,
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from .circulation_exceptions import RemoteInitiatedServerError
+from api.circulation_exceptions import RemoteInitiatedServerError
+from core.integration.settings import ConfigurationFormItem, FormField
+from core.model import Patron
 
 
 class FirstBookAuthSettings(BasicAuthProviderSettings):

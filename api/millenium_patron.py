@@ -10,6 +10,13 @@ from lxml import etree
 from money import Money
 from pydantic import HttpUrl, validator
 
+from api.authentication.base import PatronData
+from api.authentication.basic import (
+    BasicAuthenticationProvider,
+    BasicAuthProviderLibrarySettings,
+    BasicAuthProviderSettings,
+)
+from api.authenticator import BasicAuthenticationProvider
 from core.analytics import Analytics
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -21,14 +28,6 @@ from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
 from core.util.xmlparser import XMLParser
-
-from .authentication.base import PatronData
-from .authentication.basic import (
-    BasicAuthenticationProvider,
-    BasicAuthProviderLibrarySettings,
-    BasicAuthProviderSettings,
-)
-from .authenticator import BasicAuthenticationProvider
 
 
 class NeighborhoodMode(Enum):
