@@ -379,7 +379,7 @@ class TestFacets:
 
         # By default, there are 10 facet transitions: two groups of three
         # and one group of two and 2 datasource groups and 2 for collection names
-        assert 12 == len(all_groups)
+        assert 13 == len(all_groups)
 
         # available=all, collection=full, and order=title are the selected
         # facets.
