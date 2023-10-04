@@ -14,6 +14,10 @@ from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
 from api.lanes import create_default_lanes
+from api.overdrive import (
+    GenerateOverdriveAdvantageAccountList,
+    OverdriveAdvantageAccount,
+)
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
 from core.external_search import ExternalSearchIndex, Filter
@@ -42,7 +46,6 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSImportMonitor
-from core.overdrive import OverdriveAdvantageAccount
 from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
@@ -56,7 +59,6 @@ from core.scripts import (
     CustomListUpdateEntriesScript,
     DeleteInvisibleLanesScript,
     Explain,
-    GenerateOverdriveAdvantageAccountList,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,

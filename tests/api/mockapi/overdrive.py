@@ -2,20 +2,45 @@ import json
 
 from sqlalchemy.orm import Session
 
-from api.overdrive import OverdriveAPI
+from api.overdrive import OverdriveAPI, OverdriveConstants
 from core.model import Library, get_one_or_create
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
-from core.overdrive import OverdriveConstants, OverdriveCoreAPI
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class MockOverdriveCoreAPI(OverdriveCoreAPI):
+class MockOverdriveResponse:
+    def __init__(self, status_code, headers, content):
+        self.status_code = status_code
+        self.headers = headers
+        self.content = content
+
+    def json(self):
+        return json.loads(self.content)
+
+
+class MockOverdriveAPI(OverdriveAPI):
+    library_data = '{"id":1810,"name":"My Public Library (MA)","type":"Library","collectionToken":"1a09d9203","links":{"self":{"href":"http://api.overdrive.com/v1/libraries/1810","type":"application/vnd.overdrive.api+json"},"products":{"href":"http://api.overdrive.com/v1/collections/1a09d9203/products","type":"application/vnd.overdrive.api+json"},"dlrHomepage":{"href":"http://ebooks.nypl.org","type":"text/html"}},"formats":[{"id":"audiobook-wma","name":"OverDrive WMA Audiobook"},{"id":"ebook-pdf-adobe","name":"Adobe PDF eBook"},{"id":"ebook-mediado","name":"MediaDo eBook"},{"id":"ebook-epub-adobe","name":"Adobe EPUB eBook"},{"id":"ebook-kindle","name":"Kindle Book"},{"id":"audiobook-mp3","name":"OverDrive MP3 Audiobook"},{"id":"ebook-pdf-open","name":"Open PDF eBook"},{"id":"ebook-overdrive","name":"OverDrive Read"},{"id":"video-streaming","name":"Streaming Video"},{"id":"ebook-epub-open","name":"Open EPUB eBook"}]}'
+
+    token_data = '{"access_token":"foo","token_type":"bearer","expires_in":3600,"scope":"LIB META AVAIL SRCH"}'
+
+    def __init__(self, _db, collection):
+        self.access_token_requests = []
+        self.requests = []
+        self.responses = []
+
+        # Almost all tests will try to request the access token, so
+        # set the response that will be returned if an attempt is
+        # made.
+        self.access_token_response = self.mock_access_token_response("bearer token")
+        super().__init__(_db, collection)
+        self._collection_token = "fake token"
+
     @classmethod
     def mock_collection(
-        self,
+        cls,
         _db: Session,
         library: Library,
         name: str = "Test Overdrive Collection",
@@ -48,17 +73,6 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
         db.set_settings(config.for_library(library.id, create=True), ils_name=ils_name)
         _db.refresh(config)
         return collection
-
-    def __init__(self, _db, collection, *args, **kwargs):
-        self.access_token_requests = []
-        self.requests = []
-        self.responses = []
-
-        # Almost all tests will try to request the access token, so
-        # set the response that will be returned if an attempt is
-        # made.
-        self.access_token_response = self.mock_access_token_response("bearer token")
-        super().__init__(_db, collection, *args, **kwargs)
 
     def queue_collection_token(self):
         # Many tests immediately try to access the
@@ -110,24 +124,6 @@ class MockOverdriveCoreAPI(OverdriveCoreAPI):
             kwargs.get("allowed_response_codes"),
             kwargs.get("disallowed_response_codes"),
         )
-
-
-class MockOverdriveResponse:
-    def __init__(self, status_code, headers, content):
-        self.status_code = status_code
-        self.headers = headers
-        self.content = content
-
-    def json(self):
-        return json.loads(self.content)
-
-
-class MockOverdriveAPI(MockOverdriveCoreAPI, OverdriveAPI):
-    library_data = '{"id":1810,"name":"My Public Library (MA)","type":"Library","collectionToken":"1a09d9203","links":{"self":{"href":"http://api.overdrive.com/v1/libraries/1810","type":"application/vnd.overdrive.api+json"},"products":{"href":"http://api.overdrive.com/v1/collections/1a09d9203/products","type":"application/vnd.overdrive.api+json"},"dlrHomepage":{"href":"http://ebooks.nypl.org","type":"text/html"}},"formats":[{"id":"audiobook-wma","name":"OverDrive WMA Audiobook"},{"id":"ebook-pdf-adobe","name":"Adobe PDF eBook"},{"id":"ebook-mediado","name":"MediaDo eBook"},{"id":"ebook-epub-adobe","name":"Adobe EPUB eBook"},{"id":"ebook-kindle","name":"Kindle Book"},{"id":"audiobook-mp3","name":"OverDrive MP3 Audiobook"},{"id":"ebook-pdf-open","name":"Open PDF eBook"},{"id":"ebook-overdrive","name":"OverDrive Read"},{"id":"video-streaming","name":"Streaming Video"},{"id":"ebook-epub-open","name":"Open EPUB eBook"}]}'
-
-    token_data = '{"access_token":"foo","token_type":"bearer","expires_in":3600,"scope":"LIB META AVAIL SRCH"}'
-
-    collection_token = "fake token"
 
     def patron_request(self, patron, pin, *args, **kwargs):
         response = self._make_request(*args, **kwargs)

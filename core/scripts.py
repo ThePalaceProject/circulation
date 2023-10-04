@@ -1,5 +1,4 @@
 import argparse
-import csv
 import datetime
 import json
 import logging
@@ -10,7 +9,7 @@ import traceback
 import unicodedata
 import uuid
 from enum import Enum
-from typing import Generator, List, Optional, Type
+from typing import Generator, Optional, Type
 
 from sqlalchemy import and_, exists, tuple_
 from sqlalchemy.orm import Query, Session, defer
@@ -57,7 +56,6 @@ from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.overdrive import OverdriveCoreAPI
 from core.query.customlist import CustomListQueries
 from core.search.coverage_remover import RemovesSearchCoverage
 from core.service.container import Services, container_instance
@@ -2716,122 +2714,6 @@ class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
         return TimestampData(
             achievements="Coverage records deleted: %(deleted)d" % dict(deleted=count)
         )
-
-
-class GenerateOverdriveAdvantageAccountList(InputScript):
-    """Generates a CSV containing the following fields:
-    circulation manager
-    collection
-    client_key
-    external_account_id
-    library_token
-    advantage_name
-    advantage_id
-    advantage_token
-    already_configured
-    """
-
-    def __init__(self, _db=None, *args, **kwargs):
-        super().__init__(_db, *args, **kwargs)
-        self._data: List[List[str]] = list()
-
-    def _create_overdrive_api(self, collection: Collection):
-        return OverdriveCoreAPI(_db=self._db, collection=collection)
-
-    def do_run(self, *args, **kwargs):
-        parsed = GenerateOverdriveAdvantageAccountList.parse_command_line(
-            _db=self._db, *args, **kwargs
-        )
-        query: Query = Collection.by_protocol(
-            self._db, protocol=ExternalIntegration.OVERDRIVE
-        )
-        for c in query.filter(Collection.parent_id == None):
-            collection: Collection = c
-            api = self._create_overdrive_api(collection=collection)
-            client_key = api.client_key().decode()
-            client_secret = api.client_secret().decode()
-
-            try:
-                library_token = api.collection_token
-                advantage_accounts = api.get_advantage_accounts()
-
-                for aa in advantage_accounts:
-                    existing_child_collections = query.filter(
-                        Collection.parent_id == collection.id
-                    )
-                    already_configured_aa_libraries = [
-                        e.external_account_id for e in existing_child_collections
-                    ]
-                    self._data.append(
-                        [
-                            collection.name,
-                            collection.external_account_id,
-                            client_key,
-                            client_secret,
-                            library_token,
-                            aa.name,
-                            aa.library_id,
-                            aa.token,
-                            aa.library_id in already_configured_aa_libraries,
-                        ]
-                    )
-            except Exception as e:
-                logging.error(
-                    f"Could not connect to collection {c.name}: reason: {str(e)}."
-                )
-
-        file_path = parsed.output_file_path[0]
-        circ_manager_name = parsed.circulation_manager_name[0]
-        self.write_csv(output_file_path=file_path, circ_manager_name=circ_manager_name)
-
-    def write_csv(self, output_file_path: str, circ_manager_name: str):
-        with open(output_file_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(
-                [
-                    "cm",
-                    "collection",
-                    "overdrive_library_id",
-                    "client_key",
-                    "client_secret",
-                    "library_token",
-                    "advantage_name",
-                    "advantage_id",
-                    "advantage_token",
-                    "already_configured",
-                ]
-            )
-            for i in self._data:
-                i.insert(0, circ_manager_name)
-                writer.writerow(i)
-
-    @classmethod
-    def arg_parser(cls):
-        parser = argparse.ArgumentParser()
-        parser.add_argument(
-            "--output-file-path",
-            help="The path of an output file",
-            metavar="o",
-            nargs=1,
-        )
-
-        parser.add_argument(
-            "--circulation-manager-name",
-            help="The name of the circulation-manager",
-            metavar="c",
-            nargs=1,
-            required=True,
-        )
-
-        parser.add_argument(
-            "--file-format",
-            help="The file format of the output file",
-            metavar="f",
-            nargs=1,
-            default="csv",
-        )
-
-        return parser
 
 
 class CustomListUpdateEntriesScript(CustomListSweeperScript):

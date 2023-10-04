@@ -33,7 +33,6 @@ pytest_plugins = [
     "tests.fixtures.odl",
     "tests.fixtures.opds2_files",
     "tests.fixtures.opds_files",
-    "tests.fixtures.overdrive",
     "tests.fixtures.sample_covers",
     "tests.fixtures.search",
     "tests.fixtures.time",
