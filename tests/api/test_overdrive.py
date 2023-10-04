@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import base64
+import csv
 import json
 import logging
 import os
 import random
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Dict
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
 import pytest
 from requests import Response
@@ -17,6 +18,7 @@ from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.config import Configuration
 from api.overdrive import (
+    GenerateOverdriveAdvantageAccountList,
     NewTitlesOverdriveCollectionMonitor,
     OverdriveAdvantageAccount,
     OverdriveAPI,
@@ -35,6 +37,7 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import LinkData, TimestampData
 from core.model import (
+    Collection,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -3912,3 +3915,108 @@ class TestOverdriveBibliographicCoverageProvider:
         # A Work was created and made presentation ready.
         assert "Agile Documentation" == pool.work.title
         assert True == pool.work.presentation_ready
+
+
+class TestGenerateOverdriveAdvantageAccountList:
+    def test_generate_od_advantage_account_list(self, db: DatabaseTransactionFixture):
+        output_file_path = "test-output.csv"
+        circ_manager_name = "circ_man_name"
+        parent_library_name = "Parent"
+        parent_od_library_id = "parent_id"
+        child1_library_name = "child1"
+        child1_advantage_library_id = "1"
+        child1_token = "token1"
+        child2_library_name = "child2"
+        child2_advantage_library_id = "2"
+        child2_token = "token2"
+        client_key = "ck"
+        client_secret = "cs"
+        library_token = "lt"
+
+        parent: Collection = db.collection(
+            name=parent_library_name,
+            protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id=parent_od_library_id,
+        )
+        child1: Collection = db.collection(
+            name=child1_library_name,
+            protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id=child1_advantage_library_id,
+        )
+        child1.parent = parent
+        overdrive_api = MagicMock()
+        overdrive_api.get_advantage_accounts.return_value = [
+            OverdriveAdvantageAccount(
+                parent_od_library_id,
+                child1_advantage_library_id,
+                child1_library_name,
+                child1_token,
+            ),
+            OverdriveAdvantageAccount(
+                parent_od_library_id,
+                child2_advantage_library_id,
+                child2_library_name,
+                child2_token,
+            ),
+        ]
+
+        overdrive_api.client_key.return_value = bytes(client_key, "utf-8")
+        overdrive_api.client_secret.return_value = bytes(client_secret, "utf-8")
+        type(overdrive_api).collection_token = PropertyMock(return_value=library_token)
+
+        with patch(
+            "api.overdrive.GenerateOverdriveAdvantageAccountList._create_overdrive_api"
+        ) as create_od_api:
+            create_od_api.return_value = overdrive_api
+            GenerateOverdriveAdvantageAccountList(db.session).do_run(
+                cmd_args=[
+                    "--output-file-path",
+                    output_file_path,
+                    "--circulation-manager-name",
+                    circ_manager_name,
+                ]
+            )
+
+            with open(output_file_path, newline="") as csv_file:
+                csvreader = csv.reader(csv_file)
+                for index, row in enumerate(csvreader):
+                    if index == 0:
+                        assert "cm" == row[0]
+                        assert "collection" == row[1]
+                        assert "overdrive_library_id" == row[2]
+                        assert "client_key" == row[3]
+                        assert "client_secret" == row[4]
+                        assert "library_token" == row[5]
+                        assert "advantage_name" == row[6]
+                        assert "advantage_id" == row[7]
+                        assert "advantage_token" == row[8]
+                        assert "already_configured" == row[9]
+                    elif index == 1:
+                        assert circ_manager_name == row[0]
+                        assert parent_library_name == row[1]
+                        assert parent_od_library_id == row[2]
+                        assert client_key == row[3]
+                        assert client_secret == row[4]
+                        assert library_token == row[5]
+                        assert child1_library_name == row[6]
+                        assert child1_advantage_library_id == row[7]
+                        assert child1_token == row[8]
+                        assert "True" == row[9]
+                    else:
+                        assert circ_manager_name == row[0]
+                        assert parent_library_name == row[1]
+                        assert parent_od_library_id == row[2]
+                        assert client_key == row[3]
+                        assert client_secret == row[4]
+                        assert library_token == row[5]
+                        assert child2_library_name == row[6]
+                        assert child2_advantage_library_id == row[7]
+                        assert child2_token == row[8]
+                        assert "False" == row[9]
+                    last_index = index
+
+            os.remove(output_file_path)
+            assert last_index == 2
+            overdrive_api.client_key.assert_called_once()
+            overdrive_api.client_secret.assert_called_once()
+            overdrive_api.get_advantage_accounts.assert_called_once()

@@ -201,10 +201,10 @@ class OverdriveChildSettings(BaseSettings):
 
 
 class OverdriveAPI(
-    OverdriveConstants,
     BaseCirculationAPI,
     HasCollectionSelfTests,
     HasChildIntegrationConfiguration,
+    OverdriveConstants,
 ):
     NAME = ExternalIntegration.OVERDRIVE
     DESCRIPTION = _(
@@ -361,6 +361,7 @@ class OverdriveAPI(
         return self.DESCRIPTION
 
     def __init__(self, _db, collection):
+        super().__init__(_db, collection)
         if collection.protocol != ExternalIntegration.OVERDRIVE:
             raise ValueError(
                 "Collection protocol is %s, but passed into OverdriveAPI!"
@@ -2139,41 +2140,6 @@ class OverdriveFormatSweep(IdentifierSweepMonitor):
             break
 
 
-class OverdriveManifestFulfillmentInfo(FulfillmentInfo):
-    def __init__(
-        self, collection, content_link, overdrive_identifier, scope_string, access_token
-    ):
-        """Constructor.
-
-        Most of the arguments to the superconstructor can be assumed,
-        and none of them matter all that much, since this class
-        overrides the normal process by which a FulfillmentInfo becomes
-        a Flask response.
-        """
-        super().__init__(
-            collection=collection,
-            data_source_name=DataSource.OVERDRIVE,
-            identifier_type=Identifier.OVERDRIVE_ID,
-            identifier=overdrive_identifier,
-            content_link=content_link,
-            content_type=None,
-            content=None,
-            content_expires=None,
-        )
-        self.scope_string = scope_string
-        self.access_token = access_token
-
-    @property
-    def as_response(self):
-        headers = {
-            "Location": self.content_link,
-            "X-Overdrive-Scope": self.scope_string,
-            "X-Overdrive-Patron-Authorization": f"Bearer {self.access_token}",
-            "Content-Type": self.content_type or "text/plain",
-        }
-        return flask.Response("", 302, headers)
-
-
 class OverdriveData:
     overdrive_client_key: str
     overdrive_client_secret: str
@@ -3101,3 +3067,38 @@ class OverdriveAdvantageAccountListScript(Script):
             print(" ", book["title"])
             if i > 10:
                 break
+
+
+class OverdriveManifestFulfillmentInfo(FulfillmentInfo):
+    def __init__(
+        self, collection, content_link, overdrive_identifier, scope_string, access_token
+    ):
+        """Constructor.
+
+        Most of the arguments to the superconstructor can be assumed,
+        and none of them matter all that much, since this class
+        overrides the normal process by which a FulfillmentInfo becomes
+        a Flask response.
+        """
+        super().__init__(
+            collection=collection,
+            data_source_name=DataSource.OVERDRIVE,
+            identifier_type=Identifier.OVERDRIVE_ID,
+            identifier=overdrive_identifier,
+            content_link=content_link,
+            content_type=None,
+            content=None,
+            content_expires=None,
+        )
+        self.scope_string = scope_string
+        self.access_token = access_token
+
+    @property
+    def as_response(self):
+        headers = {
+            "Location": self.content_link,
+            "X-Overdrive-Scope": self.scope_string,
+            "X-Overdrive-Patron-Authorization": f"Bearer {self.access_token}",
+            "Content-Type": self.content_type or "text/plain",
+        }
+        return flask.Response("", 302, headers)
