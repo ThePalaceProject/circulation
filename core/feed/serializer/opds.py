@@ -38,6 +38,7 @@ ATTRIBUTE_MAPPING = {
     "rights": f"{{{OPDSFeed.DCTERMS_NS}}}rights",
     "ProviderName": f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName",
     "facetGroup": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
+    "facetGroupType": f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType",
     "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
     "ratingValue": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
 }
