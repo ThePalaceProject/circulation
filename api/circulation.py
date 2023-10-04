@@ -10,7 +10,6 @@ from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     Generic,
     List,
@@ -59,6 +58,7 @@ from core.model import (
 )
 from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
+from core.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     pass
@@ -574,9 +574,43 @@ class CirculationConfigurationMixin(
         return self.settings_class()(**self.integration_configuration().settings_dict)  # type: ignore[return-value]
 
 
+class CirculationInternalFormatsMixin:
+    """A mixin for CirculationAPIs that have internal formats."""
+
+    # Different APIs have different internal names for delivery
+    # mechanisms. This is a mapping of (content_type, drm_type)
+    # 2-tuples to those internal names.
+    #
+    # For instance, the combination ("application/epub+zip",
+    # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
+    # is called "ebook-epub-adobe" in Overdrive.
+    delivery_mechanism_to_internal_format: Dict[
+        Tuple[Optional[str], Optional[str]], str
+    ] = {}
+
+    def internal_format(self, delivery_mechanism: LicensePoolDeliveryMechanism) -> str:
+        """Look up the internal format for this delivery mechanism or
+        raise an exception.
+
+        :param delivery_mechanism: A LicensePoolDeliveryMechanism
+        """
+        d = delivery_mechanism.delivery_mechanism
+        key = (d.content_type, d.drm_scheme)
+        internal_format = self.delivery_mechanism_to_internal_format.get(key)
+        if internal_format is None:
+            raise DeliveryMechanismError(
+                _(
+                    "Could not map delivery mechanism %(mechanism_name)s to internal delivery mechanism!",
+                    mechanism_name=d.name,
+                )
+            )
+        return internal_format
+
+
 class BaseCirculationAPI(
     CirculationConfigurationMixin[SettingsType, LibrarySettingsType],
     HasLibraryIntegrationConfiguration,
+    LoggerMixin,
     ABC,
 ):
     """Encapsulates logic common to all circulation APIs."""
@@ -595,17 +629,6 @@ class BaseCirculationAPI(
     # delivery mechanisms (3M), set this to None.
     SET_DELIVERY_MECHANISM_AT: Optional[str] = FULFILL_STEP
 
-    # Different APIs have different internal names for delivery
-    # mechanisms. This is a mapping of (content_type, drm_type)
-    # 2-tuples to those internal names.
-    #
-    # For instance, the combination ("application/epub+zip",
-    # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
-    # is called "ebook-epub-adobe" in Overdrive.
-    delivery_mechanism_to_internal_format: Dict[
-        Tuple[Optional[str], Optional[str]], str
-    ] = {}
-
     def __init__(self, _db: Session, collection: Collection):
         self._db = _db
         self._integration_configuration_id = collection.integration_configuration.id
@@ -616,28 +639,6 @@ class BaseCirculationAPI(
         if self.collection_id is None:
             return None
         return Collection.by_id(self._db, id=self.collection_id)
-
-    def internal_format(
-        self, delivery_mechanism: Optional[LicensePoolDeliveryMechanism]
-    ) -> Optional[str]:
-        """Look up the internal format for this delivery mechanism or
-        raise an exception.
-
-        :param delivery_mechanism: A LicensePoolDeliveryMechanism
-        """
-        if not delivery_mechanism:
-            return None
-        d = delivery_mechanism.delivery_mechanism
-        key = (d.content_type, d.drm_scheme)
-        internal_format = self.delivery_mechanism_to_internal_format.get(key)
-        if not internal_format:
-            raise DeliveryMechanismError(
-                _(
-                    "Could not map Simplified delivery mechanism %(mechanism_name)s to internal delivery mechanism!",
-                    mechanism_name=d.name,
-                )
-            )
-        return internal_format
 
     @classmethod
     def default_notification_email_address(
@@ -670,14 +671,14 @@ class BaseCirculationAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format: Optional[str],
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo | HoldInfo:
         """Check out a book on behalf of a patron.
 
         :param patron: a Patron object for the patron who wants to check out the book.
         :param pin: The patron's alleged password.
         :param licensepool: Contains lending info as well as link to parent Identifier.
-        :param internal_format: Represents the patron's desired book format.
+        :param delivery_mechanism: Represents the patron's desired book format.
 
         :return: a LoanInfo object.
         """
@@ -698,29 +699,9 @@ class BaseCirculationAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format: Optional[str] = None,
-        part: Optional[str] = None,
-        fulfill_part_url: Optional[Callable[[Optional[str]], str]] = None,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> FulfillmentInfo:
-        """Get the actual resource file to the patron.
-
-        Implementations are encouraged to define ``**kwargs`` as a container
-        for vendor-specific arguments, so that they don't have to change
-        as new arguments are added.
-
-        :param internal_format: A vendor-specific name indicating
-            the format requested by the patron.
-
-        :param part: A vendor-specific identifier indicating that the
-            patron wants to fulfill one specific part of the book
-            (e.g. one chapter of an audiobook), not the whole thing.
-
-        :param fulfill_part_url: A function that takes one argument (a
-            vendor-specific part identifier) and returns the URL to use
-            when fulfilling that part.
-
-        :return: a FulfillmentInfo object.
-        """
+        """Get the actual resource file to the patron."""
         ...
 
     @abstractmethod
@@ -1089,10 +1070,6 @@ class CirculationAPI:
         if must_set_delivery_mechanism and not delivery_mechanism:
             raise DeliveryMechanismMissing()
 
-        content_link = content_expires = None
-
-        internal_format = api.internal_format(delivery_mechanism)
-
         # Do we (think we) already have this book out on loan?
         existing_loan = get_one(
             self._db,
@@ -1154,7 +1131,9 @@ class CirculationAPI:
         # available -- someone else may have checked it in since we
         # last looked.
         try:
-            loan_info = api.checkout(patron, pin, licensepool, internal_format)
+            loan_info = api.checkout(
+                patron, pin, licensepool, delivery_mechanism=delivery_mechanism
+            )
 
             if isinstance(loan_info, HoldInfo):
                 # If the API couldn't give us a loan, it may have given us
@@ -1426,8 +1405,6 @@ class CirculationAPI:
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-        part: Optional[str] = None,
-        fulfill_part_url: Optional[Callable[[Optional[str]], str]] = None,
         sync_on_failure: bool = True,
     ) -> FulfillmentInfo:
         """Fulfil a book that a patron has previously checked out.
@@ -1437,14 +1414,6 @@ class CirculationAPI:
             the book has previously been delivered through some other
             mechanism, this parameter is ignored and the previously used
             mechanism takes precedence.
-
-        :param part: A vendor-specific identifier indicating that the
-            patron wants to fulfill one specific part of the book
-            (e.g. one chapter of an audiobook), not the whole thing.
-
-        :param fulfill_part_url: A function that takes one argument (a
-            vendor-specific part identifier) and returns the URL to use
-            when fulfilling that part.
 
         :return: A FulfillmentInfo object.
 
@@ -1470,8 +1439,6 @@ class CirculationAPI:
                     pin,
                     licensepool=licensepool,
                     delivery_mechanism=delivery_mechanism,
-                    part=part,
-                    fulfill_part_url=fulfill_part_url,
                     sync_on_failure=False,
                 )
             else:
@@ -1508,19 +1475,11 @@ class CirculationAPI:
             if not api:
                 raise CannotFulfill()
 
-            internal_format = api.internal_format(delivery_mechanism)
-
-            # Here we _do_ pass in the vendor-specific arguments, but
-            # we pass them in as keyword arguments, to minimize the
-            # impact on implementation signatures. Most vendor APIs
-            # will ignore one or more of these arguments.
             fulfillment = api.fulfill(
                 patron,
                 pin,
                 licensepool,
-                internal_format=internal_format,
-                part=part,
-                fulfill_part_url=fulfill_part_url,
+                delivery_mechanism=delivery_mechanism,
             )
             if not fulfillment or not (fulfillment.content_link or fulfillment.content):
                 raise NoAcceptableFormat()

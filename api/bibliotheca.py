@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import hmac
 import html
@@ -29,7 +31,6 @@ from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -59,7 +60,9 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
+    Patron,
     Representation,
     Session,
     Subject,
@@ -116,7 +119,6 @@ class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
 class BibliothecaAPI(
     BaseCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
     HasCollectionSelfTests,
-    HasLibraryIntegrationConfiguration,
 ):
     NAME = ExternalIntegration.BIBLIOTHECA
     AUTH_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S GMT"
@@ -127,8 +129,6 @@ class BibliothecaAPI(
     AUTHORIZATION_HEADER = "3mcl-Authorization"
     VERSION_HEADER = "3mcl-Version"
 
-    log = logging.getLogger("Bibliotheca API")
-
     DEFAULT_VERSION = "2.0"
     DEFAULT_BASE_URL = "https://partner.yourcloudlibrary.com/"
 
@@ -137,19 +137,6 @@ class BibliothecaAPI(
     SET_DELIVERY_MECHANISM_AT = None
 
     SERVICE_NAME = "Bibliotheca"
-
-    # Create a lookup table between common DeliveryMechanism identifiers
-    # and Overdrive format types.
-    adobe_drm = DeliveryMechanism.ADOBE_DRM
-    findaway_drm = DeliveryMechanism.FINDAWAY_DRM
-    delivery_mechanism_to_internal_format = {
-        (Representation.EPUB_MEDIA_TYPE, adobe_drm): "ePub",
-        (Representation.PDF_MEDIA_TYPE, adobe_drm): "PDF",
-        (None, findaway_drm): "MP3",
-    }
-    internal_format_to_delivery_mechanism = {
-        v: k for k, v in list(delivery_mechanism_to_internal_format.items())
-    }
 
     @classmethod
     def settings_class(cls):
@@ -418,7 +405,13 @@ class BibliothecaAPI(
 
     TEMPLATE = "<%(request_type)s><ItemId>%(item_id)s</ItemId><PatronId>%(patron_id)s</PatronId></%(request_type)s>"
 
-    def checkout(self, patron_obj, patron_password, licensepool, delivery_mechanism):
+    def checkout(
+        self,
+        patron_obj: Patron,
+        patron_password: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
         """Check out a book on behalf of a patron.
 
         :param patron_obj: a Patron object for the patron who wants
@@ -467,18 +460,18 @@ class BibliothecaAPI(
         )
         return loan
 
-    def fulfill(self, patron, password, pool, internal_format, **kwargs):
-        """Get the actual resource file to the patron.
-
-        :param kwargs: A container for standard arguments to fulfill()
-           which are not relevant to this implementation.
-
-        :return: a FulfillmentInfo object.
-        """
-        media_type, drm_scheme = self.internal_format_to_delivery_mechanism.get(
-            internal_format, internal_format
-        )
-        if drm_scheme == DeliveryMechanism.FINDAWAY_DRM:
+    def fulfill(
+        self,
+        patron: Patron,
+        password: str,
+        pool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        """Get the actual resource file to the patron."""
+        if (
+            delivery_mechanism.delivery_mechanism.drm_scheme
+            == DeliveryMechanism.FINDAWAY_DRM
+        ):
             fulfill_method = self.get_audio_fulfillment_file
             content_transformation = self.findaway_license_to_webpub_manifest
         else:

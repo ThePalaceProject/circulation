@@ -174,21 +174,12 @@ class TestLoansController:
         # open-access titles.
         url = "/works/<license_pool_id>/fulfill"
         fixture.assert_request_calls(
-            url, fixture.controller.fulfill, "<license_pool_id>", None, None  # type: ignore[union-attr]
+            url, fixture.controller.fulfill, "<license_pool_id>", None  # type: ignore[union-attr]
         )
 
         url = "/works/<license_pool_id>/fulfill/<mechanism_id>"
         fixture.assert_request_calls(
-            url, fixture.controller.fulfill, "<license_pool_id>", "<mechanism_id>", None  # type: ignore[union-attr]
-        )
-
-        url = "/works/<license_pool_id>/fulfill/<mechanism_id>/<part>"
-        fixture.assert_request_calls(
-            url,
-            fixture.controller.fulfill,  # type: ignore[union-attr]
-            "<license_pool_id>",
-            "<mechanism_id>",
-            "<part>",
+            url, fixture.controller.fulfill, "<license_pool_id>", "<mechanism_id>"  # type: ignore[union-attr]
         )
 
     def test_revoke_loan_or_hold(self, fixture: RouteTestFixture):

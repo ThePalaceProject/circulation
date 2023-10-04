@@ -1,7 +1,6 @@
-import logging
 from abc import ABC
 from collections import defaultdict
-from typing import Optional
+from typing import Optional, Type
 from unittest.mock import MagicMock
 
 from sqlalchemy.orm import Session
@@ -17,18 +16,20 @@ from tests.mocks.search import ExternalSearchIndexFake
 
 
 class MockBaseCirculationAPI(BaseCirculationAPI, ABC):
-    def label(self):
-        return ""
-
-    def description(self):
+    @classmethod
+    def label(cls) -> str:
         return ""
 
     @classmethod
-    def settings_class(cls):
+    def description(cls) -> str:
+        return ""
+
+    @classmethod
+    def settings_class(cls) -> Type[BaseSettings]:
         return BaseSettings
 
     @classmethod
-    def library_settings_class(cls):
+    def library_settings_class(cls) -> Type[BaseSettings]:
         return BaseSettings
 
 
@@ -39,7 +40,6 @@ class MockRemoteAPI(MockBaseCirculationAPI):
         self.SET_DELIVERY_MECHANISM_AT = set_delivery_mechanism_at
         self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved
         self.responses = defaultdict(list)
-        self.log = logging.getLogger("Mock remote API")
         self.availability_updated_for = []
 
     def checkout(self, patron_obj, patron_password, licensepool, delivery_mechanism):
@@ -59,9 +59,7 @@ class MockRemoteAPI(MockBaseCirculationAPI):
         patron,
         pin,
         licensepool,
-        internal_format=None,
-        part=None,
-        fulfill_part_url=None,
+        delivery_mechanism,
     ):
         # Should be a FulfillmentInfo.
         return self._return_or_raise("fulfill")

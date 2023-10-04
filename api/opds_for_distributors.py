@@ -2,18 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-)
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Set, Tuple, Type
 
 import feedparser
 from flask_babel import lazy_gettext as _
@@ -21,6 +10,7 @@ from flask_babel import lazy_gettext as _
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import (
     CannotFulfill,
+    DeliveryMechanismError,
     LibraryAuthorizationFailedException,
 )
 from api.selftest import HasCollectionSelfTests
@@ -97,12 +87,6 @@ class OPDSForDistributorsAPI(
         for (format, drm) in DeliveryMechanism.default_client_can_fulfill_lookup
         if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None
     ]
-
-    # ...and we should map requests for delivery of that media type to
-    # the (type, BEARER_TOKEN) DeliveryMechanism.
-    delivery_mechanism_to_internal_format = {
-        (type, DeliveryMechanism.BEARER_TOKEN): type for type in SUPPORTED_MEDIA_TYPES
-    }
 
     @classmethod
     def settings_class(cls) -> Type[OPDSForDistributorsSettings]:
@@ -283,7 +267,7 @@ class OPDSForDistributorsAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format: Optional[str],
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
         now = utc_now()
         return LoanInfo(
@@ -300,57 +284,65 @@ class OPDSForDistributorsAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format: Optional[str] = None,
-        part: Optional[str] = None,
-        fulfill_part_url: Optional[Callable[[Optional[str]], str]] = None,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> FulfillmentInfo:
         """Retrieve a bearer token that can be used to download the book.
 
-        :param kwargs: A container for arguments to fulfill()
-           which are not relevant to this vendor.
-
         :return: a FulfillmentInfo object.
         """
+        if (
+            delivery_mechanism.delivery_mechanism.drm_scheme
+            != DeliveryMechanism.BEARER_TOKEN
+        ):
+            raise DeliveryMechanismError(
+                "Cannot fulfill a loan through OPDS For Distributors using a delivery mechanism with DRM scheme %s"
+                % delivery_mechanism.delivery_mechanism.drm_scheme
+            )
 
         links = licensepool.identifier.links
+
         # Find the acquisition link with the right media type.
+        url = None
         for link in links:
             media_type = link.resource.representation.media_type
             if (
                 link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-                and media_type == internal_format
+                and media_type == delivery_mechanism.delivery_mechanism.content_type
             ):
                 url = link.resource.representation.url
+                break
 
-                # Obtain a Credential with the information from our
-                # bearer token.
-                _db = Session.object_session(licensepool)
-                credential = self._get_token(_db)
+        if url is None:
+            # We couldn't find an acquisition link for this book.
+            raise CannotFulfill()
 
-                # Build a application/vnd.librarysimplified.bearer-token
-                # document using information from the credential.
-                now = utc_now()
-                expiration = int((credential.expires - now).total_seconds())  # type: ignore[operator]
-                token_document = dict(
-                    token_type="Bearer",
-                    access_token=credential.credential,
-                    expires_in=expiration,
-                    location=url,
-                )
+        # Obtain a Credential with the information from our
+        # bearer token.
+        _db = Session.object_session(licensepool)
+        credential = self._get_token(_db)
 
-                return FulfillmentInfo(
-                    licensepool.collection,
-                    licensepool.data_source.name,
-                    licensepool.identifier.type,
-                    licensepool.identifier.identifier,
-                    content_link=None,
-                    content_type=DeliveryMechanism.BEARER_TOKEN,
-                    content=json.dumps(token_document),
-                    content_expires=credential.expires,
-                )
+        # Build a application/vnd.librarysimplified.bearer-token
+        # document using information from the credential.
+        now = utc_now()
+        assert credential.expires is not None
+        expiration = int((credential.expires - now).total_seconds())
+        token_document = dict(
+            token_type="Bearer",
+            access_token=credential.credential,
+            expires_in=expiration,
+            location=url,
+        )
 
-        # We couldn't find an acquisition link for this book.
-        raise CannotFulfill()
+        return FulfillmentInfo(
+            licensepool.collection,
+            licensepool.data_source.name,
+            licensepool.identifier.type,
+            licensepool.identifier.identifier,
+            content_link=None,
+            content_type=DeliveryMechanism.BEARER_TOKEN,
+            content=json.dumps(token_document),
+            content_expires=credential.expires,
+        )
 
     def patron_activity(self, patron: Patron, pin: str) -> List[LoanInfo | HoldInfo]:
         # Look up loans for this collection in the database.

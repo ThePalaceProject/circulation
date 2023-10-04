@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import html
 import json
 import logging
@@ -19,6 +21,7 @@ from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
     BaseCirculationLoanSettings,
+    CirculationInternalFormatsMixin,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -29,7 +32,6 @@ from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -55,8 +57,11 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
     LinkRelations,
     MediaTypes,
+    Patron,
     Representation,
     Session,
     Subject,
@@ -134,8 +139,8 @@ class Axis360LibrarySettings(BaseCirculationLoanSettings):
 class Axis360API(
     BaseCirculationAPI[Axis360Settings, Axis360LibrarySettings],
     HasCollectionSelfTests,
+    CirculationInternalFormatsMixin,
     Axis360APIConstants,
-    HasLibraryIntegrationConfiguration,
 ):
     NAME = ExternalIntegration.AXIS_360
 
@@ -148,8 +153,6 @@ class Axis360API(
     availability_endpoint = "availability/v2"
     fulfillment_endpoint = "getfullfillmentInfo/v2"
     audiobook_metadata_endpoint = "getaudiobookmetadata/v2"
-
-    log = logging.getLogger("Axis 360 API")
 
     # Create a lookup table between common DeliveryMechanism identifiers
     # and Axis 360 format types.
@@ -384,10 +387,18 @@ class Axis360API(
         )
         return self.request(url, method="GET", verbose=True)
 
-    def checkout(self, patron, pin, licensepool, internal_format):
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
-        response = self._checkout(title_id, patron_id, internal_format)
+        response = self._checkout(
+            title_id, patron_id, self.internal_format(delivery_mechanism)
+        )
         try:
             return CheckoutResponseParser(licensepool.collection).process_all(
                 response.content
@@ -401,18 +412,21 @@ class Axis360API(
         response = self.request(url, data=args, method="POST")
         return response
 
-    def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
-        """Fulfill a patron's request for a specific book.
-
-        :param kwargs: A container for arguments to fulfill()
-           which are not relevant to this vendor.
-
-        :return: a FulfillmentInfo object.
-        """
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        """Fulfill a patron's request for a specific book."""
         identifier = licensepool.identifier
         # This should include only one 'activity'.
         activities = self.patron_activity(
-            patron, pin, licensepool.identifier, internal_format
+            patron,
+            pin,
+            licensepool.identifier,
+            self.internal_format(delivery_mechanism),
         )
         for loan in activities:
             if not isinstance(loan, LoanInfo):

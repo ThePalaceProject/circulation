@@ -25,6 +25,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from api.circulation import (
     BaseCirculationAPI,
     BaseCirculationEbookLoanSettings,
+    CirculationInternalFormatsMixin,
     DeliveryMechanismInfo,
     FulfillmentInfo,
     HoldInfo,
@@ -68,6 +69,7 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
     MediaTypes,
     Patron,
@@ -202,6 +204,7 @@ class OverdriveChildSettings(BaseSettings):
 
 class OverdriveAPI(
     BaseCirculationAPI,
+    CirculationInternalFormatsMixin,
     HasCollectionSelfTests,
     HasChildIntegrationConfiguration,
     OverdriveConstants,
@@ -260,8 +263,6 @@ class OverdriveAPI(
     # An OverDrive defined constant indicating the "main" or parent account
     # associated with an OverDrive collection.
     OVERDRIVE_MAIN_ACCOUNT_ID = -1
-
-    log = logging.getLogger("Overdrive API")
 
     # A lock for threaded usage.
     lock = RLock()
@@ -1010,7 +1011,13 @@ class OverdriveAPI(
             raise PatronAuthorizationFailedException(message, debug)
         return credential
 
-    def checkout(self, patron, pin, licensepool, internal_format):
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
         """Check out a book on behalf of a patron.
 
         :param patron: a Patron object for the patron who wants
@@ -1021,7 +1028,7 @@ class OverdriveAPI(
         :param licensepool: Identifier of the book to be checked out is
             attached to this licensepool.
 
-        :param internal_format: Represents the patron's desired book format.
+        :param delivery_mechanism: Represents the patron's desired book format.
 
         :return: a LoanInfo object.
         """
@@ -1029,8 +1036,8 @@ class OverdriveAPI(
         identifier = licensepool.identifier
         overdrive_id = identifier.identifier
         headers = {"Content-Type": "application/json"}
-        payload = dict(fields=[dict(name="reserveId", value=overdrive_id)])
-        payload = json.dumps(payload)
+        payload_dict = dict(fields=[dict(name="reserveId", value=overdrive_id)])
+        payload = json.dumps(payload_dict)
 
         response = self.patron_request(
             patron, pin, self.CHECKOUTS_ENDPOINT, extra_headers=headers, data=payload
@@ -1228,14 +1235,20 @@ class OverdriveAPI(
         self.raise_exception_on_error(data)
         return data
 
-    def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
-        """Get the actual resource file to the patron.
-
-        :param kwargs: A container for arguments to fulfill()
-           which are not relevant to this vendor.
-
-        :return: a FulfillmentInfo object.
-        """
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        """Get the actual resource file to the patron."""
+        internal_format = self.internal_format(delivery_mechanism)
+        if licensepool.identifier.identifier is None:
+            self.log.error(
+                f"Cannot fulfill licensepool with no identifier. Licensepool.id: {licensepool.id}"
+            )
+            raise CannotFulfill()
         try:
             result = self.get_fulfillment_link(
                 patron, pin, licensepool.identifier.identifier, internal_format

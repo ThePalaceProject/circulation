@@ -14,7 +14,6 @@ from api.axis import Axis360FulfillmentInfo
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import (
     AlreadyOnHold,
-    CannotFulfill,
     NoAvailableCopies,
     NoLicenses,
     NotFoundOnRemote,
@@ -672,29 +671,9 @@ class TestLoanController:
     def test_fulfill(self, loan_fixture: LoanFixture):
         # Verify that arguments to the fulfill() method are propagated
         # correctly to the CirculationAPI.
-        class MockCirculationAPI:
-            def fulfill(
-                self,
-                patron,
-                credential,
-                requested_license_pool,
-                mechanism,
-                part,
-                fulfill_part_url,
-            ):
-                self.called_with = (
-                    patron,
-                    credential,
-                    requested_license_pool,
-                    mechanism,
-                    part,
-                    fulfill_part_url,
-                )
-                raise CannotFulfill()
 
         controller = loan_fixture.manager.loans
-        mock = MockCirculationAPI()
-        library_short_name = loan_fixture.db.default_library().short_name
+        mock = MagicMock(spec=CirculationAPI)
         controller.manager.circulation_apis[loan_fixture.db.default_library().id] = mock
 
         with loan_fixture.request_context_with_library(
@@ -703,50 +682,20 @@ class TestLoanController:
             authenticated = controller.authenticated_patron_from_request()
             loan, ignore = loan_fixture.pool.loan_to(authenticated)
 
-            # Try to fulfill a certain part of the loan.
+            # Try to fulfill the loan.
             assert isinstance(loan_fixture.pool.id, int)
-            part = "part 1 million"
             controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id, part
+                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
             )
 
             # Verify that the right arguments were passed into
             # CirculationAPI.
-            (
-                patron,
-                credential,
-                pool,
-                mechanism,
-                part,
-                fulfill_part_url,
-            ) = mock.called_with
-            assert authenticated == patron
-            assert loan_fixture.valid_credentials["password"] == credential
-            assert loan_fixture.pool == pool
-            assert loan_fixture.mech2 == mechanism
-            assert "part 1 million" == part
-
-            # The last argument is complicated -- it's a function for
-            # generating partial fulfillment URLs. Let's try it out
-            # and make sure it gives the result we expect.
-            expect = url_for(
-                "fulfill",
-                license_pool_id=loan_fixture.pool.id,
-                mechanism_id=mechanism.delivery_mechanism.id,
-                library_short_name=library_short_name,
-                part=part,
-                _external=True,
+            mock.fulfill.assert_called_once_with(
+                authenticated,
+                loan_fixture.valid_credentials["password"],
+                loan_fixture.pool,
+                loan_fixture.mech2,
             )
-            part_url = fulfill_part_url(part)
-            assert expect == part_url
-
-            # Ensure that the library short name is the first segment
-            # of the path of the fulfillment url. We cannot perform
-            # patron authentication without it.
-            expected_path = urllib.parse.urlparse(expect).path
-            part_url_path = urllib.parse.urlparse(part_url).path
-            assert expected_path.startswith(f"/{library_short_name}/")
-            assert part_url_path.startswith(f"/{library_short_name}/")
 
     @pytest.mark.parametrize(
         "as_response_value",

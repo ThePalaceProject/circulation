@@ -25,6 +25,7 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    MediaTypes,
     Representation,
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -82,6 +83,8 @@ class OdiloFixture:
             identifier_id=self.RECORD_ID,
             with_license_pool=True,
         )
+
+        self.delivery_mechanism = self.licensepool.delivery_mechanisms[0]
 
 
 @pytest.fixture(scope="function")
@@ -346,7 +349,7 @@ class TestOdiloCirculationAPI:
             patron,
             odilo.PIN,
             odilo.licensepool,
-            "ACSM_EPUB",
+            odilo.delivery_mechanism,
         )
         odilo.api.log.info("Test patron not found ok!")
 
@@ -364,7 +367,7 @@ class TestOdiloCirculationAPI:
             odilo.patron,
             odilo.PIN,
             odilo.licensepool,
-            "ACSM_EPUB",
+            odilo.delivery_mechanism,
         )
         odilo.api.log.info("Test resource not found on remote ok!")
 
@@ -392,34 +395,43 @@ class TestOdiloCirculationAPI:
             odilo.patron,
             odilo.PIN,
             odilo.licensepool,
-            "FAKE_FORMAT",
+            odilo.delivery_mechanism,
         )
         odilo.api.log.info("Test invalid format for resource ok!")
 
     def test_12_checkout_acsm_epub(self, odilo: OdiloFixture):
         checkout_data, checkout_json = odilo.sample_json("checkout_acsm_epub_ok.json")
         odilo.api.queue_response(200, content=checkout_json)
-        self.perform_and_validate_checkout("ACSM_EPUB", odilo)
+        self.perform_and_validate_checkout(odilo)
 
     def test_13_checkout_acsm_pdf(self, odilo: OdiloFixture):
+        odilo.delivery_mechanism.delivery_mechanism.content_type = (
+            MediaTypes.PDF_MEDIA_TYPE
+        )
         checkout_data, checkout_json = odilo.sample_json("checkout_acsm_pdf_ok.json")
         odilo.api.queue_response(200, content=checkout_json)
-        self.perform_and_validate_checkout("ACSM_PDF", odilo)
+        self.perform_and_validate_checkout(odilo)
 
     def test_14_checkout_ebook_streaming(self, odilo: OdiloFixture):
+        odilo.delivery_mechanism.delivery_mechanism.content_type = (
+            Representation.TEXT_HTML_MEDIA_TYPE
+        )
+        odilo.delivery_mechanism.delivery_mechanism.drm_scheme = (
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+        )
         checkout_data, checkout_json = odilo.sample_json(
             "checkout_ebook_streaming_ok.json"
         )
         odilo.api.queue_response(200, content=checkout_json)
-        self.perform_and_validate_checkout("EBOOK_STREAMING", odilo)
+        self.perform_and_validate_checkout(odilo)
 
     def test_mechanism_set_on_borrow(self, odilo: OdiloFixture):
         """The delivery mechanism for an Odilo title is set on checkout."""
         assert OdiloAPI.SET_DELIVERY_MECHANISM_AT == OdiloAPI.BORROW_STEP
 
-    def perform_and_validate_checkout(self, internal_format, odilo: OdiloFixture):
+    def perform_and_validate_checkout(self, odilo: OdiloFixture):
         loan_info = odilo.api.checkout(
-            odilo.patron, odilo.PIN, odilo.licensepool, internal_format
+            odilo.patron, odilo.PIN, odilo.licensepool, odilo.delivery_mechanism
         )
         assert loan_info, "LoanInfo null --> checkout failed!"
         odilo.api.log.info("Loan ok: %s" % loan_info.identifier)
@@ -435,36 +447,45 @@ class TestOdiloCirculationAPI:
         acsm_data = odilo.sample_data("fulfill_ok_acsm_epub.acsm")
         odilo.api.queue_response(200, content=acsm_data)
 
-        fulfillment_info = self.fulfill("ACSM_EPUB", odilo)
+        fulfillment_info = self.fulfill(odilo)
         assert fulfillment_info.content_type[0] == Representation.EPUB_MEDIA_TYPE
         assert fulfillment_info.content_type[1] == DeliveryMechanism.ADOBE_DRM
 
     def test_22_fulfill_acsm_pdf(self, odilo: OdiloFixture):
+        odilo.delivery_mechanism.delivery_mechanism.content_type = (
+            MediaTypes.PDF_MEDIA_TYPE
+        )
         checkout_data, checkout_json = odilo.sample_json("patron_checkouts.json")
         odilo.api.queue_response(200, content=checkout_json)
 
         acsm_data = odilo.sample_data("fulfill_ok_acsm_pdf.acsm")
         odilo.api.queue_response(200, content=acsm_data)
 
-        fulfillment_info = self.fulfill("ACSM_PDF", odilo)
+        fulfillment_info = self.fulfill(odilo)
         assert fulfillment_info.content_type[0] == Representation.PDF_MEDIA_TYPE
         assert fulfillment_info.content_type[1] == DeliveryMechanism.ADOBE_DRM
 
     def test_23_fulfill_ebook_streaming(self, odilo: OdiloFixture):
+        odilo.delivery_mechanism.delivery_mechanism.content_type = (
+            Representation.TEXT_HTML_MEDIA_TYPE
+        )
+        odilo.delivery_mechanism.delivery_mechanism.drm_scheme = (
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
+        )
         checkout_data, checkout_json = odilo.sample_json("patron_checkouts.json")
         odilo.api.queue_response(200, content=checkout_json)
 
         odilo.licensepool.identifier.identifier = "00011055"
-        fulfillment_info = self.fulfill("EBOOK_STREAMING", odilo)
+        fulfillment_info = self.fulfill(odilo)
         assert fulfillment_info.content_type[0] == Representation.TEXT_HTML_MEDIA_TYPE
         assert (
             fulfillment_info.content_type[1]
             == DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
         )
 
-    def fulfill(self, internal_format, odilo: OdiloFixture):
+    def fulfill(self, odilo: OdiloFixture):
         fulfillment_info = odilo.api.fulfill(
-            odilo.patron, odilo.PIN, odilo.licensepool, internal_format
+            odilo.patron, odilo.PIN, odilo.licensepool, odilo.delivery_mechanism
         )
         assert fulfillment_info, "Cannot Fulfill !!"
 

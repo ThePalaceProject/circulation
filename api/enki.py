@@ -10,7 +10,6 @@ from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -35,6 +34,9 @@ from core.model import (
     Edition,
     Hyperlink,
     Identifier,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    Patron,
     Representation,
     Subject,
 )
@@ -81,7 +83,6 @@ class EnkiAPI(
     BaseCirculationAPI[EnkiSettings, EnkiLibrarySettings],
     HasCollectionSelfTests,
     EnkiConstants,
-    HasLibraryIntegrationConfiguration,
 ):
     ENKI_LIBRARY_ID_KEY = "enki_library_id"
     DESCRIPTION = _("Integrate an Enki collection.")
@@ -95,17 +96,6 @@ class EnkiAPI(
     ENKI_EXTERNAL = NAME
     ENKI_ID = "Enki ID"
 
-    # Create a lookup table between common DeliveryMechanism identifiers
-    # and Enki format types.
-    epub = Representation.EPUB_MEDIA_TYPE
-    adobe_drm = DeliveryMechanism.ADOBE_DRM
-    no_drm = DeliveryMechanism.NO_DRM
-
-    delivery_mechanism_to_internal_format = {
-        (epub, no_drm): "free",
-        (epub, adobe_drm): "acs",
-    }
-
     # Enki API serves all responses with a 200 error code and a
     # text/html Content-Type. However, there's a string that
     # reliably shows up in error pages which is unlikely to show up
@@ -114,7 +104,6 @@ class EnkiAPI(
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
     SERVICE_NAME = "Enki"
-    log = logging.getLogger("Enki API")
 
     @classmethod
     def settings_class(cls):
@@ -368,7 +357,13 @@ class EnkiAPI(
             time.strftime(time_format, time.gmtime(float(epoch_string))), time_format
         )
 
-    def checkout(self, patron, pin, licensepool, internal_format):
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
         identifier = licensepool.identifier
         enki_id = identifier.identifier
         enki_library_id = self.enki_library_id(patron.library)
@@ -421,14 +416,14 @@ class EnkiAPI(
         response = self.request(url, method="get", params=args)
         return response
 
-    def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
-        """Get the actual resource file to the patron.
-
-        :param kwargs: A container for arguments to fulfill()
-           which are not relevant to this vendor.
-
-        :return: a FulfillmentInfo object.
-        """
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        """Get the actual resource file to the patron."""
         book_id = licensepool.identifier.identifier
         enki_library_id = self.enki_library_id(patron.library)
         response = self.loan_request(
@@ -454,11 +449,11 @@ class EnkiAPI(
         # whether the content link points to the actual book or an
         # ACSM file) but since Enki titles only have a single delivery
         # mechanism, it's easy to make a guess.
-        drm_type = self.no_drm
+        drm_type = DeliveryMechanism.NO_DRM
         for lpdm in licensepool.delivery_mechanisms:
-            delivery_mechanism = lpdm.delivery_mechanism
-            if delivery_mechanism:
-                drm_type = delivery_mechanism.drm_scheme
+            mechanism = lpdm.delivery_mechanism
+            if mechanism:
+                drm_type = mechanism.drm_scheme
                 break
 
         return FulfillmentInfo(
@@ -683,9 +678,9 @@ class BibliographicParser:
         licenses_owned = availability.get("totalCopies", 0)
         licenses_available = availability.get("availableCopies", 0)
         hold = availability.get("onHold", 0)
-        drm_type = EnkiAPI.no_drm
+        drm_type = DeliveryMechanism.NO_DRM
         if availability.get("accessType") == "acs":
-            drm_type = EnkiAPI.adobe_drm
+            drm_type = DeliveryMechanism.ADOBE_DRM
         formats = []
 
         content_type = None

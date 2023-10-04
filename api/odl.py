@@ -3,10 +3,9 @@ from __future__ import annotations
 import binascii
 import datetime
 import json
-import logging
 import uuid
 from abc import ABC
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type
 
 import dateutil
 from flask import url_for
@@ -266,14 +265,6 @@ class ODLAPI(
         """
         return self.collection.external_integration
 
-    def internal_format(  # type: ignore[override]
-        self, delivery_mechanism: Optional[LicensePoolDeliveryMechanism]
-    ) -> Optional[LicensePoolDeliveryMechanism]:
-        """Each consolidated copy is only available in one format, so we don't need
-        a mapping to internal formats.
-        """
-        return delivery_mechanism
-
     @property
     def collection(self) -> Collection:
         """Return a collection associated with this object.
@@ -455,7 +446,7 @@ class ODLAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format: Optional[str],
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
         """Create a new loan."""
         _db = Session.object_session(patron)
@@ -555,9 +546,7 @@ class ODLAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        internal_format: Optional[str] = None,
-        part: Optional[str] = None,
-        fulfill_part_url: Optional[Callable[[Optional[str]], str]] = None,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> FulfillmentInfo:
         """Get the actual resource file to the patron."""
         _db = Session.object_session(patron)
@@ -567,7 +556,7 @@ class ODLAPI(
             .filter(Loan.patron == patron)
             .filter(Loan.license_pool_id == licensepool.id)
         ).one()
-        return self._fulfill(loan, internal_format)
+        return self._fulfill(loan, delivery_mechanism)
 
     @staticmethod
     def _find_content_link_and_type(
@@ -595,11 +584,6 @@ class ODLAPI(
             # No candidates
             return None, None
 
-        if not drm_scheme:
-            # If we don't have a requested DRM scheme, so we use the first one.
-            # TODO: Can this just be dropped?
-            return candidates[0]
-
         # For DeMarque audiobook content, we need to translate the type property
         # to reflect what we have stored in our delivery mechanisms.
         if drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
@@ -610,7 +594,7 @@ class ODLAPI(
     def _fulfill(
         self,
         loan: Loan,
-        delivery_mechanism: Optional[Union[str, LicensePoolDeliveryMechanism]] = None,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> FulfillmentInfo:
         licensepool = loan.license_pool
         doc = self.get_license_status_document(loan)
@@ -628,11 +612,9 @@ class ODLAPI(
         expires = dateutil.parser.parse(expires)
 
         links = doc.get("links", [])
-        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-            delivery_mechanism = delivery_mechanism.delivery_mechanism.drm_scheme
 
         content_link, content_type = self._find_content_link_and_type(
-            links, delivery_mechanism
+            links, delivery_mechanism.delivery_mechanism.drm_scheme
         )
 
         return FulfillmentInfo(
@@ -1001,7 +983,7 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
             license_info_document = json.loads(response)
             return license_info_document  # type: ignore[no-any-return]
         else:
-            logging.warning(
+            cls.logger().warning(
                 f"License Info Document is not available. "
                 f"Status link {document_link} failed with {status_code} code."
             )
@@ -1036,7 +1018,7 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
         document_format = license_info_document.get("format")
 
         if identifier is None:
-            logging.error("License info document has no identifier.")
+            cls.logger().error("License info document has no identifier.")
             return None
 
         expires = None
@@ -1047,13 +1029,13 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
         if document_status is not None:
             status = LicenseStatus.get(document_status)
             if status.value != document_status:
-                logging.warning(
+                cls.logger().warning(
                     f"Identifier # {identifier} unknown status value "
                     f"{document_status} defaulting to {status.value}."
                 )
         else:
             status = LicenseStatus.unavailable
-            logging.warning(
+            cls.logger().warning(
                 f"Identifier # {identifier} license info document does not have "
                 f"required key 'status'."
             )
@@ -1062,7 +1044,7 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
             available = int(document_available)
         else:
             available = 0
-            logging.warning(
+            cls.logger().warning(
                 f"Identifier # {identifier} license info document does not have "
                 f"required key 'checkouts.available'."
             )
@@ -1120,7 +1102,7 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
             # There is a mismatch between the license info document and
             # the feed we are importing. Since we don't know which to believe
             # we log an error and continue.
-            logging.error(
+            cls.logger().error(
                 f"Mismatch between license identifier in the feed ({feed_license_identifier}) "
                 f"and the identifier in the license info document "
                 f"({parsed_license.identifier}) ignoring license completely."
@@ -1128,7 +1110,7 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
             return None
 
         if parsed_license.expires != feed_license_expires:
-            logging.error(
+            cls.logger().error(
                 f"License identifier {feed_license_identifier}. Mismatch between license "
                 f"expiry in the feed ({feed_license_expires}) and the expiry in the license "
                 f"info document ({parsed_license.expires}) setting license status "
@@ -1137,7 +1119,7 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
             parsed_license.status = LicenseStatus.unavailable
 
         if parsed_license.terms_concurrency != feed_concurrency:
-            logging.error(
+            cls.logger().error(
                 f"License identifier {feed_license_identifier}. Mismatch between license "
                 f"concurrency in the feed ({feed_concurrency}) and the "
                 f"concurrency in the license info document ("
