@@ -22,7 +22,7 @@ def upgrade() -> None:
     conn = op.get_bind()
     all_libraries = conn.execute("SELECT id, settings_dict from libraries").all()
 
-    for (lib_id, settings) in all_libraries:
+    for lib_id, settings in all_libraries:
         order = settings.get(ORDER_KEY, [])
         if "last_update" not in order:
             order.append("last_update")
@@ -39,7 +39,7 @@ def downgrade() -> None:
     conn = op.get_bind()
     all_libraries = conn.execute("SELECT id, settings_dict from libraries").all()
 
-    for (lib_id, settings) in all_libraries:
+    for lib_id, settings in all_libraries:
         order: list = settings.get(ORDER_KEY, [])
         if "last_update" in order:
             order.remove("last_update")
