@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import traceback
+from abc import ABC, abstractmethod
+from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from typing import (
@@ -28,7 +30,6 @@ from feedparser import FeedParserDict
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import HttpUrl
-from sqlalchemy.orm import aliased
 from sqlalchemy.orm.session import Session
 
 from api.circulation import CirculationConfigurationMixin
@@ -59,7 +60,6 @@ from core.model import (
     CoverageRecord,
     DataSource,
     Edition,
-    Equivalency,
     ExternalIntegration,
     Hyperlink,
     Identifier,
@@ -75,49 +75,13 @@ from core.monitor import CollectionMonitor
 from core.selftest import SelfTestResult
 from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
+from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
 
 if TYPE_CHECKING:
     from core.model import Work
-
-
-@overload
-def parse_identifier(db: Session, identifier: str) -> Identifier:
-    ...
-
-
-@overload
-def parse_identifier(db: Session, identifier: Optional[str]) -> Optional[Identifier]:
-    ...
-
-
-def parse_identifier(db: Session, identifier: Optional[str]) -> Optional[Identifier]:
-    """Parse the identifier and return an Identifier object representing it.
-
-    :param db: Database session
-    :type db: sqlalchemy.orm.session.Session
-
-    :param identifier: String containing the identifier
-    :type identifier: str
-
-    :return: Identifier object
-    :rtype: Optional[core.model.identifier.Identifier]
-    """
-    parsed_identifier = None
-
-    try:
-        result = Identifier.parse_urn(db, identifier)
-
-        if result is not None:
-            parsed_identifier, _ = result
-    except Exception:
-        logging.error(
-            f"An unexpected exception occurred during parsing identifier {identifier}"
-        )
-
-    return parsed_identifier
 
 
 class OPDSXMLParser(XMLParser):
@@ -226,9 +190,278 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
-class OPDSImporter(
-    CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings]
+class BaseOPDSImporter(
+    CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings],
+    LoggerMixin,
+    ABC,
 ):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        data_source_name: Optional[str],
+        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+    ):
+        self._db = _db
+        if collection.id is None:
+            raise ValueError(
+                f"Unable to create importer for Collection with id = None. Collection: {collection.name}."
+            )
+        self._collection_id = collection.id
+        self._integration_configuration_id = collection.integration_configuration_id
+        if data_source_name is None:
+            # Use the Collection data_source for OPDS import.
+            data_source = self.collection.data_source
+            if data_source:
+                data_source_name = data_source.name
+            else:
+                raise ValueError(
+                    "Cannot perform an OPDS import on a Collection that has no associated DataSource!"
+                )
+        self.data_source_name = data_source_name
+
+        # In general, we are cautious when mirroring resources so that
+        # we don't, e.g. accidentally get our IP banned from
+        # gutenberg.org.
+        self.http_get = http_get or Representation.cautious_http_get
+
+    @abstractmethod
+    def extract_feed_data(
+        self, feed: str | bytes, feed_url: Optional[str] = None
+    ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
+        ...
+
+    @abstractmethod
+    def extract_last_update_dates(
+        self, feed: str | bytes | FeedParserDict
+    ) -> List[Tuple[Optional[str], Optional[datetime]]]:
+        ...
+
+    @abstractmethod
+    def extract_next_links(self, feed: str | bytes) -> List[str]:
+        ...
+
+    @abstractmethod
+    def assert_importable_content(
+        self, feed: str, feed_url: str, max_get_attempts: int = 5
+    ) -> Literal[True]:
+        ...
+
+    @overload
+    def parse_identifier(self, identifier: str) -> Identifier:
+        ...
+
+    @overload
+    def parse_identifier(self, identifier: Optional[str]) -> Optional[Identifier]:
+        ...
+
+    def parse_identifier(self, identifier: Optional[str]) -> Optional[Identifier]:
+        """Parse the identifier and return an Identifier object representing it.
+
+        :param identifier: String containing the identifier
+
+        :return: Identifier object
+        """
+        parsed_identifier = None
+
+        try:
+            result = Identifier.parse_urn(self._db, identifier)
+            if result is not None:
+                parsed_identifier, _ = result
+        except Exception:
+            self.log.error(
+                f"An unexpected exception occurred during parsing identifier {identifier}"
+            )
+
+        return parsed_identifier
+
+    @property
+    def data_source(self) -> DataSource:
+        """Look up or create a DataSource object representing the
+        source of this OPDS feed.
+        """
+        offers_licenses = self.collection is not None
+        return DataSource.lookup(  # type: ignore[no-any-return]
+            self._db,
+            self.data_source_name,
+            autocreate=True,
+            offers_licenses=offers_licenses,
+        )
+
+    @property
+    def collection(self) -> Collection:
+        collection = Collection.by_id(self._db, self._collection_id)
+        if collection is None:
+            raise ValueError("Unable to load collection.")
+        return collection
+
+    def import_edition_from_metadata(self, metadata: Metadata) -> Edition:
+        """For the passed-in Metadata object, see if can find or create an Edition
+        in the database. Also create a LicensePool if the Metadata has
+        CirculationData in it.
+        """
+        # Locate or create an Edition for this book.
+        edition, is_new_edition = metadata.edition(self._db)
+
+        policy = ReplacementPolicy(
+            subjects=True,
+            links=True,
+            contributions=True,
+            rights=True,
+            link_content=True,
+            formats=True,
+            even_if_not_apparently_updated=True,
+        )
+        metadata.apply(
+            edition=edition,
+            collection=self.collection,
+            replace=policy,
+        )
+
+        return edition  # type: ignore[no-any-return]
+
+    def update_work_for_edition(
+        self,
+        edition: Edition,
+        is_open_access: bool = True,
+    ) -> tuple[LicensePool | None, Work | None]:
+        """If possible, ensure that there is a presentation-ready Work for the
+        given edition's primary identifier.
+
+        :param edition: The edition whose license pool and work we're interested in.
+        :param is_open_access: Whether this is an open access edition.
+        :return: 2-Tuple of license pool (optional) and work (optional) for edition.
+        """
+
+        work = None
+
+        # Looks up a license pool for the primary identifier associated with
+        # the given edition. If this is not an open access book, then the
+        # collection is also used as criteria for the lookup. Open access
+        # books don't require a collection match, according to this explanation
+        # from prior work:
+        #   Find a LicensePool for the primary identifier. Any LicensePool will
+        #   do--the collection doesn't have to match, since all
+        #   LicensePools for a given identifier have the same Work.
+        #
+        # If we have CirculationData, a pool was created when we
+        # imported the edition. If there was already a pool from a
+        # different data source or a different collection, that's fine
+        # too.
+        collection_criteria = {} if is_open_access else {"collection": self.collection}
+        pool = get_one(
+            self._db,
+            LicensePool,
+            identifier=edition.primary_identifier,
+            on_multiple="interchangeable",
+            **collection_criteria,
+        )
+
+        if pool:
+            if not pool.work or not pool.work.presentation_ready:
+                # There is no presentation-ready Work for this
+                # LicensePool. Try to create one.
+                work, ignore = pool.calculate_work()
+            else:
+                # There is a presentation-ready Work for this LicensePool.
+                # Use it.
+                work = pool.work
+
+        # If a presentation-ready Work already exists, there's no
+        # rush. We might have new metadata that will change the Work's
+        # presentation, but when we called Metadata.apply() the work
+        # was set up to have its presentation recalculated in the
+        # background, and that's good enough.
+        return pool, work
+
+    def import_from_feed(
+        self, feed: str | bytes, feed_url: Optional[str] = None
+    ) -> Tuple[
+        List[Edition],
+        List[LicensePool],
+        List[Work],
+        Dict[str, List[CoverageFailure]],
+    ]:
+        # Keep track of editions that were imported. Pools and works
+        # for those editions may be looked up or created.
+        imported_editions = {}
+        pools = {}
+        works = {}
+
+        # If parsing the overall feed throws an exception, we should address that before
+        # moving on. Let the exception propagate.
+        metadata_objs, extracted_failures = self.extract_feed_data(feed, feed_url)
+        failures = defaultdict(list, extracted_failures)
+        # make editions.  if have problem, make sure associated pool and work aren't created.
+        for key, metadata in metadata_objs.items():
+            # key is identifier.urn here
+
+            # If there's a status message about this item, don't try to import it.
+            if key in list(failures.keys()):
+                continue
+
+            try:
+                # Create an edition. This will also create a pool if there's circulation data.
+                edition = self.import_edition_from_metadata(metadata)
+                if edition:
+                    imported_editions[key] = edition
+            except Exception as e:
+                # Rather than scratch the whole import, treat this as a failure that only applies
+                # to this item.
+                self.log.error("Error importing an OPDS item", exc_info=e)
+                data_source = self.data_source
+                primary_id: IdentifierData = metadata.primary_identifier
+                identifier, ignore = Identifier.for_foreign_id(
+                    self._db, primary_id.type, primary_id.identifier
+                )
+                failure = CoverageFailure(
+                    identifier,
+                    traceback.format_exc(),
+                    data_source=data_source,
+                    transient=False,
+                    collection=self.collection,
+                )
+                failures[key].append(failure)
+                # clean up any edition might have created
+                if key in imported_editions:
+                    del imported_editions[key]
+                # Move on to the next item, don't create a work.
+                continue
+
+            try:
+                pool, work = self.update_work_for_edition(edition)
+                if pool:
+                    pools[key] = pool
+                if work:
+                    works[key] = work
+            except Exception as e:
+                collection_name = self.collection.name if self.collection else "None"
+                logging.warning(
+                    f"Non-fatal exception: Failed to import item - import will continue: "
+                    f"identifier={key}; collection={collection_name}/{self._collection_id}; "
+                    f"data_source={self.data_source}; exception={e}",
+                    stack_info=True,
+                )
+                identifier, ignore = Identifier.parse_urn(self._db, key)
+                data_source = self.data_source
+                failure = CoverageFailure(
+                    identifier,
+                    traceback.format_exc(),
+                    data_source=data_source,
+                    transient=False,
+                    collection=self.collection,
+                )
+                failures[key].append(failure)
+
+        return (
+            list(imported_editions.values()),
+            list(pools.values()),
+            list(works.values()),
+            failures,
+        )
+
+
+class OPDSImporter(BaseOPDSImporter):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -238,24 +471,13 @@ class OPDSImporter(
     from external content servers.
     """
 
-    COULD_NOT_CREATE_LICENSE_POOL = (
-        "No existing license pool for this identifier and no way of creating one."
-    )
-
     NAME = ExternalIntegration.OPDS_IMPORT
     DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
-
-    NO_DEFAULT_AUDIENCE = ""
 
     # Subclasses of OPDSImporter may define a different parser class that's
     # a subclass of OPDSXMLParser. For example, a subclass may want to use
     # tags from an additional namespace.
     PARSER_CLASS = OPDSXMLParser
-
-    # Subclasses of OPDSImporter may define a list of status codes
-    # that should be treated as indicating success, rather than failure,
-    # when they show up in <simplified:message> tags.
-    SUCCESS_STATUS_CODES: list[int] | None = None
 
     @classmethod
     def settings_class(cls) -> Type[OPDSImporterSettings]:
@@ -276,12 +498,9 @@ class OPDSImporter(
     def __init__(
         self,
         _db: Session,
-        collection: Optional[Collection],
+        collection: Collection,
         data_source_name: Optional[str] = None,
-        identifier_mapping: Optional[Dict[Identifier, Identifier]] = None,
         http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
-        content_modifier: Optional[Callable[..., None]] = None,
-        map_from_collection: Optional[bool] = None,
     ):
         """:param collection: LicensePools created by this OPDS import
         will be associated with the given Collection. If this is None,
@@ -297,71 +516,17 @@ class OPDSImporter(
 
         :param http_get: Use this method to make an HTTP GET request. This
         can be replaced with a stub method for testing purposes.
-
-        :param content_modifier: A function that may modify-in-place
-        representations (such as images and EPUB documents) as they
-        come in from the network.
-
-        :param map_from_collection
         """
-        self._db = _db
-        self.log = logging.getLogger("OPDS Importer")
-        self._collection_id = collection.id if collection else None
-        self._integration_configuration_id = (
-            collection.integration_configuration.id if collection else None
-        )
-        if self.collection and not data_source_name:
-            # Use the Collection data_source for OPDS import.
-            data_source = self.collection.data_source
-            if data_source:
-                data_source_name = data_source.name
-            else:
-                raise ValueError(
-                    "Cannot perform an OPDS import on a Collection that has no associated DataSource!"
-                )
-        else:
-            # Use the given data_source or default to the Metadata
-            # Wrangler.
-            data_source_name = data_source_name or DataSource.METADATA_WRANGLER
-        self.data_source_name = data_source_name
-        self.identifier_mapping = identifier_mapping
+        super().__init__(_db, collection, data_source_name)
 
         self.primary_identifier_source = None
         if collection:
             self.primary_identifier_source = collection.primary_identifier_source
 
-        self.content_modifier = content_modifier
-
         # In general, we are cautious when mirroring resources so that
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
-        self.map_from_collection = map_from_collection
-
-    @property
-    def collection(self) -> Optional[Collection]:
-        """Returns an associated Collection object
-
-        :return: Associated Collection object
-        :rtype: Optional[Collection]
-        """
-        if self._collection_id:
-            return Collection.by_id(self._db, id=self._collection_id)
-
-        return None
-
-    @property
-    def data_source(self) -> DataSource:
-        """Look up or create a DataSource object representing the
-        source of this OPDS feed.
-        """
-        offers_licenses = self.collection is not None
-        return DataSource.lookup(  # type: ignore[no-any-return]
-            self._db,
-            self.data_source_name,
-            autocreate=True,
-            offers_licenses=offers_licenses,
-        )
 
     def assert_importable_content(
         self, feed: str, feed_url: str, max_get_attempts: int = 5
@@ -440,182 +605,6 @@ class OPDSImporter(
         )
         return False
 
-    def _parse_identifier(self, identifier: str) -> Identifier:
-        """Parse the identifier and return an Identifier object representing it.
-
-        :param identifier: String containing the identifier
-        :type identifier: str
-
-        :return: Identifier object
-        :rtype: Identifier
-        """
-        return parse_identifier(self._db, identifier)
-
-    def import_from_feed(
-        self, feed: str | bytes, feed_url: Optional[str] = None
-    ) -> Tuple[
-        List[Edition],
-        List[LicensePool],
-        List[Work],
-        Dict[str, CoverageFailure | List[CoverageFailure]],
-    ]:
-        # Keep track of editions that were imported. Pools and works
-        # for those editions may be looked up or created.
-        imported_editions = {}
-        pools = {}
-        works = {}
-
-        # If parsing the overall feed throws an exception, we should address that before
-        # moving on. Let the exception propagate.
-        metadata_objs, failures = self.extract_feed_data(feed, feed_url)
-        # make editions.  if have problem, make sure associated pool and work aren't created.
-        for key, metadata in metadata_objs.items():
-            # key is identifier.urn here
-
-            # If there's a status message about this item, don't try to import it.
-            if key in list(failures.keys()):
-                continue
-
-            try:
-                # Create an edition. This will also create a pool if there's circulation data.
-                edition = self.import_edition_from_metadata(metadata)
-                if edition:
-                    imported_editions[key] = edition
-            except Exception as e:
-                # Rather than scratch the whole import, treat this as a failure that only applies
-                # to this item.
-                self.log.error("Error importing an OPDS item", exc_info=e)
-                data_source = self.data_source
-                primary_id: IdentifierData = metadata.primary_identifier
-                identifier, ignore = Identifier.for_foreign_id(
-                    self._db, primary_id.type, primary_id.identifier
-                )
-                failure = CoverageFailure(
-                    identifier,
-                    traceback.format_exc(),
-                    data_source=data_source,
-                    transient=False,
-                    collection=self.collection,
-                )
-                failures[key] = failure
-                # clean up any edition might have created
-                if key in imported_editions:
-                    del imported_editions[key]
-                # Move on to the next item, don't create a work.
-                continue
-
-            try:
-                pool, work = self.update_work_for_edition(edition)
-                if pool:
-                    pools[key] = pool
-                if work:
-                    works[key] = work
-            except Exception as e:
-                collection_name = self.collection.name if self.collection else "None"
-                logging.warning(
-                    f"Non-fatal exception: Failed to import item - import will continue: "
-                    f"identifier={key}; collection={collection_name}/{self._collection_id}; "
-                    f"data_source={self.data_source}; exception={e}",
-                    stack_info=True,
-                )
-                identifier, ignore = Identifier.parse_urn(self._db, key)
-                data_source = self.data_source
-                failure = CoverageFailure(
-                    identifier,
-                    traceback.format_exc(),
-                    data_source=data_source,
-                    transient=False,
-                    collection=self.collection,
-                )
-                failures[key] = failure
-
-        return (
-            list(imported_editions.values()),
-            list(pools.values()),
-            list(works.values()),
-            failures,
-        )
-
-    def import_edition_from_metadata(self, metadata: Metadata) -> Edition:
-        """For the passed-in Metadata object, see if can find or create an Edition
-        in the database. Also create a LicensePool if the Metadata has
-        CirculationData in it.
-        """
-        # Locate or create an Edition for this book.
-        edition, is_new_edition = metadata.edition(self._db)
-
-        policy = ReplacementPolicy(
-            subjects=True,
-            links=True,
-            contributions=True,
-            rights=True,
-            link_content=True,
-            formats=True,
-            even_if_not_apparently_updated=True,
-            content_modifier=self.content_modifier,
-        )
-        metadata.apply(
-            edition=edition,
-            collection=self.collection,
-            replace=policy,
-        )
-
-        return edition  # type: ignore[no-any-return]
-
-    def update_work_for_edition(
-        self,
-        edition: Edition,
-        is_open_access: bool = True,
-    ) -> tuple[LicensePool | None, Work | None]:
-        """If possible, ensure that there is a presentation-ready Work for the
-        given edition's primary identifier.
-
-        :param edition: The edition whose license pool and work we're interested in.
-        :param is_open_access: Whether this is an open access edition.
-        :return: 2-Tuple of license pool (optional) and work (optional) for edition.
-        """
-
-        work = None
-
-        # Looks up a license pool for the primary identifier associated with
-        # the given edition. If this is not an open access book, then the
-        # collection is also used as criteria for the lookup. Open access
-        # books don't require a collection match, according to this explanation
-        # from prior work:
-        #   Find a LicensePool for the primary identifier. Any LicensePool will
-        #   do--the collection doesn't have to match, since all
-        #   LicensePools for a given identifier have the same Work.
-        #
-        # If we have CirculationData, a pool was created when we
-        # imported the edition. If there was already a pool from a
-        # different data source or a different collection, that's fine
-        # too.
-        collection_criteria = {} if is_open_access else {"collection": self.collection}
-        pool = get_one(
-            self._db,
-            LicensePool,
-            identifier=edition.primary_identifier,
-            on_multiple="interchangeable",
-            **collection_criteria,
-        )
-
-        if pool:
-            if not pool.work or not pool.work.presentation_ready:
-                # There is no presentation-ready Work for this
-                # LicensePool. Try to create one.
-                work, ignore = pool.calculate_work()
-            else:
-                # There is a presentation-ready Work for this LicensePool.
-                # Use it.
-                work = pool.work
-
-        # If a presentation-ready Work already exists, there's no
-        # rush. We might have new metadata that will change the Work's
-        # presentation, but when we called Metadata.apply() the work
-        # was set up to have its presentation recalculated in the
-        # background, and that's good enough.
-        return pool, work
-
     def extract_next_links(self, feed: str | bytes | FeedParserDict) -> List[str]:
         if isinstance(feed, (bytes, str)):
             parsed = feedparser.parse(feed)
@@ -642,44 +631,9 @@ class OPDSImporter(
         ]
         return [x for x in dates if x and x[1]]
 
-    def build_identifier_mapping(self, external_urns: List[str]) -> None:
-        """Uses the given Collection and a list of URNs to reverse
-        engineer an identifier mapping.
-
-        NOTE: It would be better if .identifier_mapping weren't
-        instance data, since a single OPDSImporter might import
-        multiple pages of a feed. However, the code as written should
-        work.
-        """
-        if not self.collection:
-            return
-
-        mapping = dict()
-        identifiers_by_urn, failures = Identifier.parse_urns(
-            self._db, external_urns, autocreate=False
-        )
-        external_identifiers = list(identifiers_by_urn.values())
-
-        internal_identifier = aliased(Identifier)
-        qu = (
-            self._db.query(Identifier, internal_identifier)
-            .join(Identifier.inbound_equivalencies)
-            .join(internal_identifier, Equivalency.input)
-            .join(internal_identifier.licensed_through)
-            .filter(
-                Identifier.id.in_([x.id for x in external_identifiers]),
-                LicensePool.collection == self.collection,
-            )
-        )
-
-        for external_identifier, internal_identifier in qu:
-            mapping[external_identifier] = internal_identifier
-
-        self.identifier_mapping = mapping
-
     def extract_feed_data(
         self, feed: str | bytes, feed_url: Optional[str] = None
-    ) -> Tuple[Dict[str, Metadata], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+    ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
         """Turn an OPDS feed into lists of Metadata and CirculationData objects,
         with associated messages and next_links.
         """
@@ -692,17 +646,11 @@ class OPDSImporter(
             feed, data_source=data_source, feed_url=feed_url, do_get=self.http_get
         )
 
-        if self.map_from_collection:
-            # Build the identifier_mapping based on the Collection.
-            self.build_identifier_mapping(
-                list(fp_metadata.keys()) + list(fp_failures.keys())
-            )
-
         # translate the id in failures to identifier.urn
-        identified_failures: Dict[str, CoverageFailure | List[CoverageFailure]] = {}
+        identified_failures = {}
         for urn, failure in list(fp_failures.items()) + list(xml_failures.items()):
             identifier, failure = self.handle_failure(urn, failure)
-            identified_failures[identifier.urn] = failure
+            identified_failures[identifier.urn] = [failure]
 
         # Use one loop for both, since the id will be the same for both dictionaries.
         metadata = {}
@@ -734,20 +682,12 @@ class OPDSImporter(
             if external_identifier is None:
                 external_identifier, ignore = Identifier.parse_urn(self._db, _id)
 
-            internal_identifier: Optional[Identifier]
-            if self.identifier_mapping and external_identifier is not None:
-                internal_identifier = self.identifier_mapping.get(
-                    external_identifier, external_identifier
-                )
-            else:
-                internal_identifier = external_identifier
-
             # Don't process this item if there was already an error
-            if internal_identifier.urn in list(identified_failures.keys()):
+            if external_identifier.urn in list(identified_failures.keys()):
                 continue
 
             identifier_obj = IdentifierData(
-                type=internal_identifier.type, identifier=internal_identifier.identifier
+                type=external_identifier.type, identifier=external_identifier.identifier
             )
 
             # form the Metadata object
@@ -757,7 +697,7 @@ class OPDSImporter(
 
             combined_meta["primary_identifier"] = identifier_obj
 
-            metadata[internal_identifier.urn] = Metadata(**combined_meta)
+            metadata[external_identifier.urn] = Metadata(**combined_meta)
 
             # Form the CirculationData that would correspond to this Metadata,
             # assuming there is a Collection to hold the LicensePool that
@@ -772,7 +712,7 @@ class OPDSImporter(
             # not going to put anything under metadata.circulation,
             # and any partial data that got added to
             # metadata.circulation is going to be removed.
-            metadata[internal_identifier.urn].circulation = None
+            metadata[external_identifier.urn].circulation = None
             if c_data_dict:
                 circ_links_dict = {}
                 # extract just the links to pass to CirculationData constructor
@@ -788,7 +728,7 @@ class OPDSImporter(
                 self._add_format_data(circulation)
 
                 if circulation.formats:
-                    metadata[internal_identifier.urn].circulation = circulation
+                    metadata[external_identifier.urn].circulation = circulation
                 else:
                     # If the CirculationData has no formats, it
                     # doesn't really offer any way to actually get the
@@ -819,32 +759,22 @@ class OPDSImporter(
         """Convert a URN and a failure message that came in through
         an OPDS feed into an Identifier and a CoverageFailure object.
 
-        The Identifier may not be the one designated by `urn` (if it's
-        found in self.identifier_mapping) and the 'failure' may turn out not
-        to be a CoverageFailure at all -- if it's an Identifier, that means
-        that what a normal OPDSImporter would consider 'failure' is
-        considered success.
+        The 'failure' may turn out not to be a CoverageFailure at
+        all -- if it's an Identifier, that means that what a normal
+        OPDSImporter would consider 'failure' is considered success.
         """
         external_identifier, ignore = Identifier.parse_urn(self._db, urn)
-        if self.identifier_mapping:
-            # The identifier found in the OPDS feed is different from
-            # the identifier we want to export.
-            internal_identifier = self.identifier_mapping.get(
-                external_identifier, external_identifier
-            )
-        else:
-            internal_identifier = external_identifier
         if isinstance(failure, Identifier):
             # The OPDSImporter does not actually consider this a
             # failure. Signal success by returning the internal
             # identifier as the 'failure' object.
-            failure = internal_identifier
+            failure = external_identifier
         else:
             # This really is a failure. Associate the internal
             # identifier with the CoverageFailure object.
-            failure.obj = internal_identifier
+            failure.obj = external_identifier
             failure.collection = self.collection
-        return internal_identifier, failure
+        return external_identifier, failure
 
     @classmethod
     def _add_format_data(cls, circulation: CirculationData) -> None:
@@ -1227,11 +1157,6 @@ class OPDSImporter(
             # We can't associate this message with any particular
             # Identifier so we can't turn it into a CoverageFailure.
             return None
-
-        if cls.SUCCESS_STATUS_CODES and message.status_code in cls.SUCCESS_STATUS_CODES:
-            # This message is telling us that nothing went wrong. It
-            # should be treated as a success.
-            return identifier  # type: ignore[no-any-return]
 
         if message.status_code == 200:
             # By default, we treat a message with a 200 status code
@@ -1647,7 +1572,7 @@ class OPDSImportMonitor(
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[OPDSImporter],
+        import_class: Type[BaseOPDSImporter],
         force_reimport: bool = False,
         **import_class_kwargs: Any,
     ) -> None:
@@ -1764,17 +1689,6 @@ class OPDSImportMonitor(
 
         return headers
 
-    def _parse_identifier(self, identifier: Optional[str]) -> Optional[Identifier]:
-        """Extract the publication's identifier from its metadata.
-
-        :param identifier: String containing the identifier
-        :type identifier: str
-
-        :return: Identifier object
-        :rtype: Identifier
-        """
-        return parse_identifier(self._db, identifier)
-
     def opds_url(self, collection: Collection) -> Optional[str]:
         """Returns the OPDS import URL for the given collection.
 
@@ -1806,7 +1720,7 @@ class OPDSImportMonitor(
 
         new_data = False
         for raw_identifier, remote_updated in last_update_dates:
-            identifier = self._parse_identifier(raw_identifier)
+            identifier = self.importer.parse_identifier(raw_identifier)
             if not identifier:
                 # Maybe this is new, maybe not, but we can't associate
                 # the information with an Identifier, so we can't do
@@ -1932,7 +1846,7 @@ class OPDSImportMonitor(
 
     def import_one_feed(
         self, feed: bytes | str
-    ) -> Tuple[List[Edition], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+    ) -> Tuple[List[Edition], Dict[str, List[CoverageFailure]]]:
         """Import every book mentioned in an OPDS feed."""
 
         # Because we are importing into a Collection, we will immediately
@@ -1952,13 +1866,7 @@ class OPDSImportMonitor(
             )
 
         # Create CoverageRecords for the failures.
-        for urn, failure in list(failures.items()):
-            failure_items: List[CoverageFailure]
-            if isinstance(failure, list):
-                failure_items = failure
-            else:
-                failure_items = [failure]
-
+        for urn, failure_items in list(failures.items()):
             for failure_item in failure_items:
                 failure_item.to_coverage_record(
                     operation=CoverageRecord.IMPORT_OPERATION

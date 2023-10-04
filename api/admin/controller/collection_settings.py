@@ -84,9 +84,6 @@ class CollectionSettingsController(SettingsController):
                 continue
 
             collection_dict = self.collection_to_dict(collection_object)
-            [protocol] = [
-                p for p in protocols if p["name"] == collection_object.protocol
-            ]
             if collection_object.integration_configuration:
                 libraries = self.load_libraries(collection_object, user)
                 collection_dict["libraries"] = libraries

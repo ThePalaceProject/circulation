@@ -1,5 +1,5 @@
 import datetime
-from typing import Callable, List, Tuple
+from typing import List, Optional
 
 import pytest
 from freezegun import freeze_time
@@ -10,7 +10,7 @@ from webpub_manifest_parser.odl.semantic import (
 )
 
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
-from api.odl2 import ODL2API, ODL2Importer
+from api.odl2 import ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import (
     Contribution,
@@ -19,6 +19,7 @@ from core.model import (
     Edition,
     EditionConstants,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     MediaTypes,
     Work,
     create,
@@ -26,93 +27,49 @@ from core.model import (
 from core.model.constants import IdentifierConstants
 from core.model.patron import Hold
 from core.model.resource import Hyperlink
-from tests.api.test_odl import LicenseHelper, LicenseInfoHelper, TestODLImporter
-from tests.fixtures.api_odl2_files import ODL2APIFilesFixture
+from tests.fixtures.api_odl import (
+    LicenseHelper,
+    LicenseInfoHelper,
+    MockGet,
+    ODL2APIFilesFixture,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.odl import ODL2APITestFixture, ODLTestFixture
+from tests.fixtures.odl import ODL2APITestFixture
 
 
-class TestODL2Importer(TestODLImporter):
+class TestODL2Importer:
     @staticmethod
     def _get_delivery_mechanism_by_drm_scheme_and_content_type(
-        delivery_mechanisms, content_type, drm_scheme
-    ):
+        delivery_mechanisms: List[LicensePoolDeliveryMechanism],
+        content_type: str,
+        drm_scheme: str,
+    ) -> Optional[DeliveryMechanism]:
         """Find a license pool in the list by its identifier.
 
         :param delivery_mechanisms: List of delivery mechanisms
-        :type delivery_mechanisms: List[DeliveryMechanism]
-
         :param content_type: Content type
-        :type content_type: str
-
         :param drm_scheme: DRM scheme
-        :type drm_scheme: str
 
-        :return: Delivery mechanism with the the specified DRM scheme and content type (if any)
-        :rtype: Optional[DeliveryMechanism]
+        :return: Delivery mechanism with the specified DRM scheme and content type (if any)
         """
         for delivery_mechanism in delivery_mechanisms:
-            delivery_mechanism = delivery_mechanism.delivery_mechanism
+            mechanism = delivery_mechanism.delivery_mechanism
 
             if (
-                delivery_mechanism.drm_scheme == drm_scheme
-                and delivery_mechanism.content_type == content_type
+                mechanism.drm_scheme == drm_scheme
+                and mechanism.content_type == content_type
             ):
-                return delivery_mechanism
+                return mechanism
 
         return None
-
-    @pytest.fixture
-    def integration_protocol(self):
-        return ODL2API.NAME
-
-    @pytest.fixture()
-    def import_templated(  # type: ignore
-        self,
-        mock_get,
-        importer,
-        feed_template: str,
-        api_odl2_files_fixture: ODL2APIFilesFixture,
-    ) -> Callable:
-        def i(licenses: List[LicenseInfoHelper]) -> Tuple[List, List, List, List]:
-            feed_licenses = [l.license for l in licenses]
-            [mock_get.add(l) for l in licenses]
-            feed = self.get_templated_feed(
-                files=api_odl2_files_fixture,
-                filename=feed_template,
-                licenses=feed_licenses,
-            )
-            return importer.import_from_feed(feed)
-
-        return i
-
-    @pytest.fixture()
-    def importer(  # type: ignore[override]
-        self,
-        db: DatabaseTransactionFixture,
-        odl_test_fixture: ODLTestFixture,
-        mock_get,
-    ) -> ODL2Importer:
-        library = odl_test_fixture.library()
-        return ODL2Importer(
-            db.session,
-            collection=odl_test_fixture.collection(library),
-            http_get=mock_get.get,
-        )
-
-    @pytest.fixture()
-    def feed_template(self):
-        return "feed_template.json.jinja"
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import(
         self,
-        db: DatabaseTransactionFixture,
-        importer,
-        mock_get,
-        datasource,
+        odl2_importer: ODL2Importer,
+        odl_mock_get: MockGet,
         api_odl2_files_fixture: ODL2APIFilesFixture,
-    ):
+    ) -> None:
         """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 2.x.
 
         NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
@@ -129,17 +86,17 @@ class TestODL2Importer(TestODLImporter):
             available=10,
         )
 
-        mock_get.add(moby_dick_license)
+        odl_mock_get.add(moby_dick_license)
         feed = api_odl2_files_fixture.sample_text("feed.json")
 
-        config = importer.collection.integration_configuration
-        importer.set_ignored_identifier_types([IdentifierConstants.URI], config)
+        config = odl2_importer.collection.integration_configuration
+        odl2_importer.set_ignored_identifier_types([IdentifierConstants.URI], config)
         DatabaseTransactionFixture.set_settings(
             config, odl2_skipped_license_formats=["text/html"]
         )
 
         # Act
-        imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
 
         # Assert
 
@@ -174,7 +131,7 @@ class TestODL2Importer(TestODLImporter):
         assert moby_dick_edition == moby_dick_author_author_contribution.edition
         assert Contributor.AUTHOR_ROLE == moby_dick_author_author_contribution.role
 
-        assert datasource == moby_dick_edition.data_source
+        assert "Feedbooks" == moby_dick_edition.data_source.name
 
         assert "Test Publisher" == moby_dick_edition.publisher
         assert datetime.date(2015, 9, 29) == moby_dick_edition.published
@@ -249,6 +206,7 @@ class TestODL2Importer(TestODLImporter):
         assert 1 == len(failures)
         huck_finn_failures = failures["9781234567897"]
 
+        assert isinstance(huck_finn_failures, list)
         assert 1 == len(huck_finn_failures)
         [huck_finn_failure] = huck_finn_failures
         assert isinstance(huck_finn_failure, CoverageFailure)
@@ -268,22 +226,21 @@ class TestODL2Importer(TestODLImporter):
     def test_import_audiobook_with_streaming(
         self,
         db: DatabaseTransactionFixture,
-        importer,
-        mock_get,
-        datasource,
+        odl2_importer: ODL2Importer,
+        odl_mock_get: MockGet,
         api_odl2_files_fixture: ODL2APIFilesFixture,
-    ):
+    ) -> None:
         """Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook."""
         license = api_odl2_files_fixture.sample_text("license-audiobook.json")
         feed = api_odl2_files_fixture.sample_text("feed-audiobook-streaming.json")
-        mock_get.add(license)
+        odl_mock_get.add(license)
 
-        DatabaseTransactionFixture.set_settings(
-            importer.collection.integration_configuration,
+        db.set_settings(
+            odl2_importer.collection.integration_configuration,
             odl2_skipped_license_formats=["text/html"],
         )
 
-        imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
@@ -327,21 +284,19 @@ class TestODL2Importer(TestODLImporter):
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_no_streaming(
         self,
-        db: DatabaseTransactionFixture,
-        importer,
-        mock_get,
-        datasource,
+        odl2_importer: ODL2Importer,
+        odl_mock_get: MockGet,
         api_odl2_files_fixture: ODL2APIFilesFixture,
-    ):
+    ) -> None:
         """
         Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook
         that is not available for streaming.
         """
         license = api_odl2_files_fixture.sample_text("license-audiobook.json")
         feed = api_odl2_files_fixture.sample_text("feed-audiobook-no-streaming.json")
-        mock_get.add(license)
+        odl_mock_get.add(license)
 
-        imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type
 
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
@@ -10,7 +10,7 @@ from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
-from api.odl import ODLAPI, ODLImporter, ODLSettings
+from api.odl import ODLAPI, BaseODLImporter, ODLSettings
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -18,7 +18,7 @@ from core.integration.settings import (
 )
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
-from core.model.configuration import ExternalIntegration, HasExternalIntegration
+from core.model.configuration import ExternalIntegration
 from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 
     from api.circulation import HoldInfo
-    from core.model import Collection, Identifier, LicensePool
+    from core.model import Collection, LicensePool
     from core.model.patron import Hold, Loan, Patron
 
 
@@ -115,7 +115,7 @@ class ODL2API(ODLAPI):
         return super()._place_hold(patron, licensepool)
 
 
-class ODL2Importer(OPDS2Importer, HasExternalIntegration):
+class ODL2Importer(OPDS2Importer, BaseODLImporter):
     """Import information and formats from an ODL feed.
 
     The only change from OPDS2Importer is that this importer extracts
@@ -134,10 +134,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
         collection: Collection,
         parser: Optional[RWPMManifestParser] = None,
         data_source_name: str | None = None,
-        identifier_mapping: Dict[Identifier, Identifier] | None = None,
         http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
-        content_modifier: Optional[Callable[..., None]] = None,
-        map_from_collection: Optional[bool] = None,
     ):
         """Initialize a new instance of ODL2Importer class.
 
@@ -158,26 +155,13 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
             NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
         :type data_source_name: str
-
-        :param identifier_mapping: Dictionary used for mapping external identifiers into a set of internal ones
-        :type identifier_mapping: Dict
-
-        :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
-            as they come in from the network.
-        :type content_modifier: Callable
-
-        :param map_from_collection: Identifier mapping
-        :type map_from_collection: Dict
         """
         super().__init__(
             db,
             collection,
             parser if parser else RWPMManifestParser(ODLFeedParserFactory()),
             data_source_name,
-            identifier_mapping,
             http_get,
-            content_modifier,
-            map_from_collection,
         )
         self._logger = logging.getLogger(__name__)
 
@@ -235,7 +219,7 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                 if not license_info_document_link:
                     parsed_license = None
                 else:
-                    parsed_license = ODLImporter.get_license_data(
+                    parsed_license = self.get_license_data(
                         license_info_document_link,
                         checkout_link,
                         identifier,
@@ -259,19 +243,17 @@ class ODL2Importer(OPDS2Importer, HasExternalIntegration):
                         medium = Edition.medium_from_media_type(license_format)
 
                     drm_schemes: List[str | None]
-                    if license_format in ODLImporter.LICENSE_FORMATS:
+                    if license_format in self.LICENSE_FORMATS:
                         # Special case to handle DeMarque audiobooks which include the protection
                         # in the content type. When we see a license format of
                         # application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction
                         # it means that this audiobook title is available through the DeMarque streaming manifest
                         # endpoint.
                         drm_schemes = [
-                            ODLImporter.LICENSE_FORMATS[license_format][
-                                ODLImporter.DRM_SCHEME
-                            ]
+                            self.LICENSE_FORMATS[license_format][self.DRM_SCHEME]
                         ]
-                        license_format = ODLImporter.LICENSE_FORMATS[license_format][
-                            ODLImporter.CONTENT_TYPE
+                        license_format = self.LICENSE_FORMATS[license_format][
+                            self.CONTENT_TYPE
                         ]
                     else:
                         drm_schemes = (

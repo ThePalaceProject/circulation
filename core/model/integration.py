@@ -66,7 +66,7 @@ class IntegrationConfiguration(Base):
 
     @overload
     def for_library(
-        self, library_id: int, create: Literal[True] = True
+        self, library_id: int, create: Literal[True]
     ) -> IntegrationLibraryConfiguration:
         ...
 

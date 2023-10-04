@@ -492,7 +492,7 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
 
     def import_one_feed(
         self, feed: bytes | str
-    ) -> Tuple[List[Edition], Dict[str, CoverageFailure | List[CoverageFailure]]]:
+    ) -> Tuple[List[Edition], Dict[str, List[CoverageFailure]]]:
         # Collect all the identifiers in the feed.
         parsed_feed = feedparser.parse(feed)
         identifiers = [entry.get("id") for entry in parsed_feed.get("entries", [])]

@@ -1,13 +1,13 @@
+from __future__ import annotations
+
 import datetime
 import json
 import urllib.parse
-import uuid
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict
 
 import dateutil
 import pytest
 from freezegun import freeze_time
-from jinja2 import Template
 
 from api.circulation import HoldInfo
 from api.circulation_exceptions import (
@@ -36,80 +36,23 @@ from core.model import (
 from core.util import datetime_helpers
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
-from tests.fixtures.api_odl_files import ODLAPIFilesFixture
+from tests.fixtures.api_odl import (
+    LicenseHelper,
+    LicenseInfoHelper,
+    MockGet,
+    OdlImportTemplatedFixture,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import APIFilesFixture
 from tests.fixtures.odl import ODLAPITestFixture, ODLTestFixture
 
 if TYPE_CHECKING:
     from core.model import LicensePool
 
 
-class LicenseHelper:
-    """Represents an ODL license."""
-
-    def __init__(
-        self,
-        identifier: Optional[str] = None,
-        checkouts: Optional[int] = None,
-        concurrency: Optional[int] = None,
-        expires: Optional[Union[datetime.datetime, str]] = None,
-    ) -> None:
-        """Initialize a new instance of LicenseHelper class.
-
-        :param identifier: License's identifier
-        :param checkouts: Total number of checkouts before a license expires
-        :param concurrency: Number of concurrent checkouts allowed
-        :param expires: Date & time when a license expires
-        """
-        self.identifier: str = identifier if identifier else f"urn:uuid:{uuid.uuid1()}"
-        self.checkouts: Optional[int] = checkouts
-        self.concurrency: Optional[int] = concurrency
-        if isinstance(expires, datetime.datetime):
-            self.expires = expires.isoformat()
-        else:
-            self.expires: Optional[str] = expires  # type: ignore
-
-
-class LicenseInfoHelper:
-    """Represents information about the current state of a license stored in the License Info Document."""
-
-    def __init__(
-        self,
-        license: LicenseHelper,
-        available: int,
-        status: str = "available",
-        left: Optional[int] = None,
-    ) -> None:
-        """Initialize a new instance of LicenseInfoHelper class."""
-        self.license: LicenseHelper = license
-        self.status: str = status
-        self.left: Optional[int] = left
-        self.available: int = available
-
-    def __str__(self) -> str:
-        """Return a JSON representation of a part of the License Info Document."""
-        output = {
-            "identifier": self.license.identifier,
-            "status": self.status,
-            "terms": {
-                "concurrency": self.license.concurrency,
-            },
-            "checkouts": {
-                "available": self.available,
-            },
-        }
-        if self.license.expires is not None:
-            output["terms"]["expires"] = self.license.expires  # type: ignore
-        if self.left is not None:
-            output["checkouts"]["left"] = self.left  # type: ignore
-        return json.dumps(output)
-
-
 class TestODLAPI:
     def test_get_license_status_document_success(
         self, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # With a new loan.
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
         odl_api_test_fixture.api.queue_response(
@@ -172,7 +115,7 @@ class TestODLAPI:
 
     def test_get_license_status_document_errors(
         self, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
 
         odl_api_test_fixture.api.queue_response(200, content="not json")
@@ -193,7 +136,7 @@ class TestODLAPI:
 
     def test_checkin_success(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # A patron has a copy of this book checked out.
         odl_api_test_fixture.license.setup(concurrency=7, available=6)  # type: ignore[attr-defined]
 
@@ -218,7 +161,7 @@ class TestODLAPI:
 
     def test_checkin_success_with_holds_queue(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # A patron has the only copy of this book checked out.
         odl_api_test_fixture.license.setup(concurrency=1, available=0)  # type: ignore[attr-defined]
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
@@ -248,7 +191,7 @@ class TestODLAPI:
 
     def test_checkin_already_fulfilled(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # The loan is already fulfilled.
         odl_api_test_fixture.license.setup(concurrency=7, available=6)  # type: ignore[attr-defined]
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
@@ -272,7 +215,7 @@ class TestODLAPI:
 
     def test_checkin_not_checked_out(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # Not checked out locally.
         pytest.raises(
             NotCheckedOut,
@@ -304,7 +247,7 @@ class TestODLAPI:
 
     def test_checkin_cannot_return(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # Not fulfilled yet, but no return link from the distributor.
         loan, ignore = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
         loan.external_identifier = db.fresh_str()
@@ -345,7 +288,7 @@ class TestODLAPI:
 
     def test_checkout_success(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # This book is available to check out.
         odl_api_test_fixture.license.setup(concurrency=6, available=6, left=30)  # type: ignore[attr-defined]
 
@@ -378,7 +321,7 @@ class TestODLAPI:
 
     def test_checkout_success_with_hold(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # A patron has this book on hold, and the book just became available to check out.
         odl_api_test_fixture.pool.on_hold_to(
             odl_api_test_fixture.patron,
@@ -420,7 +363,7 @@ class TestODLAPI:
 
     def test_checkout_already_checked_out(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         odl_api_test_fixture.license.setup(concurrency=2, available=1)  # type: ignore[attr-defined]
 
         # Checkout succeeds the first time
@@ -433,7 +376,7 @@ class TestODLAPI:
 
     def test_checkout_expired_hold(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # The patron was at the beginning of the hold queue, but the hold already expired.
         yesterday = utc_now() - datetime.timedelta(days=1)
         hold, _ = odl_api_test_fixture.pool.on_hold_to(
@@ -455,7 +398,7 @@ class TestODLAPI:
 
     def test_checkout_no_available_copies(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # A different patron has the only copy checked out.
         odl_api_test_fixture.license.setup(concurrency=1, available=0)  # type: ignore[attr-defined]
         existing_loan, _ = odl_api_test_fixture.license.loan_to(db.patron())
@@ -529,7 +472,7 @@ class TestODLAPI:
 
     def test_checkout_no_licenses(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         odl_api_test_fixture.license.setup(concurrency=1, available=1, left=0)  # type: ignore[attr-defined]
 
         pytest.raises(
@@ -545,7 +488,7 @@ class TestODLAPI:
 
     def test_checkout_when_all_licenses_expired(
         self, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # license expired by expiration date
         odl_api_test_fixture.license.setup(  # type: ignore[attr-defined]
             concurrency=1,
@@ -582,7 +525,7 @@ class TestODLAPI:
 
     def test_checkout_cannot_loan(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         lsd = json.dumps(
             {
                 "status": "revoked",
@@ -671,11 +614,11 @@ class TestODLAPI:
         self,
         odl_api_test_fixture: ODLAPITestFixture,
         db: DatabaseTransactionFixture,
-        delivery_mechanism,
-        correct_type,
-        correct_link,
-        links,
-    ):
+        delivery_mechanism: str,
+        correct_type: str,
+        correct_link: str,
+        links: Dict[str, Any],
+    ) -> None:
         # Fulfill a loan in a way that gives access to a license file.
         odl_api_test_fixture.license.setup(concurrency=1, available=1)  # type: ignore[attr-defined]
         odl_api_test_fixture.checkout()
@@ -708,7 +651,7 @@ class TestODLAPI:
 
     def test_fulfill_cannot_fulfill(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         odl_api_test_fixture.license.setup(concurrency=7, available=7)  # type: ignore[attr-defined]
         odl_api_test_fixture.checkout()
 
@@ -751,7 +694,7 @@ class TestODLAPI:
 
     def test_count_holds_before(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         tomorrow = now + datetime.timedelta(days=1)
@@ -803,7 +746,7 @@ class TestODLAPI:
 
     def test_update_hold_end_date(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         now = utc_now()
         tomorrow = now + datetime.timedelta(days=1)
         yesterday = now - datetime.timedelta(days=1)
@@ -823,6 +766,7 @@ class TestODLAPI:
         config = odl_api_test_fixture.collection.integration_configuration.for_library(
             library.id
         )
+        assert config is not None
         DatabaseTransactionFixture.set_settings(
             config,
             **{
@@ -989,7 +933,7 @@ class TestODLAPI:
 
     def test_update_hold_position(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         tomorrow = now + datetime.timedelta(days=1)
@@ -1044,7 +988,7 @@ class TestODLAPI:
 
     def test_update_hold_data(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         hold, is_new = odl_api_test_fixture.pool.on_hold_to(
             odl_api_test_fixture.patron,
             utc_now(),
@@ -1057,7 +1001,7 @@ class TestODLAPI:
 
     def test_update_hold_queue(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         licenses = [odl_api_test_fixture.license]
 
         DatabaseTransactionFixture.set_settings(
@@ -1191,7 +1135,7 @@ class TestODLAPI:
 
     def test_place_hold_success(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         loan, _ = odl_api_test_fixture.checkout(patron=db.patron())
 
         hold = odl_api_test_fixture.api.place_hold(
@@ -1211,7 +1155,9 @@ class TestODLAPI:
         assert loan.end_date == hold.end_date
         assert 1 == hold.hold_position
 
-    def test_place_hold_already_on_hold(self, odl_api_test_fixture: ODLAPITestFixture):
+    def test_place_hold_already_on_hold(
+        self, odl_api_test_fixture: ODLAPITestFixture
+    ) -> None:
         odl_api_test_fixture.license.setup(concurrency=1, available=0)  # type: ignore[attr-defined]
         odl_api_test_fixture.pool.on_hold_to(odl_api_test_fixture.patron)
         pytest.raises(
@@ -1225,7 +1171,7 @@ class TestODLAPI:
 
     def test_place_hold_currently_available(
         self, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         pytest.raises(
             CurrentlyAvailable,
             odl_api_test_fixture.api.place_hold,
@@ -1237,7 +1183,7 @@ class TestODLAPI:
 
     def test_release_hold_success(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         loan_patron = db.patron()
         odl_api_test_fixture.checkout(patron=loan_patron)
         odl_api_test_fixture.pool.on_hold_to(odl_api_test_fixture.patron, position=1)
@@ -1275,7 +1221,9 @@ class TestODLAPI:
         assert 1 == db.session.query(Hold).count()
         assert 0 == other_hold.position
 
-    def test_release_hold_not_on_hold(self, odl_api_test_fixture: ODLAPITestFixture):
+    def test_release_hold_not_on_hold(
+        self, odl_api_test_fixture: ODLAPITestFixture
+    ) -> None:
         pytest.raises(
             NotOnHold,
             odl_api_test_fixture.api.release_hold,
@@ -1286,7 +1234,7 @@ class TestODLAPI:
 
     def test_patron_activity_loan(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         # No loans yet.
         assert [] == odl_api_test_fixture.api.patron_activity(
             odl_api_test_fixture.patron, "pin"
@@ -1383,7 +1331,7 @@ class TestODLAPI:
 
     def test_update_loan_still_active(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         odl_api_test_fixture.license.setup(concurrency=6, available=6)  # type: ignore[attr-defined]
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
         loan.external_identifier = db.fresh_str()
@@ -1398,7 +1346,7 @@ class TestODLAPI:
 
     def test_update_loan_removes_loan(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         odl_api_test_fixture.license.setup(concurrency=7, available=7)  # type: ignore[attr-defined]
         _, loan = odl_api_test_fixture.checkout()
 
@@ -1417,7 +1365,7 @@ class TestODLAPI:
 
     def test_update_loan_removes_loan_with_hold_queue(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
-    ):
+    ) -> None:
         _, loan = odl_api_test_fixture.checkout()
         hold, _ = odl_api_test_fixture.pool.on_hold_to(db.patron(), position=1)
         odl_api_test_fixture.pool.update_availability_from_licenses()
@@ -1441,92 +1389,13 @@ class TestODLAPI:
 
 
 class TestODLImporter:
-    class MockGet:
-        def __init__(self):
-            self.responses = []
-
-        def get(self, *args, **kwargs):
-            return 200, {}, str(self.responses.pop(0))
-
-        def add(self, item):
-            return self.responses.append(item)
-
-    class MockMetadataClient:
-        def canonicalize_author_name(self, identifier, working_display_name):
-            return working_display_name
-
-    @pytest.fixture()
-    def mock_get(self) -> MockGet:
-        return self.MockGet()
-
-    @pytest.fixture()
-    def importer(
-        self,
-        db: DatabaseTransactionFixture,
-        odl_test_fixture: ODLTestFixture,
-        mock_get,
-    ) -> ODLImporter:
-        library = odl_test_fixture.library()
-        return ODLImporter(
-            db.session,
-            collection=odl_test_fixture.collection(library),
-            http_get=mock_get.get,
-        )
-
-    @pytest.fixture()
-    def datasource(
-        self, db: DatabaseTransactionFixture, odl_test_fixture: ODLTestFixture
-    ) -> DataSource:
-        collection = odl_test_fixture.collection(odl_test_fixture.library())
-        data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},
-        )
-        return data_source
-
-    @pytest.fixture()
-    def feed_template(self):
-        return "feed_template.xml.jinja"
-
-    @pytest.fixture()
-    def import_templated(
-        self,
-        mock_get,
-        importer,
-        feed_template: str,
-        api_odl_files_fixture: ODLAPIFilesFixture,
-    ) -> Callable:
-        def i(licenses: List[LicenseInfoHelper]) -> Tuple[List, List, List, List]:
-            feed_licenses = [l.license for l in licenses]
-            [mock_get.add(l) for l in licenses]
-            feed = self.get_templated_feed(
-                files=api_odl_files_fixture,
-                filename=feed_template,
-                licenses=feed_licenses,
-            )
-            return importer.import_from_feed(feed)
-
-        return i
-
-    def get_templated_feed(
-        self, files: APIFilesFixture, filename: str, licenses: List[LicenseHelper]
-    ) -> str:
-        """Get the test ODL feed with specific licensing information.
-
-        :param files: Access to test files
-        :param filename: Name of template to load
-        :param licenses: List of ODL licenses
-
-        :return: Test ODL feed
-        """
-        text = files.sample_text(filename)
-        template = Template(text)
-        feed = template.render(licenses=licenses)
-        return feed
-
     @freeze_time("2019-01-01T00:00:00+00:00")
-    def test_import(self, importer, mock_get, odl_test_fixture: ODLTestFixture):
+    def test_import(
+        self,
+        odl_importer: ODLImporter,
+        odl_mock_get: MockGet,
+        odl_test_fixture: ODLTestFixture,
+    ) -> None:
         """Ensure that ODLImporter correctly processes and imports the ODL feed encoded using OPDS 1.x.
 
         NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
@@ -1566,24 +1435,22 @@ class TestODLImporter:
             available=5,
         )
 
-        [
-            mock_get.add(r)
-            for r in [
-                warrior_time_limited,
-                canadianity_loan_limited,
-                canadianity_perpetual,
-                midnight_loan_limited_1,
-                midnight_loan_limited_2,
-                dragons_loan,
-            ]
-        ]
+        for r in [
+            warrior_time_limited,
+            canadianity_loan_limited,
+            canadianity_perpetual,
+            midnight_loan_limited_1,
+            midnight_loan_limited_2,
+            dragons_loan,
+        ]:
+            odl_mock_get.add(r)
 
         (
             imported_editions,
             imported_pools,
             imported_works,
             failures,
-        ) = importer.import_from_feed(feed)
+        ) = odl_importer.import_from_feed(feed)
 
         # This importer works the same as the base OPDSImporter, except that
         # it extracts format information from 'odl:license' tags and creates
@@ -1602,7 +1469,7 @@ class TestODLImporter:
             warrior,
             blazing,
             midnight,
-        ] = sorted(imported_editions, key=lambda x: x.title)
+        ] = sorted(imported_editions, key=lambda x: str(x.title))
         assert "The Blazing World" == blazing.title
         assert "Sun Warrior" == warrior.title
         assert "Canadianity" == canadianity.title
@@ -1707,7 +1574,7 @@ class TestODLImporter:
         )  # 40 remaining checkouts + 1 perpetual license in the License Info Documents
         assert 11 == canadianity_pool.licenses_available
         [license1, license2] = sorted(
-            canadianity_pool.licenses, key=lambda x: x.identifier
+            canadianity_pool.licenses, key=lambda x: str(x.identifier)
         )
         assert "2" == license1.identifier
         assert (
@@ -1756,7 +1623,7 @@ class TestODLImporter:
         )  # 20 + 52 remaining checkouts in corresponding License Info Documents
         assert 2 == midnight_pool.licenses_available
         [license1, license2] = sorted(
-            midnight_pool.licenses, key=lambda x: x.identifier
+            midnight_pool.licenses, key=lambda x: str(x.identifier)
         )
         assert "4" == license1.identifier
         assert (
@@ -1783,6 +1650,8 @@ class TestODLImporter:
         assert 52 == license2.checkouts_left
         assert 1 == license2.checkouts_available
 
+
+class TestOdlAndOdl2Importer:
     @pytest.mark.parametrize(
         "license",
         [
@@ -1819,12 +1688,19 @@ class TestODLImporter:
         ],
     )
     @freeze_time("2021-01-01T00:00:00+00:00")
-    def test_odl_importer_expired_licenses(self, import_templated, license):
+    def test_odl_importer_expired_licenses(
+        self,
+        odl_import_templated: OdlImportTemplatedFixture,
+        license: LicenseInfoHelper,
+    ):
         """Ensure ODLImporter imports expired licenses, but does not count them."""
         # Import the test feed with an expired ODL license.
-        imported_editions, imported_pools, imported_works, failures = import_templated(
-            [license]
-        )
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = odl_import_templated([license])
 
         # The importer created 1 edition and 1 work with no failures.
         assert failures == {}
@@ -1843,7 +1719,9 @@ class TestODLImporter:
         [imported_license] = imported_pool.licenses
         assert imported_license.is_inactive is True
 
-    def test_odl_importer_reimport_expired_licenses(self, import_templated):
+    def test_odl_importer_reimport_expired_licenses(
+        self, odl_import_templated: OdlImportTemplatedFixture
+    ):
         license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
         licenses = [
             LicenseInfoHelper(
@@ -1860,7 +1738,7 @@ class TestODLImporter:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = import_templated(licenses)
+            ) = odl_import_templated(licenses)
 
             # The importer created 1 edition and 1 work with no failures.
             assert failures == {}
@@ -1886,7 +1764,7 @@ class TestODLImporter:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = import_templated(licenses)
+            ) = odl_import_templated(licenses)
 
             # The importer created 1 edition and 1 work with no failures.
             assert failures == {}
@@ -1905,7 +1783,9 @@ class TestODLImporter:
             assert imported_license.is_inactive is True
 
     @freeze_time("2021-01-01T00:00:00+00:00")
-    def test_odl_importer_multiple_expired_licenses(self, import_templated):
+    def test_odl_importer_multiple_expired_licenses(
+        self, odl_import_templated: OdlImportTemplatedFixture
+    ):
         """Ensure ODLImporter imports expired licenses
         and does not count them in the total number of available licenses."""
 
@@ -1948,9 +1828,12 @@ class TestODLImporter:
                 left=40,
             ),
         ]
-        imported_editions, imported_pools, imported_works, failures = import_templated(
-            active + inactive
-        )
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = odl_import_templated(active + inactive)
 
         assert failures == {}
 
@@ -1969,7 +1852,9 @@ class TestODLImporter:
         assert sum(not l.is_inactive for l in imported_pool.licenses) == len(active)
         assert sum(l.is_inactive for l in imported_pool.licenses) == len(inactive)
 
-    def test_odl_importer_reimport_multiple_licenses(self, import_templated):
+    def test_odl_importer_reimport_multiple_licenses(
+        self, odl_import_templated: OdlImportTemplatedFixture
+    ):
         """Ensure ODLImporter correctly imports licenses that have already been imported."""
 
         # 1.1. Import the test feed with ODL licenses that are not expired.
@@ -1995,7 +1880,7 @@ class TestODLImporter:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = import_templated(licenses)
+            ) = odl_import_templated(licenses)
 
             # No failures in the import
             assert failures == {}
@@ -2028,7 +1913,7 @@ class TestODLImporter:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = import_templated(licenses)
+            ) = odl_import_templated(licenses)
 
             # No failures in the import
             assert failures == {}
