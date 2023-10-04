@@ -193,8 +193,6 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
             If there is no DataSource with this name, one will be created.
             NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
-        :param content_modifier: A function that may modify-in-place representations (such as images and EPUB documents)
-            as they come in from the network.
         """
         super().__init__(db, collection, data_source_name, http_get)
         self._parser = parser

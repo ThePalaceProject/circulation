@@ -218,9 +218,6 @@ class BaseOPDSImporter(
                 raise ValueError(
                     "Cannot perform an OPDS import on a Collection that has no associated DataSource!"
                 )
-        else:
-            # Use the given data_source
-            data_source_name = data_source_name
         self.data_source_name = data_source_name
 
         # In general, we are cautious when mirroring resources so that
@@ -503,7 +500,6 @@ class OPDSImporter(BaseOPDSImporter):
         _db: Session,
         collection: Collection,
         data_source_name: Optional[str] = None,
-        identifier_mapping: Optional[Dict[Identifier, Identifier]] = None,
         http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
     ):
         """:param collection: LicensePools created by this OPDS import
@@ -522,7 +518,6 @@ class OPDSImporter(BaseOPDSImporter):
         can be replaced with a stub method for testing purposes.
         """
         super().__init__(_db, collection, data_source_name)
-        self.identifier_mapping = identifier_mapping
 
         self.primary_identifier_source = None
         if collection:
@@ -687,20 +682,12 @@ class OPDSImporter(BaseOPDSImporter):
             if external_identifier is None:
                 external_identifier, ignore = Identifier.parse_urn(self._db, _id)
 
-            internal_identifier: Optional[Identifier]
-            if self.identifier_mapping and external_identifier is not None:
-                internal_identifier = self.identifier_mapping.get(
-                    external_identifier, external_identifier
-                )
-            else:
-                internal_identifier = external_identifier
-
             # Don't process this item if there was already an error
-            if internal_identifier.urn in list(identified_failures.keys()):
+            if external_identifier.urn in list(identified_failures.keys()):
                 continue
 
             identifier_obj = IdentifierData(
-                type=internal_identifier.type, identifier=internal_identifier.identifier
+                type=external_identifier.type, identifier=external_identifier.identifier
             )
 
             # form the Metadata object
@@ -710,7 +697,7 @@ class OPDSImporter(BaseOPDSImporter):
 
             combined_meta["primary_identifier"] = identifier_obj
 
-            metadata[internal_identifier.urn] = Metadata(**combined_meta)
+            metadata[external_identifier.urn] = Metadata(**combined_meta)
 
             # Form the CirculationData that would correspond to this Metadata,
             # assuming there is a Collection to hold the LicensePool that
@@ -725,7 +712,7 @@ class OPDSImporter(BaseOPDSImporter):
             # not going to put anything under metadata.circulation,
             # and any partial data that got added to
             # metadata.circulation is going to be removed.
-            metadata[internal_identifier.urn].circulation = None
+            metadata[external_identifier.urn].circulation = None
             if c_data_dict:
                 circ_links_dict = {}
                 # extract just the links to pass to CirculationData constructor
@@ -741,7 +728,7 @@ class OPDSImporter(BaseOPDSImporter):
                 self._add_format_data(circulation)
 
                 if circulation.formats:
-                    metadata[internal_identifier.urn].circulation = circulation
+                    metadata[external_identifier.urn].circulation = circulation
                 else:
                     # If the CirculationData has no formats, it
                     # doesn't really offer any way to actually get the
@@ -772,32 +759,22 @@ class OPDSImporter(BaseOPDSImporter):
         """Convert a URN and a failure message that came in through
         an OPDS feed into an Identifier and a CoverageFailure object.
 
-        The Identifier may not be the one designated by `urn` (if it's
-        found in self.identifier_mapping) and the 'failure' may turn out not
-        to be a CoverageFailure at all -- if it's an Identifier, that means
-        that what a normal OPDSImporter would consider 'failure' is
-        considered success.
+        The 'failure' may turn out not to be a CoverageFailure at
+        all -- if it's an Identifier, that means that what a normal
+        OPDSImporter would consider 'failure' is considered success.
         """
         external_identifier, ignore = Identifier.parse_urn(self._db, urn)
-        if self.identifier_mapping:
-            # The identifier found in the OPDS feed is different from
-            # the identifier we want to export.
-            internal_identifier = self.identifier_mapping.get(
-                external_identifier, external_identifier
-            )
-        else:
-            internal_identifier = external_identifier
         if isinstance(failure, Identifier):
             # The OPDSImporter does not actually consider this a
             # failure. Signal success by returning the internal
             # identifier as the 'failure' object.
-            failure = internal_identifier
+            failure = external_identifier
         else:
             # This really is a failure. Associate the internal
             # identifier with the CoverageFailure object.
-            failure.obj = internal_identifier
+            failure.obj = external_identifier
             failure.collection = self.collection
-        return internal_identifier, failure
+        return external_identifier, failure
 
     @classmethod
     def _add_format_data(cls, circulation: CirculationData) -> None:

@@ -607,10 +607,8 @@ class TestOPDSImporter:
 
         axis_id = db.identifier(identifier_type=Identifier.AXIS_360_ID)
         axis_isbn = db.identifier(Identifier.ISBN, "9781453219539")
-        identifier_mapping = {axis_isbn: axis_id}
         importer = opds_importer_fixture.importer(
             data_source_name=DataSource.OA_CONTENT_SERVER,
-            identifier_mapping=identifier_mapping,
         )
 
         # The simplest case -- an identifier associated with a
@@ -635,23 +633,6 @@ class TestOPDSImporter:
         # Note that the 'failure' object retuned is the Identifier that
         # was passed in, not the Identifier that substituted as the 'failure'.
         # (In real usage, though, they should be the same.)
-
-        # An identifier that maps to some other identifier,
-        # associated with a CoverageFailure.
-        identifier, output_failure = importer.handle_failure(
-            axis_isbn.urn, input_failure
-        )
-        assert axis_id == identifier
-        assert input_failure == output_failure
-
-        # An identifier that maps to some other identifier,
-        # in a scenario where what OPDSImporter considers failure
-        # is considered success.
-        identifier, not_a_failure = importer.handle_failure(
-            axis_isbn.urn, db.identifier()
-        )
-        assert axis_id == identifier
-        assert axis_id == not_a_failure
 
     def test_coveragefailure_from_message(
         self, opds_importer_fixture: OPDSImporterFixture
