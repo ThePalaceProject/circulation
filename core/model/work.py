@@ -1039,9 +1039,6 @@ class Work(Base):
             # change it.
             self.last_update_time = utc_now()
 
-        if changed or policy.regenerate_opds_entries:
-            self.calculate_opds_entries()
-
         if changed or policy.regenerate_marc_record:
             self.calculate_marc_record()
 
@@ -1171,19 +1168,6 @@ class Work(Base):
 
         l = [_ensure(s) for s in l]
         return "\n".join(l)
-
-    def calculate_opds_entries(self, verbose=True):
-        from core.opds import AcquisitionFeed, Annotator, VerboseAnnotator
-
-        _db = Session.object_session(self)
-        simple = AcquisitionFeed.single_entry(_db, self, Annotator, force_create=True)
-        if verbose is True:
-            verbose = AcquisitionFeed.single_entry(
-                _db, self, VerboseAnnotator, force_create=True
-            )
-        WorkCoverageRecord.add_for(
-            self, operation=WorkCoverageRecord.GENERATE_OPDS_OPERATION
-        )
 
     def calculate_marc_record(self):
         from core.marc import Annotator, MARCExporter

@@ -1078,60 +1078,6 @@ class Identifier(Base, IdentifierConstants):
 
         return qu
 
-    def opds_entry(self):
-        """Create an OPDS entry using only resources directly
-        associated with this Identifier.
-        This makes it possible to create an OPDS entry even when there
-        is no Edition.
-        Currently the only things in this OPDS entry will be description,
-        cover image, and popularity.
-        NOTE: The timestamp doesn't take into consideration when the
-        description was added. Rather than fixing this it's probably
-        better to get rid of this hack and create real Works where we
-        would be using this method.
-        """
-        id = self.urn
-        cover_image = None
-        description = None
-        most_recent_update = None
-        timestamps = []
-        for link in self.links:
-            resource = link.resource
-            if link.rel == LinkRelations.IMAGE:
-                if not cover_image or (
-                    not cover_image.representation.thumbnails
-                    and resource.representation.thumbnails
-                ):
-                    cover_image = resource
-                    if cover_image.representation:
-                        # This is technically redundant because
-                        # minimal_opds_entry will redo this work,
-                        # but just to be safe.
-                        mirrored_at = cover_image.representation.mirrored_at
-                        if mirrored_at:
-                            timestamps.append(mirrored_at)
-            elif link.rel == LinkRelations.DESCRIPTION:
-                if not description or resource.quality > description.quality:
-                    description = resource
-
-        if self.coverage_records:
-            timestamps.extend(
-                [c.timestamp for c in self.coverage_records if c.timestamp]
-            )
-        if timestamps:
-            most_recent_update = max(timestamps)
-
-        quality = Measurement.overall_quality(self.measurements)
-        from core.opds import AcquisitionFeed
-
-        return AcquisitionFeed.minimal_opds_entry(
-            identifier=self,
-            cover=cover_image,
-            description=description,
-            quality=quality,
-            most_recent_update=most_recent_update,
-        )
-
     def __eq__(self, other):
         """Equality implementation for total_ordering."""
         # We don't want an Identifier to be == an IdentifierData

@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from api.admin.opds import AdminAnnotator
+from core.feed.annotator.admin import AdminAnnotator
 from core.model import CirculationEvent, Genre, WorkGenre, get_one_or_create
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_admin import AdminControllerFixture
@@ -63,7 +63,7 @@ class TestDashboardController:
             url = AdminAnnotator(
                 dashboard_fixture.manager.d_circulation,  # type: ignore
                 dashboard_fixture.ctrl.db.default_library(),
-            ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
+            ).permalink_for(lp.identifier)
 
         events = response["circulation_events"]
         assert types[::-1] == [event["type"] for event in events]
@@ -80,7 +80,7 @@ class TestDashboardController:
             url = AdminAnnotator(
                 dashboard_fixture.manager.d_circulation,  # type: ignore
                 dashboard_fixture.ctrl.db.default_library(),
-            ).permalink_for(dashboard_fixture.english_1, lp, lp.identifier)
+            ).permalink_for(lp.identifier)
 
         assert 2 == len(response["circulation_events"])
 

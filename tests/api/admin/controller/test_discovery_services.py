@@ -318,7 +318,7 @@ class TestDiscoveryServices:
 
         service = get_one(
             settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
+            IntegrationConfiguration,
             id=discovery_service.id,
         )
         assert None == service

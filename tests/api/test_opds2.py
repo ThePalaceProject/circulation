@@ -1,174 +1,24 @@
 import io
-import json
 from unittest.mock import MagicMock, patch
-from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
 from requests import Response
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 from werkzeug import Response as wkResponse
 
-from api.app import app
 from api.circulation import FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from api.controller import CirculationManager
-from api.opds2 import (
-    OPDS2NavigationsAnnotator,
-    OPDS2PublicationsAnnotator,
-    TokenAuthenticationFulfillmentProcessor,
-)
-from core.lane import Facets, Pagination
+from api.opds2 import TokenAuthenticationFulfillmentProcessor
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.datasource import DataSource
 from core.model.patron import Loan
-from core.model.resource import Hyperlink
 from core.opds2_import import OPDS2Importer, RWPMManifestParser
 from core.problem_details import INVALID_CREDENTIALS
-from tests.fixtures.api_controller import (
-    CirculationControllerFixture,
-    ControllerFixture,
-)
+from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds2_files import OPDS2FilesFixture
-
-
-class OPDS2FeedControllerFixture:
-    def __init__(self, circulation_fixture: CirculationControllerFixture):
-        self.db = circulation_fixture.db
-        self.circulation_fixture = circulation_fixture
-        self.annotator = OPDS2PublicationsAnnotator(
-            "https://example.org/opds2",
-            Facets.default(self.db.default_library()),
-            Pagination.default(),
-            self.db.default_library(),
-        )
-        self.controller = self.circulation_fixture.manager.opds2_feeds
-
-
-@pytest.fixture(scope="function")
-def opds2_feed_controller(
-    circulation_fixture: CirculationControllerFixture,
-) -> OPDS2FeedControllerFixture:
-    return OPDS2FeedControllerFixture(circulation_fixture)
-
-
-class TestOPDS2FeedController:
-    def test_publications_feed(self, opds2_feed_controller: OPDS2FeedControllerFixture):
-        circ = opds2_feed_controller.circulation_fixture
-        with circ.request_context_with_library("/"):
-            response = opds2_feed_controller.controller.publications()
-            assert response.status_code == 200
-            feed = json.loads(response.data)
-            assert "metadata" in feed
-            assert "links" in feed
-            assert "publications" in feed
-
-
-class OPDS2PublicationAnnotatorFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-        self.annotator = OPDS2PublicationsAnnotator(
-            "https://example.org/opds2",
-            Facets.default(db.default_library()),
-            Pagination.default(),
-            db.default_library(),
-        )
-
-
-@pytest.fixture(scope="function")
-def opds2_publication_annotator(
-    db: DatabaseTransactionFixture,
-) -> OPDS2PublicationAnnotatorFixture:
-    return OPDS2PublicationAnnotatorFixture(db)
-
-
-class TestOPDS2PublicationAnnotator:
-    def test_loan_link(
-        self, opds2_publication_annotator: OPDS2PublicationAnnotatorFixture
-    ):
-        work = opds2_publication_annotator.db.work()
-        idn = work.presentation_edition.primary_identifier
-        with app.test_request_context("/"):
-            link = opds2_publication_annotator.annotator.loan_link(
-                work.presentation_edition
-            )
-            assert Hyperlink.BORROW == link["rel"]
-            assert (
-                quote(
-                    f"/{opds2_publication_annotator.db.default_library().short_name}/works/{idn.type}/{idn.identifier}/borrow"
-                )
-                == link["href"]
-            )
-
-    def test_self_link(
-        self, opds2_publication_annotator: OPDS2PublicationAnnotatorFixture
-    ):
-        work = opds2_publication_annotator.db.work()
-        idn = work.presentation_edition.primary_identifier
-        with app.test_request_context("/"):
-            link = opds2_publication_annotator.annotator.self_link(
-                work.presentation_edition
-            )
-            assert link["rel"] == "self"
-            assert (
-                quote(
-                    f"/{opds2_publication_annotator.db.default_library().short_name}/works/{idn.type}/{idn.identifier}"
-                )
-                == link["href"]
-            )
-
-    def test_facet_url(
-        self, opds2_publication_annotator: OPDS2PublicationAnnotatorFixture
-    ):
-        db = opds2_publication_annotator.db
-        facet = Facets(
-            db.default_library(), Facets.COLLECTION_FEATURED, None, None, None, None
-        )
-        with app.test_request_context("/"):
-            link = opds2_publication_annotator.annotator.facet_url(facet)
-        parsed = urlparse(link)
-        assert parsed.hostname == "localhost"
-        assert parsed.path == f"/{db.default_library().short_name}/opds2/publications"
-        assert parse_qs(parsed.query) == dict(
-            order=["author"],
-            available=["all"],
-            collection=["featured"],
-            distributor=["All"],
-            collectionName=["All"],
-        )
-
-
-class OPDS2NavigationAnnotatorFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-        self.annotator = OPDS2NavigationsAnnotator(
-            "/",
-            Facets.default(db.default_library()),
-            Pagination.default(),
-            db.default_library(),
-            title="Navigation",
-        )
-
-
-@pytest.fixture(scope="function")
-def opds2_navigation_annotator(
-    db: DatabaseTransactionFixture,
-) -> OPDS2NavigationAnnotatorFixture:
-    return OPDS2NavigationAnnotatorFixture(db)
-
-
-class TestOPDS2NavigationAnnotator:
-    def test_navigation(
-        self, opds2_navigation_annotator: OPDS2NavigationAnnotatorFixture
-    ):
-        with app.test_request_context("/"):
-            navigation = opds2_navigation_annotator.annotator.navigation_collection()
-        assert len(navigation) == 1
-        assert (
-            navigation[0]["href"]
-            == f"/{opds2_navigation_annotator.db.default_library().short_name}/opds2/publications"
-        )
 
 
 class TestTokenAuthenticationFulfillmentProcessor:

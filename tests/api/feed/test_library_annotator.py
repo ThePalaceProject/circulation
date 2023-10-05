@@ -23,6 +23,7 @@ from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EverythingEn
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
+from core.feed.opds import UnfulfillableWork
 from core.feed.types import FeedData, WorkEntry
 from core.feed.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Pagination
@@ -39,7 +40,6 @@ from core.model import (
     RightsStatus,
     Work,
 )
-from core.opds import UnfulfillableWork
 from core.opds_import import OPDSXMLParser
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
@@ -799,7 +799,7 @@ class TestLibraryAnnotator:
         # When there are two authors, they each get a contributor link.
         work.presentation_edition.add_contributor("Oprah", Contributor.AUTHOR_ROLE)
         work.calculate_presentation(
-            PresentationCalculationPolicy(regenerate_opds_entries=True),
+            PresentationCalculationPolicy(),
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         contributor_links = [
@@ -818,7 +818,7 @@ class TestLibraryAnnotator:
         annotator_fixture.db.session.delete(work.presentation_edition.contributions[1])
         annotator_fixture.db.session.commit()
         work.calculate_presentation(
-            PresentationCalculationPolicy(regenerate_opds_entries=True),
+            PresentationCalculationPolicy(),
         )
         [entry] = self.get_parsed_feed(annotator_fixture, [work]).entries
         assert [] == [l.link for l in entry.computed.authors if l.link]

@@ -1,22 +1,31 @@
 from datetime import timedelta
 
+import feedparser
+import pytest
+
 from core.classifier import Classifier
+from core.external_search import WorkSearchResult
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.base import Annotator
 from core.feed.annotator.circulation import CirculationManagerAnnotator
 from core.feed.annotator.verbose import VerboseAnnotator
 from core.feed.types import FeedEntryType, Link, WorkEntry
 from core.feed.util import strftime
+from core.lane import WorkList
 from core.model import tuple_to_numericrange
 from core.model.classification import Subject
+from core.model.constants import MediaTypes
 from core.model.contributor import Contributor
 from core.model.datasource import DataSource
 from core.model.edition import Edition
+from core.model.formats import FormatPriorities
+from core.model.integration import IntegrationConfiguration
+from core.model.licensing import DeliveryMechanism, LicensePool, RightsStatus
 from core.model.measurement import Measurement
 from core.model.resource import Hyperlink, Resource
 from core.model.work import Work
-from core.util.datetime_helpers import utc_now
-from tests.core.test_opds import TestAnnotatorsFixture, annotators_fixture  # noqa
+from core.util.datetime_helpers import datetime_utc, utc_now
+from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import (  # noqa
     DatabaseTransactionFixture,
     DBStatementCounter,
@@ -24,12 +33,8 @@ from tests.fixtures.database import (  # noqa
 
 
 class TestAnnotators:
-    def test_all_subjects(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_all_subjects(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         work = db.work(genre="Fiction", with_open_access_download=True)
         edition = work.presentation_edition
@@ -130,19 +135,14 @@ class TestAnnotators:
 
         assert Annotator.content(None) == ""
 
-    def test_appeals(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_appeals(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         work = db.work(with_open_access_download=True)
         work.appeal_language = 0.1
         work.appeal_character = 0.2
         work.appeal_story = 0.3
         work.appeal_setting = 0.4
-        work.calculate_opds_entries(verbose=True)
 
         category_tags = VerboseAnnotator.categories(work)
         appeal_tags = category_tags[Work.APPEALS_URI]
@@ -155,8 +155,7 @@ class TestAnnotators:
         actual = [(x["term"], x["label"], x["ratingValue"]) for x in appeal_tags]
         assert set(expect) == set(actual)
 
-    def test_authors(self, annotators_fixture: TestAnnotatorsFixture):
-        db = annotators_fixture.db
+    def test_authors(self, db: DatabaseTransactionFixture):
         edition = db.edition()
         [c_orig] = list(edition.contributors)
 
@@ -176,12 +175,8 @@ class TestAnnotators:
             c_orig.sort_name,
         }
 
-    def test_detailed_author(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_detailed_author(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         c, ignore = db.contributor("Familyname, Givenname")
         c.display_name = "Givenname Familyname"
@@ -204,14 +199,8 @@ class TestAnnotators:
         [same_tag] = VerboseAnnotator.authors(work.presentation_edition)["authors"]
         assert same_tag.dict() == author.dict()
 
-    def test_duplicate_author_names_are_ignored(
-        self, annotators_fixture: TestAnnotatorsFixture
-    ):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_duplicate_author_names_are_ignored(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         # Ignores duplicate author names
         work = db.work(with_license_pool=True)
@@ -224,13 +213,9 @@ class TestAnnotators:
         assert 1 == len(Annotator.authors(edition)["authors"])
 
     def test_all_annotators_mention_every_relevant_author(
-        self, annotators_fixture: TestAnnotatorsFixture
+        self, db: DatabaseTransactionFixture
     ):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+        session = db.session
 
         work = db.work(authors=[], with_license_pool=True)
         edition = work.presentation_edition
@@ -268,18 +253,13 @@ class TestAnnotators:
         assert 0 == len(tags["contributors"])
         assert [None, None] == [x.role for x in (tags["authors"])]
 
-    def test_ratings(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_ratings(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.quality = 1.0 / 3
         work.popularity = 0.25
         work.rating = 0.6
-        work.calculate_opds_entries(verbose=True)
         entry = OPDSAcquisitionFeed._create_entry(
             work,
             work.active_license_pool(),
@@ -303,16 +283,11 @@ class TestAnnotators:
         ]
         assert set(expected) == set(ratings)
 
-    def test_subtitle(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_subtitle(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.subtitle = "Return of the Jedi"
-        work.calculate_opds_entries()
 
         feed = OPDSAcquisitionFeed(
             db.fresh_str(),
@@ -328,7 +303,6 @@ class TestAnnotators:
 
         # If there's no subtitle, the subtitle tag isn't included.
         work.presentation_edition.subtitle = None
-        work.calculate_opds_entries()
         feed = OPDSAcquisitionFeed(
             db.fresh_str(),
             db.fresh_url(),
@@ -340,17 +314,12 @@ class TestAnnotators:
         assert computed is not None
         assert computed.subtitle == None
 
-    def test_series(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_series(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         work = db.work(with_license_pool=True, with_open_access_download=True)
         work.presentation_edition.series = "Harry Otter and the Lifetime of Despair"
         work.presentation_edition.series_position = 4
-        work.calculate_opds_entries()
 
         feed = OPDSAcquisitionFeed(
             db.fresh_str(),
@@ -369,7 +338,6 @@ class TestAnnotators:
 
         # The series position can be 0, for a prequel for example.
         work.presentation_edition.series_position = 0
-        work.calculate_opds_entries()
 
         feed = OPDSAcquisitionFeed(
             db.fresh_str(),
@@ -387,7 +355,6 @@ class TestAnnotators:
 
         # If there's no series title, the series tag isn't included.
         work.presentation_edition.series = None
-        work.calculate_opds_entries()
         feed = OPDSAcquisitionFeed(
             db.fresh_str(),
             db.fresh_url(),
@@ -401,12 +368,8 @@ class TestAnnotators:
         # No series name
         assert Annotator.series(None, "") == None
 
-    def test_samples(self, annotators_fixture: TestAnnotatorsFixture):
-        data, db, session = (
-            annotators_fixture,
-            annotators_fixture.db,
-            annotators_fixture.session,
-        )
+    def test_samples(self, db: DatabaseTransactionFixture):
+        session = db.session
 
         work = db.work(with_license_pool=True)
         edition = work.presentation_edition
@@ -488,3 +451,243 @@ class TestAnnotator:
         # Missing values
         assert data.language == None
         assert data.updated == FeedEntryType(text=strftime(now))
+
+
+class CirculationManagerAnnotatorFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.work = db.work(with_open_access_download=True)
+        self.lane = db.lane(display_name="Fantasy")
+        self.annotator = CirculationManagerAnnotator(
+            self.lane,
+        )
+
+
+@pytest.fixture(scope="function")
+def circulation_fixture(
+    db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+) -> CirculationManagerAnnotatorFixture:
+    return CirculationManagerAnnotatorFixture(db)
+
+
+class TestCirculationManagerAnnotator:
+    def test_open_access_link(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        # The resource URL associated with a LicensePoolDeliveryMechanism
+        # becomes the `href` of an open-access `link` tag.
+        pool = circulation_fixture.work.license_pools[0]
+        [lpdm] = pool.delivery_mechanisms
+
+        # Temporarily disconnect the Resource's Representation so we
+        # can verify that this works even if there is no
+        # Representation.
+        representation = lpdm.resource.representation
+        lpdm.resource.representation = None
+        lpdm.resource.url = "http://foo.com/thefile.epub"
+        link_tag = circulation_fixture.annotator.open_access_link(pool, lpdm)
+        assert lpdm.resource.url == link_tag.href
+
+        # The dcterms:rights attribute may provide a more detailed
+        # explanation of the book's copyright status.
+        assert lpdm.rights_status.uri == link_tag.rights
+
+        # If the Resource has a Representation, the public URL is used
+        # instead of the original Resource URL.
+        lpdm.resource.representation = representation
+        link_tag = circulation_fixture.annotator.open_access_link(pool, lpdm)
+        assert representation.public_url == link_tag.href
+
+        # If there is no Representation, the Resource's original URL is used.
+        lpdm.resource.representation = None
+        link_tag = circulation_fixture.annotator.open_access_link(pool, lpdm)
+        assert lpdm.resource.url == link_tag.href
+
+    def test_default_lane_url(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        default_lane_url = circulation_fixture.annotator.default_lane_url()
+        assert "feed" in default_lane_url
+        assert str(circulation_fixture.lane.id) not in default_lane_url
+
+    def test_feed_url(self, circulation_fixture: CirculationManagerAnnotatorFixture):
+        feed_url_fantasy = circulation_fixture.annotator.feed_url(
+            circulation_fixture.lane
+        )
+        assert "feed" in feed_url_fantasy
+        assert str(circulation_fixture.lane.id) in feed_url_fantasy
+        assert (
+            str(circulation_fixture.db.default_library().name) not in feed_url_fantasy
+        )
+
+    def test_navigation_url(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        navigation_url_fantasy = circulation_fixture.annotator.navigation_url(
+            circulation_fixture.lane
+        )
+        assert "navigation" in navigation_url_fantasy
+        assert str(circulation_fixture.lane.id) in navigation_url_fantasy
+
+    def test_visible_delivery_mechanisms(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        # By default, all delivery mechanisms are visible
+        [pool] = circulation_fixture.work.license_pools
+        [epub] = list(circulation_fixture.annotator.visible_delivery_mechanisms(pool))
+        assert "application/epub+zip" == epub.delivery_mechanism.content_type
+
+        # Create an annotator that hides PDFs.
+        no_pdf = CirculationManagerAnnotator(
+            circulation_fixture.lane,
+            hidden_content_types=["application/pdf"],
+        )
+
+        # This has no effect on the EPUB.
+        [epub2] = list(no_pdf.visible_delivery_mechanisms(pool))
+        assert epub == epub2
+
+        # Create an annotator that hides EPUBs.
+        no_epub = CirculationManagerAnnotator(
+            circulation_fixture.lane,
+            hidden_content_types=["application/epub+zip"],
+        )
+
+        # The EPUB is hidden, and this license pool has no delivery
+        # mechanisms.
+        assert [] == list(no_epub.visible_delivery_mechanisms(pool))
+
+    def test_visible_delivery_mechanisms_configured_0(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        """Test that configuration options do affect OPDS feeds.
+        Exhaustive testing of different configuration values isn't necessary
+        here: See the tests for FormatProperties to see the actual semantics
+        of the configuration values."""
+        edition = circulation_fixture.db.edition()
+        pool: LicensePool = circulation_fixture.db.licensepool(edition)
+
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            RightsStatus.UNKNOWN,
+            None,
+        )
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
+            RightsStatus.UNKNOWN,
+            None,
+        )
+        pool.set_delivery_mechanism(
+            MediaTypes.PDF_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
+            RightsStatus.UNKNOWN,
+            None,
+        )
+
+        config: IntegrationConfiguration = pool.collection.integration_configuration
+        DatabaseTransactionFixture.set_settings(
+            config,
+            **{
+                FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY: [
+                    f"{DeliveryMechanism.LCP_DRM}",
+                ],
+                FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY: [
+                    f"{MediaTypes.PDF_MEDIA_TYPE}"
+                ],
+            },
+        )
+        circulation_fixture.db.session.commit()
+
+        annotator = CirculationManagerAnnotator(
+            circulation_fixture.lane,
+            hidden_content_types=[],
+        )
+
+        # DRM-free types appear first.
+        # Then our LCP'd PDF.
+        # Then our LCP'd EPUB.
+        # Then our Adobe DRM'd EPUB.
+        results = annotator.visible_delivery_mechanisms(pool)
+        assert results[0].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert results[0].delivery_mechanism.drm_scheme == None
+        assert results[1].delivery_mechanism.content_type == MediaTypes.PDF_MEDIA_TYPE
+        assert results[1].delivery_mechanism.drm_scheme == DeliveryMechanism.LCP_DRM
+        assert results[2].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert results[2].delivery_mechanism.drm_scheme == DeliveryMechanism.LCP_DRM
+        assert results[3].delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert results[3].delivery_mechanism.drm_scheme == DeliveryMechanism.ADOBE_DRM
+        assert len(results) == 4
+
+    def test_rights_attributes(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        m = circulation_fixture.annotator.rights_attributes
+
+        # Given a LicensePoolDeliveryMechanism with a RightsStatus,
+        # rights_attributes creates a dictionary mapping the dcterms:rights
+        # attribute to the URI associated with the RightsStatus.
+        lp = circulation_fixture.db.licensepool(None)
+        [lpdm] = lp.delivery_mechanisms
+        assert {"rights": lpdm.rights_status.uri} == m(lpdm)
+
+        # If any link in the chain is broken, rights_attributes returns
+        # an empty dictionary.
+        old_uri = lpdm.rights_status.uri
+        lpdm.rights_status.uri = None
+        assert {} == m(lpdm)
+        lpdm.rights_status.uri = old_uri
+
+        lpdm.rights_status = None
+        assert {} == m(lpdm)
+
+        assert {} == m(None)
+
+    def test_work_entry_includes_updated(
+        self, circulation_fixture: CirculationManagerAnnotatorFixture
+    ):
+        # By default, the 'updated' date is the value of
+        # Work.last_update_time.
+        work = circulation_fixture.db.work(with_open_access_download=True)
+        # This date is later, but we don't check it.
+        work.license_pools[0].availability_time = datetime_utc(2019, 1, 1)
+        work.last_update_time = datetime_utc(2018, 2, 4)
+
+        def entry_for(work):
+            worklist = WorkList()
+            worklist.initialize(None)
+            annotator = CirculationManagerAnnotator(worklist)
+            feed = (
+                OPDSAcquisitionFeed("test", "url", [work], annotator).as_response().data
+            )
+            [entry] = feedparser.parse(str(feed)).entries
+            return entry
+
+        entry = entry_for(work)
+        assert "2018-02-04" in entry.get("updated")
+
+        # If the work passed in is a WorkSearchResult that indicates
+        # the search index found a later 'update time', then the later
+        # time is used. This value isn't always present -- it's only
+        # calculated when the list is being _ordered_ by 'update time'.
+        # Otherwise it's too slow to bother.
+        class MockHit:
+            def __init__(self, last_update):
+                # Store the time the way we get it from Opensearch --
+                # as a single-element list containing seconds since epoch.
+                self.last_update = [
+                    (last_update - datetime_utc(1970, 1, 1)).total_seconds()
+                ]
+
+        hit = MockHit(datetime_utc(2018, 2, 5))
+        result = WorkSearchResult(work, hit)
+        entry = entry_for(result)
+        assert "2018-02-05" in entry.get("updated")
+
+        # Any 'update time' provided by Opensearch is used even if
+        # it's clearly earlier than Work.last_update_time.
+        hit = MockHit(datetime_utc(2017, 1, 1))
+        result._hit = hit
+        entry = entry_for(result)
+        assert "2017-01-01" in entry.get("updated")

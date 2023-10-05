@@ -9,7 +9,6 @@ from core.coverage import (
     CoverageProviderProgress,
     IdentifierCoverageProvider,
     MARCRecordWorkCoverageProvider,
-    OPDSEntryWorkCoverageProvider,
     PresentationReadyWorkCoverageProvider,
     WorkClassificationCoverageProvider,
     WorkPresentationEditionCoverageProvider,
@@ -2195,7 +2194,6 @@ class TestWorkPresentationEditionCoverageProvider:
                 policy.choose_edition,
                 policy.set_edition_metadata,
                 policy.choose_cover,
-                policy.regenerate_opds_entries,
                 policy.update_search_index,
             ]
         )
@@ -2218,33 +2216,12 @@ class TestWorkClassificationCoverageProvider:
                 policy.choose_edition,
                 policy.set_edition_metadata,
                 policy.choose_cover,
-                policy.regenerate_opds_entries,
                 policy.update_search_index,
                 policy.classify,
                 policy.choose_summary,
                 policy.calculate_quality,
             ]
         )
-
-
-class TestOPDSEntryWorkCoverageProvider:
-    def test_run(self, db: DatabaseTransactionFixture):
-        provider = OPDSEntryWorkCoverageProvider(db.session)
-        work = db.work()
-        work.simple_opds_entry = "old junk"
-        work.verbose_opds_entry = "old long junk"
-
-        # The work is not presentation-ready, so nothing happens.
-        provider.run()
-        assert "old junk" == work.simple_opds_entry
-        assert "old long junk" == work.verbose_opds_entry
-
-        # The work is presentation-ready, so its OPDS entries are
-        # regenerated.
-        work.presentation_ready = True
-        provider.run()
-        assert work.simple_opds_entry.startswith("<entry")
-        assert work.verbose_opds_entry.startswith("<entry")
 
 
 class TestMARCRecordWorkCoverageProvider:

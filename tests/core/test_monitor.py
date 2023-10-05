@@ -41,7 +41,6 @@ from core.monitor import (
     MeasurementReaper,
     Monitor,
     NotPresentationReadyWorkSweepMonitor,
-    OPDSEntryCacheMonitor,
     PatronNeighborhoodScrubber,
     PatronRecordReaper,
     PermanentWorkIDRefreshMonitor,
@@ -855,23 +854,6 @@ class TestWorkSweepMonitors:
         assert [w2, w3] == Mock3(db.session).item_query().all()
         assert [] == Mock3(db.session, collection=c1).item_query().all()
         assert [w2] == Mock3(db.session, collection=c2).item_query().all()
-
-
-class TestOPDSEntryCacheMonitor:
-    def test_process_item(self, db: DatabaseTransactionFixture):
-        """This Monitor calculates OPDS entries for works."""
-
-        class Mock(OPDSEntryCacheMonitor):
-            SERVICE_NAME = "Mock"
-
-        monitor = Mock(db.session)
-        work = db.work()
-        assert None == work.simple_opds_entry
-        assert None == work.verbose_opds_entry
-
-        monitor.process_item(work)
-        assert work.simple_opds_entry != None
-        assert work.verbose_opds_entry != None
 
 
 class TestPermanentWorkIDRefresh:

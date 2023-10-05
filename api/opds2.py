@@ -2,18 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from flask import url_for
 from uritemplate import URITemplate
 
 from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
-from core.lane import Facets
 from core.model import ConfigurationSetting, DataSource, ExternalIntegration
-from core.model.edition import Edition
-from core.model.identifier import Identifier
 from core.model.licensing import LicensePoolDeliveryMechanism
-from core.model.resource import Hyperlink
-from core.opds2 import OPDS2Annotator
 from core.problem_details import INVALID_CREDENTIALS
 from core.util.http import HTTP
 from core.util.log import LoggerMixin
@@ -21,68 +15,6 @@ from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
     from core.model import LicensePool, Patron
-
-
-class OPDS2PublicationsAnnotator(OPDS2Annotator):
-    """API level implementation for the publications feed OPDS2 annotator"""
-
-    def loan_link(self, edition: Edition) -> dict:
-        identifier: Identifier = edition.primary_identifier
-        return {
-            "href": url_for(
-                "borrow",
-                identifier_type=identifier.type,
-                identifier=identifier.identifier,
-                library_short_name=self.library.short_name,
-            ),
-            "rel": Hyperlink.BORROW,
-        }
-
-    def self_link(self, edition: Edition) -> dict:
-        identifier: Identifier = edition.primary_identifier
-        return {
-            "href": url_for(
-                "permalink",
-                identifier_type=identifier.type,
-                identifier=identifier.identifier,
-                library_short_name=self.library.short_name,
-            ),
-            "rel": "self",
-        }
-
-    @classmethod
-    def facet_url(cls, facets: Facets) -> str:
-        name = facets.library.short_name if facets.library else None
-        return url_for(
-            "opds2_publications",
-            _external=True,
-            library_short_name=name,
-            **dict(facets.items()),
-        )
-
-
-class OPDS2NavigationsAnnotator(OPDS2Annotator):
-    """API level implementation for the navigation feed OPDS2 annotator"""
-
-    def navigation_collection(self) -> list[dict]:
-        """The OPDS2 navigation collection, currently only serves the publications link"""
-        return [
-            {
-                "href": url_for(
-                    "opds2_publications", library_short_name=self.library.short_name
-                ),
-                "title": "OPDS2 Publications Feed",
-                "type": self.OPDS2_TYPE,
-            }
-        ]
-
-    def feed_metadata(self):
-        return {"title": self.title}
-
-    def feed_links(self):
-        return [
-            {"href": self.url, "rel": "self", "type": self.OPDS2_TYPE},
-        ]
 
 
 class TokenAuthenticationFulfillmentProcessor(

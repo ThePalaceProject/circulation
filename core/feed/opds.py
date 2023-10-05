@@ -10,6 +10,8 @@ from core.feed.serializer.base import SerializerInterface
 from core.feed.serializer.opds import OPDS1Serializer
 from core.feed.serializer.opds2 import OPDS2Serializer
 from core.feed.types import FeedData, WorkEntry
+from core.lane import FeaturedFacets
+from core.model.cachedfeed import CachedFeed
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSMessage
 
@@ -94,3 +96,18 @@ class BaseOPDSFeed(FeedInterface):
             # Only OPDS2 has the same content type for feed and entry
             response.content_type = serializer.content_type()
         return response
+
+
+class UnfulfillableWork(Exception):
+    """Raise this exception when it turns out a Work currently cannot be
+    fulfilled through any means, *and* this is a problem sufficient to
+    cancel the creation of an <entry> for the Work.
+
+    For commercial works, this might be because the collection
+    contains no licenses. For open-access works, it might be because
+    none of the delivery mechanisms could be mirrored.
+    """
+
+
+class NavigationFacets(FeaturedFacets):
+    CACHED_FEED_TYPE = CachedFeed.NAVIGATION_TYPE

@@ -26,17 +26,21 @@ from core.feed.annotator.circulation import (
 from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed.annotator.verbose import VerboseAnnotator
 from core.feed.navigation import NavigationFeed
-from core.feed.opds import BaseOPDSFeed
+from core.feed.opds import BaseOPDSFeed, UnfulfillableWork
 from core.feed.types import FeedData, Link, WorkEntry, WorkEntryData
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.model import DeliveryMechanism, Representation
 from core.model.constants import LinkRelations
-from core.opds import MockUnfulfillableAnnotator
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
+
+
+class MockUnfulfillableAnnotator(Annotator):
+    def annotate_work_entry(self, *args, **kwargs):
+        raise UnfulfillableWork()
 
 
 class TestOPDSFeedProtocol:
@@ -490,7 +494,6 @@ class TestOPDSAcquisitionFeed:
 
         # If the edition was issued before 1980, no datetime formatting error
         # is raised.
-        work.simple_opds_entry = work.verbose_opds_entry = None
         five_hundred_years = datetime.timedelta(days=(500 * 365))
         work.presentation_edition.issued = utc_now() - five_hundred_years
 
@@ -560,7 +563,7 @@ class TestOPDSAcquisitionFeed:
         [pool] = work.license_pools
         response = OPDSAcquisitionFeed.single_entry(
             work,
-            MockUnfulfillableAnnotator(),  # type: ignore[arg-type]
+            MockUnfulfillableAnnotator(),
         )
         assert isinstance(response, OPDSMessage)
         expect = OPDSAcquisitionFeed.error_message(

@@ -1929,10 +1929,6 @@ class TestExplain:
         # printed out.
         assert "OCLC Linked Data | an operation | success" in output
 
-        # WorkCoverageRecords associated with the work were
-        # printed out.
-        assert "generate-opds | success" in output
-
         # There is an active LicensePool that is fulfillable and has
         # copies owned.
         assert "%s owned" % pool.licenses_owned in output

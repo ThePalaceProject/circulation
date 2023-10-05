@@ -288,11 +288,8 @@ class TestWorkController:
             )
             assert 200 == response.status_code
             assert "New title" == work_fixture.english_1.title
-            assert "New title" in work_fixture.english_1.simple_opds_entry
             assert "New subtitle" == work_fixture.english_1.subtitle
-            assert "New subtitle" in work_fixture.english_1.simple_opds_entry
             assert "New Author" == work_fixture.english_1.author
-            assert "New Author" in work_fixture.english_1.simple_opds_entry
             [author, narrator] = sorted(
                 work_fixture.english_1.presentation_edition.contributions,
                 key=lambda x: x.contributor.display_name,
@@ -304,9 +301,7 @@ class TestWorkController:
             assert "Narrator, New" == narrator.contributor.sort_name
             assert "Narrator" == narrator.role
             assert "New series" == work_fixture.english_1.series
-            assert "New series" in work_fixture.english_1.simple_opds_entry
             assert 144 == work_fixture.english_1.series_position
-            assert "144" in work_fixture.english_1.simple_opds_entry
             assert "Audio" == work_fixture.english_1.presentation_edition.medium
             assert "fre" == work_fixture.english_1.presentation_edition.language
             assert "New Publisher" == work_fixture.english_1.publisher
@@ -317,10 +312,6 @@ class TestWorkController:
             )
             assert 0.25 == work_fixture.english_1.quality
             assert "<p>New summary</p>" == work_fixture.english_1.summary_text
-            assert (
-                "&lt;p&gt;New summary&lt;/p&gt;"
-                in work_fixture.english_1.simple_opds_entry
-            )
             assert 1 == staff_edition_count()
 
         with work_fixture.request_context_with_library_and_admin("/"):
@@ -351,7 +342,6 @@ class TestWorkController:
             )
             assert 200 == response.status_code
             assert "abcd" == work_fixture.english_1.summary_text
-            assert "New summary" not in work_fixture.english_1.simple_opds_entry
             [author, narrator, author2] = sorted(
                 work_fixture.english_1.presentation_edition.contributions,
                 key=lambda x: x.contributor.display_name,
@@ -395,11 +385,6 @@ class TestWorkController:
             assert None == work_fixture.english_1.series
             assert None == work_fixture.english_1.series_position
             assert "" == work_fixture.english_1.summary_text
-            assert "New subtitle" not in work_fixture.english_1.simple_opds_entry
-            assert "Narrator" not in work_fixture.english_1.simple_opds_entry
-            assert "New series" not in work_fixture.english_1.simple_opds_entry
-            assert "144" not in work_fixture.english_1.simple_opds_entry
-            assert "abcd" not in work_fixture.english_1.simple_opds_entry
             assert 1 == staff_edition_count()
 
         with work_fixture.request_context_with_library_and_admin("/"):
@@ -421,13 +406,6 @@ class TestWorkController:
             assert "Final series" == work_fixture.english_1.series
             assert 169 == work_fixture.english_1.series_position
             assert "<p>Final summary</p>" == work_fixture.english_1.summary_text
-            assert "Final subtitle" in work_fixture.english_1.simple_opds_entry
-            assert "Final series" in work_fixture.english_1.simple_opds_entry
-            assert "169" in work_fixture.english_1.simple_opds_entry
-            assert (
-                "&lt;p&gt;Final summary&lt;/p&gt;"
-                in work_fixture.english_1.simple_opds_entry
-            )
             assert 1 == staff_edition_count()
 
         # Make sure a non-librarian of this library can't edit.

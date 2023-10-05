@@ -210,7 +210,6 @@ class PresentationCalculationPolicy:
         choose_summary=True,
         calculate_quality=True,
         choose_cover=True,
-        regenerate_opds_entries=False,
         regenerate_marc_record=False,
         update_search_index=False,
         verbose=True,
@@ -232,8 +231,6 @@ class PresentationCalculationPolicy:
            quality of the Work?
         :param choose_cover: Should we reconsider which of the
            available cover images is the best?
-        :param regenerate_opds_entries: Should we recreate the OPDS entries
-           for this Work?
         :param regenerate_marc_record: Should we regenerate the MARC record
            for this Work?
         :param update_search_index: Should we reindex this Work's
@@ -268,14 +265,9 @@ class PresentationCalculationPolicy:
         self.calculate_quality = calculate_quality
         self.choose_cover = choose_cover
 
-        # We will regenerate OPDS entries if any of the metadata
-        # changes, but if regenerate_opds_entries is True we will
-        # _always_ do so. This is so we can regenerate _all_ the OPDS
-        # entries if the OPDS presentation algorithm changes.
-        # The same is true for the MARC records, except that they will
+        # Regenerate MARC records, except that they will
         # never be generated unless a MARC organization code is set
         # in a sitewide configuration setting.
-        self.regenerate_opds_entries = regenerate_opds_entries
         self.regenerate_marc_record = regenerate_marc_record
 
         # Similarly for update_search_index.
@@ -293,7 +285,6 @@ class PresentationCalculationPolicy:
         everything, even when it doesn't seem necessary.
         """
         return PresentationCalculationPolicy(
-            regenerate_opds_entries=True,
             regenerate_marc_record=True,
             update_search_index=True,
         )

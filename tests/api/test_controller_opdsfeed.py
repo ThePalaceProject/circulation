@@ -15,9 +15,9 @@ from core.external_search import SortKeyPagination
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.navigation import NavigationFeed
+from core.feed.opds import NavigationFacets
 from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.model import CachedFeed, Edition
-from core.opds import NavigationFacets
 from core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 from tests.fixtures.library import LibraryFixture
