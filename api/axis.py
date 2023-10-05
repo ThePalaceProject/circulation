@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import html
 import json
 import logging
@@ -7,13 +8,27 @@ import re
 import socket
 import ssl
 import urllib
+from abc import ABC, abstractmethod
 from datetime import timedelta
-from typing import Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    List,
+    Literal,
+    Mapping,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 from urllib.parse import urlparse
 
 import certifi
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from lxml.etree import _Element
 from pydantic import validator
 
 from api.admin.validator import Validator
@@ -50,6 +65,7 @@ from core.metadata_layer import (
 )
 from core.model import (
     Classification,
+    Collection,
     Contributor,
     DataSource,
     DeliveryMechanism,
@@ -70,9 +86,10 @@ from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMoni
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import HTTP, RequestNetworkException
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
-from core.util.xmlparser import XMLParser
+from core.util.xmlparser import XMLProcessor
 
 
 class Axis360APIConstants:
@@ -373,7 +390,7 @@ class Axis360API(
         patron_id = patron.authorization_identifier
         response = self._checkin(title_id, patron_id)
         try:
-            return CheckinResponseParser(licensepool.collection).process_all(
+            return CheckinResponseParser(licensepool.collection).process_first(
                 response.content
             )
         except etree.XMLSyntaxError as e:
@@ -400,9 +417,12 @@ class Axis360API(
             title_id, patron_id, self.internal_format(delivery_mechanism)
         )
         try:
-            return CheckoutResponseParser(licensepool.collection).process_all(
+            loan_info = CheckoutResponseParser(licensepool.collection).process_first(
                 response.content
             )
+            if loan_info is None:
+                raise CannotLoan()
+            return loan_info
         except etree.XMLSyntaxError as e:
             raise RemoteInitiatedServerError(response.content, self.SERVICE_NAME)
 
@@ -460,7 +480,7 @@ class Axis360API(
             titleId=title_id, patronId=patron_id, email=hold_notification_email
         )
         response = self.request(url, params=params)
-        hold_info = HoldResponseParser(licensepool.collection).process_all(
+        hold_info = HoldResponseParser(licensepool.collection).process_first(
             response.content
         )
         if not hold_info.identifier:
@@ -479,7 +499,7 @@ class Axis360API(
         params = dict(titleId=title_id, patronId=patron_id)
         response = self.request(url, params=params)
         try:
-            HoldReleaseResponseParser(licensepool.collection).process_all(
+            HoldReleaseResponseParser(licensepool.collection).process_first(
                 response.content
             )
         except NotOnHold:
@@ -788,14 +808,17 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
         self.api.update_licensepools_for_identifiers(identifiers)
 
 
-class Axis360Parser(XMLParser):
-    NS = {"axis": "http://axis360api.baker-taylor.com/vendorAPI"}
+T = TypeVar("T")
 
+
+class Axis360Parser(XMLProcessor[T], ABC):
     SHORT_DATE_FORMAT = "%m/%d/%Y"
     FULL_DATE_FORMAT_IMPLICIT_UTC = "%m/%d/%Y %I:%M:%S %p"
     FULL_DATE_FORMAT_EXPLICIT_UTC = "%m/%d/%Y %I:%M:%S %p +00:00"
 
-    def _pd(self, date):
+    NAMESPACES = {"axis": "http://axis360api.baker-taylor.com/vendorAPI"}
+
+    def _pd(self, date: Optional[str]) -> Optional[datetime.datetime]:
         """Stupid function to parse a date."""
         if date is None:
             return date
@@ -805,7 +828,13 @@ class Axis360Parser(XMLParser):
             pass
         return strptime_utc(date, self.FULL_DATE_FORMAT_EXPLICIT_UTC)
 
-    def _xpath1_boolean(self, e, target, ns, default=False):
+    def _xpath1_boolean(
+        self,
+        e: _Element,
+        target: str,
+        ns: Optional[Dict[str, str]],
+        default: bool = False,
+    ) -> bool:
         text = self.text_of_optional_subtag(e, target, ns)
         if text is None:
             return default
@@ -814,12 +843,16 @@ class Axis360Parser(XMLParser):
         else:
             return False
 
-    def _xpath1_date(self, e, target, ns):
+    def _xpath1_date(
+        self, e: _Element, target: str, ns: Optional[Dict[str, str]]
+    ) -> Optional[datetime.datetime]:
         value = self.text_of_optional_subtag(e, target, ns)
         return self._pd(value)
 
 
-class BibliographicParser(Axis360Parser):
+class BibliographicParser(
+    Axis360Parser[Tuple[Optional[Metadata], Optional[CirculationData]]], LoggerMixin
+):
     DELIVERY_DATA_FOR_AXIS_FORMAT = {
         "Blio": None,  # Legacy format, handled the same way as AxisNow
         "Acoustik": (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
@@ -828,10 +861,8 @@ class BibliographicParser(Axis360Parser):
         "PDF": (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
     }
 
-    log = logging.getLogger("Axis 360 Bibliographic Parser")
-
     @classmethod
-    def parse_list(cls, l):
+    def parse_list(cls, l: str) -> List[str]:
         """Turn strings like this into lists:
 
         FICTION / Thrillers; FICTION / Suspense; FICTION / General
@@ -839,14 +870,22 @@ class BibliographicParser(Axis360Parser):
         """
         return [x.strip() for x in l.split(";")]
 
-    def __init__(self, include_availability=True, include_bibliographic=True):
+    def __init__(
+        self, include_availability: bool = True, include_bibliographic: bool = True
+    ):
         self.include_availability = include_availability
         self.include_bibliographic = include_bibliographic
 
-    def process_all(self, string):
-        yield from super().process_all(string, "//axis:title", self.NS)
+    @property
+    def xpath_expression(self) -> str:
+        return "//axis:title"
 
-    def extract_availability(self, circulation_data, element, ns):
+    def extract_availability(
+        self,
+        circulation_data: Optional[CirculationData],
+        element: _Element,
+        ns: Optional[Dict[str, str]],
+    ) -> CirculationData:
         identifier = self.text_of_subtag(element, "axis:titleId", ns)
         primary_identifier = IdentifierData(Identifier.AXIS_360_ID, identifier)
         if not circulation_data:
@@ -859,13 +898,6 @@ class BibliographicParser(Axis360Parser):
         total_copies = self.int_of_subtag(availability, "axis:totalCopies", ns)
         available_copies = self.int_of_subtag(availability, "axis:availableCopies", ns)
         size_of_hold_queue = self.int_of_subtag(availability, "axis:holdsQueueSize", ns)
-
-        availability_updated = self.text_of_optional_subtag(
-            availability, "axis:updateDate", ns
-        )
-        if availability_updated:
-            # NOTE: We don't actually do anything with this.
-            availability_updated = self._pd(availability_updated)
 
         circulation_data.licenses_owned = total_copies
         circulation_data.licenses_available = available_copies
@@ -890,7 +922,12 @@ class BibliographicParser(Axis360Parser):
     )
 
     @classmethod
-    def parse_contributor(cls, author, primary_author_found=False, force_role=None):
+    def parse_contributor(
+        cls,
+        author: str,
+        primary_author_found: bool = False,
+        force_role: Optional[str] = None,
+    ) -> ContributorData:
         """Parse an Axis 360 contributor string.
 
         The contributor string looks like "Butler, Octavia" or "Walt
@@ -918,17 +955,22 @@ class BibliographicParser(Axis360Parser):
         match = cls.role_abbreviation.search(author)
         if match:
             role_type = match.groups()[0]
-            role = cls.role_abbreviation_to_role.get(
+            mapped_role = cls.role_abbreviation_to_role.get(
                 role_type, Contributor.UNKNOWN_ROLE
             )
-            if role is cls.generic_author:
-                role = default_author_role
+            role = (
+                default_author_role
+                if mapped_role is cls.generic_author
+                else cast(str, mapped_role)
+            )
             author = author[:-5].strip()
         if force_role:
             role = force_role
         return ContributorData(sort_name=author, roles=[role])
 
-    def extract_bibliographic(self, element, ns):
+    def extract_bibliographic(
+        self, element: _Element, ns: Optional[Dict[str, str]]
+    ) -> Metadata:
         """Turn bibliographic metadata into a Metadata and a CirculationData objects,
         and return them as a tuple."""
 
@@ -948,18 +990,18 @@ class BibliographicParser(Axis360Parser):
         found_primary_author = False
         if contributor:
             for c in self.parse_list(contributor):
-                contributor = self.parse_contributor(c, found_primary_author)
-                if Contributor.PRIMARY_AUTHOR_ROLE in contributor.roles:
+                contributor_data = self.parse_contributor(c, found_primary_author)
+                if Contributor.PRIMARY_AUTHOR_ROLE in contributor_data.roles:
                     found_primary_author = True
-                contributors.append(contributor)
+                contributors.append(contributor_data)
 
         narrator = self.text_of_optional_subtag(element, "axis:narrator", ns)
         if narrator:
             for n in self.parse_list(narrator):
-                contributor = self.parse_contributor(
+                contributor_data = self.parse_contributor(
                     n, force_role=Contributor.NARRATOR_ROLE
                 )
-                contributors.append(contributor)
+                contributors.append(contributor_data)
 
         links = []
         description = self.text_of_optional_subtag(element, "axis:annotation", ns)
@@ -1042,7 +1084,6 @@ class BibliographicParser(Axis360Parser):
             identifiers.append(IdentifierData(Identifier.ISBN, isbn))
 
         formats = []
-        acceptable = False
         seen_formats = []
 
         # All of the formats we don't support, like Blio, are ebook
@@ -1078,10 +1119,8 @@ class BibliographicParser(Axis360Parser):
                     "Unrecognized Axis format name for %s: %s"
                     % (identifier, informal_name)
                 )
-            elif self.DELIVERY_DATA_FOR_AXIS_FORMAT.get(informal_name):
-                content_type, drm_scheme = self.DELIVERY_DATA_FOR_AXIS_FORMAT[
-                    informal_name
-                ]
+            elif delivery_data := self.DELIVERY_DATA_FOR_AXIS_FORMAT.get(informal_name):
+                content_type, drm_scheme = delivery_data
                 formats.append(
                     FormatData(content_type=content_type, drm_scheme=drm_scheme)
                 )
@@ -1133,7 +1172,9 @@ class BibliographicParser(Axis360Parser):
         metadata.circulation = circulationdata
         return metadata
 
-    def process_one(self, element, ns):
+    def process_one(
+        self, element: _Element, ns: Optional[Dict[str, str]]
+    ) -> Tuple[Optional[Metadata], Optional[CirculationData]]:
         if self.include_bibliographic:
             bibliographic = self.extract_bibliographic(element, ns)
         else:
@@ -1153,13 +1194,13 @@ class BibliographicParser(Axis360Parser):
         return bibliographic, availability
 
 
-class ResponseParser(Axis360Parser):
+class ResponseParser:
     id_type = Identifier.AXIS_360_ID
 
     SERVICE_NAME = "Axis 360"
 
     # Map Axis 360 error codes to our circulation exceptions.
-    code_to_exception = {
+    code_to_exception: Mapping[int | Tuple[int, str], Type[IntegrationException]] = {
         315: InvalidInputException,  # Bad password
         316: InvalidInputException,  # DRM account already exists
         1000: PatronAuthorizationFailedException,
@@ -1214,7 +1255,46 @@ class ResponseParser(Axis360Parser):
         5004: LibraryInvalidInputException,  # Missing TransactionID
     }
 
-    def __init__(self, collection):
+    @classmethod
+    def _raise_exception_on_error(
+        cls,
+        code: str | int,
+        message: str,
+        custom_error_classes: Optional[
+            Mapping[int | Tuple[int, str], Type[IntegrationException]]
+        ] = None,
+        ignore_error_codes=None,
+    ) -> Tuple[int, str]:
+        try:
+            code = int(code)
+        except ValueError:
+            # Non-numeric code? Inconceivable!
+            raise RemoteInitiatedServerError(
+                "Invalid response code from Axis 360: %s" % code, cls.SERVICE_NAME
+            )
+
+        if ignore_error_codes and code in ignore_error_codes:
+            return code, message
+
+        if custom_error_classes is None:
+            custom_error_classes = {}
+        for d in custom_error_classes, cls.code_to_exception:
+            if (code, message) in d:
+                raise d[(code, message)]
+            elif code in d:
+                # Something went wrong and we know how to turn it into a
+                # specific exception.
+                error_class = d[code]
+                if error_class is RemoteInitiatedServerError:
+                    e = error_class(message, cls.SERVICE_NAME)
+                else:
+                    e = error_class(message)
+                raise e
+        return code, message
+
+
+class XMLResponseParser(ResponseParser, Axis360Parser[T], ABC):
+    def __init__(self, collection: Collection):
         """Constructor.
 
         :param collection: A Collection, in case parsing this document
@@ -1223,7 +1303,13 @@ class ResponseParser(Axis360Parser):
         self.collection = collection
 
     def raise_exception_on_error(
-        self, e, ns, custom_error_classes={}, ignore_error_codes=None
+        self,
+        e: _Element,
+        ns: Optional[Dict[str, str]],
+        custom_error_classes: Optional[
+            Mapping[int | Tuple[int, str], Type[IntegrationException]]
+        ] = None,
+        ignore_error_codes: Optional[List[int]] = None,
     ):
         """Raise an error if the given lxml node represents an Axis 360 error
         condition.
@@ -1248,53 +1334,28 @@ class ResponseParser(Axis360Parser):
             code.text, message, custom_error_classes, ignore_error_codes
         )
 
-    @classmethod
-    def _raise_exception_on_error(
-        cls, code, message, custom_error_classes={}, ignore_error_codes=None
-    ):
-        try:
-            code = int(code)
-        except ValueError:
-            # Non-numeric code? Inconcievable!
-            raise RemoteInitiatedServerError(
-                "Invalid response code from Axis 360: %s" % code, cls.SERVICE_NAME
-            )
 
-        if ignore_error_codes and code in ignore_error_codes:
-            return code, message
+class CheckinResponseParser(XMLResponseParser[Literal[True]]):
+    @property
+    def xpath_expression(self) -> str:
+        return "//axis:EarlyCheckinRestResult"
 
-        for d in custom_error_classes, cls.code_to_exception:
-            if (code, message) in d:
-                raise d[(code, message)]
-            elif code in d:
-                # Something went wrong and we know how to turn it into a
-                # specific exception.
-                error_class = d[code]
-                if error_class is RemoteInitiatedServerError:
-                    e = error_class(message, cls.SERVICE_NAME)
-                else:
-                    e = error_class(message)
-                raise e
-        return code, message
-
-
-class CheckinResponseParser(ResponseParser):
-    def process_all(self, string):
-        for i in super().process_all(string, "//axis:EarlyCheckinRestResult", self.NS):
-            return i
-
-    def process_one(self, e, namespaces):
+    def process_one(
+        self, e: _Element, namespaces: Optional[Dict[str, str]]
+    ) -> Literal[True]:
         """Either raise an appropriate exception, or do nothing."""
         self.raise_exception_on_error(e, namespaces, ignore_error_codes=[4058])
         return True
 
 
-class CheckoutResponseParser(ResponseParser):
-    def process_all(self, string):
-        for i in super().process_all(string, "//axis:checkoutResult", self.NS):
-            return i
+class CheckoutResponseParser(XMLResponseParser[LoanInfo]):
+    @property
+    def xpath_expression(self) -> str:
+        return "//axis:checkoutResult"
 
-    def process_one(self, e, namespaces):
+    def process_one(
+        self, e: _Element, namespaces: Optional[Dict[str, str]]
+    ) -> LoanInfo:
         """Either turn the given document into a LoanInfo
         object, or raise an appropriate exception.
         """
@@ -1322,12 +1383,14 @@ class CheckoutResponseParser(ResponseParser):
         return loan
 
 
-class HoldResponseParser(ResponseParser):
-    def process_all(self, string):
-        for i in super().process_all(string, "//axis:addtoholdResult", self.NS):
-            return i
+class HoldResponseParser(XMLResponseParser[HoldInfo]):
+    @property
+    def xpath_expression(self) -> str:
+        return "//axis:addtoholdResult"
 
-    def process_one(self, e, namespaces):
+    def process_one(
+        self, e: _Element, namespaces: Optional[Dict[str, str]]
+    ) -> HoldInfo:
         """Either turn the given document into a HoldInfo
         object, or raise an appropriate exception.
         """
@@ -1359,26 +1422,24 @@ class HoldResponseParser(ResponseParser):
         return hold
 
 
-class HoldReleaseResponseParser(ResponseParser):
-    def process_all(self, string):
-        for i in super().process_all(string, "//axis:removeholdResult", self.NS):
-            return i
+class HoldReleaseResponseParser(XMLResponseParser[Literal[True]]):
+    @property
+    def xpath_expression(self) -> str:
+        return "//axis:removeholdResult"
 
-    def post_process(self, i):
-        r"""Unlike other ResponseParser subclasses, we don't return any type of
-        \*Info object, so there's no need to do any post-processing.
-        """
-        return i
-
-    def process_one(self, e, namespaces):
+    def process_one(
+        self, e: _Element, namespaces: Optional[Dict[str, str]]
+    ) -> Literal[True]:
         # There's no data to gather here. Either there was an error
         # or we were successful.
         self.raise_exception_on_error(e, namespaces, {3109: NotOnHold})
         return True
 
 
-class AvailabilityResponseParser(ResponseParser):
-    def __init__(self, api, internal_format=None):
+class AvailabilityResponseParser(
+    XMLResponseParser[Optional[Union[LoanInfo, HoldInfo]]]
+):
+    def __init__(self, api: Axis360API, internal_format: Optional[str] = None) -> None:
         """Constructor.
 
         :param api: An Axis360API instance, in case the parsing of an
@@ -1391,16 +1452,19 @@ class AvailabilityResponseParser(ResponseParser):
         """
         self.api = api
         self.internal_format = internal_format
+        if api.collection is None:
+            raise ValueError(
+                "Cannot use an Axis360AvailabilityResponseParser without a Collection."
+            )
         super().__init__(api.collection)
 
-    def process_all(self, string):
-        for info in super().process_all(string, "//axis:title", self.NS):
-            # Filter out books where nothing in particular is
-            # happening.
-            if info:
-                yield info
+    @property
+    def xpath_expression(self) -> str:
+        return "//axis:title"
 
-    def process_one(self, e, ns):
+    def process_one(
+        self, e: _Element, ns: Optional[Dict[str, str]]
+    ) -> Optional[Union[LoanInfo, HoldInfo]]:
         # Figure out which book we're talking about.
         axis_identifier = self.text_of_subtag(e, "axis:titleId", ns)
         availability = self._xpath1(e, "axis:availability", ns)
@@ -1410,7 +1474,7 @@ class AvailabilityResponseParser(ResponseParser):
         checked_out = self._xpath1_boolean(availability, "axis:isCheckedout", ns)
         on_hold = self._xpath1_boolean(availability, "axis:isInHoldQueue", ns)
 
-        info = None
+        info: Optional[Union[LoanInfo, HoldInfo]] = None
         if checked_out:
             start_date = self._xpath1_date(availability, "axis:checkoutStartDate", ns)
             end_date = self._xpath1_date(availability, "axis:checkoutEndDate", ns)
@@ -1430,6 +1494,7 @@ class AvailabilityResponseParser(ResponseParser):
                 identifier=axis_identifier,
             )
 
+            fulfillment: Optional[FulfillmentInfo]
             if download_url and self.internal_format != self.api.AXISNOW:
                 # The patron wants a direct link to the book, which we can deliver
                 # immediately, without making any more API requests.
@@ -1499,7 +1564,7 @@ class AvailabilityResponseParser(ResponseParser):
         return info
 
 
-class JSONResponseParser(ResponseParser):
+class JSONResponseParser(Generic[T], ResponseParser, ABC):
     """Most ResponseParsers parse XML documents; subclasses of
     JSONResponseParser parse JSON documents.
 
@@ -1508,7 +1573,7 @@ class JSONResponseParser(ResponseParser):
     """
 
     @classmethod
-    def _required_key(cls, key, json_obj):
+    def _required_key(cls, key: str, json_obj: Optional[Mapping[str, Any]]) -> Any:
         """Raise an exception if the given key is not present in the given
         object.
         """
@@ -1524,20 +1589,20 @@ class JSONResponseParser(ResponseParser):
         return json_obj[key]
 
     @classmethod
-    def verify_status_code(cls, parsed):
+    def verify_status_code(cls, parsed: Optional[Mapping[str, Any]]) -> None:
         """Assert that the incoming JSON document represents a successful
         response.
         """
         k = cls._required_key
         status = k("Status", parsed)
-        code = k("Code", status)
+        code: int = k("Code", status)
         message = status.get("Message")
 
         # If the document describes an error condition, raise
         # an appropriate exception immediately.
         cls._raise_exception_on_error(code, message)
 
-    def parse(self, data, *args, **kwargs):
+    def parse(self, data: Union[Dict[str, Any], bytes, str], **kwargs: Any) -> T:
         """Parse a JSON document."""
         if isinstance(data, dict):
             parsed = data  # already parsed
@@ -1547,36 +1612,45 @@ class JSONResponseParser(ResponseParser):
             except ValueError as e:
                 # It's not JSON.
                 raise RemoteInitiatedServerError(
-                    "Invalid response from Axis 360 (was expecting JSON): %s" % data,
+                    f"Invalid response from Axis 360 (was expecting JSON): {data!r}",
                     self.SERVICE_NAME,
                 )
 
         # If the response indicates an error condition, don't continue --
         # raise an exception immediately.
         self.verify_status_code(parsed)
-        return self._parse(parsed, *args, **kwargs)
+        return self._parse(parsed, **kwargs)
 
-    def _parse(self, parsed, *args, **kwargs):
+    @abstractmethod
+    def _parse(self, parsed: Dict[str, Any], **kwargs: Any) -> T:
         """Parse a document we know to represent success on the
         API level. Called by parse() once the high-level details
         have been worked out.
         """
-        raise NotImplementedError()
+        ...
 
 
-class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
+class Axis360FulfillmentInfoResponseParser(
+    JSONResponseParser[
+        Tuple[Union[FindawayManifest, "AxisNowManifest"], datetime.datetime]
+    ]
+):
     """Parse JSON documents into Findaway audiobook manifests or AxisNow manifests."""
 
-    def __init__(self, api):
+    def __init__(self, api: Axis360API):
         """Constructor.
 
         :param api: An Axis360API instance, in case the parsing of
         a fulfillment document triggers additional API requests.
         """
         self.api = api
-        super().__init__(self.api.collection)
 
-    def _parse(self, parsed, license_pool):
+    def _parse(
+        self,
+        parsed: Dict[str, Any],
+        license_pool: Optional[LicensePool] = None,
+        **kwargs,
+    ) -> Tuple[Union[FindawayManifest, AxisNowManifest], datetime.datetime]:
         """Extract all useful information from a parsed FulfillmentInfo
         response.
 
@@ -1589,9 +1663,13 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
         :return: A 2-tuple (manifest, expiration_date). `manifest` is either
             a FindawayManifest (for an audiobook) or an AxisNowManifest (for an ebook).
         """
+        if license_pool is None:
+            raise TypeError("Must pass in a LicensePool")
+
         expiration_date = self._required_key("ExpirationDate", parsed)
         expiration_date = self.parse_date(expiration_date)
 
+        manifest: Union[FindawayManifest, AxisNowManifest]
         if "FNDTransactionID" in parsed:
             manifest = self.parse_findaway(parsed, license_pool)
         else:
@@ -1599,7 +1677,7 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
 
         return manifest, expiration_date
 
-    def parse_date(self, date):
+    def parse_date(self, date: str) -> datetime.datetime:
         if "." in date:
             # Remove 7(?!) decimal places of precision and
             # UTC timezone, which are more trouble to parse
@@ -1607,14 +1685,16 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
             date = date[: date.rindex(".")]
 
         try:
-            date = strptime_utc(date, "%Y-%m-%d %H:%M:%S")
+            date_parsed = strptime_utc(date, "%Y-%m-%d %H:%M:%S")
         except ValueError:
             raise RemoteInitiatedServerError(
                 "Could not parse expiration date: %s" % date, self.SERVICE_NAME
             )
-        return date
+        return date_parsed
 
-    def parse_findaway(self, parsed, license_pool):
+    def parse_findaway(
+        self, parsed: Dict[str, Any], license_pool: LicensePool
+    ) -> FindawayManifest:
         k = self._required_key
         fulfillmentId = k("FNDContentID", parsed)
         licenseId = k("FNDLicenseID", parsed)
@@ -1623,7 +1703,7 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
 
         # Acquire the TOC information
         metadata_response = self.api.get_audiobook_metadata(fulfillmentId)
-        parser = AudiobookMetadataParser(self.api.collection)
+        parser = AudiobookMetadataParser()
         accountId, spine_items = parser.parse(metadata_response.content)
 
         return FindawayManifest(
@@ -1636,18 +1716,22 @@ class Axis360FulfillmentInfoResponseParser(JSONResponseParser):
             spine_items=spine_items,
         )
 
-    def parse_axisnow(self, parsed):
+    def parse_axisnow(self, parsed: Dict[str, Any]) -> AxisNowManifest:
         k = self._required_key
         isbn = k("ISBN", parsed)
         book_vault_uuid = k("BookVaultUUID", parsed)
         return AxisNowManifest(book_vault_uuid, isbn)
 
 
-class AudiobookMetadataParser(JSONResponseParser):
+class AudiobookMetadataParser(
+    JSONResponseParser[Tuple[Optional[str], List[SpineItem]]]
+):
     """Parse the results of Axis 360's audiobook metadata API call."""
 
     @classmethod
-    def _parse(cls, parsed):
+    def _parse(
+        cls, parsed: Dict[str, Any], **kwargs
+    ) -> Tuple[Optional[str], List[SpineItem]]:
         spine_items = []
         accountId = parsed.get("fndaccountid", None)
         for item in parsed.get("readingOrder", []):
@@ -1674,7 +1758,7 @@ class AxisNowManifest:
 
     MEDIA_TYPE = DeliveryMechanism.AXISNOW_DRM
 
-    def __init__(self, book_vault_uuid, isbn):
+    def __init__(self, book_vault_uuid: str, isbn: str):
         """Constructor.
 
         :param book_vault_uuid: The UUID of a Book Vault.
@@ -1683,7 +1767,7 @@ class AxisNowManifest:
         self.book_vault_uuid = book_vault_uuid
         self.isbn = isbn
 
-    def __str__(self):
+    def __str__(self) -> str:
         data = dict(isbn=self.isbn, book_vault_uuid=self.book_vault_uuid)
         return json.dumps(data, sort_keys=True)
 
@@ -1704,7 +1788,7 @@ class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
         transaction_id = self.key
         response = self.api.get_fulfillment_info(transaction_id)
         parser = Axis360FulfillmentInfoResponseParser(self.api)
-        manifest, expires = parser.parse(response.content, license_pool)
+        manifest, expires = parser.parse(response.content, license_pool=license_pool)
         self._content = str(manifest)
         self._content_type = manifest.MEDIA_TYPE
         self._content_expires = expires

@@ -96,6 +96,7 @@ module = [
     "core.util.authentication_for_opds",
     "core.util.cache",
     "core.util.problem_detail",
+    "core.util.xmlparser",
     "tests.fixtures.authenticator",
     "tests.migration.*",
 ]
