@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import base64
 import datetime
 import html
 import json
-import logging
 import re
 import socket
 import ssl
@@ -12,11 +12,14 @@ from abc import ABC, abstractmethod
 from datetime import timedelta
 from typing import (
     Any,
+    Callable,
     Dict,
+    Generator,
     Generic,
     List,
     Literal,
     Mapping,
+    Sequence,
     Tuple,
     Type,
     TypeVar,
@@ -30,6 +33,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from lxml.etree import _Element
 from pydantic import validator
+from requests import Response as RequestsResponse
 
 from api.admin.validator import Validator
 from api.circulation import (
@@ -62,6 +66,7 @@ from core.metadata_layer import (
     Metadata,
     ReplacementPolicy,
     SubjectData,
+    TimestampData,
 )
 from core.model import (
     Classification,
@@ -88,7 +93,6 @@ from core.util.flask_util import Response
 from core.util.http import HTTP, RequestNetworkException
 from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
-from core.util.string_helpers import base64
 from core.util.xmlparser import XMLProcessor
 
 
@@ -139,7 +143,7 @@ class Axis360Settings(BaseSettings):
     )
 
     @validator("url")
-    def _validate_url(cls, v):
+    def _validate_url(cls, v: str) -> str:
         # Validate if the url provided is valid http or a valid nickname
         valid_names = list(Axis360APIConstants.SERVER_NICKNAMES.keys())
         if not Validator._is_url(v, valid_names):
@@ -194,20 +198,22 @@ class Axis360API(
     }
 
     @classmethod
-    def settings_class(cls):
+    def settings_class(cls) -> Type[Axis360Settings]:
         return Axis360Settings
 
     @classmethod
-    def library_settings_class(cls):
+    def library_settings_class(cls) -> Type[Axis360LibrarySettings]:
         return Axis360LibrarySettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls) -> str:
+        return cls.NAME
 
-    def description(self):
+    @classmethod
+    def description(cls) -> str:
         return ""
 
-    def __init__(self, _db, collection):
+    def __init__(self, _db: Session, collection: Collection) -> None:
         if collection.protocol != ExternalIntegration.AXIS_360:
             raise ValueError(
                 "Collection protocol is %s, but passed into Axis360API!"
@@ -215,7 +221,7 @@ class Axis360API(
             )
 
         super().__init__(_db, collection)
-        self.library_id = collection.external_account_id
+        self.library_id = collection.external_account_id or ""
         config = self.configuration()
         self.username = config.username
         self.password = config.password
@@ -231,32 +237,25 @@ class Axis360API(
         if not self.library_id or not self.username or not self.password:
             raise CannotLoadConfiguration("Axis 360 configuration is incomplete.")
 
-        # Use utf8 instead of unicode encoding
-        settings = [self.library_id, self.username, self.password]
-        self.library_id, self.username, self.password = (
-            setting.encode("utf8") for setting in settings
-        )
-
-        self.token = None
+        self.token: Optional[str] = None
         self.verify_certificate: bool = (
             config.verify_certificate if config.verify_certificate is not None else True
         )
 
     @property
-    def source(self):
-        return DataSource.lookup(self._db, DataSource.AXIS_360)
+    def source(self) -> Optional[DataSource]:
+        return DataSource.lookup(self._db, DataSource.AXIS_360)  # type: ignore[no-any-return]
 
     @property
-    def authorization_headers(self):
-        authorization = b":".join([self.username, self.password, self.library_id])
-        authorization = authorization.decode("utf-8").encode("utf_16_le")
-        authorization = base64.standard_b64encode(authorization)
-        return dict(Authorization="Basic " + authorization)
+    def authorization_headers(self) -> Dict[str, str]:
+        authorization = ":".join([self.username, self.password, self.library_id])
+        authorization_encoded = authorization.encode("utf_16_le")
+        authorization_b64 = base64.standard_b64encode(authorization_encoded).decode(
+            "utf-8"
+        )
+        return dict(Authorization="Basic " + authorization_b64)
 
-    def external_integration(self, _db):
-        return self.collection.external_integration
-
-    def _run_self_tests(self, _db):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         result = self.run_test("Refreshing bearer token", self.refresh_bearer_token)
         yield result
         if not result.success:
@@ -264,7 +263,7 @@ class Axis360API(
             # the rest of the tests.
             return
 
-        def _count_events():
+        def _count_events() -> str:
             now = utc_now()
             five_minutes_ago = now - timedelta(minutes=5)
             count = len(list(self.recent_activity(since=five_minutes_ago)))
@@ -274,13 +273,16 @@ class Axis360API(
             "Asking for circulation events for the last five minutes", _count_events
         )
 
-        for result in self.default_patrons(self.collection):
-            if isinstance(result, SelfTestResult):
-                yield result
-                continue
-            library, patron, pin = result
+        if self.collection is None:
+            raise ValueError("Collection is None")
 
-            def _count_activity():
+        for library_result in self.default_patrons(self.collection):
+            if isinstance(library_result, SelfTestResult):
+                yield library_result
+                continue
+            library, patron, pin = library_result
+
+            def _count_activity() -> str:
                 result = self.patron_activity(patron, pin)
                 return "Found %d loans/holds" % len(result)
 
@@ -293,7 +295,7 @@ class Axis360API(
         for result in super()._run_self_tests(_db):
             yield result
 
-    def refresh_bearer_token(self):
+    def refresh_bearer_token(self) -> str:
         url = self.base_url + self.access_token_endpoint
         headers = self.authorization_headers
         response = self._make_request(
@@ -303,19 +305,21 @@ class Axis360API(
 
     def request(
         self,
-        url,
-        method="get",
-        extra_headers={},
-        data=None,
-        params=None,
-        exception_on_401=False,
-        **kwargs,
-    ):
+        url: str,
+        method: str = "get",
+        extra_headers: Optional[Dict[str, str]] = None,
+        data: Optional[Mapping[str, Any]] = None,
+        params: Optional[Mapping[str, Any]] = None,
+        exception_on_401: bool = False,
+        **kwargs: Any,
+    ) -> RequestsResponse:
         """Make an HTTP request, acquiring/refreshing a bearer token
         if necessary.
         """
         if not self.token:
             self.token = self.refresh_bearer_token()
+        if not extra_headers:
+            extra_headers = {}
         headers = dict(extra_headers)
         headers["Authorization"] = "Bearer " + self.token
         headers["Library"] = self.library_id
@@ -350,12 +354,17 @@ class Axis360API(
         else:
             return response
 
-    def availability(self, patron_id=None, since=None, title_ids=[]):
+    def availability(
+        self,
+        patron_id: Optional[str] = None,
+        since: Optional[datetime.datetime] = None,
+        title_ids: Optional[List[str]] = None,
+    ) -> RequestsResponse:
         url = self.base_url + self.availability_endpoint
         args = dict()
         if since:
-            since = since.strftime(self.DATE_FORMAT)
-            args["updatedDate"] = since
+            since_str = since.strftime(self.DATE_FORMAT)
+            args["updatedDate"] = since_str
         if patron_id:
             args["patronId"] = patron_id
         if title_ids:
@@ -363,13 +372,13 @@ class Axis360API(
         response = self.request(url, params=args, timeout=None)
         return response
 
-    def get_fulfillment_info(self, transaction_id):
+    def get_fulfillment_info(self, transaction_id: str) -> RequestsResponse:
         """Make a call to the getFulfillmentInfoAPI."""
         url = self.base_url + self.fulfillment_endpoint
         params = dict(TransactionID=transaction_id)
         return self.request(url, "POST", params=params)
 
-    def get_audiobook_metadata(self, findaway_content_id):
+    def get_audiobook_metadata(self, findaway_content_id: str) -> RequestsResponse:
         """Make a call to the getaudiobookmetadata endpoint."""
         base_url = self.base_url
         url = base_url + self.audiobook_metadata_endpoint
@@ -377,7 +386,7 @@ class Axis360API(
         response = self.request(url, "POST", params=params)
         return response
 
-    def checkin(self, patron, pin, licensepool):
+    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Return a book early.
 
         :param patron: The Patron who wants to return their book.
@@ -390,14 +399,28 @@ class Axis360API(
         patron_id = patron.authorization_identifier
         response = self._checkin(title_id, patron_id)
         try:
-            return CheckinResponseParser(licensepool.collection).process_first(
+            CheckinResponseParser(licensepool.collection).process_first(
                 response.content
             )
         except etree.XMLSyntaxError as e:
             raise RemoteInitiatedServerError(response.content, self.SERVICE_NAME)
 
-    def _checkin(self, title_id, patron_id):
+    def _checkin(
+        self, title_id: Optional[str], patron_id: Optional[str]
+    ) -> RequestsResponse:
         """Make a request to the EarlyCheckInTitle endpoint."""
+        if title_id is None:
+            self.log.warning(
+                f"Calling _checkin with title_id None. This is likely a bug. Patron_id: {patron_id}."
+            )
+            title_id = ""
+
+        if patron_id is None:
+            self.log.warning(
+                f"Calling _checkin with patron_id None. This is likely a bug. Title_id: {title_id}."
+            )
+            patron_id = ""
+
         url = self.base_url + "EarlyCheckInTitle/v3?itemID={}&patronID={}".format(
             urllib.parse.quote(title_id),
             urllib.parse.quote(patron_id),
@@ -426,7 +449,9 @@ class Axis360API(
         except etree.XMLSyntaxError as e:
             raise RemoteInitiatedServerError(response.content, self.SERVICE_NAME)
 
-    def _checkout(self, title_id, patron_id, internal_format):
+    def _checkout(
+        self, title_id: Optional[str], patron_id: Optional[str], internal_format: str
+    ) -> RequestsResponse:
         url = self.base_url + "checkout/v2"
         args = dict(titleId=title_id, patronId=patron_id, format=internal_format)
         response = self.request(url, data=args, method="POST")
@@ -466,7 +491,13 @@ class Axis360API(
         # book checked out.
         raise NoActiveLoan()
 
-    def place_hold(self, patron, pin, licensepool, hold_notification_email):
+    def place_hold(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        hold_notification_email: Optional[str],
+    ) -> HoldInfo:
         if not hold_notification_email:
             hold_notification_email = self.default_notification_email_address(
                 patron, pin
@@ -483,6 +514,8 @@ class Axis360API(
         hold_info = HoldResponseParser(licensepool.collection).process_first(
             response.content
         )
+        if not hold_info:
+            raise CannotHold()
         if not hold_info.identifier:
             # The Axis 360 API doesn't return the identifier of the
             # item that was placed on hold, so we have to fill it in
@@ -491,7 +524,7 @@ class Axis360API(
             hold_info.identifier = identifier.identifier
         return hold_info
 
-    def release_hold(self, patron, pin, licensepool):
+    def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         url = self.base_url + "removeHold/v2"
         identifier = licensepool.identifier
         title_id = identifier.identifier
@@ -506,10 +539,17 @@ class Axis360API(
             # Fine, it wasn't on hold and now it's still not on hold.
             pass
         # If we didn't raise an exception, we're fine.
-        return True
+        return None
 
-    def patron_activity(self, patron, pin, identifier=None, internal_format=None):
+    def patron_activity(
+        self,
+        patron: Patron,
+        pin: Optional[str],
+        identifier: Optional[Identifier] = None,
+        internal_format: Optional[str] = None,
+    ) -> List[LoanInfo | HoldInfo]:
         if identifier:
+            assert identifier.identifier is not None
             title_ids = [identifier.identifier]
         else:
             title_ids = None
@@ -522,14 +562,16 @@ class Axis360API(
             )
         )
 
-    def update_availability(self, licensepool):
+    def update_availability(self, licensepool: LicensePool) -> None:
         """Update the availability information for a single LicensePool.
 
         Part of the CirculationAPI interface.
         """
         self.update_licensepools_for_identifiers([licensepool.identifier])
 
-    def update_licensepools_for_identifiers(self, identifiers):
+    def update_licensepools_for_identifiers(
+        self, identifiers: List[Identifier]
+    ) -> None:
         """Update availability and bibliographic information for
         a list of books.
 
@@ -554,7 +596,12 @@ class Axis360API(
         for removed_identifier in remainder:
             self._reap(removed_identifier)
 
-    def update_book(self, bibliographic, availability, analytics=None):
+    def update_book(
+        self,
+        bibliographic: Metadata,
+        availability: CirculationData,
+        analytics: Optional[Analytics] = None,
+    ) -> Tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
         and availability data from the Axis 360 API.
 
@@ -585,17 +632,19 @@ class Axis360API(
         availability.apply(self._db, self.collection, replace=policy)
         return edition, new_edition, license_pool, new_license_pool
 
-    def _fetch_remote_availability(self, identifiers):
+    def _fetch_remote_availability(
+        self, identifiers: List[Identifier]
+    ) -> Generator[Tuple[Metadata, CirculationData], None, None]:
         """Retrieve availability information for the specified identifiers.
 
         :yield: A stream of (Metadata, CirculationData) 2-tuples.
         """
         identifier_strings = self.create_identifier_strings(identifiers)
         response = self.availability(title_ids=identifier_strings)
-        parser = BibliographicParser(self.collection)
+        parser = BibliographicParser()
         return parser.process_all(response.content)
 
-    def _reap(self, identifier):
+    def _reap(self, identifier: Identifier) -> None:
         """Update our local circulation information to reflect the fact that
         the identified book has been removed from the remote
         collection.
@@ -625,20 +674,25 @@ class Axis360API(
             self._db, collection, ReplacementPolicy.from_license_source(self._db)
         )
 
-    def recent_activity(self, since):
+    def recent_activity(
+        self, since: datetime.datetime
+    ) -> Generator[Tuple[Metadata, CirculationData], None, None]:
         """Find books that have had recent activity.
 
         :yield: A sequence of (Metadata, CirculationData) 2-tuples
         """
         availability = self.availability(since=since)
         content = availability.content
-        yield from BibliographicParser(self.collection).process_all(content)
+        yield from BibliographicParser().process_all(content)
 
     @classmethod
-    def create_identifier_strings(cls, identifiers):
+    def create_identifier_strings(
+        cls, identifiers: Sequence[Identifier | str]
+    ) -> List[str]:
         identifier_strings = []
         for i in identifiers:
             if isinstance(i, Identifier):
+                assert i.identifier is not None
                 value = i.identifier
             else:
                 value = i
@@ -647,11 +701,19 @@ class Axis360API(
         return identifier_strings
 
     @classmethod
-    def parse_token(cls, token):
+    def parse_token(cls, token: bytes) -> str:
         data = json.loads(token)
-        return data["access_token"]
+        return data["access_token"]  # type: ignore[no-any-return]
 
-    def _make_request(self, url, method, headers, data=None, params=None, **kwargs):
+    def _make_request(
+        self,
+        url: str,
+        method: str,
+        headers: Mapping[str, str],
+        data: Optional[Mapping[str, Any]] = None,
+        params: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
+    ) -> RequestsResponse:
         """Actually make an HTTP request."""
         return HTTP.request_with_timeout(
             method, url, headers=headers, data=data, params=params, **kwargs
@@ -670,7 +732,14 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
 
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 
-    def __init__(self, _db, collection, api_class=Axis360API):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        api_class: Union[
+            Axis360API, Callable[[Session, Collection], Axis360API]
+        ] = Axis360API,
+    ):
         super().__init__(_db, collection)
         if isinstance(api_class, Axis360API):
             # Use a preexisting Axis360API instance rather than
@@ -684,7 +753,12 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
             collection, api_class=self.api
         )
 
-    def catch_up_from(self, start, cutoff, progress):
+    def catch_up_from(
+        self,
+        start: datetime.datetime,
+        cutoff: Optional[datetime.datetime],
+        progress: TimestampData,
+    ) -> None:
         """Find Axis 360 books that changed recently.
 
         :progress: A TimestampData representing the time previously
@@ -698,7 +772,9 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
                 self._db.commit()
         progress.achievements = "Modified titles: %d." % count
 
-    def process_book(self, bibliographic, circulation):
+    def process_book(
+        self, bibliographic: Metadata, circulation: CirculationData
+    ) -> Tuple[Edition, LicensePool]:
         edition, new_edition, license_pool, new_license_pool = self.api.update_book(
             bibliographic, circulation
         )
@@ -728,7 +804,14 @@ class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
     INPUT_IDENTIFIER_TYPES = Identifier.AXIS_360_ID
     DEFAULT_BATCH_SIZE = 25
 
-    def __init__(self, collection, api_class=Axis360API, **kwargs):
+    def __init__(
+        self,
+        collection: Collection,
+        api_class: Union[
+            Axis360API, Callable[[Session, Collection], Axis360API]
+        ] = Axis360API,
+        **kwargs: Any,
+    ) -> None:
         """Constructor.
 
         :param collection: Provide bibliographic coverage to all
@@ -747,7 +830,9 @@ class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
             self.api = api_class(_db, collection)
         self.parser = BibliographicParser()
 
-    def process_batch(self, identifiers):
+    def process_batch(
+        self, identifiers: List[Identifier]
+    ) -> List[CoverageFailure | Identifier]:
         identifier_strings = self.api.create_identifier_strings(identifiers)
         response = self.api.availability(title_ids=identifier_strings)
         seen_identifiers = set()
@@ -778,10 +863,10 @@ class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
                 batch_results.append(result)
         return batch_results
 
-    def handle_success(self, identifier):
-        return self.set_presentation_ready(identifier)
+    def handle_success(self, identifier: Identifier) -> Identifier | CoverageFailure:
+        return self.set_presentation_ready(identifier)  # type: ignore[no-any-return]
 
-    def process_item(self, identifier):
+    def process_item(self, identifier: Identifier) -> Identifier | CoverageFailure:
         results = self.process_batch([identifier])
         return results[0]
 
@@ -795,7 +880,14 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
     INTERVAL_SECONDS = 3600 * 12
     PROTOCOL = ExternalIntegration.AXIS_360
 
-    def __init__(self, _db, collection, api_class=Axis360API):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        api_class: Union[
+            Axis360API, Callable[[Session, Collection], Axis360API]
+        ] = Axis360API,
+    ) -> None:
         super().__init__(_db, collection)
         if isinstance(api_class, Axis360API):
             # Use a preexisting Axis360API instance rather than
@@ -804,7 +896,7 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
         else:
             self.api = api_class(_db, collection)
 
-    def process_items(self, identifiers):
+    def process_items(self, identifiers: List[Identifier]) -> None:
         self.api.update_licensepools_for_identifiers(identifiers)
 
 
@@ -850,9 +942,7 @@ class Axis360Parser(XMLProcessor[T], ABC):
         return self._pd(value)
 
 
-class BibliographicParser(
-    Axis360Parser[Tuple[Optional[Metadata], Optional[CirculationData]]], LoggerMixin
-):
+class BibliographicParser(Axis360Parser[Tuple[Metadata, CirculationData]], LoggerMixin):
     DELIVERY_DATA_FOR_AXIS_FORMAT = {
         "Blio": None,  # Legacy format, handled the same way as AxisNow
         "Acoustik": (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
@@ -869,12 +959,6 @@ class BibliographicParser(
         Ursu, Anne ; Fortune, Eric (ILT)
         """
         return [x.strip() for x in l.split(";")]
-
-    def __init__(
-        self, include_availability: bool = True, include_bibliographic: bool = True
-    ):
-        self.include_availability = include_availability
-        self.include_bibliographic = include_bibliographic
 
     @property
     def xpath_expression(self) -> str:
@@ -1027,11 +1111,13 @@ class BibliographicParser(
                     )
                 )
 
-        publication_date = self.text_of_optional_subtag(
+        publication_date_str = self.text_of_optional_subtag(
             element, "axis:publicationDate", ns
         )
-        if publication_date:
-            publication_date = strptime_utc(publication_date, self.SHORT_DATE_FORMAT)
+        if publication_date_str:
+            publication_date = strptime_utc(
+                publication_date_str, self.SHORT_DATE_FORMAT
+            )
 
         series = self.text_of_optional_subtag(element, "axis:series", ns)
         publisher = self.text_of_optional_subtag(element, "axis:publisher", ns)
@@ -1174,22 +1260,16 @@ class BibliographicParser(
 
     def process_one(
         self, element: _Element, ns: Optional[Dict[str, str]]
-    ) -> Tuple[Optional[Metadata], Optional[CirculationData]]:
-        if self.include_bibliographic:
-            bibliographic = self.extract_bibliographic(element, ns)
-        else:
-            bibliographic = None
+    ) -> Tuple[Metadata, CirculationData]:
+        bibliographic = self.extract_bibliographic(element, ns)
 
         passed_availability = None
         if bibliographic and bibliographic.circulation:
             passed_availability = bibliographic.circulation
 
-        if self.include_availability:
-            availability = self.extract_availability(
-                circulation_data=passed_availability, element=element, ns=ns
-            )
-        else:
-            availability = None
+        availability = self.extract_availability(
+            circulation_data=passed_availability, element=element, ns=ns
+        )
 
         return bibliographic, availability
 
@@ -1263,7 +1343,7 @@ class ResponseParser:
         custom_error_classes: Optional[
             Mapping[int | Tuple[int, str], Type[IntegrationException]]
         ] = None,
-        ignore_error_codes=None,
+        ignore_error_codes: Optional[List[int]] = None,
     ) -> Tuple[int, str]:
         try:
             code = int(code)
@@ -1310,7 +1390,7 @@ class XMLResponseParser(ResponseParser, Axis360Parser[T], ABC):
             Mapping[int | Tuple[int, str], Type[IntegrationException]]
         ] = None,
         ignore_error_codes: Optional[List[int]] = None,
-    ):
+    ) -> Tuple[int, str]:
         """Raise an error if the given lxml node represents an Axis 360 error
         condition.
 
@@ -1436,9 +1516,7 @@ class HoldReleaseResponseParser(XMLResponseParser[Literal[True]]):
         return True
 
 
-class AvailabilityResponseParser(
-    XMLResponseParser[Optional[Union[LoanInfo, HoldInfo]]]
-):
+class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
     def __init__(self, api: Axis360API, internal_format: Optional[str] = None) -> None:
         """Constructor.
 
@@ -1649,7 +1727,7 @@ class Axis360FulfillmentInfoResponseParser(
         self,
         parsed: Dict[str, Any],
         license_pool: Optional[LicensePool] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Tuple[Union[FindawayManifest, AxisNowManifest], datetime.datetime]:
         """Extract all useful information from a parsed FulfillmentInfo
         response.
@@ -1730,7 +1808,7 @@ class AudiobookMetadataParser(
 
     @classmethod
     def _parse(
-        cls, parsed: Dict[str, Any], **kwargs
+        cls, parsed: Dict[str, Any], **kwargs: Any
     ) -> Tuple[Optional[str], List[SpineItem]]:
         spine_items = []
         accountId = parsed.get("fndaccountid", None)
@@ -1741,7 +1819,7 @@ class AudiobookMetadataParser(
         return accountId, spine_items
 
     @classmethod
-    def _extract_spine_item(cls, part):
+    def _extract_spine_item(cls, part: Dict[str, str | int | float]) -> SpineItem:
         """Convert an element of the 'readingOrder' list to a SpineItem."""
         title = part.get("title")
         # Incoming duration is measured in seconds.
@@ -1772,7 +1850,7 @@ class AxisNowManifest:
         return json.dumps(data, sort_keys=True)
 
 
-class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
+class Axis360FulfillmentInfo(APIAwareFulfillmentInfo, LoggerMixin):
     """An Axis 360-specific FulfillmentInfo implementation for audiobooks
     and books served through AxisNow.
 
@@ -1782,10 +1860,15 @@ class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
     those requests.
     """
 
-    def do_fetch(self):
+    def do_fetch(self) -> None:
         _db = self.api._db
         license_pool = self.license_pool(_db)
         transaction_id = self.key
+        if not isinstance(self.api, Axis360API):
+            self.log.error(
+                f"Called with wrong API type {self.api.__class__.__name__} should be {Axis360API.__name__}"
+            )
+            raise ValueError("Axis360FulfillmentInfo can only be used with Axis360API")
         response = self.api.get_fulfillment_info(transaction_id)
         parser = Axis360FulfillmentInfoResponseParser(self.api)
         manifest, expires = parser.parse(response.content, license_pool=license_pool)
@@ -1794,7 +1877,7 @@ class Axis360FulfillmentInfo(APIAwareFulfillmentInfo):
         self._content_expires = expires
 
 
-class Axis360AcsFulfillmentInfo(FulfillmentInfo):
+class Axis360AcsFulfillmentInfo(FulfillmentInfo, LoggerMixin):
     """This implements a Axis 360 specific FulfillmentInfo for ACS content
     served through AxisNow. The AxisNow API gives us a link that we can use
     to get the ACSM file that we serve to the mobile apps.
@@ -1826,15 +1909,13 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo):
     code path than most of our external HTTP requests.
     """
 
-    logger = logging.getLogger(__name__)
-
-    def __init__(self, verify: bool, **kwargs):
+    def __init__(self, verify: bool, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.verify: bool = verify
 
     def problem_detail_document(self, error_details: str) -> ProblemDetail:
         service_name = urlparse(self.content_link).netloc
-        self.logger.warning(error_details)
+        self.log.warning(error_details)
         return INTEGRATION_ERROR.detailed(
             _(RequestNetworkException.detail, service=service_name),
             title=RequestNetworkException.title,

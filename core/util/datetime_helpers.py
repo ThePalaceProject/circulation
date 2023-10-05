@@ -61,7 +61,7 @@ def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
     return dt.astimezone(pytz.UTC)
 
 
-def strptime_utc(date_string, format):
+def strptime_utc(date_string: str, format: str) -> datetime.datetime:
     """Parse a string that describes a time but includes no timezone,
     into a timezone-aware datetime object set to UTC.
 

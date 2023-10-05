@@ -75,6 +75,7 @@ module = [
     "api.admin.form_data",
     "api.admin.model.dashboard_statistics",
     "api.adobe_vendor_id",
+    "api.axis",
     "api.circulation",
     "api.discovery.*",
     "api.integration.*",
