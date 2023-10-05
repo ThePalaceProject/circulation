@@ -5,6 +5,7 @@ import datetime
 from io import StringIO
 from typing import TYPE_CHECKING
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -270,7 +271,6 @@ class TestRunSelfTestsScript:
         assert ["result 1", "result 2"] == script.processed
 
     def test_process_result(self, db: DatabaseTransactionFixture):
-
         # Test a successful test that returned a result.
         success = SelfTestResult("i succeeded")
         success.success = True
@@ -302,7 +302,7 @@ class TestHasCollectionSelfTests:
                 return "1"
 
         mock = Mock()
-        results = [x for x in mock._run_self_tests()]
+        results = [x for x in mock._run_self_tests(MagicMock())]
         assert ["1"] == [x.result for x in results]
         assert True == mock._no_delivery_mechanisms_called
 

@@ -1,14 +1,13 @@
 import json
 import os
 
-from . import *
+from core.classifier import *
 
 base_dir = os.path.split(__file__)[0]
 resource_dir = os.path.join(base_dir, "..", "resources")
 
 
 class DeweyDecimalClassifier(Classifier):
-
     NAMES = json.load(open(os.path.join(resource_dir, "dewey_1000.json")))
 
     # Add some other values commonly found in MARC records.

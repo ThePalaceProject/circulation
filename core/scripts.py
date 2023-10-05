@@ -1,5 +1,4 @@
 import argparse
-import csv
 import datetime
 import json
 import logging
@@ -10,26 +9,23 @@ import traceback
 import unicodedata
 import uuid
 from enum import Enum
-from typing import Generator, List, Optional, Type
+from typing import Generator, Optional, Type
 
 from sqlalchemy import and_, exists, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from core.model.classification import Classification
-from core.model.devicetokens import DeviceToken, DeviceTokenTypes
-from core.model.patron import Loan
-from core.query.customlist import CustomListQueries
-from core.search.coverage_remover import RemovesSearchCoverage
-from core.util.notifications import PushNotifications
-
-from .config import CannotLoadConfiguration, Configuration, ConfigurationConstants
-from .coverage import CollectionCoverageProviderJob, CoverageProviderProgress
-from .external_search import ExternalSearchIndex, Filter, SearchIndexCoverageProvider
-from .lane import Lane
-from .metadata_layer import TimestampData
-from .model import (
+from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
+from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
+from core.external_search import (
+    ExternalSearchIndex,
+    Filter,
+    SearchIndexCoverageProvider,
+)
+from core.lane import Lane
+from core.metadata_layer import TimestampData
+from core.model import (
     BaseCoverageRecord,
     CachedFeed,
     Collection,
@@ -54,15 +50,23 @@ from .model import (
     get_one_or_create,
     production_session,
 )
-from .model.listeners import site_configuration_has_changed
-from .monitor import CollectionMonitor, ReaperMonitor
-from .opds_import import OPDSImporter, OPDSImportMonitor
-from .overdrive import OverdriveCoreAPI
-from .service.container import Services, container_instance
-from .util import fast_query_count
-from .util.datetime_helpers import strptime_utc, utc_now
-from .util.personal_names import contributor_name_match_ratio, display_name_to_sort_name
-from .util.worker_pools import DatabasePool
+from core.model.classification import Classification
+from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.listeners import site_configuration_has_changed
+from core.model.patron import Loan
+from core.monitor import CollectionMonitor, ReaperMonitor
+from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.query.customlist import CustomListQueries
+from core.search.coverage_remover import RemovesSearchCoverage
+from core.service.container import Services, container_instance
+from core.util import fast_query_count
+from core.util.datetime_helpers import strptime_utc, utc_now
+from core.util.notifications import PushNotifications
+from core.util.personal_names import (
+    contributor_name_match_ratio,
+    display_name_to_sort_name,
+)
+from core.util.worker_pools import DatabasePool
 
 
 class Script:
@@ -125,6 +129,9 @@ class Script:
             self._session = _db
 
         self._services = container_instance() if services is None else services
+
+        # Call init_resources() to initialize the logging configuration.
+        self._services.init_resources()
 
     def run(self):
         DataSource.well_known_sources(self._db)
@@ -359,8 +366,8 @@ class RunThreadedCollectionCoverageProviderScript(Script):
 
         for collection in collections:
             provider = self.provider_class(collection, **self.provider_kwargs)
-            with (
-                pool or DatabasePool(self.worker_size, self.session_factory)
+            with pool or DatabasePool(
+                self.worker_size, self.session_factory
             ) as job_queue:
                 query_size, batch_size = self.get_query_and_batch_sizes(provider)
                 # Without a commit, the query to count which items need
@@ -715,7 +722,7 @@ class LaneSweeperScript(LibraryInputScript):
     """Do something to each lane in a library."""
 
     def process_library(self, library):
-        from .lane import WorkList
+        from core.lane import WorkList
 
         top_level = WorkList.top_level_for_library(self._db, library)
         queue = [top_level]
@@ -795,7 +802,6 @@ class RunCoverageProviderScript(IdentifierInputScript):
     def __init__(
         self, provider, _db=None, cmd_args=None, *provider_args, **provider_kwargs
     ):
-
         super().__init__(_db)
         parsed_args = self.parse_command_line(self._db, cmd_args)
         if parsed_args.identifier_type:
@@ -1578,7 +1584,6 @@ class AddClassificationScript(IdentifierInputScript):
 
 
 class WorkProcessingScript(IdentifierInputScript):
-
     name = "Work processing script"
 
     def __init__(
@@ -1809,7 +1814,6 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
         the ordering of the rows follows all the joined tables"""
 
         for subject in self._unchecked_subjects():
-
             last_work: Optional[Work] = None  # Last work object of the previous page
             # IDs of the last work, for paging
             work_id, license_id, iden_id, classn_id = (
@@ -2111,7 +2115,6 @@ class CheckContributorNamesInDB(IdentifierInputScript):
         return query.order_by(Edition.id)
 
     def do_run(self, batch_size=10):
-
         self.query = self.make_query(
             self._db,
             self.parsed_args.identifier_type,
@@ -2645,7 +2648,7 @@ class ListCollectionMetadataIdentifiersScript(CollectionInputScript):
 
 
 class UpdateLaneSizeScript(LaneSweeperScript):
-    def __init__(self, _db, *args, **kwargs):
+    def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, *args, **kwargs)
         search = kwargs.get("search_index_client", None)
         self._search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
@@ -2713,122 +2716,6 @@ class SearchIndexCoverageRemover(TimestampScript, RemovesSearchCoverage):
         )
 
 
-class GenerateOverdriveAdvantageAccountList(InputScript):
-    """Generates a CSV containing the following fields:
-    circulation manager
-    collection
-    client_key
-    external_account_id
-    library_token
-    advantage_name
-    advantage_id
-    advantage_token
-    already_configured
-    """
-
-    def __init__(self, _db=None, *args, **kwargs):
-        super().__init__(_db, args, kwargs)
-        self._data: List[List[str]] = list()
-
-    def _create_overdrive_api(self, collection: Collection):
-        return OverdriveCoreAPI(_db=self._db, collection=collection)
-
-    def do_run(self, *args, **kwargs):
-        parsed = GenerateOverdriveAdvantageAccountList.parse_command_line(
-            _db=self._db, *args, **kwargs
-        )
-        query: Query = Collection.by_protocol(
-            self._db, protocol=ExternalIntegration.OVERDRIVE
-        )
-        for c in query.filter(Collection.parent_id == None):
-            collection: Collection = c
-            api = self._create_overdrive_api(collection=collection)
-            client_key = api.client_key().decode()
-            client_secret = api.client_secret().decode()
-
-            try:
-                library_token = api.collection_token
-                advantage_accounts = api.get_advantage_accounts()
-
-                for aa in advantage_accounts:
-                    existing_child_collections = query.filter(
-                        Collection.parent_id == collection.id
-                    )
-                    already_configured_aa_libraries = [
-                        e.external_account_id for e in existing_child_collections
-                    ]
-                    self._data.append(
-                        [
-                            collection.name,
-                            collection.external_account_id,
-                            client_key,
-                            client_secret,
-                            library_token,
-                            aa.name,
-                            aa.library_id,
-                            aa.token,
-                            aa.library_id in already_configured_aa_libraries,
-                        ]
-                    )
-            except Exception as e:
-                logging.error(
-                    f"Could not connect to collection {c.name}: reason: {str(e)}."
-                )
-
-        file_path = parsed.output_file_path[0]
-        circ_manager_name = parsed.circulation_manager_name[0]
-        self.write_csv(output_file_path=file_path, circ_manager_name=circ_manager_name)
-
-    def write_csv(self, output_file_path: str, circ_manager_name: str):
-        with open(output_file_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(
-                [
-                    "cm",
-                    "collection",
-                    "overdrive_library_id",
-                    "client_key",
-                    "client_secret",
-                    "library_token",
-                    "advantage_name",
-                    "advantage_id",
-                    "advantage_token",
-                    "already_configured",
-                ]
-            )
-            for i in self._data:
-                i.insert(0, circ_manager_name)
-                writer.writerow(i)
-
-    @classmethod
-    def arg_parser(cls):
-        parser = argparse.ArgumentParser()
-        parser.add_argument(
-            "--output-file-path",
-            help="The path of an output file",
-            metavar="o",
-            nargs=1,
-        )
-
-        parser.add_argument(
-            "--circulation-manager-name",
-            help="The name of the circulation-manager",
-            metavar="c",
-            nargs=1,
-            required=True,
-        )
-
-        parser.add_argument(
-            "--file-format",
-            help="The file format of the output file",
-            metavar="f",
-            nargs=1,
-            default="csv",
-        )
-
-        return parser
-
-
 class CustomListUpdateEntriesScript(CustomListSweeperScript):
     """Traverse all entries and update lists if they have auto_update_enabled"""
 
@@ -2843,7 +2730,8 @@ class CustomListUpdateEntriesScript(CustomListSweeperScript):
 
     def _update_list_with_new_entries(self, custom_list: CustomList):
         """Run a search on a custom list, assuming we have auto_update_enabled with a valid query
-        Only json type queries are supported right now, without any support for additional facets"""
+        Only json type queries are supported right now, without any support for additional facets
+        """
 
         start_page = 1
         json_query = None
@@ -2899,7 +2787,6 @@ class DeleteInvisibleLanesScript(LibraryInputScript):
     """Delete lanes that are flagged as invisible"""
 
     def process_library(self, library):
-
         try:
             for lane in self._db.query(Lane).filter(Lane.library_id == library.id):
                 if not lane.visible:

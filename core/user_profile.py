@@ -2,7 +2,7 @@ import json
 
 from flask_babel import lazy_gettext as _
 
-from .problem_details import *
+from core.problem_details import *
 
 
 class ProfileController:

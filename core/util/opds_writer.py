@@ -3,7 +3,7 @@ import datetime
 import pytz
 from lxml import builder, etree
 
-from .datetime_helpers import utc_now
+from core.util.datetime_helpers import utc_now
 
 
 class ElementMaker(builder.ElementMaker):
@@ -20,7 +20,6 @@ class ElementMaker(builder.ElementMaker):
 
 
 class AtomFeed:
-
     ATOM_TYPE = "application/atom+xml"
 
     ATOM_LIKE_TYPES = [ATOM_TYPE, "application/xml"]
@@ -174,7 +173,6 @@ class AtomFeed:
 
 
 class OPDSFeed(AtomFeed):
-
     ACQUISITION_FEED_TYPE = (
         AtomFeed.ATOM_TYPE + ";profile=opds-catalog;kind=acquisition"
     )

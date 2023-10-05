@@ -7,7 +7,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, overload
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -28,15 +28,21 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
 
-from ..util.datetime_helpers import utc_now
-from ..util.summary import SummaryEvaluator
-from . import Base, PresentationCalculationPolicy, create, get_one, get_one_or_create
-from .classification import Classification, Subject
-from .constants import IdentifierConstants, LinkRelations
-from .coverage import CoverageRecord
-from .datasource import DataSource
-from .licensing import LicensePoolDeliveryMechanism, RightsStatus
-from .measurement import Measurement
+from core.model import (
+    Base,
+    PresentationCalculationPolicy,
+    create,
+    get_one,
+    get_one_or_create,
+)
+from core.model.classification import Classification, Subject
+from core.model.constants import IdentifierConstants, LinkRelations
+from core.model.coverage import CoverageRecord
+from core.model.datasource import DataSource
+from core.model.licensing import LicensePoolDeliveryMechanism, RightsStatus
+from core.model.measurement import Measurement
+from core.util.datetime_helpers import utc_now
+from core.util.summary import SummaryEvaluator
 
 if TYPE_CHECKING:
     from core.model import (  # noqa: autoflake
@@ -391,16 +397,16 @@ class Identifier(Base, IdentifierConstants):
         return True
 
     @property
-    def urn(self):
-        identifier_text = quote(self.identifier)
+    def urn(self) -> str:
+        identifier_text = quote(self.identifier or "")
         if self.type == Identifier.ISBN:
             return self.ISBN_URN_SCHEME_PREFIX + identifier_text
         elif self.type == Identifier.URI:
-            return self.identifier
+            return self.identifier or ""
         elif self.type == Identifier.GUTENBERG_ID:
             return self.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
         else:
-            identifier_type = quote(self.type)
+            identifier_type = quote(self.type or "")
             return self.URN_SCHEME_PREFIX + "{}/{}".format(
                 identifier_type, identifier_text
             )
@@ -431,7 +437,6 @@ class Identifier(Base, IdentifierConstants):
 
     @classmethod
     def type_and_identifier_for_urn(cls, identifier_string: str) -> tuple[str, str]:
-
         for parser in Identifier.PARSERS:
             result = parser.parse(identifier_string)
             if result:
@@ -560,6 +565,26 @@ class Identifier(Base, IdentifierConstants):
                 pass
 
         return cls.for_foreign_id(_db, identifier_type, identifier_string)
+
+    @classmethod
+    @overload
+    def parse_urn(
+        cls,
+        _db: Session,
+        identifier_string: str,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier, bool]:
+        ...
+
+    @classmethod
+    @overload
+    def parse_urn(
+        cls,
+        _db: Session,
+        identifier_string: str | None,
+        must_support_license_pools: bool = False,
+    ) -> tuple[Identifier | None, bool | None]:
+        ...
 
     @classmethod
     def parse_urn(
@@ -728,7 +753,7 @@ class Identifier(Base, IdentifierConstants):
         fetching, mirroring and scaling Representations as links are
         created. It might be good to move that code into here.
         """
-        from .resource import Hyperlink, Representation, Resource
+        from core.model.resource import Hyperlink, Representation, Resource
 
         _db = Session.object_session(self)
         # Find or create the Resource.
@@ -905,7 +930,7 @@ class Identifier(Base, IdentifierConstants):
     def resources_for_identifier_ids(
         self, _db, identifier_ids, rel=None, data_source=None
     ):
-        from .resource import Hyperlink, Resource
+        from core.model.resource import Hyperlink, Resource
 
         resources = (
             _db.query(Resource)
@@ -937,7 +962,7 @@ class Identifier(Base, IdentifierConstants):
     def best_cover_for(cls, _db, identifier_ids, rel=None):
         # Find all image resources associated with any of
         # these identifiers.
-        from .resource import Hyperlink, Resource
+        from core.model.resource import Hyperlink, Resource
 
         rel = rel or Hyperlink.IMAGE
         images = cls.resources_for_identifier_ids(_db, identifier_ids, rel)
@@ -1097,7 +1122,7 @@ class Identifier(Base, IdentifierConstants):
             most_recent_update = max(timestamps)
 
         quality = Measurement.overall_quality(self.measurements)
-        from ..opds import AcquisitionFeed
+        from core.opds import AcquisitionFeed
 
         return AcquisitionFeed.minimal_opds_entry(
             identifier=self,

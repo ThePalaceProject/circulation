@@ -9,13 +9,11 @@ from core.metadata_layer import Metadata
 from core.model import DataSource, ExternalIntegration, Identifier
 from core.util.http import HTTP
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
-
-from ..fixtures.api_novelist_files import NoveListFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.api_novelist_files import NoveListFilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class NoveListFixture:
-
     db: DatabaseTransactionFixture
     files: NoveListFilesFixture
     integration: ExternalIntegration

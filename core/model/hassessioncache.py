@@ -11,7 +11,7 @@ from typing import Callable, Hashable
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session
 
-from . import get_one
+from core.model import get_one
 
 if sys.version_info >= (3, 11):
     from typing import Self

@@ -121,7 +121,6 @@ def create_provider(
 
 
 class TestSIP2AuthenticationProvider:
-
     # We feed sample data into the MockSIPClient, even though it adds
     # an extra step of indirection, because it lets us use as a
     # starting point the actual (albeit redacted) SIP2 messages we

@@ -11,15 +11,20 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
-from ..util import LanguageCodes, TitleProcessor
-from ..util.permanent_work_id import WorkIDCalculator
-from . import Base, PresentationCalculationPolicy, get_one, get_one_or_create
-from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
-from .contributor import Contribution, Contributor
-from .coverage import CoverageRecord
-from .datasource import DataSource
-from .identifier import Identifier
-from .licensing import DeliveryMechanism, LicensePool
+from core.model import Base, PresentationCalculationPolicy, get_one, get_one_or_create
+from core.model.constants import (
+    DataSourceConstants,
+    EditionConstants,
+    LinkRelations,
+    MediaTypes,
+)
+from core.model.contributor import Contribution, Contributor
+from core.model.coverage import CoverageRecord
+from core.model.datasource import DataSource
+from core.model.identifier import Identifier
+from core.model.licensing import DeliveryMechanism, LicensePool
+from core.util import LanguageCodes, TitleProcessor
+from core.util.permanent_work_id import WorkIDCalculator
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the

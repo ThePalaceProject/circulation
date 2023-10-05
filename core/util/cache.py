@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from sqlalchemy.orm import Session
 
-from ..model.datasource import DataSource
+from core.model.datasource import DataSource
 
 # TODO: Remove this when we drop support for Python 3.9
 if sys.version_info >= (3, 10):
@@ -70,7 +70,8 @@ class CachedData:
     Cache data using the CachedData.cache instance
     This must be initialized somewhere in the vicinity of its usage with CacheData.initialize(_db)
     While writing methods to cache, always lock the body to the _db is used and updated in a threadsafe manner
-    Always expunge objects before returning the data, to avoid stale/cross-thread session usage"""
+    Always expunge objects before returning the data, to avoid stale/cross-thread session usage
+    """
 
     # Instance of itself
     cache: Optional[CachedData] = None

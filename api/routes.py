@@ -5,16 +5,14 @@ import flask
 from flask import Response, make_response, request
 from flask_cors.core import get_cors_options, set_cors_headers
 from flask_pydantic_spec import Response as SpecResponse
-from werkzeug.exceptions import HTTPException
 
+from api.app import api_spec, app, babel
+from api.config import Configuration
 from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
-from core.app_server import ErrorHandler, compressible, returns_problem_detail
+from core.app_server import compressible, returns_problem_detail
 from core.model import HasSessionCache
 from core.util.problem_detail import ProblemDetail
-
-from .app import api_spec, app, babel
-from .config import Configuration
 
 
 @babel.localeselector
@@ -106,20 +104,6 @@ def allows_patron_web(f):
         return resp
 
     return update_wrapper(wrapped_function, f)
-
-
-h = ErrorHandler(app, app.config["DEBUG"])
-
-
-@app.errorhandler(Exception)
-@allows_patron_web
-def exception_handler(exception):
-    if isinstance(exception, HTTPException):
-        # This isn't an exception we need to handle, it's werkzeug's way
-        # of interrupting normal control flow with a specific HTTP response.
-        # Return the exception and it will be used as the response.
-        return exception
-    return h.handle(exception)
 
 
 def has_library(f):

@@ -2,7 +2,7 @@ import re
 
 from fuzzywuzzy import fuzz
 
-from .permanent_work_id import WorkIDCalculator
+from core.util.permanent_work_id import WorkIDCalculator
 
 
 def normalize_title_for_matching(title):

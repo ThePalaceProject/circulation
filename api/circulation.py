@@ -26,6 +26,11 @@ from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
 from sqlalchemy.orm import Query
 
+from api.circulation_exceptions import *
+from api.integration.registry.license_providers import (
+    CirculationLicenseProvidersRegistry,
+)
+from api.util.patron import PatronUtility
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.integration.base import HasLibraryIntegrationConfiguration
@@ -54,10 +59,6 @@ from core.model import (
 )
 from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
-
-from .circulation_exceptions import *
-from .integration.registry.license_providers import CirculationLicenseProvidersRegistry
-from .util.patron import PatronUtility
 
 if TYPE_CHECKING:
     pass
@@ -435,7 +436,7 @@ class LoanInfo(CirculationInfo):
         identifier_type: Optional[str],
         identifier: Optional[str],
         start_date: Optional[datetime.datetime],
-        end_date: datetime.datetime,
+        end_date: Optional[datetime.datetime],
         fulfillment_info: Optional[FulfillmentInfo] = None,
         external_identifier: Optional[str] = None,
         locked_to: Optional[DeliveryMechanismInfo] = None,
@@ -566,11 +567,11 @@ class CirculationConfigurationMixin(
         libconfig = self.integration_configuration().for_library(library_id=library_id)
         if libconfig:
             config = self.library_settings_class()(**libconfig.settings_dict)
-            return config  # type: ignore [return-value]
+            return config  # type: ignore[return-value]
         return None
 
     def configuration(self) -> SettingsType:
-        return self.settings_class()(**self.integration_configuration().settings_dict)  # type: ignore [return-value]
+        return self.settings_class()(**self.integration_configuration().settings_dict)  # type: ignore[return-value]
 
 
 class BaseCirculationAPI(
@@ -752,9 +753,7 @@ class BaseCirculationAPI(
         ...
 
     @abstractmethod
-    def update_availability(
-        self, licensepool: LicensePool
-    ) -> Tuple[LicensePool, bool, bool]:
+    def update_availability(self, licensepool: LicensePool) -> None:
         """Update availability information for a book."""
         ...
 
@@ -900,10 +899,9 @@ class CirculationAPI:
         :return: Mapping of protocols to fulfillment post-processors.
         """
         from api.opds2 import TokenAuthenticationFulfillmentProcessor
+        from api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
         from core.opds2_import import OPDS2Importer
         from core.opds_import import OPDSImporter
-
-        from .saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 
         return {
             OPDSImporter.NAME: SAMLWAYFlessAcquisitionLinkProcessor,

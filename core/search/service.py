@@ -69,7 +69,8 @@ class SearchServiceFailedDocument:
 
 class SearchService(ABC):
     """The interface we need from services like Opensearch. Essentially, it provides the operations we want with
-    sensible types, rather than the untyped pile of JSON the actual search client provides."""
+    sensible types, rather than the untyped pile of JSON the actual search client provides.
+    """
 
     @abstractmethod
     def read_pointer_name(self) -> str:
@@ -168,8 +169,9 @@ class SearchServiceOpensearch1(SearchService):
         self._indexes_created: List[str] = []
 
         # Documents are not allowed to automatically create indexes.
+        # AWS OpenSearch only accepts the "flat" format
         self._client.cluster.put_settings(
-            body={"persistent": {"action": {"auto_create_index": "false"}}}
+            body={"persistent": {"action.auto_create_index": "false"}}
         )
 
     def indexes_created(self) -> List[str]:

@@ -14,12 +14,13 @@ from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
+from core.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from firebase_admin.messaging import SendResponse
 
 
-class PushNotifications:
+class PushNotifications(LoggerMixin):
     # Should be set to true while unit testing
     TESTING_MODE = False
     _fcm_app = None
@@ -82,6 +83,9 @@ class PushNotifications:
         if loan.patron.authorization_identifier:
             data["authorization_identifier"] = loan.patron.authorization_identifier
 
+        cls.logger().info(
+            f"Patron {loan.patron.authorization_identifier} has {len(tokens)} device tokens."
+        )
         for token in tokens:
             msg = messaging.Message(
                 token=token.device_token,
@@ -89,6 +93,9 @@ class PushNotifications:
                 data=data,
             )
             resp = messaging.send(msg, dry_run=cls.TESTING_MODE, app=cls.fcm_app())
+            cls.logger().info(
+                f"Sent loan expiry notification for {loan.patron.authorization_identifier} ID: {resp}"
+            )
             responses.append(resp)
         return responses
 
@@ -115,6 +122,10 @@ class PushNotifications:
             if patron.authorization_identifier:
                 data["authorization_identifier"] = patron.authorization_identifier
 
+            cls.logger().info(
+                f"Must sync patron activity for {patron.authorization_identifier}, has {len(tokens)} device tokens."
+            )
+
             for token in tokens:
                 msg = messaging.Message(
                     token=token.device_token,
@@ -123,6 +134,9 @@ class PushNotifications:
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
             msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
+        )
+        cls.logger().info(
+            f"Activity Sync Notifications: Successes {batch.success_count}, failures {batch.failure_count}."
         )
         return [resp.message_id for resp in batch.responses]
 
@@ -137,6 +151,10 @@ class PushNotifications:
         url = cls.base_url(_db)
         for hold in holds:
             tokens = cls.notifiable_tokens(hold.patron)
+            cls.logger().info(
+                f"Notifying patron {hold.patron.authorization_identifier or hold.patron.username} for hold: {hold.work.title}. "
+                f"Patron has {len(tokens)} device tokens."
+            )
             loans_api = f"{url}/{hold.patron.library.short_name}/loans"
             work: Work = hold.work
             identifier: Identifier = hold.license_pool.identifier
@@ -163,5 +181,8 @@ class PushNotifications:
                 msgs.append(msg)
         batch: messaging.BatchResponse = messaging.send_all(
             msgs, dry_run=cls.TESTING_MODE, app=cls.fcm_app()
+        )
+        cls.logger().info(
+            f"Hold Notifications: Successes {batch.success_count}, failures {batch.failure_count}."
         )
         return [resp.message_id for resp in batch.responses]

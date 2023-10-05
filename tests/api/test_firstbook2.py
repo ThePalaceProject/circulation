@@ -26,7 +26,6 @@ class MockFirstBookResponse:
 
 
 class MockFirstBookAuthenticationAPI(FirstBookAuthenticationAPI):
-
     SUCCESS = '"Valid Code Pin Pair"'
     FAILURE = '{"code":404,"message":"Access Code Pin Pair not found"}'
 

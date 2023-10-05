@@ -1,4 +1,4 @@
-from . import *
+from core.classifier import *
 
 
 class BICClassifier(Classifier):

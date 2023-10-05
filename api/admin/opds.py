@@ -14,7 +14,6 @@ class AdminAnnotator(LibraryAnnotator):
     def annotate_work_entry(
         self, work, active_license_pool, edition, identifier, feed, entry
     ):
-
         super().annotate_work_entry(
             work, active_license_pool, edition, identifier, feed, entry
         )

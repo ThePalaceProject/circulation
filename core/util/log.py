@@ -1,4 +1,6 @@
 import functools
+import logging
+import sys
 import time
 from contextlib import contextmanager
 from typing import Callable, Optional
@@ -55,3 +57,33 @@ def elapsed_time_logging(
         toc = time.perf_counter()
         elapsed_time = toc - tic
         log_method(f"{prefix}Completed. (elapsed time: {elapsed_time:0.4f} seconds)")
+
+
+# Once we drop python 3.8 this can go away
+if sys.version_info >= (3, 9):
+    cache_decorator = functools.cache
+else:
+    cache_decorator = functools.lru_cache
+
+
+class LoggerMixin:
+    """Mixin that adds a logger with a standardized name"""
+
+    @classmethod
+    @cache_decorator
+    def logger(cls) -> logging.Logger:
+        """
+        Returns a logger named after the module and name of the class.
+
+        This is cached so that we don't create a new logger every time
+        it is called.
+        """
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
+    @property
+    def log(self) -> logging.Logger:
+        """
+        A convenience property that returns the logger for the class,
+        so it is easier to access the logger from an instance.
+        """
+        return self.logger()

@@ -36,7 +36,6 @@ class SpineItem:
 
 
 class FindawayManifest(AudiobookManifest):
-
     # This URI prefix makes it clear when we are using a term coined
     # by Findaway in a JSON-LD document.
     FINDAWAY_EXTENSION_CONTEXT = (

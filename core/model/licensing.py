@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 from enum import Enum as PythonEnum
-from typing import TYPE_CHECKING, List, Literal, Tuple, overload
+from typing import TYPE_CHECKING, List, Literal, Optional, Tuple, overload
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
@@ -14,25 +14,28 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
+from core.model import Base, flush, get_one, get_one_or_create
+from core.model.circulationevent import CirculationEvent
+from core.model.constants import (
+    DataSourceConstants,
+    EditionConstants,
+    LinkRelations,
+    MediaTypes,
+)
+from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
-
-from ..util.datetime_helpers import utc_now
-from . import Base, flush, get_one, get_one_or_create
-from .circulationevent import CirculationEvent
-from .constants import DataSourceConstants, EditionConstants, LinkRelations, MediaTypes
-from .hassessioncache import HasSessionCache
-from .patron import Hold, Loan, Patron
+from core.model.patron import Hold, Loan, Patron
+from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
+    from core.analytics import Analytics
     from core.model import (  # noqa: autoflake
         Collection,
         DataSource,
         Identifier,
         Resource,
     )
-
-    from ..analytics import Analytics
 
 
 class PolicyException(Exception):
@@ -139,12 +142,12 @@ class License(Base, LicenseFunctions):
 
     # One License can have many Loans.
     loans: Mapped[List[Loan]] = relationship(
-        "Loan", backref="license", cascade="all, delete-orphan"
+        "Loan", back_populates="license", cascade="all, delete-orphan"
     )
 
     __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
 
-    def loan_to(self, patron: Patron, **kwargs):
+    def loan_to(self, patron: Patron, **kwargs) -> Tuple[Loan, bool]:
         loan, is_new = self.license_pool.loan_to(patron, **kwargs)
         loan.license = self
         return loan, is_new
@@ -359,9 +362,9 @@ class LicensePool(Base):
         autocreate=True,
     ) -> Tuple[LicensePool | None, bool]:
         """Find or create a LicensePool for the given foreign ID."""
-        from .collection import CollectionMissing
-        from .datasource import DataSource
-        from .identifier import Identifier
+        from core.model.collection import CollectionMissing
+        from core.model.datasource import DataSource
+        from core.model.identifier import Identifier
 
         if not collection:
             raise CollectionMissing()
@@ -419,7 +422,7 @@ class LicensePool(Base):
     @classmethod
     def with_no_work(cls, _db):
         """Find LicensePools that have no corresponding Work."""
-        from .work import Work
+        from core.model.work import Work
 
         return _db.query(LicensePool).outerjoin(Work).filter(Work.id == None).all()
 
@@ -547,7 +550,7 @@ class LicensePool(Base):
         :return: A boolean explaining whether any of the presentation
         information associated with this LicensePool actually changed.
         """
-        from .edition import Edition
+        from core.model.edition import Edition
 
         _db = Session.object_session(self)
         old_presentation_edition = self.presentation_edition
@@ -560,7 +563,7 @@ class LicensePool(Base):
 
         # Note: We can do a cleaner solution, if we refactor to not use metadata's
         # methods to update editions.  For now, we're choosing to go with the below approach.
-        from ..metadata_layer import IdentifierData, Metadata, ReplacementPolicy
+        from core.metadata_layer import IdentifierData, Metadata, ReplacementPolicy
 
         if len(all_editions) == 1:
             # There's only one edition associated with this
@@ -1021,7 +1024,7 @@ class LicensePool(Base):
         end=None,
         fulfillment=None,
         external_identifier=None,
-    ):
+    ) -> Tuple[Loan, bool]:
         _db = Session.object_session(patron)
         kwargs = dict(start=start or utc_now(), end=end)
         loan, is_new = get_one_or_create(
@@ -1067,7 +1070,7 @@ class LicensePool(Base):
             hold.external_identifier = external_identifier
         return hold, new
 
-    def best_available_license(self):
+    def best_available_license(self) -> License | None:
         """Determine the next license that should be lent out for this pool.
 
         Time-limited licenses and perpetual licenses are the best. It doesn't matter which
@@ -1084,7 +1087,7 @@ class LicensePool(Base):
         The worst option would be pay-per-use, but we don't yet support any distributors that
         offer that model.
         """
-        best = None
+        best: Optional[License] = None
         now = utc_now()
 
         for license in self.licenses:
@@ -1094,7 +1097,10 @@ class LicensePool(Base):
             active_loan_count = len(
                 [l for l in license.loans if not l.end or l.end > now]
             )
-            if active_loan_count >= license.checkouts_available:
+            checkouts_available = (
+                license.checkouts_available if license.checkouts_available else 0
+            )
+            if active_loan_count >= checkouts_available:
                 continue
 
             if (
@@ -1103,13 +1109,13 @@ class LicensePool(Base):
                 or (
                     license.is_time_limited
                     and best.is_time_limited
-                    and license.expires < best.expires
+                    and license.expires < best.expires  # type: ignore[operator]
                 )
                 or (license.is_perpetual and not best.is_time_limited)
                 or (
                     license.is_loan_limited
                     and best.is_loan_limited
-                    and license.checkouts_left > best.checkouts_left
+                    and license.checkouts_left > best.checkouts_left  # type: ignore[operator]
                 )
             ):
                 best = license
@@ -1154,7 +1160,7 @@ class LicensePool(Base):
         from calling set_presentation_edition() and assumes we've
         already done that work.
         """
-        from .work import Work
+        from core.model.work import Work
 
         if not self.identifier:
             # A LicensePool with no Identifier should never have a Work.
@@ -1325,7 +1331,7 @@ class LicensePool(Base):
     @property
     def open_access_links(self):
         """Yield all open-access Resources for this LicensePool."""
-        from .identifier import Identifier
+        from core.model.identifier import Identifier
 
         open_access = LinkRelations.OPEN_ACCESS_DOWNLOAD
         _db = Session.object_session(self)
@@ -1770,7 +1776,6 @@ class DeliveryMechanism(Base, HasSessionCache):
         return (self.content_type, self.drm_scheme)
 
     def __repr__(self):
-
         if self.default_client_can_fulfill:
             fulfillable = "fulfillable"
         else:
@@ -2024,7 +2029,7 @@ class RightsStatus(Base):
         return status
 
     @classmethod
-    def rights_uri_from_string(cls, rights):
+    def rights_uri_from_string(cls, rights: str) -> str:
         rights = rights.lower()
         if rights == "public domain in the usa.":
             return RightsStatus.PUBLIC_DOMAIN_USA

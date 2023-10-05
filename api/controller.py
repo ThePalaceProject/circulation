@@ -23,10 +23,35 @@ from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
 from werkzeug.datastructures import MIMEAccept
 
+from api.annotations import AnnotationParser, AnnotationWriter
 from api.authentication.access_token import AccessTokenProvider
+from api.authenticator import Authenticator, CirculationPatronProfileStorage
+from api.base_controller import BaseCirculationManagerController
+from api.circulation import CirculationAPI
+from api.circulation_exceptions import *
+from api.config import CannotLoadConfiguration, Configuration
+from api.custom_index import CustomIndexView
+from api.lanes import (
+    ContributorFacets,
+    ContributorLane,
+    CrawlableCollectionBasedLane,
+    CrawlableCustomListBasedLane,
+    CrawlableFacets,
+    HasSeriesFacets,
+    JackpotFacets,
+    JackpotWorkList,
+    RecommendationLane,
+    RelatedBooksLane,
+    SeriesFacets,
+    SeriesLane,
+    load_lanes,
+)
 from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
+from api.odl import ODLAPI
+from api.odl2 import ODL2API
 from api.opds2 import OPDS2NavigationsAnnotator
+from api.problem_details import *
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
@@ -53,7 +78,6 @@ from core.lane import (
     SearchFacets,
     WorkList,
 )
-from core.log import LogConfiguration
 from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
 from core.model import (
@@ -96,32 +120,6 @@ from core.util.log import elapsed_time_logging, log_elapsed_time
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemError
 
-from .annotations import AnnotationParser, AnnotationWriter
-from .authenticator import Authenticator, CirculationPatronProfileStorage
-from .base_controller import BaseCirculationManagerController
-from .circulation import CirculationAPI
-from .circulation_exceptions import *
-from .config import CannotLoadConfiguration, Configuration
-from .custom_index import CustomIndexView
-from .lanes import (
-    ContributorFacets,
-    ContributorLane,
-    CrawlableCollectionBasedLane,
-    CrawlableCustomListBasedLane,
-    CrawlableFacets,
-    HasSeriesFacets,
-    JackpotFacets,
-    JackpotWorkList,
-    RecommendationLane,
-    RelatedBooksLane,
-    SeriesFacets,
-    SeriesLane,
-    load_lanes,
-)
-from .odl import ODLAPI
-from .odl2 import ODL2API
-from .problem_details import *
-
 if TYPE_CHECKING:
     from werkzeug import Response as wkResponse
 
@@ -160,7 +158,6 @@ if TYPE_CHECKING:
     from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.sitewide_services import (
-        LoggingServicesController,
         SearchServicesController,
         SitewideServicesController,
     )
@@ -217,7 +214,6 @@ class CirculationManager:
     admin_library_settings_controller: LibrarySettingsController
     admin_individual_admin_settings_controller: IndividualAdminSettingsController
     admin_sitewide_services_controller: SitewideServicesController
-    admin_logging_services_controller: LoggingServicesController
     admin_search_service_self_tests_controller: SearchServiceSelfTestsController
     admin_search_services_controller: SearchServicesController
     admin_catalog_services_controller: CatalogServicesController
@@ -300,7 +296,6 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        LogConfiguration.initialize(self._db)
         self.analytics = Analytics(self._db, refresh=True)
 
         with elapsed_time_logging(

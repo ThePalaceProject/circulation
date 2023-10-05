@@ -8,9 +8,9 @@ from flask import Response as FlaskResponse
 from lxml import etree
 from pydantic import BaseModel, Extra
 
-from . import problem_detail
-from .datetime_helpers import utc_now
-from .opds_writer import OPDSFeed
+from core.util import problem_detail
+from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import OPDSFeed
 
 
 def problem_raw(type, status, title, detail=None, instance=None, headers={}):
@@ -152,7 +152,6 @@ class OPDSFeedResponse(Response):
         max_age=None,
         private=None,
     ):
-
         mimetype = mimetype or OPDSFeed.ACQUISITION_FEED_TYPE
         status = status or 200
         if max_age is None:

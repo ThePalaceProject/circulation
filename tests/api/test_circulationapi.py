@@ -42,10 +42,9 @@ from tests.api.mockapi.circulation import (
     MockCirculationAPI,
     MockRemoteAPI,
 )
-
-from ..fixtures.api_bibliotheca_files import BibliothecaFilesFixture
-from ..fixtures.database import DatabaseTransactionFixture
-from ..fixtures.library import LibraryFixture
+from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.library import LibraryFixture
 
 
 class CirculationAPIFixture:
@@ -1441,7 +1440,6 @@ class TestCirculationAPI:
     def test_sync_bookshelf_applies_locked_delivery_mechanism_to_loan(
         self, circulation_api: CirculationAPIFixture
     ):
-
         # By the time we hear about the patron's loan, they've already
         # locked in an oddball delivery mechanism.
         mechanism = DeliveryMechanismInfo(
@@ -1473,7 +1471,6 @@ class TestCirculationAPI:
     def test_sync_bookshelf_respects_last_loan_activity_sync(
         self, circulation_api: CirculationAPIFixture
     ):
-
         # We believe we have up-to-date loan activity for this patron.
         now = utc_now()
         circulation_api.patron.last_loan_activity_sync = now

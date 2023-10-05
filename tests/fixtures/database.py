@@ -25,7 +25,6 @@ from core.classifier import Classifier
 from core.config import Configuration
 from core.configuration.library import LibrarySettings
 from core.integration.goals import Goals
-from core.log import LogConfiguration
 from core.model import (
     Classification,
     Collection,
@@ -78,9 +77,6 @@ class ApplicationFixture:
     def create(cls):
         # This will make sure we always connect to the test database.
         os.environ["TESTING"] = "true"
-
-        # Ensure that the log configuration starts in a known state.
-        LogConfiguration.initialize(None, testing=True)
 
         # Drop any existing schema. It will be recreated when the database is initialized.
         _cls = cls()
@@ -950,9 +946,9 @@ class TemporaryDirectoryConfigurationFixture:
 
 
 @pytest.fixture(scope="function")
-def temporary_directory_configuration() -> Iterable[
-    TemporaryDirectoryConfigurationFixture
-]:
+def temporary_directory_configuration() -> (
+    Iterable[TemporaryDirectoryConfigurationFixture]
+):
     fix = TemporaryDirectoryConfigurationFixture.create()
     yield fix
     fix.close()

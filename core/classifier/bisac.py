@@ -2,8 +2,8 @@ import csv
 import os
 import re
 
-from . import *
-from .keyword import KeywordBasedClassifier
+from core.classifier import *
+from core.classifier.keyword import KeywordBasedClassifier
 
 
 class CustomMatchToken:

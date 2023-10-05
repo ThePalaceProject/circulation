@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from flask import url_for
@@ -17,6 +16,7 @@ from core.model.resource import Hyperlink
 from core.opds2 import OPDS2Annotator
 from core.problem_details import INVALID_CREDENTIALS
 from core.util.http import HTTP
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -85,7 +85,9 @@ class OPDS2NavigationsAnnotator(OPDS2Annotator):
         ]
 
 
-class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcessor):
+class TokenAuthenticationFulfillmentProcessor(
+    CirculationFulfillmentPostProcessor, LoggerMixin
+):
     """In case a feed has a token auth endpoint and the content_link requires an authentication token
     Then we must fetch the required authentication token from the token_auth endpoint and
     expand the templated url with the received token.
@@ -93,10 +95,6 @@ class TokenAuthenticationFulfillmentProcessor(CirculationFulfillmentPostProcesso
 
     def __init__(self, collection) -> None:
         pass
-
-    @classmethod
-    def logger(cls) -> logging.Logger:
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     def fulfill(
         self,

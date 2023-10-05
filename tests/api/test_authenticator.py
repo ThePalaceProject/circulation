@@ -63,18 +63,17 @@ from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException, RemoteIntegrationException
 from core.util.problem_detail import ProblemDetail
-
-from ..fixtures.announcements import AnnouncementFixture
-from ..fixtures.library import LibraryFixture
+from tests.fixtures.announcements import AnnouncementFixture
+from tests.fixtures.library import LibraryFixture
 
 if TYPE_CHECKING:
-    from ..fixtures.api_controller import ControllerFixture
-    from ..fixtures.authenticator import (
+    from tests.fixtures.api_controller import ControllerFixture
+    from tests.fixtures.authenticator import (
         CreateAuthIntegrationFixture,
         MilleniumAuthIntegrationFixture,
     )
-    from ..fixtures.database import DatabaseTransactionFixture
-    from ..fixtures.vendor_id import VendorIDFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.vendor_id import VendorIDFixture
 
 
 class MockBasic(BasicAuthenticationProvider):
@@ -1322,7 +1321,6 @@ class TestLibraryAuthenticator:
 
 
 class TestBasicAuthenticationProvider:
-
     credentials = dict(username="user", password="")
 
     def test_authenticated_patron_passes_on_none(

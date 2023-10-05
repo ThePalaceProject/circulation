@@ -10,9 +10,8 @@ from sqlalchemy.exc import ArgumentError
 # It's convenient for other modules import IntegrationException
 # from this module, alongside CannotLoadConfiguration.
 from core.exceptions import IntegrationException
-
-from .util import LanguageCodes, ansible_boolean
-from .util.datetime_helpers import to_utc, utc_now
+from core.util import LanguageCodes, ansible_boolean
+from core.util.datetime_helpers import to_utc, utc_now
 
 
 class CannotLoadConfiguration(IntegrationException):
@@ -27,13 +26,11 @@ class CannotLoadConfiguration(IntegrationException):
 
 
 class ConfigurationConstants:
-
     TRUE = "true"
     FALSE = "false"
 
 
 class Configuration(ConfigurationConstants):
-
     log = logging.getLogger("Configuration file loader")
 
     # Environment variables that contain URLs to the database
@@ -344,7 +341,7 @@ class Configuration(ConfigurationConstants):
         # NOTE: Currently we never check the database (because timeout is
         # never set to None). This code will hopefully be removed soon.
         if _db and timeout is None:
-            from .model import ConfigurationSetting
+            from core.model import ConfigurationSetting
 
             timeout = ConfigurationSetting.sitewide(
                 _db, cls.SITE_CONFIGURATION_TIMEOUT
@@ -373,7 +370,7 @@ class Configuration(ConfigurationConstants):
         # site_configuration_was_changed() (defined in model.py) was
         # called.
         if not known_value:
-            from .model import Timestamp
+            from core.model import Timestamp
 
             known_value = Timestamp.value(
                 _db, cls.SITE_CONFIGURATION_CHANGED, service_type=None, collection=None

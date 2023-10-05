@@ -6,11 +6,8 @@ from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
-from core.model.coverage import EquivalencyCoverageRecord
-
-from . import log  # This sets the appropriate log format.
-from .metadata_layer import ReplacementPolicy, TimestampData
-from .model import (
+from core.metadata_layer import ReplacementPolicy, TimestampData
+from core.model import (
     BaseCoverageRecord,
     Collection,
     CollectionMissing,
@@ -25,8 +22,9 @@ from .model import (
     WorkCoverageRecord,
     get_one,
 )
-from .util.datetime_helpers import utc_now
-from .util.worker_pools import DatabaseJob
+from core.model.coverage import EquivalencyCoverageRecord
+from core.util.datetime_helpers import utc_now
+from core.util.worker_pools import DatabaseJob
 
 
 class CoverageFailure:
@@ -1278,7 +1276,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
         if license_pool:
             if not license_pool.work or not license_pool.work.presentation_ready:
-                for (v, default) in (("exclude_search", self.EXCLUDE_SEARCH_INDEX),):
+                for v, default in (("exclude_search", self.EXCLUDE_SEARCH_INDEX),):
                     if not v in calculate_work_kwargs:
                         calculate_work_kwargs[v] = default
 

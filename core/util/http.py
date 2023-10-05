@@ -12,9 +12,8 @@ from urllib3 import Retry
 import core
 from core.exceptions import IntegrationException
 from core.problem_details import INTEGRATION_ERROR
-
-from .problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from .problem_detail import ProblemError
+from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
+from core.util.problem_detail import ProblemError
 
 
 class RemoteIntegrationException(IntegrationException):

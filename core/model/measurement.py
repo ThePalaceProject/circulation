@@ -1,13 +1,18 @@
 # Measurement
-
+from __future__ import annotations
 
 import bisect
 import logging
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Unicode
+from sqlalchemy.orm import Mapped, relationship
 
-from . import Base
-from .constants import DataSourceConstants
+from core.model import Base
+from core.model.constants import DataSourceConstants
+
+if TYPE_CHECKING:
+    from core.model.datasource import DataSource
 
 
 class Measurement(Base):
@@ -711,6 +716,9 @@ class Measurement(Base):
 
     # A Measurement always comes from some DataSource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="measurements"
+    )
 
     # The quantity being measured.
     quantity_measured = Column(Unicode, index=True)

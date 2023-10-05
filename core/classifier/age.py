@@ -1,6 +1,6 @@
 import re
 
-from . import Classifier
+from core.classifier import Classifier
 
 
 class GradeLevelClassifier(Classifier):
@@ -75,7 +75,6 @@ class GradeLevelClassifier(Classifier):
 
     @classmethod
     def target_age(cls, identifier, name, require_explicit_grade_marker=False):
-
         if (identifier and "education" in identifier) or (name and "education" in name):
             # This is a book about teaching, e.g. fifth grade.
             return cls.range_tuple(None, None)

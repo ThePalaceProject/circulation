@@ -30,7 +30,6 @@ class TestSummaryEvaluator:
         assert s2 == self._best(s1, s2)
 
     def test_noun_phrase_coverage_is_important(self):
-
         s1 = "The story of Alice and the White Rabbit."
         s2 = "The story of Alice and the Mock Turtle."
         s3 = "Alice meets the Mock Turtle and the White Rabbit."

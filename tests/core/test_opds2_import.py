@@ -20,9 +20,8 @@ from core.model import (
 from core.model.collection import Collection
 from core.model.constants import IdentifierType
 from core.opds2_import import OPDS2Importer, RWPMManifestParser
-
-from ..fixtures.database import DatabaseTransactionFixture
-from ..fixtures.opds2_files import OPDS2FilesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.opds2_files import OPDS2FilesFixture
 
 
 class OPDS2Test:

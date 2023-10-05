@@ -10,10 +10,10 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, relationship
 
-from . import Base, get_one, get_one_or_create
-from .constants import DataSourceConstants, IdentifierConstants
-from .hassessioncache import HasSessionCache
-from .licensing import LicensePoolDeliveryMechanism
+from core.model import Base, get_one, get_one_or_create
+from core.model.constants import DataSourceConstants, IdentifierConstants
+from core.model.hassessioncache import HasSessionCache
+from core.model.licensing import LicensePoolDeliveryMechanism
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
@@ -72,7 +72,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can generate many Measurements.
     measurements: Mapped[List[Measurement]] = relationship(
-        "Measurement", backref="data_source"
+        "Measurement", back_populates="data_source"
     )
 
     # One DataSource can provide many Classifications.
@@ -291,7 +291,6 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
             (cls.ENKI, True, False, IdentifierConstants.ENKI_ID, None),
             (cls.PROQUEST, True, False, IdentifierConstants.PROQUEST_ID, None),
         ):
-
             obj = DataSource.lookup(
                 _db,
                 name,

@@ -12,6 +12,7 @@ from urllib.parse import quote
 from botocore.exceptions import BotoCoreError, ClientError
 
 from core.config import CannotLoadConfiguration
+from core.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -29,7 +30,7 @@ class MultipartS3UploadPart:
     PartNumber: int
 
 
-class MultipartS3ContextManager:
+class MultipartS3ContextManager(LoggerMixin):
     def __init__(
         self,
         client: S3Client,
@@ -43,7 +44,6 @@ class MultipartS3ContextManager:
         self.bucket = bucket
         self.part_number = 1
         self.parts: List[MultipartS3UploadPart] = []
-        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
         self.media_type = media_type
         self.upload: Optional[CreateMultipartUploadOutputTypeDef] = None
         self.upload_id: Optional[str] = None
@@ -137,7 +137,7 @@ class MultipartS3ContextManager:
         return self._exception
 
 
-class S3Service:
+class S3Service(LoggerMixin):
     def __init__(
         self,
         client: S3Client,
@@ -149,7 +149,6 @@ class S3Service:
         self.region = region
         self.bucket = bucket
         self.url_template = url_template
-        self.log = logging.getLogger(f"{self.__module__}.{self.__class__.__name__}")
 
         # Validate the URL template.
         formatter = Formatter()

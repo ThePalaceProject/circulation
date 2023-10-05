@@ -5,15 +5,13 @@ import uuid
 
 from flask_babel import lazy_gettext as _
 
+from api.config import CannotLoadConfiguration
 from core.model import ConfigurationSetting, ExternalIntegration, Session
 from core.service.container import Services
 from core.util.http import HTTP
 
-from .config import CannotLoadConfiguration
-
 
 class GoogleAnalyticsProvider:
-
     NAME = _("Google Analytics")
     DESCRIPTION = _("How to Configure a Google Analytics Integration")
     INSTRUCTIONS = _(
@@ -86,7 +84,6 @@ class GoogleAnalyticsProvider:
             )
 
     def collect_event(self, library, license_pool, event_type, time, **kwargs):
-
         # Explicitly destroy any neighborhood information -- we don't
         # want to send this to third-party sources.
         kwargs.pop("neighborhood", None)

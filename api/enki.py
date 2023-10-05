@@ -6,6 +6,9 @@ import time
 from flask_babel import lazy_gettext as _
 from pydantic import HttpUrl
 
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
+from api.circulation_exceptions import *
+from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
@@ -39,10 +42,6 @@ from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
-
-from .circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
-from .circulation_exceptions import *
-from .selftest import HasCollectionSelfTests, SelfTestResult
 
 
 class EnkiConstants:

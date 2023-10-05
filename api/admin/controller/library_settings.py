@@ -13,7 +13,12 @@ from PIL import Image, UnidentifiedImageError
 from PIL.Image import Resampling
 from werkzeug.datastructures import FileStorage
 
+from api.admin.announcement_list_validator import AnnouncementListValidator
+from api.admin.controller.base import AdminPermissionsControllerMixin
+from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
+from api.config import Configuration
+from api.controller import CirculationManager
 from api.lanes import create_default_lanes
 from core.configuration.library import LibrarySettings
 from core.model import (
@@ -28,12 +33,6 @@ from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
 from core.model.announcements import Announcement
 from core.model.library import LibraryLogo
 from core.util.problem_detail import ProblemDetail, ProblemError
-
-from ...config import Configuration
-from ...controller import CirculationManager
-from ..announcement_list_validator import AnnouncementListValidator
-from ..form_data import ProcessFormData
-from .base import AdminPermissionsControllerMixin
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):

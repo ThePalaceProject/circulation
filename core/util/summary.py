@@ -5,7 +5,7 @@ from collections import Counter
 from textblob import TextBlob
 from textblob.exceptions import MissingCorpusError
 
-from . import Bigrams, english_bigrams
+from core.util import Bigrams, english_bigrams
 
 
 class SummaryEvaluator:

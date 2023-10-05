@@ -17,15 +17,20 @@ repos:
       - id: mixed-line-ending
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.3.2
+    rev: v3.14.0
     hooks:
       - id: pyupgrade
         args:
           - --py38-plus
           - --keep-runtime-typing
 
+  - repo: https://github.com/MarcoGorelli/absolufy-imports
+    rev: v0.3.0
+    hooks:
+      - id: absolufy-imports
+
   - repo: https://github.com/myint/autoflake
-    rev: v2.1.1
+    rev: v2.2.1
     hooks:
       - id: autoflake
         args:
@@ -34,7 +39,7 @@ repos:
           - --ignore-init-module-imports
 
   - repo: https://github.com/psf/black
-    rev: 22.10.0
+    rev: 23.9.1
     hooks:
       - id: black
         name: Run black
@@ -46,20 +51,20 @@ repos:
         name: Run isort
 
   - repo: https://github.com/sirosen/check-jsonschema
-    rev: 0.22.0
+    rev: 0.27.0
     hooks:
       - id: check-github-workflows
       - id: check-github-actions
 
   - repo: https://github.com/pappasam/toml-sort
-    rev: v0.23.0
+    rev: v0.23.1
     hooks:
       - id: toml-sort
         args: []
         files: pyproject.toml
 
   - repo: https://github.com/jackdewinter/pymarkdown
-    rev: v0.9.9
+    rev: v0.9.13.4
     hooks:
       - id: pymarkdown
         args:

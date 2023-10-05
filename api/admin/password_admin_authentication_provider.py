@@ -3,26 +3,24 @@ from typing import Union
 from flask import render_template_string, url_for
 from sqlalchemy.orm.session import Session
 
+from api.admin.admin_authentication_provider import AdminAuthenticationProvider
 from api.admin.config import Configuration as AdminClientConfig
-from api.config import Configuration
-from core.model import Admin, ConfigurationSetting
-from core.util.email import EmailManager
-from core.util.problem_detail import ProblemDetail
-
-from .admin_authentication_provider import AdminAuthenticationProvider
-from .problem_details import INVALID_ADMIN_CREDENTIALS
-from .template_styles import button_style, input_style, label_style
-from .templates import (
+from api.admin.problem_details import INVALID_ADMIN_CREDENTIALS
+from api.admin.template_styles import button_style, input_style, label_style
+from api.admin.templates import (
     forgot_password_template,
     reset_password_email_html,
     reset_password_email_text,
     reset_password_template,
     sign_in_template,
 )
+from api.config import Configuration
+from core.model import Admin, ConfigurationSetting
+from core.util.email import EmailManager
+from core.util.problem_detail import ProblemDetail
 
 
 class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
-
     NAME = "Password Auth"
 
     SIGN_IN_TEMPLATE = sign_in_template.format(

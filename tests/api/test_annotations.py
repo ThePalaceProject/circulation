@@ -9,8 +9,7 @@ from api.annotations import AnnotationParser, AnnotationWriter
 from api.problem_details import *
 from core.model import Annotation, create
 from core.util.datetime_helpers import utc_now
-
-from ..fixtures.api_controller import ControllerFixture
+from tests.fixtures.api_controller import ControllerFixture
 
 
 class AnnotationFixture:

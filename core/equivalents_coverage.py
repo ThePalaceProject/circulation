@@ -103,7 +103,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
         recursive_equivs = []
         for link_id, parent_id in chained_identifiers:
-
             # First time around we MUST delete any chains formed from this identifier before
             if parent_id not in completed_identifiers:
                 delete_stmt = delete(RecursiveEquivalencyCache).where(

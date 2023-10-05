@@ -11,7 +11,7 @@ from typing import Dict, Optional, Tuple
 from flask_babel import LazyString
 from pydantic import BaseModel
 
-from ..exceptions import BaseError
+from core.exceptions import BaseError
 
 JSON_MEDIA_TYPE = "application/api-problem+json"
 

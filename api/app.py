@@ -5,31 +5,29 @@ import urllib.parse
 import flask_babel
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
-from sqlalchemy.orm import Session
 
+from api.admin.controller import setup_admin_controllers
 from api.config import Configuration
+from api.controller import CirculationManager
+from api.util.flask import PalaceFlask
+from api.util.profilers import (
+    PalaceCProfileProfiler,
+    PalacePyInstrumentProfiler,
+    PalaceXrayProfiler,
+)
+from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.log import LogConfiguration
 from core.model import (
     LOCK_ID_APP_INIT,
     ConfigurationSetting,
     SessionManager,
     pg_advisory_lock,
 )
-from core.service.container import container_instance
+from core.service.container import Services, container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
 from scripts import InstanceInitializationScript
-
-from .admin.controller import setup_admin_controllers
-from .controller import CirculationManager
-from .util.flask import PalaceFlask
-from .util.profilers import (
-    PalaceCProfileProfiler,
-    PalacePyInstrumentProfiler,
-    PalaceXrayProfiler,
-)
 
 app = PalaceFlask(__name__)
 app._db = None  # type: ignore [assignment]
@@ -66,14 +64,13 @@ def initialize_admin(_db=None):
     LocalAnalyticsProvider.initialize(_db)
 
 
-def initialize_circulation_manager():
+def initialize_circulation_manager(container: Services):
     if os.environ.get("AUTOINITIALIZE") == "False":
         # It's the responsibility of the importing code to set app.manager
         # appropriately.
         pass
     else:
         if getattr(app, "manager", None) is None:
-            container = container_instance()
             try:
                 app.manager = CirculationManager(app._db, container)
             except Exception:
@@ -93,23 +90,25 @@ def initialize_database():
     app._db = _db
 
 
-def initialize_logging(db: Session, app: PalaceFlask):
-    testing = "TESTING" in os.environ
-    log_level = LogConfiguration.initialize(db, testing=testing)
-    debug = log_level == "DEBUG"
-    app.config["DEBUG"] = debug
-    app.debug = debug
-    db.commit()
-    logging.getLogger().info("Application debug mode==%r" % app.debug)
-
-
-from . import routes  # noqa
-from .admin import routes as admin_routes  # noqa
+from api import routes  # noqa
+from api.admin import routes as admin_routes  # noqa
 
 
 def initialize_application() -> PalaceFlask:
     with app.app_context(), flask_babel.force_locale("en"):
         initialize_database()
+
+        # Load the application service container
+        container = container_instance()
+
+        # Initialize the application services container, this will make sure
+        # that the logging system is initialized.
+        container.init_resources()
+
+        # Initialize the applications error handler.
+        error_handler = ErrorHandler(app, container.config.logging.level())
+        app.register_error_handler(Exception, error_handler.handle)
+
         # TODO: Remove this lock once our settings are moved to integration settings.
         # We need this lock, so that only one instance of the application is
         # initialized at a time. This prevents database conflicts when multiple
@@ -117,8 +116,7 @@ def initialize_application() -> PalaceFlask:
         # time during initialization. This should be able to go away once we
         # move our settings off the configurationsettings system.
         with pg_advisory_lock(app._db, LOCK_ID_APP_INIT):
-            initialize_logging(app._db, app)
-            initialize_circulation_manager()
+            initialize_circulation_manager(container)
             initialize_admin()
     return app
 

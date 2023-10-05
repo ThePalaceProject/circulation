@@ -78,7 +78,6 @@ class TestCirculationEvent:
         return event, was_new
 
     def test_new_title(self, db: DatabaseTransactionFixture):
-
         # Here's a new title.
         collection = db.collection()
         data = self._event_data(

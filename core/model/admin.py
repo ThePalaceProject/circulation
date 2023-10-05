@@ -20,19 +20,17 @@ from sqlalchemy.orm import Mapped, relationship, validates
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 
+from core.model import Base, get_one, get_one_or_create
+from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
 from core.problem_details import INVALID_RESET_PASSWORD_TOKEN
 from core.util.problem_detail import ProblemDetail
-
-from . import Base, get_one, get_one_or_create
-from .hassessioncache import HasSessionCache
 
 if TYPE_CHECKING:
     from core.model.library import Library  # noqa: autoflake
 
 
 class Admin(Base, HasSessionCache):
-
     __tablename__ = "admins"
 
     id = Column(Integer, primary_key=True)
@@ -158,6 +156,7 @@ class Admin(Base, HasSessionCache):
         # First check if the admin is a manager of _all_ libraries.
         if self.is_sitewide_library_manager():
             return True
+
         # If not, they could still be a manager of _this_ library.
         def lookup_hook():
             return (
@@ -186,6 +185,7 @@ class Admin(Base, HasSessionCache):
         # Check if the admin is a librarian for _all_ libraries.
         if self.is_sitewide_librarian():
             return True
+
         # If not, they might be a librarian of _this_ library.
         def lookup_hook():
             return (
@@ -272,7 +272,6 @@ class Admin(Base, HasSessionCache):
 
 
 class AdminRole(Base, HasSessionCache):
-
     __tablename__ = "adminroles"
 
     id = Column(Integer, primary_key=True)

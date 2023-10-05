@@ -15,6 +15,17 @@ from lxml import etree
 from pydantic import validator
 
 from api.admin.validator import Validator
+from api.circulation import (
+    APIAwareFulfillmentInfo,
+    BaseCirculationAPI,
+    BaseCirculationLoanSettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
+from api.circulation_exceptions import *
+from api.selftest import HasCollectionSelfTests, SelfTestResult
+from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
@@ -57,18 +68,6 @@ from core.util.http import HTTP, RequestNetworkException
 from core.util.problem_detail import ProblemDetail
 from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser
-
-from .circulation import (
-    APIAwareFulfillmentInfo,
-    BaseCirculationAPI,
-    BaseCirculationLoanSettings,
-    FulfillmentInfo,
-    HoldInfo,
-    LoanInfo,
-)
-from .circulation_exceptions import *
-from .selftest import HasCollectionSelfTests, SelfTestResult
-from .web_publication_manifest import FindawayManifest, SpineItem
 
 
 class Axis360APIConstants:
@@ -138,7 +137,6 @@ class Axis360API(
     Axis360APIConstants,
     HasLibraryIntegrationConfiguration,
 ):
-
     NAME = ExternalIntegration.AXIS_360
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
@@ -272,7 +270,7 @@ class Axis360API(
             )
 
         # Run the tests defined by HasCollectionSelfTests
-        for result in super()._run_self_tests():
+        for result in super()._run_self_tests(_db):
             yield result
 
     def refresh_bearer_token(self):

@@ -51,9 +51,9 @@ class NavigationFeed(BaseOPDSFeed):
         return feed
 
     def generate_feed(self) -> None:
-        self._feed.add_metadata("title", text=self.title)
-        self._feed.add_metadata("id", text=self.url)
-        self._feed.add_metadata("updated", text=strftime(utc_now()))
+        self._feed.metadata.title = self.title
+        self._feed.metadata.id = self.url
+        self._feed.metadata.updated = strftime(utc_now())
         self._feed.add_link(href=self.url, rel="self")
         if not self.lane.children:
             # We can't generate links to children, since this Worklist

@@ -432,19 +432,13 @@ class TestCollectionSettings:
             ]
         )
         assert isinstance(l1.id, int)
-        assert (
-            "l1_ils"
-            == collection.integration_configuration.for_library(l1.id).settings_dict[
-                "ils_name"
-            ]
-        )
+        l1_settings = collection.integration_configuration.for_library(l1.id)
+        assert l1_settings is not None
+        assert "l1_ils" == l1_settings.settings_dict["ils_name"]
         assert isinstance(l2.id, int)
-        assert (
-            "l2_ils"
-            == collection.integration_configuration.for_library(l2.id).settings_dict[
-                "ils_name"
-            ]
-        )
+        l2_settings = collection.integration_configuration.for_library(l2.id)
+        assert l2_settings is not None
+        assert "l2_ils" == l2_settings.settings_dict["ils_name"]
 
         # This collection will be a child of the first collection.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
@@ -482,12 +476,9 @@ class TestCollectionSettings:
         # One library has access to the collection.
         assert [child] == l3.collections
         assert isinstance(l3.id, int)
-        assert (
-            "l3_ils"
-            == child.integration_configuration.for_library(l3.id).settings_dict[
-                "ils_name"
-            ]
-        )
+        l3_settings = child.integration_configuration.for_library(l3.id)
+        assert l3_settings is not None
+        assert "l3_ils" == l3_settings.settings_dict["ils_name"]
 
     def test_collections_post_edit(
         self, settings_ctrl_fixture: SettingsControllerFixture
@@ -544,9 +535,9 @@ class TestCollectionSettings:
             "overdrive_website_id"
         )
         assert isinstance(l1.id, int)
-        assert "the_ils" == collection.integration_configuration.for_library(
-            l1.id
-        ).settings_dict.get("ils_name")
+        l1_settings = collection.integration_configuration.for_library(l1.id)
+        assert l1_settings is not None
+        assert "the_ils" == l1_settings.settings_dict.get("ils_name")
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -698,9 +689,9 @@ class TestCollectionSettings:
 
         # Additional settings were set on the collection+library.
         assert isinstance(l1.id, int)
-        assert "14" == collection.integration_configuration.for_library(
-            l1.id
-        ).settings_dict.get("ebook_loan_duration")
+        l1_settings = collection.integration_configuration.for_library(l1.id)
+        assert l1_settings is not None
+        assert "14" == l1_settings.settings_dict.get("ebook_loan_duration")
 
         # Remove the connection between collection and library.
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):

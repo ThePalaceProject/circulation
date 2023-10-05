@@ -2,11 +2,10 @@ from typing import Optional
 
 from flask_babel import lazy_gettext as _
 
+from api.problem_details import *
 from core.config import IntegrationException
 from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
 from core.util.problem_detail import ProblemDetail
-
-from .problem_details import *
 
 
 class CirculationException(IntegrationException):

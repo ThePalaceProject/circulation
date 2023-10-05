@@ -33,9 +33,9 @@ from tests.api.mockapi.odilo import MockOdiloAPI
 from tests.core.mock import MockRequestsResponse
 
 if TYPE_CHECKING:
-    from ..fixtures.api_odilo_files import OdiloFilesFixture
-    from ..fixtures.authenticator import SimpleAuthIntegrationFixture
-    from ..fixtures.database import DatabaseTransactionFixture
+    from tests.fixtures.api_odilo_files import OdiloFilesFixture
+    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class OdiloFixture:
@@ -369,7 +369,6 @@ class TestOdiloCirculationAPI:
         odilo.api.log.info("Test resource not found on remote ok!")
 
     def test_make_absolute_url(self, odilo: OdiloFixture):
-
         # A relative URL is made absolute using the API's base URL.
         relative = "/relative-url"
         absolute = odilo.api._make_absolute_url(relative)

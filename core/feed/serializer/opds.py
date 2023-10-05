@@ -13,6 +13,7 @@ from core.feed.types import (
     DataEntry,
     FeedData,
     FeedEntryType,
+    FeedMetadata,
     IndirectAcquisition,
     WorkEntryData,
 )
@@ -37,6 +38,7 @@ ATTRIBUTE_MAPPING = {
     "rights": f"{{{OPDSFeed.DCTERMS_NS}}}rights",
     "ProviderName": f"{{{OPDSFeed.BIBFRAME_NS}}}ProviderName",
     "facetGroup": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
+    "facetGroupType": f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType",
     "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
     "ratingValue": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
 }
@@ -78,9 +80,7 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
         if feed.entrypoint:
             serialized.set(f"{{{OPDSFeed.SIMPLIFIED_NS}}}entrypoint", feed.entrypoint)
 
-        for name, metadata in feed.metadata.items():
-            element = self._serialize_feed_entry(name, metadata)
-            serialized.append(element)
+        serialized.extend(self._serialize_feed_metadata(feed.metadata))
 
         for entry in feed.entries:
             if entry.computed:
@@ -112,6 +112,28 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
 
         etree.indent(serialized)
         return self.to_string(serialized)
+
+    def _serialize_feed_metadata(self, metadata: FeedMetadata) -> List[etree._Element]:
+        tags = []
+        # Compulsory title
+        tags.append(self._tag("title", metadata.title or ""))
+
+        if metadata.id:
+            tags.append(self._tag("id", metadata.id))
+        if metadata.updated:
+            tags.append(self._tag("updated", metadata.updated))
+        if metadata.patron:
+            tags.append(self._serialize_feed_entry("patron", metadata.patron))
+        if metadata.drm_licensor:
+            tags.append(self._serialize_feed_entry("licensor", metadata.drm_licensor))
+        if metadata.lcp_hashed_passphrase:
+            tags.append(
+                self._serialize_feed_entry(
+                    "hashed_passphrase", metadata.lcp_hashed_passphrase
+                )
+            )
+
+        return tags
 
     def serialize_work_entry(self, feed_entry: WorkEntryData) -> etree._Element:
         entry: etree._Element = OPDSFeed.entry()

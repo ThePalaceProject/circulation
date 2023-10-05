@@ -16,9 +16,9 @@ from dateutil.parser import parse
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
-from .analytics import Analytics
-from .classifier import NO_NUMBER, NO_VALUE
-from .model import (
+from core.analytics import Analytics
+from core.classifier import NO_NUMBER, NO_VALUE
+from core.model import (
     Classification,
     Collection,
     Contributor,
@@ -41,11 +41,11 @@ from .model import (
     get_one,
     get_one_or_create,
 )
-from .model.licensing import LicenseFunctions, LicenseStatus
-from .util import LanguageCodes
-from .util.datetime_helpers import to_utc, utc_now
-from .util.median import median
-from .util.personal_names import display_name_to_sort_name
+from core.model.licensing import LicenseFunctions, LicenseStatus
+from core.util import LanguageCodes
+from core.util.datetime_helpers import to_utc, utc_now
+from core.util.median import median
+from core.util.personal_names import display_name_to_sort_name
 
 
 class ReplacementPolicy:
@@ -62,7 +62,6 @@ class ReplacementPolicy:
         formats=False,
         rights=False,
         link_content=False,
-        content_modifier=None,
         analytics=None,
         even_if_not_apparently_updated=False,
         presentation_calculation_policy=None,
@@ -75,7 +74,6 @@ class ReplacementPolicy:
         self.formats = formats
         self.link_content = link_content
         self.even_if_not_apparently_updated = even_if_not_apparently_updated
-        self.content_modifier = content_modifier
         self.analytics = analytics
         self.presentation_calculation_policy = (
             presentation_calculation_policy or PresentationCalculationPolicy()
@@ -523,7 +521,7 @@ class LicenseData(LicenseFunctions):
     def __init__(
         self,
         identifier: str,
-        checkout_url: str,
+        checkout_url: Optional[str],
         status_url: str,
         status: LicenseStatus,
         checkouts_available: int,
@@ -556,7 +554,6 @@ class LicenseData(LicenseFunctions):
 
 
 class TimestampData:
-
     CLEAR_VALUE = Timestamp.CLEAR_VALUE
 
     def __init__(
@@ -1998,7 +1995,7 @@ class CSVMetadataImporter:
                         primary_identifier = identifier
 
         subjects = []
-        for (field_name, (subject_type, weight)) in list(self.subject_fields.items()):
+        for field_name, (subject_type, weight) in list(self.subject_fields.items()):
             values = self.list_field(row, field_name)
             for value in values:
                 subjects.append(

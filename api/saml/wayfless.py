@@ -76,7 +76,6 @@ class SAMLWAYFlessAcquisitionLinkProcessor(
     def fulfill(
         self, patron, pin, licensepool, delivery_mechanism, fulfillment: FulfillmentInfo
     ) -> FulfillmentInfo:
-
         self._logger.debug(
             f"WAYFless acquisition link template: {self._wayfless_url_template}"
         )

@@ -3,11 +3,10 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
+from api.circulation_exceptions import *
+from api.problem_details import *
 from core.model import Library, Patron
 from core.util.problem_detail import ProblemDetail
-
-from .circulation_exceptions import *
-from .problem_details import *
 
 
 class BaseCirculationManagerController:
@@ -79,7 +78,6 @@ class BaseCirculationManagerController:
         return patron
 
     def authenticated_patron(self, authorization_header: Authorization):
-
         """Look up the patron authenticated by the given authorization header.
 
         The header could contain a barcode and pin or a token for an

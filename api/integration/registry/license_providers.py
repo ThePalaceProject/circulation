@@ -9,12 +9,12 @@ from core.model.configuration import ExternalIntegration
 if TYPE_CHECKING:
     from api.circulation import BaseCirculationAPI  # noqa: autoflake
     from core.integration.settings import BaseSettings  # noqa: autoflake
-    from core.opds_import import OPDSImporter  # noqa: autoflake
+    from core.opds_import import BaseOPDSImporter  # noqa: autoflake
 
 
 class LicenseProvidersRegistry(
     IntegrationRegistry[
-        Union["BaseCirculationAPI[BaseSettings, BaseSettings]", "OPDSImporter"]
+        Union["BaseCirculationAPI[BaseSettings, BaseSettings]", "BaseOPDSImporter"]
     ]
 ):
     def __init__(self) -> None:
@@ -48,7 +48,7 @@ class CirculationLicenseProvidersRegistry(
         self.register(ODL2API, canonical=ODL2API.NAME)
 
 
-class OpenAccessLicenseProvidersRegistry(IntegrationRegistry["OPDSImporter"]):
+class OpenAccessLicenseProvidersRegistry(IntegrationRegistry["BaseOPDSImporter"]):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
         from core.opds2_import import OPDS2Importer

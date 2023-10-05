@@ -10,7 +10,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -30,20 +30,20 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, backref, relationship
 from sqlalchemy.orm.session import Session
 
-from ..util.datetime_helpers import utc_now
-from ..util.http import HTTP
-from . import Base, get_one, get_one_or_create
-from .constants import (
+from core.model import Base, get_one, get_one_or_create
+from core.model.constants import (
     DataSourceConstants,
     IdentifierConstants,
     LinkRelations,
     MediaTypes,
 )
-from .edition import Edition
-from .licensing import LicensePoolDeliveryMechanism
+from core.model.edition import Edition
+from core.model.licensing import LicensePoolDeliveryMechanism
+from core.util.datetime_helpers import utc_now
+from core.util.http import HTTP
 
 if TYPE_CHECKING:
-    from core.model import CachedMARCFile, Work  # noqa: autoflake
+    from core.model import CachedMARCFile
 
 
 class Resource(Base):
@@ -75,7 +75,7 @@ class Resource(Base):
 
     # Many Works may use this resource (as opposed to other resources
     # linked to them with rel="description") as their summary.
-    from .work import Work
+    from core.model.work import Work
 
     summary_works: Mapped[List[Work]] = relationship(
         "Work", backref="summary", foreign_keys=[Work.summary_id]
@@ -281,7 +281,6 @@ class Resource(Base):
 
     @classmethod
     def best_covers_among(cls, resources):
-
         """Choose the best covers from a list of Resources."""
         champions = []
         champion_key = None
@@ -1019,12 +1018,14 @@ class Representation(Base, MediaTypes):
         return json.dumps(dict(d))
 
     @classmethod
-    def simple_http_get(cls, url, headers, **kwargs) -> Tuple[int, Any, Any]:
+    def simple_http_get(
+        cls, url, headers, **kwargs
+    ) -> Tuple[int, Dict[str, str], bytes]:
         """The most simple HTTP-based GET."""
         if not "allow_redirects" in kwargs:
             kwargs["allow_redirects"] = True
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
-        return response.status_code, response.headers, response.content
+        return response.status_code, response.headers, response.content  # type: ignore[return-value]
 
     @classmethod
     def simple_http_post(cls, url, headers, **kwargs):

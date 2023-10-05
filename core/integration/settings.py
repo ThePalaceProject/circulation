@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
@@ -29,6 +28,7 @@ from api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
 )
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 if TYPE_CHECKING:
@@ -244,7 +244,7 @@ class ConfigurationFormItem:
         return self.weight, form_entry
 
 
-class BaseSettings(BaseModel):
+class BaseSettings(BaseModel, LoggerMixin):
     """
     Base class for all our database backed pydantic settings classes
 
@@ -308,11 +308,6 @@ class BaseSettings(BaseModel):
         # but we generally will populate the module using the field name
         # not the alias.
         allow_population_by_field_name = True
-
-    @classmethod
-    def logger(cls) -> logging.Logger:
-        """Get the logger for this class"""
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     @classmethod
     def configuration_form(cls, db: Session) -> List[Dict[str, Any]]:

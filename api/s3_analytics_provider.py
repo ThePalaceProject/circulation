@@ -10,13 +10,8 @@ from sqlalchemy.orm import Session
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import Library, LicensePool, MediaTypes
-from core.model.configuration import ConfigurationGrouping
 from core.service.container import Services
 from core.service.storage.s3 import S3Service
-
-
-class S3AnalyticsProviderConfiguration(ConfigurationGrouping):
-    """Contains configuration settings of the S3 Analytics provider."""
 
 
 class S3AnalyticsProvider(LocalAnalyticsProvider):
@@ -25,9 +20,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     NAME = _("S3 Analytics")
     DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
-    SETTINGS = (
-        LocalAnalyticsProvider.SETTINGS + S3AnalyticsProviderConfiguration.to_settings()
-    )
+    SETTINGS = LocalAnalyticsProvider.SETTINGS
 
     def __init__(
         self,

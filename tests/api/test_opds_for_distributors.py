@@ -1,11 +1,10 @@
 import datetime
 import json
 from typing import Callable, Union
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-import core.opds_import
 from api.circulation_exceptions import *
 from api.opds_for_distributors import (
     OPDSForDistributorsAPI,
@@ -29,6 +28,7 @@ from core.model import (
     RightsStatus,
     Timestamp,
     create,
+    get_one,
 )
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
@@ -131,7 +131,7 @@ class TestOPDSForDistributorsAPI:
         # BEARER_TOKEN access control scheme, then X is a supported
         # media type for an OPDS For Distributors collection.
         supported = opds_dist_api_fixture.api.SUPPORTED_MEDIA_TYPES
-        for (format, drm) in DeliveryMechanism.default_client_can_fulfill_lookup:
+        for format, drm in DeliveryMechanism.default_client_can_fulfill_lookup:
             if drm == (DeliveryMechanism.BEARER_TOKEN) and format is not None:
                 assert format in supported
 
@@ -147,7 +147,7 @@ class TestOPDSForDistributorsAPI:
         fulfilled with no underlying loan, if its delivery mechanism
         uses bearer token fulfillment.
         """
-        patron = object()
+        patron = MagicMock()
         pool = opds_dist_api_fixture.db.licensepool(
             edition=None, collection=opds_dist_api_fixture.collection
         )
@@ -156,11 +156,11 @@ class TestOPDSForDistributorsAPI:
         m = opds_dist_api_fixture.api.can_fulfill_without_loan
 
         # No LicensePoolDeliveryMechanism -> False
-        assert False == m(patron, pool, None)
+        assert False == m(patron, pool, MagicMock())
 
         # No LicensePool -> False (there can be multiple LicensePools for
         # a single LicensePoolDeliveryMechanism).
-        assert False == m(patron, None, lpdm)
+        assert False == m(patron, MagicMock(), lpdm)
 
         # No DeliveryMechanism -> False
         old_dm = lpdm.delivery_mechanism
@@ -410,6 +410,7 @@ class TestOPDSForDistributorsAPI:
 
         # The loan's start date has been set to the current time.
         now = utc_now()
+        assert loan_info.start_date is not None
         assert (now - loan_info.start_date).seconds < 2
 
         # The loan is of indefinite duration.
@@ -471,6 +472,7 @@ class TestOPDSForDistributorsAPI:
         assert None == fulfillment_info.content_link
 
         assert DeliveryMechanism.BEARER_TOKEN == fulfillment_info.content_type
+        assert fulfillment_info.content is not None
         bearer_token_document = json.loads(fulfillment_info.content)
         expires_in = bearer_token_document["expires_in"]
         assert expires_in < 60
@@ -483,6 +485,7 @@ class TestOPDSForDistributorsAPI:
         # bearer token expires to the time at which the title was
         # originally fulfilled.
         expect_expiration = fulfillment_time + datetime.timedelta(seconds=expires_in)
+        assert fulfillment_info.content_expires is not None
         assert (
             abs((fulfillment_info.content_expires - expect_expiration).total_seconds())
             < 5
@@ -621,7 +624,6 @@ class TestOPDSForDistributorsImporter:
     def test__add_format_data(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
     ):
-
         # Mock SUPPORTED_MEDIA_TYPES for purposes of test.
         api = OPDSForDistributorsAPI
         old_value = api.SUPPORTED_MEDIA_TYPES
@@ -708,9 +710,7 @@ class TestOPDSForDistributorsImporter:
             collection=collection2,
         )
 
-        with patch(
-            "core.opds_import.get_one", wraps=core.opds_import.get_one
-        ) as get_one_mock:
+        with patch("core.opds_import.get_one", wraps=get_one) as get_one_mock:
             importer1_lp, _ = importer1.update_work_for_edition(edition)
             importer2_lp, _ = importer2.update_work_for_edition(edition)
 

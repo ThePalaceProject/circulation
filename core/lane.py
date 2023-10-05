@@ -37,20 +37,11 @@ from sqlalchemy.orm import (
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 
-from core.model.before_flush_decorator import Listener
-from core.model.configuration import (
-    ConfigurationAttributeValue,
-    ConfigurationSetting,
-    ExternalIntegration,
-)
-from core.model.hybrid import hybrid_property
-from core.model.listeners import site_configuration_has_changed
-
-from .classifier import Classifier
-from .config import Configuration
-from .entrypoint import EntryPoint, EverythingEntryPoint
-from .facets import FacetConstants
-from .model import (
+from core.classifier import Classifier
+from core.config import Configuration
+from core.entrypoint import EntryPoint, EverythingEntryPoint
+from core.facets import FacetConstants
+from core.model import (
     Base,
     CachedFeed,
     Collection,
@@ -67,13 +58,21 @@ from .model import (
     get_one_or_create,
     tuple_to_numericrange,
 )
-from .model.constants import EditionConstants
-from .problem_details import *
-from .util import LanguageCodes
-from .util.accept_language import parse_accept_language
-from .util.datetime_helpers import utc_now
-from .util.opds_writer import OPDSFeed
-from .util.problem_detail import ProblemDetail
+from core.model.before_flush_decorator import Listener
+from core.model.configuration import (
+    ConfigurationAttributeValue,
+    ConfigurationSetting,
+    ExternalIntegration,
+)
+from core.model.constants import EditionConstants
+from core.model.hybrid import hybrid_property
+from core.model.listeners import site_configuration_has_changed
+from core.problem_details import *
+from core.util import LanguageCodes
+from core.util.accept_language import parse_accept_language
+from core.util.datetime_helpers import utc_now
+from core.util.opds_writer import OPDSFeed
+from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
     from core.model import CachedMARCFile  # noqa: autoflake
@@ -1929,7 +1928,7 @@ class WorkList:
             that generates such a list when executed.
 
         """
-        from .external_search import ExternalSearchIndex
+        from core.external_search import ExternalSearchIndex
 
         search_engine = search_engine or ExternalSearchIndex.load(_db)
         filter = self.filter(_db, facets)
@@ -1944,7 +1943,7 @@ class WorkList:
         Using this ensures that modify_search_filter_hook() is always
         called.
         """
-        from .external_search import Filter
+        from core.external_search import Filter
 
         filter = Filter.from_worklist(_db, self, facets)
         modified = self.modify_search_filter_hook(filter)
@@ -1981,7 +1980,7 @@ class WorkList:
         """Convert a list of lists of Hit objects into a list
         of lists of Work objects.
         """
-        from .external_search import Filter, WorkSearchResult
+        from core.external_search import Filter, WorkSearchResult
 
         has_script_fields = None
         work_ids = set()
@@ -2128,7 +2127,7 @@ class WorkList:
         else:
             target_size = pagination.size
 
-        from .external_search import ExternalSearchIndex
+        from core.external_search import ExternalSearchIndex
 
         search_engine = search_engine or ExternalSearchIndex.load(_db)
 
@@ -2250,7 +2249,7 @@ class WorkList:
         queries = []
         for lane in lanes:
             overview_facets = lane.overview_facets(_db, facets)
-            from .external_search import Filter
+            from core.external_search import Filter
 
             filter = Filter.from_worklist(_db, lane, overview_facets)
             queries.append((None, filter, pagination))
@@ -3052,7 +3051,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     def update_size(self, _db, search_engine=None):
         """Update the stored estimate of the number of Works in this Lane."""
         library = self.get_library(_db)
-        from .external_search import ExternalSearchIndex
+        from core.external_search import ExternalSearchIndex
 
         search_engine = search_engine or ExternalSearchIndex.load(_db)
 

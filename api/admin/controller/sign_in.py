@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 from typing import Tuple
+from urllib.parse import urlsplit
 
 import flask
 from flask import Response, redirect, url_for
 from flask_babel import lazy_gettext as _
 from werkzeug import Response as WerkzeugResponse
-from werkzeug.urls import BaseURL, url_parse
 
 from api.admin.config import Configuration as AdminClientConfig
 from api.admin.controller.base import AdminController
@@ -153,7 +153,7 @@ class SanitizedRedirections:
         we extract the URL path and forbid redirecting to external
         hosts.
         """
-        redirect_url: BaseURL = url_parse(target)
+        redirect_url = urlsplit(target)
 
         # If the redirect isn't asking for a particular host, then it's safe.
         if redirect_url.netloc in (None, ""):

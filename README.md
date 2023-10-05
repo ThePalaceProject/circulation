@@ -186,6 +186,29 @@ a storage service, you can set the following environment variables:
         - `{key}`: The key of the file.
         - `{region}`: The region of the storage service.
 
+#### Logging
+
+The application uses the [Python logging](https://docs.python.org/3/library/logging.html) module for logging. Optionally
+logs can be configured to be sent to AWS CloudWatch logs. The following environment variables can be used to configure
+the logging:
+
+- `PALACE_LOG_LEVEL`: The log level to use for the application. The default is `INFO`.
+- `PALACE_LOG_VERBOSE_LEVEL`: The log level to use for particularly verbose loggers. Keeping these loggers at a
+  higher log level by default makes it easier to troubleshoot issues. The default is `WARNING`.
+- `PALACE_LOG_CLOUDWATCH_ENABLED`: Enable / disable sending logs to CloudWatch. The default is `false`.
+- `PALACE_LOG_CLOUDWATCH_REGION`: The AWS region of the CloudWatch logs. This must be set if using CloudWatch logs.
+- `PALACE_LOG_CLOUDWATCH_GROUP`: The name of the CloudWatch log group to send logs to. Default is `palace`.
+- `PALACE_LOG_CLOUDWATCH_STREAM`: The name of the CloudWatch log stream to send logs to. Default is
+  `{machine_name}/{program_name}/{logger_name}/{process_id}`. See
+  [watchtower docs](https://github.com/kislyuk/watchtower#log-stream-naming) for details.
+- `PALACE_LOG_CLOUDWATCH_INTERVAL`: The interval in seconds to send logs to CloudWatch. Default is `60`.
+- `PALACE_LOG_CLOUDWATCH_CREATE_GROUP`: Whether to create the log group if it does not exist. Default is `true`.
+- `PALACE_LOG_CLOUDWATCH_ACCESS_KEY`: The access key to use when sending logs to CloudWatch. This is optional.
+    - If this key is set it will be passed to boto3 when connecting to CloudWatch.
+    - If it is not set boto3 will attempt to find credentials as outlined in their
+      [documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
+- `PALACE_LOG_CLOUDWATCH_SECRET_KEY`: The secret key to use when sending logs to CloudWatch. This is optional.
+
 #### Patron `Basic Token` authentication
 
 Enables/disables patron "basic token" authentication through setting the designated environment variable to any

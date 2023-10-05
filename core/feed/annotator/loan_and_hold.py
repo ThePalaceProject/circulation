@@ -2,12 +2,11 @@ import copy
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.types import FeedData, Link, WorkEntry
 from core.model.configuration import ExternalIntegration
 from core.model.constants import EditionConstants, LinkRelations
 from core.model.patron import Hold, Patron
-
-from .circulation import LibraryAnnotator
 
 
 class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
@@ -87,8 +86,8 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
             link = self.user_profile_management_protocol_link
             if link.href is not None:
                 feed.add_link(link.href, rel=link.rel)
-            for name, value in tags.items():
-                feed.add_metadata(name, feed_entry=value)
+            if "drm_licensor" in tags:
+                feed.metadata.drm_licensor = tags["drm_licensor"]
 
     def annotate_work_entry(
         self, entry: WorkEntry, updated: Optional[datetime] = None

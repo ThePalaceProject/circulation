@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 
 from money import Money
@@ -16,6 +15,7 @@ from core.model.integration import IntegrationConfiguration
 from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.authentication_for_opds import OPDSAuthenticationFlow
 from core.util.datetime_helpers import utc_now
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
 
@@ -31,6 +31,7 @@ class AuthenticationProvider(
     OPDSAuthenticationFlow,
     HasLibraryIntegrationConfiguration,
     HasSelfTestsIntegrationConfiguration,
+    LoggerMixin,
     ABC,
 ):
     """Handle a specific patron authentication scheme."""
@@ -46,10 +47,6 @@ class AuthenticationProvider(
         self.library_id = library_id
         self.integration_id = integration_id
         self.analytics = analytics
-
-    @classmethod
-    def logger(cls) -> logging.Logger:
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     def library(self, _db: Session) -> Library | None:
         return Library.by_id(_db, self.library_id)

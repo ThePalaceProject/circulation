@@ -4,8 +4,8 @@ from collections import defaultdict
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
-from .metadata_layer import ReplacementPolicy
-from .model import (
+from core.metadata_layer import ReplacementPolicy
+from core.model import (
     Classification,
     CustomListEntry,
     Edition,
@@ -13,7 +13,7 @@ from .model import (
     Subject,
     get_one_or_create,
 )
-from .util.datetime_helpers import utc_now
+from core.util.datetime_helpers import utc_now
 
 
 class TitleFromExternalList:

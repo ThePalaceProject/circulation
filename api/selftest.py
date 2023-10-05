@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC
-from typing import Iterable, Optional, Tuple, Union
+from typing import Generator, Iterable, Optional, Tuple, Union
 
 from sqlalchemy.orm.session import Session
 
@@ -84,7 +83,7 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
         :raise: _NoValidLibrarySelfTestPatron when a valid patron is not found.
         """
         _db = _db or Session.object_session(library)
-        from .authenticator import LibraryAuthenticator
+        from api.authenticator import LibraryAuthenticator
 
         library_authenticator = LibraryAuthenticator.from_config(_db, library)
         auth = library_authenticator.basic_auth_provider
@@ -132,10 +131,6 @@ class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelf
     def integration(self, _db: Session) -> IntegrationConfiguration | None:
         return self.collection.integration_configuration
 
-    @classmethod
-    def logger(cls) -> logging.Logger:
-        return logging.Logger(cls.__name__)
-
     def _no_delivery_mechanisms_test(self):
         # Find works in the tested collection that have no delivery
         # mechanisms.
@@ -157,7 +152,7 @@ class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelf
         else:
             return "All titles in this collection have delivery mechanisms."
 
-    def _run_self_tests(self):
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         yield self.run_test(
             "Checking for titles that have no delivery mechanisms.",
             self._no_delivery_mechanisms_test,
