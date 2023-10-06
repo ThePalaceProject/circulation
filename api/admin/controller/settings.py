@@ -16,7 +16,6 @@ from api.admin.problem_details import (
     INTEGRATION_NAME_ALREADY_IN_USE,
     INTEGRATION_URL_ALREADY_IN_USE,
     INVALID_CONFIGURATION_OPTION,
-    MISSING_INTEGRATION,
     MISSING_SERVICE,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
@@ -37,7 +36,6 @@ from core.integration.settings import BaseSettings
 from core.model import (
     ConfigurationSetting,
     ExternalIntegration,
-    ExternalIntegrationLink,
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
     Library,
@@ -57,66 +55,6 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
     METADATA_SERVICE_URI_TYPE = "application/opds+json;profile=https://librarysimplified.org/rel/profile/metadata-service"
 
     NO_MIRROR_INTEGRATION = "NO_MIRROR"
-
-    def _set_storage_external_integration_link(
-        self, service: ExternalIntegration, purpose: str, setting_key: str
-    ) -> Optional[ProblemDetail]:
-        """Either set or delete the external integration link between the
-        service and the storage integration.
-
-        :param service: Service's ExternalIntegration object
-
-        :param purpose: Service's purpose
-
-        :param setting_key: Key of the configuration setting that must be set in the storage integration.
-            For example, a specific bucket (MARC, Analytics, etc.).
-
-        :return: ProblemDetail object if the operation failed
-        """
-        mirror_integration_id = flask.request.form.get("mirror_integration_id")
-
-        if not mirror_integration_id:
-            return None
-
-        # If no storage integration was selected, then delete the existing
-        # external integration link.
-        if mirror_integration_id == self.NO_MIRROR_INTEGRATION:
-            current_integration_link = get_one(
-                self._db,
-                ExternalIntegrationLink,
-                library_id=None,
-                external_integration_id=service.id,
-                purpose=purpose,
-            )
-
-            if current_integration_link:
-                self._db.delete(current_integration_link)
-        else:
-            storage_integration = get_one(
-                self._db, ExternalIntegration, id=mirror_integration_id
-            )
-
-            # Only get storage integrations that have a specific configuration setting set.
-            # For example: a specific bucket.
-            if (
-                not storage_integration
-                or not storage_integration.setting(setting_key).value
-            ):
-                return MISSING_INTEGRATION
-
-            current_integration_link_created, ignore = get_one_or_create(
-                self._db,
-                ExternalIntegrationLink,
-                library_id=None,
-                external_integration_id=service.id,
-                purpose=purpose,
-            )
-
-            current_integration_link_created.other_integration_id = (
-                storage_integration.id
-            )
-
-        return None
 
     def _get_settings_class(
         self, registry: IntegrationRegistry, protocol_name: str, is_child=False
@@ -233,29 +171,14 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
             settings = dict()
             for setting in protocol.get("settings", []):
                 key = setting.get("key")
-
-                # If the setting is a covers or books mirror, we need to get
-                # the value from ExternalIntegrationLink and
-                # not from a ConfigurationSetting.
-                if key.endswith("mirror_integration_id"):
-                    storage_integration = get_one(
-                        self._db,
-                        ExternalIntegrationLink,
-                        external_integration_id=service.id,
-                    )
-                    if storage_integration:
-                        value = str(storage_integration.other_integration_id)
-                    else:
-                        value = self.NO_MIRROR_INTEGRATION
+                if setting.get("type") in ("list", "menu"):
+                    value = ConfigurationSetting.for_externalintegration(
+                        key, service
+                    ).json_value
                 else:
-                    if setting.get("type") in ("list", "menu"):
-                        value = ConfigurationSetting.for_externalintegration(
-                            key, service
-                        ).json_value
-                    else:
-                        value = ConfigurationSetting.for_externalintegration(
-                            key, service
-                        ).value
+                    value = ConfigurationSetting.for_externalintegration(
+                        key, service
+                    ).value
                 settings[key] = value
 
             service_info = dict(

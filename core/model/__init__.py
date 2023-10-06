@@ -537,11 +537,7 @@ from core.model.collection import (
     CollectionMissing,
     collections_identifiers,
 )
-from core.model.configuration import (
-    ConfigurationSetting,
-    ExternalIntegration,
-    ExternalIntegrationLink,
-)
+from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.contributor import Contribution, Contributor
 from core.model.coverage import (
     BaseCoverageRecord,
