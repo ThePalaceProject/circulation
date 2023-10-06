@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Dict
+from typing import Dict, List
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
@@ -50,6 +50,10 @@ class Configuration(ConfigurationConstants):
     OD_PREFIX_TESTING_PREFIX = "SIMPLIFIED_TESTING"
     OD_FULFILLMENT_CLIENT_KEY_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_KEY"
     OD_FULFILLMENT_CLIENT_SECRET_SUFFIX = "OVERDRIVE_FULFILLMENT_CLIENT_SECRET"
+
+    # Quicksight
+    # Comma separated aws arns
+    QUICKSIGHT_AUTHORIZED_ARNS_KEY = "QUICKSIGHT_AUTHORIZED_ARNS"
 
     # Environment variable for SirsiDynix Auth
     SIRSI_DYNIX_APP_ID = "SIMPLIFIED_SIRSI_DYNIX_APP_ID"
@@ -283,6 +287,12 @@ class Configuration(ConfigurationConstants):
         if not key:
             raise CannotLoadConfiguration("Invalid fulfillment credentials.")
         return {"key": key, "secret": secret}
+
+    @classmethod
+    def quicksight_authorized_arns(cls) -> Dict[str, List[str]]:
+        """Split the comma separated arns"""
+        arns_str = os.environ.get(cls.QUICKSIGHT_AUTHORIZED_ARNS_KEY, "")
+        return json.loads(arns_str)
 
     @classmethod
     def localization_languages(cls):

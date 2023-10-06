@@ -11,11 +11,16 @@ from api.admin.config import Configuration as AdminClientConfig
 from api.admin.controller.custom_lists import CustomListsController
 from api.admin.dashboard_stats import generate_statistics
 from api.admin.model.dashboard_statistics import StatisticsResponse
+from api.admin.model.quicksight import (
+    QuicksightDashboardNamesResponse,
+    QuicksightGenerateUrlRequest,
+    QuicksightGenerateUrlResponse,
+)
 from api.admin.templates import admin_sign_in_again as sign_in_again_template
 from api.app import api_spec, app
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
-from core.util.problem_detail import ProblemDetail, ProblemDetailModel
+from core.util.problem_detail import ProblemDetail, ProblemDetailModel, ProblemError
 
 # An admin's session will expire after this amount of time and
 # the admin will have to log in again.
@@ -82,7 +87,11 @@ def returns_json_or_response_or_problem_detail(f):
 
     @wraps(f)
     def decorated(*args, **kwargs):
-        v = f(*args, **kwargs)
+        try:
+            v = f(*args, **kwargs)
+        except ProblemError as ex:
+            # A ProblemError is the same as a ProblemDetail
+            v = ex.problem_detail
         if isinstance(v, ProblemDetail):
             return v.response
         if isinstance(v, Response):
@@ -311,6 +320,31 @@ def stats():
         app.manager.admin_dashboard_controller.stats(stats_function=generate_statistics)
     )
     return statistics_response.api_dict()
+
+
+@app.route("/admin/quicksight_embed/<dashboard_name>")
+@api_spec.validate(
+    resp=SpecResponse(HTTP_200=QuicksightGenerateUrlResponse),
+    tags=["admin.quicksight"],
+    query=QuicksightGenerateUrlRequest,
+)
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def generate_quicksight_url(dashboard_name: str):
+    return app.manager.admin_quicksight_controller.generate_quicksight_url(
+        dashboard_name
+    )
+
+
+@app.route("/admin/quicksight_embed/names")
+@api_spec.validate(
+    resp=SpecResponse(HTTP_200=QuicksightDashboardNamesResponse),
+    tags=["admin.quicksight"],
+)
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def get_quicksight_names():
+    return app.manager.admin_quicksight_controller.get_dashboard_names()
 
 
 @app.route("/admin/libraries", methods=["GET", "POST"])

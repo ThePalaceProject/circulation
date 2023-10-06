@@ -12,6 +12,7 @@ from api.admin import routes
 from api.admin.controller import setup_admin_controllers
 from api.admin.problem_details import *
 from api.controller import CirculationManagerController
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
@@ -908,3 +909,23 @@ class TestAdminStatic:
             str(local_path),
             "circulation-admin.css",
         )
+
+
+def test_returns_json_or_response_or_problem_detail():
+    @routes.returns_json_or_response_or_problem_detail
+    def mock_responses(response):
+        if isinstance(response, ProblemError):
+            raise response
+        return response
+
+    problem = ProblemDetail(
+        "http://problem", status_code=400, title="Title", detail="Is a detail"
+    )
+
+    # Both raising an error and responding with a problem detail are equivalent
+    assert mock_responses(ProblemError(problem)) == problem.response
+    assert mock_responses(problem) == problem.response
+
+    # A json provides a response object
+    with flask.app.Flask(__name__).test_request_context():
+        assert mock_responses({"status": True}).json == {"status": True}

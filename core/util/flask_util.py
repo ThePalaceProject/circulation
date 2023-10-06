@@ -205,3 +205,14 @@ class CustomBaseModel(BaseModel):
         rather than their Python class member names.
         """
         return self.dict(*args, by_alias=by_alias, **kwargs)
+
+
+def str_comma_list_validator(value):
+    """Validate a comma separated string and parse it into a list, generally used for query parameters"""
+    if isinstance(value, (int, float)):
+        # A single number shows up as an int
+        value = str(value)
+    elif not isinstance(value, str):
+        raise TypeError("string required")
+
+    return value.split(",")

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from api.admin.controller.quicksight import QuickSightController
+
 if TYPE_CHECKING:
     from api.controller import CirculationManager
 
@@ -100,3 +102,4 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
     manager.admin_announcement_service = AnnouncementSettings(manager)
     manager.admin_search_controller = AdminSearchController(manager)
+    manager.admin_quicksight_controller = QuickSightController(manager)
