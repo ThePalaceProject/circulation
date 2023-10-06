@@ -74,7 +74,10 @@ class TestQuicksightController:
                         "Dashboard": {"InitialDashboardId": "uuid1"}
                     },
                     SessionTags=[
-                        dict(Key="library_name", Value="|".join([default.name, library1.name]))  # type: ignore[list-item]
+                        dict(
+                            Key="library_name",
+                            Value="|".join([str(library1.name), str(default.name)]),
+                        )
                     ],
                 )
 
@@ -97,7 +100,7 @@ class TestQuicksightController:
                         "Dashboard": {"InitialDashboardId": "uuid2"}
                     },
                     SessionTags=[
-                        dict(Key="library_name", Value="|".join([library1.name]))  # type: ignore[list-item]
+                        dict(Key="library_name", Value="|".join([str(library1.name)]))
                     ],
                 )
 
