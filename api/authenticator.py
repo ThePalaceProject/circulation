@@ -16,7 +16,11 @@ from werkzeug.datastructures import Authorization, Headers
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
 from api.authentication.access_token import AccessTokenProvider
-from api.authentication.base import AuthenticationProvider
+from api.authentication.base import (
+    AuthenticationProvider,
+    LibrarySettingsType,
+    SettingsType,
+)
 from api.authentication.basic import BasicAuthenticationProvider
 from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.config import CannotLoadConfiguration, Configuration
@@ -842,7 +846,9 @@ class BearerTokenSigner:
         return ConfigurationSetting.sitewide_secret(db, cls.BEARER_TOKEN_SIGNING_SECRET)
 
 
-class BaseSAMLAuthenticationProvider(AuthenticationProvider, BearerTokenSigner, ABC):
+class BaseSAMLAuthenticationProvider(
+    AuthenticationProvider[SettingsType, LibrarySettingsType], BearerTokenSigner, ABC
+):
     """
     Base class for SAML authentication providers
     """

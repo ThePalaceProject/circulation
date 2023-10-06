@@ -166,7 +166,9 @@ class MilleniumPatronLibrarySettings(BasicAuthProviderLibrarySettings):
     )
 
 
-class MilleniumPatronAPI(BasicAuthenticationProvider):
+class MilleniumPatronAPI(
+    BasicAuthenticationProvider[MilleniumPatronSettings, MilleniumPatronLibrarySettings]
+):
     @classmethod
     def label(cls) -> str:
         return "Millenium"

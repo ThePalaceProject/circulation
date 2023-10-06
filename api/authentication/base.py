@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TypeVar
 
 from money import Money
 from sqlalchemy.orm import Session
@@ -27,9 +28,15 @@ class AuthProviderLibrarySettings(BaseSettings):
     ...
 
 
+SettingsType = TypeVar("SettingsType", bound=AuthProviderSettings, covariant=True)
+LibrarySettingsType = TypeVar(
+    "LibrarySettingsType", bound=AuthProviderLibrarySettings, covariant=True
+)
+
+
 class AuthenticationProvider(
     OPDSAuthenticationFlow,
-    HasLibraryIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
     HasSelfTestsIntegrationConfiguration,
     LoggerMixin,
     ABC,
@@ -40,16 +47,22 @@ class AuthenticationProvider(
         self,
         library_id: int,
         integration_id: int,
-        settings: AuthProviderSettings,
-        library_settings: AuthProviderLibrarySettings,
+        settings: SettingsType,
+        library_settings: LibrarySettingsType,
         analytics: Analytics | None = None,
     ):
         self.library_id = library_id
         self.integration_id = integration_id
         self.analytics = analytics
+        self._settings = settings
+        self._library_settings = library_settings
 
     def library(self, _db: Session) -> Library | None:
         return Library.by_id(_db, self.library_id)
+
+    @property
+    def settings(self) -> SettingsType:
+        return self._settings
 
     def integration(self, _db: Session) -> IntegrationConfiguration | None:
         return (
@@ -57,16 +70,6 @@ class AuthenticationProvider(
             .filter(IntegrationConfiguration.id == self.integration_id)
             .one_or_none()
         )
-
-    @classmethod
-    def settings_class(cls) -> type[AuthProviderSettings]:
-        return AuthProviderSettings
-
-    @classmethod
-    def library_settings_class(
-        cls,
-    ) -> type[AuthProviderLibrarySettings]:
-        return AuthProviderLibrarySettings
 
     @property
     @abstractmethod
@@ -109,6 +112,11 @@ class AuthenticationProvider(
         :return: The patron's password, or None if not available.
         """
         ...
+
+
+AuthenticationProviderType = AuthenticationProvider[
+    AuthProviderSettings, AuthProviderLibrarySettings
+]
 
 
 class CannotCreateLocalPatron(Exception):

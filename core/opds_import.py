@@ -1713,18 +1713,18 @@ class OPDSImportMonitor(
         self.force_reimport = force_reimport
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
-        config = self.importer.api.configuration()
-        self.username = config.username
-        self.password = config.password
+        settings = self.importer.api.settings
+        self.username = settings.username
+        self.password = settings.password
 
         # Not all inherited settings have these
         # OPDSforDistributors does not use this setting
         try:
-            self.custom_accept_header = config.custom_accept_header
+            self.custom_accept_header = settings.custom_accept_header
         except AttributeError:
             self.custom_accept_header = None
         try:
-            self._max_retry_count: int | None = config.max_retry_count
+            self._max_retry_count: int | None = settings.max_retry_count
         except AttributeError:
             self._max_retry_count = 0
 

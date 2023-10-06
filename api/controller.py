@@ -2394,7 +2394,7 @@ class ODLNotificationController(CirculationManagerController):
             return NO_ACTIVE_LOAN.detailed(_("No loan was found for this identifier."))
 
         collection = loan.license_pool.collection
-        if collection.protocol not in (ODLAPI.NAME, ODL2API.NAME):
+        if collection.protocol not in (ODLAPI.label(), ODL2API.label()):
             return INVALID_LOAN_FOR_ODL_NOTIFICATION
 
         api = self.manager.circulation_apis[library.id].api_for_license_pool(

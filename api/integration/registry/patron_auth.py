@@ -6,10 +6,10 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 
 if TYPE_CHECKING:
-    from api.authentication.base import AuthenticationProvider  # noqa: autoflake
+    from api.authentication.base import AuthenticationProviderType  # noqa: autoflake
 
 
-class PatronAuthRegistry(IntegrationRegistry["AuthenticationProvider"]):
+class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
         from api.firstbook2 import FirstBookAuthenticationAPI

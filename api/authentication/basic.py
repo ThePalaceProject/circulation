@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Generator, List, Optional, Pattern
+from typing import Any, Dict, Generator, List, Optional, Pattern, TypeVar
 
 from flask import url_for
 from pydantic import PositiveInt, validator
@@ -259,7 +259,15 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         return v
 
 
-class BasicAuthenticationProvider(AuthenticationProvider, ABC):
+SettingsType = TypeVar("SettingsType", bound=BasicAuthProviderSettings, covariant=True)
+LibrarySettingsType = TypeVar(
+    "LibrarySettingsType", bound=BasicAuthProviderLibrarySettings, covariant=True
+)
+
+
+class BasicAuthenticationProvider(
+    AuthenticationProvider[SettingsType, LibrarySettingsType], ABC
+):
     """Verify a username/password, obtained through HTTP Basic Auth, with
     a remote source of truth.
     """
@@ -268,8 +276,8 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
         self,
         library_id: int,
         integration_id: int,
-        settings: BasicAuthProviderSettings,
-        library_settings: BasicAuthProviderLibrarySettings,
+        settings: SettingsType,
+        library_settings: LibrarySettingsType,
         analytics: Analytics | None = None,
     ):
         """Create a BasicAuthenticationProvider."""
@@ -336,16 +344,6 @@ class BasicAuthenticationProvider(AuthenticationProvider, ABC):
     @property
     def flow_type(self) -> str:
         return "http://opds-spec.org/auth/basic"
-
-    @classmethod
-    def settings_class(cls) -> type[BasicAuthProviderSettings]:
-        return BasicAuthProviderSettings
-
-    @classmethod
-    def library_settings_class(
-        cls,
-    ) -> type[BasicAuthProviderLibrarySettings]:
-        return BasicAuthProviderLibrarySettings
 
     @abstractmethod
     def remote_patron_lookup(

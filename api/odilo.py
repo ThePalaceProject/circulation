@@ -407,11 +407,13 @@ class OdiloAPI(
     def library_settings_class(cls):
         return OdiloLibrarySettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls):
+        return cls.NAME
 
-    def description(self):
-        return self.DESCRIPTION
+    @classmethod
+    def description(cls):
+        return cls.DESCRIPTION
 
     def __init__(self, _db, collection):
         self.odilo_bibliographic_coverage_provider = OdiloBibliographicCoverageProvider(
@@ -429,10 +431,10 @@ class OdiloAPI(
 
         self.collection_id = collection.id
         self.token = None
-        config = self.configuration()
-        self.client_key = config.username
-        self.client_secret = config.password
-        self.library_api_base_url = config.library_api_base_url
+        settings = self.settings
+        self.client_key = settings.username
+        self.client_secret = settings.password
+        self.library_api_base_url = settings.library_api_base_url
 
         if (
             not self.client_key
@@ -442,9 +444,13 @@ class OdiloAPI(
             raise CannotLoadConfiguration("Odilo configuration is incomplete.")
 
         # Use utf8 instead of unicode encoding
-        settings = [self.client_key, self.client_secret, self.library_api_base_url]
+        settings_encoded = [
+            self.client_key,
+            self.client_secret,
+            self.library_api_base_url,
+        ]
         self.client_key, self.client_secret, self.library_api_base_url = (
-            setting.encode("utf8") for setting in settings
+            setting.encode("utf8") for setting in settings_encoded
         )
 
         # Get set up with up-to-date credentials from the API.

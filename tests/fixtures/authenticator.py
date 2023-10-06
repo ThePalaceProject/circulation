@@ -2,7 +2,7 @@ from typing import Dict, Optional, Tuple, Type
 
 import pytest
 
-from api.authentication.base import AuthenticationProvider
+from api.authentication.base import AuthenticationProviderType
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
 from api.saml.provider import SAMLWebSSOAuthenticationProvider
@@ -76,7 +76,7 @@ class AuthProtocolFixture:
     def __init__(self, registry: PatronAuthRegistry):
         self.registry = registry
 
-    def __call__(self, protocol: Type[AuthenticationProvider]) -> str:
+    def __call__(self, protocol: Type[AuthenticationProviderType]) -> str:
         return self.registry.get_protocol(protocol, "")
 
 

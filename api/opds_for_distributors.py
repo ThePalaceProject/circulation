@@ -14,7 +14,6 @@ from api.circulation_exceptions import (
     LibraryAuthorizationFailedException,
 )
 from api.selftest import HasCollectionSelfTests
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import FormatData, TimestampData
 from core.model import (
@@ -70,12 +69,7 @@ class OPDSForDistributorsAPI(
         OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings
     ],
     HasCollectionSelfTests,
-    HasLibraryIntegrationConfiguration,
 ):
-    NAME = "OPDS for Distributors"
-    DESCRIPTION = _(
-        "Import books from a distributor that requires authentication to get the OPDS feed and download books."
-    )
     BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
 
     # In OPDS For Distributors, all items are gated through the
@@ -100,20 +94,20 @@ class OPDSForDistributorsAPI(
 
     @classmethod
     def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
+        return "Import books from a distributor that requires authentication to get the OPDS feed and download books."
 
     @classmethod
     def label(cls) -> str:
-        return cls.NAME
+        return "OPDS for Distributors"
 
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)
         self.external_integration_id = collection.external_integration.id
 
-        config = self.configuration()
-        self.data_source_name = config.data_source
-        self.username = config.username
-        self.password = config.password
+        settings = self.settings
+        self.data_source_name = settings.data_source
+        self.username = settings.username
+        self.password = settings.password
         self.feed_url = collection.external_account_id
         self.auth_url: Optional[str] = None
 
@@ -393,7 +387,7 @@ class OPDSForDistributorsAPI(
 
 
 class OPDSForDistributorsImporter(OPDSImporter):
-    NAME = OPDSForDistributorsAPI.NAME
+    NAME = OPDSForDistributorsAPI.label()
 
     @classmethod
     def settings_class(cls) -> Type[OPDSForDistributorsSettings]:

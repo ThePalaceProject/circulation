@@ -59,7 +59,9 @@ class FirstBookAuthSettings(BasicAuthProviderSettings):
     )
 
 
-class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
+class FirstBookAuthenticationAPI(
+    BasicAuthenticationProvider[FirstBookAuthSettings, BasicAuthProviderLibrarySettings]
+):
     @classmethod
     def label(cls) -> str:
         return "First Book"
@@ -74,6 +76,10 @@ class FirstBookAuthenticationAPI(BasicAuthenticationProvider):
     @classmethod
     def settings_class(cls) -> type[FirstBookAuthSettings]:
         return FirstBookAuthSettings
+
+    @classmethod
+    def library_settings_class(cls) -> type[BasicAuthProviderLibrarySettings]:
+        return BasicAuthProviderLibrarySettings
 
     @property
     def login_button_image(self) -> str | None:

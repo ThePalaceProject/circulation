@@ -50,7 +50,9 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
     )
 
 
-class SimpleAuthenticationProvider(BasicAuthenticationProvider):
+class SimpleAuthenticationProvider(
+    BasicAuthenticationProvider[SimpleAuthSettings, BasicAuthProviderLibrarySettings]
+):
     """An authentication provider that authenticates a single patron.
 
     This serves only one purpose: to set up a working circulation
@@ -72,6 +74,10 @@ class SimpleAuthenticationProvider(BasicAuthenticationProvider):
     @classmethod
     def settings_class(cls) -> Type[SimpleAuthSettings]:
         return SimpleAuthSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[BasicAuthProviderLibrarySettings]:
+        return BasicAuthProviderLibrarySettings
 
     def __init__(
         self,

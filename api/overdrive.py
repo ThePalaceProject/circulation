@@ -210,11 +210,6 @@ class OverdriveAPI(
     HasChildIntegrationConfiguration,
     OverdriveConstants,
 ):
-    NAME = ExternalIntegration.OVERDRIVE
-    DESCRIPTION = _(
-        "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
-    )
-
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
     # Create a lookup table between common DeliveryMechanism identifiers
@@ -356,11 +351,13 @@ class OverdriveAPI(
     def child_settings_class(cls):
         return OverdriveChildSettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls):
+        return ExternalIntegration.OVERDRIVE
 
-    def description(self):
-        return self.DESCRIPTION
+    @classmethod
+    def description(cls):
+        return "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)

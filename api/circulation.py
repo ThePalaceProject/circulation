@@ -11,7 +11,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
-    Generic,
     Iterable,
     List,
     Literal,
@@ -578,8 +577,7 @@ LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covaria
 
 
 class BaseCirculationAPI(
-    Generic[SettingsType, LibrarySettingsType],
-    HasLibraryIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
     LoggerMixin,
     ABC,
 ):
@@ -635,9 +633,11 @@ class BaseCirculationAPI(
             )
         return config
 
-    def library_configuration(
-        self, library: Library | int
-    ) -> LibrarySettingsType | None:
+    @property
+    def settings(self) -> SettingsType:
+        return self.settings_class()(**self.integration_configuration().settings_dict)
+
+    def library_settings(self, library: Library | int) -> LibrarySettingsType | None:
         library_id = library.id if isinstance(library, Library) else library
         if library_id is None:
             return None
@@ -645,10 +645,7 @@ class BaseCirculationAPI(
         if libconfig is None:
             return None
         config = self.library_settings_class()(**libconfig.settings_dict)
-        return config  # type: ignore[return-value]
-
-    def configuration(self) -> SettingsType:
-        return self.settings_class()(**self.integration_configuration().settings_dict)  # type: ignore[return-value]
+        return config
 
     @abstractmethod
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:

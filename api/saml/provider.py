@@ -29,7 +29,11 @@ SAML_INVALID_SUBJECT = pd(
 )
 
 
-class SAMLWebSSOAuthenticationProvider(BaseSAMLAuthenticationProvider):
+class SAMLWebSSOAuthenticationProvider(
+    BaseSAMLAuthenticationProvider[
+        SAMLWebSSOAuthSettings, SAMLWebSSOAuthLibrarySettings
+    ]
+):
     """SAML authentication provider implementing Web Browser SSO profile using the following bindings:
     - HTTP-Redirect Binding for requests
     - HTTP-POST Binding for responses
@@ -54,7 +58,6 @@ class SAMLWebSSOAuthenticationProvider(BaseSAMLAuthenticationProvider):
         self._patron_id_use_name_id = settings.patron_id_use_name_id
         self._patron_id_attributes = settings.patron_id_attributes
         self._patron_id_regular_expression = settings.patron_id_regular_expression
-        self._settings = settings
 
     @classmethod
     def label(cls) -> str:

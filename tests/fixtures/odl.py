@@ -75,13 +75,13 @@ class ODLTestFixture:
     def library(self):
         return self.db.default_library()
 
-    def collection(self, library):
+    def collection(self, library, api_class=ODLAPI):
         """Create a mock ODL collection to use in tests."""
-        integration_protocol = ODLAPI.NAME
+        integration_protocol = api_class.label()
         collection, ignore = get_one_or_create(
             self.db.session,
             Collection,
-            name="Test ODL Collection",
+            name=f"Test {api_class.__name__} Collection",
             create_method_kwargs=dict(
                 external_account_id="http://odl",
             ),

@@ -54,7 +54,9 @@ class OpdsRegistrationServiceSettings(BaseSettings):
     )
 
 
-class OpdsRegistrationService(HasIntegrationConfiguration):
+class OpdsRegistrationService(
+    HasIntegrationConfiguration[OpdsRegistrationServiceSettings]
+):
     """A circulation manager's view of a remote service that supports
     the OPDS Directory Registration Protocol:
 
@@ -76,7 +78,7 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
     ) -> None:
         """Constructor."""
         self.integration = integration
-        self.settings = settings
+        self._settings = settings
 
     @classmethod
     def label(cls) -> str:
@@ -100,6 +102,10 @@ class OpdsRegistrationService(HasIntegrationConfiguration):
     def settings_class(cls) -> Type[OpdsRegistrationServiceSettings]:
         """Get the settings for this integration."""
         return OpdsRegistrationServiceSettings
+
+    @property
+    def settings(self) -> OpdsRegistrationServiceSettings:
+        return self._settings
 
     @classmethod
     @overload

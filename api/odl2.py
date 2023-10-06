@@ -74,17 +74,18 @@ class ODL2Settings(ODLSettings):
 
 
 class ODL2API(ODLAPI):
-    NAME = ExternalIntegration.ODL2
-
     @classmethod
     def settings_class(cls) -> Type[ODL2Settings]:
         return ODL2Settings
 
+    @classmethod
+    def label(cls) -> str:
+        return ExternalIntegration.ODL2
+
     def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
-        config = self.configuration()
-        self.loan_limit = config.loan_limit  # type: ignore[attr-defined]
-        self.hold_limit = config.hold_limit  # type: ignore[attr-defined]
+        self.loan_limit = self.settings.loan_limit  # type: ignore[attr-defined]
+        self.hold_limit = self.settings.hold_limit  # type: ignore[attr-defined]
 
     def _checkout(
         self, patron: Patron, licensepool: LicensePool, hold: Optional[Hold] = None
@@ -122,11 +123,16 @@ class ODL2Importer(OPDS2Importer, BaseODLImporter):
     FormatData and LicenseData from ODL 2.x's "licenses" arrays.
     """
 
-    NAME = ODL2API.NAME
+    NAME = ODL2API.label()
 
     @classmethod
     def settings_class(cls) -> Type[ODL2Settings]:
         return ODL2Settings
+
+    @property
+    def api(self) -> ODL2API:
+        """Return the ODL2API object used by this importer."""
+        return ODL2API(self._db, self.collection)
 
     def __init__(
         self,
@@ -186,7 +192,7 @@ class ODL2Importer(OPDS2Importer, BaseODLImporter):
         licenses = []
         medium = None
 
-        skipped_license_formats = self.configuration().skipped_license_formats  # type: ignore[attr-defined]
+        skipped_license_formats = self.api.settings.skipped_license_formats  # type: ignore[attr-defined]
         if skipped_license_formats:
             skipped_license_formats = set(skipped_license_formats)
 
@@ -285,7 +291,7 @@ class ODL2Importer(OPDS2Importer, BaseODLImporter):
 class ODL2ImportMonitor(OPDS2ImportMonitor):
     """Import information from an ODL feed."""
 
-    PROTOCOL = ODL2Importer.NAME
+    PROTOCOL = ODL2API.label()
     SERVICE_NAME = "ODL 2.x Import Monitor"
 
     def __init__(

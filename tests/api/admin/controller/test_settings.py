@@ -275,7 +275,9 @@ class TestSettingsController:
             key: str
             value: str
 
-        class Protocol1(HasLibraryIntegrationConfiguration):
+        class Protocol1(
+            HasLibraryIntegrationConfiguration[BaseSettings, P1LibrarySettings]
+        ):
             @classmethod
             def library_settings_class(cls):
                 return P1LibrarySettings
@@ -291,6 +293,10 @@ class TestSettingsController:
             @classmethod
             def settings_class(cls):
                 pass
+
+            @property
+            def settings(self):
+                return BaseSettings()
 
         with pytest.raises(RuntimeError) as runtime_error_raised:
             _set_configuration_library(

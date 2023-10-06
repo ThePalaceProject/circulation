@@ -185,11 +185,6 @@ class ODLAPI(
     circulation manager.
     """
 
-    NAME = ExternalIntegration.ODL
-    DESCRIPTION = _(
-        "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
-    )
-
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
     # Possible status values in the License Status Document:
@@ -231,27 +226,27 @@ class ODLAPI(
 
     @classmethod
     def label(cls) -> str:
-        return cls.NAME
+        return ExternalIntegration.ODL
 
     @classmethod
     def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
+        return "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
 
     def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
-        if collection.protocol != self.NAME:
+        if collection.protocol != self.label():
             raise ValueError(
                 "Collection protocol is %s, but passed into %s!"
                 % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        config = self.configuration()
-        self.data_source_name = config.data_source
+        settings = self.settings
+        self.data_source_name = settings.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
-        self.username = config.username
-        self.password = config.password
+        self.username = settings.username
+        self.password = settings.password
         self.analytics = Analytics(_db)
 
         self._hasher_factory = HasherFactory()
@@ -283,11 +278,11 @@ class ODLAPI(
 
         :return: Hasher instance
         """
-        config = self.configuration()
+        settings = self.settings
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                config.encryption_algorithm  # type: ignore[arg-type]
-                if config.encryption_algorithm
+                settings.encryption_algorithm  # type: ignore[arg-type]
+                if settings.encryption_algorithm
                 else ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM
             )
 
@@ -356,7 +351,6 @@ class ODLAPI(
                 _external=True,
             )
 
-            config = self.configuration()
             checkout_url = str(loan.license.checkout_url)
             url_template = URITemplate(checkout_url)
             url = url_template.expand(
@@ -366,8 +360,8 @@ class ODLAPI(
                 expires=expires.isoformat(),
                 notification_url=notification_url,
                 passphrase=encoded_pass,
-                hint=config.passphrase_hint,
-                hint_url=config.passphrase_hint_url,
+                hint=self.settings.passphrase_hint,
+                hint_url=self.settings.passphrase_hint_url,
             )
 
         response = self._get(url)
@@ -1139,12 +1133,17 @@ class ODLImporter(OPDSImporter, BaseODLImporter):
     format information from 'odl:license' tags.
     """
 
-    NAME = ODLAPI.NAME
+    NAME = ODLAPI.label()
     PARSER_CLASS = ODLXMLParser
 
     # The media type for a License Info Document, used to get information
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
+
+    @property
+    def api(self) -> ODLAPI:
+        """Return the ODL2API object used by this importer."""
+        return ODLAPI(self._db, self.collection)
 
     @classmethod
     def _detail_for_elementtree_entry(
@@ -1289,7 +1288,7 @@ class ODLHoldReaper(CollectionMonitor):
     the holds queues for their pools."""
 
     SERVICE_NAME = "ODL Hold Reaper"
-    PROTOCOL = ODLAPI.NAME
+    PROTOCOL = ODLAPI.label()
 
     def __init__(
         self,
