@@ -320,11 +320,16 @@ class OPDSForDistributorsAPI(
         # bearer token.
         _db = Session.object_session(licensepool)
         credential = self._get_token(_db)
+        if credential.expires is None:
+            self.log.error(
+                f"Credential ({credential.id}) for patron ({patron.authorization_identifier}/{patron.id}) "
+                "has no expiration date. Cannot fulfill loan."
+            )
+            raise CannotFulfill()
 
         # Build a application/vnd.librarysimplified.bearer-token
         # document using information from the credential.
         now = utc_now()
-        assert credential.expires is not None
         expiration = int((credential.expires - now).total_seconds())
         token_document = dict(
             token_type="Bearer",
