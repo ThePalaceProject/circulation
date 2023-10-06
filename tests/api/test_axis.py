@@ -6,7 +6,7 @@ import socket
 import ssl
 import urllib
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
@@ -33,6 +33,7 @@ from api.axis import (
 from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.web_publication_manifest import FindawayManifest, SpineItem
+from core.analytics import Analytics
 from core.coverage import CoverageFailure
 from core.metadata_layer import (
     CirculationData,
@@ -685,7 +686,9 @@ class TestAxis360API:
         analytics = MockAnalyticsProvider()
         api = MockAxis360API(axis360.db.session, axis360.collection)
         e, e_new, lp, lp_new = api.update_book(
-            axis360.BIBLIOGRAPHIC_DATA, axis360.AVAILABILITY_DATA, analytics=analytics  # type: ignore[arg-type]
+            axis360.BIBLIOGRAPHIC_DATA,
+            axis360.AVAILABILITY_DATA,
+            analytics=cast(Analytics, analytics),
         )
         # A new LicensePool and Edition were created.
         assert True == lp_new
@@ -721,7 +724,9 @@ class TestAxis360API:
         )
 
         e2, e_new, lp2, lp_new = api.update_book(
-            axis360.BIBLIOGRAPHIC_DATA, new_circulation, analytics=analytics  # type: ignore[arg-type]
+            axis360.BIBLIOGRAPHIC_DATA,
+            new_circulation,
+            analytics=cast(Analytics, analytics),
         )
 
         # The same LicensePool and Edition are returned -- no new ones
