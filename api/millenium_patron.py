@@ -27,7 +27,6 @@ from core.model import Patron
 from core.util import MoneyUtility
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import HTTP
-from core.util.xmlparser import XMLParser
 
 
 class NeighborhoodMode(Enum):
@@ -167,7 +166,7 @@ class MilleniumPatronLibrarySettings(BasicAuthProviderLibrarySettings):
     )
 
 
-class MilleniumPatronAPI(BasicAuthenticationProvider, XMLParser):
+class MilleniumPatronAPI(BasicAuthenticationProvider):
     @classmethod
     def label(cls) -> str:
         return "Millenium"

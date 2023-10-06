@@ -996,8 +996,12 @@ class TestParsers:
         [bib1, av1], [bib2, av2] = BibliographicParser(False, True).process_all(data)
 
         # We didn't ask for availability information, so none was provided.
-        assert None == av1
-        assert None == av2
+        assert av1 is None
+        assert av2 is None
+
+        # But we did get bibliographic information.
+        assert bib1 is not None
+        assert bib2 is not None
 
         assert "Faith of My Fathers : A Family Memoir" == bib1.title
         assert "eng" == bib1.language
@@ -1116,6 +1120,9 @@ class TestParsers:
         data = axis360.sample_data("availability_with_audiobook_fulfillment.xml")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
+        assert av is None
+        assert bib is not None
+
         assert "Back Spin" == bib.title
         assert Edition.AUDIO_MEDIUM == bib.medium
 
@@ -1137,6 +1144,8 @@ class TestParsers:
         data = data.replace(b"AxisNow", b"No Such Format")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
+        assert av is None
+        assert bib is not None
 
         # A book in Blio format is treated as an AxisNow ebook.
         assert Edition.BOOK_MEDIUM == bib.medium
@@ -1152,6 +1161,8 @@ class TestParsers:
         data = data.replace(b"Acoustik", b"Blio")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
+        assert av is None
+        assert bib is not None
 
         # There is only one FormatData -- 'Blio' and 'AxisNow' mean the same thing.
         assert Edition.BOOK_MEDIUM == bib.medium
@@ -1165,6 +1176,8 @@ class TestParsers:
         data = data.replace(b"AxisNow", b"No Such Format 2")
 
         [[bib, av]] = BibliographicParser(False, True).process_all(data)
+        assert av is None
+        assert bib is not None
 
         # We don't support any of the formats, so no FormatData objects were created.
         assert [] == bib.circulation.formats
@@ -1211,8 +1224,12 @@ class TestParsers:
         [bib1, av1], [bib2, av2] = BibliographicParser(True, False).process_all(data)
 
         # We didn't ask for bibliographic information, so none was provided.
-        assert None == bib1
-        assert None == bib2
+        assert bib1 is None
+        assert bib2 is None
+
+        # But we did get availability information.
+        assert av1 is not None
+        assert av2 is not None
 
         assert "0003642860" == av1.primary_identifier(axis360.db.session).identifier
         assert 9 == av1.licenses_owned
@@ -1243,9 +1260,9 @@ def axis360parsers(
 class TestRaiseExceptionOnError:
     def test_internal_server_error(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("internal_server_error.xml")
-        parser = HoldReleaseResponseParser(None)
+        parser = HoldReleaseResponseParser(MagicMock())
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            parser.process_all(data)
+            parser.process_first(data)
         assert "Internal Server Error" in str(excinfo.value)
 
     def test_ignore_error_codes(self, axis360parsers: Axis360FixturePlusParsers):
@@ -1262,21 +1279,21 @@ class TestRaiseExceptionOnError:
         # Unlike in test_internal_server_error, no exception is
         # raised, because we told the parser to ignore this particular
         # error code.
-        parser = IgnoreISE(None)
-        assert retval == parser.process_all(data)
+        parser = IgnoreISE(MagicMock())
+        assert retval == parser.process_first(data)
 
     def test_internal_server_error2(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("invalid_error_code.xml")
-        parser = HoldReleaseResponseParser(None)
+        parser = HoldReleaseResponseParser(MagicMock())
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            parser.process_all(data)
+            parser.process_first(data)
         assert "Invalid response code from Axis 360: abcd" in str(excinfo.value)
 
     def test_missing_error_code(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("missing_error_code.xml")
-        parser = HoldReleaseResponseParser(None)
+        parser = HoldReleaseResponseParser(MagicMock())
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            parser.process_all(data)
+            parser.process_first(data)
         assert "No status code!" in str(excinfo.value)
 
 
@@ -1289,20 +1306,20 @@ class TestCheckinResponseParser:
         for filename in ("checkin_success.xml", "checkin_not_checked_out.xml"):
             data = axis360parsers.sample_data(filename)
             parser = CheckinResponseParser(axis360parsers.default_collection)
-            parsed = parser.process_all(data)
-            assert parsed == True
+            parsed = parser.process_first(data)
+            assert parsed is True
 
     def test_parse_checkin_failure(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("checkin_failure.xml")
         parser = CheckinResponseParser(axis360parsers.default_collection)
-        pytest.raises(NotFoundOnRemote, parser.process_all, data)
+        pytest.raises(NotFoundOnRemote, parser.process_first, data)
 
 
 class TestCheckoutResponseParser:
     def test_parse_checkout_success(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("checkout_success.xml")
         parser = CheckoutResponseParser(axis360parsers.default_collection)
-        parsed = parser.process_all(data)
+        parsed = parser.process_first(data)
         assert isinstance(parsed, LoanInfo)
         assert axis360parsers.default_collection.id == parsed.collection_id
         assert DataSource.AXIS_360 == parsed.data_source_name
@@ -1316,20 +1333,20 @@ class TestCheckoutResponseParser:
 
     def test_parse_already_checked_out(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_checked_out.xml")
-        parser = CheckoutResponseParser(None)
-        pytest.raises(AlreadyCheckedOut, parser.process_all, data)
+        parser = CheckoutResponseParser(MagicMock())
+        pytest.raises(AlreadyCheckedOut, parser.process_first, data)
 
     def test_parse_not_found_on_remote(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("not_found_on_remote.xml")
-        parser = CheckoutResponseParser(None)
-        pytest.raises(NotFoundOnRemote, parser.process_all, data)
+        parser = CheckoutResponseParser(MagicMock())
+        pytest.raises(NotFoundOnRemote, parser.process_first, data)
 
 
 class TestHoldResponseParser:
     def test_parse_hold_success(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("place_hold_success.xml")
         parser = HoldResponseParser(axis360parsers.default_collection)
-        parsed = parser.process_all(data)
+        parsed = parser.process_first(data)
         assert isinstance(parsed, HoldInfo)
         assert 1 == parsed.hold_position
 
@@ -1339,20 +1356,20 @@ class TestHoldResponseParser:
 
     def test_parse_already_on_hold(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_on_hold.xml")
-        parser = HoldResponseParser(None)
-        pytest.raises(AlreadyOnHold, parser.process_all, data)
+        parser = HoldResponseParser(MagicMock())
+        pytest.raises(AlreadyOnHold, parser.process_first, data)
 
 
 class TestHoldReleaseResponseParser:
     def test_success(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("release_hold_success.xml")
-        parser = HoldReleaseResponseParser(None)
-        assert True == parser.process_all(data)
+        parser = HoldReleaseResponseParser(MagicMock())
+        assert True == parser.process_first(data)
 
     def test_failure(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("release_hold_failure.xml")
-        parser = HoldReleaseResponseParser(None)
-        pytest.raises(NotOnHold, parser.process_all, data)
+        parser = HoldReleaseResponseParser(MagicMock())
+        pytest.raises(NotOnHold, parser.process_first, data)
 
 
 class TestAvailabilityResponseParser:
@@ -1365,16 +1382,22 @@ class TestAvailabilityResponseParser:
         data = axis360parsers.sample_data("availability_with_loan_and_hold.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         activity = list(parser.process_all(data))
-        hold, loan, reserved = sorted(activity, key=lambda x: x.identifier)
+        hold, loan, reserved = sorted(
+            activity, key=lambda x: "" if x is None else str(x.identifier)
+        )
+        assert isinstance(hold, HoldInfo)
+        assert isinstance(loan, LoanInfo)
+        assert isinstance(reserved, HoldInfo)
         assert axis360parsers.api.collection is not None
         assert axis360parsers.api.collection.id == hold.collection_id
         assert Identifier.AXIS_360_ID == hold.identifier_type
         assert "0012533119" == hold.identifier
         assert 1 == hold.hold_position
-        assert None == hold.end_date
+        assert hold.end_date is None
 
         assert axis360parsers.api.collection.id == loan.collection_id
         assert "0015176429" == loan.identifier
+        assert loan.fulfillment_info is not None
         assert "http://fulfillment/" == loan.fulfillment_info.content_link
         assert datetime_utc(2015, 8, 12, 17, 40, 27) == loan.end_date
 
@@ -1389,6 +1412,7 @@ class TestAvailabilityResponseParser:
         data = axis360parsers.sample_data("availability_without_fulfillment.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         [loan] = list(parser.process_all(data))
+        assert isinstance(loan, LoanInfo)
 
         assert axis360parsers.api.collection is not None
         assert axis360parsers.api.collection.id == loan.collection_id
@@ -1402,6 +1426,7 @@ class TestAvailabilityResponseParser:
         data = axis360parsers.sample_data("availability_with_audiobook_fulfillment.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         [loan] = list(parser.process_all(data))
+        assert isinstance(loan, LoanInfo)
         fulfillment = loan.fulfillment_info
         assert isinstance(fulfillment, Axis360FulfillmentInfo)
 
@@ -1422,6 +1447,7 @@ class TestAvailabilityResponseParser:
         # First, ask for an ePub.
         epub_parser = AvailabilityResponseParser(axis360parsers.api, "ePub")
         [availability] = list(epub_parser.process_all(data))
+        assert isinstance(availability, LoanInfo)
         fulfillment = availability.fulfillment_info
 
         # This particular file has a downloadUrl ready to go, so we
@@ -1442,6 +1468,7 @@ class TestAvailabilityResponseParser:
             axis360parsers.api, axis360parsers.api.AXISNOW
         )
         [availability] = list(axisnow_parser.process_all(data))
+        assert isinstance(availability, LoanInfo)
         fulfillment = availability.fulfillment_info
         assert isinstance(fulfillment, Axis360FulfillmentInfo)
         assert "6670197A-D264-447A-86C7-E4CB829C0236" == fulfillment.key
@@ -1494,36 +1521,36 @@ class TestJSONResponseParser:
 
     def test_parse(self):
         class Mock(JSONResponseParser):
-            def _parse(self, parsed, *args, **kwargs):
-                self.called_with = parsed, args, kwargs
+            def _parse(self, parsed, **kwargs):
+                self.called_with = parsed, kwargs
                 return "success"
 
-        parser = Mock(object())
+        parser = Mock()
 
         # Test success.
         doc = dict(Status=dict(Code=0000))
 
         # The JSON will be parsed and passed in to _parse(); all other
-        # arguments to parse() will be passed through to _parse().
-        result = parser.parse(json.dumps(doc), "value1", arg2="value2")
+        # keyword arguments to parse() will be passed through to _parse().
+        result = parser.parse(json.dumps(doc), arg2="value2")
         assert "success" == result
-        assert (doc, ("value1",), dict(arg2="value2")) == parser.called_with
+        assert (doc, dict(arg2="value2")) == parser.called_with
 
         # It also works if the JSON was already parsed.
-        result = parser.parse(doc, "new_value")
-        assert (doc, ("new_value",), {}) == parser.called_with
+        result = parser.parse(doc, foo="bar")
+        assert (doc, {"foo": "bar"}) == parser.called_with
 
         # Non-JSON input causes an error.
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.parse("I'm not JSON")
         assert (
-            "Invalid response from Axis 360 (was expecting JSON): I'm not JSON"
+            'Invalid response from Axis 360 (was expecting JSON): "I\'m not JSON"'
             in str(excinfo.value)
         )
 
 
 class TestAxis360FulfillmentInfoResponseParser:
-    def test__parse_findaway(self, axis360parsers: Axis360FixturePlusParsers):
+    def test__parse_findaway(self, axis360parsers: Axis360FixturePlusParsers) -> None:
         # _parse will create a valid FindawayManifest given a
         # complete document.
 
@@ -1550,7 +1577,7 @@ class TestAxis360FulfillmentInfoResponseParser:
         audiobook_metadata = axis360parsers.sample_data("audiobook_metadata.json")
         axis360parsers.api.queue_response(200, {}, audiobook_metadata)
 
-        manifest, expires = m(data, pool)
+        manifest, expires = m(data, license_pool=pool)
 
         assert isinstance(manifest, FindawayManifest)
         metadata = manifest.metadata
@@ -1589,17 +1616,17 @@ class TestAxis360FulfillmentInfoResponseParser:
             missing_field = get_data()
             del missing_field[field]
             with pytest.raises(RemoteInitiatedServerError) as excinfo:
-                m(missing_field, pool)
+                m(missing_field, license_pool=pool)
             assert "Required key %s not present" % field in str(excinfo.value)
 
         # Try with a bad expiration date.
         bad_date = get_data()
         bad_date["ExpirationDate"] = "not-a-date"
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            m(bad_date, pool)
+            m(bad_date, license_pool=pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
 
-    def test__parse_axisnow(self, axis360parsers: Axis360FixturePlusParsers):
+    def test__parse_axisnow(self, axis360parsers: Axis360FixturePlusParsers) -> None:
         # _parse will create a valid AxisNowManifest given a
         # complete document.
 
@@ -1620,7 +1647,7 @@ class TestAxis360FulfillmentInfoResponseParser:
         # Since this is an ebook, not an audiobook, there will be no
         # second request to the API, the way there is in the audiobook
         # test.
-        manifest, expires = m(data, pool)
+        manifest, expires = m(data, license_pool=pool)
 
         assert isinstance(manifest, AxisNowManifest)
         assert {
@@ -1632,7 +1659,7 @@ class TestAxis360FulfillmentInfoResponseParser:
         bad_date = get_data()
         bad_date["ExpirationDate"] = "not-a-date"
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
-            m(bad_date, pool)
+            m(bad_date, license_pool=pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
 
 
@@ -1648,13 +1675,13 @@ class TestAudiobookMetadataParser:
         metadata = dict(
             fndaccountid="An account ID", readingOrder=["Spine item 1", "Spine item 2"]
         )
-        account_id, spine_items = Mock(None)._parse(metadata)
+        account_id, spine_items = Mock()._parse(metadata)
 
         assert "An account ID" == account_id
         assert ["Spine item 1 (extracted)", "Spine item 2 (extracted)"] == spine_items
 
         # No data? Nothing will be parsed.
-        account_id, spine_items = Mock(None)._parse({})
+        account_id, spine_items = Mock()._parse({})
         assert None == account_id
         assert [] == spine_items
 

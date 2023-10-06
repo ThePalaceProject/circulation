@@ -4,7 +4,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, ClassVar, Optional, Protocol, Type, runtime_checkable
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
@@ -30,6 +30,7 @@ from api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotHold,
+    CirculationException,
     CurrentlyAvailable,
     NoAvailableCopies,
     NoLicenses,
@@ -241,7 +242,7 @@ class TestBibliothecaAPI:
         db = bibliotheca_fixture.db
 
         class MockItemListParser:
-            def parse(self, data):
+            def process_all(self, data):
                 self.parse_called_with = data
                 yield "item1"
                 yield "item2"
@@ -792,12 +793,11 @@ class TestBibliothecaCirculationSweep:
 
 class TestBibliothecaParser:
     def test_parse_date(self, bibliotheca_fixture: BibliothecaAPITestFixture):
-        parser = BibliothecaParser()
-        v = parser.parse_date("2016-01-02T12:34:56")
-        assert datetime_utc(2016, 1, 2, 12, 34, 56) == v
+        v = BibliothecaParser.parse_date("2016-01-02T12:34:56")
+        assert v == datetime_utc(2016, 1, 2, 12, 34, 56)
 
-        assert None == parser.parse_date(None)
-        assert None == parser.parse_date("Some weird value")
+        assert BibliothecaParser.parse_date(None) is None
+        assert BibliothecaParser.parse_date("Some weird value") is None
 
 
 class TestEventParser:
@@ -837,7 +837,7 @@ class TestPatronCirculationParser:
     def test_parse(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         data = bibliotheca_fixture.files.sample_data("checkouts.xml")
         collection = bibliotheca_fixture.collection
-        loans_and_holds = PatronCirculationParser(collection).process_all(data)
+        loans_and_holds = list(PatronCirculationParser(collection).process_all(data))
         loans = [x for x in loans_and_holds if isinstance(x, LoanInfo)]
         holds = [x for x in loans_and_holds if isinstance(x, HoldInfo)]
         assert 2 == len(loans)
@@ -876,7 +876,7 @@ class TestPatronCirculationParser:
 class TestCheckoutResponseParser:
     def test_parse(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         data = bibliotheca_fixture.files.sample_data("successful_checkout.xml")
-        due_date = CheckoutResponseParser().process_all(data)
+        due_date = CheckoutResponseParser().process_first(data)
         assert datetime_utc(2015, 4, 16, 0, 32, 36) == due_date
 
 
@@ -974,7 +974,7 @@ class TestErrorParser:
     def test_exception(
         self,
         incoming_message: str,
-        error_class: Any,
+        error_class: Type[CirculationException],
         error_code: int,
         problem_detail_title: str,
         problem_detail_code: int,
@@ -982,7 +982,7 @@ class TestErrorParser:
         document = self.BIBLIOTHECA_ERROR_RESPONSE_BODY_TEMPLATE.format(
             message=incoming_message
         )
-        error = ErrorParser().process_all(document)
+        error = ErrorParser().process_first(document)
         assert isinstance(error, error_class)
         assert incoming_message == str(error)
         assert error_code == error.status_code
@@ -1039,14 +1039,15 @@ class TestErrorParser:
             incoming_message = api_bibliotheca_files_fixture.files().sample_text(
                 incoming_message_from_file
             )
-        error = ErrorParser().process_all(incoming_message)
-        problem = error.as_problem_detail_document()
-
+        assert incoming_message is not None
+        error = ErrorParser().process_first(incoming_message)
         assert isinstance(error, RemoteInitiatedServerError)
+
         assert BibliothecaAPI.SERVICE_NAME == error.service_name
         assert 502 == error.status_code
         assert error_string == str(error)
 
+        problem = error.as_problem_detail_document()
         assert 502 == problem.status_code
         assert "Integration error communicating with Bibliotheca" == problem.detail
         assert "Third-party service failed." == problem.title
@@ -1886,7 +1887,7 @@ class TestItemListParser:
 
     def test_item_list(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         data = bibliotheca_fixture.files.sample_data("item_metadata_list_mini.xml")
-        data_parsed = list(ItemListParser().parse(data))
+        data_parsed = list(ItemListParser().process_all(data))
 
         # There should be 2 items in the list.
         assert 2 == len(data_parsed)
@@ -1946,7 +1947,7 @@ class TestItemListParser:
         self, bibliotheca_fixture: BibliothecaAPITestFixture
     ):
         data = bibliotheca_fixture.files.sample_data("item_metadata_audio.xml")
-        [parsed_data] = list(ItemListParser().parse(data))
+        [parsed_data] = list(ItemListParser().process_all(data))
         names_and_roles = []
         for c in parsed_data.contributors:
             [role] = c.roles
