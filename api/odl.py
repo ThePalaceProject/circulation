@@ -22,6 +22,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.lcp.hash import Hasher, HasherFactory, HashingAlgorithm
@@ -169,7 +170,7 @@ class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
 
 
 class ODLAPI(
-    BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
+    PatronActivityCirculationAPI[ODLSettings, ODLLibrarySettings],
 ):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level

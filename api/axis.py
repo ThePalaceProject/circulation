@@ -44,6 +44,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
@@ -158,7 +159,7 @@ class Axis360LibrarySettings(BaseCirculationLoanSettings):
 
 
 class Axis360API(
-    BaseCirculationAPI[Axis360Settings, Axis360LibrarySettings],
+    PatronActivityCirculationAPI[Axis360Settings, Axis360LibrarySettings],
     HasCollectionSelfTests,
     CirculationInternalFormatsMixin,
     Axis360APIConstants,

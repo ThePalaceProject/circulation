@@ -125,7 +125,7 @@ class ODL2Importer(OPDS2Importer, BaseODLImporter):
     NAME = ODL2API.NAME
 
     @classmethod
-    def settings_class(cls) -> Type[ODL2Settings]:  # type: ignore[override]
+    def settings_class(cls) -> Type[ODL2Settings]:
         return ODL2Settings
 
     def __init__(

@@ -11,7 +11,13 @@ from pydantic import HttpUrl
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import (
+    BaseCirculationAPI,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+    PatronActivityCirculationAPI,
+)
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
@@ -87,7 +93,7 @@ class EnkiLibrarySettings(BaseSettings):
 
 
 class EnkiAPI(
-    BaseCirculationAPI[EnkiSettings, EnkiLibrarySettings],
+    PatronActivityCirculationAPI[EnkiSettings, EnkiLibrarySettings],
     HasCollectionSelfTests,
     EnkiConstants,
 ):

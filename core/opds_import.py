@@ -32,7 +32,8 @@ from lxml import etree
 from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
-from api.circulation import CirculationConfigurationMixin
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
 from api.selftest import HasCollectionSelfTests
 from core.classifier import Classifier
 from core.config import IntegrationException
@@ -64,7 +65,9 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
+    Patron,
     Representation,
     RightsStatus,
     Subject,
@@ -190,8 +193,101 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
+class BaseOPDSAPI(
+    BaseCirculationAPI[OPDSImporterSettings, OPDSImporterLibrarySettings], ABC
+):
+    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
+        # All the CM side accounting for this loan is handled by CirculationAPI
+        # since we don't have any remote API we need to call this method is
+        # just a no-op.
+        pass
+
+    def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
+        # Since there is no such thing as a hold, there is no such
+        # thing as releasing a hold.
+        raise NotOnHold()
+
+    def place_hold(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        notification_email_address: Optional[str],
+    ) -> HoldInfo:
+        # Because all OPDS content is assumed to be simultaneously
+        # available to all patrons, there is no such thing as a hold.
+        raise CurrentlyAvailable()
+
+    def update_availability(self, licensepool: LicensePool) -> None:
+        # We already know all the availability information we're going
+        # to know, so we don't need to do anything.
+        pass
+
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        requested_mechanism = delivery_mechanism.delivery_mechanism
+        fulfillment = None
+        for lpdm in licensepool.delivery_mechanisms:
+            if not (
+                lpdm.resource
+                and lpdm.resource.representation
+                and lpdm.resource.representation.url
+            ):
+                # This LicensePoolDeliveryMechanism can't actually
+                # be used for fulfillment.
+                continue
+            if lpdm.delivery_mechanism == requested_mechanism:
+                # We found it! This is how the patron wants
+                # the book to be delivered.
+                fulfillment = lpdm
+                break
+
+        if not fulfillment:
+            # There is just no way to fulfill this loan the way the
+            # patron wants.
+            raise FormatNotAvailable()
+
+        rep = fulfillment.resource.representation
+        if rep:
+            content_link = rep.public_url
+        else:
+            content_link = fulfillment.resource.url
+        media_type = rep.media_type
+        return FulfillmentInfo(
+            licensepool.collection,
+            licensepool.data_source.name,
+            identifier_type=licensepool.identifier.type,
+            identifier=licensepool.identifier.identifier,
+            content_link=content_link,
+            content_type=media_type,
+            content=None,
+            content_expires=None,
+        )
+
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
+        return LoanInfo(licensepool.collection, None, None, None, None, None)
+
+    def can_fulfill_without_loan(
+        self,
+        patron: Optional[Patron],
+        pool: LicensePool,
+        lpdm: LicensePoolDeliveryMechanism,
+    ) -> bool:
+        return True
+
+
 class BaseOPDSImporter(
-    CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings],
     LoggerMixin,
     ABC,
 ):
@@ -239,6 +335,11 @@ class BaseOPDSImporter(
 
     @abstractmethod
     def extract_next_links(self, feed: str | bytes) -> List[str]:
+        ...
+
+    @property
+    @abstractmethod
+    def api(self) -> BaseOPDSAPI:
         ...
 
     @abstractmethod
@@ -461,6 +562,24 @@ class BaseOPDSImporter(
         )
 
 
+class OPDSAPI(BaseOPDSAPI):
+    @classmethod
+    def settings_class(cls) -> Type[OPDSImporterSettings]:
+        return OPDSImporterSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[OPDSImporterLibrarySettings]:
+        return OPDSImporterLibrarySettings
+
+    @classmethod
+    def description(cls) -> str:
+        return "Import books from a publicly-accessible OPDS feed."
+
+    @classmethod
+    def label(cls) -> str:
+        return "OPDS Importer"
+
+
 class OPDSImporter(BaseOPDSImporter):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
@@ -478,22 +597,6 @@ class OPDSImporter(BaseOPDSImporter):
     # a subclass of OPDSXMLParser. For example, a subclass may want to use
     # tags from an additional namespace.
     PARSER_CLASS = OPDSXMLParser
-
-    @classmethod
-    def settings_class(cls) -> Type[OPDSImporterSettings]:
-        return OPDSImporterSettings
-
-    @classmethod
-    def library_settings_class(cls) -> Type[OPDSImporterLibrarySettings]:
-        return OPDSImporterLibrarySettings
-
-    @classmethod
-    def label(cls) -> str:
-        return "OPDS Importer"
-
-    @classmethod
-    def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
 
     def __init__(
         self,
@@ -527,6 +630,16 @@ class OPDSImporter(BaseOPDSImporter):
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
+        self._api: Optional[OPDSAPI] = None
+
+    @property
+    def api(self) -> OPDSAPI:
+        if self._api is None:
+            self._api = OPDSAPI(
+                self._db,
+                self.collection,
+            )
+        return self._api
 
     def assert_importable_content(
         self, feed: str, feed_url: str, max_get_attempts: int = 5
@@ -1600,19 +1713,18 @@ class OPDSImportMonitor(
         self.force_reimport = force_reimport
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
-        config = self.importer.configuration()
+        config = self.importer.api.configuration()
         self.username = config.username
         self.password = config.password
 
         # Not all inherited settings have these
         # OPDSforDistributors does not use this setting
-        settings = self.importer.configuration()
         try:
-            self.custom_accept_header = settings.custom_accept_header
+            self.custom_accept_header = config.custom_accept_header
         except AttributeError:
             self.custom_accept_header = None
         try:
-            self._max_retry_count: int | None = settings.max_retry_count
+            self._max_retry_count: int | None = config.max_retry_count
         except AttributeError:
             self._max_retry_count = 0
 

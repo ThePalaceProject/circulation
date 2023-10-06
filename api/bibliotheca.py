@@ -25,6 +25,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
@@ -118,7 +119,7 @@ class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
 
 
 class BibliothecaAPI(
-    BaseCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
+    PatronActivityCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
     HasCollectionSelfTests,
 ):
     NAME = ExternalIntegration.BIBLIOTHECA

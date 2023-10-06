@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Set, Tup
 import feedparser
 from flask_babel import lazy_gettext as _
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
+from api.circulation import FulfillmentInfo, LoanInfo, PatronActivityCirculationAPI
 from api.circulation_exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
@@ -66,7 +66,9 @@ class OPDSForDistributorsLibrarySettings(BaseSettings):
 
 
 class OPDSForDistributorsAPI(
-    BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
+    PatronActivityCirculationAPI[
+        OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings
+    ],
     HasCollectionSelfTests,
     HasLibraryIntegrationConfiguration,
 ):
@@ -394,7 +396,7 @@ class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.NAME
 
     @classmethod
-    def settings_class(cls) -> Type[OPDSForDistributorsSettings]:  # type: ignore[override]
+    def settings_class(cls) -> Type[OPDSForDistributorsSettings]:
         return OPDSForDistributorsSettings
 
     def update_work_for_edition(

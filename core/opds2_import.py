@@ -62,6 +62,7 @@ from core.model import (
 )
 from core.model.configuration import ConfigurationSetting
 from core.opds_import import (
+    BaseOPDSAPI,
     BaseOPDSImporter,
     OPDSImporterLibrarySettings,
     OPDSImporterSettings,
@@ -149,13 +150,7 @@ class OPDS2ImporterLibrarySettings(OPDSImporterLibrarySettings):
     pass
 
 
-class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
-    """Imports editions and license pools from an OPDS 2.0 feed."""
-
-    NAME: str = ExternalIntegration.OPDS2_IMPORT
-    DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
-    NEXT_LINK_RELATION: str = "next"
-
+class OPDS2API(BaseOPDSAPI):
     @classmethod
     def settings_class(cls) -> Type[OPDS2ImporterSettings]:
         return OPDS2ImporterSettings
@@ -166,11 +161,19 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
 
     @classmethod
     def label(cls) -> str:
-        return cls.NAME
+        return "OPDS 2.0 Import"
 
     @classmethod
     def description(cls) -> str:
-        return cls.DESCRIPTION
+        return "Import books from a publicly-accessible OPDS 2.0 feed."
+
+
+class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
+    """Imports editions and license pools from an OPDS 2.0 feed."""
+
+    NAME: str = ExternalIntegration.OPDS2_IMPORT
+    DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
+    NEXT_LINK_RELATION: str = "next"
 
     def __init__(
         self,
@@ -196,6 +199,14 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
         """
         super().__init__(db, collection, data_source_name, http_get)
         self._parser = parser
+        self._api: Optional[OPDS2API] = None
+
+    @property
+    def api(self) -> OPDS2API:
+        """Get the API object."""
+        if self._api is None:
+            self._api = OPDS2API(self._db, self.collection)
+        return self._api
 
     def assert_importable_content(
         self, feed: str, feed_url: str, max_get_attempts: int = 5
@@ -213,7 +224,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
         :return: Boolean value indicating whether CM can import the identifier
         """
         return identifier.type not in self._get_ignored_identifier_types(
-            self.integration_configuration()
+            self.api.integration_configuration()
         )
 
     def _extract_subjects(self, subjects: list[core_ast.Subject]) -> list[SubjectData]:

@@ -5,7 +5,13 @@ from unittest.mock import MagicMock
 
 from sqlalchemy.orm import Session
 
-from api.circulation import BaseCirculationAPI, CirculationAPI, HoldInfo, LoanInfo
+from api.circulation import (
+    BaseCirculationAPI,
+    CirculationAPI,
+    HoldInfo,
+    LoanInfo,
+    PatronActivityCirculationAPI,
+)
 from api.controller import CirculationManager
 from core.external_search import ExternalSearchIndex
 from core.integration.settings import BaseSettings
@@ -15,7 +21,7 @@ from core.service.container import Services
 from tests.mocks.search import ExternalSearchIndexFake
 
 
-class MockBaseCirculationAPI(BaseCirculationAPI, ABC):
+class MockBaseCirculationAPI(PatronActivityCirculationAPI, ABC):
     @classmethod
     def label(cls) -> str:
         return ""

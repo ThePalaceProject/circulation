@@ -14,6 +14,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
@@ -349,7 +350,7 @@ class OdiloLibrarySettings(BaseSettings):
 
 
 class OdiloAPI(
-    BaseCirculationAPI[OdiloSettings, OdiloLibrarySettings],
+    PatronActivityCirculationAPI[OdiloSettings, OdiloLibrarySettings],
     HasCollectionSelfTests,
     CirculationInternalFormatsMixin,
 ):
