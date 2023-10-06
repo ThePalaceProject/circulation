@@ -8,13 +8,18 @@ from flask_babel import lazy_gettext as _
 from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import (
+    BaseCirculationAPI,
+    CirculationInternalFormatsMixin,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import (
     CirculationData,
@@ -37,6 +42,9 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    Patron,
     Representation,
     Subject,
 )
@@ -343,9 +351,8 @@ class OdiloLibrarySettings(BaseSettings):
 class OdiloAPI(
     BaseCirculationAPI[OdiloSettings, OdiloLibrarySettings],
     HasCollectionSelfTests,
-    HasLibraryIntegrationConfiguration,
+    CirculationInternalFormatsMixin,
 ):
-    log = logging.getLogger("Odilo API")
     LIBRARY_API_BASE_URL = "library_api_base_url"
 
     NAME = ExternalIntegration.ODILO
@@ -621,7 +628,13 @@ class OdiloAPI(
             self.library_api_base_url + url, payload, headers, **kwargs
         )
 
-    def checkout(self, patron, pin, licensepool, internal_format):
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
         """Check out a book on behalf of a patron.
 
         :param patron: a Patron object for the patron who wants
@@ -632,17 +645,18 @@ class OdiloAPI(
         :param licensepool: Identifier of the book to be checked out is
             attached to this licensepool.
 
-        :param internal_format: Represents the patron's desired book format.
+        :param delivery_mechanism: Represents the patron's desired book format.
 
         :return: a LoanInfo object.
         """
         record_id = licensepool.identifier.identifier
+        internal_format = self.internal_format(delivery_mechanism)
 
         # Data just as 'x-www-form-urlencoded', no JSON
 
         payload = dict(
             patronId=patron.authorization_identifier,
-            format=internal_format,
+            format=self.internal_format,
         )
 
         response = self.patron_request(
@@ -756,14 +770,15 @@ class OdiloAPI(
             )
         )
 
-    def fulfill(self, patron, pin, licensepool, internal_format, **kwargs):
-        """Get the actual resource file to the patron.
-
-        :param kwargs: A container for arguments to fulfill()
-           which are not relevant to this vendor.
-
-        :return: a FulfillmentInfo object.
-        """
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        """Get the actual resource file to the patron."""
+        internal_format = self.internal_format(delivery_mechanism)
         record_id = licensepool.identifier.identifier
         content_link, content, content_type = self.get_fulfillment_link(
             patron, pin, record_id, internal_format
@@ -774,17 +789,18 @@ class OdiloAPI(
                 "Odilo record_id %s was not available as %s"
                 % (record_id, internal_format)
             )
-        else:
-            return FulfillmentInfo(
-                licensepool.collection,
-                DataSource.ODILO,
-                Identifier.ODILO_ID,
-                record_id,
-                content_link=content_link,
-                content=content,
-                content_type=content_type,
-                content_expires=None,
-            )
+            raise CannotFulfill()
+
+        return FulfillmentInfo(
+            licensepool.collection,
+            DataSource.ODILO,
+            Identifier.ODILO_ID,
+            record_id,
+            content_link=content_link,
+            content=content,
+            content_type=content_type,
+            content_expires=None,
+        )
 
     def get_fulfillment_link(self, patron, pin, record_id, format_type):
         """Get the link corresponding to an existing checkout."""

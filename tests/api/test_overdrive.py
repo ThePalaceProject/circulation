@@ -46,6 +46,7 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
     MediaTypes,
     Representation,
@@ -785,8 +786,9 @@ class TestOverdriveAPI:
     def test_checkout(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Verify the process of checking out a book.
         db = overdrive_api_fixture.db
-        patron = object()
-        pin = object()
+        patron = MagicMock()
+        pin = MagicMock()
+        delivery_mechanism = MagicMock()
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
         identifier = pool.identifier
 
@@ -818,7 +820,7 @@ class TestOverdriveAPI:
         api = Mock(db.session, overdrive_api_fixture.collection)
         api_response = json.dumps("some data")
         api.queue_response(201, content=api_response)
-        loan = api.checkout(patron, pin, pool, "internal format is ignored")
+        loan = api.checkout(patron, pin, pool, delivery_mechanism)
 
         # Verify that a good-looking patron request went out.
         endpoint, ignore, kwargs = api.requests.pop()
@@ -854,7 +856,7 @@ class TestOverdriveAPI:
         # Most of the time, an error simply results in an exception.
         api.queue_response(400, content=api_response)
         with pytest.raises(Exception) as excinfo:
-            api.checkout(patron, pin, pool, "internal format is ignored")
+            api.checkout(patron, pin, pool, delivery_mechanism)
         assert "exception in _process_checkout_error" in str(excinfo.value)
         assert (
             patron,
@@ -869,7 +871,7 @@ class TestOverdriveAPI:
         api.PROCESS_CHECKOUT_ERROR_RESULT = "Actually, I was able to recover"  # type: ignore[assignment]
         api.queue_response(400, content=api_response)
         assert "Actually, I was able to recover" == api.checkout(
-            patron, pin, pool, "internal format is ignored"
+            patron, pin, pool, delivery_mechanism
         )
         assert (
             patron,
@@ -1462,7 +1464,6 @@ class TestOverdriveAPI:
 
         # If get_fulfillment_link returns a FulfillmentInfo, it is returned
         # immediately and the rest of fulfill() does not run.
-
         fulfillment = FulfillmentInfo(
             overdrive_api_fixture.collection, None, None, None, None, None, None, None
         )
@@ -1471,12 +1472,15 @@ class TestOverdriveAPI:
             def get_fulfillment_link(*args, **kwargs):
                 return fulfillment
 
-        # Since most of the data is not provided, if fulfill() tried
-        # to actually run to completion, it would crash.
+            def internal_format(
+                self, delivery_mechanism: LicensePoolDeliveryMechanism
+            ) -> str:
+                return "format"
+
         edition, pool = db.edition(with_license_pool=True)
         api = MockAPI(db.session, overdrive_api_fixture.collection)
-        result = api.fulfill(None, None, pool, None)
-        assert fulfillment == result
+        result = api.fulfill(MagicMock(), MagicMock(), pool, MagicMock())
+        assert result is fulfillment
 
     def test_fulfill_raises_exception_and_updates_formats_for_outdated_format(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -1543,7 +1547,7 @@ class TestOverdriveAPI:
             db.patron(),
             "pin",
             pool,
-            "ebook-epub-adobe",
+            pool.delivery_mechanisms[0],
         )
 
         # The delivery mechanisms have been updated.
@@ -2238,11 +2242,19 @@ class TestOverdriveAPI:
             )
         )
 
-        fulfill = od_api.fulfill(
-            patron, "pin", work.active_license_pool(), "ebook-epub-open"
+        # Mock delivery mechanism
+        delivery_mechanism = create_autospec(LicensePoolDeliveryMechanism)
+        delivery_mechanism.delivery_mechanism = create_autospec(DeliveryMechanism)
+        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.NO_DRM
+        delivery_mechanism.delivery_mechanism.content_type = (
+            Representation.EPUB_MEDIA_TYPE
         )
 
-        assert fulfill.content_link_redirect == True
+        fulfill = od_api.fulfill(
+            patron, "pin", work.active_license_pool(), delivery_mechanism
+        )
+
+        assert fulfill.content_link_redirect is True
         assert fulfill.content_link == "https://example.org/epub-redirect"
 
 

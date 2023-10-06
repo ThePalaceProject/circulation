@@ -6,11 +6,11 @@ from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, runtime_checkable
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pymarc import parse_xml_to_array
-from pymarc.record import Record  # type: ignore
+from pymarc.record import Record
 
 from api.bibliotheca import (
     BibliothecaAPI,
@@ -54,6 +54,7 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
     Representation,
     Subject,
@@ -576,8 +577,10 @@ class TestBibliothecaAPI:
             headers={"Content-Type": "presumably/an-acsm"},
             content="this is an ACSM",
         )
+        delivery_mechanism = create_autospec(LicensePoolDeliveryMechanism)
+        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
         fulfillment = bibliotheca_fixture.api.fulfill(
-            patron, "password", pool, internal_format="ePub"
+            patron, "password", pool, delivery_mechanism=delivery_mechanism
         )
         assert isinstance(fulfillment, FulfillmentInfo)
         assert b"this is an ACSM" == fulfillment.content
@@ -595,8 +598,11 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.api.queue_response(
             200, headers={"Content-Type": "application/json"}, content=license
         )
+        delivery_mechanism.delivery_mechanism.drm_scheme = (
+            DeliveryMechanism.FINDAWAY_DRM
+        )
         fulfillment = bibliotheca_fixture.api.fulfill(
-            patron, "password", pool, internal_format="MP3"
+            patron, "password", pool, delivery_mechanism=delivery_mechanism
         )
         assert isinstance(fulfillment, FulfillmentInfo)
 
@@ -627,7 +633,7 @@ class TestBibliothecaAPI:
             200, headers={"Content-Type": bad_media_type}, content=bad_content
         )
         fulfillment = bibliotheca_fixture.api.fulfill(
-            patron, "password", pool, internal_format="MP3"
+            patron, "password", pool, delivery_mechanism=delivery_mechanism
         )
         assert isinstance(fulfillment, FulfillmentInfo)
 

@@ -4,6 +4,7 @@ import datetime
 import json
 import urllib.parse
 from typing import TYPE_CHECKING, Any, Dict
+from unittest.mock import MagicMock
 
 import dateutil
 import pytest
@@ -28,6 +29,7 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     Hold,
+    LicensePoolDeliveryMechanism,
     Loan,
     MediaTypes,
     Representation,
@@ -623,6 +625,11 @@ class TestODLAPI:
         odl_api_test_fixture.license.setup(concurrency=1, available=1)  # type: ignore[attr-defined]
         odl_api_test_fixture.checkout()
 
+        lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
+        lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
+        lpdm.delivery_mechanism.content_type = "ignored/format"
+        lpdm.delivery_mechanism.drm_scheme = delivery_mechanism
+
         lsd = json.dumps(
             {
                 "status": "ready",
@@ -636,7 +643,7 @@ class TestODLAPI:
             odl_api_test_fixture.patron,
             "pin",
             odl_api_test_fixture.pool,
-            delivery_mechanism,
+            lpdm,
         )
 
         assert odl_api_test_fixture.collection == fulfillment.collection(db.session)

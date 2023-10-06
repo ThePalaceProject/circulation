@@ -401,7 +401,7 @@ class TestOPDSForDistributorsAPI:
         )
 
         loan_info = opds_dist_api_fixture.api.checkout(
-            patron, "1234", pool, Representation.EPUB_MEDIA_TYPE
+            patron, "1234", pool, MagicMock()
         )
         assert opds_dist_api_fixture.collection.id == loan_info.collection_id
         assert data_source.name == loan_info.data_source_name
@@ -428,6 +428,23 @@ class TestOPDSForDistributorsAPI:
             with_license_pool=True,
             collection=opds_dist_api_fixture.collection,
         )
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.BEARER_TOKEN,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
+
+        # Find the correct delivery mechanism
+        delivery_mechanism = None
+        for mechanism in pool.delivery_mechanisms:
+            if (
+                mechanism.delivery_mechanism.drm_scheme
+                == DeliveryMechanism.BEARER_TOKEN
+            ):
+                delivery_mechanism = mechanism
+        assert delivery_mechanism is not None
+
         # This pool doesn't have an acquisition link, so
         # we can't fulfill it yet.
         pytest.raises(
@@ -436,7 +453,7 @@ class TestOPDSForDistributorsAPI:
             patron,
             "1234",
             pool,
-            Representation.EPUB_MEDIA_TYPE,
+            delivery_mechanism,
         )
 
         # Set up an epub acquisition link for the pool.
@@ -447,12 +464,7 @@ class TestOPDSForDistributorsAPI:
             data_source,
             Representation.EPUB_MEDIA_TYPE,
         )
-        pool.set_delivery_mechanism(
-            Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.NO_DRM,
-            RightsStatus.IN_COPYRIGHT,
-            link.resource,
-        )
+        delivery_mechanism.resource = link.resource
 
         # Set the API's auth url so it doesn't have to get it -
         # that's tested in test_get_token.
@@ -463,7 +475,7 @@ class TestOPDSForDistributorsAPI:
 
         fulfillment_time = utc_now()
         fulfillment_info = opds_dist_api_fixture.api.fulfill(
-            patron, "1234", pool, Representation.EPUB_MEDIA_TYPE
+            patron, "1234", pool, delivery_mechanism
         )
         assert opds_dist_api_fixture.collection.id == fulfillment_info.collection_id
         assert data_source.name == fulfillment_info.data_source_name

@@ -423,11 +423,15 @@ class TestAxis360API:
 
         patron = axis360.db.patron()
         patron.authorization_identifier = "a barcode"
+        delivery_mechanism = pool.delivery_mechanisms[0]
 
-        def fulfill(internal_format="not AxisNow"):
-            return axis360.api.fulfill(
-                patron, "pin", licensepool=pool, internal_format=internal_format
-            )
+        fulfill = partial(
+            axis360.api.fulfill,
+            patron,
+            "pin",
+            licensepool=pool,
+            delivery_mechanism=delivery_mechanism,
+        )
 
         # If Axis 360 says a patron does not have a title checked out,
         # an attempt to fulfill that title will fail with NoActiveLoan.
@@ -440,7 +444,7 @@ class TestAxis360API:
         # object with a content link.
         data = axis360.sample_data("availability_with_loan_and_hold.xml")
         axis360.api.queue_response(200, content=data)
-        fulfillment = fulfill(internal_format="ePub")
+        fulfillment = fulfill()
         assert isinstance(fulfillment, FulfillmentInfo)
         assert not isinstance(fulfillment, Axis360FulfillmentInfo)
         assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
@@ -452,7 +456,8 @@ class TestAxis360API:
         data = axis360.sample_data("availability_with_axisnow_fulfillment.xml")
         data = data.replace(b"0016820953", pool.identifier.identifier.encode("utf8"))
         axis360.api.queue_response(200, content=data)
-        fulfillment = fulfill("AxisNow")
+        delivery_mechanism.drm_scheme = DeliveryMechanism.AXISNOW_DRM
+        fulfillment = fulfill()
         assert isinstance(fulfillment, Axis360FulfillmentInfo)
 
         # Looking up the details of the Axis360FulfillmentInfo will
@@ -475,7 +480,8 @@ class TestAxis360API:
         )
         data = axis360.sample_data("availability_with_audiobook_fulfillment.xml")
         axis360.api.queue_response(200, content=data)
-        fulfillment = fulfill(internal_format="irrelevant")
+        delivery_mechanism.drm_scheme = DeliveryMechanism.FINDAWAY_DRM
+        fulfillment = fulfill()
         assert isinstance(fulfillment, Axis360FulfillmentInfo)
 
     def test_patron_activity(self, axis360: Axis360Fixture):

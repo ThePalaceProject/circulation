@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -410,7 +411,7 @@ class TestEnkiAPI:
 
         data = enki_test_fixture.files.sample_data("checked_out_acs.json")
         enki_test_fixture.api.queue_response(200, content=data)
-        loan = enki_test_fixture.api.checkout(patron, "pin", pool, "internal format")
+        loan = enki_test_fixture.api.checkout(patron, "pin", pool, MagicMock())
 
         # An appropriate request to the "getSELink" endpoint was made.,
         [
@@ -455,7 +456,7 @@ class TestEnkiAPI:
 
             patron = db.patron(external_identifier="notabarcode")
 
-            loan = enki_test_fixture.api.checkout(patron, "notapin", pool, None)
+            loan = enki_test_fixture.api.checkout(patron, "notapin", pool, MagicMock())
 
     def test_checkout_not_available(self, enki_test_fixture: EnkiTestFixure):
         """Test that the correct exception is thrown upon an unsuccessful login."""
@@ -473,7 +474,7 @@ class TestEnkiAPI:
             pool.identifier.identifier = "econtentRecord1"
             patron = db.patron(external_identifier="12345678901234")
 
-            loan = enki_test_fixture.api.checkout(patron, "1234", pool, None)
+            loan = enki_test_fixture.api.checkout(patron, "1234", pool, MagicMock())
 
     def test_fulfillment_open_access_parser(self, enki_test_fixture: EnkiTestFixure):
         """Test that fulfillment info for non-ACS Enki books is parsed correctly."""
@@ -506,9 +507,7 @@ class TestEnkiAPI:
 
         data = enki_test_fixture.files.sample_data("checked_out_acs.json")
         enki_test_fixture.api.queue_response(200, content=data)
-        fulfillment = enki_test_fixture.api.fulfill(
-            patron, "pin", pool, "internal format"
-        )
+        fulfillment = enki_test_fixture.api.fulfill(patron, "pin", pool, MagicMock())
 
         # An appropriate request to the "getSELink" endpoint was made.,
         [

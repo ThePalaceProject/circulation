@@ -1663,7 +1663,6 @@ class LoanController(CirculationManagerController):
         self,
         license_pool_id: int,
         mechanism_id: int | None = None,
-        part: str | None = None,
         do_get: Any | None = None,
     ) -> wkResponse | ProblemDetail:
         """Fulfill a book that has already been checked out,
@@ -1676,10 +1675,6 @@ class LoanController(CirculationManagerController):
 
         :param license_pool_id: Database ID of a LicensePool.
         :param mechanism_id: Database ID of a DeliveryMechanism.
-
-        :param part: Vendor-specific identifier used when fulfilling a
-           specific part of a book rather than the whole thing (e.g. a
-           single chapter of an audiobook).
         """
         do_get = do_get or Representation.simple_http_get
 
@@ -1751,26 +1746,12 @@ class LoanController(CirculationManagerController):
                     _("You must specify a delivery mechanism to fulfill this loan.")
                 )
 
-        # Define a function that, given a part identifier, will create
-        # an appropriate link to this controller.
-        def fulfill_part_url(part):
-            return url_for(
-                "fulfill",
-                license_pool_id=requested_license_pool.id,
-                mechanism_id=mechanism.delivery_mechanism.id,
-                library_short_name=library.short_name,
-                part=str(part),
-                _external=True,
-            )
-
         try:
             fulfillment = self.circulation.fulfill(
                 patron,
                 credential,
                 requested_license_pool,
                 mechanism,
-                part=part,
-                fulfill_part_url=fulfill_part_url,
             )
         except DeliveryMechanismConflict as e:
             return DELIVERY_CONFLICT.detailed(str(e))
@@ -1779,10 +1760,10 @@ class LoanController(CirculationManagerController):
                 _("Can't fulfill loan because you have no active loan for this book."),
                 status_code=e.status_code,
             )
-        except CannotFulfill as e:
-            return CANNOT_FULFILL.with_debug(str(e), status_code=e.status_code)
         except FormatNotAvailable as e:
             return NO_ACCEPTABLE_FORMAT.with_debug(str(e), status_code=e.status_code)
+        except CannotFulfill as e:
+            return CANNOT_FULFILL.with_debug(str(e), status_code=e.status_code)
         except DeliveryMechanismError as e:
             return BAD_DELIVERY_MECHANISM.with_debug(str(e), status_code=e.status_code)
 
