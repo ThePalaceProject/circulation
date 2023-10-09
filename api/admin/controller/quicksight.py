@@ -3,6 +3,7 @@ from typing import Dict
 
 import boto3
 import flask
+from sqlalchemy import select
 
 from api.admin.model.quicksight import (
     QuicksightDashboardNamesResponse,
@@ -71,9 +72,11 @@ class QuickSightController(CirculationManagerController):
                 )
             )
 
-        libraries = (
-            self._db.query(Library).filter(Library.id.in_(allowed_library_ids)).all()
-        )
+        libraries = self._db.execute(
+            select(Library.name)
+            .where(Library.id.in_(allowed_library_ids))
+            .order_by(Library.name)
+        ).all()
 
         try:
             delimiter = "|"
