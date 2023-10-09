@@ -784,6 +784,7 @@ class TestMARCExporter:
             query_batch_size=1,
         )
 
+        assert storage_service.mocked_multipart_upload is not None
         # Even though there are 4 parts, we upload in 3 batches due to minimum size limitations
         # The "4"th part gets uploaded due it being the tail piece
         assert len(storage_service.mocked_multipart_upload.content_parts) == 3

@@ -49,7 +49,7 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
         self.bucket = bucket
         self.media_type = media_type
         self.content = b""
-        self.content_parts = []
+        self.content_parts: List[bytes] = []
         self._complete = False
         self._url = url
         self._exception = None
@@ -85,7 +85,7 @@ class MockS3Service(S3Service):
     ) -> None:
         super().__init__(client, region, bucket, url_template)
         self.uploads: List[MockS3ServiceUpload] = []
-        self.mocked_multipart_upload = None
+        self.mocked_multipart_upload: Optional[MockMultipartS3ContextManager] = None
 
     def store_stream(
         self,
