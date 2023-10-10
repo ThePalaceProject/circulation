@@ -36,15 +36,6 @@ class MockCredential(firebase_admin.credentials.Base):
         return self._g_credential
 
 
-@pytest.fixture
-def mock_app() -> firebase_admin.App:
-    app = firebase_admin.initialize_app(
-        MockCredential(), options=dict(projectId="mock-app-1"), name="testapp"
-    )
-    yield app
-    firebase_admin.delete_app(app)
-
-
 class PushNotificationsFixture:
     def __init__(self, db: DatabaseTransactionFixture, app: firebase_admin.App) -> None:
         self.db = db
