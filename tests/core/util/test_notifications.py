@@ -1,9 +1,9 @@
 import re
+from typing import Generator
 from unittest import mock
 
 import firebase_admin
 import pytest
-from firebase_admin import messaging
 from google.auth import credentials
 from requests_mock import Mocker
 
@@ -45,17 +45,10 @@ def mock_app() -> firebase_admin.App:
     firebase_admin.delete_app(app)
 
 
-def assert_send_message(msg: messaging.Message, expected: dict):
-    assert expected["token"] == msg.token
-    assert expected["data"] == msg.data
-    if "notification" in expected:
-        assert expected["notification"].title == msg.notification.title
-        assert expected["notification"].body == msg.notification.body
-
-
 class PushNotificationsFixture:
-    def __init__(self, db: DatabaseTransactionFixture) -> None:
+    def __init__(self, db: DatabaseTransactionFixture, app: firebase_admin.App) -> None:
         self.db = db
+        self.app = app
         PushNotifications.TESTING_MODE = True
         setting = ConfigurationSetting.sitewide(
             self.db.session, Configuration.BASE_URL_KEY
@@ -64,14 +57,18 @@ class PushNotificationsFixture:
 
 
 @pytest.fixture(scope="function")
-def push_notf_fixture(db: DatabaseTransactionFixture) -> PushNotificationsFixture:
-    return PushNotificationsFixture(db)
+def push_notf_fixture(
+    db: DatabaseTransactionFixture,
+) -> Generator[PushNotificationsFixture, None, None]:
+    app = firebase_admin.initialize_app(
+        MockCredential(), options=dict(projectId="mock-app-1"), name="testapp"
+    )
+    yield PushNotificationsFixture(db, app)
+    firebase_admin.delete_app(app)
 
 
 class TestPushNotifications:
-    def test_send_loan_notification(
-        self, push_notf_fixture: PushNotificationsFixture, mock_app: firebase_admin.App
-    ):
+    def test_send_loan_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
         patron = db.patron(external_identifier="xyz1")
         patron.authorization_identifier = "abc1"
@@ -86,45 +83,53 @@ class TestPushNotifications:
         work: Work = db.work(with_license_pool=True)
         loan, _ = work.active_license_pool().loan_to(patron)  # type: ignore
 
-        # Ensure data structuring has no errors
+        # Test the data structuring down to the "send" method
+        # If bad data is detected, the fcm "send" method will error out
+        # If not, we are good
         with mock.patch(
             "core.util.notifications.PushNotifications.fcm_app"
         ) as mock_fcm, Mocker() as mocker:
             mocker.post(
                 re.compile("https://fcm.googleapis.com"), json=dict(name="mid-mock")
             )
-            mock_fcm.return_value = mock_app
+            mock_fcm.return_value = push_notf_fixture.app
             assert PushNotifications.send_loan_expiry_message(
                 loan, 1, [device_token]
             ) == ["mid-mock"]
 
-        # Mock the send method to test actual values
         with mock.patch(
             "core.util.notifications.PushNotifications.fcm_app"
-        ) as mock_fcm, mock.patch("core.util.notifications.messaging.send") as send:
+        ) as mock_fcm, mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_loan_expiry_message(loan, 1, [device_token])
 
-            assert send.call_count == 1
-            message = send.call_args[0][0]
-            assert message.token == "atoken"
-            assert message.notification.title == "Only 1 day left on your loan!"
-            assert (
-                message.notification.body
-                == f"Your loan on {work.presentation_edition.title} is expiring soon"
-            )
-            assert message.data == dict(
-                title="Only 1 day left on your loan!",
-                body=f"Your loan on {work.presentation_edition.title} is expiring soon",
-                event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
-                loans_endpoint="http://localhost/default/loans",
-                external_identifier=patron.external_identifier,
-                authorization_identifier=patron.authorization_identifier,
-                identifier=work.presentation_edition.primary_identifier.identifier,
-                type=work.presentation_edition.primary_identifier.type,
-                library=loan.library.short_name,
-                days_to_expiry="1",
-            )
-            assert send.call_args[1] == {"dry_run": True, "app": mock_fcm()}
+            assert messaging.Message.call_count == 1
+            assert messaging.Message.call_args_list[0] == [
+                (),
+                {
+                    "token": "atoken",
+                    "notification": messaging.Notification(
+                        title="Only 1 day left on your loan!",
+                        body=f"Your loan on {work.presentation_edition.title} is expiring soon",
+                    ),
+                    "data": dict(
+                        title="Only 1 day left on your loan!",
+                        body=f"Your loan on {work.presentation_edition.title} is expiring soon",
+                        event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
+                        loans_endpoint="http://localhost/default/loans",
+                        external_identifier=patron.external_identifier,
+                        authorization_identifier=patron.authorization_identifier,
+                        identifier=work.presentation_edition.primary_identifier.identifier,
+                        type=work.presentation_edition.primary_identifier.type,
+                        library=loan.library.short_name,
+                        days_to_expiry="1",
+                    ),
+                },
+            ]
+            assert messaging.send.call_count == 1
+            assert messaging.send.call_args_list[0] == [
+                (messaging.Message(),),
+                {"dry_run": True, "app": mock_fcm()},
+            ]
 
     def test_send_activity_sync(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
@@ -155,41 +160,48 @@ class TestPushNotifications:
 
         with mock.patch(
             "core.util.notifications.PushNotifications.fcm_app"
-        ) as fcm_app, mock.patch(
-            "core.util.notifications.messaging.send_all"
-        ) as send_all:
+        ) as fcm_app, mock.patch("core.util.notifications.messaging") as messaging:
             # Notify 2 patrons of 3 total
             PushNotifications.send_activity_sync_message([patron1, patron2])
-            messages = [
-                dict(
-                    event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                    loans_endpoint="http://localhost/default/loans",
-                    external_identifier=patron1.external_identifier,
-                    authorization_identifier=patron1.authorization_identifier,
+            assert messaging.Message.call_count == 4
+            assert messaging.Message.call_args_list == [
+                mock.call(
+                    token=tokens[0].device_token,
+                    data=dict(
+                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
+                        loans_endpoint="http://localhost/default/loans",
+                        external_identifier=patron1.external_identifier,
+                        authorization_identifier=patron1.authorization_identifier,
+                    ),
                 ),
-                dict(
-                    event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                    loans_endpoint="http://localhost/default/loans",
-                    external_identifier=patron1.external_identifier,
-                    authorization_identifier=patron1.authorization_identifier,
+                mock.call(
+                    token=tokens[1].device_token,
+                    data=dict(
+                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
+                        loans_endpoint="http://localhost/default/loans",
+                        external_identifier=patron1.external_identifier,
+                        authorization_identifier=patron1.authorization_identifier,
+                    ),
                 ),
-                dict(
-                    event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                    loans_endpoint="http://localhost/default/loans",
-                    external_identifier=patron2.external_identifier,
+                mock.call(
+                    token=tokens[2].device_token,
+                    data=dict(
+                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
+                        loans_endpoint="http://localhost/default/loans",
+                        external_identifier=patron2.external_identifier,
+                    ),
                 ),
-                dict(
-                    event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                    loans_endpoint="http://localhost/default/loans",
-                    external_identifier=patron2.external_identifier,
+                mock.call(
+                    token=tokens[3].device_token,
+                    data=dict(
+                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
+                        loans_endpoint="http://localhost/default/loans",
+                        external_identifier=patron2.external_identifier,
+                    ),
                 ),
             ]
 
-            msg: messaging.Message
-            for ix, msg in enumerate(send_all.call_args[0]):
-                assert msg[0].data == messages[ix]
-
-            assert send_all.call_count == 1
+            assert messaging.send_all.call_count == 1
 
     def test_holds_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
@@ -217,15 +229,13 @@ class TestPushNotifications:
 
         with mock.patch(
             "core.util.notifications.PushNotifications.fcm_app"
-        ) as fcm_app, mock.patch(
-            "core.util.notifications.messaging.send_all"
-        ) as send_all:
+        ) as fcm_app, mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_holds_notifications([hold1, hold2])
 
         loans_api = "http://localhost/default/loans"
-        assert send_all.call_count == 1
-        messages = [
-            dict(
+        assert messaging.Message.call_count == 3
+        assert messaging.Message.call_args_list == [
+            mock.call(
                 token="test-token-1",
                 notification=messaging.Notification(
                     title=f'Your hold on "{work1.title}" is available!',
@@ -241,7 +251,7 @@ class TestPushNotifications:
                     library=hold1.patron.library.short_name,
                 ),
             ),
-            dict(
+            mock.call(
                 token="test-token-2",
                 notification=messaging.Notification(
                     title=f'Your hold on "{work1.title}" is available!',
@@ -257,7 +267,7 @@ class TestPushNotifications:
                     library=hold1.patron.library.short_name,
                 ),
             ),
-            dict(
+            mock.call(
                 token="test-token-3",
                 notification=messaging.Notification(
                     title=f'Your hold on "{work2.title}" is available!',
@@ -273,6 +283,3 @@ class TestPushNotifications:
                 ),
             ),
         ]
-
-        for ix, msg in enumerate(send_all.call_args[0][0]):
-            assert_send_message(msg, messages[ix])
