@@ -133,6 +133,7 @@ module = [
     "flask_babel",
     "flask_pydantic_spec.*",
     "fuzzywuzzy",
+    "google.auth",
     "greenlet",
     "html_sanitizer",
     "isbnlib",

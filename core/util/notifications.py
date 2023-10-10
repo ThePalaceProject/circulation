@@ -76,7 +76,7 @@ class PushNotifications(LoggerMixin):
             type=identifier.type,
             identifier=identifier.identifier,
             library=library_short_name,
-            days_to_expiry=days_to_expiry,
+            days_to_expiry=str(days_to_expiry),
         )
         if loan.patron.external_identifier:
             data["external_identifier"] = loan.patron.external_identifier
