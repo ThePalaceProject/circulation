@@ -10,13 +10,13 @@ T = TypeVar("T")
 class SerializerInterface(ABC, Generic[T]):
     @classmethod
     @abstractmethod
-    def to_string(cls, data: T) -> bytes:
+    def to_string(cls, data: T) -> str:
         ...
 
     @abstractmethod
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: Optional[List[OPDSMessage]] = None
-    ) -> bytes:
+    ) -> str:
         ...
 
     @abstractmethod

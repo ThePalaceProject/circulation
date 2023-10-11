@@ -73,7 +73,7 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
 
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: Optional[List[OPDSMessage]] = None
-    ) -> bytes:
+    ) -> str:
         # First we do metadata
         serialized = self.E.feed()
 
@@ -380,8 +380,8 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
         return element
 
     @classmethod
-    def to_string(cls, element: etree._Element) -> bytes:
-        return cast(bytes, etree.tostring(element))
+    def to_string(cls, element: etree._Element) -> str:
+        return cast(str, etree.tostring(element, encoding="unicode"))
 
     def content_type(self) -> str:
         return OPDSFeed.ACQUISITION_FEED_TYPE
