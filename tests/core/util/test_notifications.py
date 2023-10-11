@@ -294,7 +294,11 @@ class TestPushNotifications:
 
         with mock.patch(
             "core.util.notifications.PushNotifications.fcm_app"
-        ) as fcm_app, mock.patch("core.util.notifications.messaging") as messaging:
+        ) as fcm_app, mock.patch(
+            "core.util.notifications.messaging"
+        ) as messaging, caplog.at_level(
+            logging.WARNING
+        ):
             PushNotifications.send_messages(
                 [token],
                 None,
