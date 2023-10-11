@@ -708,7 +708,6 @@ class MARCExporter:
                     )
                     if record:
                         record_bytes = record.as_marc()
-                        this_batch_bytes += len(record_bytes)
                         this_batch.write(record_bytes)
                 if (
                     this_batch.getbuffer().nbytes
