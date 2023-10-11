@@ -6,7 +6,7 @@ import socket
 import ssl
 import urllib
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
@@ -33,6 +33,7 @@ from api.axis import (
 from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.web_publication_manifest import FindawayManifest, SpineItem
+from core.analytics import Analytics
 from core.coverage import CoverageFailure
 from core.metadata_layer import (
     CirculationData,
@@ -130,12 +131,6 @@ def axis360(
 
 
 class TestAxis360API:
-    def test_external_integration(self, axis360: Axis360Fixture):
-        assert (
-            axis360.collection.external_integration
-            == axis360.api.external_integration(object())
-        )
-
     def test__run_self_tests(
         self,
         axis360: Axis360Fixture,
@@ -181,7 +176,7 @@ class TestAxis360API:
             patron_activity,
             pools_without_delivery,
             refresh_bearer_token,
-        ] = sorted(api._run_self_tests(axis360.db.session), key=lambda x: x.name)
+        ] = sorted(api._run_self_tests(axis360.db.session), key=lambda x: str(x.name))
         assert "Refreshing bearer token" == refresh_bearer_token.name
         assert True == refresh_bearer_token.success
         assert "the new token" == refresh_bearer_token.result
@@ -239,7 +234,8 @@ class TestAxis360API:
         api = Mock(axis360.db.session, axis360.collection)
         [failure] = api._run_self_tests(axis360.db.session)
         assert "Refreshing bearer token" == failure.name
-        assert False == failure.success
+        assert failure.success is False
+        assert failure.exception is not None
         assert "no way" == failure.exception.args[0]
 
     def test_create_identifier_strings(self, axis360: Axis360Fixture):
@@ -361,8 +357,7 @@ class TestAxis360API:
         patron = axis360.db.patron()
         barcode = axis360.db.fresh_str()
         patron.authorization_identifier = barcode
-        response = axis360.api.checkin(patron, "pin", pool)
-        assert response == True
+        axis360.api.checkin(patron, "pin", pool)
 
         # Verify the format of the HTTP request that was made.
         [request] = axis360.api.requests
@@ -501,7 +496,7 @@ class TestAxis360API:
         assert patron.authorization_identifier == kwargs["params"]["patronId"]
 
         # We got three results -- two holds and one loan.
-        [hold1, loan, hold2] = sorted(results, key=lambda x: x.identifier)
+        [hold1, loan, hold2] = sorted(results, key=lambda x: str(x.identifier))
         assert isinstance(hold1, HoldInfo)
         assert isinstance(hold2, HoldInfo)
         assert isinstance(loan, LoanInfo)
@@ -691,7 +686,9 @@ class TestAxis360API:
         analytics = MockAnalyticsProvider()
         api = MockAxis360API(axis360.db.session, axis360.collection)
         e, e_new, lp, lp_new = api.update_book(
-            axis360.BIBLIOGRAPHIC_DATA, axis360.AVAILABILITY_DATA, analytics=analytics
+            axis360.BIBLIOGRAPHIC_DATA,
+            axis360.AVAILABILITY_DATA,
+            analytics=cast(Analytics, analytics),
         )
         # A new LicensePool and Edition were created.
         assert True == lp_new
@@ -727,7 +724,9 @@ class TestAxis360API:
         )
 
         e2, e_new, lp2, lp_new = api.update_book(
-            axis360.BIBLIOGRAPHIC_DATA, new_circulation, analytics=analytics
+            axis360.BIBLIOGRAPHIC_DATA,
+            new_circulation,
+            analytics=cast(Analytics, analytics),
         )
 
         # The same LicensePool and Edition are returned -- no new ones
@@ -842,14 +841,18 @@ class TestCirculationMonitor:
             def process_book(self, bibliographic, circulation):
                 self.processed.append((bibliographic, circulation))
 
-        monitor = MockMonitor(axis360.db.session, axis360.collection, api_class=MockAPI)
+        mock_api = MockAPI(axis360.db.session, axis360.collection)
+        monitor = MockMonitor(
+            axis360.db.session, axis360.collection, api_class=mock_api
+        )
         data = axis360.sample_data("single_item.xml")
         axis360.api.queue_response(200, content=data)
         progress = TimestampData()
-        monitor.catch_up_from("start", "cutoff", progress)
+        start_mock = MagicMock()
+        monitor.catch_up_from(start_mock, MagicMock(), progress)
 
         # The start time was passed into recent_activity.
-        assert "start" == monitor.api.recent_activity_called_with
+        assert start_mock == mock_api.recent_activity_called_with
 
         # process_book was called on each item returned by recent_activity.
         assert [(1, "a"), (2, "b")] == monitor.processed
@@ -993,11 +996,12 @@ class TestParsers:
 
         data = axis360.sample_data("tiny_collection.xml")
 
-        [bib1, av1], [bib2, av2] = BibliographicParser(False, True).process_all(data)
+        [bib1, av1], [bib2, av2] = BibliographicParser().process_all(data)
 
-        # We didn't ask for availability information, so none was provided.
-        assert av1 is None
-        assert av2 is None
+        # We test for availability information in a separate test.
+        # Here we just make sure it is present.
+        assert av1 is not None
+        assert av2 is not None
 
         # But we did get bibliographic information.
         assert bib1 is not None
@@ -1119,8 +1123,8 @@ class TestParsers:
         # narrator information here.
         data = axis360.sample_data("availability_with_audiobook_fulfillment.xml")
 
-        [[bib, av]] = BibliographicParser(False, True).process_all(data)
-        assert av is None
+        [[bib, av]] = BibliographicParser().process_all(data)
+        assert av is not None
         assert bib is not None
 
         assert "Back Spin" == bib.title
@@ -1143,8 +1147,8 @@ class TestParsers:
         data = data.replace(b"Acoustik", b"Blio")
         data = data.replace(b"AxisNow", b"No Such Format")
 
-        [[bib, av]] = BibliographicParser(False, True).process_all(data)
-        assert av is None
+        [[bib, av]] = BibliographicParser().process_all(data)
+        assert av is not None
         assert bib is not None
 
         # A book in Blio format is treated as an AxisNow ebook.
@@ -1160,8 +1164,8 @@ class TestParsers:
         data = axis360.sample_data("availability_with_audiobook_fulfillment.xml")
         data = data.replace(b"Acoustik", b"Blio")
 
-        [[bib, av]] = BibliographicParser(False, True).process_all(data)
-        assert av is None
+        [[bib, av]] = BibliographicParser().process_all(data)
+        assert av is not None
         assert bib is not None
 
         # There is only one FormatData -- 'Blio' and 'AxisNow' mean the same thing.
@@ -1175,8 +1179,8 @@ class TestParsers:
         data = data.replace(b"Acoustik", b"No Such Format 1")
         data = data.replace(b"AxisNow", b"No Such Format 2")
 
-        [[bib, av]] = BibliographicParser(False, True).process_all(data)
-        assert av is None
+        [[bib, av]] = BibliographicParser().process_all(data)
+        assert av is not None
         assert bib is not None
 
         # We don't support any of the formats, so no FormatData objects were created.
@@ -1221,11 +1225,12 @@ class TestParsers:
 
         data = axis360.sample_data("tiny_collection.xml")
 
-        [bib1, av1], [bib2, av2] = BibliographicParser(True, False).process_all(data)
+        [bib1, av1], [bib2, av2] = BibliographicParser().process_all(data)
 
-        # We didn't ask for bibliographic information, so none was provided.
-        assert bib1 is None
-        assert bib2 is None
+        # We already tested the bibliographic information, so we just make sure
+        # it is present.
+        assert bib1 is not None
+        assert bib2 is not None
 
         # But we did get availability information.
         assert av1 is not None
@@ -1807,10 +1812,11 @@ class TestAxisNowManifest:
 class Axis360ProviderFixture(Axis360Fixture):
     def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
         super().__init__(db, files)
+        mock_api = MockAxis360API(db.session, self.collection)
         self.provider = Axis360BibliographicCoverageProvider(
-            self.collection, api_class=MockAxis360API
+            self.collection, api_class=mock_api
         )
-        self.api = self.provider.api
+        self.api = mock_api
 
 
 @pytest.fixture(scope="function")

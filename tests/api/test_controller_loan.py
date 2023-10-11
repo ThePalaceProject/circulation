@@ -10,8 +10,14 @@ from flask import Response as FlaskResponse
 from flask import url_for
 from werkzeug import Response as wkResponse
 
-from api.axis import Axis360FulfillmentInfo
-from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.axis import Axis360API, Axis360FulfillmentInfo
+from api.circulation import (
+    BaseCirculationAPI,
+    CirculationAPI,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from api.circulation_exceptions import (
     AlreadyOnHold,
     NoAvailableCopies,
@@ -877,7 +883,7 @@ class TestLoanController:
         lpdm.delivery_mechanism.default_client_can_fulfill = True
 
         # Mock out the flow
-        api = MagicMock()
+        api = MagicMock(spec=BaseCirculationAPI)
         api.fulfill.return_value = FulfillmentInfo(
             loan_fixture.db.default_collection(),
             DataSource.OVERDRIVE,
@@ -913,6 +919,7 @@ class TestLoanController:
         assert response.location == "https://example.org/redirect_to_epub"
 
         # Axis360 variant
+        api = MagicMock(spec=Axis360API)
         api.collection = loan_fixture.db.default_collection()
         api._db = loan_fixture.db.session
         axis360_ff = Axis360FulfillmentInfo(
@@ -933,6 +940,9 @@ class TestLoanController:
             library=loan_fixture.db.default_library(),
             headers=dict(Authorization=loan_fixture.valid_auth),
         ):
+            controller.circulation.api_for_collection[
+                loan_fixture.db.default_collection().id
+            ] = api
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
         assert isinstance(response, wkResponse)
