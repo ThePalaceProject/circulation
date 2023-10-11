@@ -515,6 +515,9 @@ class MARCExporter:
     INCLUDE_SUMMARY = "include_summary"
     INCLUDE_SIMPLIFIED_GENRES = "include_simplified_genres"
 
+    # The minimum size each piece of a multipart upload should be
+    MINIMUM_UPLOAD_BATCH_SIZE_BYTES = 5 * 1024 * 1024  # 5MB
+
     LIBRARY_SETTINGS = [
         {
             "key": UPDATE_FREQUENCY,
@@ -655,7 +658,6 @@ class MARCExporter:
         force_refresh=False,
         search_engine=None,
         query_batch_size=500,
-        upload_batch_size=7500,
     ):
         """
         Create and export a MARC file for the books in a lane.
@@ -666,10 +668,6 @@ class MARCExporter:
         :param start_time: Only include records that were created or modified after this time.
         :param force_refresh: Create new records even when cached records are available.
         :param query_batch_size: Number of works to retrieve with a single Opensearch query.
-        :param upload_batch_size: Number of records to mirror at a time. This is different
-          from query_batch_size because S3 enforces a minimum size of 5MB for all parts
-          of a multipart upload except the last, but 5MB of records would be too many
-          works for a single query.
         """
 
         # We store the content, if it's not empty. If it's empty, we create a CachedMARCFile
@@ -694,7 +692,6 @@ class MARCExporter:
             content_type=Representation.MARC_MEDIA_TYPE,
         ) as upload:
             this_batch = BytesIO()
-            this_batch_size = 0
             while pagination is not None:
                 # Retrieve one 'page' of works from the search index.
                 works = lane.works(
@@ -710,14 +707,16 @@ class MARCExporter:
                         work, annotator, force_refresh, self.integration
                     )
                     if record:
-                        this_batch.write(record.as_marc())
-                this_batch_size += pagination.this_page_size
-                if this_batch_size >= upload_batch_size:
+                        record_bytes = record.as_marc()
+                        this_batch.write(record_bytes)
+                if (
+                    this_batch.getbuffer().nbytes
+                    >= self.MINIMUM_UPLOAD_BATCH_SIZE_BYTES
+                ):
                     # We've reached or exceeded the upload threshold.
                     # Upload one part of the multipart document.
                     self._upload_batch(this_batch, upload)
                     this_batch = BytesIO()
-                    this_batch_size = 0
                 pagination = pagination.next_page
 
             # Upload the final part of the multi-document, if
