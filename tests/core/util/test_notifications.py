@@ -1,6 +1,11 @@
+import re
+from typing import Generator
 from unittest import mock
 
+import firebase_admin
 import pytest
+from google.auth import credentials
+from requests_mock import Mocker
 
 from core.config import Configuration
 from core.model import create, get_one_or_create
@@ -12,9 +17,29 @@ from core.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
+# Mock credential classes pulled directly from the fcm test repository
+# https://github.com/firebase/firebase-admin-python/blob/master/tests/testutils.py
+class MockGoogleCredential(credentials.Credentials):
+    """A mock Google authentication credential."""
+
+    def refresh(self, request):
+        self.token = "mock-token"
+
+
+class MockCredential(firebase_admin.credentials.Base):
+    """A mock Firebase credential implementation."""
+
+    def __init__(self):
+        self._g_credential = MockGoogleCredential()
+
+    def get_credential(self):
+        return self._g_credential
+
+
 class PushNotificationsFixture:
-    def __init__(self, db: DatabaseTransactionFixture) -> None:
+    def __init__(self, db: DatabaseTransactionFixture, app: firebase_admin.App) -> None:
         self.db = db
+        self.app = app
         PushNotifications.TESTING_MODE = True
         setting = ConfigurationSetting.sitewide(
             self.db.session, Configuration.BASE_URL_KEY
@@ -23,8 +48,14 @@ class PushNotificationsFixture:
 
 
 @pytest.fixture(scope="function")
-def push_notf_fixture(db: DatabaseTransactionFixture) -> PushNotificationsFixture:
-    return PushNotificationsFixture(db)
+def push_notf_fixture(
+    db: DatabaseTransactionFixture,
+) -> Generator[PushNotificationsFixture, None, None]:
+    app = firebase_admin.initialize_app(
+        MockCredential(), options=dict(projectId="mock-app-1"), name="testapp"
+    )
+    yield PushNotificationsFixture(db, app)
+    firebase_admin.delete_app(app)
 
 
 class TestPushNotifications:
@@ -42,6 +73,20 @@ class TestPushNotifications:
         )
         work: Work = db.work(with_license_pool=True)
         loan, _ = work.active_license_pool().loan_to(patron)  # type: ignore
+
+        # Test the data structuring down to the "send" method
+        # If bad data is detected, the fcm "send" method will error out
+        # If not, we are good
+        with mock.patch(
+            "core.util.notifications.PushNotifications.fcm_app"
+        ) as mock_fcm, Mocker() as mocker:
+            mocker.post(
+                re.compile("https://fcm.googleapis.com"), json=dict(name="mid-mock")
+            )
+            mock_fcm.return_value = push_notf_fixture.app
+            assert PushNotifications.send_loan_expiry_message(
+                loan, 1, [device_token]
+            ) == ["mid-mock"]
 
         with mock.patch(
             "core.util.notifications.PushNotifications.fcm_app"
@@ -67,7 +112,7 @@ class TestPushNotifications:
                         identifier=work.presentation_edition.primary_identifier.identifier,
                         type=work.presentation_edition.primary_identifier.type,
                         library=loan.library.short_name,
-                        days_to_expiry=1,
+                        days_to_expiry="1",
                     ),
                 },
             ]
