@@ -8,9 +8,9 @@ from sqlalchemy import desc, nullslast
 from sqlalchemy.orm import Session
 
 from api.admin.model.dashboard_statistics import StatisticsResponse
-from api.admin.opds import AdminAnnotator
 from api.controller import CirculationManagerController
 from api.local_analytics_exporter import LocalAnalyticsExporter
+from core.feed.annotator.admin import AdminAnnotator
 from core.model import (
     Admin,
     CirculationEvent,
@@ -51,8 +51,6 @@ class DashboardController(CirculationManagerController):
                 "book": {
                     "title": result.license_pool.work.title,
                     "url": annotator.permalink_for(
-                        result.license_pool.work,
-                        result.license_pool,
                         result.license_pool.identifier,
                     ),
                 },

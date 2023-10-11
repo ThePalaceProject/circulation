@@ -208,14 +208,12 @@ class TestWork:
         assert "Alice Adder, Bob Bitshifter" == work.author
 
         # This Work starts out with a single CoverageRecord reflecting
-        # the work done to generate its initial OPDS entry, and then
-        # it adds choose-edition as a primary edition is set. The
+        # the work done to choose-edition as a primary edition is set. The
         # search index CoverageRecord is a marker for work that must
         # be done in the future, and is not tested here.
-        [choose_edition, generate_opds, update_search_index] = sorted(
+        [choose_edition, update_search_index] = sorted(
             work.coverage_records, key=lambda x: x.operation
         )
-        assert generate_opds.operation == WorkCoverageRecord.GENERATE_OPDS_OPERATION
         assert choose_edition.operation == WorkCoverageRecord.CHOOSE_EDITION_OPERATION
 
         # pools aren't yet aware of each other
@@ -280,7 +278,6 @@ class TestWork:
             (wcr.CLASSIFY_OPERATION, success),
             (wcr.SUMMARY_OPERATION, success),
             (wcr.QUALITY_OPERATION, success),
-            (wcr.GENERATE_OPDS_OPERATION, success),
             (wcr.GENERATE_MARC_OPERATION, success),
             (wcr.UPDATE_SEARCH_INDEX_OPERATION, wcr.REGISTERED),
         }
@@ -889,13 +886,6 @@ class TestWork:
             assert None == work_or_edition.cover_thumbnail_url
             assert True == (cover_link.resource.voted_quality < 0)
             assert True == (cover_link.resource.votes_for_quality > 0)
-
-            if isinstance(work_or_edition, Work):
-                # It also removes the link from the cached OPDS entries.
-                for url in [full_url, thumbnail_url]:
-                    assert url not in work.simple_opds_entry
-                    assert url not in work.verbose_opds_entry
-
             return True
 
         def reset_cover():
@@ -908,9 +898,6 @@ class TestWork:
             work.calculate_presentation(search_index_client=index)
             assert full_url == work.cover_full_url
             assert thumbnail_url == work.cover_thumbnail_url
-            for url in [full_url, thumbnail_url]:
-                assert url in work.simple_opds_entry
-                assert url in work.verbose_opds_entry
 
         # Suppressing the cover removes the cover from the work.
         index = external_search_fake_fixture.external_search
@@ -1646,27 +1633,6 @@ class TestWork:
         # Only when all Subjects are checked does the work stop showing up.
         classification2.subject.checked = True
         assert [] == qu.all()
-
-    def test_calculate_opds_entries(self, db: DatabaseTransactionFixture):
-        """Verify that calculate_opds_entries sets both simple and verbose
-        entries.
-        """
-        work = db.work()
-
-        work.calculate_opds_entries(verbose=False)
-        simple_entry = work.simple_opds_entry
-        assert simple_entry.startswith("<entry")
-        assert None == work.verbose_opds_entry
-
-        work.calculate_opds_entries(verbose=True)
-        # The simple OPDS entry is the same length as before.
-        # It's not necessarily _exactly_ the same because the
-        # <updated> timestamp may be different.
-        assert len(simple_entry) == len(work.simple_opds_entry)
-
-        # The verbose OPDS entry is longer than the simple one.
-        assert work.verbose_opds_entry.startswith("<entry")
-        assert len(work.verbose_opds_entry) > len(simple_entry)
 
     def test_calculate_marc_record(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)

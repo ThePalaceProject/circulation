@@ -689,21 +689,6 @@ class PatronSweepMonitor(SweepMonitor):
 # SweepMonitors that do something specific.
 
 
-class OPDSEntryCacheMonitor(PresentationReadyWorkSweepMonitor):
-    """A Monitor that recalculates the OPDS entries for every
-    presentation-ready Work.
-
-    This is different from the OPDSEntryWorkCoverageProvider,
-    which only processes works that are missing a WorkCoverageRecord
-    with the 'generate-opds' operation.
-    """
-
-    SERVICE_NAME = "ODPS Entry Cache Monitor"
-
-    def process_item(self, work):
-        work.calculate_opds_entries()
-
-
 class PermanentWorkIDRefreshMonitor(EditionSweepMonitor):
     """A monitor that calculates or recalculates the permanent work ID for
     every edition.

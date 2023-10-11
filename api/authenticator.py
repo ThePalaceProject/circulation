@@ -29,11 +29,11 @@ from core.integration.registry import IntegrationRegistry
 from core.model import ConfigurationSetting, Library, Patron, PatronProfileStorage
 from core.model.announcements import Announcement
 from core.model.integration import IntegrationLibraryConfiguration
-from core.opds import OPDSFeed
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.http import RemoteIntegrationException
 from core.util.log import LoggerMixin, elapsed_time_logging
+from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 if sys.version_info >= (3, 11):

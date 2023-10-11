@@ -21,7 +21,6 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import eagerload
 from sqlalchemy.orm.exc import NoResultFound
-from werkzeug.datastructures import MIMEAccept
 
 from api.annotations import AnnotationParser, AnnotationWriter
 from api.authentication.access_token import AccessTokenProvider
@@ -50,7 +49,6 @@ from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
 from api.odl import ODLAPI
 from api.odl2 import ODL2API
-from api.opds2 import OPDS2NavigationsAnnotator
 from api.problem_details import *
 from api.saml.controller import SAMLController
 from core.analytics import Analytics
@@ -69,6 +67,7 @@ from core.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.feed.navigation import NavigationFeed
+from core.feed.opds import NavigationFacets
 from core.lane import (
     BaseFacets,
     Facets,
@@ -107,8 +106,6 @@ from core.model.devicetokens import (
     InvalidTokenTypeError,
 )
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
-from core.opds import NavigationFacets
-from core.opds2 import AcquisitonFeedOPDS2
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
 from core.service.container import Services
@@ -176,7 +173,6 @@ class CirculationManager:
     # API Controllers
     index_controller: IndexController
     opds_feeds: OPDSFeedController
-    opds2_feeds: OPDS2FeedController
     marc_records: MARCRecordController
     loans: LoanController
     annotations: AnnotationController
@@ -439,7 +435,6 @@ class CirculationManager:
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
-        self.opds2_feeds = OPDS2FeedController(self)
         self.marc_records = MARCRecordController(self)
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
@@ -1273,68 +1268,6 @@ class FeedRequestParameters:
     pagination: Pagination | None = None
     facets: Facets | None = None
     problem: ProblemDetail | None = None
-
-
-class OPDS2FeedController(CirculationManagerController):
-    """All OPDS2 type feeds are served through this controller"""
-
-    def _parse_feed_request(self):
-        """Parse the request to get frequently used request parameters for the feeds"""
-        library = getattr(flask.request, "library", None)
-        pagination = load_pagination_from_request(SortKeyPagination)
-        if isinstance(pagination, ProblemDetail):
-            return FeedRequestParameters(problem=pagination)
-
-        try:
-            facets = load_facets_from_request()
-            if isinstance(facets, ProblemDetail):
-                return FeedRequestParameters(problem=facets)
-        except AttributeError:
-            # No facets/library present, so NoneType
-            facets = None
-
-        return FeedRequestParameters(
-            library=library, facets=facets, pagination=pagination
-        )
-
-    def publications(self):
-        """OPDS2 publications feed"""
-        params: FeedRequestParameters = self._parse_feed_request()
-        if params.problem:
-            return params.problem
-        lane = self.load_lane(None)
-        annotator = self.manager.annotator(lane, params.facets)
-        max_age = flask.request.args.get("max_age")
-        feed = OPDSAcquisitionFeed.page(
-            self._db,
-            lane.display_name,
-            flask.request.url,
-            lane,
-            annotator,
-            params.facets,
-            params.pagination,
-            self.search_engine,
-        )
-        return feed.as_response(
-            mime_types=MIMEAccept([("application/opds+json", 1)]),  # Force the type
-            max_age=int(max_age) if max_age is not None else None,
-        )
-
-    def navigation(self):
-        """OPDS2 navigation links"""
-        params: FeedRequestParameters = self._parse_feed_request()
-        annotator = OPDS2NavigationsAnnotator(
-            flask.request.url,
-            params.facets,
-            params.pagination,
-            params.library,
-            title="OPDS2 Navigation",
-        )
-        feed = AcquisitonFeedOPDS2.navigation(self._db, annotator)
-
-        return Response(
-            str(feed), status=200, headers={"Content-Type": annotator.OPDS2_TYPE}
-        )
 
 
 class MARCRecordController(CirculationManagerController):

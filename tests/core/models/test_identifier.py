@@ -1,9 +1,7 @@
 import datetime
 from unittest.mock import PropertyMock, create_autospec
 
-import feedparser
 import pytest
-from lxml import etree
 
 from core.model import PresentationCalculationPolicy
 from core.model.constants import MediaTypes
@@ -14,9 +12,7 @@ from core.model.identifier import (
     ProQuestIdentifierParser,
     RecursiveEquivalencyCache,
 )
-from core.model.resource import Hyperlink, Representation
-from core.util.datetime_helpers import utc_now
-from core.util.opds_writer import AtomFeed
+from core.model.resource import Hyperlink
 from tests.core.models.test_coverage import ExampleEquivalencyCoverageRecordFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -632,88 +628,6 @@ class TestIdentifier:
             oclc,
             count_as_missing_before=timestamp + datetime.timedelta(seconds=1),
         ).all()
-
-    def test_opds_entry(self, db: DatabaseTransactionFixture):
-        identifier = db.identifier()
-        source = DataSource.lookup(db.session, DataSource.CONTENT_CAFE)
-
-        summary = identifier.add_link(
-            Hyperlink.DESCRIPTION,
-            "http://description",
-            source,
-            media_type=Representation.TEXT_PLAIN,
-            content="a book",
-        )[0]
-        cover = identifier.add_link(
-            Hyperlink.IMAGE,
-            "http://cover",
-            source,
-            media_type=Representation.JPEG_MEDIA_TYPE,
-        )[0]
-
-        def get_entry_dict(entry):
-            return feedparser.parse(etree.tostring(entry, encoding="unicode")).entries[
-                0
-            ]
-
-        # The entry includes the urn, description, and cover link.
-        entry = get_entry_dict(identifier.opds_entry())
-        assert identifier.urn == entry.id
-        assert "a book" == entry.summary
-        [cover_link] = entry.links
-        assert "http://cover" == cover_link.href
-
-        # The 'updated' time is set to the latest timestamp associated
-        # with the Identifier.
-        assert [] == identifier.coverage_records
-
-        # This may be the time the cover image was mirrored.
-        cover.resource.representation.set_as_mirrored(db.fresh_url())
-        now = utc_now()
-        cover.resource.representation.mirrored_at = now
-        entry = get_entry_dict(identifier.opds_entry())
-        assert AtomFeed._strftime(now) == entry.updated
-
-        # Or it may be a timestamp on a coverage record associated
-        # with the Identifier.
-
-        # For whatever reason, this coverage record is missing its
-        # timestamp. This indicates an error elsewhere, but it
-        # doesn't crash the method we're testing.
-        no_timestamp = db.coverage_record(identifier, source, operation="bad operation")
-        no_timestamp.timestamp = None
-
-        # If a coverage record is dated after the cover image's mirror
-        # time, That becomes the new updated time.
-        record = db.coverage_record(identifier, source)
-        the_future = now + datetime.timedelta(minutes=60)
-        record.timestamp = the_future
-        identifier.opds_entry()
-        entry = get_entry_dict(identifier.opds_entry())
-        assert AtomFeed._strftime(record.timestamp) == entry.updated
-
-        # Basically the latest date is taken from either a coverage record
-        # or a representation.
-        even_later = now + datetime.timedelta(minutes=120)
-        thumbnail = identifier.add_link(
-            Hyperlink.THUMBNAIL_IMAGE,
-            "http://thumb",
-            source,
-            media_type=Representation.JPEG_MEDIA_TYPE,
-        )[0]
-        thumb_rep = thumbnail.resource.representation
-        cover_rep = cover.resource.representation
-        thumbnail.resource.representation.thumbnail_of_id = cover_rep.id
-        cover_rep.thumbnails.append(thumb_rep)
-        thumbnail.resource.representation.mirrored_at = even_later
-
-        entry = get_entry_dict(identifier.opds_entry())
-        # The thumbnail has been added to the links.
-        assert 2 == len(entry.links)
-        assert any(filter(lambda l: l.href == "http://thumb", entry.links))  # type: ignore
-        # And the updated time has been changed accordingly.
-        expected = thumbnail.resource.representation.mirrored_at
-        assert AtomFeed._strftime(even_later) == entry.updated
 
     @pytest.mark.parametrize(
         "_,identifier_type,identifier,title",

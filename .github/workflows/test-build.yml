@@ -60,6 +60,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
+          flags: ${{ matrix.module }}
 
   test-migrations:
     name: Migration Tests
@@ -107,6 +108,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
+          flags: migration
 
   docker-image-build:
     name: Docker build

@@ -29,9 +29,9 @@ from core.model import (
     SessionManager,
     create,
 )
-from core.opds import AcquisitionFeed
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import OPDSFeedResponse, Response
+from core.util.opds_writer import OPDSFeed
 from scripts import (
     AdobeAccountIDResetScript,
     CacheFacetListsPerLane,
@@ -377,7 +377,7 @@ class TestCacheFacetListsPerLane:
             # we get a Flask Response containing an OPDS feed.
             response = script.do_generate(lane, facets, pagination)
             assert isinstance(response, OPDSFeedResponse)
-            assert AcquisitionFeed.ACQUISITION_FEED_TYPE == response.content_type
+            assert OPDSFeed.ACQUISITION_FEED_TYPE == response.content_type
             assert response.get_data(as_text=True).startswith("<feed")
 
 
@@ -450,7 +450,7 @@ class TestCacheOPDSGroupFeedPerLane:
             # Try again without mocking AcquisitionFeed to verify that
             # we get a Flask response.
             response = script.do_generate(lane, facets, pagination)
-            assert AcquisitionFeed.ACQUISITION_FEED_TYPE == response.content_type
+            assert OPDSFeed.ACQUISITION_FEED_TYPE == response.content_type
             assert response.get_data(as_text=True).startswith("<feed")
 
     def test_facets(

@@ -4,11 +4,11 @@ import flask
 from flask import url_for
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
-from api.admin.opds import AdminAnnotator, AdminFeed
 from api.controller import CirculationManagerController
 from core.app_server import load_pagination_from_request
 from core.classifier import genres
-from core.util.flask_util import OPDSFeedResponse
+from core.feed.admin import AdminFeed
+from core.feed.annotator.admin import AdminAnnotator
 from core.util.problem_detail import ProblemDetail
 
 
@@ -28,7 +28,7 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
             annotator=annotator,
             pagination=pagination,
         )
-        return OPDSFeedResponse(opds_feed, max_age=0)
+        return opds_feed.as_response(max_age=0)
 
     def genres(self):
         data = dict({"Fiction": dict({}), "Nonfiction": dict({})})

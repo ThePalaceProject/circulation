@@ -8,5 +8,13 @@ coverage:
 comment:
   # Only comment when coverage changes
   require_changes: true
-  # Require all builds to finish before comment is posted
-  after_n_builds: 8
+
+flag_management:
+  default_rules: # the rules that will be followed for any flag added, generally
+    carryforward: true
+    statuses:
+      - type: project
+        target: auto
+        threshold: 0.2%
+      - type: patch
+        target: auto

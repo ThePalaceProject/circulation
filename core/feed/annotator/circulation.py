@@ -24,6 +24,7 @@ from core.config import CannotLoadConfiguration
 from core.entrypoint import EverythingEntryPoint
 from core.external_search import WorkSearchResult
 from core.feed.annotator.base import Annotator
+from core.feed.opds import UnfulfillableWork
 from core.feed.types import (
     Acquisition,
     FeedData,
@@ -50,7 +51,6 @@ from core.model.licensing import (
 )
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
-from core.opds import UnfulfillableWork
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
 

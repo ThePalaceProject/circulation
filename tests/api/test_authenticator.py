@@ -57,11 +57,11 @@ from core.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from core.model.library import LibraryLogo
-from core.opds import OPDSFeed
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException, RemoteIntegrationException
+from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
