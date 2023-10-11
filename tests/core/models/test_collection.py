@@ -8,7 +8,7 @@ from core.model import create, get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
-from core.model.coverage import CoverageRecord, WorkCoverageRecord
+from core.model.coverage import CoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
 from core.model.edition import Edition
@@ -691,49 +691,6 @@ class TestCollection:
         with pytest.raises(ValueError) as excinfo:
             collection.disassociate_library(other_library)
         assert "No known external integration for collection" in str(excinfo.value)
-
-    def test_licensepools_with_works_updated_since(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        m = test_collection.licensepools_with_works_updated_since
-
-        # Verify our ability to find LicensePools with works whose
-        # OPDS entries were updated since a given time.
-        w1 = db.work(with_license_pool=True)
-        w2 = db.work(with_license_pool=True)
-        w3 = db.work(with_license_pool=True)
-
-        # An empty catalog returns nothing.
-        timestamp = utc_now()
-        assert [] == m(db.session, timestamp).all()
-
-        test_collection.catalog_identifier(w1.license_pools[0].identifier)
-        test_collection.catalog_identifier(w2.license_pools[0].identifier)
-
-        # This Work is catalogued in another catalog and will never show up.
-        collection2 = db.collection()
-        in_other_catalog = db.work(with_license_pool=True, collection=collection2)
-        collection2.catalog_identifier(in_other_catalog.license_pools[0].identifier)
-
-        # When no timestamp is passed, all LicensePeols in the catalog
-        # are returned, in order of the WorkCoverageRecord
-        # timestamp on the associated Work.
-        lp1, lp2 = m(db.session, None).all()
-        assert w1 == lp1.work
-        assert w2 == lp2.work
-
-        # When a timestamp is passed, only LicensePools whose works
-        # have been updated since then will be returned.
-        [w1_coverage_record] = [
-            c
-            for c in w1.coverage_records
-            if c.operation == WorkCoverageRecord.GENERATE_OPDS_OPERATION
-        ]
-        w1_coverage_record.timestamp = utc_now()
-        assert [w1] == [x.work for x in m(db.session, timestamp)]
 
     def test_isbns_updated_since(
         self, example_collection_fixture: ExampleCollectionFixture

@@ -413,7 +413,6 @@ class DatabaseTransactionFixture:
             # This is probably going to be used in an OPDS feed, so
             # fake that the work is presentation ready.
             work.presentation_ready = True
-            work.calculate_opds_entries(verbose=False)
 
         return work
 
@@ -843,7 +842,6 @@ class DatabaseTransactionFixture:
         """
         work = self.work(*args, **kwargs)
         work.calculate_presentation_edition()
-        work.calculate_opds_entries(verbose=False)
         return work
 
     def sample_ecosystem(self):

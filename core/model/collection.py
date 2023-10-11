@@ -15,14 +15,7 @@ from sqlalchemy import (
     exists,
     func,
 )
-from sqlalchemy.orm import (
-    Mapped,
-    backref,
-    contains_eager,
-    joinedload,
-    mapper,
-    relationship,
-)
+from sqlalchemy.orm import Mapped, backref, joinedload, mapper, relationship
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
@@ -31,7 +24,7 @@ from core.integration.goals import Goals
 from core.model import Base, create, get_one, get_one_or_create
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.constants import EditionConstants
-from core.model.coverage import CoverageRecord, WorkCoverageRecord
+from core.model.coverage import CoverageRecord
 from core.model.datasource import DataSource
 from core.model.edition import Edition
 from core.model.hassessioncache import HasSessionCache
@@ -752,51 +745,6 @@ class Collection(Base, HasSessionCache):
         )
 
         return query
-
-    def licensepools_with_works_updated_since(self, _db, timestamp):
-        """Finds all LicensePools in a collection's catalog whose Works' OPDS
-        entries have been updated since the timestamp. Used by the
-        metadata wrangler.
-
-        :param _db: A database connection,
-        :param timestamp: A datetime.timestamp object
-
-        :return: a Query that yields LicensePools. The Work and
-           Identifier associated with each LicensePool have been
-           pre-loaded, giving the caller all the information
-           necessary to create full OPDS entries for the works.
-        """
-        opds_operation = WorkCoverageRecord.GENERATE_OPDS_OPERATION
-        qu = (
-            _db.query(LicensePool)
-            .join(
-                LicensePool.work,
-            )
-            .join(
-                LicensePool.identifier,
-            )
-            .join(
-                Work.coverage_records,
-            )
-            .join(
-                CollectionIdentifier,
-                Identifier.id == CollectionIdentifier.identifier_id,
-            )
-        )
-        qu = qu.filter(
-            WorkCoverageRecord.operation == opds_operation,
-            CollectionIdentifier.collection_id == self.id,
-        )
-        qu = qu.options(
-            contains_eager(LicensePool.work),
-            contains_eager(LicensePool.identifier),
-        )
-
-        if timestamp:
-            qu = qu.filter(WorkCoverageRecord.timestamp > timestamp)
-
-        qu = qu.order_by(WorkCoverageRecord.timestamp)
-        return qu
 
     def isbns_updated_since(self, _db, timestamp):
         """Finds all ISBNs in a collection's catalog that have been updated

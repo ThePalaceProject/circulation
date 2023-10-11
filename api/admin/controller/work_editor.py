@@ -339,7 +339,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             # problem the user is trying to fix.
             policy = PresentationCalculationPolicy(
                 classify=True,
-                regenerate_opds_entries=True,
                 regenerate_marc_record=True,
                 update_search_index=True,
                 calculate_quality=changed_rating,
@@ -622,7 +621,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # Update presentation
         policy = PresentationCalculationPolicy(
             classify=True,
-            regenerate_opds_entries=True,
             regenerate_marc_record=True,
             update_search_index=True,
         )

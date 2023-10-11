@@ -26,7 +26,7 @@ from core.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
-from core.feed.opds import BaseOPDSFeed
+from core.feed.opds import BaseOPDSFeed, UnfulfillableWork
 from core.feed.types import FeedData, Link, WorkEntry
 from core.feed.util import strftime
 from core.lane import Facets, FacetsWithEntryPoint, Lane, Pagination, SearchFacets
@@ -36,7 +36,6 @@ from core.model.identifier import Identifier
 from core.model.licensing import LicensePool
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
-from core.opds import UnfulfillableWork
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse

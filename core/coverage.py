@@ -1547,24 +1547,6 @@ class WorkPresentationProvider(PresentationReadyWorkCoverageProvider):
     DEFAULT_BATCH_SIZE = 100
 
 
-class OPDSEntryWorkCoverageProvider(WorkPresentationProvider):
-    """Make sure all presentation-ready works have an up-to-date OPDS
-    entry.
-
-    This is different from the OPDSEntryCacheMonitor, which sweeps
-    over all presentation-ready works, even ones which are already
-    covered.
-    """
-
-    SERVICE_NAME = "OPDS Entry Work Coverage Provider"
-    OPERATION = WorkCoverageRecord.GENERATE_OPDS_OPERATION
-    DEFAULT_BATCH_SIZE = 1000
-
-    def process_item(self, work):
-        work.calculate_opds_entries()
-        return work
-
-
 class MARCRecordWorkCoverageProvider(WorkPresentationProvider):
     """Make sure all presentation-ready works have an up-to-date MARC
     record.
@@ -1606,12 +1588,7 @@ class WorkPresentationEditionCoverageProvider(WorkPresentationProvider):
         # operation (COVER_OPERATION), but it's a little complicated because
         # that's not a WorkCoverageRecord operation.
         choose_cover=True,
-        # We do this even though it's redundant with
-        # OPDSEntryWorkCoverageProvider. If you change a
-        # Work's presentation edition but don't update its OPDS entry,
-        # it effectively didn't happen.
-        regenerate_opds_entries=True,
-        # Same logic for the search index. This will flag the Work as
+        # This will flag the Work as
         # needing a search index update, and SearchIndexCoverageProvider
         # will take care of it.
         update_search_index=True,

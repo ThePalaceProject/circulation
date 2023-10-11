@@ -83,14 +83,6 @@ class AtomFeed:
         return date.strftime(fmt)
 
     @classmethod
-    def add_link_to_feed(cls, feed, children=None, **kwargs):
-        link = cls.E.link(**kwargs)
-        feed.append(link)
-        if children:
-            for i in children:
-                link.append(i)
-
-    @classmethod
     def add_link_to_entry(cls, entry, children=None, **kwargs):
         if "title" in kwargs:
             kwargs["title"] = str(kwargs["title"])
@@ -101,12 +93,8 @@ class AtomFeed:
                 link.append(i)
 
     @classmethod
-    def author(cls, *args, **kwargs):
-        return cls.E.author(*args, **kwargs)
-
-    @classmethod
-    def contributor(cls, *args, **kwargs):
-        return cls.E.contributor(*args, **kwargs)
+    def link(cls, *args, **kwargs):
+        return cls.E.link(*args, **kwargs)
 
     @classmethod
     def category(cls, *args, **kwargs):
@@ -115,42 +103,6 @@ class AtomFeed:
     @classmethod
     def entry(cls, *args, **kwargs):
         return cls.E.entry(*args, **kwargs)
-
-    @classmethod
-    def id(cls, *args, **kwargs):
-        return cls.E.id(*args, **kwargs)
-
-    @classmethod
-    def link(cls, *args, **kwargs):
-        return cls.E.link(*args, **kwargs)
-
-    @classmethod
-    def makeelement(cls, *args, **kwargs):
-        return cls.E._makeelement(*args, **kwargs)
-
-    @classmethod
-    def name(cls, *args, **kwargs):
-        return cls.E.name(*args, **kwargs)
-
-    @classmethod
-    def schema_(cls, field_name):
-        return f"{{{cls.SCHEMA_NS}}}{field_name}"
-
-    @classmethod
-    def summary(cls, *args, **kwargs):
-        return cls.E.summary(*args, **kwargs)
-
-    @classmethod
-    def title(cls, *args, **kwargs):
-        return cls.E.title(*args, **kwargs)
-
-    @classmethod
-    def update(cls, *args, **kwargs):
-        return cls.E.update(*args, **kwargs)
-
-    @classmethod
-    def updated(cls, *args, **kwargs):
-        return cls.E.updated(*args, **kwargs)
 
     def __init__(self, title, url, **kwargs):
         """Constructor.

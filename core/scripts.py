@@ -1562,7 +1562,6 @@ class AddClassificationScript(IdentifierInputScript):
             choose_summary=False,
             calculate_quality=False,
             choose_cover=False,
-            regenerate_opds_entries=True,
             regenerate_marc_record=True,
             update_search_index=True,
             verbose=True,
@@ -1732,7 +1731,6 @@ class WorkClassificationScript(WorkPresentationScript):
         choose_summary=False,
         calculate_quality=False,
         choose_cover=False,
-        regenerate_opds_entries=False,
         regenerate_marc_record=False,
         update_search_index=False,
     )
@@ -1883,7 +1881,6 @@ class WorkOPDSScript(WorkPresentationScript):
         choose_summary=False,
         calculate_quality=False,
         choose_cover=False,
-        regenerate_opds_entries=True,
         regenerate_marc_record=True,
         update_search_index=True,
     )
