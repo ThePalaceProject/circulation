@@ -692,7 +692,6 @@ class MARCExporter:
             content_type=Representation.MARC_MEDIA_TYPE,
         ) as upload:
             this_batch = BytesIO()
-            this_batch_bytes = 0
             while pagination is not None:
                 # Retrieve one 'page' of works from the search index.
                 works = lane.works(
@@ -711,12 +710,14 @@ class MARCExporter:
                         record_bytes = record.as_marc()
                         this_batch_bytes += len(record_bytes)
                         this_batch.write(record_bytes)
-                if this_batch_bytes >= self.MINIMUM_UPLOAD_BATCH_SIZE_BYTES:
+                if (
+                    this_batch.getbuffer().nbytes
+                    >= self.MINIMUM_UPLOAD_BATCH_SIZE_BYTES
+                ):
                     # We've reached or exceeded the upload threshold.
                     # Upload one part of the multipart document.
                     self._upload_batch(this_batch, upload)
                     this_batch = BytesIO()
-                    this_batch_bytes = 0
                 pagination = pagination.next_page
 
             # Upload the final part of the multi-document, if
