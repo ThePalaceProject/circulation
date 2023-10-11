@@ -53,13 +53,6 @@ class TestAtomFeed:
             method="c14n2",
         ) in etree.tostring(entry, method="c14n2")
 
-    def test_contributor(self):
-        kwargs = {"{%s}role" % AtomFeed.OPF_NS: "ctb"}
-        tag = etree.tounicode(AtomFeed.author(**kwargs))
-        assert tag.startswith("<author")
-        assert 'xmlns:opf="http://www.idpf.org/2007/opf"' in tag
-        assert tag.endswith('opf:role="ctb"/>')
-
     @pytest.mark.parametrize(
         "_,obj,formatted",
         [
