@@ -815,7 +815,19 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 facets.entrypoint,
             )
 
-        feed.add_pagination_links(results, lane)
+        if len(results) > 0:
+            # There are works in this list. Add a 'next' link.
+            next_url = annotator.search_url(lane, query, pagination.next_page, facets)
+            feed.add_link(href=next_url, rel="next")
+
+        if pagination.offset > 0:
+            first_url = annotator.search_url(lane, query, pagination.first_page, facets)
+            feed.add_link(rel="first", href=first_url)
+
+        previous_page = pagination.previous_page
+        if previous_page:
+            previous_url = annotator.search_url(lane, query, previous_page, facets)
+            feed.add_link(rel="previous", href=previous_url)
 
         # Add "up" link.
         feed.add_link(
