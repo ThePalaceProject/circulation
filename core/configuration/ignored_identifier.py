@@ -57,7 +57,7 @@ class IgnoredIdentifierImporterMixin:
                 "ignored_identifier_types", []
             )
 
-        return self._ignored_identifier_types  # type: ignore[return-value]
+        return self._ignored_identifier_types
 
     def set_ignored_identifier_types(
         self,
