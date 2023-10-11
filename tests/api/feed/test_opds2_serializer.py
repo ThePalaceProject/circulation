@@ -148,6 +148,7 @@ class TestOPDS2Serializer:
         acquisition = Acquisition(
             href="http://acquisition",
             rel="acquisition",
+            type="html",
             availability_status="available",
             availability_since="2022-02-02",
             availability_until="2222-02-02",
@@ -166,6 +167,7 @@ class TestOPDS2Serializer:
 
         assert result["href"] == acquisition.href
         assert result["rel"] == acquisition.rel
+        assert result["type"] == acquisition.type
         assert result["properties"] == dict(
             availability={
                 "since": "2022-02-02",
