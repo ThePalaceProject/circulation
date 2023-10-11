@@ -170,7 +170,7 @@ class TestFeedEquivalence:
                 search_engine=search_index,
             )
 
-        assert_equal_xmls(str(old_feed), new_feed.serialize().decode())
+        assert_equal_xmls(str(old_feed), new_feed.serialize())
 
     def test_search_feed(
         self,
