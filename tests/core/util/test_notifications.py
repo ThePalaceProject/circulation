@@ -1,14 +1,16 @@
+import logging
 import re
 from typing import Generator
 from unittest import mock
 
 import firebase_admin
 import pytest
+from firebase_admin.messaging import UnregisteredError
 from google.auth import credentials
 from requests_mock import Mocker
 
 from core.config import Configuration
-from core.model import create, get_one_or_create
+from core.model import create, get_one, get_one_or_create
 from core.model.configuration import ConfigurationSetting
 from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
@@ -158,6 +160,7 @@ class TestPushNotifications:
             assert messaging.Message.call_args_list == [
                 mock.call(
                     token=tokens[0].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -167,6 +170,7 @@ class TestPushNotifications:
                 ),
                 mock.call(
                     token=tokens[1].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -176,6 +180,7 @@ class TestPushNotifications:
                 ),
                 mock.call(
                     token=tokens[2].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -184,6 +189,7 @@ class TestPushNotifications:
                 ),
                 mock.call(
                     token=tokens[3].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -192,7 +198,7 @@ class TestPushNotifications:
                 ),
             ]
 
-            assert messaging.send_all.call_count == 1
+            assert messaging.send.call_count == 4
 
     def test_holds_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
@@ -274,3 +280,66 @@ class TestPushNotifications:
                 ),
             ),
         ]
+
+    def test_send_messages(
+        self,
+        push_notf_fixture: PushNotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        db = push_notf_fixture.db
+        patron1 = db.patron()
+        token = DeviceToken.create(
+            db.session, DeviceTokenTypes.FCM_IOS, "test-token", patron1
+        )
+
+        with mock.patch(
+            "core.util.notifications.PushNotifications.fcm_app"
+        ) as fcm_app, mock.patch("core.util.notifications.messaging") as messaging:
+            PushNotifications.send_messages(
+                [token],
+                None,
+                dict(test_none=None, test_str="test", test_int=1, test_bool=True),
+            )
+            assert messaging.Message.call_count == 1
+            assert messaging.Message.call_args.kwargs["data"] == dict(
+                test_str="test", test_int="1", test_bool="True"
+            )
+
+        assert len(caplog.records) == 3
+        assert (
+            "Removing test_none from notification data because it is None"
+            in caplog.messages
+        )
+        assert "Converting test_int from <class 'int'> to str" in caplog.messages
+        assert "Converting test_bool from <class 'bool'> to str" in caplog.messages
+
+    def test_send_messages_unregistered_error(
+        self,
+        push_notf_fixture: PushNotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        db = push_notf_fixture.db
+        patron1 = db.patron()
+        patron1.authorization_identifier = "auth1"
+        token = DeviceToken.create(
+            db.session, DeviceTokenTypes.FCM_IOS, "test-token", patron1
+        )
+
+        # When a token causes an UnregisteredError, it should be deleted
+        with mock.patch(
+            "core.util.notifications.PushNotifications.fcm_app"
+        ) as fcm_app, mock.patch(
+            "core.util.notifications.messaging"
+        ) as messaging, caplog.at_level(
+            logging.INFO
+        ):
+            messaging.send.side_effect = UnregisteredError("test")
+            PushNotifications.send_messages([token], None, {})
+            assert messaging.Message.call_count == 1
+            assert messaging.send.call_count == 1
+
+        assert get_one(db.session, DeviceToken, device_token="test-token") is None
+        assert (
+            "Device token test-token for patron auth1 is no longer registered, deleting"
+            in caplog.text
+        )

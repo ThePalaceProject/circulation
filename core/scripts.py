@@ -2868,7 +2868,7 @@ class LoanNotificationsScript(Script):
         # the same day
         if delta.days in self.LOAN_EXPIRATION_DAYS:
             self.log.info(
-                f"Patron {patron.external_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
+                f"Patron {patron.authorization_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
             )
             PushNotifications.send_loan_expiry_message(loan, delta.days, tokens)
 
