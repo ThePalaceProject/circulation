@@ -298,7 +298,7 @@ class TestPushNotifications:
             PushNotifications.send_messages(
                 [token],
                 None,
-                dict(test_none=None, test_str="test", test_int=1, test_bool=True),
+                dict(test_none=None, test_str="test", test_int=1, test_bool=True),  # type: ignore[dict-item]
             )
             assert messaging.Message.call_count == 1
             assert messaging.Message.call_args.kwargs["data"] == dict(
