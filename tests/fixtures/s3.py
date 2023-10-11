@@ -49,6 +49,7 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
         self.bucket = bucket
         self.media_type = media_type
         self.content = b""
+        self.content_parts: List[bytes] = []
         self._complete = False
         self._url = url
         self._exception = None
@@ -70,6 +71,7 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
         return False
 
     def upload_part(self, content: bytes) -> None:
+        self.content_parts.append(content)
         self.content += content
 
 
@@ -83,6 +85,7 @@ class MockS3Service(S3Service):
     ) -> None:
         super().__init__(client, region, bucket, url_template)
         self.uploads: List[MockS3ServiceUpload] = []
+        self.mocked_multipart_upload: Optional[MockMultipartS3ContextManager] = None
 
     def store_stream(
         self,
@@ -96,9 +99,10 @@ class MockS3Service(S3Service):
     def multipart(
         self, key: str, content_type: Optional[str] = None
     ) -> MultipartS3ContextManager:
-        return MockMultipartS3ContextManager(
+        self.mocked_multipart_upload = MockMultipartS3ContextManager(
             self, self.bucket, key, self.generate_url(key), content_type
         )
+        return self.mocked_multipart_upload
 
 
 class S3ServiceProtocol(Protocol):

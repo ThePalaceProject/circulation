@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 from urllib.parse import quote
 
 import pytest
@@ -644,7 +645,6 @@ class TestMARCExporter:
             annotator,
             storage_service,
             query_batch_size=1,
-            upload_batch_size=1,
             search_engine=search_engine,
         )
 
@@ -704,7 +704,6 @@ class TestMARCExporter:
             storage_service,
             start_time=start_time,
             query_batch_size=2,
-            upload_batch_size=2,
             search_engine=search_engine,
         )
         [cache] = db.session.query(CachedMARCFile).all()
@@ -750,6 +749,50 @@ class TestMARCExporter:
         assert cache.representation.content is None
         assert cache.start_time is None
         assert marc_exporter_fixture.now < cache.end_time
+
+    def test_records_minimum_size(
+        self,
+        db: DatabaseTransactionFixture,
+        s3_service_fixture: S3ServiceFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ):
+        lane = db.lane(genres=["Mystery"])
+        storage_service = s3_service_fixture.mock_service()
+        exporter = marc_exporter_fixture.exporter
+        annotator = marc_exporter_fixture.annotator
+        search_engine = marc_exporter_fixture.search_engine
+
+        # Make sure we page exactly how many times we need to
+        works = [
+            db.work(genre="Mystery", with_open_access_download=True) for _ in range(4)
+        ]
+        search_engine.mock_query_works(works)
+
+        exporter.MINIMUM_UPLOAD_BATCH_SIZE_BYTES = 100
+        # Mock the "records" generated, and force the response to be of certain sizes
+        created_record_mock = MagicMock()
+        created_record_mock.as_marc = MagicMock(
+            side_effect=[b"1" * 600, b"2" * 20, b"3" * 500, b"4" * 10]
+        )
+        exporter.create_record = lambda *args: created_record_mock
+
+        exporter.records(
+            lane,
+            annotator,
+            storage_service,
+            search_engine=search_engine,
+            query_batch_size=1,
+        )
+
+        assert storage_service.mocked_multipart_upload is not None
+        # Even though there are 4 parts, we upload in 3 batches due to minimum size limitations
+        # The "4"th part gets uploaded due it being the tail piece
+        assert len(storage_service.mocked_multipart_upload.content_parts) == 3
+        assert storage_service.mocked_multipart_upload.content_parts == [
+            b"1" * 600,
+            b"2" * 20 + b"3" * 500,
+            b"4" * 10,
+        ]
 
 
 class TestMARCExporterFacets:
