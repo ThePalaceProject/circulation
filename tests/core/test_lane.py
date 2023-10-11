@@ -420,6 +420,7 @@ class TestFacets:
             ["collectionName", db.default_collection().name, False],
             ["distributor", "All", True],
             ["distributor", DataSource.AMAZON, False],
+            ["order", "last_update", False],
             ["order", "title", True],
             ["order", "work_id", False],
         ]

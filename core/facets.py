@@ -50,7 +50,6 @@ class FacetConstants:
         ORDER_TITLE,
         ORDER_AUTHOR,
         ORDER_ADDED_TO_COLLECTION,
-        ORDER_LAST_UPDATE,
     ]
 
     ORDER_ASCENDING = "asc"
@@ -117,7 +116,6 @@ class FacetConstants:
             ORDER_AUTHOR,
             ORDER_TITLE,
             ORDER_ADDED_TO_COLLECTION,
-            ORDER_LAST_UPDATE,
         ],
         AVAILABILITY_FACET_GROUP_NAME: [
             AVAILABLE_ALL,

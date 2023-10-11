@@ -429,6 +429,15 @@ class Facets(FacetsWithEntryPoint):
         """
         available = config.enabled_facets(facet_group_name)
 
+        # Hard code LAST_UPDATE based ordering as always available
+        # Some OPDS2 consumers, like Aspen, depend on this facet being available
+        # So we must allow this ordering, without access from the library settings
+        if (
+            facet_group_name == Facets.ORDER_FACET_GROUP_NAME
+            and Facets.ORDER_LAST_UPDATE not in available
+        ):
+            available.append(Facets.ORDER_LAST_UPDATE)
+
         # "The default facet isn't available" makes no sense. If the
         # default facet is not in the available list for any reason,
         # add it to the beginning of the list. This makes other code
