@@ -209,5 +209,5 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
         return "application/opds+json"
 
     @classmethod
-    def to_string(cls, data: Dict[str, Any]) -> bytes:
-        return json.dumps(data, indent=2).encode()
+    def to_string(cls, data: Dict[str, Any]) -> str:
+        return json.dumps(data, indent=2)

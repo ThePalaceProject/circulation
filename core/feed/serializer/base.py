@@ -10,7 +10,7 @@ T = TypeVar("T")
 class SerializerInterface(ABC, Generic[T]):
     @classmethod
     @abstractmethod
-    def to_string(cls, data: T) -> bytes:
+    def to_string(cls, data: T) -> str:
         ...
 
     @abstractmethod
