@@ -16,7 +16,7 @@ class SerializerInterface(ABC, Generic[T]):
     @abstractmethod
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: Optional[List[OPDSMessage]] = None
-    ) -> bytes:
+    ) -> str:
         ...
 
     @abstractmethod

@@ -38,7 +38,7 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
 
     def serialize_feed(
         self, feed: FeedData, precomposed_entries: Optional[List[Any]] = None
-    ) -> bytes:
+    ) -> str:
         serialized: Dict[str, Any] = {"publications": []}
         serialized["metadata"] = self._serialize_metadata(feed)
 
