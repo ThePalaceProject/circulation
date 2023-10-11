@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import MIMEAccept
 
+from api.app import app
 from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
@@ -110,22 +111,6 @@ class MockAnnotator(CirculationManagerAnnotator):
             sep = "&"
         if pagination:
             base += sep + pagination.query_string
-        return base
-
-    @classmethod
-    def search_url(cls, lane, query, pagination, facets=None):
-        if isinstance(lane, Lane):
-            base = "http://%s/" % lane.url_name
-        else:
-            base = "http://%s/" % lane.display_name
-        sep = "?"
-        if pagination:
-            base += sep + pagination.query_string
-            sep = "&"
-        if facets:
-            facet_query_string = facets.query_string
-            if facet_query_string:
-                base += sep + facet_query_string
         return base
 
     @classmethod
@@ -1188,17 +1173,18 @@ class TestEntrypointLinkInsertion:
             was called with.
             """
             data.mock.called_with = None
-            OPDSAcquisitionFeed.search(
-                session,
-                "title",
-                "url",
-                wl,
-                None,
-                None,
-                pagination=pagination,
-                facets=facets,
-                annotator=data.annotator(),
-            )
+            with app.test_request_context("/"):
+                OPDSAcquisitionFeed.search(
+                    session,
+                    "title",
+                    "url",
+                    wl,
+                    None,
+                    None,
+                    pagination=pagination,
+                    facets=facets,
+                    annotator=LibraryAnnotator(None, None, db.default_library()),
+                )
             return data.mock.called_with
 
         # Mock search() so it never tries to return anything.
@@ -1233,14 +1219,16 @@ class TestEntrypointLinkInsertion:
 
         # The make_link function that was passed in calls
         # TestAnnotator.search_url() when passed an EntryPoint.
-        first_page_url = "http://wl/?available=all&collection=full&entrypoint=Book&order=relevance&search_type=default"
-        assert first_page_url == make_link(EbooksEntryPoint)
+        first_page_url = "http://localhost/default/search/?entrypoint=Book&order=relevance&available=all&collection=full&search_type=default"
+        with app.test_request_context("/"):
+            assert first_page_url == make_link(EbooksEntryPoint)
 
         # Pagination information is not propagated through entry point links
         # -- you always start at the beginning of the list.
         pagination = Pagination(offset=100)
         feed, make_link, entrypoints, selected = run(data.wl, facets, pagination)
-        assert first_page_url == make_link(EbooksEntryPoint)
+        with app.test_request_context("/"):
+            assert first_page_url == make_link(EbooksEntryPoint)
 
 
 class TestLookupAcquisitionFeed:
