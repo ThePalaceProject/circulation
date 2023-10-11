@@ -61,6 +61,9 @@ class Configuration(ConfigurationConstants):
     # Environment variable for temporary reporting email
     REPORTING_EMAIL_ENVIRONMENT_VARIABLE = "SIMPLIFIED_REPORTING_EMAIL"
 
+    # Environment variable for collection manager name
+    CM_NAME_ENVIRONMENT_VARIABLE = "PALACE_CM_NAME"
+
     # ConfigurationSetting key for the base url of the app.
     BASE_URL_KEY = "base_url"
 

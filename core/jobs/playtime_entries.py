@@ -127,9 +127,10 @@ class PlaytimeEntriesEmailReportsScript(Script):
         formatted_start_date = start.strftime(self.REPORT_DATE_FORMAT)
         formatted_until_date = until.strftime(self.REPORT_DATE_FORMAT)
         report_date_label = f"{formatted_start_date} - {formatted_until_date}"
-        email_subject = (
-            f"Playtime Summaries {formatted_start_date} - {formatted_until_date}"
-        )
+
+        cm_name = os.environ.get(Configuration.CM_NAME_ENVIRONMENT_VARIABLE)
+
+        email_subject = f"{cm_name}: Playtime Summaries {formatted_start_date} - {formatted_until_date}"
         attachment_extension = "csv"
         attachment_name = f"playtime-summary-{formatted_start_date}-{formatted_until_date}.{attachment_extension}"
 

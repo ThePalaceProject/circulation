@@ -10,6 +10,7 @@ x-cm-env-variables: &cm-env-variables
   PALACE_STORAGE_PUBLIC_ACCESS_BUCKET: "public"
   PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
   PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
+  PALACE_CM_NAME: "TEST CM"
 
 services:
   # example docker compose configuration for testing and development
