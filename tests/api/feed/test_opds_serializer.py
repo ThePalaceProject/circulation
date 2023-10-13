@@ -116,7 +116,10 @@ class TestOPDSSerializer:
                 f"{{{OPDSFeed.OPDS_NS}}}availability",
                 lambda child: child.get("status") == "available",
             ),
-            ("hashed_passphrase", lambda child: child.text == "passphrase"),
+            (
+                f"{{{OPDSFeed.LCP_NS}}}hashed_passphrase",
+                lambda child: child.text == "passphrase",
+            ),
             (
                 f"{{{OPDSFeed.DRM_NS}}}licensor",
                 lambda child: child.get(f"{{{OPDSFeed.DRM_NS}}}vendor") == "vendor"
