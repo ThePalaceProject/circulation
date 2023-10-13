@@ -29,8 +29,11 @@ class TestSAMLMetadataLoader:
         with pytest.raises(SAMLMetadataLoadingError):
             metadata_loader.load_idp_metadata(url)
 
+    @patch("urllib.request.Request")
     @patch("urllib.request.urlopen")
-    def test_load_idp_metadata_correctly_loads_one_descriptor(self, urlopen_mock):
+    def test_load_idp_metadata_correctly_loads_one_descriptor(
+        self, urlopen_mock, request_mock
+    ):
         # Arrange
         url = "http://md.incommon.org/InCommon/metadata.xml"
         incorrect_xml = saml_strings.CORRECT_XML_WITH_IDP_1
@@ -43,11 +46,15 @@ class TestSAMLMetadataLoader:
         xml_metadata = metadata_loader.load_idp_metadata(url)
 
         # Assert
-        urlopen_mock.assert_called_with(url, timeout=None)
+        request_mock.assert_called_with(url, headers={})
+        urlopen_mock.assert_called_with(request_mock(), timeout=None)
         assert saml_strings.CORRECT_XML_WITH_IDP_1 == xml_metadata
 
+    @patch("urllib.request.Request")
     @patch("urllib.request.urlopen")
-    def test_load_idp_metadata_correctly_loads_multiple_descriptors(self, urlopen_mock):
+    def test_load_idp_metadata_correctly_loads_multiple_descriptors(
+        self, urlopen_mock, request_mock
+    ):
         # Arrange
         url = "http://md.incommon.org/InCommon/metadata.xml"
         incorrect_xml = saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS
@@ -60,7 +67,8 @@ class TestSAMLMetadataLoader:
         xml_metadata = metadata_loader.load_idp_metadata(url)
 
         # Assert
-        urlopen_mock.assert_called_with(url, timeout=None)
+        request_mock.assert_called_with(url, headers={})
+        urlopen_mock.assert_called_with(request_mock(), timeout=None)
         assert saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS == xml_metadata
 
 

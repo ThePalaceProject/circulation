@@ -210,7 +210,7 @@ pyparsing = "3.1.1"
 pyspellchecker = "0.7.2"
 python = ">=3.8,<4"
 python-dateutil = "2.8.2"
-python3-saml = "~1.15.0"  # python-saml is required for SAML authentication
+python3-saml = "^1.16"  # python-saml is required for SAML authentication
 pytz = "^2023.3"
 pyyaml = "^6.0"
 redmail = "^0.6.0"

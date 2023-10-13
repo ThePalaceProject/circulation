@@ -3340,14 +3340,14 @@ cli = ["click (>=5.0)"]
 
 [[package]]
 name = "python3-saml"
-version = "1.15.0"
+version = "1.16.0"
 description = "Saml Python Toolkit. Add SAML support to your Python software using this library"
 optional = false
 python-versions = "*"
 files = [
-    {file = "python3-saml-1.15.0.tar.gz", hash = "sha256:8c68b31739471faffb93dcdfe3bcab375b9d6a0459cab7fa9cb0d7d874ecf0b0"},
-    {file = "python3_saml-1.15.0-py2-none-any.whl", hash = "sha256:3a76a17c6a2384313c5cdb450ea8b2e6d098f30836ee3dddbfe8e870903971d2"},
-    {file = "python3_saml-1.15.0-py3-none-any.whl", hash = "sha256:cc0458351ddaa08270ebe29ffaf9e1a41dbd285ba43a176cbd70907af5944c66"},
+    {file = "python3-saml-1.16.0.tar.gz", hash = "sha256:97c9669aecabc283c6e5fb4eb264f446b6e006f5267d01c9734f9d8bffdac133"},
+    {file = "python3_saml-1.16.0-py2-none-any.whl", hash = "sha256:c49097863c278ff669a337a96c46dc1f25d16307b4bb2679d2d1733cc4f5176a"},
+    {file = "python3_saml-1.16.0-py3-none-any.whl", hash = "sha256:20b97d11b04f01ee22e98f4a38242e2fea2e28fbc7fbc9bdd57cab5ac7fc2d0d"},
 ]
 
 [package.dependencies]
@@ -4523,4 +4523,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4"
-content-hash = "654439c38d24a5629cdb02e2f268e89f7d477fc736e61667dbf6da1e1344c516"
+content-hash = "9ba050560850ff05c9acdb9bafa2383b4017be67b0c30c9ba507cad2fc68f014"
