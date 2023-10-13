@@ -1,14 +1,18 @@
+import logging
 import re
 from typing import Generator
 from unittest import mock
+from unittest.mock import MagicMock
 
 import firebase_admin
 import pytest
+from firebase_admin.exceptions import FirebaseError
+from firebase_admin.messaging import UnregisteredError
 from google.auth import credentials
 from requests_mock import Mocker
 
 from core.config import Configuration
-from core.model import create, get_one_or_create
+from core.model import create, get_one, get_one_or_create
 from core.model.configuration import ConfigurationSetting
 from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
@@ -51,11 +55,13 @@ class PushNotificationsFixture:
 def push_notf_fixture(
     db: DatabaseTransactionFixture,
 ) -> Generator[PushNotificationsFixture, None, None]:
-    app = firebase_admin.initialize_app(
-        MockCredential(), options=dict(projectId="mock-app-1"), name="testapp"
-    )
-    yield PushNotificationsFixture(db, app)
-    firebase_admin.delete_app(app)
+    with mock.patch("core.util.notifications.PushNotifications.fcm_app") as mock_fcm:
+        app = firebase_admin.initialize_app(
+            MockCredential(), options=dict(projectId="mock-app-1"), name="testapp"
+        )
+        mock_fcm.return_value = app
+        yield PushNotificationsFixture(db, app)
+        firebase_admin.delete_app(app)
 
 
 class TestPushNotifications:
@@ -77,20 +83,15 @@ class TestPushNotifications:
         # Test the data structuring down to the "send" method
         # If bad data is detected, the fcm "send" method will error out
         # If not, we are good
-        with mock.patch(
-            "core.util.notifications.PushNotifications.fcm_app"
-        ) as mock_fcm, Mocker() as mocker:
+        with Mocker() as mocker:
             mocker.post(
                 re.compile("https://fcm.googleapis.com"), json=dict(name="mid-mock")
             )
-            mock_fcm.return_value = push_notf_fixture.app
             assert PushNotifications.send_loan_expiry_message(
                 loan, 1, [device_token]
             ) == ["mid-mock"]
 
-        with mock.patch(
-            "core.util.notifications.PushNotifications.fcm_app"
-        ) as mock_fcm, mock.patch("core.util.notifications.messaging") as messaging:
+        with mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_loan_expiry_message(loan, 1, [device_token])
 
             assert messaging.Message.call_count == 1
@@ -119,7 +120,7 @@ class TestPushNotifications:
             assert messaging.send.call_count == 1
             assert messaging.send.call_args_list[0] == [
                 (messaging.Message(),),
-                {"dry_run": True, "app": mock_fcm()},
+                {"dry_run": True, "app": push_notf_fixture.app},
             ]
 
     def test_send_activity_sync(self, push_notf_fixture: PushNotificationsFixture):
@@ -149,15 +150,14 @@ class TestPushNotifications:
             )
             tokens.append(t)
 
-        with mock.patch(
-            "core.util.notifications.PushNotifications.fcm_app"
-        ) as fcm_app, mock.patch("core.util.notifications.messaging") as messaging:
+        with mock.patch("core.util.notifications.messaging") as messaging:
             # Notify 2 patrons of 3 total
             PushNotifications.send_activity_sync_message([patron1, patron2])
             assert messaging.Message.call_count == 4
             assert messaging.Message.call_args_list == [
                 mock.call(
                     token=tokens[0].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -167,6 +167,7 @@ class TestPushNotifications:
                 ),
                 mock.call(
                     token=tokens[1].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -176,6 +177,7 @@ class TestPushNotifications:
                 ),
                 mock.call(
                     token=tokens[2].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -184,6 +186,7 @@ class TestPushNotifications:
                 ),
                 mock.call(
                     token=tokens[3].device_token,
+                    notification=None,
                     data=dict(
                         event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
                         loans_endpoint="http://localhost/default/loans",
@@ -192,7 +195,7 @@ class TestPushNotifications:
                 ),
             ]
 
-            assert messaging.send_all.call_count == 1
+            assert messaging.send.call_count == 4
 
     def test_holds_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
@@ -218,9 +221,7 @@ class TestPushNotifications:
             hold1, _ = p1.on_hold_to(patron1, position=0)
             hold2, _ = p2.on_hold_to(patron2, position=0)
 
-        with mock.patch(
-            "core.util.notifications.PushNotifications.fcm_app"
-        ) as fcm_app, mock.patch("core.util.notifications.messaging") as messaging:
+        with mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_holds_notifications([hold1, hold2])
 
         loans_api = "http://localhost/default/loans"
@@ -274,3 +275,81 @@ class TestPushNotifications:
                 ),
             ),
         ]
+
+    def test_send_messages(
+        self,
+        push_notf_fixture: PushNotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        db = push_notf_fixture.db
+        patron1 = db.patron()
+        token = DeviceToken.create(
+            db.session, DeviceTokenTypes.FCM_IOS, "test-token", patron1
+        )
+
+        caplog.set_level(logging.WARNING)
+        with mock.patch("core.util.notifications.messaging") as messaging:
+            PushNotifications.send_messages(
+                [token],
+                None,
+                dict(test_none=None, test_str="test", test_int=1, test_bool=True),  # type: ignore[dict-item]
+            )
+            assert messaging.Message.call_count == 1
+            assert messaging.Message.call_args.kwargs["data"] == dict(
+                test_str="test", test_int="1", test_bool="True"
+            )
+
+        assert len(caplog.records) == 3
+        assert (
+            "Removing test_none from notification data because it is None"
+            in caplog.messages
+        )
+        assert "Converting test_int from <class 'int'> to str" in caplog.messages
+        assert "Converting test_bool from <class 'bool'> to str" in caplog.messages
+
+    def test_send_messages_unregistered_error(
+        self,
+        push_notf_fixture: PushNotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        db = push_notf_fixture.db
+        patron1 = db.patron()
+        patron1.authorization_identifier = "auth1"
+        token = DeviceToken.create(
+            db.session, DeviceTokenTypes.FCM_IOS, "test-token", patron1
+        )
+        caplog.set_level(logging.INFO)
+        # When a token causes an UnregisteredError, it should be deleted
+        with mock.patch("core.util.notifications.messaging") as messaging:
+            messaging.send.side_effect = UnregisteredError("test")
+            PushNotifications.send_messages([token], None, {})
+            assert messaging.Message.call_count == 1
+            assert messaging.send.call_count == 1
+
+        assert get_one(db.session, DeviceToken, device_token="test-token") is None
+        assert (
+            "Device token test-token for patron auth1 is no longer registered, deleting"
+            in caplog.text
+        )
+
+    def test_send_messages_firebase_error(
+        self,
+        push_notf_fixture: PushNotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # When a token causes an FirebaseError, we should log it and move on
+        mock_token = MagicMock(spec=DeviceToken)
+        mock_token.patron.authorization_identifier = "12345"
+
+        caplog.set_level(logging.ERROR)
+        with mock.patch("core.util.notifications.messaging") as messaging:
+            messaging.send.side_effect = FirebaseError("", "")
+            PushNotifications.send_messages([mock_token], None, {})
+            assert messaging.Message.call_count == 1
+            assert messaging.send.call_count == 1
+
+        # We logged the error
+        assert "Failed to send notification for patron 12345" in caplog.text
+
+        # And the log contains a traceback
+        assert "Traceback" in caplog.text
