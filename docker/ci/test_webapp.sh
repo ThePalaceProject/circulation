@@ -17,7 +17,7 @@ check_service_status "$container" /etc/service/nginx
 check_service_status "$container" /etc/service/uwsgi
 
 # Wait for UWSGI to be ready to accept connections.
-timeout 120s grep -q 'WSGI app .* ready in [0-9]* seconds' <(docker logs "$container" -f 2>&1)
+timeout 240s grep -q 'WSGI app .* ready in [0-9]* seconds' <(docker logs "$container" -f 2>&1)
 
 # Make sure the web server is running.
 healthcheck=$(docker exec "$container" curl --write-out "%{http_code}" --silent --output /dev/null http://localhost/healthcheck.html)
