@@ -6,19 +6,12 @@ from flask import Response, make_response, request
 from flask_cors.core import get_cors_options, set_cors_headers
 from flask_pydantic_spec import Response as SpecResponse
 
-from api.app import api_spec, app, babel
-from api.config import Configuration
+from api.app import api_spec, app
 from api.model.patron_auth import PatronAuthAccessToken
 from api.model.time_tracking import PlaytimeEntriesPost, PlaytimeEntriesPostResponse
 from core.app_server import compressible, returns_problem_detail
 from core.model import HasSessionCache
 from core.util.problem_detail import ProblemDetail
-
-
-@babel.localeselector
-def get_locale():
-    languages = Configuration.localization_languages()
-    return request.accept_languages.best_match(languages)
 
 
 @app.after_request
