@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,6 +10,7 @@ import pytest
 from api.circulation import FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import *
 from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
+from core.analytics import Analytics
 from core.metadata_layer import CirculationData, Metadata, TimestampData
 from core.model import (
     Contributor,
@@ -40,7 +41,9 @@ class EnkiTestFixure:
         self.db = db
         self.files = files
         self.api = MockEnkiAPI(db.session, db.default_library())
-        self.collection = self.api.collection
+        collection = self.api.collection
+        assert collection is not None
+        self.collection = collection
 
 
 @pytest.fixture(scope="function")
@@ -65,11 +68,6 @@ class TestEnkiAPI:
 
         collection.protocol = ExternalIntegration.ENKI
         EnkiAPI(db.session, collection)
-
-    def test_external_integration(self, enki_test_fixture: EnkiTestFixure):
-        db = enki_test_fixture.db
-        integration = enki_test_fixture.api.external_integration(db.session)
-        assert ExternalIntegration.ENKI == integration.protocol
 
     def test_enki_library_id(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
@@ -126,6 +124,7 @@ class TestEnkiAPI:
         # Collection used in the API -- one library with a default
         # patron and one without.
         no_default_patron = db.library()
+        assert api.collection is not None
         api.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
@@ -137,7 +136,7 @@ class TestEnkiAPI:
             default_patron_activity,
             circulation_changes,
             collection_changes,
-        ) = sorted(api._run_self_tests(db.session), key=lambda x: x.name)
+        ) = sorted(api._run_self_tests(db.session), key=lambda x: str(x.name))
 
         # Verify that each test method was called and returned the
         # expected SelfTestResult object.
@@ -810,7 +809,9 @@ class TestEnkiImport:
         api = MockAPI(pages)
 
         # Do the 'import'.
-        importer = Mock(db.session, enki_test_fixture.collection, api_class=api)
+        importer = Mock(
+            db.session, enki_test_fixture.collection, api_class=cast(EnkiAPI, api)
+        )
         importer.full_import()
 
         # get_all_titles was called three times, once for the first two
@@ -842,8 +843,10 @@ class TestEnkiImport:
                 self.update_circulation_called_with = since
 
         api = MockAPI()
-        importer = Mock(db.session, enki_test_fixture.collection, api_class=api)
-        since = object()
+        importer = Mock(
+            db.session, enki_test_fixture.collection, api_class=cast(EnkiAPI, api)
+        )
+        since = MagicMock()
         importer.incremental_import(since)
 
         # The 'since' value was passed into both methods.
@@ -951,7 +954,10 @@ class TestEnkiImport:
 
         analytics = MockAnalyticsProvider()
         monitor = EnkiImport(
-            db.session, enki_test_fixture.collection, api_class=api, analytics=analytics
+            db.session,
+            enki_test_fixture.collection,
+            api_class=api,
+            analytics=cast(Analytics, analytics),
         )
         end = utc_now()
 
