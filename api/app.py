@@ -3,6 +3,7 @@ import os
 import urllib.parse
 
 import flask_babel
+from flask import request
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
 
@@ -29,13 +30,20 @@ from core.util import LanguageCodes
 from core.util.cache import CachedData
 from scripts import InstanceInitializationScript
 
+
+def get_locale():
+    """The localization selection function to be used with flask-babel"""
+    languages = Configuration.localization_languages()
+    return request.accept_languages.best_match(languages, "en")
+
+
 app = PalaceFlask(__name__)
 app._db = None  # type: ignore [assignment]
 app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
     Configuration.localization_languages()[0]
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
-babel = Babel(app)
+babel = Babel(app, locale_selector=get_locale)
 
 # The autodoc spec, can be accessed at "/apidoc/swagger"
 api_spec = FlaskPydanticSpec(
