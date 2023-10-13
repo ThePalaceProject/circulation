@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -53,6 +54,7 @@ from core.monitor import (
     WorkReaper,
     WorkSweepMonitor,
 )
+from core.service import container
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.core.mock import (
     AlwaysSuccessfulCoverageProvider,
@@ -269,6 +271,14 @@ class TestMonitor:
         assert isinstance(t1.start, datetime.datetime)
         assert isinstance(t2.start, datetime.datetime)
         assert t2.start > t1.start
+
+    def test_init_configures_logging(self, db: DatabaseTransactionFixture):
+        mock_services = MagicMock()
+        container._container_instance = mock_services
+        collection = db.collection()
+        MockMonitor(db.session, collection)
+        mock_services.init_resources.assert_called_once()
+        container._container_instance = None
 
 
 class TestCollectionMonitor:

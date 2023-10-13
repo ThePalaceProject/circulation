@@ -32,6 +32,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.configuration import ConfigurationSetting
+from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
@@ -113,6 +114,10 @@ class Monitor:
         self.collection_id = None
         if collection:
             self.collection_id = collection.id
+
+        # Make sure that logging is configured.
+        self.services = container_instance()
+        self.services.init_resources()
 
     @property
     def log(self):
