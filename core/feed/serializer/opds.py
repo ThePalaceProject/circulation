@@ -28,6 +28,7 @@ TAG_MAPPING = {
     "licensor": f"{{{OPDSFeed.DRM_NS}}}licensor",
     "patron": f"{{{OPDSFeed.SIMPLIFIED_NS}}}patron",
     "series": f"{{{OPDSFeed.SCHEMA_NS}}}series",
+    "hashed_passphrase": f"{{{OPDSFeed.LCP_NS}}}hashed_passphrase",
 }
 
 ATTRIBUTE_MAPPING = {
