@@ -11,7 +11,7 @@ import uuid
 from enum import Enum
 from typing import Generator, Optional, Type
 
-from sqlalchemy import and_, exists, tuple_
+from sqlalchemy import and_, exists, or_, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -2824,7 +2824,16 @@ class LoanNotificationsScript(Script):
             )
             return
 
-        _query = self._db.query(Loan).order_by(Loan.id)
+        _query = (
+            self._db.query(Loan)
+            .filter(
+                or_(
+                    Loan.patron_last_notified != utc_now().date(),
+                    Loan.patron_last_notified == None,
+                )
+            )
+            .order_by(Loan.id)
+        )
         last_loan_id = None
         processed_loans = 0
 
@@ -2863,9 +2872,6 @@ class LoanNotificationsScript(Script):
             self.log.warning(f"Loan: {loan.id} has no end date, skipping")
             return
         delta: datetime.timedelta = loan.end - now
-        # We assume this script runs ONCE A DAY
-        # else this will send notifications multiple times for
-        # the same day
         if delta.days in self.LOAN_EXPIRATION_DAYS:
             self.log.info(
                 f"Patron {patron.authorization_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"

@@ -552,6 +552,7 @@ class Loan(Base, LoanAndHoldMixin):
     # Some distributors (e.g. Feedbooks) may have an identifier that can
     # be used to check the status of a specific Loan.
     external_identifier = Column(Unicode, unique=True, nullable=True)
+    patron_last_notified = Column(DateTime, nullable=True)
 
     __table_args__ = (UniqueConstraint("patron_id", "license_pool_id"),)
 
@@ -583,6 +584,7 @@ class Hold(Base, LoanAndHoldMixin):
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
     external_identifier = Column(Unicode, unique=True, nullable=True)
+    patron_last_notified = Column(DateTime, nullable=True)
 
     patron: Mapped[Patron] = relationship(
         "Patron", back_populates="holds", lazy="joined"

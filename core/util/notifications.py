@@ -15,6 +15,7 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.identifier import Identifier
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
+from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
 
 
@@ -135,6 +136,7 @@ class PushNotifications(LoggerMixin):
             f"Patron {loan.patron.authorization_identifier} has {len(tokens)} device tokens. "
             f"Sending loan expiry notification(s)."
         )
+        loan.patron_last_notified = utc_now().date()
         return cls.send_messages(
             tokens, messaging.Notification(title=title, body=body), data
         )
@@ -204,6 +206,7 @@ class PushNotifications(LoggerMixin):
             if hold.patron.authorization_identifier:
                 data["authorization_identifier"] = hold.patron.authorization_identifier
 
+            hold.patron_last_notified = utc_now().date()
             resp = cls.send_messages(tokens, messaging.Notification(title=title), data)
             responses.extend(resp)
 

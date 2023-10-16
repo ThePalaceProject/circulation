@@ -17,6 +17,7 @@ from core.model.configuration import ConfigurationSetting
 from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.work import Work
+from core.util.datetime_helpers import utc_now
 from core.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -90,6 +91,7 @@ class TestPushNotifications:
             assert PushNotifications.send_loan_expiry_message(
                 loan, 1, [device_token]
             ) == ["mid-mock"]
+            assert loan.patron_last_notified == utc_now().date()
 
         with mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_loan_expiry_message(loan, 1, [device_token])
@@ -224,6 +226,9 @@ class TestPushNotifications:
         with mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_holds_notifications([hold1, hold2])
 
+        assert (
+            hold1.patron_last_notified == hold2.patron_last_notified == utc_now().date()
+        )
         loans_api = "http://localhost/default/loans"
         assert messaging.Message.call_count == 3
         assert messaging.Message.call_args_list == [
