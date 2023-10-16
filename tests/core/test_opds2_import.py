@@ -402,9 +402,9 @@ class TestOPDS2Importer(OPDS2Test):
         # Arrange
         # Update the list of supported identifier types in the collection's configuration settings
         # and set the identifier type passed as a parameter as the only supported identifier type.
-        data.importer.set_ignored_identifier_types(
-            ignore_identifier_type, data.importer.api.integration_configuration()
-        )
+        data.importer.ignored_identifier_types = [
+            t.value for t in ignore_identifier_type
+        ]
 
         content_server_feed = opds2_files_fixture.sample_text("feed.json")
 

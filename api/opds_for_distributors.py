@@ -29,7 +29,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.opds_import import BaseOPDSImporterSettings, OPDSImporter, OPDSImportMonitor
+from core.opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from core.selftest import SelfTestResult
 
 
-class OPDSForDistributorsSettings(BaseOPDSImporterSettings):
+class OPDSForDistributorsSettings(OPDSImporterSettings):
     username: str = FormField(
         form=ConfigurationFormItem(
             label=_("Library's username or access key"),

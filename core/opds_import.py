@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Dict,
     Generator,
+    Generic,
     Iterable,
     List,
     Literal,
@@ -19,6 +20,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     overload,
 )
 from urllib.parse import urljoin, urlparse
@@ -37,8 +39,8 @@ from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, N
 from api.selftest import HasCollectionSelfTests
 from core.classifier import Classifier
 from core.config import IntegrationException
+from core.connection_config import ConnectionSetting
 from core.coverage import CoverageFailure
-from core.importers import BaseImporterSettings
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -74,7 +76,9 @@ from core.model import (
     get_one,
 )
 from core.model.configuration import HasExternalIntegration
+from core.model.formats import FormatPrioritiesSettings
 from core.monitor import CollectionMonitor
+from core.saml.wayfless import SAMLWAYFlessSetttings
 from core.selftest import SelfTestResult
 from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
@@ -100,7 +104,11 @@ class OPDSXMLParser(XMLParser):
     }
 
 
-class BaseOPDSImporterSettings(BaseSettings):
+class OPDSImporterSettings(
+    ConnectionSetting,
+    SAMLWAYFlessSetttings,
+    FormatPrioritiesSettings,
+):
     _NO_DEFAULT_AUDIENCE = ""
 
     external_account_id: Optional[HttpUrl] = FormField(
@@ -128,12 +136,9 @@ class BaseOPDSImporterSettings(BaseSettings):
                 {audience: audience for audience in sorted(Classifier.AUDIENCES)}
             ),
             required=False,
-            # readOnly=True,
         ),
     )
 
-
-class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
     username: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Username"),
@@ -154,7 +159,7 @@ class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
         )
     )
 
-    custom_accept_header: Optional[str] = FormField(
+    custom_accept_header: str = FormField(
         default=",".join(
             [
                 OPDSFeed.ACQUISITION_FEED_TYPE,
@@ -287,7 +292,11 @@ class BaseOPDSAPI(
         return True
 
 
+SettingsType = TypeVar("SettingsType", bound=OPDSImporterSettings, covariant=True)
+
+
 class BaseOPDSImporter(
+    Generic[SettingsType],
     LoggerMixin,
     ABC,
 ):
@@ -320,6 +329,14 @@ class BaseOPDSImporter(
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
+        self.settings = self.settings_class().construct(
+            **collection.integration_configuration.settings_dict
+        )
+
+    @classmethod
+    @abstractmethod
+    def settings_class(cls) -> Type[SettingsType]:
+        ...
 
     @abstractmethod
     def extract_feed_data(
@@ -335,11 +352,6 @@ class BaseOPDSImporter(
 
     @abstractmethod
     def extract_next_links(self, feed: str | bytes) -> List[str]:
-        ...
-
-    @property
-    @abstractmethod
-    def api(self) -> BaseOPDSAPI:
         ...
 
     @abstractmethod
@@ -577,10 +589,10 @@ class OPDSAPI(BaseOPDSAPI):
 
     @classmethod
     def label(cls) -> str:
-        return "OPDS Importer"
+        return "OPDS Import"
 
 
-class OPDSImporter(BaseOPDSImporter):
+class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -597,6 +609,10 @@ class OPDSImporter(BaseOPDSImporter):
     # a subclass of OPDSXMLParser. For example, a subclass may want to use
     # tags from an additional namespace.
     PARSER_CLASS = OPDSXMLParser
+
+    @classmethod
+    def settings_class(cls) -> Type[OPDSImporterSettings]:
+        return OPDSImporterSettings
 
     def __init__(
         self,
@@ -630,16 +646,6 @@ class OPDSImporter(BaseOPDSImporter):
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
-        self._api: Optional[OPDSAPI] = None
-
-    @property
-    def api(self) -> OPDSAPI:
-        if self._api is None:
-            self._api = OPDSAPI(
-                self._db,
-                self.collection,
-            )
-        return self._api
 
     def assert_importable_content(
         self, feed: str, feed_url: str, max_get_attempts: int = 5
@@ -1685,7 +1691,7 @@ class OPDSImportMonitor(
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[BaseOPDSImporter],
+        import_class: Type[BaseOPDSImporter[OPDSImporterSettings]],
         force_reimport: bool = False,
         **import_class_kwargs: Any,
     ) -> None:
@@ -1713,20 +1719,12 @@ class OPDSImportMonitor(
         self.force_reimport = force_reimport
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
-        settings = self.importer.api.settings
+        settings = self.importer.settings
         self.username = settings.username
         self.password = settings.password
 
-        # Not all inherited settings have these
-        # OPDSforDistributors does not use this setting
-        try:
-            self.custom_accept_header = settings.custom_accept_header
-        except AttributeError:
-            self.custom_accept_header = None
-        try:
-            self._max_retry_count: int | None = settings.max_retry_count
-        except AttributeError:
-            self._max_retry_count = 0
+        self.custom_accept_header = settings.custom_accept_header
+        self._max_retry_count = settings.max_retry_count
 
         parsed_url = urlparse(self.feed_url)
         self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"

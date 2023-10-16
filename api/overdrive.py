@@ -37,8 +37,8 @@ from api.circulation_exceptions import CannotFulfill
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration, Configuration
+from core.connection_config import ConnectionSetting
 from core.coverage import BibliographicCoverageProvider
-from core.importers import BaseImporterSettings
 from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
@@ -131,7 +131,7 @@ class OverdriveConstants:
     ILS_NAME_DEFAULT = "default"
 
 
-class OverdriveSettings(BaseImporterSettings):
+class OverdriveSettings(ConnectionSetting):
     """The basic Overdrive configuration"""
 
     external_account_id: Optional[str] = FormField(

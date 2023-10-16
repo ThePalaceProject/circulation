@@ -31,10 +31,10 @@ from core.model import (
     Hyperlink,
     Identifier,
     Loan,
-    MediaTypes,
     Representation,
     RightsStatus,
 )
+from core.opds_import import OPDSAPI
 from core.util.datetime_helpers import utc_now
 from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 from tests.api.mockapi.circulation import (
@@ -170,30 +170,6 @@ class TestCirculationAPI:
         circulation_api.remote.queue_checkout(loaninfo)
         loan, hold, is_new = self.borrow(circulation_api)
         assert 3 == circulation_api.analytics.count
-
-    def test_borrowing_of_unlimited_access_book_succeeds(
-        self, circulation_api: CirculationAPIFixture
-    ):
-        """Ensure that unlimited access books that don't belong to collections
-        having a custom CirculationAPI implementation (e.g., OPDS 1.x, OPDS 2.x collections)
-        are checked out in the same way as OA and self-hosted books."""
-        # Arrange
-
-        # Reset the API map, this book belongs to the "basic" collection,
-        # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
-
-        # Mark the book as unlimited access.
-        circulation_api.pool.unlimited_access = True
-
-        # Act
-        loan, hold, is_new = self.borrow(circulation_api)
-
-        # Assert
-        assert True == is_new
-        assert circulation_api.pool == loan.license_pool
-        assert circulation_api.patron == loan.patron
-        assert hold is None
 
     def test_attempt_borrow_with_existing_remote_loan(
         self, circulation_api: CirculationAPIFixture
@@ -771,6 +747,8 @@ class TestCirculationAPI:
         #
         patron = circulation_api.db.patron(library=library)
         pool = MagicMock()
+        pool.open_access = False
+        pool.unlimited_access = False
         circulation.at_loan_limit = False
         circulation.at_hold_limit = False
 
@@ -904,9 +882,12 @@ class TestCirculationAPI:
         loan, hold, is_new = self.borrow(circulation_api)
         assert hold != None
 
-    def test_fulfill_open_access(self, circulation_api: CirculationAPIFixture):
+    def test_fulfill_errors(self, circulation_api: CirculationAPIFixture):
         # Here's an open-access title.
         circulation_api.pool.open_access = True
+        circulation_api.circulation.remotes[
+            circulation_api.pool.data_source.name
+        ] = OPDSAPI(circulation_api.db.session, circulation_api.collection)
 
         # The patron has the title on loan.
         circulation_api.pool.loan_to(circulation_api.patron)
@@ -917,15 +898,7 @@ class TestCirculationAPI:
         assert None == broken_lpdm.resource
         i_want_an_epub = broken_lpdm.delivery_mechanism
 
-        # fulfill_open_access() and fulfill() will both raise
-        # FormatNotAvailable.
-        pytest.raises(
-            FormatNotAvailable,
-            circulation_api.circulation.fulfill_open_access,
-            circulation_api.pool,
-            i_want_an_epub,
-        )
-
+        # fulfill() will raise FormatNotAvailable.
         pytest.raises(
             FormatNotAvailable,
             circulation_api.circulation.fulfill,
@@ -956,9 +929,12 @@ class TestCirculationAPI:
         assert None == link.resource.representation
         pytest.raises(
             FormatNotAvailable,
-            circulation_api.circulation.fulfill_open_access,
+            circulation_api.circulation.fulfill,
+            circulation_api.patron,
+            "1234",
             circulation_api.pool,
-            i_want_an_epub,
+            broken_lpdm,
+            sync_on_failure=False,
         )
 
         # Let's add a Representation to the Resource.
@@ -971,29 +947,8 @@ class TestCirculationAPI:
         link.resource.representation = representation
 
         # We can finally fulfill a loan.
-        result = circulation_api.circulation.fulfill_open_access(
-            circulation_api.pool, broken_lpdm
-        )
-        assert isinstance(result, FulfillmentInfo)
-        assert result.content_link == link.resource.representation.public_url
-        assert result.content_type == i_want_an_epub.content_type
-
-        # Now, if we try to call fulfill() with the broken
-        # LicensePoolDeliveryMechanism we get a result from the
-        # working DeliveryMechanism with the same format.
         result = circulation_api.circulation.fulfill(
             circulation_api.patron, "1234", circulation_api.pool, broken_lpdm
-        )
-        assert isinstance(result, FulfillmentInfo)
-        assert result.content_link == link.resource.representation.public_url
-        assert result.content_type == i_want_an_epub.content_type
-
-        # We get the right result even if the code calling
-        # fulfill_open_access() is incorrectly written and passes in
-        # the broken LicensePoolDeliveryMechanism (as opposed to its
-        # generic DeliveryMechanism).
-        result = circulation_api.circulation.fulfill_open_access(
-            circulation_api.pool, broken_lpdm
         )
         assert isinstance(result, FulfillmentInfo)
         assert result.content_link == link.resource.representation.public_url
@@ -1010,61 +965,13 @@ class TestCirculationAPI:
         working_lpdm.delivery_mechanism = irrelevant_delivery_mechanism
         pytest.raises(
             FormatNotAvailable,
-            circulation_api.circulation.fulfill_open_access,
-            circulation_api.pool,
-            i_want_an_epub,
-        )
-
-    def test_fulfilment_of_unlimited_access_book_succeeds(
-        self, circulation_api: CirculationAPIFixture
-    ):
-        """Ensure that unlimited access books that don't belong to collections
-        having a custom CirculationAPI implementation (e.g., OPDS 1.x, OPDS 2.x collections)
-        are fulfilled in the same way as OA and self-hosted books."""
-        # Reset the API map, this book belongs to the "basic" collection,
-        # i.e. collection without a custom CirculationAPI implementation.
-        circulation_api.circulation.api_for_license_pool = MagicMock(return_value=None)
-
-        # Mark the book as unlimited access.
-        circulation_api.pool.unlimited_access = True
-
-        media_type = MediaTypes.EPUB_MEDIA_TYPE
-
-        # Create a borrow link.
-        link, _ = circulation_api.pool.identifier.add_link(
-            Hyperlink.BORROW,
-            circulation_api.db.fresh_url(),
-            circulation_api.pool.data_source,
-        )
-
-        # Create a license pool delivery mechanism.
-        circulation_api.pool.set_delivery_mechanism(
-            media_type,
-            DeliveryMechanism.ADOBE_DRM,
-            RightsStatus.IN_COPYRIGHT,
-            link.resource,
-        )
-
-        # Create a representation.
-        representation, _ = circulation_api.db.representation(
-            link.resource.url, media_type, "Dummy content", mirrored=True
-        )
-        link.resource.representation = representation
-
-        # Act
-        circulation_api.pool.loan_to(circulation_api.patron)
-
-        result = circulation_api.circulation.fulfill(
+            circulation_api.circulation.fulfill,
             circulation_api.patron,
             "1234",
             circulation_api.pool,
-            circulation_api.pool.delivery_mechanisms[0],
+            broken_lpdm,
+            sync_on_failure=False,
         )
-
-        # The fulfillment looks good.
-        assert isinstance(result, FulfillmentInfo)
-        assert result.content_link == link.resource.representation.public_url
-        assert result.content_type == media_type
 
     def test_fulfill(self, circulation_api: CirculationAPIFixture):
         circulation_api.pool.loan_to(circulation_api.patron)

@@ -18,6 +18,7 @@ from api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests
 from core.model import (
     Admin,
@@ -46,9 +47,9 @@ class TestCollectionSettings:
             )
             assert response.get("collections") == []
 
-            names = [p.get("name") for p in response.get("protocols")]
-            assert ExternalIntegration.OVERDRIVE in names
-            assert ExternalIntegration.OPDS_IMPORT in names
+            names = {p.get("name") for p in response.get("protocols")}
+            expected_names = {k for k, v in LicenseProvidersRegistry()}
+            assert names == expected_names
 
     def test_collections_get_collections_with_multiple_collections(
         self, settings_ctrl_fixture: SettingsControllerFixture

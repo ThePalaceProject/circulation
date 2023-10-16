@@ -13,8 +13,7 @@ from api.authentication.basic import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
 from api.selftest import HasCollectionSelfTests, HasSelfTests, SelfTestResult
 from core.exceptions import IntegrationException
-from core.model import ExternalIntegration, Patron
-from core.opds_import import OPDSImportMonitor
+from core.model import Patron
 from core.scripts import RunSelfTestsScript
 from core.util.problem_detail import ProblemDetail
 
@@ -199,10 +198,6 @@ class TestRunSelfTestsScript:
         registry = CirculationAPI(db.session, db.default_library()).registry
         for k, v in registry:
             assert api_map[k] == v
-
-        # But a couple of things were added to the map that are not in
-        # CirculationAPI.
-        assert api_map[ExternalIntegration.OPDS_IMPORT] == OPDSImportMonitor
 
         # If test_collection raises an exception, the exception is recorded,
         # and we move on.
