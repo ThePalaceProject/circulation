@@ -509,7 +509,7 @@ class EnkiAPI(
 
     def patron_activity(
         self, patron: Patron, pin: Optional[str]
-    ) -> Generator[LoanInfo, None, None]:
+    ) -> Generator[LoanInfo | HoldInfo, None, None]:
         enki_library_id = self.enki_library_id(patron.library)
         response = self.patron_request(
             patron.authorization_identifier, pin, enki_library_id
@@ -528,6 +528,11 @@ class EnkiAPI(
                 raise CirculationException(response.content)
         for loan in result["checkedOutItems"]:
             yield self.parse_patron_loans(loan)
+        for type, holds in list(result["holds"].items()):
+            for hold in holds:
+                hold_info = self.parse_patron_holds(hold)
+                if hold_info:
+                    yield hold_info
 
     def patron_request(
         self, patron: Optional[str], pin: Optional[str], enki_library_id: Optional[str]
@@ -559,6 +564,13 @@ class EnkiAPI(
             end_date=end_date,
             fulfillment_info=None,
         )
+
+    def parse_patron_holds(self, hold_data: Mapping[str, Any]) -> Optional[HoldInfo]:
+        self.log.warning(
+            "Hold information received, but parsing patron holds is not implemented. %r",
+            hold_data,
+        )
+        return None
 
     def place_hold(
         self,
