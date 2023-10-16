@@ -12,6 +12,7 @@ from typing import (
     Any,
     Dict,
     Generic,
+    Iterable,
     List,
     Literal,
     Tuple,
@@ -705,7 +706,9 @@ class BaseCirculationAPI(
         ...
 
     @abstractmethod
-    def patron_activity(self, patron: Patron, pin: str) -> List[LoanInfo | HoldInfo]:
+    def patron_activity(
+        self, patron: Patron, pin: str
+    ) -> Iterable[LoanInfo | HoldInfo]:
         """Return a patron's current checkouts and holds."""
         ...
 
@@ -1659,7 +1662,7 @@ class CirculationAPI:
                 self.api = api
                 self.patron = patron
                 self.pin = pin
-                self.activity: Optional[List[LoanInfo | HoldInfo]] = None
+                self.activity: Optional[Iterable[LoanInfo | HoldInfo]] = None
                 self.exception: Optional[Exception] = None
                 self.trace: Tuple[
                     Type[BaseException], BaseException, TracebackType

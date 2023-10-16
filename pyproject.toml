@@ -78,6 +78,7 @@ module = [
     "api.axis",
     "api.circulation",
     "api.discovery.*",
+    "api.enki",
     "api.integration.*",
     "api.lcp.hash",
     "api.odl",
