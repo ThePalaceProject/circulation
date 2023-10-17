@@ -78,7 +78,7 @@ class OpdsRegistrationService(
     ) -> None:
         """Constructor."""
         self.integration = integration
-        self._settings = settings
+        self.settings = settings
 
     @classmethod
     def label(cls) -> str:
@@ -102,10 +102,6 @@ class OpdsRegistrationService(
     def settings_class(cls) -> Type[OpdsRegistrationServiceSettings]:
         """Get the settings for this integration."""
         return OpdsRegistrationServiceSettings
-
-    @property
-    def settings(self) -> OpdsRegistrationServiceSettings:
-        return self._settings
 
     @classmethod
     @overload

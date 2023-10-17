@@ -54,15 +54,9 @@ class AuthenticationProvider(
         self.library_id = library_id
         self.integration_id = integration_id
         self.analytics = analytics
-        self._settings = settings
-        self._library_settings = library_settings
 
     def library(self, _db: Session) -> Library | None:
         return Library.by_id(_db, self.library_id)
-
-    @property
-    def settings(self) -> SettingsType:
-        return self._settings
 
     def integration(self, _db: Session) -> IntegrationConfiguration | None:
         return (

@@ -39,11 +39,6 @@ class HasIntegrationConfiguration(Generic[SettingsType], ABC):
         """
         return {}
 
-    @property
-    @abstractmethod
-    def settings(self) -> SettingsType:
-        ...
-
 
 class HasLibraryIntegrationConfiguration(
     Generic[SettingsType, LibrarySettingsType],

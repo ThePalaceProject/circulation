@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
-from core.model.configuration import ExternalIntegration
 
 if TYPE_CHECKING:
     from api.circulation import BaseCirculationAPI  # noqa: autoflake
@@ -28,13 +27,13 @@ class LicenseProvidersRegistry(
         from core.opds2_import import OPDS2API
         from core.opds_import import OPDSAPI
 
-        self.register(OverdriveAPI, canonical=ExternalIntegration.OVERDRIVE)
-        self.register(OdiloAPI, canonical=ExternalIntegration.ODILO)
-        self.register(BibliothecaAPI, canonical=ExternalIntegration.BIBLIOTHECA)
-        self.register(Axis360API, canonical=ExternalIntegration.AXIS_360)
-        self.register(EnkiAPI, canonical=EnkiAPI.ENKI_EXTERNAL)
+        self.register(OverdriveAPI, canonical=OverdriveAPI.label())
+        self.register(OdiloAPI, canonical=OdiloAPI.label())
+        self.register(BibliothecaAPI, canonical=BibliothecaAPI.label())
+        self.register(Axis360API, canonical=Axis360API.label())
+        self.register(EnkiAPI, canonical=EnkiAPI.label())
         self.register(OPDSForDistributorsAPI, canonical=OPDSForDistributorsAPI.label())
         self.register(ODLAPI, canonical=ODLAPI.label())
         self.register(ODL2API, canonical=ODL2API.label())
-        self.register(OPDSAPI, canonical=ExternalIntegration.OPDS_IMPORT)
-        self.register(OPDS2API, canonical=ExternalIntegration.OPDS2_IMPORT)
+        self.register(OPDSAPI, canonical=OPDSAPI.label())
+        self.register(OPDS2API, canonical=OPDS2API.label())

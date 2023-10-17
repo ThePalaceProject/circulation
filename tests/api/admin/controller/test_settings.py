@@ -288,10 +288,6 @@ class TestSettingsController:
             def settings_class(cls):
                 pass
 
-            @property
-            def settings(self):
-                return BaseSettings()
-
         with pytest.raises(RuntimeError) as runtime_error_raised:
             _set_configuration_library(
                 config, dict(short_name="not-short-name"), Protocol1
