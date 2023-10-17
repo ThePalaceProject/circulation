@@ -238,10 +238,10 @@ class BaseOPDSAPI(
         requested_mechanism = delivery_mechanism.delivery_mechanism
         fulfillment = None
         for lpdm in licensepool.delivery_mechanisms:
-            if not (
-                lpdm.resource
-                and lpdm.resource.representation
-                and lpdm.resource.representation.url
+            if (
+                lpdm.resource is None
+                or lpdm.resource.representation is None
+                or lpdm.resource.representation.public_url is None
             ):
                 # This LicensePoolDeliveryMechanism can't actually
                 # be used for fulfillment.
@@ -258,11 +258,9 @@ class BaseOPDSAPI(
             raise FormatNotAvailable()
 
         rep = fulfillment.resource.representation
-        if rep:
-            content_link = rep.public_url
-        else:
-            content_link = fulfillment.resource.url
+        content_link = rep.public_url
         media_type = rep.media_type
+
         return FulfillmentInfo(
             licensepool.collection,
             licensepool.data_source.name,
