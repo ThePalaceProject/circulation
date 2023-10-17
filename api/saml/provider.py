@@ -58,6 +58,7 @@ class SAMLWebSSOAuthenticationProvider(
         self._patron_id_use_name_id = settings.patron_id_use_name_id
         self._patron_id_attributes = settings.patron_id_attributes
         self._patron_id_regular_expression = settings.patron_id_regular_expression
+        self._settings = settings
 
     @classmethod
     def label(cls) -> str:
