@@ -5,7 +5,7 @@ from typing import Optional
 import sqlalchemy
 from sqlalchemy.orm import Session
 
-from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
+from api.circulation import FulfillmentInfo
 from api.saml.credential import SAMLCredentialManager
 from core.exceptions import BaseError
 from core.model import Collection, get_one

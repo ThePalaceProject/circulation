@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from uritemplate import URITemplate
 
-from api.circulation import CirculationFulfillmentPostProcessor, FulfillmentInfo
+from api.circulation import FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from core.model import ConfigurationSetting, DataSource, ExternalIntegration
 from core.model.licensing import LicensePoolDeliveryMechanism

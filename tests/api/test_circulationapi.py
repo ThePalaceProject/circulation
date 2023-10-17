@@ -1,6 +1,7 @@
 """Test the CirculationAPI."""
 import datetime
 from datetime import timedelta
+from typing import cast
 from unittest.mock import MagicMock
 
 import flask
@@ -18,6 +19,7 @@ from api.circulation import (
     LoanInfo,
 )
 from api.circulation_exceptions import *
+from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
@@ -1086,7 +1088,7 @@ class TestCirculationAPI:
         lp1 = circulation_api.db.licensepool(edition=None)
         lp2 = circulation_api.db.licensepool(edition=None)
 
-        api = CirculationAPI(circulation_api.db.session, l1, analytics)  # type: ignore[arg-type]
+        api = CirculationAPI(circulation_api.db.session, l1, cast(Analytics, analytics))
 
         def assert_event(inp, outp):
             # Assert that passing `inp` into the mock _collect_event
