@@ -247,13 +247,16 @@ class TestPlaytimeEntriesEmailReportsScript:
         # collection2 library2
         playtime(db.session, identifier, collection2, library2, date3m(3), 300)
 
+        reporting_name = "test-cm"
+
         # Horrible unbracketted syntax for python 3.8
         with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
             "core.jobs.playtime_entries.EmailManager"
         ) as email, patch(
             "core.jobs.playtime_entries.os.environ",
             new={
-                Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email"
+                Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
+                Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
             },
         ):
             PlaytimeEntriesEmailReportsScript(db.session).run()
@@ -290,7 +293,7 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         assert email.send_email.call_count == 1
         assert email.send_email.call_args == call(
-            f"Playtime Summaries {cutoff} - {until}",
+            f"{reporting_name}: Playtime Summaries {cutoff} - {until}",
             receivers=["reporting@test.email"],
             text="",
             attachments={

@@ -186,6 +186,11 @@ a storage service, you can set the following environment variables:
         - `{key}`: The key of the file.
         - `{region}`: The region of the storage service.
 
+#### Reporting
+
+- `PALACE_REPORTING_NAME`: (Optional) A name used to identify the CM instance associated with generated reports.
+- `SIMPLIFIED_REPORTING_EMAIL`: (Required) Email address of recipient of reports.
+
 #### Logging
 
 The application uses the [Python logging](https://docs.python.org/3/library/logging.html) module for logging. Optionally
