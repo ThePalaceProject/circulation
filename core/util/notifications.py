@@ -136,10 +136,13 @@ class PushNotifications(LoggerMixin):
             f"Patron {loan.patron.authorization_identifier} has {len(tokens)} device tokens. "
             f"Sending loan expiry notification(s)."
         )
-        loan.patron_last_notified = utc_now().date()
-        return cls.send_messages(
+        responses = cls.send_messages(
             tokens, messaging.Notification(title=title, body=body), data
         )
+        if len(responses) > 0:
+            # Atleast one notification succeeded
+            loan.patron_last_notified = utc_now().date()
+        return responses
 
     @classmethod
     def send_activity_sync_message(cls, patrons: list[Patron]) -> list[str]:
@@ -206,8 +209,11 @@ class PushNotifications(LoggerMixin):
             if hold.patron.authorization_identifier:
                 data["authorization_identifier"] = hold.patron.authorization_identifier
 
-            hold.patron_last_notified = utc_now().date()
             resp = cls.send_messages(tokens, messaging.Notification(title=title), data)
+            if len(resp) > 0:
+                # Atleast one notification succeeded
+                hold.patron_last_notified = utc_now().date()
+
             responses.extend(resp)
 
         return responses
