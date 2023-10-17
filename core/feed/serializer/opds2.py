@@ -165,7 +165,7 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
             props["indirectAcquisition"].append(_indirect(indirect))
 
         if link.lcp_hashed_passphrase:
-            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase
+            props["lcp_hashed_passphrase"] = link.lcp_hashed_passphrase.text
 
         if link.drm_licensor:
             props["licensor"] = {
