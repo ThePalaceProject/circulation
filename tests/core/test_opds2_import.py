@@ -18,6 +18,7 @@ from core.model import (
     Edition,
     EditionConstants,
     ExternalIntegration,
+    Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Loan,
@@ -86,6 +87,7 @@ class TestOPDS2ImporterFixture:
     collection: Collection
     data_source: DataSource
     importer: OPDS2Importer
+    library: Library
 
 
 @pytest.fixture

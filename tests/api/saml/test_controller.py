@@ -27,7 +27,6 @@ from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
 from tests.api.saml import saml_strings
 from tests.fixtures.api_controller import ControllerFixture
-from tests.fixtures.database import DatabaseTransactionFixture
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
     saml_strings.SP_ENTITY_ID,
@@ -466,14 +465,3 @@ class TestSAMLController:
                     controller_fixture.db.session,
                     finish_authentication_result,
                 )
-
-
-class TestSAMLWAYFlessAcquisitionLinkProcessor:
-    def test_fulfill_no_wayless_template_url(self, db: DatabaseTransactionFixture):
-        processor = SAMLWAYFlessAcquisitionLinkProcessor(db.default_collection())
-        assert processor._wayfless_url_template == None
-
-        mocked_fulfillment = MagicMock()
-        # As long as there is no template url, no actions should take place
-        response = processor.fulfill(None, None, None, None, mocked_fulfillment)
-        assert response == mocked_fulfillment

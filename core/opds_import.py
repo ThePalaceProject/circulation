@@ -241,11 +241,9 @@ class BaseOPDSAPI(
         pass
 
     def fulfill_saml_wayfless(
-        self, patron: Patron, fulfillment: FulfillmentInfo
+        self, template: str, patron: Patron, fulfillment: FulfillmentInfo
     ) -> FulfillmentInfo:
-        self.log.debug(
-            f"WAYFless acquisition link template: {self.saml_wayfless_url_template}"
-        )
+        self.log.debug(f"WAYFless acquisition link template: {template}")
 
         db = Session.object_session(patron)
         saml_credential = self.saml_credential_manager.lookup_saml_token_by_patron(
@@ -268,7 +266,7 @@ class BaseOPDSAPI(
                 f"SAML subject {saml_subject} does not contain an IdP's entityID"
             )
 
-        acquisition_link = self.saml_wayfless_url_template.replace(
+        acquisition_link = template.replace(
             SAMLWAYFlessConstants.IDP_PLACEHOLDER,
             urllib.parse.quote(saml_subject.idp, safe=""),
         )
@@ -337,7 +335,9 @@ class BaseOPDSAPI(
         )
 
         if self.saml_wayfless_url_template:
-            fulfillment_info = self.fulfill_saml_wayfless(patron, fulfillment_info)
+            fulfillment_info = self.fulfill_saml_wayfless(
+                self.saml_wayfless_url_template, patron, fulfillment_info
+            )
 
         return fulfillment_info
 
