@@ -392,7 +392,7 @@ class TestAnalyticsServices:
             )
             assert response.status_code == 200
 
-        service = get_one(
+        service1 = get_one(
             settings_ctrl_fixture.ctrl.db.session, ExternalIntegration, id=service.id
         )
-        assert None == service
+        assert None == service1
