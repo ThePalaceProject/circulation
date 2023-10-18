@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqlalchemy import or_
+
 from core.config import Configuration, ConfigurationConstants
 from core.model import Base
 from core.model.configuration import ConfigurationSetting
 from core.model.patron import Hold
 from core.monitor import SweepMonitor
+from core.util.datetime_helpers import utc_now
 from core.util.notifications import PushNotifications
 
 if TYPE_CHECKING:
@@ -38,7 +41,13 @@ class HoldsNotificationMonitor(SweepMonitor):
 
     def item_query(self) -> Query:
         query = super().item_query()
-        query = query.filter(Hold.position == 0)
+        query = query.filter(
+            Hold.position == 0,
+            or_(
+                Hold.patron_last_notified != utc_now().date(),
+                Hold.patron_last_notified == None,
+            ),
+        )
         return query
 
     def process_items(self, items: list[Hold]) -> None:

@@ -2523,32 +2523,50 @@ class TestLoanNotificationsScript:
         )
 
     def test_do_run(self, db: DatabaseTransactionFixture):
+        now = utc_now()
         self._setup_method(db)
         loan, _ = self.work.active_license_pool().loan_to(
             self.patron,
-            utc_now(),
-            utc_now() + datetime.timedelta(days=1, hours=1),
+            now,
+            now + datetime.timedelta(days=1, hours=1),
         )
 
         work2 = db.work(with_license_pool=True)
         loan2, _ = work2.active_license_pool().loan_to(
             self.patron,
-            utc_now(),
-            utc_now() + datetime.timedelta(days=2, hours=1),
+            now,
+            now + datetime.timedelta(days=2, hours=1),
         )
+
+        work3 = db.work(with_license_pool=True)
+        p = work3.active_license_pool()
+        loan3, _ = p.loan_to(
+            self.patron,
+            now,
+            now + datetime.timedelta(days=1, hours=1),
+        )
+        # loan 3 was notified today already, so should get skipped
+        loan3.patron_last_notified = now.date()
+
+        work4 = db.work(with_license_pool=True)
+        p = work4.active_license_pool()
+        loan4, _ = p.loan_to(
+            self.patron,
+            now,
+            now + datetime.timedelta(days=1, hours=1),
+        )
+        # loan 4 was notified yesterday, so should NOT get skipped
+        loan4.patron_last_notified = now.date() - datetime.timedelta(days=1)
 
         self.script.process_loan = MagicMock()
         self.script.BATCH_SIZE = 1
         self.script.do_run()
 
-        assert self.script.process_loan.call_count == 2
+        assert self.script.process_loan.call_count == 3
         assert self.script.process_loan.call_args_list == [
-            call(
-                loan,
-            ),
-            call(
-                loan2,
-            ),
+            call(loan),
+            call(loan2),
+            call(loan4),
         ]
 
         # Sitewide notifications are turned off

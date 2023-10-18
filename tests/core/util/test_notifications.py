@@ -1,11 +1,13 @@
 import logging
 import re
+from datetime import datetime
 from typing import Generator
 from unittest import mock
 from unittest.mock import MagicMock
 
 import firebase_admin
 import pytest
+import pytz
 from firebase_admin.exceptions import FirebaseError
 from firebase_admin.messaging import UnregisteredError
 from google.auth import credentials
@@ -17,6 +19,7 @@ from core.model.configuration import ConfigurationSetting
 from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.work import Work
+from core.util.datetime_helpers import utc_now
 from core.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -90,6 +93,7 @@ class TestPushNotifications:
             assert PushNotifications.send_loan_expiry_message(
                 loan, 1, [device_token]
             ) == ["mid-mock"]
+            assert loan.patron_last_notified == utc_now().date()
 
         with mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_loan_expiry_message(loan, 1, [device_token])
@@ -122,6 +126,58 @@ class TestPushNotifications:
                 (messaging.Message(),),
                 {"dry_run": True, "app": push_notf_fixture.app},
             ]
+
+    def test_patron_last_notified_updated(
+        self, push_notf_fixture: PushNotificationsFixture
+    ):
+        db = push_notf_fixture.db
+        patron = db.patron(external_identifier="xyz1")
+        patron.authorization_identifier = "abc1"
+
+        device_token, _ = get_one_or_create(
+            db.session,
+            DeviceToken,
+            device_token="atoken",
+            token_type=DeviceTokenTypes.FCM_ANDROID,
+            patron=patron,
+        )
+        work: Work = db.work(with_license_pool=True)
+        loan, _ = work.active_license_pool().loan_to(patron)  # type: ignore
+        work2: Work = db.work(with_license_pool=True)
+        hold, _ = work2.active_license_pool().on_hold_to(patron)  # type: ignore
+
+        with mock.patch(
+            "core.util.notifications.PushNotifications.send_messages"
+        ) as mock_send, mock.patch("core.util.notifications.utc_now") as mock_now:
+            # Loan expiry
+            # No messages sent
+            mock_send.return_value = []
+            responses = PushNotifications.send_loan_expiry_message(
+                loan, 1, [device_token]
+            )
+            assert responses == []
+            assert loan.patron_last_notified == None
+
+            # One message sent
+            mock_now.return_value = datetime(2020, 1, 1, tzinfo=pytz.UTC)
+            mock_send.return_value = ["mock-mid"]
+            responses = PushNotifications.send_loan_expiry_message(
+                loan, 1, [device_token]
+            )
+            assert responses == ["mock-mid"]
+            # last notified gets updated
+            assert loan.patron_last_notified == datetime(2020, 1, 1).date()
+
+            # Now hold expiry
+            mock_send.return_value = []
+            responses = PushNotifications.send_holds_notifications([hold])
+            assert responses == []
+            assert hold.patron_last_notified == None
+
+            mock_send.return_value = ["mock-mid"]
+            responses = PushNotifications.send_holds_notifications([hold])
+            assert responses == ["mock-mid"]
+            assert hold.patron_last_notified == datetime(2020, 1, 1).date()
 
     def test_send_activity_sync(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
@@ -224,6 +280,9 @@ class TestPushNotifications:
         with mock.patch("core.util.notifications.messaging") as messaging:
             PushNotifications.send_holds_notifications([hold1, hold2])
 
+        assert (
+            hold1.patron_last_notified == hold2.patron_last_notified == utc_now().date()
+        )
         loans_api = "http://localhost/default/loans"
         assert messaging.Message.call_count == 3
         assert messaging.Message.call_args_list == [
