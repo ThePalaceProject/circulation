@@ -34,17 +34,19 @@ class MonkeyPatchedODLFixture:
         self.monkeypatch = monkeypatch
 
     @staticmethod
-    def _queue_response(self, status_code, headers={}, content=None):
-        self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
+    def _queue_response(patched_self, status_code, headers={}, content=None):
+        patched_self.responses.insert(
+            0, MockRequestsResponse(status_code, headers, content)
+        )
 
     @staticmethod
-    def _get(self, url, headers=None):
-        self.requests.append([url, headers])
-        response = self.responses.pop()
+    def _get(patched_self, url, headers=None):
+        patched_self.requests.append([url, headers])
+        response = patched_self.responses.pop()
         return HTTP._process_response(url, response)
 
     @staticmethod
-    def _url_for(self, *args, **kwargs):
+    def _url_for(patched_self, *args, **kwargs):
         del kwargs["_external"]
         return "http://{}?{}".format(
             "/".join(args),
@@ -52,6 +54,10 @@ class MonkeyPatchedODLFixture:
         )
 
     def __call__(self, api: Type[BaseODLAPI]):
+        # We monkeypatch the ODLAPI class to intercept HTTP requests and responses
+        # these monkeypatched methods are staticmethods on this class. They take
+        # a patched_self argument, which is the instance of the ODLAPI class that
+        # they have been monkeypatched onto.
         self.monkeypatch.setattr(api, "_get", self._get)
         self.monkeypatch.setattr(api, "_url_for", self._url_for)
         self.monkeypatch.setattr(
