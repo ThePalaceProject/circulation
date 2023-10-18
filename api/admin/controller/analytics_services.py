@@ -3,7 +3,6 @@ from flask import Response
 
 from api.admin.controller.settings import SettingsController
 from api.admin.problem_details import INCOMPLETE_CONFIGURATION, MISSING_ANALYTICS_NAME
-from api.google_analytics_provider import GoogleAnalyticsProvider
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import ExternalIntegration
@@ -15,7 +14,6 @@ class AnalyticsServicesController(SettingsController):
     def __init__(self, manager):
         super().__init__(manager)
         provider_apis = [
-            GoogleAnalyticsProvider,
             LocalAnalyticsProvider,
             S3AnalyticsProvider,
         ]

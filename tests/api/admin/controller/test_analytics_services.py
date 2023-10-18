@@ -15,7 +15,7 @@ from api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from api.google_analytics_provider import GoogleAnalyticsProvider
+from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
     AdminRole,
@@ -41,7 +41,7 @@ class TestAnalyticsServices:
             assert local_analytics.get("protocol") == LocalAnalyticsProvider.__module__
 
             protocols = response.get("protocols")
-            assert GoogleAnalyticsProvider.NAME in [p.get("label") for p in protocols]
+            assert S3AnalyticsProvider.NAME in [p.get("label") for p in protocols]
             assert "settings" in protocols[0]
 
     def test_analytics_services_get_with_one_service(
@@ -55,48 +55,6 @@ class TestAnalyticsServices:
         )
 
         settings_ctrl_fixture.ctrl.db.session.delete(local_analytics_default)
-
-        ga_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=GoogleAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-        ga_service.url = settings_ctrl_fixture.ctrl.db.fresh_str()
-
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
-            )
-            [service] = response.get("analytics_services")
-
-            assert ga_service.id == service.get("id")
-            assert ga_service.protocol == service.get("protocol")
-            assert ga_service.url == service.get("settings").get(
-                ExternalIntegration.URL
-            )
-
-        ga_service.libraries += [settings_ctrl_fixture.ctrl.db.default_library()]
-        ConfigurationSetting.for_library_and_externalintegration(
-            settings_ctrl_fixture.ctrl.db.session,
-            GoogleAnalyticsProvider.TRACKING_ID,
-            settings_ctrl_fixture.ctrl.db.default_library(),
-            ga_service,
-        ).value = "trackingid"
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
-            )
-            [service] = response.get("analytics_services")
-
-            [library] = service.get("libraries")
-            assert (
-                settings_ctrl_fixture.ctrl.db.default_library().short_name
-                == library.get("short_name")
-            )
-            assert "trackingid" == library.get(GoogleAnalyticsProvider.TRACKING_ID)
-
-        settings_ctrl_fixture.ctrl.db.session.delete(ga_service)
 
         local_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
@@ -169,20 +127,18 @@ class TestAnalyticsServices:
             )
             assert response.uri == MISSING_SERVICE.uri
 
-        service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=GoogleAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            name="name",
+        [local_analytics] = (
+            settings_ctrl_fixture.ctrl.db.session.query(ExternalIntegration)
+            .filter(ExternalIntegration.goal == ExternalIntegration.ANALYTICS_GOAL)
+            .all()
         )
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            assert isinstance(service.name, str)
+            assert isinstance(local_analytics.name, str)
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", service.name),
-                    ("protocol", GoogleAnalyticsProvider.__module__),
+                    ("name", local_analytics.name),
+                    ("protocol", S3AnalyticsProvider.__module__),
                     ("url", "http://test"),
                 ]
             )
@@ -194,7 +150,7 @@ class TestAnalyticsServices:
         service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=GoogleAnalyticsProvider.__module__,
+            protocol=S3AnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
 
@@ -217,7 +173,7 @@ class TestAnalyticsServices:
                 [
                     ("id", str(service.id)),
                     ("name", "analytics name"),
-                    ("protocol", GoogleAnalyticsProvider.__module__),
+                    ("protocol", S3AnalyticsProvider.__module__),
                     ("url", ""),
                 ]
             )
@@ -230,7 +186,7 @@ class TestAnalyticsServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(service.id)),
-                    ("protocol", GoogleAnalyticsProvider.__module__),
+                    ("protocol", S3AnalyticsProvider.__module__),
                     ("name", "some other analytics name"),
                     (ExternalIntegration.URL, "http://test"),
                     ("libraries", json.dumps([{"short_name": "not-a-library"}])),
@@ -250,7 +206,7 @@ class TestAnalyticsServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(service.id)),
-                    ("protocol", GoogleAnalyticsProvider.__module__),
+                    ("protocol", S3AnalyticsProvider.__module__),
                     ("name", "some other name"),
                     (ExternalIntegration.URL, ""),
                     ("libraries", json.dumps([{"short_name": library.short_name}])),
@@ -286,12 +242,11 @@ class TestAnalyticsServices:
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", "Google analytics name"),
-                    ("protocol", GoogleAnalyticsProvider.__module__),
-                    (ExternalIntegration.URL, "http://test"),
+                    ("name", "S3 analytics name"),
+                    ("protocol", S3AnalyticsProvider.__module__),
                     (
-                        "libraries",
-                        json.dumps([{"short_name": "L", "tracking_id": "trackingid"}]),
+                        "location_source",
+                        S3AnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD,
                     ),
                 ]
             )
@@ -304,19 +259,15 @@ class TestAnalyticsServices:
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
             goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=GoogleAnalyticsProvider.__module__,
+            protocol=S3AnalyticsProvider.__module__,
         )
         assert isinstance(service, ExternalIntegration)
         assert service.id == int(response.get_data())
-        assert GoogleAnalyticsProvider.__module__ == service.protocol
-        assert "http://test" == service.url
-        assert [library] == service.libraries
+        assert S3AnalyticsProvider.__module__ == service.protocol
         assert (
-            "trackingid"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                GoogleAnalyticsProvider.TRACKING_ID,
-                library,
+            "neighborhood"
+            == ConfigurationSetting.for_externalintegration(
+                S3AnalyticsProvider.LOCATION_SOURCE,
                 service,
             ).value
         )
@@ -349,34 +300,22 @@ class TestAnalyticsServices:
     def test_analytics_services_post_edit(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        l1 = settings_ctrl_fixture.ctrl.db.library(
-            name="Library 1",
-            short_name="L1",
-        )
-        l2 = settings_ctrl_fixture.ctrl.db.library(
-            name="Library 2",
-            short_name="L2",
-        )
-
-        ga_service, ignore = create(
+        s3_service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=GoogleAnalyticsProvider.__module__,
+            protocol=S3AnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
-        ga_service.url = "oldurl"
-        ga_service.libraries = [l1]
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("id", str(ga_service.id)),
+                    ("id", str(s3_service.id)),
                     ("name", "some other analytics name"),
-                    ("protocol", GoogleAnalyticsProvider.__module__),
-                    (ExternalIntegration.URL, "http://test"),
+                    ("protocol", S3AnalyticsProvider.__module__),
                     (
-                        "libraries",
-                        json.dumps([{"short_name": "L2", "tracking_id": "l2id"}]),
+                        S3AnalyticsProvider.LOCATION_SOURCE,
+                        S3AnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD,
                     ),
                 ]
             )
@@ -385,23 +324,20 @@ class TestAnalyticsServices:
             )
             assert response.status_code == 200
 
-        assert ga_service.id == int(response.get_data())
-        assert GoogleAnalyticsProvider.__module__ == ga_service.protocol
-        assert "http://test" == ga_service.url
-        assert [l2] == ga_service.libraries
+        assert s3_service.id == int(response.get_data())
+        assert s3_service.name == "some other analytics name"
+        assert S3AnalyticsProvider.__module__ == s3_service.protocol
         assert (
-            "l2id"
-            == ConfigurationSetting.for_library_and_externalintegration(
-                settings_ctrl_fixture.ctrl.db.session,
-                GoogleAnalyticsProvider.TRACKING_ID,
-                l2,
-                ga_service,
+            S3AnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
+            == ConfigurationSetting.for_externalintegration(
+                S3AnalyticsProvider.LOCATION_SOURCE,
+                s3_service,
             ).value
         )
 
     def test_check_name_unique(self, settings_ctrl_fixture: SettingsControllerFixture):
         kwargs = dict(
-            protocol=GoogleAnalyticsProvider.__module__,
+            protocol=S3AnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
         existing_service, ignore = create(
@@ -435,34 +371,28 @@ class TestAnalyticsServices:
     def test_analytics_service_delete(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        l1 = settings_ctrl_fixture.ctrl.db.library(
-            name="Library 1",
-            short_name="L1",
-        )
-        ga_service, ignore = create(
+        service, ignore = create(
             settings_ctrl_fixture.ctrl.db.session,
             ExternalIntegration,
-            protocol=GoogleAnalyticsProvider.__module__,
+            protocol=S3AnalyticsProvider.__module__,
             goal=ExternalIntegration.ANALYTICS_GOAL,
         )
-        ga_service.url = "oldurl"
-        ga_service.libraries = [l1]
 
         with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
             settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
             pytest.raises(
                 AdminNotAuthorized,
                 settings_ctrl_fixture.manager.admin_analytics_services_controller.process_delete,
-                ga_service.id,
+                service.id,
             )
 
             settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
             response = settings_ctrl_fixture.manager.admin_analytics_services_controller.process_delete(
-                ga_service.id
+                service.id
             )
             assert response.status_code == 200
 
         service = get_one(
-            settings_ctrl_fixture.ctrl.db.session, ExternalIntegration, id=ga_service.id
+            settings_ctrl_fixture.ctrl.db.session, ExternalIntegration, id=service.id
         )
         assert None == service
