@@ -1,13 +1,13 @@
 import datetime
-import io
-from typing import List, Union
+from typing import Generator, List, Union
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.logging import LogCaptureFixture
 from requests import Response
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from api.circulation import CirculationAPI
+from api.circulation import CirculationAPI, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from core.model import (
     ConfigurationSetting,
@@ -460,6 +460,52 @@ class TestOPDS2Importer(OPDS2Test):
         assert setting.value == "http://example.org/auth?userName={patron_id}"
 
 
+class Opds2ApiFixture:
+    def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
+        self.patron = db.patron()
+        self.collection: Collection = db.collection(
+            protocol=ExternalIntegration.OPDS2_IMPORT
+        )
+        self.integration = self.collection.create_external_integration(
+            ExternalIntegration.OPDS2_IMPORT
+        )
+        self.setting = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, self.integration
+        )
+        self.setting.value = "http://example.org/token?userName={patron_id}"
+
+        self.mock_response = MagicMock(spec=Response)
+        self.mock_response.status_code = 200
+        self.mock_response.text = "plaintext-auth-token"
+
+        self.mock_http = mock_http
+        self.mock_http.get_with_timeout.return_value = self.mock_response
+
+        self.data_source = DataSource.lookup(db.session, "test", autocreate=True)
+
+        self.pool = MagicMock(spec=LicensePool)
+        self.mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
+        self.pool.delivery_mechanisms = [self.mechanism]
+        self.pool.data_source = self.data_source
+        self.mechanism.resource.representation.public_url = (
+            "http://example.org/11234/fulfill?authToken={authentication_token}"
+        )
+
+        self.api = OPDS2API(db.session, self.collection)
+
+    def fulfill(self) -> FulfillmentInfo:
+        return self.api.fulfill(self.patron, "", self.pool, self.mechanism)
+
+
+@pytest.fixture
+def opds2_api_fixture(
+    db: DatabaseTransactionFixture,
+) -> Generator[Opds2ApiFixture, None, None]:
+    with patch("core.opds2_import.HTTP") as mock_http:
+        fixture = Opds2ApiFixture(db, mock_http)
+        yield fixture
+
+
 class TestOpds2Api:
     def test_opds2_with_authentication_tokens(
         self,
@@ -514,43 +560,16 @@ class TestOpds2Api:
         assert fulfillment.content_expires is None
         assert fulfillment.content_link_redirect is True
 
-    @patch("core.opds2_import.HTTP")
-    def test_fulfill(self, mock_http: MagicMock, db: DatabaseTransactionFixture):
-        patron = db.patron()
-        collection: Collection = db.collection(
-            protocol=ExternalIntegration.OPDS2_IMPORT
-        )
-        integration: ExternalIntegration = collection.create_external_integration(
-            ExternalIntegration.OPDS2_IMPORT
-        )
-        setting: ConfigurationSetting = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, integration
-        )
-        setting.value = "http://example.org/token?userName={patron_id}"
+    def test_token_fulfill(self, opds2_api_fixture: Opds2ApiFixture):
+        ff_info = opds2_api_fixture.fulfill()
 
-        resp = Response()
-        resp.status_code = 200
-        resp.raw = io.BytesIO(b"plaintext-auth-token")
-        mock_http.get_with_timeout.return_value = resp
-
-        data_source = DataSource.lookup(db.session, "test", autocreate=True)
-
-        pool = MagicMock(spec=LicensePool)
-        mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
-        pool.delivery_mechanisms = [mechanism]
-        pool.data_source = data_source
-        mechanism.resource.representation.public_url = (
-            "http://example.org/11234/fulfill?authToken={authentication_token}"
+        patron_id = opds2_api_fixture.patron.identifier_to_remote_service(
+            opds2_api_fixture.data_source
         )
 
-        api = OPDS2API(db.session, collection)
-        ff_info = api.fulfill(patron, "", pool, mechanism)
-
-        patron_id = patron.identifier_to_remote_service(data_source)
-
-        assert mock_http.get_with_timeout.call_count == 1
+        assert opds2_api_fixture.mock_http.get_with_timeout.call_count == 1
         assert (
-            mock_http.get_with_timeout.call_args[0][0]
+            opds2_api_fixture.mock_http.get_with_timeout.call_args[0][0]
             == f"http://example.org/token?userName={patron_id}"
         )
 
@@ -558,70 +577,84 @@ class TestOpds2Api:
             ff_info.content_link
             == "http://example.org/11234/fulfill?authToken=plaintext-auth-token"
         )
-        assert ff_info.content_link_redirect == True
+        assert ff_info.content_link_redirect is True
 
+    def test_token_fulfill_alternate_template(self, opds2_api_fixture: Opds2ApiFixture):
         # Alternative templating
-        mechanism.resource.representation.public_url = (
+        opds2_api_fixture.mechanism.resource.representation.public_url = (
             "http://example.org/11234/fulfill{?authentication_token}"
         )
-        ff_info = api.fulfill(patron, "", pool, mechanism)
+        ff_info = opds2_api_fixture.fulfill()
 
         assert (
             ff_info.content_link
             == "http://example.org/11234/fulfill?authentication_token=plaintext-auth-token"
         )
 
-        ## Test error case
+    def test_token_fulfill_400_response(self, opds2_api_fixture: Opds2ApiFixture):
         # non-200 response
-        resp = Response()
-        resp.status_code = 400
-        mock_http.reset_mock()
-        mock_http.get_with_timeout.return_value = resp
+        opds2_api_fixture.mock_response.status_code = 400
         with pytest.raises(CannotFulfill):
-            api.fulfill(patron, "", pool, mechanism)
+            opds2_api_fixture.fulfill()
 
-        ## Pass through cases
+    def test_token_fulfill_no_template(self, opds2_api_fixture: Opds2ApiFixture):
         # No templating in the url
-        mechanism.resource.representation.public_url = (
-            "http://example.org/11234/fulfill?authToken=authentication_token"
+        opds2_api_fixture.mechanism.resource.representation.public_url = (
+            "http://example.org/11234/fulfill"
         )
-        ff_info = api.fulfill(patron, "", pool, mechanism)
+        ff_info = opds2_api_fixture.fulfill()
         assert ff_info.content_link_redirect is False
-        assert ff_info.content_link == mechanism.resource.representation.public_url
+        assert (
+            ff_info.content_link
+            == opds2_api_fixture.mechanism.resource.representation.public_url
+        )
 
+    def test_token_fulfill_no_content_link(
+        self, opds2_api_fixture: Opds2ApiFixture, caplog: LogCaptureFixture
+    ):
+        # No content_link on the fulfillment info coming into the function
+        mock = MagicMock(spec=FulfillmentInfo)
+        mock.content_link = None
+        response = opds2_api_fixture.api.fulfill_token_auth(
+            opds2_api_fixture.patron, opds2_api_fixture.pool, mock
+        )
+        assert response is mock
+        assert (
+            "No content link found in fulfillment, unable to fulfill via OPDS2 token auth"
+            in caplog.text
+        )
+
+    def test_token_fulfill_no_endpoint_config(self, opds2_api_fixture: Opds2ApiFixture):
         # No token endpoint config
-        mechanism.resource.representation.public_url = (
-            "http://example.org/11234/fulfill?authToken={authentication_token}"
-        )
-        api.token_auth_configuration = None
-        ff_info = api.fulfill(patron, "", pool, mechanism)
-        assert ff_info.content_link_redirect is False
-        assert ff_info.content_link == mechanism.resource.representation.public_url
+        opds2_api_fixture.api.token_auth_configuration = None
+        mock = MagicMock()
+        opds2_api_fixture.api.fulfill_token_auth = mock
+        opds2_api_fixture.fulfill()
+        # we never call the token auth function
+        assert mock.call_count == 0
 
-    @patch("core.opds2_import.HTTP")
-    def test_get_authentication_token(self, mock_http, db: DatabaseTransactionFixture):
-        resp = Response()
-        resp.status_code = 200
-        resp.raw = io.BytesIO(b"plaintext-auth-token")
-        mock_http.get_with_timeout.return_value = resp
-        patron = db.patron()
-        datasource = DataSource.lookup(db.session, "test", autocreate=True)
+    def test_get_authentication_token(self, opds2_api_fixture: Opds2ApiFixture):
         token = OPDS2API.get_authentication_token(
-            patron, datasource, "http://example.org/token"
+            opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
         )
 
         assert token == "plaintext-auth-token"
-        assert mock_http.get_with_timeout.call_count == 1
+        assert opds2_api_fixture.mock_http.get_with_timeout.call_count == 1
 
-    @patch("core.opds2_import.HTTP")
-    def test_get_authentication_token_errors(
-        self, mock_http: MagicMock, db: DatabaseTransactionFixture
+    def test_get_authentication_token_400_response(
+        self, opds2_api_fixture: Opds2ApiFixture
     ):
-        resp = Response()
-        resp.status_code = 400
-        mock_http.get_with_timeout.return_value = resp
-        datasource = DataSource.lookup(db.session, "test", autocreate=True)
+        opds2_api_fixture.mock_response.status_code = 400
         with pytest.raises(CannotFulfill):
             OPDS2API.get_authentication_token(
-                db.patron(), datasource, "http://example.org/token"
+                opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
+            )
+
+    def test_get_authentication_token_bad_response(
+        self, opds2_api_fixture: Opds2ApiFixture
+    ):
+        opds2_api_fixture.mock_response.text = None
+        with pytest.raises(CannotFulfill):
+            OPDS2API.get_authentication_token(
+                opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
             )
