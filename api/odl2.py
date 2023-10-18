@@ -10,7 +10,7 @@ from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from api.circulation_exceptions import PatronHoldLimitReached, PatronLoanLimitReached
-from api.odl import ODLAPI, BaseODLImporter, ODLSettings
+from api.odl import BaseODLAPI, BaseODLImporter, ODLLibrarySettings, ODLSettings
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -19,7 +19,12 @@ from core.integration.settings import (
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
 from core.model.configuration import ExternalIntegration
-from core.opds2_import import OPDS2Importer, OPDS2ImportMonitor, RWPMManifestParser
+from core.opds2_import import (
+    OPDS2Importer,
+    OPDS2ImporterSettings,
+    OPDS2ImportMonitor,
+    RWPMManifestParser,
+)
 from core.util import first_or_default
 from core.util.datetime_helpers import to_utc
 
@@ -32,8 +37,8 @@ if TYPE_CHECKING:
     from core.model.patron import Hold, Loan, Patron
 
 
-class ODL2Settings(ODLSettings):
-    skipped_license_formats: Optional[List[str]] = FormField(
+class ODL2Settings(OPDS2ImporterSettings, ODLSettings):
+    skipped_license_formats: List[str] = FormField(
         default=["text/html"],
         alias="odl2_skipped_license_formats",
         form=ConfigurationFormItem(
@@ -73,18 +78,27 @@ class ODL2Settings(ODLSettings):
     )
 
 
-class ODL2API(ODLAPI):
-    NAME = ExternalIntegration.ODL2
-
+class ODL2API(BaseODLAPI[ODL2Settings, ODLLibrarySettings]):
     @classmethod
     def settings_class(cls) -> Type[ODL2Settings]:
         return ODL2Settings
 
+    @classmethod
+    def library_settings_class(cls) -> Type[ODLLibrarySettings]:
+        return ODLLibrarySettings
+
+    @classmethod
+    def label(cls) -> str:
+        return ExternalIntegration.ODL2
+
+    @classmethod
+    def description(cls) -> str:
+        return "Import books from a distributor that uses OPDS2 + ODL (Open Distribution to Libraries)."
+
     def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
-        config = self.configuration()
-        self.loan_limit = config.loan_limit  # type: ignore[attr-defined]
-        self.hold_limit = config.hold_limit  # type: ignore[attr-defined]
+        self.loan_limit = self.settings.loan_limit
+        self.hold_limit = self.settings.hold_limit
 
     def _checkout(
         self, patron: Patron, licensepool: LicensePool, hold: Optional[Hold] = None
@@ -115,17 +129,17 @@ class ODL2API(ODLAPI):
         return super()._place_hold(patron, licensepool)
 
 
-class ODL2Importer(OPDS2Importer, BaseODLImporter):
+class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
     """Import information and formats from an ODL feed.
 
     The only change from OPDS2Importer is that this importer extracts
     FormatData and LicenseData from ODL 2.x's "licenses" arrays.
     """
 
-    NAME = ODL2API.NAME
+    NAME = ODL2API.label()
 
     @classmethod
-    def settings_class(cls) -> Type[ODL2Settings]:  # type: ignore[override]
+    def settings_class(cls) -> Type[ODL2Settings]:
         return ODL2Settings
 
     def __init__(
@@ -186,9 +200,7 @@ class ODL2Importer(OPDS2Importer, BaseODLImporter):
         licenses = []
         medium = None
 
-        skipped_license_formats = self.configuration().skipped_license_formats  # type: ignore[attr-defined]
-        if skipped_license_formats:
-            skipped_license_formats = set(skipped_license_formats)
+        skipped_license_formats = set(self.settings.skipped_license_formats)
 
         if publication.licenses:
             for odl_license in publication.licenses:
@@ -285,7 +297,7 @@ class ODL2Importer(OPDS2Importer, BaseODLImporter):
 class ODL2ImportMonitor(OPDS2ImportMonitor):
     """Import information from an ODL feed."""
 
-    PROTOCOL = ODL2Importer.NAME
+    PROTOCOL = ODL2API.label()
     SERVICE_NAME = "ODL 2.x Import Monitor"
 
     def __init__(

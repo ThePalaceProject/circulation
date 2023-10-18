@@ -923,7 +923,6 @@ class RunSelfTestsScript(LibraryInputScript):
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
             api_map = dict(CirculationAPI(self._db, library).registry)
-            api_map[ExternalIntegration.OPDS_IMPORT] = OPDSImportMonitor
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
                 try:
@@ -940,11 +939,7 @@ class RunSelfTestsScript(LibraryInputScript):
             return
 
         self.out.write(" Running self-test for %s.\n" % collection.name)
-        # Some HasSelfTests classes require extra arguments to their
-        # constructors.
-        extra_args = extra_args or {
-            OPDSImportMonitor: [OPDSImporter],
-        }
+        extra_args = extra_args or {}
         extra = extra_args.get(tester, [])
         constructor_args = [self._db, collection] + list(extra)
         results_dict, results_list = tester.run_self_tests(

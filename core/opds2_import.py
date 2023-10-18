@@ -9,6 +9,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    List,
     Literal,
     Optional,
     Tuple,
@@ -29,7 +30,6 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
-from core.configuration.ignored_identifier import IgnoredIdentifierImporterMixin
 from core.coverage import CoverageFailure
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -61,7 +61,9 @@ from core.model import (
     Subject,
 )
 from core.model.configuration import ConfigurationSetting
+from core.model.constants import IdentifierType
 from core.opds_import import (
+    BaseOPDSAPI,
     BaseOPDSImporter,
     OPDSImporterLibrarySettings,
     OPDSImporterSettings,
@@ -130,7 +132,7 @@ class RWPMManifestParser:
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
-    custom_accept_header: Optional[str] = FormField(
+    custom_accept_header: str = FormField(
         default="{}, {};q=0.9, */*;q=0.1".format(
             OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
         ),
@@ -144,18 +146,30 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
         ),
     )
 
+    ignored_identifier_types: List[str] = FormField(
+        alias="IGNORED_IDENTIFIER_TYPE",
+        default=[],
+        form=ConfigurationFormItem(
+            label=_("List of identifiers that will be skipped"),
+            description=_(
+                "Circulation Manager will not be importing publications with identifiers having one of the selected types."
+            ),
+            type=ConfigurationFormItemType.MENU,
+            required=False,
+            options={
+                identifier_type.value: identifier_type.value
+                for identifier_type in IdentifierType
+            },
+            format="narrow",
+        ),
+    )
+
 
 class OPDS2ImporterLibrarySettings(OPDSImporterLibrarySettings):
     pass
 
 
-class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
-    """Imports editions and license pools from an OPDS 2.0 feed."""
-
-    NAME: str = ExternalIntegration.OPDS2_IMPORT
-    DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
-    NEXT_LINK_RELATION: str = "next"
-
+class OPDS2API(BaseOPDSAPI):
     @classmethod
     def settings_class(cls) -> Type[OPDS2ImporterSettings]:
         return OPDS2ImporterSettings
@@ -166,11 +180,23 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
 
     @classmethod
     def label(cls) -> str:
-        return cls.NAME
+        return "OPDS 2.0 Import"
 
     @classmethod
     def description(cls) -> str:
-        return cls.DESCRIPTION
+        return "Import books from a publicly-accessible OPDS 2.0 feed."
+
+
+class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
+    """Imports editions and license pools from an OPDS 2.0 feed."""
+
+    NAME: str = ExternalIntegration.OPDS2_IMPORT
+    DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
+    NEXT_LINK_RELATION: str = "next"
+
+    @classmethod
+    def settings_class(cls) -> Type[OPDS2ImporterSettings]:
+        return OPDS2ImporterSettings
 
     def __init__(
         self,
@@ -196,6 +222,7 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
         """
         super().__init__(db, collection, data_source_name, http_get)
         self._parser = parser
+        self.ignored_identifier_types = self.settings.ignored_identifier_types
 
     def assert_importable_content(
         self, feed: str, feed_url: str, max_get_attempts: int = 5
@@ -205,16 +232,10 @@ class OPDS2Importer(IgnoredIdentifierImporterMixin, BaseOPDSImporter):
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.
 
-        NOTE: Currently, this method hard codes allowed identifier types.
-        The next PR will add an additional configuration setting allowing to override this behaviour
-        and configure allowed identifier types in the CM Admin UI.
-
         :param identifier: Identifier object
         :return: Boolean value indicating whether CM can import the identifier
         """
-        return identifier.type not in self._get_ignored_identifier_types(
-            self.integration_configuration()
-        )
+        return identifier.type not in self.ignored_identifier_types
 
     def _extract_subjects(self, subjects: list[core_ast.Subject]) -> list[SubjectData]:
         """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.

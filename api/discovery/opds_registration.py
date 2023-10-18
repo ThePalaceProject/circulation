@@ -54,7 +54,9 @@ class OpdsRegistrationServiceSettings(BaseSettings):
     )
 
 
-class OpdsRegistrationService(HasIntegrationConfiguration):
+class OpdsRegistrationService(
+    HasIntegrationConfiguration[OpdsRegistrationServiceSettings]
+):
     """A circulation manager's view of a remote service that supports
     the OPDS Directory Registration Protocol:
 

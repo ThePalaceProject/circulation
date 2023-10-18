@@ -8,9 +8,9 @@ from typing import (
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
     Tuple,
-    Type,
     Union,
 )
 
@@ -154,10 +154,6 @@ class ConfigurationFormItemType(Enum):
     COLOR = "color-picker"
     IMAGE = "image"
 
-    @classmethod
-    def options_from_enum(cls, enum_: Type[Enum]) -> Dict[Enum | str, str]:
-        return {e.value: e.name for e in enum_}
-
 
 @dataclass(frozen=True)
 class ConfigurationFormItem:
@@ -186,7 +182,7 @@ class ConfigurationFormItem:
     # When the type is SELECT, LIST, or MENU, the options are used to populate the
     # field in the admin interface. This can either be a callable that returns a
     # dictionary of options or a dictionary of options.
-    options: Callable[[Session], Dict[Enum | str, str]] | Dict[
+    options: Callable[[Session], Dict[Enum | str, str]] | Mapping[
         Enum | str, str
     ] | None = None
 

@@ -5,7 +5,7 @@ import datetime
 import json
 import uuid
 from abc import ABC
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar
 
 import dateutil
 from flask import url_for
@@ -22,12 +22,12 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.lcp.hash import Hasher, HasherFactory, HashingAlgorithm
 from core import util
 from core.analytics import Analytics
-from core.importers import BaseImporterSettings
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -63,6 +63,7 @@ from core.monitor import CollectionMonitor
 from core.opds_import import (
     BaseOPDSImporter,
     OPDSImporter,
+    OPDSImporterSettings,
     OPDSImportMonitor,
     OPDSXMLParser,
 )
@@ -74,16 +75,12 @@ from core.util.string_helpers import base64
 class ODLAPIConstants:
     DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
     DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
-    DEFAULT_ENCRYPTION_ALGORITHM = HashingAlgorithm.SHA256.value
 
 
-class ODLSettings(BaseImporterSettings):
+class ODLSettings(OPDSImporterSettings):
     external_account_id: Optional[HttpUrl] = FormField(
-        key=Collection.EXTERNAL_ACCOUNT_ID_KEY,
         form=ConfigurationFormItem(
             label=_("ODL feed URL"),
-            description="",
-            type=ConfigurationFormItemType.TEXT,
             required=True,
         ),
     )
@@ -91,8 +88,6 @@ class ODLSettings(BaseImporterSettings):
     username: str = FormField(
         form=ConfigurationFormItem(
             label=_("Library's API username"),
-            description="",
-            type=ConfigurationFormItemType.TEXT,
             required=True,
         )
     )
@@ -101,19 +96,8 @@ class ODLSettings(BaseImporterSettings):
         key=ExternalIntegration.PASSWORD,
         form=ConfigurationFormItem(
             label=_("Library's API password"),
-            description="",
-            type=ConfigurationFormItemType.TEXT,
             required=True,
         ),
-    )
-
-    data_source: str = FormField(
-        form=ConfigurationFormItem(
-            label=_("Data source name"),
-            description="",
-            type=ConfigurationFormItemType.TEXT,
-            required=True,
-        )
     )
 
     default_reservation_period: Optional[PositiveInt] = FormField(
@@ -152,14 +136,14 @@ class ODLSettings(BaseImporterSettings):
         ),
     )
 
-    encryption_algorithm: Optional[str] = FormField(
-        default=ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM,
+    encryption_algorithm: HashingAlgorithm = FormField(
+        default=HashingAlgorithm.SHA256,
         form=ConfigurationFormItem(
             label=_("Passphrase encryption algorithm"),
             description=_("Algorithm used for encrypting the passphrase."),
             type=ConfigurationFormItemType.SELECT,
             required=False,
-            options=ConfigurationFormItemType.options_from_enum(HashingAlgorithm),
+            options={alg: alg.name for alg in HashingAlgorithm},
         ),
     )
 
@@ -168,9 +152,13 @@ class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
     pass
 
 
-class ODLAPI(
-    BaseCirculationAPI[ODLSettings, ODLLibrarySettings],
-):
+SettingsType = TypeVar("SettingsType", bound=ODLSettings, covariant=True)
+LibrarySettingsType = TypeVar(
+    "LibrarySettingsType", bound=ODLLibrarySettings, covariant=True
+)
+
+
+class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType], ABC):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
     of control to the library, but it requires the circulation manager to
@@ -179,15 +167,7 @@ class ODLAPI(
 
     In addition to circulating books to patrons of a library on the current circulation
     manager, this API can be used to circulate books to patrons of external libraries.
-    Only one circulation manager per ODL collection should use an ODLAPI
-    - the others should use a SharedODLAPI and configure it to connect to the main
-    circulation manager.
     """
-
-    NAME = ExternalIntegration.ODL
-    DESCRIPTION = _(
-        "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
-    )
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
@@ -220,74 +200,36 @@ class ODLAPI(
         EXPIRED_STATUS,
     ]
 
-    @classmethod
-    def settings_class(cls) -> Type[ODLSettings]:
-        return ODLSettings
-
-    @classmethod
-    def library_settings_class(cls) -> Type[ODLLibrarySettings]:
-        return ODLLibrarySettings
-
-    @classmethod
-    def label(cls) -> str:
-        return cls.NAME
-
-    @classmethod
-    def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
-
     def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
-        if collection.protocol != self.NAME:
+        if collection.protocol != self.label():
             raise ValueError(
                 "Collection protocol is %s, but passed into %s!"
                 % (collection.protocol, self.__class__.__name__)
             )
         self.collection_id = collection.id
-        config = self.configuration()
-        self.data_source_name = config.data_source
+        settings = self.settings
+        self.data_source_name = settings.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
 
-        self.username = config.username
-        self.password = config.password
+        self.username = settings.username
+        self.password = settings.password
         self.analytics = Analytics(_db)
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Optional[Hasher] = None
 
-    def external_integration(self, db: Session) -> ExternalIntegration:
-        """Return an external integration associated with this object.
-
-        :param db: Database session
-        :return: External integration associated with this object
-        """
-        return self.collection.external_integration
-
-    @property
-    def collection(self) -> Collection:
-        """Return a collection associated with this object.
-
-        :param db: Database session
-        :return: Collection associated with this object
-        """
-        collection = super().collection
-        if not collection:
-            raise ValueError(f"Collection not found: {self.collection_id}")
-        return collection
-
     def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance
 
         :return: Hasher instance
         """
-        config = self.configuration()
+        settings = self.settings
         if self._hasher_instance is None:
             self._hasher_instance = self._hasher_factory.create(
-                config.encryption_algorithm  # type: ignore[arg-type]
-                if config.encryption_algorithm
-                else ODLAPIConstants.DEFAULT_ENCRYPTION_ALGORITHM
+                settings.encryption_algorithm
             )
 
         return self._hasher_instance
@@ -326,6 +268,8 @@ class ODLAPI(
         else:
             id = loan.license.identifier
             checkout_id = str(uuid.uuid1())
+            if self.collection is None:
+                raise ValueError(f"Collection not found: {self.collection_id}")
             default_loan_period = self.collection.default_loan_period(
                 loan.patron.library
             )
@@ -355,7 +299,6 @@ class ODLAPI(
                 _external=True,
             )
 
-            config = self.configuration()
             checkout_url = str(loan.license.checkout_url)
             url_template = URITemplate(checkout_url)
             url = url_template.expand(
@@ -365,8 +308,8 @@ class ODLAPI(
                 expires=expires.isoformat(),
                 notification_url=notification_url,
                 passphrase=encoded_pass,
-                hint=config.passphrase_hint,
-                hint_url=config.passphrase_hint_url,
+                hint=self.settings.passphrase_hint,
+                hint_url=self.settings.passphrase_hint_url,
             )
 
         response = self._get(url)
@@ -383,7 +326,7 @@ class ODLAPI(
             )
         return status_doc  # type: ignore[no-any-return]
 
-    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> bool:  # type: ignore[override]
+    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Return a loan early."""
         _db = Session.object_session(patron)
 
@@ -395,7 +338,7 @@ class ODLAPI(
         if loan.count() < 1:
             raise NotCheckedOut()
         loan_result = loan.one()
-        return self._checkin(loan_result)
+        self._checkin(loan_result)
 
     def _checkin(self, loan: Loan) -> bool:
         _db = Session.object_session(loan)
@@ -673,6 +616,8 @@ class ODLAPI(
         self._update_hold_position(holdinfo, pool)
         assert holdinfo.hold_position is not None
 
+        if self.collection is None:
+            raise ValueError(f"Collection not found: {self.collection_id}")
         default_loan_period = self.collection.default_loan_period(library)
         default_reservation_period = self.collection.default_reservation_period
 
@@ -954,11 +899,41 @@ class ODLAPI(
         pass
 
 
+class ODLAPI(
+    BaseODLAPI[ODLSettings, ODLLibrarySettings],
+):
+    """ODL (Open Distribution to Libraries) is a specification that allows
+    libraries to manage their own loans and holds. It offers a deeper level
+    of control to the library, but it requires the circulation manager to
+    keep track of individual copies rather than just license pools, and
+    manage its own holds queues.
+
+    In addition to circulating books to patrons of a library on the current circulation
+    manager, this API can be used to circulate books to patrons of external libraries.
+    """
+
+    @classmethod
+    def settings_class(cls) -> Type[ODLSettings]:
+        return ODLSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[ODLLibrarySettings]:
+        return ODLLibrarySettings
+
+    @classmethod
+    def label(cls) -> str:
+        return ExternalIntegration.ODL
+
+    @classmethod
+    def description(cls) -> str:
+        return "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
+
+
 class ODLXMLParser(OPDSXMLParser):
     NAMESPACES = dict(OPDSXMLParser.NAMESPACES, odl="http://opds-spec.org/odl")
 
 
-class BaseODLImporter(BaseOPDSImporter, ABC):
+class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
     FEEDBOOKS_AUDIO = "{}; protection={}".format(
         MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
         DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
@@ -1131,19 +1106,23 @@ class BaseODLImporter(BaseOPDSImporter, ABC):
         return parsed_license
 
 
-class ODLImporter(OPDSImporter, BaseODLImporter):
+class ODLImporter(OPDSImporter, BaseODLImporter[ODLSettings]):
     """Import information and formats from an ODL feed.
 
     The only change from OPDSImporter is that this importer extracts
     format information from 'odl:license' tags.
     """
 
-    NAME = ODLAPI.NAME
+    NAME = ODLAPI.label()
     PARSER_CLASS = ODLXMLParser
 
     # The media type for a License Info Document, used to get information
     # about the license.
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
+
+    @classmethod
+    def settings_class(cls) -> Type[ODLSettings]:
+        return ODLSettings
 
     @classmethod
     def _detail_for_elementtree_entry(
@@ -1288,7 +1267,7 @@ class ODLHoldReaper(CollectionMonitor):
     the holds queues for their pools."""
 
     SERVICE_NAME = "ODL Hold Reaper"
-    PROTOCOL = ODLAPI.NAME
+    PROTOCOL = ODLAPI.label()
 
     def __init__(
         self,

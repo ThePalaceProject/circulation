@@ -76,7 +76,11 @@ if TYPE_CHECKING:
     from tests.fixtures.vendor_id import VendorIDFixture
 
 
-class MockBasic(BasicAuthenticationProvider):
+class MockBasic(
+    BasicAuthenticationProvider[
+        BasicAuthProviderSettings, BasicAuthProviderLibrarySettings
+    ]
+):
     """A second mock basic authentication provider for use in testing
     the workflow around Basic Auth.
     """
@@ -100,6 +104,14 @@ class MockBasic(BasicAuthenticationProvider):
         if lookup_patrondata is False:
             lookup_patrondata = patrondata
         self.lookup_patrondata = lookup_patrondata
+
+    @classmethod
+    def settings_class(cls) -> type[BasicAuthProviderSettings]:
+        return BasicAuthProviderSettings
+
+    @classmethod
+    def library_settings_class(cls) -> type[BasicAuthProviderLibrarySettings]:
+        return BasicAuthProviderLibrarySettings
 
     @classmethod
     def label(cls) -> str:

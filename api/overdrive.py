@@ -30,14 +30,15 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.circulation_exceptions import CannotFulfill
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration, Configuration
+from core.connection_config import ConnectionSetting
 from core.coverage import BibliographicCoverageProvider
-from core.importers import BaseImporterSettings
 from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
@@ -130,7 +131,7 @@ class OverdriveConstants:
     ILS_NAME_DEFAULT = "default"
 
 
-class OverdriveSettings(BaseImporterSettings):
+class OverdriveSettings(ConnectionSetting):
     """The basic Overdrive configuration"""
 
     external_account_id: Optional[str] = FormField(
@@ -203,17 +204,12 @@ class OverdriveChildSettings(BaseSettings):
 
 
 class OverdriveAPI(
-    BaseCirculationAPI,
+    PatronActivityCirculationAPI,
     CirculationInternalFormatsMixin,
     HasCollectionSelfTests,
     HasChildIntegrationConfiguration,
     OverdriveConstants,
 ):
-    NAME = ExternalIntegration.OVERDRIVE
-    DESCRIPTION = _(
-        "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
-    )
-
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
 
     # Create a lookup table between common DeliveryMechanism identifiers
@@ -355,11 +351,13 @@ class OverdriveAPI(
     def child_settings_class(cls):
         return OverdriveChildSettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls):
+        return ExternalIntegration.OVERDRIVE
 
-    def description(self):
-        return self.DESCRIPTION
+    @classmethod
+    def description(cls):
+        return "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)

@@ -118,12 +118,6 @@ def test_key_rename(
             "overdrive_client_secret",
             integration_id,
         )
-        create_config_setting(
-            connection, "prioritized_drm_schemes", '["P1", "P2"]', integration_id
-        )
-        create_config_setting(
-            connection, "IGNORED_IDENTIFIER_TYPE", '["Overdrive ID"]', integration_id
-        )
         create_collection(
             connection, "Test Overdrive", integration_id, "ExternalAccountID"
         )
@@ -145,6 +139,4 @@ def test_key_rename(
             "overdrive_client_key": "overdrive_client_key",
             "overdrive_client_secret": "overdrive_client_secret",
             "external_account_id": "ExternalAccountID",
-            "ignored_identifier_types": ["Overdrive ID"],
-            "prioritized_drm_schemes": ["P1", "P2"],
         }

@@ -10,7 +10,7 @@ from api.admin.controller.integration_settings import (
 )
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
-from api.authentication.base import AuthenticationProvider
+from api.authentication.base import AuthenticationProviderType
 from api.authentication.basic import BasicAuthenticationProvider
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
@@ -25,10 +25,10 @@ from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class PatronAuthServicesController(
-    IntegrationSettingsController[AuthenticationProvider],
+    IntegrationSettingsController[AuthenticationProviderType],
     AdminPermissionsControllerMixin,
 ):
-    def default_registry(self) -> IntegrationRegistry[AuthenticationProvider]:
+    def default_registry(self) -> IntegrationRegistry[AuthenticationProviderType]:
         return PatronAuthRegistry()
 
     @property

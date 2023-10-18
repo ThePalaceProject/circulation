@@ -11,7 +11,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
-    Generic,
     Iterable,
     List,
     Literal,
@@ -27,9 +26,7 @@ from pydantic import PositiveInt
 from sqlalchemy.orm import Query
 
 from api.circulation_exceptions import *
-from api.integration.registry.license_providers import (
-    CirculationLicenseProvidersRegistry,
-)
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.util.patron import PatronUtility
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
@@ -542,39 +539,6 @@ class BaseCirculationLoanSettings(BaseSettings):
     )
 
 
-SettingsType = TypeVar("SettingsType", bound=BaseSettings, covariant=True)
-LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
-
-
-class CirculationConfigurationMixin(
-    Generic[SettingsType, LibrarySettingsType], HasLibraryIntegrationConfiguration, ABC
-):
-    _db: Session
-    _integration_configuration_id: Optional[int]
-
-    def integration_configuration(self) -> IntegrationConfiguration:
-        config = get_one(
-            self._db, IntegrationConfiguration, id=self._integration_configuration_id
-        )
-        if config is None:
-            raise ValueError(
-                f"No Configuration available for {self.__class__.__name__} (id={self._integration_configuration_id})"
-            )
-        return config
-
-    # We have to ignore the return values due to a known bug in mypy
-    # https://github.com/python/mypy/issues/10003
-    def library_configuration(self, library_id: int) -> LibrarySettingsType | None:
-        libconfig = self.integration_configuration().for_library(library_id=library_id)
-        if libconfig:
-            config = self.library_settings_class()(**libconfig.settings_dict)
-            return config  # type: ignore[return-value]
-        return None
-
-    def configuration(self) -> SettingsType:
-        return self.settings_class()(**self.integration_configuration().settings_dict)  # type: ignore[return-value]
-
-
 class CirculationInternalFormatsMixin:
     """A mixin for CirculationAPIs that have internal formats."""
 
@@ -608,9 +572,12 @@ class CirculationInternalFormatsMixin:
         return internal_format
 
 
+SettingsType = TypeVar("SettingsType", bound=BaseSettings, covariant=True)
+LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
+
+
 class BaseCirculationAPI(
-    CirculationConfigurationMixin[SettingsType, LibrarySettingsType],
-    HasLibraryIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
     LoggerMixin,
     ABC,
 ):
@@ -655,6 +622,30 @@ class BaseCirculationAPI(
         else:
             library = library_or_patron
         return library.settings.default_notification_email_address
+
+    def integration_configuration(self) -> IntegrationConfiguration:
+        config = get_one(
+            self._db, IntegrationConfiguration, id=self._integration_configuration_id
+        )
+        if config is None:
+            raise ValueError(
+                f"No Configuration available for {self.__class__.__name__} (id={self._integration_configuration_id})"
+            )
+        return config
+
+    @property
+    def settings(self) -> SettingsType:
+        return self.settings_class()(**self.integration_configuration().settings_dict)
+
+    def library_settings(self, library: Library | int) -> LibrarySettingsType | None:
+        library_id = library.id if isinstance(library, Library) else library
+        if library_id is None:
+            return None
+        libconfig = self.integration_configuration().for_library(library_id=library_id)
+        if libconfig is None:
+            return None
+        config = self.library_settings_class()(**libconfig.settings_dict)
+        return config
 
     @abstractmethod
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
@@ -706,13 +697,6 @@ class BaseCirculationAPI(
         ...
 
     @abstractmethod
-    def patron_activity(
-        self, patron: Patron, pin: str
-    ) -> Iterable[LoanInfo | HoldInfo]:
-        """Return a patron's current checkouts and holds."""
-        ...
-
-    @abstractmethod
     def place_hold(
         self,
         patron: Patron,
@@ -739,6 +723,22 @@ class BaseCirculationAPI(
     @abstractmethod
     def update_availability(self, licensepool: LicensePool) -> None:
         """Update availability information for a book."""
+        ...
+
+
+class PatronActivityCirculationAPI(
+    BaseCirculationAPI[SettingsType, LibrarySettingsType], ABC
+):
+    """
+    A CirculationAPI that can return a patron's current checkouts and holds, that
+    were made outside the Palace platform.
+    """
+
+    @abstractmethod
+    def patron_activity(
+        self, patron: Patron, pin: str
+    ) -> Iterable[LoanInfo | HoldInfo]:
+        """Return a patron's current checkouts and holds."""
         ...
 
 
@@ -821,7 +821,7 @@ class CirculationAPI:
         self.library_id = library.id
         self.analytics = analytics
         self.initialization_exceptions = dict()
-        self.registry = registry or CirculationLicenseProvidersRegistry()
+        self.registry = registry or LicenseProvidersRegistry()
         fulfillment_post_processors_mapping = (
             fulfillment_post_processors_map
             or self.default_fulfillment_post_processors_map
@@ -855,7 +855,8 @@ class CirculationAPI:
                     self.initialization_exceptions[collection.id] = exception
                 if api:
                     self.api_for_collection[collection.id] = api
-                    self.collection_ids_for_sync.append(collection.id)
+                    if isinstance(api, PatronActivityCirculationAPI):
+                        self.collection_ids_for_sync.append(collection.id)
 
             if (
                 collection.protocol in fulfillment_post_processors_mapping
@@ -1049,15 +1050,6 @@ class CirculationAPI:
         now = utc_now()
         api = self.api_for_license_pool(licensepool)
 
-        if licensepool.open_access or (not api and licensepool.unlimited_access):
-            # We can 'loan' open-access content ourselves just by
-            # putting a row in the database.
-            __transaction = self._db.begin_nested()
-            loan, is_new = licensepool.loan_to(patron, start=now, end=None)
-            __transaction.commit()
-            self._collect_checkout_event(patron, licensepool)
-            return loan, None, is_new
-
         # Okay, it's not an open-access book. This means we need to go
         # to an external service to get the book.
 
@@ -1084,8 +1076,9 @@ class CirculationAPI:
 
         loan_info = None
         hold_info = None
-        if existing_loan:
-            # Sync with the API to see if the loan still exists.  If
+        if existing_loan and isinstance(api, PatronActivityCirculationAPI):
+            # If we are able to sync patrons loans and holds from the
+            # remote API, we do that to see if the loan still exists. If
             # it does, we still want to perform a 'checkout' operation
             # on the API, because that's how loans are renewed, but
             # certain error conditions (like NoAvailableCopies) mean
@@ -1311,6 +1304,12 @@ class CirculationAPI:
         :raises PatronHoldLimitReached: If `pool` is currently
             unavailable and the patron is at their hold limit.
         """
+        if pool.open_access or pool.unlimited_access:
+            # Open-access books and books with unlimited access
+            # are able to be checked out even if the patron is
+            # at their loan limit.
+            return
+
         at_loan_limit = self.patron_at_loan_limit(patron)
         at_hold_limit = self.patron_at_hold_limit(patron)
 
@@ -1429,10 +1428,14 @@ class CirculationAPI:
             license_pool=licensepool,
             on_multiple="interchangeable",
         )
+        api = self.api_for_license_pool(licensepool)
+        if not api:
+            raise CannotFulfill()
+
         if not loan and not self.can_fulfill_without_loan(
             patron, licensepool, delivery_mechanism
         ):
-            if sync_on_failure:
+            if sync_on_failure and isinstance(api, PatronActivityCirculationAPI):
                 # Sync and try again.
                 # TODO: Pass in only the single collection or LicensePool
                 # that needs to be synced.
@@ -1459,37 +1462,18 @@ class CirculationAPI:
                 )
             )
 
-        api = self.api_for_license_pool(licensepool)
+        fulfillment = api.fulfill(
+            patron,
+            pin,
+            licensepool,
+            delivery_mechanism=delivery_mechanism,
+        )
+        if not fulfillment or not (fulfillment.content_link or fulfillment.content):
+            raise NoAcceptableFormat()
 
-        if licensepool.open_access or (not api and licensepool.unlimited_access):
-            # We ignore the vendor-specific arguments when doing
-            # open-access fulfillment, because we just don't support
-            # partial fulfillment of open-access content.
-            fulfillment = self.fulfill_open_access(
-                licensepool,
-                delivery_mechanism.delivery_mechanism,
-            )
-
-            fulfillment = self._post_process_fulfillment(
-                patron, pin, licensepool, delivery_mechanism, fulfillment
-            )
-
-        else:
-            if not api:
-                raise CannotFulfill()
-
-            fulfillment = api.fulfill(
-                patron,
-                pin,
-                licensepool,
-                delivery_mechanism=delivery_mechanism,
-            )
-            if not fulfillment or not (fulfillment.content_link or fulfillment.content):
-                raise NoAcceptableFormat()
-
-            fulfillment = self._post_process_fulfillment(
-                patron, pin, licensepool, delivery_mechanism, fulfillment
-            )
+        fulfillment = self._post_process_fulfillment(
+            patron, pin, licensepool, delivery_mechanism, fulfillment
+        )
 
         # Send out an analytics event to record the fact that
         # a fulfillment was initiated through the circulation
@@ -1511,58 +1495,6 @@ class CirculationAPI:
 
         return fulfillment
 
-    def fulfill_open_access(
-        self, licensepool: LicensePool, delivery_mechanism: DeliveryMechanism
-    ) -> FulfillmentInfo:
-        """Fulfill an open-access LicensePool through the requested
-        DeliveryMechanism.
-
-        :param licensepool: The title to be fulfilled.
-        :param delivery_mechanism: A DeliveryMechanism.
-        """
-        if isinstance(delivery_mechanism, LicensePoolDeliveryMechanism):
-            self.log.warning(
-                "LicensePoolDeliveryMechanism passed into fulfill_open_access, should be DeliveryMechanism."
-            )
-            delivery_mechanism = delivery_mechanism.delivery_mechanism
-        fulfillment = None
-        for lpdm in licensepool.delivery_mechanisms:
-            if not (
-                lpdm.resource
-                and lpdm.resource.representation
-                and lpdm.resource.representation.url
-            ):
-                # This LicensePoolDeliveryMechanism can't actually
-                # be used for fulfillment.
-                continue
-            if lpdm.delivery_mechanism == delivery_mechanism:
-                # We found it! This is how the patron wants
-                # the book to be delivered.
-                fulfillment = lpdm
-                break
-
-        if not fulfillment:
-            # There is just no way to fulfill this loan the way the
-            # patron wants.
-            raise FormatNotAvailable()
-
-        rep = fulfillment.resource.representation
-        if rep:
-            content_link = rep.public_url
-        else:
-            content_link = fulfillment.resource.url
-        media_type = rep.media_type
-        return FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            identifier_type=licensepool.identifier.type,
-            identifier=licensepool.identifier.identifier,
-            content_link=content_link,
-            content_type=media_type,
-            content=None,
-            content_expires=None,
-        )
-
     def revoke_loan(
         self, patron: Patron, pin: str, licensepool: LicensePool
     ) -> Literal[True]:
@@ -1576,13 +1508,17 @@ class CirculationAPI:
         )
         if loan is not None:
             api = self.api_for_license_pool(licensepool)
-            if not (api is None or licensepool.open_access):
-                try:
-                    api.checkin(patron, pin, licensepool)
-                except NotCheckedOut as e:
-                    # The book wasn't checked out in the first
-                    # place. Everything's fine.
-                    pass
+            if api is None:
+                self.log.error(
+                    f"Patron: {patron!r} tried to revoke loan for licensepool: {licensepool!r} but no api was found."
+                )
+                raise CannotReturn("No API available.")
+            try:
+                api.checkin(patron, pin, licensepool)
+            except NotCheckedOut as e:
+                # The book wasn't checked out in the first
+                # place. Everything's fine.
+                pass
 
             __transaction = self._db.begin_nested()
             logging.info(f"In revoke_loan(), deleting loan #{loan.id}")
@@ -1610,16 +1546,15 @@ class CirculationAPI:
             license_pool=licensepool,
             on_multiple="interchangeable",
         )
-        if not licensepool.open_access:
-            api = self.api_for_license_pool(licensepool)
-            if api is None:
-                raise TypeError(f"No api for licensepool: {licensepool}")
-            try:
-                api.release_hold(patron, pin, licensepool)
-            except NotOnHold as e:
-                # The book wasn't on hold in the first place. Everything's
-                # fine.
-                pass
+        api = self.api_for_license_pool(licensepool)
+        if api is None:
+            raise TypeError(f"No api for licensepool: {licensepool}")
+        try:
+            api.release_hold(patron, pin, licensepool)
+        except NotOnHold:
+            # The book wasn't on hold in the first place. Everything's
+            # fine.
+            pass
         # Any other CannotReleaseHold exception will be propagated
         # upwards at this point
         if hold:
@@ -1655,7 +1590,7 @@ class CirculationAPI:
         class PatronActivityThread(Thread):
             def __init__(
                 self,
-                api: BaseCirculationAPI[BaseSettings, BaseSettings],
+                api: PatronActivityCirculationAPI[BaseSettings, BaseSettings],
                 patron: Patron,
                 pin: str,
             ) -> None:
@@ -1692,8 +1627,9 @@ class CirculationAPI:
         threads = []
         before = time.time()
         for api in list(self.api_for_collection.values()):
-            thread = PatronActivityThread(api, patron, pin)
-            threads.append(thread)
+            if isinstance(api, PatronActivityCirculationAPI):
+                thread = PatronActivityThread(api, patron, pin)
+                threads.append(thread)
         for thread in threads:
             thread.start()
         for thread in threads:

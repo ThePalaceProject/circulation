@@ -29,10 +29,10 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
             ),
         )
         integration = collection.create_external_integration(
-            protocol=OPDSForDistributorsAPI.NAME
+            protocol=OPDSForDistributorsAPI.label()
         )
         config = collection.create_integration_configuration(
-            OPDSForDistributorsAPI.NAME
+            OPDSForDistributorsAPI.label()
         )
         config.settings_dict = dict(
             username="a", password="b", data_source="data_source"

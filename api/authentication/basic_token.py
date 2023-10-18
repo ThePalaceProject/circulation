@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, cast
+from typing import TYPE_CHECKING, Generator, Type, cast
 
 from flask import url_for
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from api.authentication.access_token import AccessTokenProvider
-from api.authentication.base import AuthenticationProvider
+from api.authentication.base import (
+    AuthenticationProvider,
+    AuthProviderLibrarySettings,
+    AuthProviderSettings,
+)
 from api.authentication.basic import BasicAuthenticationProvider
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
+from core.integration.base import LibrarySettingsType, SettingsType
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
 from core.util.problem_detail import ProblemDetail, ProblemError
@@ -18,10 +23,20 @@ if TYPE_CHECKING:
     from core.model import Library
 
 
-class BasicTokenAuthenticationProvider(AuthenticationProvider):
+class BasicTokenAuthenticationProvider(
+    AuthenticationProvider[AuthProviderSettings, AuthProviderLibrarySettings]
+):
     """Patron Authentication based on a CM generated Access Token
     It is a companion to the basic authentication, and has no meaning without it.
     """
+
+    @classmethod
+    def library_settings_class(cls) -> Type[LibrarySettingsType]:
+        raise NotImplementedError()
+
+    @classmethod
+    def settings_class(cls) -> Type[SettingsType]:
+        raise NotImplementedError()
 
     FLOW_TYPE = "http://thepalaceproject.org/authtype/basic-token"
 

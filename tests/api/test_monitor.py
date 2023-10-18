@@ -21,7 +21,7 @@ class TestLoanlikeReaperMonitor:
         will be exempt from the reaper.
         """
         for i in (
-            ODLAPI.NAME,
+            ODLAPI.label(),
             ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
         ):
             assert i in LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS

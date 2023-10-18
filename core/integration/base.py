@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from typing import Any, Generic, Type, TypeVar
 
 from sqlalchemy.orm import Session
 
 from core.integration.settings import BaseSettings
 
+SettingsType = TypeVar("SettingsType", bound=BaseSettings, covariant=True)
+LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
 
-class HasIntegrationConfiguration(ABC):
+
+class HasIntegrationConfiguration(Generic[SettingsType], ABC):
     @classmethod
     @abstractmethod
     def label(cls) -> str:
@@ -23,7 +26,7 @@ class HasIntegrationConfiguration(ABC):
 
     @classmethod
     @abstractmethod
-    def settings_class(cls) -> Type[BaseSettings]:
+    def settings_class(cls) -> Type[SettingsType]:
         """Get the settings for this integration"""
         ...
 
@@ -37,15 +40,19 @@ class HasIntegrationConfiguration(ABC):
         return {}
 
 
-class HasLibraryIntegrationConfiguration(HasIntegrationConfiguration, ABC):
+class HasLibraryIntegrationConfiguration(
+    Generic[SettingsType, LibrarySettingsType],
+    HasIntegrationConfiguration[SettingsType],
+    ABC,
+):
     @classmethod
     @abstractmethod
-    def library_settings_class(cls) -> Type[BaseSettings]:
+    def library_settings_class(cls) -> Type[LibrarySettingsType]:
         """Get the library settings for this integration"""
         ...
 
 
-class HasChildIntegrationConfiguration(HasIntegrationConfiguration, ABC):
+class HasChildIntegrationConfiguration(HasIntegrationConfiguration[SettingsType], ABC):
     @classmethod
     @abstractmethod
     def child_settings_class(cls) -> Type[BaseSettings]:

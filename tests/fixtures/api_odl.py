@@ -9,7 +9,7 @@ import pytest
 from jinja2 import Template
 
 from api.odl import BaseODLImporter, ODLImporter
-from api.odl2 import ODL2Importer
+from api.odl2 import ODL2API, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import Edition, LicensePool, Work
 from tests.fixtures.files import APIFilesFixture
@@ -150,7 +150,7 @@ def odl2_importer(
     library = odl_test_fixture.library()
     return ODL2Importer(
         db.session,
-        collection=odl_test_fixture.collection(library),
+        collection=odl_test_fixture.collection(library, ODL2API),
         http_get=odl_mock_get.get,
     )
 

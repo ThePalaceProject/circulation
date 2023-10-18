@@ -17,7 +17,7 @@ from core.util.datetime_helpers import utc_now
 
 class LoanlikeReaperMonitor(ReaperMonitor):
     SOURCE_OF_TRUTH_PROTOCOLS = [
-        ODLAPI.NAME,
+        ODLAPI.label(),
         ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
     ]
 

@@ -90,7 +90,11 @@ class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
     )
 
 
-class SirsiDynixHorizonAuthenticationProvider(BasicAuthenticationProvider):
+class SirsiDynixHorizonAuthenticationProvider(
+    BasicAuthenticationProvider[
+        SirsiDynixHorizonAuthSettings, SirsiDynixHorizonAuthLibrarySettings
+    ]
+):
     """SirsiDynix Authentication API implementation.
 
     Currently, is only used to authenticate patrons, there is no CRUD implemented for patron profiles.

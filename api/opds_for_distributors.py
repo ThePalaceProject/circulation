@@ -7,14 +7,13 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Set, Tup
 import feedparser
 from flask_babel import lazy_gettext as _
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
+from api.circulation import FulfillmentInfo, LoanInfo, PatronActivityCirculationAPI
 from api.circulation_exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
     LibraryAuthorizationFailedException,
 )
 from api.selftest import HasCollectionSelfTests
-from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import FormatData, TimestampData
 from core.model import (
@@ -30,7 +29,7 @@ from core.model import (
     Session,
     get_one,
 )
-from core.opds_import import BaseOPDSImporterSettings, OPDSImporter, OPDSImportMonitor
+from core.opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
@@ -45,7 +44,7 @@ if TYPE_CHECKING:
     from core.selftest import SelfTestResult
 
 
-class OPDSForDistributorsSettings(BaseOPDSImporterSettings):
+class OPDSForDistributorsSettings(OPDSImporterSettings):
     username: str = FormField(
         form=ConfigurationFormItem(
             label=_("Library's username or access key"),
@@ -66,14 +65,11 @@ class OPDSForDistributorsLibrarySettings(BaseSettings):
 
 
 class OPDSForDistributorsAPI(
-    BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
+    PatronActivityCirculationAPI[
+        OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings
+    ],
     HasCollectionSelfTests,
-    HasLibraryIntegrationConfiguration,
 ):
-    NAME = "OPDS for Distributors"
-    DESCRIPTION = _(
-        "Import books from a distributor that requires authentication to get the OPDS feed and download books."
-    )
     BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
 
     # In OPDS For Distributors, all items are gated through the
@@ -98,20 +94,20 @@ class OPDSForDistributorsAPI(
 
     @classmethod
     def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
+        return "Import books from a distributor that requires authentication to get the OPDS feed and download books."
 
     @classmethod
     def label(cls) -> str:
-        return cls.NAME
+        return "OPDS for Distributors"
 
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)
         self.external_integration_id = collection.external_integration.id
 
-        config = self.configuration()
-        self.data_source_name = config.data_source
-        self.username = config.username
-        self.password = config.password
+        settings = self.settings
+        self.data_source_name = settings.data_source
+        self.username = settings.username
+        self.password = settings.password
         self.feed_url = collection.external_account_id
         self.auth_url: Optional[str] = None
 
@@ -391,10 +387,10 @@ class OPDSForDistributorsAPI(
 
 
 class OPDSForDistributorsImporter(OPDSImporter):
-    NAME = OPDSForDistributorsAPI.NAME
+    NAME = OPDSForDistributorsAPI.label()
 
     @classmethod
-    def settings_class(cls) -> Type[OPDSForDistributorsSettings]:  # type: ignore[override]
+    def settings_class(cls) -> Type[OPDSForDistributorsSettings]:
         return OPDSForDistributorsSettings
 
     def update_work_for_edition(

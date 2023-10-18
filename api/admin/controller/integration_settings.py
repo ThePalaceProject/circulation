@@ -30,7 +30,7 @@ from core.util.cache import memoize
 from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemError
 
-T = TypeVar("T", bound=HasIntegrationConfiguration)
+T = TypeVar("T", bound=HasIntegrationConfiguration[BaseSettings])
 
 
 class UpdatedLibrarySettingsTuple(NamedTuple):

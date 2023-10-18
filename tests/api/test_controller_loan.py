@@ -179,6 +179,22 @@ class TestLoanController:
             assert (hold, other_pool) == result
 
     def test_borrow_success(self, loan_fixture: LoanFixture):
+        # Create a loanable LicensePool.
+        work = loan_fixture.db.work(
+            with_license_pool=True, with_open_access_download=False
+        )
+        pool = work.license_pools[0]
+        loan_fixture.manager.d_circulation.queue_checkout(
+            pool,
+            LoanInfo(
+                pool.collection,
+                pool.data_source.name,
+                pool.identifier.type,
+                pool.identifier.identifier,
+                utc_now(),
+                utc_now() + datetime.timedelta(seconds=3600),
+            ),
+        )
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
@@ -233,6 +249,20 @@ class TestLoanController:
             assert loan_fixture.mech1.resource.representation.url is not None
 
             # Now let's try to fulfill the loan using the first delivery mechanism.
+            fulfillment = FulfillmentInfo(
+                loan_fixture.pool.collection,
+                loan_fixture.pool.data_source,
+                loan_fixture.pool.identifier.type,
+                loan_fixture.pool.identifier.identifier,
+                content_link=fulfillable_mechanism.resource.representation.public_url,
+                content_type=fulfillable_mechanism.resource.representation.media_type,
+                content=None,
+                content_expires=None,
+            )
+            loan_fixture.manager.d_circulation.queue_fulfill(
+                loan_fixture.pool, fulfillment
+            )
+
             assert isinstance(loan_fixture.pool.id, int)
             response = loan_fixture.manager.loans.fulfill(
                 loan_fixture.pool.id,

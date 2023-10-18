@@ -44,6 +44,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
@@ -158,16 +159,13 @@ class Axis360LibrarySettings(BaseCirculationLoanSettings):
 
 
 class Axis360API(
-    BaseCirculationAPI[Axis360Settings, Axis360LibrarySettings],
+    PatronActivityCirculationAPI[Axis360Settings, Axis360LibrarySettings],
     HasCollectionSelfTests,
     CirculationInternalFormatsMixin,
     Axis360APIConstants,
 ):
-    NAME = ExternalIntegration.AXIS_360
-
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.BORROW_STEP
 
-    SERVICE_NAME = "Axis 360"
     DATE_FORMAT = "%m-%d-%Y %H:%M:%S"
 
     access_token_endpoint = "accesstoken"
@@ -207,7 +205,7 @@ class Axis360API(
 
     @classmethod
     def label(cls) -> str:
-        return cls.NAME
+        return ExternalIntegration.AXIS_360
 
     @classmethod
     def description(cls) -> str:
@@ -222,12 +220,12 @@ class Axis360API(
 
         super().__init__(_db, collection)
         self.library_id = collection.external_account_id or ""
-        config = self.configuration()
-        self.username = config.username
-        self.password = config.password
+        settings = self.settings
+        self.username = settings.username
+        self.password = settings.password
 
         # Convert the nickname for a server into an actual URL.
-        base_url = config.url or self.PRODUCTION_BASE_URL
+        base_url = settings.url or self.PRODUCTION_BASE_URL
         if base_url in self.SERVER_NICKNAMES:
             base_url = self.SERVER_NICKNAMES[base_url]
         if not base_url.endswith("/"):
@@ -239,7 +237,9 @@ class Axis360API(
 
         self.token: Optional[str] = None
         self.verify_certificate: bool = (
-            config.verify_certificate if config.verify_certificate is not None else True
+            settings.verify_certificate
+            if settings.verify_certificate is not None
+            else True
         )
 
     @property
@@ -403,7 +403,7 @@ class Axis360API(
                 response.content
             )
         except etree.XMLSyntaxError as e:
-            raise RemoteInitiatedServerError(response.content, self.SERVICE_NAME)
+            raise RemoteInitiatedServerError(response.content, self.label())
 
     def _checkin(
         self, title_id: Optional[str], patron_id: Optional[str]
@@ -447,7 +447,7 @@ class Axis360API(
                 raise CannotLoan()
             return loan_info
         except etree.XMLSyntaxError as e:
-            raise RemoteInitiatedServerError(response.content, self.SERVICE_NAME)
+            raise RemoteInitiatedServerError(response.content, self.label())
 
     def _checkout(
         self, title_id: Optional[str], patron_id: Optional[str], internal_format: str

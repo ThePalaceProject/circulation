@@ -25,7 +25,9 @@ class KansasAuthSettings(BasicAuthProviderSettings):
     )
 
 
-class KansasAuthenticationAPI(BasicAuthenticationProvider):
+class KansasAuthenticationAPI(
+    BasicAuthenticationProvider[KansasAuthSettings, BasicAuthProviderLibrarySettings]
+):
     @classmethod
     def label(cls) -> str:
         return "Kansas"
@@ -37,6 +39,10 @@ class KansasAuthenticationAPI(BasicAuthenticationProvider):
     @classmethod
     def settings_class(cls) -> Type[KansasAuthSettings]:
         return KansasAuthSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[BasicAuthProviderLibrarySettings]:
+        return BasicAuthProviderLibrarySettings
 
     def __init__(
         self,

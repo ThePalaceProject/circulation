@@ -29,9 +29,6 @@ class TestSettingsController:
         """Test the _get_integration_protocols helper method."""
 
         class Protocol(HasChildIntegrationConfiguration):
-            __module__ = "my name"
-            NAME = "my label"
-            DESCRIPTION = "my description"
             SITEWIDE = True
             LIBRARY_SETTINGS = [6]
             CARDINALITY = 1
@@ -47,6 +44,14 @@ class TestSettingsController:
             def settings_class(cls):
                 return BaseSettings
 
+            @classmethod
+            def label(cls):
+                return "my label"
+
+            @classmethod
+            def description(cls):
+                return "my description"
+
         [result] = SettingsController(
             admin_ctrl_fixture.manager
         )._get_integration_protocols([Protocol])
@@ -58,20 +63,9 @@ class TestSettingsController:
             child_settings=[{"label": "key", "key": "key", "required": True}],
             label="my label",
             cardinality=1,
-            name="my name",
+            name="my label",
         )
         assert expect == result
-
-        # Remove the CARDINALITY setting
-        del Protocol.CARDINALITY
-
-        # And look in a different place for the name.
-        [result] = SettingsController(
-            admin_ctrl_fixture.manager
-        )._get_integration_protocols([Protocol], protocol_name_attr="NAME")
-
-        assert "my label" == result["name"]
-        assert "cardinality" not in result
 
     def test_get_integration_info(
         self, settings_ctrl_fixture: SettingsControllerFixture
@@ -275,7 +269,9 @@ class TestSettingsController:
             key: str
             value: str
 
-        class Protocol1(HasLibraryIntegrationConfiguration):
+        class Protocol1(
+            HasLibraryIntegrationConfiguration[BaseSettings, P1LibrarySettings]
+        ):
             @classmethod
             def library_settings_class(cls):
                 return P1LibrarySettings

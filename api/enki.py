@@ -11,7 +11,13 @@ from pydantic import HttpUrl
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import (
+    BaseCirculationAPI,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+    PatronActivityCirculationAPI,
+)
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
@@ -87,7 +93,7 @@ class EnkiLibrarySettings(BaseSettings):
 
 
 class EnkiAPI(
-    BaseCirculationAPI[EnkiSettings, EnkiLibrarySettings],
+    PatronActivityCirculationAPI[EnkiSettings, EnkiLibrarySettings],
     HasCollectionSelfTests,
     EnkiConstants,
 ):
@@ -138,16 +144,16 @@ class EnkiAPI(
         super().__init__(_db, collection)
 
         self.collection_id = collection.id
-        self.base_url = self.configuration().url or self.PRODUCTION_BASE_URL
+        self.base_url = self.settings.url or self.PRODUCTION_BASE_URL
 
     def enki_library_id(self, library: Library) -> Optional[str]:
         """Find the Enki library ID for the given library."""
         if library.id is None:
             return None
-        config = self.library_configuration(library.id)
-        if config is None:
+        settings = self.library_settings(library.id)
+        if settings is None:
             return None
-        return config.enki_library_id
+        return settings.enki_library_id
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         now = utc_now()

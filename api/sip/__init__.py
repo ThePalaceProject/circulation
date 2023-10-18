@@ -189,7 +189,9 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
     )
 
 
-class SIP2AuthenticationProvider(BasicAuthenticationProvider):
+class SIP2AuthenticationProvider(
+    BasicAuthenticationProvider[SIP2Settings, SIP2LibrarySettings]
+):
     DATE_FORMATS = ["%Y%m%d", "%Y%m%d%Z%H%M%S", "%Y%m%d    %H%M%S"]
 
     # Map the reasons why SIP2 might report a patron is blocked to the

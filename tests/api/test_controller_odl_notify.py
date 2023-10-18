@@ -61,7 +61,7 @@ class ODLFixture:
 
     @staticmethod
     def integration_protocol():
-        return ODLAPI.NAME
+        return ODLAPI.label()
 
 
 @pytest.fixture(scope="function")
@@ -76,8 +76,8 @@ class TestODLNotificationController:
     @pytest.mark.parametrize(
         "protocol",
         [
-            pytest.param(ODLAPI.NAME, id="ODL 1.x collection"),
-            pytest.param(ODL2API.NAME, id="ODL 2.x collection"),
+            pytest.param(ODLAPI.label(), id="ODL 1.x collection"),
+            pytest.param(ODL2API.label(), id="ODL 2.x collection"),
         ],
     )
     def test_notify_success(

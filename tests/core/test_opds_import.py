@@ -2,14 +2,15 @@ import random
 from functools import partial
 from io import StringIO
 from typing import Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 import requests_mock
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from api.circulation import CirculationAPI
+from api.circulation import CirculationAPI, FulfillmentInfo, LoanInfo
+from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
 from api.saml.credential import SAMLCredentialManager
 from api.saml.metadata.model import (
     SAMLAttributeStatement,
@@ -30,15 +31,18 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
     MediaTypes,
     Representation,
+    Resource,
     RightsStatus,
     Subject,
     Work,
     WorkCoverageRecord,
 )
-from core.opds_import import OPDSImporter, OPDSImportMonitor, OPDSXMLParser
+from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor, OPDSXMLParser
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
 from core.util.http import BadResponseException
@@ -2293,3 +2297,178 @@ class TestOPDSImportMonitor:
                     status_forcelist=[429, 500, 502, 503, 504],
                     backoff_factor=1.0,
                 )
+
+
+class OPDSAPIFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        self.session = db.session
+        self.collection = db.collection(protocol=OPDSAPI.label())
+        self.api = OPDSAPI(self.session, self.collection)
+
+        self.mock_patron = MagicMock()
+        self.mock_pin = MagicMock(spec=str)
+        self.mock_licensepool = MagicMock(spec=LicensePool)
+        self.mock_licensepool.collection = self.collection
+
+
+@pytest.fixture
+def opds_api_fixture(db: DatabaseTransactionFixture) -> OPDSAPIFixture:
+    return OPDSAPIFixture(db)
+
+
+class TestOPDSAPI:
+    def test_checkin(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # Make sure we can call checkin() without getting an exception.
+        # The function is a no-op for this api, so we don't need to
+        # test anything else.
+        opds_api_fixture.api.checkin(
+            opds_api_fixture.mock_patron,
+            opds_api_fixture.mock_pin,
+            opds_api_fixture.mock_licensepool,
+        )
+
+    def test_release_hold(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # This api doesn't support holds. So we expect an exception.
+        with pytest.raises(NotOnHold):
+            opds_api_fixture.api.release_hold(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+            )
+
+    def test_place_hold(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # This api doesn't support holds. So we expect an exception.
+        with pytest.raises(CurrentlyAvailable):
+            opds_api_fixture.api.place_hold(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+                None,
+            )
+
+    def test_update_availability(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # This function is a no-op since we already know the availability
+        # of the license pool for any OPDS content. So we just make sure
+        # we can call it without getting an exception.
+        opds_api_fixture.api.update_availability(opds_api_fixture.mock_licensepool)
+
+    def test_checkout(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # Make sure checkout returns a LoanInfo object with the correct
+        # collection id.
+        mock_collection_property = PropertyMock(
+            return_value=opds_api_fixture.collection
+        )
+        type(opds_api_fixture.mock_licensepool).collection = mock_collection_property
+        delivery_mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
+        loan = opds_api_fixture.api.checkout(
+            opds_api_fixture.mock_patron,
+            opds_api_fixture.mock_pin,
+            opds_api_fixture.mock_licensepool,
+            delivery_mechanism,
+        )
+        assert isinstance(loan, LoanInfo)
+        assert mock_collection_property.call_count == 1
+        assert loan.collection_id == opds_api_fixture.collection.id
+
+    def test_can_fulfill_without_loan(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # This should always return True.
+        mock_lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
+        assert (
+            opds_api_fixture.api.can_fulfill_without_loan(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_licensepool,
+                mock_lpdm,
+            )
+            is True
+        )
+
+    def test_fulfill(self, opds_api_fixture: OPDSAPIFixture) -> None:
+        # We only fulfill if the requested format matches an available format
+        # for the license pool.
+        mock_mechanism = MagicMock(spec=DeliveryMechanism)
+        mock_lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
+        mock_lpdm.delivery_mechanism = mock_mechanism
+
+        # This license pool has no available formats.
+        opds_api_fixture.mock_licensepool.delivery_mechanisms = []
+        with pytest.raises(FormatNotAvailable):
+            opds_api_fixture.api.fulfill(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+                mock_lpdm,
+            )
+
+        # This license pool has a delivery mechanism, but it's not the one
+        # we're looking for.
+        opds_api_fixture.mock_licensepool.delivery_mechanisms = [
+            MagicMock(),
+            MagicMock(),
+        ]
+        with pytest.raises(FormatNotAvailable):
+            opds_api_fixture.api.fulfill(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+                mock_lpdm,
+            )
+
+        # This license pool has the delivery mechanism we're looking for, but
+        # it does not have a resource.
+        mock_lpdm.resource = None
+        opds_api_fixture.mock_licensepool.delivery_mechanisms = [mock_lpdm]
+        with pytest.raises(FormatNotAvailable):
+            opds_api_fixture.api.fulfill(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+                mock_lpdm,
+            )
+
+        # This license pool has the delivery mechanism we're looking for, and
+        # it has a resource, but the resource doesn't have a representation.
+        mock_lpdm.resource = MagicMock(spec=Resource)
+        mock_lpdm.resource.representation = None
+        opds_api_fixture.mock_licensepool.delivery_mechanisms = [mock_lpdm]
+        with pytest.raises(FormatNotAvailable):
+            opds_api_fixture.api.fulfill(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+                mock_lpdm,
+            )
+
+        # This license pool has the delivery mechanism we're looking for, and
+        # it has a resource, the resource has a representation, but the
+        # representation doesn't have a URL.
+        mock_lpdm.resource.representation = MagicMock(spec=Representation)
+        mock_lpdm.resource.representation.public_url = None
+        opds_api_fixture.mock_licensepool.delivery_mechanisms = [mock_lpdm]
+        with pytest.raises(FormatNotAvailable):
+            opds_api_fixture.api.fulfill(
+                opds_api_fixture.mock_patron,
+                opds_api_fixture.mock_pin,
+                opds_api_fixture.mock_licensepool,
+                mock_lpdm,
+            )
+
+        # This license pool has everything we need, so we can fulfill.
+        mock_lpdm.resource.representation.public_url = "http://foo.com/bar.epub"
+        opds_api_fixture.mock_licensepool.delivery_mechanisms = [
+            MagicMock(),
+            MagicMock(),
+            mock_lpdm,
+        ]
+        fulfillment = opds_api_fixture.api.fulfill(
+            opds_api_fixture.mock_patron,
+            opds_api_fixture.mock_pin,
+            opds_api_fixture.mock_licensepool,
+            mock_lpdm,
+        )
+        assert isinstance(fulfillment, FulfillmentInfo)
+        assert fulfillment.content_link == mock_lpdm.resource.representation.public_url
+        assert fulfillment.content_type == mock_lpdm.resource.representation.media_type
+        assert fulfillment.content is None
+        assert fulfillment.content_expires is None
+        assert fulfillment.collection_id == opds_api_fixture.collection.id

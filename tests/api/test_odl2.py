@@ -90,7 +90,7 @@ class TestODL2Importer:
         feed = api_odl2_files_fixture.sample_text("feed.json")
 
         config = odl2_importer.collection.integration_configuration
-        odl2_importer.set_ignored_identifier_types([IdentifierConstants.URI], config)
+        odl2_importer.ignored_identifier_types = [IdentifierConstants.URI]
         DatabaseTransactionFixture.set_settings(
             config, odl2_skipped_license_formats=["text/html"]
         )

@@ -25,6 +25,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityCirculationAPI,
 )
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
@@ -118,10 +119,9 @@ class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
 
 
 class BibliothecaAPI(
-    BaseCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
+    PatronActivityCirculationAPI[BibliothecaSettings, BibliothecaLibrarySettings],
     HasCollectionSelfTests,
 ):
-    NAME = ExternalIntegration.BIBLIOTHECA
     AUTH_TIME_FORMAT = "%a, %d %b %Y %H:%M:%S GMT"
     ARGUMENT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
     AUTHORIZATION_FORMAT = "3MCLAUTH %s:%s"
@@ -147,10 +147,12 @@ class BibliothecaAPI(
     def library_settings_class(cls):
         return BibliothecaLibrarySettings
 
-    def label(self):
-        return self.NAME
+    @classmethod
+    def label(cls):
+        return ExternalIntegration.BIBLIOTHECA
 
-    def description(self):
+    @classmethod
+    def description(cls):
         return ""
 
     def __init__(self, _db, collection):
@@ -163,10 +165,10 @@ class BibliothecaAPI(
         super().__init__(_db, collection)
 
         self._db = _db
-        config = self.configuration()
+        settings = self.settings
         self.version = self.DEFAULT_VERSION
-        self.account_id = config.username
-        self.account_key = config.password
+        self.account_id = settings.username
+        self.account_key = settings.password
         self.library_id = collection.external_account_id
         self.base_url = self.DEFAULT_BASE_URL
 

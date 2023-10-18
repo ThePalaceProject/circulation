@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Dict,
     Generator,
+    Generic,
     Iterable,
     List,
     Literal,
@@ -19,6 +20,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     overload,
 )
 from urllib.parse import urljoin, urlparse
@@ -32,12 +34,13 @@ from lxml import etree
 from pydantic import HttpUrl
 from sqlalchemy.orm.session import Session
 
-from api.circulation import CirculationConfigurationMixin
+from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
 from api.selftest import HasCollectionSelfTests
 from core.classifier import Classifier
 from core.config import IntegrationException
+from core.connection_config import ConnectionSetting
 from core.coverage import CoverageFailure
-from core.importers import BaseImporterSettings
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -64,14 +67,18 @@ from core.model import (
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     Measurement,
+    Patron,
     Representation,
     RightsStatus,
     Subject,
     get_one,
 )
 from core.model.configuration import HasExternalIntegration
+from core.model.formats import FormatPrioritiesSettings
 from core.monitor import CollectionMonitor
+from core.saml.wayfless import SAMLWAYFlessSetttings
 from core.selftest import SelfTestResult
 from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
@@ -97,7 +104,11 @@ class OPDSXMLParser(XMLParser):
     }
 
 
-class BaseOPDSImporterSettings(BaseSettings):
+class OPDSImporterSettings(
+    ConnectionSetting,
+    SAMLWAYFlessSetttings,
+    FormatPrioritiesSettings,
+):
     _NO_DEFAULT_AUDIENCE = ""
 
     external_account_id: Optional[HttpUrl] = FormField(
@@ -125,12 +136,9 @@ class BaseOPDSImporterSettings(BaseSettings):
                 {audience: audience for audience in sorted(Classifier.AUDIENCES)}
             ),
             required=False,
-            # readOnly=True,
         ),
     )
 
-
-class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
     username: Optional[str] = FormField(
         form=ConfigurationFormItem(
             label=_("Username"),
@@ -151,7 +159,7 @@ class OPDSImporterSettings(BaseImporterSettings, BaseOPDSImporterSettings):
         )
     )
 
-    custom_accept_header: Optional[str] = FormField(
+    custom_accept_header: str = FormField(
         default=",".join(
             [
                 OPDSFeed.ACQUISITION_FEED_TYPE,
@@ -190,8 +198,103 @@ class OPDSImporterLibrarySettings(BaseSettings):
     pass
 
 
+class BaseOPDSAPI(
+    BaseCirculationAPI[OPDSImporterSettings, OPDSImporterLibrarySettings], ABC
+):
+    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
+        # All the CM side accounting for this loan is handled by CirculationAPI
+        # since we don't have any remote API we need to call this method is
+        # just a no-op.
+        pass
+
+    def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
+        # Since there is no such thing as a hold, there is no such
+        # thing as releasing a hold.
+        raise NotOnHold()
+
+    def place_hold(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        notification_email_address: Optional[str],
+    ) -> HoldInfo:
+        # Because all OPDS content is assumed to be simultaneously
+        # available to all patrons, there is no such thing as a hold.
+        raise CurrentlyAvailable()
+
+    def update_availability(self, licensepool: LicensePool) -> None:
+        # We already know all the availability information we're going
+        # to know, so we don't need to do anything.
+        pass
+
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        requested_mechanism = delivery_mechanism.delivery_mechanism
+        fulfillment = None
+        for lpdm in licensepool.delivery_mechanisms:
+            if (
+                lpdm.resource is None
+                or lpdm.resource.representation is None
+                or lpdm.resource.representation.public_url is None
+            ):
+                # This LicensePoolDeliveryMechanism can't actually
+                # be used for fulfillment.
+                continue
+            if lpdm.delivery_mechanism == requested_mechanism:
+                # We found it! This is how the patron wants
+                # the book to be delivered.
+                fulfillment = lpdm
+                break
+
+        if not fulfillment:
+            # There is just no way to fulfill this loan the way the
+            # patron wants.
+            raise FormatNotAvailable()
+
+        rep = fulfillment.resource.representation
+        content_link = rep.public_url
+        media_type = rep.media_type
+
+        return FulfillmentInfo(
+            licensepool.collection,
+            licensepool.data_source.name,
+            identifier_type=licensepool.identifier.type,
+            identifier=licensepool.identifier.identifier,
+            content_link=content_link,
+            content_type=media_type,
+            content=None,
+            content_expires=None,
+        )
+
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo:
+        return LoanInfo(licensepool.collection, None, None, None, None, None)
+
+    def can_fulfill_without_loan(
+        self,
+        patron: Optional[Patron],
+        pool: LicensePool,
+        lpdm: LicensePoolDeliveryMechanism,
+    ) -> bool:
+        return True
+
+
+SettingsType = TypeVar("SettingsType", bound=OPDSImporterSettings, covariant=True)
+
+
 class BaseOPDSImporter(
-    CirculationConfigurationMixin[OPDSImporterSettings, OPDSImporterLibrarySettings],
+    Generic[SettingsType],
     LoggerMixin,
     ABC,
 ):
@@ -224,6 +327,14 @@ class BaseOPDSImporter(
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
+        self.settings = self.settings_class().construct(
+            **collection.integration_configuration.settings_dict
+        )
+
+    @classmethod
+    @abstractmethod
+    def settings_class(cls) -> Type[SettingsType]:
+        ...
 
     @abstractmethod
     def extract_feed_data(
@@ -461,7 +572,25 @@ class BaseOPDSImporter(
         )
 
 
-class OPDSImporter(BaseOPDSImporter):
+class OPDSAPI(BaseOPDSAPI):
+    @classmethod
+    def settings_class(cls) -> Type[OPDSImporterSettings]:
+        return OPDSImporterSettings
+
+    @classmethod
+    def library_settings_class(cls) -> Type[OPDSImporterLibrarySettings]:
+        return OPDSImporterLibrarySettings
+
+    @classmethod
+    def description(cls) -> str:
+        return "Import books from a publicly-accessible OPDS feed."
+
+    @classmethod
+    def label(cls) -> str:
+        return "OPDS Import"
+
+
+class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     """Imports editions and license pools from an OPDS feed.
     Creates Edition, LicensePool and Work rows in the database, if those
     don't already exist.
@@ -482,18 +611,6 @@ class OPDSImporter(BaseOPDSImporter):
     @classmethod
     def settings_class(cls) -> Type[OPDSImporterSettings]:
         return OPDSImporterSettings
-
-    @classmethod
-    def library_settings_class(cls) -> Type[OPDSImporterLibrarySettings]:
-        return OPDSImporterLibrarySettings
-
-    @classmethod
-    def label(cls) -> str:
-        return "OPDS Importer"
-
-    @classmethod
-    def description(cls) -> str:
-        return cls.DESCRIPTION  # type: ignore[no-any-return]
 
     def __init__(
         self,
@@ -1572,7 +1689,7 @@ class OPDSImportMonitor(
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[BaseOPDSImporter],
+        import_class: Type[BaseOPDSImporter[OPDSImporterSettings]],
         force_reimport: bool = False,
         **import_class_kwargs: Any,
     ) -> None:
@@ -1600,21 +1717,12 @@ class OPDSImportMonitor(
         self.force_reimport = force_reimport
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
-        config = self.importer.configuration()
-        self.username = config.username
-        self.password = config.password
+        settings = self.importer.settings
+        self.username = settings.username
+        self.password = settings.password
 
-        # Not all inherited settings have these
-        # OPDSforDistributors does not use this setting
-        settings = self.importer.configuration()
-        try:
-            self.custom_accept_header = settings.custom_accept_header
-        except AttributeError:
-            self.custom_accept_header = None
-        try:
-            self._max_retry_count: int | None = settings.max_retry_count
-        except AttributeError:
-            self._max_retry_count = 0
+        self.custom_accept_header = settings.custom_accept_header
+        self._max_retry_count = settings.max_retry_count
 
         parsed_url = urlparse(self.feed_url)
         self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"

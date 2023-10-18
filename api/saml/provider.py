@@ -29,7 +29,11 @@ SAML_INVALID_SUBJECT = pd(
 )
 
 
-class SAMLWebSSOAuthenticationProvider(BaseSAMLAuthenticationProvider):
+class SAMLWebSSOAuthenticationProvider(
+    BaseSAMLAuthenticationProvider[
+        SAMLWebSSOAuthSettings, SAMLWebSSOAuthLibrarySettings
+    ]
+):
     """SAML authentication provider implementing Web Browser SSO profile using the following bindings:
     - HTTP-Redirect Binding for requests
     - HTTP-POST Binding for responses

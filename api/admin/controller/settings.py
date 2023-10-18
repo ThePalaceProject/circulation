@@ -76,14 +76,21 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         protocols = []
         _db = self._db
         for api in provider_apis:
+            is_integration = issubclass(api, HasIntegrationConfiguration)
             protocol = dict()
-            name = getattr(api, protocol_name_attr)
+            name = (
+                getattr(api, protocol_name_attr) if not is_integration else api.label()
+            )
             protocol["name"] = name
 
             label = getattr(api, "NAME", name)
             protocol["label"] = label
 
-            description = getattr(api, "DESCRIPTION", None)
+            description = (
+                getattr(api, "DESCRIPTION", None)
+                if not is_integration
+                else api.description()
+            )
             if description != None:
                 protocol["description"] = description
 
