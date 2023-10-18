@@ -21,7 +21,7 @@ from core.service.container import Services
 from tests.mocks.search import ExternalSearchIndexFake
 
 
-class MockBaseCirculationAPI(PatronActivityCirculationAPI, ABC):
+class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI, ABC):
     @classmethod
     def label(cls) -> str:
         return ""
@@ -39,7 +39,7 @@ class MockBaseCirculationAPI(PatronActivityCirculationAPI, ABC):
         return BaseSettings
 
 
-class MockRemoteAPI(MockBaseCirculationAPI):
+class MockRemoteAPI(MockPatronActivityCirculationAPI):
     def __init__(
         self, set_delivery_mechanism_at=True, can_revoke_hold_when_reserved=True
     ):

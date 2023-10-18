@@ -38,8 +38,8 @@ from core.opds_import import OPDSAPI
 from core.util.datetime_helpers import utc_now
 from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 from tests.api.mockapi.circulation import (
-    MockBaseCirculationAPI,
     MockCirculationAPI,
+    MockPatronActivityCirculationAPI,
     MockRemoteAPI,
 )
 from tests.fixtures.api_bibliotheca_files import BibliothecaFilesFixture
@@ -572,7 +572,7 @@ class TestCirculationAPI:
         # is to call enforce_limits() before trying to check out the
         # book.
 
-        mock_api = MagicMock(spec=MockBaseCirculationAPI)
+        mock_api = MagicMock(spec=MockPatronActivityCirculationAPI)
         mock_api.checkout.side_effect = NotImplementedError()
 
         mock_circulation = CirculationAPI(
@@ -1470,7 +1470,7 @@ class TestCirculationAPI:
         the BaseCirculationAPI implementation for that title's colelction.
         """
 
-        class Mock(MockBaseCirculationAPI):
+        class Mock(MockPatronActivityCirculationAPI):
             def can_fulfill_without_loan(self, patron, pool, lpdm):
                 return "yep"
 
@@ -1478,7 +1478,7 @@ class TestCirculationAPI:
         circulation = CirculationAPI(
             circulation_api.db.session, circulation_api.db.default_library()
         )
-        mock = MagicMock(spec=MockBaseCirculationAPI)
+        mock = MagicMock(spec=MockPatronActivityCirculationAPI)
         mock.can_fulfill_without_loan = MagicMock(return_value="yep")
         circulation.api_for_collection[pool.collection.id] = mock
         assert "yep" == circulation.can_fulfill_without_loan(None, pool, MagicMock())
