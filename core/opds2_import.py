@@ -20,6 +20,7 @@ from urllib.parse import urljoin, urlparse
 import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
+from uritemplate import URITemplate
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
 from webpub_manifest_parser.core.ast import Link, Manifestlike
@@ -30,6 +31,8 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
+from api.circulation import FulfillmentInfo
+from api.circulation_exceptions import CannotFulfill
 from core.coverage import CoverageFailure
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -48,14 +51,17 @@ from core.metadata_layer import (
 from core.model import (
     Collection,
     Contributor,
+    DataSource,
     DeliveryMechanism,
     Edition,
     ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
+    LicensePoolDeliveryMechanism,
     LinkRelations,
     MediaTypes,
+    Patron,
     Representation,
     RightsStatus,
     Subject,
@@ -69,7 +75,7 @@ from core.opds_import import (
     OPDSImporterSettings,
     OPDSImportMonitor,
 )
-from core.util.http import BadResponseException
+from core.util.http import HTTP, BadResponseException
 from core.util.opds_writer import OPDSFeed
 
 if TYPE_CHECKING:
@@ -185,6 +191,84 @@ class OPDS2API(BaseOPDSAPI):
     @classmethod
     def description(cls) -> str:
         return "Import books from a publicly-accessible OPDS 2.0 feed."
+
+    def __init__(self, _db: Session, collection: Collection):
+        super().__init__(_db, collection)
+        # TODO: This needs to be refactored to use IntegrationConfiguration,
+        #  but it has been temporarily rolled back, since the IntegrationConfiguration
+        #  code caused problems fulfilling TOKEN_AUTH books in production.
+        #  This should be fixed as part of the work PP-313 to fully remove
+        #  ExternalIntegrations from our collections code.
+        token_auth_configuration = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, collection.external_integration
+        )
+        self.token_auth_configuration = (
+            token_auth_configuration.value if token_auth_configuration else None
+        )
+
+    @classmethod
+    def get_authentication_token(
+        cls, patron: Patron, datasource: DataSource, token_auth_url: str
+    ) -> str:
+        """Get the authentication token for a patron"""
+        log = cls.logger()
+
+        patron_id = patron.identifier_to_remote_service(datasource)
+        url = URITemplate(token_auth_url).expand(patron_id=patron_id)
+        response = HTTP.get_with_timeout(url)
+        if response.status_code != 200:
+            log.error(
+                f"Could not authenticate the patron (authorization identifier: '{patron.authorization_identifier}' "
+                f"external identifier: '{patron_id}'): {str(response.content)}"
+            )
+            raise CannotFulfill()
+
+        # The response should be the JWT token, not wrapped in any format like JSON
+        token = response.text
+        if not token:
+            log.error(
+                f"Could not authenticate the patron({patron_id}): {str(response.content)}"
+            )
+            raise CannotFulfill()
+
+        return token
+
+    def fulfill_token_auth(
+        self, patron: Patron, licensepool: LicensePool, fulfillment: FulfillmentInfo
+    ) -> FulfillmentInfo:
+        if not fulfillment.content_link:
+            self.log.warning(
+                "No content link found in fulfillment, unable to fulfill via OPDS2 token auth."
+            )
+            return fulfillment
+
+        templated = URITemplate(fulfillment.content_link)
+        if "authentication_token" not in templated.variable_names:
+            self.log.warning(
+                "No authentication_token variable found in content_link, unable to fulfill via OPDS2 token auth."
+            )
+            return fulfillment
+
+        token = self.get_authentication_token(
+            patron, licensepool.data_source, self.token_auth_configuration
+        )
+        fulfillment.content_link = templated.expand(authentication_token=token)
+        fulfillment.content_link_redirect = True
+        return fulfillment
+
+    def fulfill(
+        self,
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        fufillment_info = super().fulfill(patron, pin, licensepool, delivery_mechanism)
+        if self.token_auth_configuration:
+            fufillment_info = self.fulfill_token_auth(
+                patron, licensepool, fufillment_info
+            )
+        return fufillment_info
 
 
 class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):

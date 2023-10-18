@@ -18,7 +18,6 @@ from api.saml.metadata.model import (
     SAMLNameIDFormat,
     SAMLSubject,
 )
-from api.saml.wayfless import SAMLWAYFlessFulfillmentError
 from core.config import IntegrationException
 from core.coverage import CoverageFailure
 from core.metadata_layer import CirculationData, LinkData, Metadata
@@ -43,6 +42,7 @@ from core.model import (
     WorkCoverageRecord,
 )
 from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor, OPDSXMLParser
+from core.saml.wayfless import SAMLWAYFlessFulfillmentError
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
 from core.util.http import BadResponseException

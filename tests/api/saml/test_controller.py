@@ -22,7 +22,6 @@ from api.saml.metadata.model import (
     SAMLUIInfo,
 )
 from api.saml.provider import SAML_INVALID_SUBJECT, SAMLWebSSOAuthenticationProvider
-from api.saml.wayfless import SAMLWAYFlessAcquisitionLinkProcessor
 from core.model import Credential, Library
 from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
