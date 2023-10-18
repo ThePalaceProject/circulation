@@ -152,6 +152,7 @@ class TestOPDS2Serializer:
             availability_status="available",
             availability_since="2022-02-02",
             availability_until="2222-02-02",
+            lcp_hashed_passphrase=FeedEntryType(text="LCPPassphrase"),
             indirect_acquisitions=[
                 IndirectAcquisition(
                     type="indirect1",
@@ -180,6 +181,7 @@ class TestOPDS2Serializer:
                     "child": [{"type": "indirect1-1"}, {"type": "indirect1-2"}],
                 }
             ],
+            lcp_hashed_passphrase="LCPPassphrase",
         )
 
         # Test availability states
