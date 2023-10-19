@@ -689,7 +689,7 @@ class TestLibraryAuthenticator:
         # The LibraryAuthenticator exists but has no AuthenticationProviders.
         assert auth.basic_auth_provider is None
 
-        # The integration has left it trace in initialization_exceptions.
+        # The integration has left its trace in initialization_exceptions.
         not_found = auth.initialization_exceptions[(unknown.id, library.id)]
         assert isinstance(not_found, CannotLoadConfiguration)
         assert "Unable to load implementation for external integration" in str(
