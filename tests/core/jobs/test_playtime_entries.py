@@ -247,7 +247,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         # collection2 library2
         playtime(db.session, identifier, collection2, library2, date3m(3), 300)
 
-        reporting_name = "test-cm"
+        reporting_name = "test cm"
 
         # Horrible unbracketted syntax for python 3.8
         with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
@@ -297,7 +297,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             receivers=["reporting@test.email"],
             text="",
             attachments={
-                f"playtime-summary-{cutoff}-{until}.csv": ""
+                f"playtime-summary-{reporting_name.replace(' ', '_')}-{cutoff}-{until}.csv": ""
             },  # Mock objects do not write data
         )
 

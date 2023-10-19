@@ -132,12 +132,18 @@ class PlaytimeEntriesEmailReportsScript(Script):
             Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, ""
         )
 
+        # format report name for use in csv attachment filename below
+        subject_prefix = reporting_name
         if len(reporting_name) > 0:
-            reporting_name += ": "
+            subject_prefix += ": "
 
-        email_subject = f"{reporting_name}Playtime Summaries {formatted_start_date} - {formatted_until_date}"
+        email_subject = f"{subject_prefix}Playtime Summaries {formatted_start_date} - {formatted_until_date}"
+        reporting_name_with_no_spaces = reporting_name.replace(" ", "_") + "-"
         attachment_extension = "csv"
-        attachment_name = f"playtime-summary-{formatted_start_date}-{formatted_until_date}.{attachment_extension}"
+        attachment_name = (
+            f"playtime-summary-{reporting_name_with_no_spaces}"
+            f"{formatted_start_date}-{formatted_until_date}.{attachment_extension}"
+        )
 
         # Write to a temporary file so we don't overflow the memory
         with TemporaryFile(
