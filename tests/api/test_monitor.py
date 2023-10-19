@@ -49,7 +49,7 @@ class TestLoanlikeReaperMonitor:
             edition, open_access=False, data_source_name=DataSource.AXIS_360
         )
         not_open_access_4 = db.licensepool(
-            edition, open_access=False, data_source_name=DataSource.ODILO
+            edition, open_access=False, data_source_name=DataSource.BIBBLIO
         )
         unlimited_access = db.licensepool(
             edition, unlimited_access=True, data_source_name=DataSource.AMAZON

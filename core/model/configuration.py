@@ -75,7 +75,6 @@ class ExternalIntegration(Base):
     OPDS_IMPORT = "OPDS Import"
     OPDS2_IMPORT = "OPDS 2.0 Import"
     OVERDRIVE = DataSourceConstants.OVERDRIVE
-    ODILO = DataSourceConstants.ODILO
     BIBLIOTHECA = DataSourceConstants.BIBLIOTHECA
     AXIS_360 = DataSourceConstants.AXIS_360
     OPDS_FOR_DISTRIBUTORS = "OPDS for Distributors"
@@ -96,7 +95,6 @@ class ExternalIntegration(Base):
     LICENSE_PROTOCOLS = [
         OPDS_IMPORT,
         OVERDRIVE,
-        ODILO,
         BIBLIOTHECA,
         AXIS_360,
         GUTENBERG,
@@ -107,7 +105,6 @@ class ExternalIntegration(Base):
     # licenses come from a specific data source.
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = {
         OVERDRIVE: DataSourceConstants.OVERDRIVE,
-        ODILO: DataSourceConstants.ODILO,
         BIBLIOTHECA: DataSourceConstants.BIBLIOTHECA,
         AXIS_360: DataSourceConstants.AXIS_360,
         ENKI: DataSourceConstants.ENKI,

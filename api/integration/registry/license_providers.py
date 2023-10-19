@@ -19,7 +19,6 @@ class LicenseProvidersRegistry(
         from api.axis import Axis360API
         from api.bibliotheca import BibliothecaAPI
         from api.enki import EnkiAPI
-        from api.odilo import OdiloAPI
         from api.odl import ODLAPI
         from api.odl2 import ODL2API
         from api.opds_for_distributors import OPDSForDistributorsAPI
@@ -28,7 +27,6 @@ class LicenseProvidersRegistry(
         from core.opds_import import OPDSAPI
 
         self.register(OverdriveAPI, canonical=OverdriveAPI.label())
-        self.register(OdiloAPI, canonical=OdiloAPI.label())
         self.register(BibliothecaAPI, canonical=BibliothecaAPI.label())
         self.register(Axis360API, canonical=Axis360API.label())
         self.register(EnkiAPI, canonical=EnkiAPI.label())

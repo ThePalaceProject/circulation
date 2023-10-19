@@ -9,7 +9,6 @@ from enum import Enum
 class DataSourceConstants:
     GUTENBERG = "Gutenberg"
     OVERDRIVE = "Overdrive"
-    ODILO = "Odilo"
     PROJECT_GITENBERG = "Project GITenberg"
     STANDARD_EBOOKS = "Standard Ebooks"
     UNGLUE_IT = "unglue.it"
@@ -145,7 +144,6 @@ class EditionConstants:
 class IdentifierConstants:
     # Common types of identifiers.
     OVERDRIVE_ID = "Overdrive ID"
-    ODILO_ID = "Odilo ID"
     BIBLIOTHECA_ID = "Bibliotheca ID"
     GUTENBERG_ID = "Gutenberg ID"
     AXIS_360_ID = "Axis 360 ID"
@@ -173,7 +171,6 @@ class IdentifierConstants:
     LICENSE_PROVIDING_IDENTIFIER_TYPES = [
         BIBLIOTHECA_ID,
         OVERDRIVE_ID,
-        ODILO_ID,
         AXIS_360_ID,
         GUTENBERG_ID,
         ELIB_ID,
@@ -195,7 +192,6 @@ class IdentifierType(Enum):
     """Enumeration of all available identifier types."""
 
     OVERDRIVE_ID = IdentifierConstants.OVERDRIVE_ID
-    ODILO_ID = IdentifierConstants.ODILO_ID
     BIBLIOTHECA_ID = IdentifierConstants.BIBLIOTHECA_ID
     GUTENBERG_ID = IdentifierConstants.GUTENBERG_ID
     AXIS_360_ID = IdentifierConstants.AXIS_360_ID
