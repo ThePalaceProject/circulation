@@ -132,10 +132,8 @@ class PatronAuthServiceSelfTestsController:
             )
 
         protocol_class = self.get_protocol_class(integration)
-        settings = protocol_class.settings_class()(**integration.settings_dict)
-        library_settings = protocol_class.library_settings_class()(
-            **library_configuration.settings_dict
-        )
+        settings = protocol_class.settings_load(integration)
+        library_settings = protocol_class.library_settings_load(library_configuration)
 
         value, _ = protocol_class.run_self_tests(
             self.db,

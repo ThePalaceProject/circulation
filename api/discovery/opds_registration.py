@@ -129,7 +129,7 @@ class OpdsRegistrationService(
         if integration_obj is None:
             return None
 
-        settings = cls.settings_class().construct(**integration_obj.settings_dict)
+        settings = cls.settings_load(integration_obj)
         return cls(integration_obj, settings)
 
     @staticmethod

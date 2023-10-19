@@ -635,7 +635,7 @@ class BaseCirculationAPI(
 
     @property
     def settings(self) -> SettingsType:
-        return self.settings_class()(**self.integration_configuration().settings_dict)
+        return self.settings_load(self.integration_configuration())
 
     def library_settings(self, library: Library | int) -> LibrarySettingsType | None:
         library_id = library.id if isinstance(library, Library) else library
@@ -644,7 +644,7 @@ class BaseCirculationAPI(
         libconfig = self.integration_configuration().for_library(library_id=library_id)
         if libconfig is None:
             return None
-        config = self.library_settings_class()(**libconfig.settings_dict)
+        config = self.library_settings_load(libconfig)
         return config
 
     @abstractmethod

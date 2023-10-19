@@ -21,6 +21,7 @@ from api.axis import (
     Axis360CirculationMonitor,
     Axis360FulfillmentInfo,
     Axis360FulfillmentInfoResponseParser,
+    Axis360Settings,
     AxisCollectionReaper,
     AxisNowManifest,
     BibliographicParser,
@@ -35,6 +36,7 @@ from api.circulation_exceptions import *
 from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
 from core.coverage import CoverageFailure
+from core.integration.base import integration_settings_update
 from core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -790,16 +792,22 @@ class TestAxis360API:
         self, setting, setting_value, is_valid, expected, axis360: Axis360Fixture
     ):
         config = axis360.collection.integration_configuration
-        settings = config.settings_dict.copy()
-        settings[setting] = setting_value
-        config.settings_dict = settings
+        config.settings_dict[setting] = setting_value
 
         if is_valid:
+            integration_settings_update(
+                Axis360Settings, config, {setting: setting_value}, merge=True
+            )
             api = MockAxis360API(axis360.db.session, axis360.collection)
             assert api.base_url == expected
         else:
             pytest.raises(
-                ProblemError, MockAxis360API, axis360.db.session, axis360.collection
+                ProblemError,
+                integration_settings_update,
+                Axis360Settings,
+                config,
+                {setting: setting_value},
+                merge=True,
             )
 
 

@@ -41,6 +41,7 @@ from core.classifier import Classifier
 from core.config import IntegrationException
 from core.connection_config import ConnectionSetting
 from core.coverage import CoverageFailure
+from core.integration.base import integration_settings_load
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -327,8 +328,8 @@ class BaseOPDSImporter(
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
-        self.settings = self.settings_class().construct(
-            **collection.integration_configuration.settings_dict
+        self.settings = integration_settings_load(
+            self.settings_class(), collection.integration_configuration
         )
 
     @classmethod

@@ -682,9 +682,6 @@ class TestLibraryAuthenticator:
         # propagated.
         # Create an integration destined to raise CannotLoadConfiguration..
         library = db.default_library()
-        misconfigured, _ = create_millenium_auth_integration(library, url="millenium")
-
-        # ... and one destined to raise ImportError.
         unknown, _ = create_auth_integration_configuration("unknown protocol", library)
 
         auth = LibraryAuthenticator.from_config(db.session, db.default_library())
@@ -692,14 +689,9 @@ class TestLibraryAuthenticator:
         # The LibraryAuthenticator exists but has no AuthenticationProviders.
         assert auth.basic_auth_provider is None
 
-        # Both integrations have left their trace in
-        # initialization_exceptions.
-        not_configured = auth.initialization_exceptions[(misconfigured.id, library.id)]
-        assert isinstance(not_configured, CannotLoadConfiguration)
-        assert "Could not instantiate MilleniumPatronAPI" in str(not_configured)
-
+        # The integration has left its trace in initialization_exceptions.
         not_found = auth.initialization_exceptions[(unknown.id, library.id)]
-        assert isinstance(not_configured, CannotLoadConfiguration)
+        assert isinstance(not_found, CannotLoadConfiguration)
         assert "Unable to load implementation for external integration" in str(
             not_found
         )

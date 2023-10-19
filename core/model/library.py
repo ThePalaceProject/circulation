@@ -29,13 +29,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, relationship
-from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from core.configuration.library import LibrarySettings
 from core.entrypoint import EntryPoint
 from core.facets import FacetConstants
+from core.integration.base import integration_settings_load, integration_settings_update
 from core.model import Base, get_one
 from core.model.announcements import Announcement
 from core.model.customlist import customlist_sharedlibrary
@@ -300,15 +300,14 @@ class Library(Base, HasSessionCache):
                     "settings_dict for library %s is not a dict: %r"
                     % (self.short_name, self.settings_dict)
                 )
-            settings = LibrarySettings.construct(**self.settings_dict)
+            settings = integration_settings_load(LibrarySettings, self)
             self._settings = settings
         return settings
 
     def update_settings(self, new_settings: LibrarySettings) -> None:
         """Update the settings for this integration"""
         self._settings = None
-        self.settings_dict.update(new_settings.dict())
-        flag_modified(self, "settings_dict")
+        integration_settings_update(LibrarySettings, self, new_settings, merge=True)
 
     @property
     def all_collections(self) -> Generator[Collection, None, None]:
