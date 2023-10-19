@@ -499,9 +499,7 @@ class TestPatronAuth:
         assert auth_service is not None
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
-        settings = SimpleAuthenticationProvider.settings_class()(
-            **auth_service.settings_dict
-        )
+        settings = SimpleAuthenticationProvider.settings_load(auth_service)
         assert settings.test_identifier == "user"
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations
@@ -591,9 +589,7 @@ class TestPatronAuth:
         assert auth_service.id == int(response.response[0])  # type: ignore[index]
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
         assert isinstance(auth_service.settings_dict, dict)
-        settings = SimpleAuthenticationProvider.settings_class()(
-            **auth_service.settings_dict
-        )
+        settings = SimpleAuthenticationProvider.settings_load(auth_service)
         assert settings.test_identifier == "user"
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations

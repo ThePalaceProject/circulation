@@ -398,7 +398,7 @@ class OverdriveAPI(
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
             parent_integration = collection.parent.integration_configuration
-            parent_config = self.settings_class()(**parent_integration.settings_dict)
+            parent_config = self.settings_load(parent_integration)
             for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
                 parent_value = getattr(parent_config, key, None)
                 setattr(self._configuration, key, parent_value)

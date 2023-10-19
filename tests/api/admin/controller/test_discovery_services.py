@@ -200,8 +200,7 @@ class TestDiscoveryServices:
         assert service.id == int(response.get_data(as_text=True))
         assert self.protocol == service.protocol
         assert (
-            OpdsRegistrationService.settings_class()(**service.settings_dict).url
-            == "http://registry.url"
+            OpdsRegistrationService.settings_load(service).url == "http://registry.url"
         )
 
     def test_discovery_services_post_edit(
@@ -232,9 +231,7 @@ class TestDiscoveryServices:
         assert self.protocol == discovery_service.protocol
         assert (
             "http://new_registry_url.com"
-            == OpdsRegistrationService.settings_class()(
-                **discovery_service.settings_dict
-            ).url
+            == OpdsRegistrationService.settings_load(discovery_service).url
         )
 
     def test_check_name_unique(

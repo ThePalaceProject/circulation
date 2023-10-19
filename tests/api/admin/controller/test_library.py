@@ -210,7 +210,7 @@ class TestLibrarySettings:
                 FacetConstants.ORDER_TITLE,
                 FacetConstants.ORDER_AUTHOR,
             ] == settings_dict.get("facets_enabled_order")
-            assert ["French"] == settings_dict.get("large_collection_languages")
+            assert ["fre"] == settings_dict.get("large_collection_languages")
 
     def test_libraries_post_errors(self, settings_ctrl_fixture):
         with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
