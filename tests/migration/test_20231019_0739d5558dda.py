@@ -16,7 +16,7 @@ def test_settings_deletion(
     create_external_integration: CreateExternalIntegration,
     create_config_setting: CreateConfigSetting,
     create_library: CreateLibrary,
-):
+) -> None:
     alembic_runner.migrate_down_to(MIGRATION_UID)
     alembic_runner.migrate_down_one()
 
