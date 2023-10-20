@@ -2225,7 +2225,7 @@ class TestWorkList:
         # WorkList is the default cache age for any type of OPDS feed,
         # no matter what type of feed is being generated.
         wl = WorkList()
-        assert OPDSFeed.DEFAULT_MAX_AGE == wl.max_cache_age(object())
+        assert OPDSFeed.DEFAULT_MAX_AGE == wl.max_cache_age()
 
     def test_filter(self, db: DatabaseTransactionFixture):
         # Verify that filter() calls modify_search_filter_hook()
