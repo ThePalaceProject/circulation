@@ -10,7 +10,7 @@ from core.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.lane import Facets, WorkList
-from core.model import Admin, CachedFeed, ConfigurationSetting, create
+from core.model import Admin, ConfigurationSetting, create
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.problem_details import *
 from core.util.problem_detail import ProblemDetail
@@ -288,7 +288,7 @@ class TestCirculationManager:
             # load_facets_from_request().
             controller.admin = admin  # type: ignore
             facets = circulation_fixture.manager.load_facets_from_request()
-            assert CachedFeed.IGNORE_CACHE == facets.max_cache_age
+            assert 0 == facets.max_cache_age
 
         # Since the admin sign-in controller is part of the admin
         # package and not the API proper, test a situation where, for

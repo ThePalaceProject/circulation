@@ -29,7 +29,6 @@ from sqlalchemy.orm import (
     aliased,
     backref,
     contains_eager,
-    defer,
     joinedload,
     query,
     relationship,
@@ -43,7 +42,6 @@ from core.entrypoint import EntryPoint, EverythingEntryPoint
 from core.facets import FacetConstants
 from core.model import (
     Base,
-    CachedFeed,
     Collection,
     CustomList,
     CustomListEntry,
@@ -84,12 +82,6 @@ class BaseFacets(FacetConstants):
     This is intended solely for use as a base class.
     """
 
-    # If the use of a certain faceting object has implications for the
-    # type of feed (the way FeaturedFacets always implies a 'groups' feed),
-    # set the type of feed here. This will override any CACHED_FEED_TYPE
-    # associated with the WorkList.
-    CACHED_FEED_TYPE: Optional[str] = None
-
     # By default, faceting objects have no opinion on how long the feeds
     # generated using them should be cached.
     max_cache_age = None
@@ -98,21 +90,9 @@ class BaseFacets(FacetConstants):
         """Yields a 2-tuple for every active facet setting.
 
         These tuples are used to generate URLs that can identify
-        specific facet settings, and to distinguish between CachedFeed
-        objects that represent the same feed with different facet
-        settings.
+        specific facet settings.
         """
         return []
-
-    @property
-    def cached(self):
-        """This faceting object's opinion on whether feeds should be cached.
-
-        :return: A boolean, or None for 'no opinion'.
-        """
-        if self.max_cache_age is None:
-            return None
-        return self.max_cache_age != 0
 
     @property
     def query_string(self):
@@ -325,11 +305,11 @@ class FacetsWithEntryPoint(BaseFacets):
     @classmethod
     def load_max_cache_age(cls, value):
         """Convert a value for the MAX_CACHE_AGE_NAME parameter to a value
-        that CachedFeed will understand.
 
         :param value: A string.
-        :return: For now, either CachedFeed.IGNORE_CACHE or None.
+        :return: For now, either 0 or None.
         """
+        print("MAX AGE", value)
         if value is None:
             return value
 
@@ -346,7 +326,7 @@ class FacetsWithEntryPoint(BaseFacets):
         #
         # Thus, any nonzero value will be ignored.
         if value == 0:
-            value = CachedFeed.IGNORE_CACHE
+            value = 0
         else:
             value = None
         return value
@@ -358,11 +338,8 @@ class FacetsWithEntryPoint(BaseFacets):
         """
         if self.entrypoint:
             yield (self.ENTRY_POINT_FACET_GROUP_NAME, self.entrypoint.INTERNAL_NAME)
-        if self.max_cache_age not in (None, CachedFeed.CACHE_FOREVER):
-            if self.max_cache_age == CachedFeed.IGNORE_CACHE:
-                value = 0
-            else:
-                value = self.max_cache_age
+        if self.max_cache_age is not None:
+            value = self.max_cache_age
             yield (self.MAX_CACHE_AGE_NAME, str(value))
 
     def modify_search_filter(self, filter):
@@ -972,9 +949,6 @@ class FeaturedFacets(FacetsWithEntryPoint):
     This is mainly a convenient thing to pass into
     AcquisitionFeed.groups().
     """
-
-    # This Facets class is used exclusively for grouped feeds.
-    CACHED_FEED_TYPE = CachedFeed.GROUPS_TYPE
 
     def __init__(
         self, minimum_featured_quality, entrypoint=None, random_seed=None, **kwargs
@@ -2426,7 +2400,6 @@ class DatabaseBackedWorkList(WorkList):
 
         # Apply optimizations.
         qu = cls._modify_loading(qu)
-        qu = cls._defer_unused_fields(qu)
         return qu
 
     @classmethod
@@ -2474,18 +2447,6 @@ class DatabaseBackedWorkList(WorkList):
         return Collection.restrict_to_ready_deliverable_works(
             query, show_suppressed=show_suppressed, collection_ids=self.collection_ids
         )
-
-    @classmethod
-    def _defer_unused_fields(cls, query):
-        """Some applications use the simple OPDS entry and some
-        applications use the verbose. Whichever one we don't need,
-        we can stop from even being sent over from the
-        database.
-        """
-        if Configuration.DEFAULT_OPDS_FORMAT == "simple_opds_entry":
-            return query.options(defer(Work.verbose_opds_entry))
-        else:
-            return query.options(defer(Work.simple_opds_entry))
 
     def bibliographic_filter_clauses(self, _db, qu):
         """Create a SQLAlchemy filter that excludes books whose bibliographic
@@ -2813,13 +2774,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # admin interface can see all the lanes, visible or not.
     _visible = Column("visible", Boolean, default=True, nullable=False)
 
-    # A Lane may have many CachedFeeds.
-    cachedfeeds: Mapped[List[CachedFeed]] = relationship(
-        "CachedFeed",
-        backref="lane",
-        cascade="all, delete-orphan",
-    )
-
     # A Lane may have many CachedMARCFiles.
     cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
@@ -3031,22 +2985,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         ):
             return True
         return False
-
-    def max_cache_age(self, type):
-        """Determine how long a feed for this WorkList should be cached
-        internally.
-
-        :param type: The type of feed.
-        """
-        if type == CachedFeed.GROUPS_TYPE:
-            # Generating grouped feeds on the fly for Lanes is not incredibly
-            # expensive, but it's slow enough that we prefer to regenerate
-            # them in the background (using force_refresh=True) rather
-            # than while someone is waiting for an HTTP response.
-            return CachedFeed.CACHE_FOREVER
-
-        # Other than that, we have no opinion -- use the default.
-        return super().max_cache_age(type)
 
     def update_size(self, _db, search_engine=None):
         """Update the stored estimate of the number of Works in this Lane."""

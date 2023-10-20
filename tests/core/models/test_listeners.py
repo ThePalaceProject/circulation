@@ -5,13 +5,7 @@ import pytest
 
 from core import lane, model
 from core.config import Configuration
-from core.model import (
-    CachedFeed,
-    ConfigurationSetting,
-    Timestamp,
-    WorkCoverageRecord,
-    create,
-)
+from core.model import ConfigurationSetting, Timestamp, WorkCoverageRecord
 from core.model.listeners import site_configuration_has_changed
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -218,15 +212,6 @@ class TestSiteConfigurationHasChanged:
         library.collections.append(collection)
         session.commit()
         data.mock.assert_was_called()
-
-        # Associating a CachedFeed with the library does _not_ call
-        # the method, because nothing changed on the Library object and
-        # we don't listen for 'append' events on Library.cachedfeeds.
-        create(
-            session, CachedFeed, type="page", pagination="", facets="", library=library
-        )
-        session.commit()
-        data.mock.assert_was_not_called()
 
         # NOTE: test_work.py:TestWork.test_reindex_on_availability_change
         # tests the circumstances under which a database change

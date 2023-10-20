@@ -82,7 +82,6 @@ from core.metadata_layer import ContributorData
 from core.model import (
     Admin,
     Annotation,
-    CachedFeed,
     CirculationEvent,
     Collection,
     ConfigurationSetting,
@@ -249,10 +248,7 @@ class CirculationManager:
             ):
                 return NO_SUCH_LANE.detailed(_("Lane does not exist"))
 
-        if (
-            isinstance(facets, BaseFacets)
-            and getattr(facets, "max_cache_age", None) is not None
-        ):
+        if isinstance(facets, BaseFacets):
             # A faceting object was loaded, and it tried to do something nonstandard
             # with caching.
 
@@ -1215,7 +1211,7 @@ class OPDSFeedController(CirculationManagerController):
             annotator=annotator,
             search_engine=search_engine,
             facets=facets,
-            max_age=CachedFeed.IGNORE_CACHE,
+            max_age=0,
         )
 
     def qa_feed(self, feed_class=OPDSAcquisitionFeed):

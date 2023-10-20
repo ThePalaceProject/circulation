@@ -6,7 +6,6 @@ import pytest
 from core.config import Configuration
 from core.metadata_layer import TimestampData
 from core.model import (
-    CachedFeed,
     CirculationEvent,
     Collection,
     CollectionMissing,
@@ -28,7 +27,6 @@ from core.model import (
     get_one_or_create,
 )
 from core.monitor import (
-    CachedFeedReaper,
     CirculationEventLocationScrubber,
     CollectionMonitor,
     CollectionReaper,
@@ -1030,8 +1028,6 @@ class TestReaperMonitor:
         Time.time_eq(m.cutoff, utc_now() - m.MAX_AGE)
 
     def test_specific_reapers(self, db: DatabaseTransactionFixture):
-        assert CachedFeed.timestamp == CachedFeedReaper(db.session).timestamp_field
-        assert 30 == CachedFeedReaper.MAX_AGE
         assert Credential.expires == CredentialReaper(db.session).timestamp_field
         assert 1 == CredentialReaper.MAX_AGE
         assert (
@@ -1039,10 +1035,6 @@ class TestReaperMonitor:
             == PatronRecordReaper(db.session).timestamp_field
         )
         assert 60 == PatronRecordReaper.MAX_AGE
-
-    def test_where_clause(self, db: DatabaseTransactionFixture):
-        m = CachedFeedReaper(db.session)
-        assert "cachedfeeds.timestamp < :timestamp_1" == str(m.where_clause)
 
     def test_run_once(self, db: DatabaseTransactionFixture):
         # Create four Credentials: two expired, two valid.
@@ -1140,25 +1132,9 @@ class TestWorkReaper:
         for work in works:
             WorkCoverageRecord.add_for(work, operation="some operation")
 
-        # Each work has a CachedFeed.
-        for work in works:
-            feed = CachedFeed(
-                work=work, type="page", content="content", pagination="", facets=""
-            )
-            db.session.add(feed)
-
-        # Also create a CachedFeed that has no associated Work.
-        workless_feed = CachedFeed(
-            work=None, type="page", content="content", pagination="", facets=""
-        )
-        db.session.add(workless_feed)
-
-        db.session.commit()
-
         # Run the reaper.
         s = MockSearchIndex()
         m = WorkReaper(db.session, search_index_client=s)
-        print(m.search_index_client)
         m.run_once()
 
         # Search index was updated
@@ -1187,14 +1163,6 @@ class TestWorkReaper:
         # their work.
         assert 2 == len([x for x in l.entries if not x.work])
         assert [has_license_pool] == [x.work for x in l.entries if x.work]
-
-        # The CachedFeeds associated with the reaped Works have been
-        # deleted. The surviving Work still has one, and the
-        # CachedFeed that didn't have a work in the first place is
-        # unaffected.
-        feeds = db.session.query(CachedFeed).all()
-        assert [workless_feed] == [x for x in feeds if not x.work]
-        assert [has_license_pool] == [x.work for x in feeds if x.work]
 
 
 class TestCollectionReaper:

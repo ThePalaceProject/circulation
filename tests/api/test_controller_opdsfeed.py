@@ -17,7 +17,7 @@ from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.navigation import NavigationFeed
 from core.feed.opds import NavigationFacets
 from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
-from core.model import CachedFeed, Edition
+from core.model import Edition
 from core.util.flask_util import Response
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 from tests.fixtures.library import LibraryFixture
@@ -748,7 +748,7 @@ class TestOPDSFeedController:
         assert expect_url == kwargs.pop("url")  # type: ignore
 
         # These feeds are never to be cached.
-        assert CachedFeed.IGNORE_CACHE == kwargs.pop("max_age")  # type: ignore
+        assert 0 == kwargs.pop("max_age")  # type: ignore
 
         # To improve performance, a Pagination object was created that
         # limits each lane in the test feed to a single Work.

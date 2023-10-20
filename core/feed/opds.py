@@ -11,7 +11,6 @@ from core.feed.serializer.opds import OPDS1Serializer
 from core.feed.serializer.opds2 import OPDS2Serializer
 from core.feed.types import FeedData, WorkEntry
 from core.lane import FeaturedFacets
-from core.model.cachedfeed import CachedFeed
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSMessage
 
@@ -106,4 +105,4 @@ class UnfulfillableWork(Exception):
 
 
 class NavigationFacets(FeaturedFacets):
-    CACHED_FEED_TYPE = CachedFeed.NAVIGATION_TYPE
+    pass

@@ -31,14 +31,7 @@ from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import Filter
 from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
-from core.model import (
-    CachedFeed,
-    Contributor,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    create,
-)
+from core.model import Contributor, DataSource, Edition, ExternalIntegration, create
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import ExternalSearchFixtureFake
@@ -516,10 +509,6 @@ def related_books_fixture(db: DatabaseTransactionFixture) -> RelatedBooksFixture
 
 
 class TestRelatedBooksLane:
-    def test_feed_type(self, related_books_fixture: RelatedBooksFixture):
-        # All feeds from these lanes are cached as 'related works' feeds.
-        assert CachedFeed.RELATED_TYPE == RelatedBooksLane.CACHED_FEED_TYPE
-
     def test_initialization(self, related_books_fixture: RelatedBooksFixture):
         # Asserts that a RelatedBooksLane won't be initialized for a work
         # without related books
@@ -768,10 +757,6 @@ class TestSeriesFacets:
 
 
 class TestSeriesLane:
-    def test_feed_type(self):
-        # All feeds from these lanes are cached as series feeds.
-        assert CachedFeed.SERIES_TYPE == SeriesLane.CACHED_FEED_TYPE
-
     def test_initialization(self, lane_fixture: LaneFixture):
         # An error is raised if SeriesLane is created with an empty string.
         pytest.raises(ValueError, SeriesLane, lane_fixture.db.default_library(), "")
@@ -841,10 +826,6 @@ class TestContributorFacets:
 
 
 class TestContributorLane:
-    def test_feed_type(self):
-        # All feeds of this type are cached as contributor feeds.
-        assert CachedFeed.CONTRIBUTOR_TYPE == ContributorLane.CACHED_FEED_TYPE
-
     def test_initialization(self, lane_fixture: LaneFixture):
         with pytest.raises(ValueError) as excinfo:
             ContributorLane(lane_fixture.db.default_library(), None)
@@ -925,11 +906,6 @@ class TestContributorLane:
 
 
 class TestCrawlableFacets:
-    def test_feed_type(self, db: DatabaseTransactionFixture):
-        # All crawlable feeds are cached as such, no matter what
-        # WorkList they come from.
-        assert CachedFeed.CRAWLABLE_TYPE == CrawlableFacets.CACHED_FEED_TYPE
-
     def test_default(self, db: DatabaseTransactionFixture):
         facets = CrawlableFacets.default(db.default_library())
         assert CrawlableFacets.COLLECTION_FULL == facets.collection

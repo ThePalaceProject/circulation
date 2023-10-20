@@ -12,7 +12,6 @@ from core.config import Configuration
 from core.metadata_layer import TimestampData
 from core.model import (
     Base,
-    CachedFeed,
     CirculationEvent,
     Collection,
     CollectionMissing,
@@ -887,17 +886,6 @@ class ReaperMonitor(Monitor):
 
 
 # ReaperMonitors that do something specific.
-
-
-class CachedFeedReaper(ReaperMonitor):
-    """Removed cached feeds older than thirty days."""
-
-    MODEL_CLASS = CachedFeed
-    TIMESTAMP_FIELD = "timestamp"
-    MAX_AGE = 30
-
-
-ReaperMonitor.REGISTRY.append(CachedFeedReaper)
 
 
 class CredentialReaper(ReaperMonitor):

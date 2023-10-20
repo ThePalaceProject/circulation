@@ -27,7 +27,6 @@ from core.lane import Lane
 from core.metadata_layer import TimestampData
 from core.model import (
     BaseCoverageRecord,
-    CachedFeed,
     Collection,
     ConfigurationSetting,
     Contributor,
@@ -1774,8 +1773,6 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
             )
             .options(
                 defer(Work.summary_text),
-                defer(Work.simple_opds_entry),
-                defer(Work.verbose_opds_entry),
             )
         )
 
@@ -2495,7 +2492,6 @@ class WhereAreMyBooksScript(CollectionInputScript):
                 self.out("\n")
         else:
             self.out("There are no libraries in the system -- that's a problem.")
-        self.delete_cached_feeds()
         self.out("\n")
         collections = parsed.collections or self._db.query(Collection)
         for collection in collections:
@@ -2518,20 +2514,6 @@ class WhereAreMyBooksScript(CollectionInputScript):
             self.out(" This library has no lanes -- that's a problem.")
         else:
             self.out(" Associated with %s lanes.", len(library.lanes))
-
-    def delete_cached_feeds(self):
-        page_feeds = self._db.query(CachedFeed).filter(
-            CachedFeed.type != CachedFeed.GROUPS_TYPE
-        )
-        page_feeds_count = page_feeds.count()
-        self.out(
-            "%d feeds in cachedfeeds table, not counting grouped feeds.",
-            page_feeds_count,
-        )
-        if page_feeds_count:
-            self.out(" Deleting them all.")
-            page_feeds.delete()
-            self._db.commit()
 
     def explain_collection(self, collection):
         self.out('Examining collection "%s"', collection.name)

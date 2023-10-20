@@ -32,7 +32,6 @@ from core.lane import (
     WorkList,
 )
 from core.model import (
-    CachedFeed,
     CustomList,
     DataSource,
     Edition,
@@ -294,8 +293,8 @@ class TestFacetsWithEntryPoint:
         # IGNORE_CACHE (do not pull from cache) and None (no opinion).
         assert None == m("")
         assert None == m(None)
-        assert CachedFeed.IGNORE_CACHE == m(0)
-        assert CachedFeed.IGNORE_CACHE == m("0")
+        assert 0 == m(0)
+        assert 0 == m("0")
 
         # All other values are treated as 'no opinion'.
         assert None == m("1")
@@ -1290,11 +1289,6 @@ class TestFeaturedFacets:
         assert 1 == facets.minimum_featured_quality
         assert entrypoint == facets.entrypoint
         assert True == facets.entrypoint_is_default
-
-    def test_feed_type(self):
-        # If a grouped feed is built via CachedFeed.fetch, it will be
-        # filed as a grouped feed.
-        assert CachedFeed.GROUPS_TYPE == FeaturedFacets.CACHED_FEED_TYPE
 
     def test_default(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
@@ -3011,13 +3005,9 @@ class TestDatabaseBackedWorkList:
             def _modify_loading(cls, qu):
                 return [qu, "_modify_loading"]
 
-            @classmethod
-            def _defer_unused_fields(cls, qu):
-                return qu + ["_defer_unused_fields"]
-
         result = Mock.base_query(db.session)
 
-        [base_query, m, d] = result
+        [base_query, m] = result
         expect = (
             db.session.query(Work)
             .join(Work.license_pools)
@@ -3026,7 +3016,6 @@ class TestDatabaseBackedWorkList:
         )
         assert str(expect) == str(base_query)
         assert "_modify_loading" == m
-        assert "_defer_unused_fields" == d
 
     def test_bibliographic_filter_clauses(self, db: DatabaseTransactionFixture):
         called = dict()

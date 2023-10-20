@@ -18,7 +18,6 @@ from core.external_search import ExternalSearchIndex, Filter
 from core.lane import Lane, WorkList
 from core.metadata_layer import TimestampData
 from core.model import (
-    CachedFeed,
     Collection,
     ConfigurationSetting,
     Contributor,
@@ -1722,39 +1721,6 @@ class TestWhereAreMyBooksScript:
         assert ("Checking library %s", [library2.name]) == checking
         assert " This library has no collections -- that's a problem." == no_collection
         assert " This library has no lanes -- that's a problem." == no_lanes
-
-    def test_delete_cached_feeds(
-        self,
-        db: DatabaseTransactionFixture,
-        end_to_end_search_fixture: EndToEndSearchFixture,
-    ):
-        groups = CachedFeed(type=CachedFeed.GROUPS_TYPE, pagination="")
-        db.session.add(groups)
-        not_groups = CachedFeed(type=CachedFeed.PAGE_TYPE, pagination="")
-        db.session.add(not_groups)
-
-        assert 2 == db.session.query(CachedFeed).count()
-
-        script = MockWhereAreMyBooks(
-            _db=db.session, search=end_to_end_search_fixture.external_search_index
-        )
-        script.delete_cached_feeds()
-        how_many, theyre_gone = script.output
-        assert (
-            "%d feeds in cachedfeeds table, not counting grouped feeds.",
-            [1],
-        ) == how_many
-        assert " Deleting them all." == theyre_gone
-
-        # Call it again, and we don't see "Deleting them all". There aren't
-        # any to delete.
-        script.output = []
-        script.delete_cached_feeds()
-        [how_many] = script.output
-        assert (
-            "%d feeds in cachedfeeds table, not counting grouped feeds.",
-            [0],
-        ) == how_many
 
     @staticmethod
     def check_explanation(
