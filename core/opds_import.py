@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import traceback
+import urllib
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from datetime import datetime
@@ -36,6 +37,7 @@ from sqlalchemy.orm.session import Session
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
+from api.saml.credential import SAMLCredentialManager
 from api.selftest import HasCollectionSelfTests
 from core.classifier import Classifier
 from core.config import IntegrationException
@@ -79,7 +81,11 @@ from core.model import (
 from core.model.configuration import HasExternalIntegration
 from core.model.formats import FormatPrioritiesSettings
 from core.monitor import CollectionMonitor
-from core.saml.wayfless import SAMLWAYFlessSetttings
+from core.saml.wayfless import (
+    SAMLWAYFlessConstants,
+    SAMLWAYFlessFulfillmentError,
+    SAMLWAYFlessSetttings,
+)
 from core.selftest import SelfTestResult
 from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
@@ -202,6 +208,11 @@ class OPDSImporterLibrarySettings(BaseSettings):
 class BaseOPDSAPI(
     BaseCirculationAPI[OPDSImporterSettings, OPDSImporterLibrarySettings], ABC
 ):
+    def __init__(self, _db: Session, collection: Collection):
+        super().__init__(_db, collection)
+        self.saml_wayfless_url_template = self.settings.saml_wayfless_url_template
+        self.saml_credential_manager = SAMLCredentialManager()
+
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # All the CM side accounting for this loan is handled by CirculationAPI
         # since we don't have any remote API we need to call this method is
@@ -228,6 +239,56 @@ class BaseOPDSAPI(
         # We already know all the availability information we're going
         # to know, so we don't need to do anything.
         pass
+
+    def fulfill_saml_wayfless(
+        self, template: str, patron: Patron, fulfillment: FulfillmentInfo
+    ) -> FulfillmentInfo:
+        self.log.debug(f"WAYFless acquisition link template: {template}")
+
+        db = Session.object_session(patron)
+        saml_credential = self.saml_credential_manager.lookup_saml_token_by_patron(
+            db, patron
+        )
+
+        self.log.debug(f"SAML credentials: {saml_credential}")
+
+        if not saml_credential:
+            raise SAMLWAYFlessFulfillmentError(
+                f"There are no existing SAML credentials for patron {patron}"
+            )
+
+        saml_subject = self.saml_credential_manager.extract_saml_token(saml_credential)
+
+        self.log.debug(f"SAML subject: {saml_subject}")
+
+        if not saml_subject.idp:
+            raise SAMLWAYFlessFulfillmentError(
+                f"SAML subject {saml_subject} does not contain an IdP's entityID"
+            )
+
+        acquisition_link = template.replace(
+            SAMLWAYFlessConstants.IDP_PLACEHOLDER,
+            urllib.parse.quote(saml_subject.idp, safe=""),
+        )
+        if fulfillment.content_link is None:
+            self.log.warning(
+                f"Fulfillment {fulfillment} has no content link, unable to transform it"
+            )
+            content_link = ""
+        else:
+            content_link = fulfillment.content_link
+
+        acquisition_link = acquisition_link.replace(
+            SAMLWAYFlessConstants.ACQUISITION_LINK_PLACEHOLDER,
+            urllib.parse.quote(content_link, safe=""),
+        )
+
+        self.log.debug(
+            f"Old acquisition link {fulfillment.content_link} has been transformed to {acquisition_link}"
+        )
+
+        fulfillment.content_link = acquisition_link
+        return fulfillment
 
     def fulfill(
         self,
@@ -262,7 +323,7 @@ class BaseOPDSAPI(
         content_link = rep.public_url
         media_type = rep.media_type
 
-        return FulfillmentInfo(
+        fulfillment_info = FulfillmentInfo(
             licensepool.collection,
             licensepool.data_source.name,
             identifier_type=licensepool.identifier.type,
@@ -272,6 +333,13 @@ class BaseOPDSAPI(
             content=None,
             content_expires=None,
         )
+
+        if self.saml_wayfless_url_template:
+            fulfillment_info = self.fulfill_saml_wayfless(
+                self.saml_wayfless_url_template, patron, fulfillment_info
+            )
+
+        return fulfillment_info
 
     def checkout(
         self,

@@ -2,6 +2,7 @@ from typing import Optional
 
 from flask_babel import lazy_gettext as _
 
+from core.exceptions import BaseError
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -49,3 +50,7 @@ class SAMLWAYFlessSetttings(BaseSettings):
             required=False,
         ),
     )
+
+
+class SAMLWAYFlessFulfillmentError(BaseError):
+    pass

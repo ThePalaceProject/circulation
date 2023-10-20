@@ -1,9 +1,14 @@
 import datetime
-from typing import List, Union
+from typing import Generator, List, Union
+from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.logging import LogCaptureFixture
+from requests import Response
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
+from api.circulation import CirculationAPI, FulfillmentInfo
+from api.circulation_exceptions import CannotFulfill
 from core.model import (
     ConfigurationSetting,
     Contribution,
@@ -13,13 +18,16 @@ from core.model import (
     Edition,
     EditionConstants,
     ExternalIntegration,
+    Library,
     LicensePool,
+    LicensePoolDeliveryMechanism,
+    Loan,
     MediaTypes,
     Work,
 )
 from core.model.collection import Collection
 from core.model.constants import IdentifierType
-from core.opds2_import import OPDS2Importer, RWPMManifestParser
+from core.opds2_import import OPDS2API, OPDS2Importer, RWPMManifestParser
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds2_files import OPDS2FilesFixture
 
@@ -79,6 +87,7 @@ class TestOPDS2ImporterFixture:
     collection: Collection
     data_source: DataSource
     importer: OPDS2Importer
+    library: Library
 
 
 @pytest.fixture
@@ -87,7 +96,9 @@ def opds2_importer_fixture(
 ) -> TestOPDS2ImporterFixture:
     data = TestOPDS2ImporterFixture()
     data.transaction = db
-    data.collection = db.default_collection()
+    data.collection = db.collection(protocol=OPDS2API.label())
+    data.library = db.default_library()
+    data.library.collections.append(data.collection)
     data.data_source = DataSource.lookup(
         db.session, "OPDS 2.0 Data Source", autocreate=True
     )
@@ -447,3 +458,203 @@ class TestOPDS2Importer(OPDS2Test):
 
         # Did the token endpoint get stored correctly?
         assert setting.value == "http://example.org/auth?userName={patron_id}"
+
+
+class Opds2ApiFixture:
+    def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
+        self.patron = db.patron()
+        self.collection: Collection = db.collection(
+            protocol=ExternalIntegration.OPDS2_IMPORT
+        )
+        self.integration = self.collection.create_external_integration(
+            ExternalIntegration.OPDS2_IMPORT
+        )
+        self.setting = ConfigurationSetting.for_externalintegration(
+            ExternalIntegration.TOKEN_AUTH, self.integration
+        )
+        self.setting.value = "http://example.org/token?userName={patron_id}"
+
+        self.mock_response = MagicMock(spec=Response)
+        self.mock_response.status_code = 200
+        self.mock_response.text = "plaintext-auth-token"
+
+        self.mock_http = mock_http
+        self.mock_http.get_with_timeout.return_value = self.mock_response
+
+        self.data_source = DataSource.lookup(db.session, "test", autocreate=True)
+
+        self.pool = MagicMock(spec=LicensePool)
+        self.mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
+        self.pool.delivery_mechanisms = [self.mechanism]
+        self.pool.data_source = self.data_source
+        self.mechanism.resource.representation.public_url = (
+            "http://example.org/11234/fulfill?authToken={authentication_token}"
+        )
+
+        self.api = OPDS2API(db.session, self.collection)
+
+    def fulfill(self) -> FulfillmentInfo:
+        return self.api.fulfill(self.patron, "", self.pool, self.mechanism)
+
+
+@pytest.fixture
+def opds2_api_fixture(
+    db: DatabaseTransactionFixture,
+) -> Generator[Opds2ApiFixture, None, None]:
+    with patch("core.opds2_import.HTTP") as mock_http:
+        fixture = Opds2ApiFixture(db, mock_http)
+        yield fixture
+
+
+class TestOpds2Api:
+    def test_opds2_with_authentication_tokens(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        """Test the end to end workflow from importing the feed to a fulfill"""
+        content = opds2_files_fixture.sample_text("auth_token_feed.json")
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_importer_fixture.importer.import_from_feed(content)
+
+        work = works[0]
+
+        api = CirculationAPI(db.session, db.default_library())
+        patron = db.patron()
+
+        # Borrow the book from the library
+        api.borrow(patron, "pin", work.license_pools[0], MagicMock(), None)
+
+        loans = db.session.query(Loan).filter(Loan.patron == patron)
+        assert loans.count() == 1
+
+        loan = loans.first()
+        assert isinstance(loan, Loan)
+
+        epub_mechanism = None
+        for mechanism in loan.license_pool.delivery_mechanisms:
+            if mechanism.delivery_mechanism.content_type == "application/epub+zip":
+                epub_mechanism = mechanism
+                break
+
+        assert epub_mechanism is not None
+
+        # Fulfill (Download) the book, should redirect to an authenticated URL
+        with patch.object(OPDS2API, "get_authentication_token") as mock_auth:
+            mock_auth.return_value = "plaintext-token"
+            fulfillment = api.fulfill(
+                patron, "pin", work.license_pools[0], epub_mechanism
+            )
+
+        assert (
+            fulfillment.content_link
+            == "http://example.org//getDrmFreeFile.action?documentId=1543720&mediaType=epub&authToken=plaintext-token"
+        )
+        assert fulfillment.content_type == "application/epub+zip"
+        assert fulfillment.content is None
+        assert fulfillment.content_expires is None
+        assert fulfillment.content_link_redirect is True
+
+    def test_token_fulfill(self, opds2_api_fixture: Opds2ApiFixture):
+        ff_info = opds2_api_fixture.fulfill()
+
+        patron_id = opds2_api_fixture.patron.identifier_to_remote_service(
+            opds2_api_fixture.data_source
+        )
+
+        assert opds2_api_fixture.mock_http.get_with_timeout.call_count == 1
+        assert (
+            opds2_api_fixture.mock_http.get_with_timeout.call_args[0][0]
+            == f"http://example.org/token?userName={patron_id}"
+        )
+
+        assert (
+            ff_info.content_link
+            == "http://example.org/11234/fulfill?authToken=plaintext-auth-token"
+        )
+        assert ff_info.content_link_redirect is True
+
+    def test_token_fulfill_alternate_template(self, opds2_api_fixture: Opds2ApiFixture):
+        # Alternative templating
+        opds2_api_fixture.mechanism.resource.representation.public_url = (
+            "http://example.org/11234/fulfill{?authentication_token}"
+        )
+        ff_info = opds2_api_fixture.fulfill()
+
+        assert (
+            ff_info.content_link
+            == "http://example.org/11234/fulfill?authentication_token=plaintext-auth-token"
+        )
+
+    def test_token_fulfill_400_response(self, opds2_api_fixture: Opds2ApiFixture):
+        # non-200 response
+        opds2_api_fixture.mock_response.status_code = 400
+        with pytest.raises(CannotFulfill):
+            opds2_api_fixture.fulfill()
+
+    def test_token_fulfill_no_template(self, opds2_api_fixture: Opds2ApiFixture):
+        # No templating in the url
+        opds2_api_fixture.mechanism.resource.representation.public_url = (
+            "http://example.org/11234/fulfill"
+        )
+        ff_info = opds2_api_fixture.fulfill()
+        assert ff_info.content_link_redirect is False
+        assert (
+            ff_info.content_link
+            == opds2_api_fixture.mechanism.resource.representation.public_url
+        )
+
+    def test_token_fulfill_no_content_link(
+        self, opds2_api_fixture: Opds2ApiFixture, caplog: LogCaptureFixture
+    ):
+        # No content_link on the fulfillment info coming into the function
+        mock = MagicMock(spec=FulfillmentInfo)
+        mock.content_link = None
+        response = opds2_api_fixture.api.fulfill_token_auth(
+            opds2_api_fixture.patron, opds2_api_fixture.pool, mock
+        )
+        assert response is mock
+        assert (
+            "No content link found in fulfillment, unable to fulfill via OPDS2 token auth"
+            in caplog.text
+        )
+
+    def test_token_fulfill_no_endpoint_config(self, opds2_api_fixture: Opds2ApiFixture):
+        # No token endpoint config
+        opds2_api_fixture.api.token_auth_configuration = None
+        mock = MagicMock()
+        opds2_api_fixture.api.fulfill_token_auth = mock
+        opds2_api_fixture.fulfill()
+        # we never call the token auth function
+        assert mock.call_count == 0
+
+    def test_get_authentication_token(self, opds2_api_fixture: Opds2ApiFixture):
+        token = OPDS2API.get_authentication_token(
+            opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
+        )
+
+        assert token == "plaintext-auth-token"
+        assert opds2_api_fixture.mock_http.get_with_timeout.call_count == 1
+
+    def test_get_authentication_token_400_response(
+        self, opds2_api_fixture: Opds2ApiFixture
+    ):
+        opds2_api_fixture.mock_response.status_code = 400
+        with pytest.raises(CannotFulfill):
+            OPDS2API.get_authentication_token(
+                opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
+            )
+
+    def test_get_authentication_token_bad_response(
+        self, opds2_api_fixture: Opds2ApiFixture
+    ):
+        opds2_api_fixture.mock_response.text = None
+        with pytest.raises(CannotFulfill):
+            OPDS2API.get_authentication_token(
+                opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
+            )
