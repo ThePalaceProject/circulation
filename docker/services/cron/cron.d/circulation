@@ -93,10 +93,6 @@ HOME=/var/www/circulation
 #
 45 * * * * root core/bin/run odl2_import_monitor >> /var/log/cron.log 2>&1
 
-# Odilo
-#
-*/15 * * * * root core/bin/run odilo_monitor_recent >> /var/log/cron.log 2>&1
-
 # SAML
 #
 0 5 * * * root core/bin/run saml_monitor >> /var/log/cron.log 2>&1
