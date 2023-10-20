@@ -309,7 +309,6 @@ class FacetsWithEntryPoint(BaseFacets):
         :param value: A string.
         :return: For now, either 0 or None.
         """
-        print("MAX AGE", value)
         if value is None:
             return value
 
@@ -1387,7 +1386,7 @@ class WorkList:
     def visible(self) -> bool:
         return True
 
-    def max_cache_age(self, type):
+    def max_cache_age(self):
         """Determine how long a feed for this WorkList should be cached
         internally.
         """
