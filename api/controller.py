@@ -1043,7 +1043,9 @@ class OPDSFeedController(CirculationManagerController):
             facets=facets,
             pagination=pagination,
             search_engine=search_engine,
-        ).as_response(mime_types=flask.request.accept_mimetypes, max_age=worklist.max_cache_age())
+        ).as_response(
+            mime_types=flask.request.accept_mimetypes, max_age=worklist.max_cache_age()
+        )
 
     def _load_search_facets(self, lane):
         entrypoints = list(flask.request.library.entrypoints)

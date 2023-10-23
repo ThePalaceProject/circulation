@@ -92,7 +92,7 @@ class TestFacetsWithEntryPoint:
         old_entrypoint = object()
         kwargs = dict(extra_key="extra_value")
         facets = FacetsWithEntryPoint(
-            old_entrypoint, entrypoint_is_default=True, max_cache_age=123, **kwargs
+            old_entrypoint, entrypoint_is_default=True, **kwargs
         )
         new_entrypoint = object()
         new_facets = facets.navigate(new_entrypoint)
