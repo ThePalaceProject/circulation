@@ -163,7 +163,6 @@ class FacetsWithEntryPoint(BaseFacets):
         """
         self.entrypoint = entrypoint
         self.entrypoint_is_default = entrypoint_is_default
-        self.max_cache_age = max_cache_age
         self.constructor_kwargs = kwargs
 
     @classmethod
@@ -188,7 +187,6 @@ class FacetsWithEntryPoint(BaseFacets):
         return self.__class__(
             entrypoint=entrypoint,
             entrypoint_is_default=False,
-            max_cache_age=self.max_cache_age,
             **self.constructor_kwargs,
         )
 
@@ -264,15 +262,9 @@ class FacetsWithEntryPoint(BaseFacets):
             return entrypoint
         entrypoint, is_default = entrypoint
 
-        max_cache_age = get_argument(Facets.MAX_CACHE_AGE_NAME, None)
-        max_cache_age = cls.load_max_cache_age(max_cache_age)
-        if isinstance(max_cache_age, ProblemDetail):
-            return max_cache_age
-
         return cls(
             entrypoint=entrypoint,
             entrypoint_is_default=is_default,
-            max_cache_age=max_cache_age,
             **extra_kwargs,
         )
 
@@ -302,34 +294,6 @@ class FacetsWithEntryPoint(BaseFacets):
             return default, True
         return ep, False
 
-    @classmethod
-    def load_max_cache_age(cls, value):
-        """Convert a value for the MAX_CACHE_AGE_NAME parameter to a value
-
-        :param value: A string.
-        :return: For now, either 0 or None.
-        """
-        if value is None:
-            return value
-
-        try:
-            value = int(value)
-        except ValueError as e:
-            value = None
-
-        # At the moment, the only acceptable value that can be set
-        # through the web is zero -- i.e. don't use the cache at
-        # all. We can't give web clients fine-grained control over
-        # the internal workings of our cache; the most we can do
-        # is give them the opportunity to opt out.
-        #
-        # Thus, any nonzero value will be ignored.
-        if value == 0:
-            value = 0
-        else:
-            value = None
-        return value
-
     def items(self):
         """Yields a 2-tuple for every active facet setting.
 
@@ -337,9 +301,6 @@ class FacetsWithEntryPoint(BaseFacets):
         """
         if self.entrypoint:
             yield (self.ENTRY_POINT_FACET_GROUP_NAME, self.entrypoint.INTERNAL_NAME)
-        if self.max_cache_age is not None:
-            value = self.max_cache_age
-            yield (self.MAX_CACHE_AGE_NAME, str(value))
 
     def modify_search_filter(self, filter):
         """Modify the given external_search.Filter object
@@ -617,7 +578,6 @@ class Facets(FacetsWithEntryPoint):
             enabled_facets=self.facets_enabled_at_init,
             entrypoint=(entrypoint or self.entrypoint),
             entrypoint_is_default=False,
-            max_cache_age=self.max_cache_age,
         )
 
     def items(self):
@@ -985,9 +945,7 @@ class FeaturedFacets(FacetsWithEntryPoint):
             minimum_featured_quality or self.minimum_featured_quality
         )
         entrypoint = entrypoint or self.entrypoint
-        return self.__class__(
-            minimum_featured_quality, entrypoint, max_cache_age=self.max_cache_age
-        )
+        return self.__class__(minimum_featured_quality, entrypoint)
 
     def modify_search_filter(self, filter):
         super().modify_search_filter(filter)
