@@ -68,19 +68,10 @@ from core.feed.annotator.circulation import (
 )
 from core.feed.navigation import NavigationFeed
 from core.feed.opds import NavigationFacets
-from core.lane import (
-    BaseFacets,
-    Facets,
-    FeaturedFacets,
-    Lane,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
+from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
 from core.model import (
-    Admin,
     Annotation,
     CirculationEvent,
     Collection,
@@ -248,27 +239,6 @@ class CirculationManager:
             ):
                 return NO_SUCH_LANE.detailed(_("Lane does not exist"))
 
-        if isinstance(facets, BaseFacets):
-            # A faceting object was loaded, and it tried to do something nonstandard
-            # with caching.
-
-            # Try to get the AdminSignInController, which is
-            # associated with the CirculationManager object by the
-            # admin interface in admin/controller.
-            #
-            # If the admin interface wasn't initialized for whatever
-            # reason, we'll default to assuming the user is not an
-            # authenticated admin.
-            authenticated = False
-            controller = getattr(self, "admin_sign_in_controller", None)
-            if controller:
-                admin = controller.authenticated_admin_from_request()
-                # If authenticated_admin_from_request returns anything other than an admin (probably
-                # a ProblemDetail), the user is not an authenticated admin.
-                if isinstance(admin, Admin):
-                    authenticated = True
-            if not authenticated:
-                facets.max_cache_age = None
         return facets
 
     def reload_settings_if_changed(self):

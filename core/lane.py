@@ -1387,9 +1387,7 @@ class WorkList:
         return True
 
     def max_cache_age(self):
-        """Determine how long a feed for this WorkList should be cached
-        internally.
-        """
+        """Determine how long a feed for this WorkList should be cached."""
         return self.MAX_CACHE_AGE
 
     @classmethod

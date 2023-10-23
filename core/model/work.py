@@ -59,7 +59,7 @@ else:
 
 # Import related models when doing type checking
 if TYPE_CHECKING:
-    from core.model import CustomListEntry, Library, LicensePool  # noqa: autoflake
+    from core.model import CustomListEntry, Library, LicensePool
 
 
 class WorkGenre(Base):

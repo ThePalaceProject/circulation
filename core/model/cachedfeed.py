@@ -1,4 +1,4 @@
-# CachedFeed, WillNotGenerateExpensiveFeed
+# Cached Marc Files
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -10,12 +10,6 @@ from core.model import Base
 
 if TYPE_CHECKING:
     from core.model import Representation
-
-
-class WillNotGenerateExpensiveFeed(Exception):
-    """This exception is raised when a feed is not cached, but it's too
-    expensive to generate.
-    """
 
 
 class CachedMARCFile(Base):

@@ -10,7 +10,7 @@ from core.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.lane import Facets, WorkList
-from core.model import Admin, ConfigurationSetting, create
+from core.model import ConfigurationSetting, create
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.problem_details import *
 from core.util.problem_detail import ProblemDetail
@@ -250,60 +250,6 @@ class TestCirculationManager:
             annotator = circulation_fixture.manager.annotator(worklist, facets)
             assert isinstance(annotator, CirculationManagerAnnotator)
             assert worklist == annotator.lane
-
-    def test_load_facets_from_request_disable_caching(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        # Only an authenticated admin can ask to disable caching,
-        # and load_facets_from_request is where we enforce this.
-        class MockAdminSignInController:
-            # Pretend to be able to find (or not) an Admin authenticated
-            # to make the current request.
-            admin = None
-
-            def authenticated_admin_from_request(self):
-                return self.admin
-
-        admin = Admin()
-        controller = MockAdminSignInController()
-
-        circulation_fixture.manager.admin_sign_in_controller = controller  # type: ignore[assignment]
-
-        with circulation_fixture.request_context_with_library("/"):
-            # If you don't specify a max cache age, nothing happens,
-            # whether or not you're an admin.
-            for value in INVALID_CREDENTIALS, admin:
-                controller.admin = value  # type: ignore
-                facets = circulation_fixture.manager.load_facets_from_request()
-                assert None == facets.max_cache_age
-
-        with circulation_fixture.request_context_with_library("/?max_age=0"):
-            # Not an admin, max cache age requested.
-            controller.admin = INVALID_CREDENTIALS  # type: ignore
-            facets = circulation_fixture.manager.load_facets_from_request()
-            assert None == facets.max_cache_age
-
-            # Admin, max age requested. This is the only case where
-            # nonstandard caching rules make it through
-            # load_facets_from_request().
-            controller.admin = admin  # type: ignore
-            facets = circulation_fixture.manager.load_facets_from_request()
-            assert 0 == facets.max_cache_age
-
-        # Since the admin sign-in controller is part of the admin
-        # package and not the API proper, test a situation where, for
-        # whatever reason, that controller was never initialized.
-        del circulation_fixture.manager.admin_sign_in_controller
-
-        # Now what controller.admin says doesn't matter, because the
-        # controller's not associated with the CirculationManager.
-        # But everything still basically works; you just can't
-        # disable the cache.
-        with circulation_fixture.request_context_with_library("/?max_age=0"):
-            for value in (INVALID_CREDENTIALS, admin):
-                controller.admin = value  # type: ignore
-                facets = circulation_fixture.manager.load_facets_from_request()
-                assert None == facets.max_cache_age
 
     def test_load_facets_from_request_denies_access_to_inaccessible_worklist(
         self, circulation_fixture: CirculationControllerFixture
