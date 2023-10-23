@@ -769,6 +769,8 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 publication.metadata.contributors, Contributor.CONTRIBUTOR_ROLE
             )
         )
+        # Audiobook duration
+        duration = publication.metadata.duration
 
         feed_self_url = first_or_default(
             feed.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
@@ -826,6 +828,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             series_position=series_position,
             links=links,
             data_source_last_updated=last_opds_update,
+            duration=duration,
             circulation=circulation_data,
         )
 

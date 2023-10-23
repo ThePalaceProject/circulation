@@ -5,7 +5,17 @@ import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, List
 
-from sqlalchemy import Column, Date, Enum, ForeignKey, Index, Integer, String, Unicode
+from sqlalchemy import (
+    Column,
+    Date,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Unicode,
+)
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, relationship
@@ -125,6 +135,8 @@ class Edition(Base, EditionConstants):
     MEDIUM_ENUM = Enum(*EditionConstants.KNOWN_MEDIA, name="medium")
 
     medium = Column(MEDIUM_ENUM, index=True)
+
+    duration = Column(Float, nullable=True)
 
     cover_id = Column(
         Integer,

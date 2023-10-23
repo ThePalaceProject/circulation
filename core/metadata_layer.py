@@ -1087,6 +1087,7 @@ class Metadata:
         "subtitle",
         "language",
         "medium",
+        "duration",
         "series",
         "series_position",
         "publisher",
@@ -1117,6 +1118,7 @@ class Metadata:
         measurements=None,
         links=None,
         data_source_last_updated=None,
+        duration=None,
         # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
         circulation=None,
         **kwargs,
@@ -1143,6 +1145,7 @@ class Metadata:
         self.imprint = imprint
         self.issued = issued
         self.published = published
+        self.duration = duration
 
         self.primary_identifier = primary_identifier
         self.identifiers = identifiers or []
