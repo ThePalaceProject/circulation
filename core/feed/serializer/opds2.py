@@ -72,6 +72,8 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
             metadata["title"] = data.title.text
         if data.sort_title:
             metadata["sortAs"] = data.sort_title.text
+        if data.duration is not None:
+            metadata["duration"] = data.duration
 
         if data.subtitle:
             metadata["subtitle"] = data.subtitle.text

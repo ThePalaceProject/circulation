@@ -304,6 +304,9 @@ class Annotator(ToFeedEntry):
         if edition.series:
             computed.series = self.series(edition.series, edition.series_position)
 
+        if edition.duration is not None:
+            computed.duration = float(edition.duration)
+
         content = self.content(work)
         if content:
             computed.summary = FeedEntryType(text=content)

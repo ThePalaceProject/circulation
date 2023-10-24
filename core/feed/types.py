@@ -150,6 +150,7 @@ class WorkEntryData(BaseModel):
     identifier: Optional[str] = None
     pwid: Optional[str] = None
     issued: Optional[datetime | date] = None
+    duration: Optional[float] = None
 
     summary: Optional[FeedEntryType] = None
     language: Optional[FeedEntryType] = None

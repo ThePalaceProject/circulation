@@ -155,6 +155,7 @@ class TestOPDSSerializer:
                 FeedEntryType.create(scheme="scheme", term="term", label="label")
             ],
             ratings=[FeedEntryType(text="rating")],
+            duration=10,
         )
 
         element = OPDS1Serializer().serialize_work_entry(data)
@@ -237,6 +238,10 @@ class TestOPDSSerializer:
         child = element.findall(f"Rating")
         assert len(child) == 1
         assert child[0].text == data.ratings[0].text
+
+        child = element.findall(f"{{{OPDSFeed.ATOM_NS}}}duration")
+        assert len(child) == 1
+        assert child[0].text == "10"
 
     def test_serialize_work_entry_empty(self):
         # A no-data work entry

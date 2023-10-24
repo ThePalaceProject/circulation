@@ -668,6 +668,7 @@ class TestMetadata:
         edition.primary_identifier.add_link(
             Hyperlink.IMAGE, "image", edition.data_source
         )
+        edition.duration = 100.1
         metadata = Metadata.from_edition(edition)
 
         # make sure the metadata and the originating edition match
@@ -704,6 +705,7 @@ class TestMetadata:
         edition_old.subtitle = "old_subtitile"
         edition_old.series = "old_series"
         edition_old.series_position = 5
+        edition_old.duration = 10
         metadata_old = Metadata.from_edition(edition_old)
 
         edition_new, pool = db.edition(with_license_pool=True)
@@ -712,6 +714,7 @@ class TestMetadata:
         edition_new.subtitle = "new_updated_subtitile"
         edition_new.series = "new_series"
         edition_new.series_position = 0
+        edition_new.duration = 11
         metadata_new = Metadata.from_edition(edition_new)
 
         metadata_old.update(metadata_new)
@@ -720,6 +723,7 @@ class TestMetadata:
         assert metadata_old.subtitle == metadata_new.subtitle
         assert metadata_old.series == edition_new.series
         assert metadata_old.series_position == edition_new.series_position
+        assert metadata_old.duration == metadata_new.duration
 
     def test_apply(self, db: DatabaseTransactionFixture):
         edition_old, pool = db.edition(with_license_pool=True)
@@ -737,6 +741,7 @@ class TestMetadata:
             imprint="Follywood",
             published=datetime.date(1987, 5, 4),
             issued=datetime.date(1989, 4, 5),
+            duration=10,
         )
 
         edition_new, changed = metadata.apply(edition_old, pool.collection)
@@ -753,6 +758,7 @@ class TestMetadata:
         assert edition_new.imprint == "Follywood"
         assert edition_new.published == datetime.date(1987, 5, 4)
         assert edition_new.issued == datetime.date(1989, 4, 5)
+        assert edition_new.duration == 10
 
         edition_new, changed = metadata.apply(edition_new, pool.collection)
         assert changed == False

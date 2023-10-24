@@ -153,6 +153,10 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
                     feed_entry.subtitle.text,
                 )
             )
+        if feed_entry.duration is not None:
+            entry.append(
+                OPDSFeed.E(f"{{{OPDSFeed.ATOM_NS}}}duration", str(feed_entry.duration))
+            )
         if feed_entry.summary:
             entry.append(OPDSFeed.E("summary", feed_entry.summary.text))
         if feed_entry.pwid:
