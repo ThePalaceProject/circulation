@@ -4,7 +4,6 @@ import pytest
 
 from core.coverage import (
     BaseCoverageProvider,
-    CatalogCoverageProvider,
     CoverageFailure,
     CoverageProviderProgress,
     IdentifierCoverageProvider,
@@ -1906,34 +1905,6 @@ class TestCollectionCoverageProvider:
         result = provider.set_presentation_ready(identifier)
         assert result == identifier
         assert True == pool.work.presentation_ready
-
-
-class TestCatalogCoverageProvider:
-    def test_items_that_need_coverage(self, db: DatabaseTransactionFixture):
-        c1 = db.collection()
-        c2 = db.collection()
-
-        i1 = db.identifier()
-        c1.catalog_identifier(i1)
-
-        i2 = db.identifier()
-        c2.catalog_identifier(i2)
-
-        i3 = db.identifier()
-
-        # This Identifier is licensed through the Collection c1, but
-        # it's not in the catalog--catalogs are used for different
-        # things.
-        edition, lp = db.edition(with_license_pool=True, collection=c1)
-
-        # We have four identifiers, but only i1 shows up, because
-        # it's the only one in c1's catalog.
-        class Provider(CatalogCoverageProvider):
-            SERVICE_NAME = "test"
-            DATA_SOURCE_NAME = DataSource.OVERDRIVE
-
-        provider = Provider(c1)
-        assert [i1] == provider.items_that_need_coverage().all()
 
 
 class BibliographicCoverageProviderFixture:

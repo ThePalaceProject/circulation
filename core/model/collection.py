@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, TypeVar
 
@@ -13,15 +12,14 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     exists,
-    func,
 )
-from sqlalchemy.orm import Mapped, Query, backref, joinedload, mapper, relationship
+from sqlalchemy.orm import Mapped, Query, backref, mapper, relationship
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
-from core.model import Base, create, get_one, get_one_or_create
+from core.model import Base, create, get_one_or_create
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.constants import EditionConstants
 from core.model.coverage import CoverageRecord
@@ -37,7 +35,6 @@ from core.model.integration import (
 from core.model.library import Library
 from core.model.licensing import LicensePool, LicensePoolDeliveryMechanism
 from core.model.work import Work
-from core.util.string_helpers import base64
 
 if TYPE_CHECKING:
     from core.external_search import ExternalSearchIndex
@@ -571,32 +568,6 @@ class Collection(Base, HasSessionCache):
         yield parent
         yield from parent.parents
 
-    @property
-    def metadata_identifier(self) -> str:
-        """Identifier based on collection details that uniquely represents
-        this Collection on the metadata wrangler. This identifier is
-        composed of the Collection protocol and account identifier.
-
-        A circulation manager provides a Collection's metadata
-        identifier as part of collection registration. The metadata
-        wrangler creates a corresponding Collection on its side,
-        *named after* the metadata identifier -- regardless of the name
-        of that collection on the circulation manager side.
-        """
-        account_id = self.unique_account_id
-        if self.protocol == ExternalIntegration.OPDS_IMPORT:
-            # Remove ending / from OPDS url that could duplicate the collection
-            # on the Metadata Wrangler.
-            while account_id.endswith("/"):
-                account_id = account_id[:-1]
-
-        encode = base64.urlsafe_b64encode
-        account_id = encode(account_id)
-        protocol = encode(self.protocol)
-
-        metadata_identifier = protocol + ":" + account_id
-        return encode(metadata_identifier)  # type: ignore[no-any-return]
-
     def disassociate_library(self, library: Library) -> None:
         """Disassociate a Library from this Collection and delete any relevant
         ConfigurationSettings.
@@ -638,67 +609,6 @@ class Collection(Base, HasSessionCache):
 
         self.libraries.remove(library)
 
-    @classmethod
-    def _decode_metadata_identifier(cls, metadata_identifier: str) -> Tuple[str, str]:
-        """Invert the metadata_identifier property."""
-        if not metadata_identifier:
-            raise ValueError("No metadata identifier provided.")
-        try:
-            decode = base64.urlsafe_b64decode
-            details = decode(metadata_identifier)
-            encoded_details = details.split(":", 1)
-            [protocol, account_id] = [decode(d) for d in encoded_details]
-        except (TypeError, ValueError) as e:
-            raise ValueError(
-                "Metadata identifier '%s' is invalid: %s"
-                % (metadata_identifier, str(e))
-            )
-        return protocol, account_id
-
-    @classmethod
-    def from_metadata_identifier(
-        cls,
-        _db: Session,
-        metadata_identifier: str,
-        data_source: DataSource | str | None = None,
-    ) -> Tuple[Collection, bool]:
-        """Finds or creates a Collection on the metadata wrangler, based
-        on its unique metadata_identifier.
-        """
-
-        # Decode the metadata identifier into a protocol and an
-        # account ID. If the metadata identifier is invalid, this
-        # will raise an exception.
-        protocol, account_id = cls._decode_metadata_identifier(metadata_identifier)
-
-        # Now that we know the metadata identifier is valid, try to
-        # look up a collection named after it.
-        collection = get_one(_db, Collection, name=metadata_identifier)
-        is_new = False
-
-        if not collection:
-            # Create a collection named after the metadata
-            # identifier. Give it an ExternalIntegration with the
-            # corresponding protocol, and set its data source and
-            # external_account_id.
-            new_collection, is_new = create(_db, Collection, name=metadata_identifier)
-            new_collection.create_external_integration(protocol)
-            new_collection.create_integration_configuration(protocol)
-            collection = new_collection
-
-        if protocol == ExternalIntegration.OPDS_IMPORT:
-            # For OPDS Import collections only, we store the URL to
-            # the OPDS feed (the "account ID") and the data source.
-            collection.external_account_id = account_id
-            if isinstance(data_source, DataSource):
-                collection.data_source = data_source
-            elif data_source is not None:
-                collection.data_source = DataSource.lookup(
-                    _db, data_source, autocreate=True
-                )
-
-        return collection, is_new
-
     @property
     def pools_with_no_delivery_mechanisms(self) -> Query[LicensePool]:
         """Find all LicensePools in this Collection that have no delivery
@@ -738,91 +648,6 @@ class Collection(Base, HasSessionCache):
             ) and value is not None:
                 lines.append(f'Setting "{name}": "{value}"')
         return lines
-
-    def catalog_identifier(self, identifier: Identifier) -> None:
-        """Inserts an identifier into a catalog"""
-        self.catalog_identifiers([identifier])
-
-    def catalog_identifiers(self, identifiers: List[Identifier]) -> None:
-        """Inserts identifiers into the catalog"""
-        if not identifiers:
-            # Nothing to do.
-            return
-
-        _db = Session.object_session(identifiers[0])
-        already_in_catalog = (
-            _db.query(Identifier)
-            .join(CollectionIdentifier)
-            .filter(CollectionIdentifier.collection_id == self.id)  # type: ignore[attr-defined]
-            .filter(Identifier.id.in_([x.id for x in identifiers]))
-            .all()
-        )
-
-        new_catalog_entries = [
-            dict(collection_id=self.id, identifier_id=identifier.id)
-            for identifier in identifiers
-            if identifier not in already_in_catalog
-        ]
-        _db.bulk_insert_mappings(CollectionIdentifier, new_catalog_entries)
-        _db.commit()
-
-    def unresolved_catalog(
-        self, _db: Session, data_source_name: str, operation: str
-    ) -> Query[Identifier]:
-        """Returns a query with all identifiers in a Collection's catalog that
-        have unsuccessfully attempted resolution. This method is used on the
-        metadata wrangler.
-
-        :return: a sqlalchemy.Query
-        """
-        coverage_source = DataSource.lookup(_db, data_source_name)
-        is_not_resolved = and_(
-            CoverageRecord.operation == operation,
-            CoverageRecord.data_source_id == coverage_source.id,
-            CoverageRecord.status != CoverageRecord.SUCCESS,
-        )
-
-        query = (
-            _db.query(Identifier)
-            .outerjoin(Identifier.licensed_through)
-            .outerjoin(Identifier.coverage_records)
-            .outerjoin(LicensePool.work)
-            .outerjoin(Identifier.collections)  # type: ignore[attr-defined]
-            .filter(Collection.id == self.id, is_not_resolved, Work.id == None)
-            .order_by(Identifier.id)
-        )
-
-        return query
-
-    def isbns_updated_since(
-        self, _db: Session, timestamp: datetime.datetime | None
-    ) -> Query[Identifier]:
-        """Finds all ISBNs in a collection's catalog that have been updated
-        since the timestamp but don't have a Work to show for it. Used in
-        the metadata wrangler.
-
-        :return: a Query
-        """
-        isbns = (
-            _db.query(Identifier, func.max(CoverageRecord.timestamp).label("latest"))
-            .join(Identifier.collections)  # type: ignore[attr-defined]
-            .join(Identifier.coverage_records)
-            .outerjoin(Identifier.licensed_through)
-            .group_by(Identifier.id)
-            .order_by("latest")
-            .filter(
-                Collection.id == self.id,
-                LicensePool.work_id == None,
-                CoverageRecord.status == CoverageRecord.SUCCESS,
-            )
-            .enable_eagerloads(False)
-            .options(joinedload(Identifier.coverage_records))
-        )
-
-        if timestamp:
-            isbns = isbns.filter(CoverageRecord.timestamp > timestamp)
-
-        return isbns
 
     @classmethod
     def restrict_to_ready_deliverable_works(
