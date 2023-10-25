@@ -554,7 +554,7 @@ class LicenseData(LicenseFunctions):
 
 
 class TimestampData:
-    CLEAR_VALUE = Timestamp.CLEAR_VALUE
+    CLEAR_VALUE = Timestamp.CLEAR_VALUE  # type: ignore[has-type]
 
     def __init__(
         self, start=None, finish=None, achievements=None, counter=None, exception=None

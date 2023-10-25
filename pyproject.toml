@@ -87,6 +87,7 @@ module = [
     "core.feed.*",
     "core.integration.*",
     "core.model.announcements",
+    "core.model.collection",
     "core.model.hassessioncache",
     "core.model.integration",
     "core.model.library",

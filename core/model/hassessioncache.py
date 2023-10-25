@@ -6,7 +6,7 @@ import sys
 from abc import abstractmethod
 from collections import namedtuple
 from types import SimpleNamespace
-from typing import Callable, Hashable
+from typing import Callable, Hashable, TypeVar
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session
@@ -20,6 +20,8 @@ else:
 
 
 CacheTuple = namedtuple("CacheTuple", ["id", "key", "stats"])
+
+T = TypeVar("T")
 
 
 class HasSessionCache:
@@ -94,8 +96,8 @@ class HasSessionCache:
         cache: CacheTuple,
         cache_name: str,
         cache_key: Hashable,
-        cache_miss_hook: Callable[[], tuple[Self | None, bool]],
-    ) -> tuple[Self | None, bool]:
+        cache_miss_hook: Callable[[], tuple[T, bool]],
+    ) -> tuple[T, bool]:
         """Helper method used by both by_id and by_cache_key.
 
         Looks up `cache_key` in the `cache_name` property of `cache`, returning
@@ -142,20 +144,22 @@ class HasSessionCache:
     def by_id(cls, db: Session, id: int) -> Self | None:
         """Look up an item by its unique database ID."""
         cache = cls._cache_from_session(db)
-
-        def lookup_hook():  # type: ignore[no-untyped-def]
-            return get_one(db, cls, id=id), False
-
-        obj, _ = cls._cache_lookup(db, cache, "id", id, lookup_hook)
+        obj, _ = cls._cache_lookup(
+            db, cache, "id", id, lambda: cls._by_id_lookup_hook(db, id)
+        )
         return obj
+
+    @classmethod
+    def _by_id_lookup_hook(cls, db: Session, id: int) -> tuple[Self | None, bool]:
+        return get_one(db, cls, id=id), False
 
     @classmethod
     def by_cache_key(
         cls,
         db: Session,
         cache_key: Hashable,
-        cache_miss_hook: Callable[[], tuple[Self | None, bool]],
-    ) -> tuple[Self | None, bool]:
+        cache_miss_hook: Callable[[], tuple[T, bool]],
+    ) -> tuple[T, bool]:
         """Look up an item by its cache key."""
         cache = cls._cache_from_session(db)
         return cls._cache_lookup(db, cache, "key", cache_key, cache_miss_hook)

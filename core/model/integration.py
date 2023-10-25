@@ -72,14 +72,17 @@ class IntegrationConfiguration(Base):
 
     @overload
     def for_library(
-        self, library_id: int, create: Literal[False] = False
+        self, library_id: int | None, create: bool = False
     ) -> IntegrationLibraryConfiguration | None:
         ...
 
     def for_library(
-        self, library_id: int, create: bool = False
+        self, library_id: int | None, create: bool = False
     ) -> IntegrationLibraryConfiguration | None:
         """Fetch the library configuration specifically by library_id"""
+        if library_id is None:
+            return None
+
         for config in self.library_configurations:
             if config.library_id == library_id:
                 return config

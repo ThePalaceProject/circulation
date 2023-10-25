@@ -328,7 +328,8 @@ class Library(Base, HasSessionCache):
         if group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME:
             enabled = []
             for collection in self.collections:
-                enabled.append(collection.name)
+                if collection.name is not None:
+                    enabled.append(collection.name)
             return enabled
 
         return getattr(self.settings, f"facets_enabled_{group_name}")  # type: ignore[no-any-return]
@@ -386,7 +387,7 @@ class Library(Base, HasSessionCache):
         collection_ids = collection_ids or [
             x.id for x in self.all_collections if x.id is not None
         ]
-        return Collection.restrict_to_ready_deliverable_works(  # type: ignore[no-any-return]
+        return Collection.restrict_to_ready_deliverable_works(
             query,
             collection_ids=collection_ids,
             show_suppressed=show_suppressed,
