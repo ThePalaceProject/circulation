@@ -485,29 +485,6 @@ class Collection(Base, HasSessionCache):
             )
         return self._external_integration
 
-    @property
-    def unique_account_id(self) -> str:
-        """Identifier that uniquely represents this Collection of works"""
-        unique_account_id: str | None
-        if (
-            self.data_source
-            and self.data_source.name in self.GLOBAL_COLLECTION_DATA_SOURCES
-            and not self.parent
-        ):
-            # Every top-level collection from this data source has the
-            # same catalog. Treat them all as one collection named
-            # after the data source.
-            unique_account_id = self.data_source.name
-        else:
-            unique_account_id = self.external_account_id
-
-        if not unique_account_id:
-            raise ValueError("Unique account identifier not set")
-
-        if self.parent:
-            return self.parent.unique_account_id + "+" + unique_account_id
-        return unique_account_id
-
     @hybrid_property
     def data_source(self) -> DataSource | None:
         """Find the data source associated with this Collection.
