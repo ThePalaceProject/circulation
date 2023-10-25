@@ -20,7 +20,6 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
-from core.external_search import ExternalSearchIndex
 from core.integration.goals import Goals
 from core.model import Base, create, get_one, get_one_or_create
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
@@ -41,8 +40,7 @@ from core.model.work import Work
 from core.util.string_helpers import base64
 
 if TYPE_CHECKING:
-    # This is needed during type checking so we have the
-    # types of related models.
+    from core.external_search import ExternalSearchIndex
     from core.model import Credential, CustomList, Timestamp
 
 
