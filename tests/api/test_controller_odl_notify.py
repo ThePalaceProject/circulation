@@ -26,9 +26,6 @@ class ODLFixture:
                 external_account_id="http://odl",
             ),
         )
-        integration = self.collection.create_external_integration(
-            protocol=self.integration_protocol()
-        )
         config = self.collection.create_integration_configuration(
             self.integration_protocol()
         )

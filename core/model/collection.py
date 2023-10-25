@@ -13,7 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     exists,
 )
-from sqlalchemy.orm import Mapped, Query, backref, mapper, relationship
+from sqlalchemy.orm import Mapped, Query, mapper, relationship
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
@@ -68,12 +68,7 @@ class Collection(Base, HasSessionCache):
     # into the external integration, as does the 'protocol', which
     # designates the integration technique we will use to actually get
     # the metadata and licenses. Each Collection has a distinct
-    # ExternalIntegration.
-    external_integration_id = Column(
-        Integer, ForeignKey("externalintegrations.id"), unique=True, index=True
-    )
-    _external_integration: ExternalIntegration
-
+    # integration configuration.
     integration_configuration_id = Column(
         Integer,
         ForeignKey("integration_configurations.id", ondelete="SET NULL"),
@@ -94,8 +89,7 @@ class Collection(Base, HasSessionCache):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
-    # SQLAlchemy will create a Collection-typed field called "parent".
-    parent: Collection
+    parent: Collection = relationship("Collection", remote_side=[id])
 
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
@@ -105,9 +99,7 @@ class Collection(Base, HasSessionCache):
     # A collection may have many child collections. For example,
     # An Overdrive collection may have many children corresponding
     # to Overdrive Advantage collections.
-    children: Mapped[List[Collection]] = relationship(
-        "Collection", backref=backref("parent", remote_side=[id]), uselist=True
-    )
+    children: Mapped[List[Collection]] = relationship("Collection", uselist=True)
 
     # A Collection can provide books to many Libraries.
     libraries: Mapped[List[Library]] = relationship(
@@ -164,7 +156,7 @@ class Collection(Base, HasSessionCache):
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
 
     def cache_key(self) -> Tuple[str | None, str | None]:
-        return self.name, self.external_integration.protocol
+        return self.name, self.integration_configuration.protocol
 
     @classmethod
     def by_name_and_protocol(
@@ -212,8 +204,6 @@ class Collection(Base, HasSessionCache):
                 raise ValueError(
                     f'Collection "{name}" does not use protocol "{protocol}".'
                 )
-            integration = collection.create_external_integration(protocol=protocol)
-            collection.external_integration.protocol = protocol
             collection.create_integration_configuration(protocol)
         return collection, is_new
 
@@ -413,35 +403,6 @@ class Collection(Base, HasSessionCache):
         """
         self._set_settings(**{self.DEFAULT_AUDIENCE_KEY: str(new_value)})
 
-    def create_external_integration(self, protocol: str) -> ExternalIntegration:
-        """Create an ExternalIntegration for this Collection.
-
-        To be used immediately after creating a new Collection,
-        e.g. in by_name_and_protocol, from_metadata_identifier, and
-        various test methods that create mock Collections.
-
-        If an external integration already exists, return it instead
-        of creating another one.
-
-        :param protocol: The protocol known to be in use when getting
-            licenses for this collection.
-        """
-        _db = Session.object_session(self)
-        goal = ExternalIntegration.LICENSE_GOAL
-        external_integration, is_new = get_one_or_create(
-            _db,
-            ExternalIntegration,
-            id=self.external_integration_id,
-            create_method_kwargs=dict(protocol=protocol, goal=goal),
-        )
-        if external_integration.protocol != protocol:
-            raise ValueError(
-                "Located ExternalIntegration, but its protocol (%s) does not match desired protocol (%s)."
-                % (external_integration.protocol, protocol)
-            )
-        self.external_integration_id = external_integration.id
-        return external_integration
-
     def create_integration_configuration(
         self, protocol: str
     ) -> IntegrationConfiguration:
@@ -465,25 +426,6 @@ class Collection(Base, HasSessionCache):
         self.integration_configuration_id = integration.id
         # Immediately accessing the relationship fills out the data
         return self.integration_configuration
-
-    @property
-    def external_integration(self) -> ExternalIntegration:
-        """Find the external integration for this Collection, assuming
-        it already exists.
-
-        This is generally a safe assumption since by_name_and_protocol and
-        from_metadata_identifier both create ExternalIntegrations for the
-        Collections they create.
-        """
-        # We don't enforce this on the database level because it is
-        # legitimate for a newly created Collection to have no
-        # ExternalIntegration. But by the time it's being used for real,
-        # it needs to have one.
-        if not self.external_integration_id:
-            raise ValueError(
-                "No known external integration for collection %s" % self.name
-            )
-        return self._external_integration
 
     @hybrid_property
     def data_source(self) -> DataSource | None:
@@ -554,20 +496,6 @@ class Collection(Base, HasSessionCache):
             return
 
         _db = Session.object_session(self)
-        if self.external_integration_id:
-            qu = (
-                _db.query(ConfigurationSetting)
-                .filter(ConfigurationSetting.library == library)
-                .filter(
-                    ConfigurationSetting.external_integration
-                    == self.external_integration
-                )
-            )
-            qu.delete()
-        else:
-            raise ValueError(
-                "No known external integration for collection %s" % self.name
-            )
         if self.integration_configuration_id:
             qu = (
                 _db.query(IntegrationLibraryConfiguration)
@@ -741,11 +669,6 @@ class Collection(Base, HasSessionCache):
                     work.delete(search_index)
 
             _db.delete(pool)
-
-        # Delete the ExternalIntegration associated with this
-        # Collection, assuming it wasn't deleted already.
-        if self.external_integration:
-            _db.delete(self.external_integration)
 
         # Now delete the Collection itself.
         _db.delete(self)

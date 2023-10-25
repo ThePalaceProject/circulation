@@ -57,9 +57,6 @@ class MockOverdriveAPI(OverdriveAPI):
             name=name,
             create_method_kwargs=dict(external_account_id=library_id),
         )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.OVERDRIVE
-        )
         config = collection.create_integration_configuration(
             ExternalIntegration.OVERDRIVE
         )

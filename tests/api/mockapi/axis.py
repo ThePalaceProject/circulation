@@ -21,9 +21,6 @@ class MockAxis360API(Axis360API):
                 external_account_id="c",
             ),
         )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.AXIS_360
-        )
         config = collection.create_integration_configuration(
             ExternalIntegration.AXIS_360
         )

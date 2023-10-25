@@ -169,10 +169,6 @@ class DatabaseTransactionFixture:
         collection, ignore = get_one_or_create(
             self._session, Collection, name="Default Collection"
         )
-        integration = collection.create_external_integration(
-            ExternalIntegration.OPDS_IMPORT
-        )
-        integration.goal = ExternalIntegration.LICENSE_GOAL
         config = collection.create_integration_configuration(
             ExternalIntegration.OPDS_IMPORT
         )
@@ -216,7 +212,7 @@ class DatabaseTransactionFixture:
     def session(self) -> Session:
         return self._session
 
-    def default_collection(self):
+    def default_collection(self) -> Collection:
         """A Collection that will only be created once throughout
         a given test.
 
@@ -309,8 +305,6 @@ class DatabaseTransactionFixture:
         name = name or self.fresh_str()
         collection, ignore = get_one_or_create(self.session, Collection, name=name)
         collection.external_account_id = external_account_id
-        integration = collection.create_external_integration(protocol)
-        integration.goal = ExternalIntegration.LICENSE_GOAL
         config = collection.create_integration_configuration(protocol)
         config.goal = Goals.LICENSE_GOAL
         config.settings_dict = {

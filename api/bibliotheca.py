@@ -337,9 +337,6 @@ class BibliothecaAPI(
         """This will be overridden in MockBibliothecaAPI."""
         return Representation.simple_http_get(url, headers, *args, **kwargs)
 
-    def external_integration(self, _db):
-        return self.collection.external_integration
-
     def _run_self_tests(self, _db):
         def _count_events():
             now = utc_now()

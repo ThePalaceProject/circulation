@@ -181,10 +181,6 @@ class CollectionSettingsController(SettingsController):
                 self._db.rollback()
                 return COLLECTION_NAME_ALREADY_IN_USE
             collection.create_integration_configuration(protocol_name)
-            # Mirrors still use the external integration
-            # TODO: Remove the use of external integrations when Mirrors are migrated
-            # to use the integration configurations
-            collection.create_external_integration(protocol_name)
 
         collection.name = name
         [protocol_dict] = [p for p in protocols if p.get("name") == protocol_name]

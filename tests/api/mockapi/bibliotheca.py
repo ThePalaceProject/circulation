@@ -24,9 +24,6 @@ class MockBibliothecaAPI(BibliothecaAPI):
                 external_account_id="c",
             ),
         )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.BIBLIOTHECA
-        )
         config = collection.create_integration_configuration(
             ExternalIntegration.BIBLIOTHECA
         )

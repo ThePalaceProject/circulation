@@ -20,7 +20,6 @@ from core.model import (
     Collection,
     Credential,
     DeliveryMechanism,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -102,7 +101,6 @@ class OPDSForDistributorsAPI(
 
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)
-        self.external_integration_id = collection.external_integration.id
 
         settings = self.settings
         self.data_source_name = settings.data_source
@@ -110,9 +108,6 @@ class OPDSForDistributorsAPI(
         self.password = settings.password
         self.feed_url = collection.external_account_id
         self.auth_url: Optional[str] = None
-
-    def external_integration(self, _db: Session) -> Optional[ExternalIntegration]:
-        return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         """Try to get a token."""

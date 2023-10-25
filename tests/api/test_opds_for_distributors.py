@@ -92,16 +92,6 @@ def opds_dist_api_fixture(
 
 
 class TestOPDSForDistributorsAPI:
-    def test_external_integration(
-        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
-    ):
-        assert (
-            opds_dist_api_fixture.collection.external_integration
-            == opds_dist_api_fixture.api.external_integration(
-                opds_dist_api_fixture.db.session
-            )
-        )
-
     def test__run_self_tests(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
     ):

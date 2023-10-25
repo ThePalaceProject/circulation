@@ -78,7 +78,6 @@ from core.model import (
     Subject,
     get_one,
 )
-from core.model.configuration import HasExternalIntegration
 from core.model.formats import FormatPrioritiesSettings
 from core.monitor import CollectionMonitor
 from core.saml.wayfless import (
@@ -1737,9 +1736,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         return series_name, series_position
 
 
-class OPDSImportMonitor(
-    CollectionMonitor, HasCollectionSelfTests, HasExternalIntegration
-):
+class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
     """Periodically monitor a Collection's OPDS archive feed and import
     every title it mentions.
     """
@@ -1779,7 +1776,6 @@ class OPDSImportMonitor(
                 "Collection %s has no associated data source." % collection.name
             )
 
-        self.external_integration_id = collection.external_integration.id
         feed_url = self.opds_url(collection)
         self.feed_url = "" if feed_url is None else feed_url
 
@@ -1796,9 +1792,6 @@ class OPDSImportMonitor(
         parsed_url = urlparse(self.feed_url)
         self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"
         super().__init__(_db, collection)
-
-    def external_integration(self, _db: Session) -> Optional[ExternalIntegration]:
-        return get_one(_db, ExternalIntegration, id=self.external_integration_id)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         """Retrieve the first page of the OPDS feed"""

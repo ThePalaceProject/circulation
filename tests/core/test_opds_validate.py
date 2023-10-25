@@ -20,7 +20,7 @@ class TestOPDS2Validation(OPDS2Test):
         opds_files_fixture: OPDSFilesFixture,
     ):
         db.default_collection().protocol = ExternalIntegration.OPDS2_IMPORT
-        db.default_collection().data_source = DataSource.FEEDBOOKS
+        db.default_collection().data_source = DataSource.FEEDBOOKS  # type: ignore[assignment]
         validator = OPDS2SchemaValidation(
             db.session,
             collection=db.default_collection(),
@@ -43,7 +43,7 @@ class TestODL2Validation(OPDS2Test):
             "password": "password",
         }
         db.default_collection().protocol = ExternalIntegration.ODL2
-        db.default_collection().data_source = DataSource.FEEDBOOKS
+        db.default_collection().data_source = DataSource.FEEDBOOKS  # type: ignore[assignment]
         validator = ODL2SchemaValidation(
             db.session,
             collection=db.default_collection(),

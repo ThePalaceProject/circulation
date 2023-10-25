@@ -99,9 +99,6 @@ class ODLTestFixture:
                 external_account_id="http://odl",
             ),
         )
-        integration = collection.create_external_integration(
-            protocol=integration_protocol
-        )
         config = collection.create_integration_configuration(integration_protocol)
         config.settings_dict = {
             "username": "a",

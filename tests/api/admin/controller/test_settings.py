@@ -304,8 +304,8 @@ class TestSettingsController:
             == "Required field 'key' is missing."
         )
 
-        config = _set_configuration_library(
+        result = _set_configuration_library(
             config, dict(short_name="short-name", key="key", value="value"), Protocol1
         )
-        assert config.library == library
-        assert config.settings_dict == dict(key="key", value="value")
+        assert result.library == library
+        assert result.settings_dict == dict(key="key", value="value")

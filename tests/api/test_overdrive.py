@@ -567,14 +567,6 @@ class TestOverdriveAPI:
             # this page) and a link to the next page.
             assert result == (["an availability queue"], "http://next-page/")
 
-    def test_external_integration(self, overdrive_api_fixture: OverdriveAPIFixture):
-        assert (
-            overdrive_api_fixture.collection.external_integration
-            == overdrive_api_fixture.api.external_integration(
-                overdrive_api_fixture.db.session
-            )
-        )
-
     def test_lock_in_format(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Verify which formats do or don't need to be locked in before
         # fulfillment.
@@ -3813,7 +3805,6 @@ class TestOverdriveAdvantageAccount:
         assert p == parent
         assert parent == collection.parent
         assert collection.external_account_id == account.library_id
-        assert ExternalIntegration.LICENSE_GOAL == collection.external_integration.goal
         assert ExternalIntegration.OVERDRIVE == collection.protocol
         assert Goals.LICENSE_GOAL == collection.integration_configuration.goal
         assert ExternalIntegration.OVERDRIVE == collection.protocol

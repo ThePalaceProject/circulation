@@ -3,9 +3,8 @@ from __future__ import annotations
 # ExternalIntegration, ExternalIntegrationLink, ConfigurationSetting
 import json
 import logging
-from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
@@ -179,14 +178,6 @@ class ExternalIntegration(Base):
         back_populates="external_integration",
         cascade="all, delete",
         uselist=True,
-    )
-
-    # Any number of Collections may designate an ExternalIntegration
-    # as the source of their configuration
-    collections: Mapped[List[Collection]] = relationship(
-        "Collection",
-        backref="_external_integration",
-        foreign_keys="Collection.external_integration_id",
     )
 
     libraries: Mapped[List[Library]] = relationship(
@@ -677,20 +668,6 @@ class ConfigurationSetting(Base, HasSessionCache):
         if value is None:
             value = cls.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT
         return value
-
-
-class HasExternalIntegration(metaclass=ABCMeta):
-    """Interface allowing to get access to an external integration"""
-
-    @abstractmethod
-    def external_integration(self, db: Session) -> Optional[ExternalIntegration]:
-        """Returns an external integration associated with this object
-
-        :param db: Database session
-
-        :return: External integration associated with this object
-        """
-        raise NotImplementedError()
 
 
 class ConfigurationAttributeValue(Enum):

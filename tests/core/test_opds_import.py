@@ -1839,23 +1839,6 @@ class TestOPDSImportMonitor:
                 "https://opds.import.com:9999/relative/path",
             )
 
-    def test_external_integration(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
-        )
-
-        monitor = OPDSImportMonitor(
-            session,
-            db.default_collection(),
-            import_class=OPDSImporter,
-        )
-        assert (
-            db.default_collection().external_integration
-            == monitor.external_integration(session)
-        )
-
     def test__run_self_tests(self, opds_importer_fixture: OPDSImporterFixture):
         data, db, session = (
             opds_importer_fixture,

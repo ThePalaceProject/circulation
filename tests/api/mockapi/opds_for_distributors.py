@@ -28,9 +28,6 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
                 external_account_id="http://opds",
             ),
         )
-        integration = collection.create_external_integration(
-            protocol=OPDSForDistributorsAPI.label()
-        )
         config = collection.create_integration_configuration(
             OPDSForDistributorsAPI.label()
         )

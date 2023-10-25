@@ -377,7 +377,6 @@ class OverdriveAPI(
             self._library_id = _library_id
 
         self._db = _db
-        self._external_integration = collection.external_integration
         if collection.id is None:
             raise ValueError(
                 "Collection passed into OverdriveAPI must have an ID, but %s does not"
@@ -448,9 +447,6 @@ class OverdriveAPI(
             server_nickname = OverdriveConstants.PRODUCTION_SERVERS
 
         return dict(self.HOSTS[server_nickname])
-
-    def external_integration(self, db: Session) -> ExternalIntegration:
-        return self._external_integration
 
     def endpoint(self, url: str, **kwargs) -> str:
         """Create the URL to an Overdrive API endpoint.
@@ -2865,9 +2861,6 @@ class OverdriveAdvantageAccount:
         )
         if is_new:
             # Make sure the child has its protocol set appropriately.
-            integration = child.create_external_integration(
-                ExternalIntegration.OVERDRIVE
-            )
             configuration = child.create_integration_configuration(
                 ExternalIntegration.OVERDRIVE
             )

@@ -7,6 +7,7 @@ from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import ForeignKey, Integer, Unicode
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, Session, relationship
+from sqlalchemy.orm.attributes import flag_modified
 
 from core.integration.goals import Goals
 from core.model import Base, get_one_or_create
@@ -48,6 +49,16 @@ class IntegrationConfiguration(Base):
     settings_dict: Mapped[Dict[str, Any]] = Column(
         "settings", JSONB, nullable=False, default=dict
     )
+
+    # Integration specific context data. Stored as json. This is used to
+    # store configuration data that is not user supplied for a particular
+    # integration.
+    context: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
+
+    def context_update(self, new_context: Dict[str, Any]) -> None:
+        """Update the context for this integration"""
+        self.context.update(new_context)
+        flag_modified(self, "context")
 
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)

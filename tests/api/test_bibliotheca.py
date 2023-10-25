@@ -97,12 +97,6 @@ def bibliotheca_fixture(
 
 
 class TestBibliothecaAPI:
-    def test_external_integration(self, bibliotheca_fixture: BibliothecaAPITestFixture):
-        assert (
-            bibliotheca_fixture.collection.external_integration
-            == bibliotheca_fixture.api.external_integration(object())
-        )
-
     def test__run_self_tests(
         self,
         bibliotheca_fixture: BibliothecaAPITestFixture,

@@ -10,7 +10,6 @@ from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 from api.circulation import CirculationAPI, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
 from core.model import (
-    ConfigurationSetting,
     Contribution,
     Contributor,
     DataSource,
@@ -453,12 +452,12 @@ class TestOPDS2Importer(OPDS2Test):
         imported_editions, pools, works, failures = data.importer.import_from_feed(
             content
         )
-        setting = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, data.collection.external_integration
+        token_endpoint = data.collection.integration_configuration.context.get(
+            ExternalIntegration.TOKEN_AUTH
         )
 
         # Did the token endpoint get stored correctly?
-        assert setting.value == "http://example.org/auth?userName={patron_id}"
+        assert token_endpoint == "http://example.org/auth?userName={patron_id}"
 
 
 class Opds2ApiFixture:
@@ -467,13 +466,9 @@ class Opds2ApiFixture:
         self.collection: Collection = db.collection(
             protocol=ExternalIntegration.OPDS2_IMPORT
         )
-        self.integration = self.collection.create_external_integration(
-            ExternalIntegration.OPDS2_IMPORT
-        )
-        self.setting = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, self.integration
-        )
-        self.setting.value = "http://example.org/token?userName={patron_id}"
+        self.collection.integration_configuration.context = {
+            ExternalIntegration.TOKEN_AUTH: "http://example.org/token?userName={patron_id}"
+        }
 
         self.mock_response = MagicMock(spec=Response)
         self.mock_response.status_code = 200

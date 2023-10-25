@@ -527,7 +527,9 @@ class TestExternalIntegration:
             db.default_collection().integration_configuration,
             **{Collection.DATA_SOURCE_NAME_SETTING: "New Data Source"}
         )
-        assert "New Data Source" == db.default_collection().data_source.name
+        data_source = db.default_collection().data_source
+        assert data_source is not None
+        assert data_source.name == "New Data Source"
 
     def test_set_key_value_pair(
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
