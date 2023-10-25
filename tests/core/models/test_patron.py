@@ -5,6 +5,7 @@ import pytest
 
 from core.classifier import Classifier
 from core.model import create, tuple_to_numericrange
+from core.model.constants import LinkRelations
 from core.model.credential import Credential
 from core.model.datasource import DataSource
 from core.model.licensing import PolicyException
@@ -750,6 +751,13 @@ class TestPatron:
                     )
 
 
+def mock_url_for(url, **kwargs):
+    item_list = [f"{k}={v}" for k, v in kwargs.items()]
+    item_list.sort()  # Ensure repeatable order
+    items = ";".join(item_list)
+    return f"{url} : {items}"
+
+
 class ExamplePatronProfileStorageFixture:
     patron: Patron
     store: PatronProfileStorage
@@ -761,7 +769,7 @@ class ExamplePatronProfileStorageFixture:
     ) -> "ExamplePatronProfileStorageFixture":
         data = ExamplePatronProfileStorageFixture()
         data.patron = transaction.patron()
-        data.store = PatronProfileStorage(data.patron)
+        data.store = PatronProfileStorage(data.patron, url_for=mock_url_for)
         data.transaction = transaction
         return data
 
@@ -787,6 +795,14 @@ class TestPatronProfileStorage:
     ):
         data = example_patron_profile_fixture
 
+        links = [
+            dict(
+                rel=LinkRelations.DEVICE_REGISTRATION,
+                type="application/json",
+                href="put_patron_devices : _external=True;library_short_name=default",
+            )
+        ]
+
         # synchronize_annotations always shows up as settable, even if
         # the current value is None.
         data.patron.authorization_identifier = "abcd"
@@ -795,6 +811,7 @@ class TestPatronProfileStorage:
         assert {
             "simplified:authorization_identifier": "abcd",
             "settings": {"simplified:synchronize_annotations": None},
+            "links": links,
         } == rep
 
         data.patron.synchronize_annotations = True
@@ -804,6 +821,7 @@ class TestPatronProfileStorage:
             "simplified:authorization_expires": "2016-01-01T10:20:30Z",
             "simplified:authorization_identifier": "abcd",
             "settings": {"simplified:synchronize_annotations": True},
+            "links": links,
         } == rep
 
     def test_update(

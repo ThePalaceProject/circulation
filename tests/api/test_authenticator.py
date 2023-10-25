@@ -52,6 +52,7 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import CirculationEvent, ConfigurationSetting, Library, Patron
+from core.model.constants import LinkRelations
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -458,7 +459,7 @@ class TestCirculationPatronProfileStorage:
         assert "drm:vendor" not in doc
         assert "drm:clientToken" not in doc
         assert "drm:scheme" not in doc
-        assert "links" not in doc
+        assert len(doc["links"]) == 1
 
         # Now there's authdata configured, and the DRM fields are populated with
         # the vendor ID and a short client token
@@ -474,13 +475,14 @@ class TestCirculationPatronProfileStorage:
         assert (
             adobe["drm:scheme"] == "http://librarysimplified.org/terms/drm/scheme/ACS"
         )
-        [annotations_link] = doc["links"]
+        [devices_link, annotations_link] = doc["links"]
         assert annotations_link["rel"] == "http://www.w3.org/ns/oa#annotationService"
         assert (
             annotations_link["href"]
             == "http://host/annotations?library_short_name=default"
         )
         assert annotations_link["type"] == AnnotationWriter.CONTENT_TYPE
+        assert devices_link["rel"] == LinkRelations.DEVICE_REGISTRATION
 
 
 class TestAuthenticator:
