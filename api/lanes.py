@@ -14,7 +14,6 @@ from core.lane import (
     WorkList,
 )
 from core.model import (
-    CachedFeed,
     Contributor,
     DataSource,
     Edition,
@@ -1037,7 +1036,6 @@ class RecommendationLane(WorkBasedLane):
     # Cache for 24 hours -- would ideally be much longer but availability
     # information goes stale.
     MAX_CACHE_AGE = 24 * 60 * 60
-    CACHED_FEED_TYPE = CachedFeed.RECOMMENDATIONS_TYPE
 
     def __init__(
         self, library, work, display_name=None, novelist_api=None, parent=None
@@ -1124,7 +1122,6 @@ class SeriesLane(DynamicLane):
     # Cache for 24 hours -- would ideally be longer but availability
     # information goes stale.
     MAX_CACHE_AGE = 24 * 60 * 60
-    CACHED_FEED_TYPE = CachedFeed.SERIES_TYPE
 
     def __init__(self, library, series_name, parent=None, **kwargs):
         if not series_name:
@@ -1185,7 +1182,6 @@ class ContributorLane(DynamicLane):
     # Cache for 24 hours -- would ideally be longer but availability
     # information goes stale.
     MAX_CACHE_AGE = 24 * 60 * 60
-    CACHED_FEED_TYPE = CachedFeed.CONTRIBUTOR_TYPE
 
     def __init__(
         self, library, contributor, parent=None, languages=None, audiences=None
@@ -1250,7 +1246,6 @@ class RelatedBooksLane(WorkBasedLane):
       service.
     """
 
-    CACHED_FEED_TYPE = CachedFeed.RELATED_TYPE
     DISPLAY_NAME = "Related Books"
     ROUTE = "related_books"
 
@@ -1353,8 +1348,6 @@ class RelatedBooksLane(WorkBasedLane):
 
 class CrawlableFacets(Facets):
     """A special Facets class for crawlable feeds."""
-
-    CACHED_FEED_TYPE = CachedFeed.CRAWLABLE_TYPE
 
     # These facet settings are definitive of a crawlable feed.
     # Library configuration settings don't matter.

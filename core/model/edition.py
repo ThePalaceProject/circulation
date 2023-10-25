@@ -136,10 +136,6 @@ class Edition(Base, EditionConstants):
     cover_full_url = Column(Unicode)
     cover_thumbnail_url = Column(Unicode)
 
-    # An OPDS entry containing all metadata about this entry that
-    # would be relevant to display to a library patron.
-    simple_opds_entry = Column(Unicode, default=None)
-
     # Information kept in here probably won't be used.
     extra: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 

@@ -59,12 +59,7 @@ else:
 
 # Import related models when doing type checking
 if TYPE_CHECKING:
-    from core.model import (  # noqa: autoflake
-        CachedFeed,
-        CustomListEntry,
-        Library,
-        LicensePool,
-    )
+    from core.model import CustomListEntry, Library, LicensePool
 
 
 class WorkGenre(Base):
@@ -148,12 +143,6 @@ class Work(Base):
         "CustomListEntry", backref="work"
     )
 
-    # One Work may have multiple CachedFeeds, and if a CachedFeed
-    # loses its Work, it ceases to exist.
-    cached_feeds: Mapped[List[CachedFeed]] = relationship(
-        "CachedFeed", back_populates="work", cascade="all, delete-orphan"
-    )
-
     # One Work may participate in many WorkGenre assignments.
     genres = association_proxy("work_genres", "genre", creator=WorkGenre.from_genre)
     work_genres: Mapped[List[WorkGenre]] = relationship(
@@ -220,15 +209,6 @@ class Work(Base):
     # will be made to make the Work presentation ready.
     presentation_ready_exception = Column(Unicode, default=None, index=True)
 
-    # A precalculated OPDS entry containing all metadata about this
-    # work that would be relevant to display to a library patron.
-    simple_opds_entry = Column(Unicode, default=None)
-
-    # A precalculated OPDS entry containing all metadata about this
-    # work that would be relevant to display in a machine-to-machine
-    # integration context.
-    verbose_opds_entry = Column(Unicode, default=None)
-
     # A precalculated MARC record containing metadata about this
     # work that would be relevant to display in a library's public
     # catalog.
@@ -237,8 +217,6 @@ class Work(Base):
     # These fields are potentially large and can be deferred if you
     # don't need all the data in a Work.
     LARGE_FIELDS = [
-        "simple_opds_entry",
-        "verbose_opds_entry",
         "marc_record",
         "summary_text",
     ]

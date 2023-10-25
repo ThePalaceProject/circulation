@@ -68,21 +68,11 @@ from core.feed.annotator.circulation import (
 )
 from core.feed.navigation import NavigationFeed
 from core.feed.opds import NavigationFacets
-from core.lane import (
-    BaseFacets,
-    Facets,
-    FeaturedFacets,
-    Lane,
-    Pagination,
-    SearchFacets,
-    WorkList,
-)
+from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
 from core.model import (
-    Admin,
     Annotation,
-    CachedFeed,
     CirculationEvent,
     Collection,
     ConfigurationSetting,
@@ -249,30 +239,6 @@ class CirculationManager:
             ):
                 return NO_SUCH_LANE.detailed(_("Lane does not exist"))
 
-        if (
-            isinstance(facets, BaseFacets)
-            and getattr(facets, "max_cache_age", None) is not None
-        ):
-            # A faceting object was loaded, and it tried to do something nonstandard
-            # with caching.
-
-            # Try to get the AdminSignInController, which is
-            # associated with the CirculationManager object by the
-            # admin interface in admin/controller.
-            #
-            # If the admin interface wasn't initialized for whatever
-            # reason, we'll default to assuming the user is not an
-            # authenticated admin.
-            authenticated = False
-            controller = getattr(self, "admin_sign_in_controller", None)
-            if controller:
-                admin = controller.authenticated_admin_from_request()
-                # If authenticated_admin_from_request returns anything other than an admin (probably
-                # a ProblemDetail), the user is not an authenticated admin.
-                if isinstance(admin, Admin):
-                    authenticated = True
-            if not authenticated:
-                facets.max_cache_age = None
         return facets
 
     def reload_settings_if_changed(self):
@@ -948,7 +914,7 @@ class OPDSFeedController(CirculationManagerController):
             search_engine=search_engine,
         )
         return feed.as_response(
-            max_age=int(max_age) if max_age else None,
+            max_age=int(max_age) if max_age else lane.max_cache_age(),
             mime_types=flask.request.accept_mimetypes,
         )
 
@@ -984,7 +950,7 @@ class OPDSFeedController(CirculationManagerController):
             worklist=lane,
             annotator=annotator,
             facets=facets,
-        ).as_response()
+        ).as_response(max_age=lane.max_cache_age())
 
     def crawlable_library_feed(self):
         """Build or retrieve a crawlable acquisition feed for the
@@ -1077,7 +1043,9 @@ class OPDSFeedController(CirculationManagerController):
             facets=facets,
             pagination=pagination,
             search_engine=search_engine,
-        ).as_response(mime_types=flask.request.accept_mimetypes)
+        ).as_response(
+            mime_types=flask.request.accept_mimetypes, max_age=worklist.max_cache_age()
+        )
 
     def _load_search_facets(self, lane):
         entrypoints = list(flask.request.library.entrypoints)
@@ -1163,7 +1131,9 @@ class OPDSFeedController(CirculationManagerController):
         )
         if isinstance(response, ProblemDetail):
             return response
-        return response.as_response(mime_types=flask.request.accept_mimetypes)
+        return response.as_response(
+            mime_types=flask.request.accept_mimetypes, max_age=lane.max_cache_age()
+        )
 
     def _qa_feed(
         self, feed_factory, feed_title, controller_name, facet_class, worklist_factory
@@ -1215,7 +1185,7 @@ class OPDSFeedController(CirculationManagerController):
             annotator=annotator,
             search_engine=search_engine,
             facets=facets,
-            max_age=CachedFeed.IGNORE_CACHE,
+            max_age=0,
         )
 
     def qa_feed(self, feed_class=OPDSAcquisitionFeed):
@@ -2024,7 +1994,7 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        ).as_response()
+        ).as_response(max_age=lane.max_cache_age())
 
     def permalink(self, identifier_type, identifier):
         """Serve an entry for a single book.
@@ -2121,7 +2091,7 @@ class WorkController(CirculationManagerController):
             pagination=None,
             facets=facets,
             search_engine=search_engine,
-        ).as_response()
+        ).as_response(max_age=lane.max_cache_age())
 
     def recommendations(
         self,
@@ -2180,7 +2150,7 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        ).as_response()
+        ).as_response(max_age=lane.max_cache_age())
 
     def series(self, series_name, languages, audiences, feed_class=OPDSAcquisitionFeed):
         """Serve a feed of books in a given series."""
@@ -2219,7 +2189,7 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        ).as_response()
+        ).as_response(max_age=lane.max_cache_age())
 
 
 class ProfileController(CirculationManagerController):

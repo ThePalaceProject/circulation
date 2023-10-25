@@ -32,7 +32,6 @@ from core.lane import (
     WorkList,
 )
 from core.model import (
-    CachedFeed,
     CustomList,
     DataSource,
     Edition,
@@ -70,10 +69,8 @@ class TestFacetsWithEntryPoint:
         assert [expect_items] == list(f.items())
         assert "%s=%s" % expect_items == f.query_string
 
-        f.max_cache_age = 41
         expect_items = [
             (f.ENTRY_POINT_FACET_GROUP_NAME, ep.INTERNAL_NAME),
-            (f.MAX_CACHE_AGE_NAME, "41"),
         ]
         assert expect_items == list(f.items())
 
@@ -95,7 +92,7 @@ class TestFacetsWithEntryPoint:
         old_entrypoint = object()
         kwargs = dict(extra_key="extra_value")
         facets = FacetsWithEntryPoint(
-            old_entrypoint, entrypoint_is_default=True, max_cache_age=123, **kwargs
+            old_entrypoint, entrypoint_is_default=True, **kwargs
         )
         new_entrypoint = object()
         new_facets = facets.navigate(new_entrypoint)
@@ -109,9 +106,6 @@ class TestFacetsWithEntryPoint:
         # Since navigating from one Facets object to another is a choice,
         # the new Facets object is not using a default EntryPoint.
         assert False == new_facets.entrypoint_is_default
-
-        # The max_cache_age was preserved.
-        assert 123 == new_facets.max_cache_age
 
         # The keyword arguments used to create the original faceting
         # object were propagated to its constructor.
@@ -153,12 +147,11 @@ class TestFacetsWithEntryPoint:
         assert expect == result
 
     def test__from_request(self):
-        # _from_request calls load_entrypoint() and
-        # load_max_cache_age() and instantiates the class with the
-        # result.
+        # _from_request calls load_entrypoint() and instantiates
+        # the class with the result.
 
         class MockFacetsWithEntryPoint(FacetsWithEntryPoint):
-            # Mock load_entrypoint() and load_max_cache_age() to
+            # Mock load_entrypoint() to
             # return whatever values we have set up ahead of time.
 
             @classmethod
@@ -175,22 +168,15 @@ class TestFacetsWithEntryPoint:
                 )
                 return cls.expect_load_entrypoint
 
-            @classmethod
-            def load_max_cache_age(cls, max_cache_age):
-                cls.load_max_cache_age_called_with = max_cache_age
-                return cls.expect_max_cache_age
-
         # Mock the functions that pull information out of an HTTP
         # request.
 
         # EntryPoint.load_entrypoint pulls the facet group name and
         # the maximum cache age out of the 'request' and passes those
-        # values into load_entrypoint() and load_max_cache_age.
+        # values into load_entrypoint()
         def get_argument(key, default):
             if key == Facets.ENTRY_POINT_FACET_GROUP_NAME:
                 return "entrypoint name from request"
-            elif key == Facets.MAX_CACHE_AGE_NAME:
-                return "max cache age from request"
 
         # FacetsWithEntryPoint.load_entrypoint does not use
         # get_header().
@@ -217,25 +203,19 @@ class TestFacetsWithEntryPoint:
         MockFacetsWithEntryPoint.expect_load_entrypoint = INVALID_INPUT
         assert INVALID_INPUT == m()
 
-        # Similarly if load_entrypoint() works but load_max_cache_age
-        # returns a ProblemDetail.
         expect_entrypoint = object()
         expect_is_default = object()
         MockFacetsWithEntryPoint.expect_load_entrypoint = (
             expect_entrypoint,
             expect_is_default,
         )
-        MockFacetsWithEntryPoint.expect_max_cache_age = INVALID_INPUT
-        assert INVALID_INPUT == m()
 
         # Next, test success. The return value of load_entrypoint() is
         # is passed as 'entrypoint' into the FacetsWithEntryPoint
-        # constructor. The object returned by load_max_cache_age is
-        # passed as 'max_cache_age'.
+        # constructor.
         #
         # The object returned by load_entrypoint() does not need to be a
         # currently enabled entrypoint for the library.
-        MockFacetsWithEntryPoint.expect_max_cache_age = 345
         facets = m()
         assert isinstance(facets, FacetsWithEntryPoint)
         assert expect_entrypoint == facets.entrypoint
@@ -245,13 +225,8 @@ class TestFacetsWithEntryPoint:
             ["Selectable entrypoints"],
             default_entrypoint,
         ) == MockFacetsWithEntryPoint.load_entrypoint_called_with
-        assert 345 == facets.max_cache_age
         assert dict(extra="extra kwarg") == facets.constructor_kwargs
         assert MockFacetsWithEntryPoint.selectable_entrypoints_called_with == config
-        assert (
-            MockFacetsWithEntryPoint.load_max_cache_age_called_with
-            == "max cache age from request"
-        )
 
     def test_load_entrypoint(self):
         audio = AudiobooksEntryPoint
@@ -286,30 +261,6 @@ class TestFacetsWithEntryPoint:
         # If no EntryPoints are available, load_entrypoint returns
         # nothing.
         assert (None, True) == m(audio.INTERNAL_NAME, [])
-
-    def test_load_max_cache_age(self):
-        m = FacetsWithEntryPoint.load_max_cache_age
-
-        # The two valid options for max_cache_age as loaded in from a request are
-        # IGNORE_CACHE (do not pull from cache) and None (no opinion).
-        assert None == m("")
-        assert None == m(None)
-        assert CachedFeed.IGNORE_CACHE == m(0)
-        assert CachedFeed.IGNORE_CACHE == m("0")
-
-        # All other values are treated as 'no opinion'.
-        assert None == m("1")
-        assert None == m(2)
-        assert None == m("not a number")
-
-    def test_cache_age(self):
-        # No matter what type of feed we ask about, the max_cache_age of a
-        # FacetsWithEntryPoint is whatever is stored in its .max_cache_age.
-        #
-        # This is true even for 'feed types' that make no sense.
-        max_cache_age = object()
-        facets = FacetsWithEntryPoint(max_cache_age=max_cache_age)
-        assert max_cache_age == facets.max_cache_age
 
     def test_selectable_entrypoints(self):
         """The default implementation of selectable_entrypoints just returns
@@ -351,19 +302,6 @@ class TestFacets:
         for key, value in list(default.items()):
             library.settings_dict[f"facets_default_{key}"] = value
         library._settings = None
-
-    def test_max_cache_age(self, db: DatabaseTransactionFixture):
-        # A default Facets object has no opinion on what max_cache_age
-        # should be.
-        facets = Facets(
-            db.default_library(),
-            Facets.COLLECTION_FULL,
-            Facets.AVAILABLE_ALL,
-            Facets.ORDER_TITLE,
-            Facets.DISTRIBUTOR_ALL,
-            Facets.COLLECTION_NAME_ALL,
-        )
-        assert None == facets.max_cache_age
 
     def test_facet_groups(self, db: DatabaseTransactionFixture):
         db.default_collection().data_source = DataSource.AMAZON
@@ -1290,11 +1228,6 @@ class TestFeaturedFacets:
         assert 1 == facets.minimum_featured_quality
         assert entrypoint == facets.entrypoint
         assert True == facets.entrypoint_is_default
-
-    def test_feed_type(self):
-        # If a grouped feed is built via CachedFeed.fetch, it will be
-        # filed as a grouped feed.
-        assert CachedFeed.GROUPS_TYPE == FeaturedFacets.CACHED_FEED_TYPE
 
     def test_default(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
@@ -2231,7 +2164,7 @@ class TestWorkList:
         # WorkList is the default cache age for any type of OPDS feed,
         # no matter what type of feed is being generated.
         wl = WorkList()
-        assert OPDSFeed.DEFAULT_MAX_AGE == wl.max_cache_age(object())
+        assert OPDSFeed.DEFAULT_MAX_AGE == wl.max_cache_age()
 
     def test_filter(self, db: DatabaseTransactionFixture):
         # Verify that filter() calls modify_search_filter_hook()
@@ -3011,13 +2944,9 @@ class TestDatabaseBackedWorkList:
             def _modify_loading(cls, qu):
                 return [qu, "_modify_loading"]
 
-            @classmethod
-            def _defer_unused_fields(cls, qu):
-                return qu + ["_defer_unused_fields"]
-
         result = Mock.base_query(db.session)
 
-        [base_query, m, d] = result
+        [base_query, m] = result
         expect = (
             db.session.query(Work)
             .join(Work.license_pools)
@@ -3026,7 +2955,6 @@ class TestDatabaseBackedWorkList:
         )
         assert str(expect) == str(base_query)
         assert "_modify_loading" == m
-        assert "_defer_unused_fields" == d
 
     def test_bibliographic_filter_clauses(self, db: DatabaseTransactionFixture):
         called = dict()

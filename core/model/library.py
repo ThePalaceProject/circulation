@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from core.lane import Lane
     from core.model import (  # noqa: autoflake
         AdminRole,
-        CachedFeed,
         CachedMARCFile,
         CirculationEvent,
         Collection,
@@ -107,13 +106,6 @@ class Library(Base, HasSessionCache):
     # An Library may have many admin roles.
     adminroles: Mapped[List[AdminRole]] = relationship(
         "AdminRole", back_populates="library", cascade="all, delete-orphan"
-    )
-
-    # A Library may have many CachedFeeds.
-    cachedfeeds: Mapped[List[CachedFeed]] = relationship(
-        "CachedFeed",
-        backref="library",
-        cascade="all, delete-orphan",
     )
 
     # A Library may have many CachedMARCFiles.

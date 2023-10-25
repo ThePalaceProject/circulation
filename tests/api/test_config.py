@@ -10,7 +10,6 @@ from Crypto.PublicKey import RSA
 
 from api.config import Configuration
 from core.config import CannotLoadConfiguration
-from core.config import Configuration as CoreConfiguration
 from core.configuration.library import LibrarySettings
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
@@ -135,13 +134,6 @@ class TestConfiguration:
         max_fines = m(library)
         assert max_fines is not None
         assert 100 == max_fines.amount
-
-    def test_default_opds_format(self):
-        # Initializing the Configuration object modifies the corresponding
-        # object in core, so that core code will behave appropriately.
-        assert (
-            Configuration.DEFAULT_OPDS_FORMAT == CoreConfiguration.DEFAULT_OPDS_FORMAT
-        )
 
     @patch.object(os, "environ", new=dict())
     def test_fcm_credentials(self, notifications_files_fixture):

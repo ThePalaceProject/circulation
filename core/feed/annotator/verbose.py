@@ -22,8 +22,6 @@ class VerboseAnnotator(Annotator):
     in great detail.
     """
 
-    opds_cache_field = Work.verbose_opds_entry.name
-
     def annotate_work_entry(
         self, entry: WorkEntry, updated: Optional[datetime] = None
     ) -> None:

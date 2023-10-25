@@ -73,9 +73,6 @@ class Configuration(ConfigurationConstants):
     # Configuration key for push notifications status
     PUSH_NOTIFICATIONS_STATUS = "push_notifications_status"
 
-    # Lane policies
-    DEFAULT_OPDS_FORMAT = "verbose_opds_entry"
-
     # Integrations
     URL = "url"
     INTEGRATIONS = "integrations"
