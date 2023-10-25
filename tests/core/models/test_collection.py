@@ -229,6 +229,32 @@ class TestCollection:
         enki_child.parent = enki
         assert DataSource.ENKI + "+enkichild" == enki_child.unique_account_id
 
+    def test_get_protocol(self, db: DatabaseTransactionFixture):
+        test_collection = db.collection()
+        integration = test_collection.integration_configuration
+        test_collection.integration_configuration = None
+
+        # A collection with no associated ExternalIntegration has no protocol.
+        with pytest.raises(ValueError) as excinfo:
+            getattr(test_collection, "protocol")
+
+        assert "Collection has no integration configuration" in str(excinfo.value)
+
+        integration.protocol = None
+        test_collection.integration_configuration = integration
+
+        # If a collection has an integration that doesn't have a protocol set,
+        # it has no protocol, so we get an exception.
+        with pytest.raises(ValueError) as excinfo:
+            getattr(test_collection, "protocol")
+
+        assert "Collection has integration configuration but no protocol" in str(
+            excinfo.value
+        )
+
+        integration.protocol = "test protocol"
+        assert test_collection.protocol == "test protocol"
+
     def test_change_protocol(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
