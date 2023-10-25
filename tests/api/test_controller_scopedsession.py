@@ -60,6 +60,7 @@ class ScopedHolder:
             name=self.fresh_id() + " (collection for scoped session)",
         )
         collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
+        collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
         library.collections.append(collection)
         return collection
 
