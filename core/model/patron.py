@@ -24,6 +24,7 @@ from sqlalchemy.orm.session import Session
 
 from core.classifier import Classifier
 from core.model import Base, get_one_or_create, numericrange_to_tuple
+from core.model.constants import LinkRelations
 from core.model.credential import Credential
 from core.model.hybrid import hybrid_property
 from core.user_profile import ProfileStorage
@@ -770,6 +771,17 @@ class PatronProfileStorage(ProfileStorage):
             )
         settings = {self.SYNCHRONIZE_ANNOTATIONS: patron.synchronize_annotations}
         doc[self.SETTINGS_KEY] = settings
+        doc["links"] = [
+            dict(
+                rel=LinkRelations.DEVICE_REGISTRATION,
+                type="application/json",
+                href=self.url_for(
+                    "put_patron_devices",
+                    library_short_name=self.patron.library.short_name,
+                    _external=True,
+                ),
+            )
+        ]
         return doc
 
     def update(self, settable, full):

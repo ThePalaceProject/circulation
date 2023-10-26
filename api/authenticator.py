@@ -78,7 +78,7 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
             )
             links.append(annotations_link)
 
-            doc["links"] = links
+            doc["links"].extend(links)
 
         if drm:
             doc["drm"] = drm

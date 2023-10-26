@@ -239,6 +239,7 @@ class LinkRelations:
     BORROW = "http://opds-spec.org/acquisition/borrow"
 
     TIME_TRACKING = "http://palaceproject.io/terms/timeTracking"
+    DEVICE_REGISTRATION = "http://palaceproject.io/terms/deviceRegistration"
 
     CIRCULATION_ALLOWED = [
         OPEN_ACCESS_DOWNLOAD,
