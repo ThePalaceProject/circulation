@@ -41,6 +41,20 @@ class TestHTTP:
         assert "3xx" == m(399)
         assert "5xx" == m(500)
 
+    @mock.patch("core.util.http.sessions.Session")
+    def test_request_with_timeout_defaults(self, mock_session):
+        with mock.patch.object(HTTP, "DEFAULT_REQUEST_TIMEOUT", 10), mock.patch.object(
+            HTTP, "DEFAULT_REQUEST_RETRIES", 2
+        ):
+            mock_ctx = mock_session().__enter__()
+            mock_request = mock_ctx.request
+            HTTP.request_with_timeout("GET", "url")
+            # The session adapter has a retry attached
+            assert mock_ctx.mount.call_args[0][1].max_retries.total == 2
+            mock_request.assert_called_once()
+            # The request has a timeout
+            assert mock_request.call_args[1]["timeout"] == 10
+
     @mock.patch("core.util.http.core.__version__", "<VERSION>")
     def test_request_with_timeout_success(self, mock_request):
         request = mock_request(MockRequestsResponse(200, content="Success!"))

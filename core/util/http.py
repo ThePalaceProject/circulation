@@ -1,4 +1,5 @@
 import logging
+import time
 from json import JSONDecodeError
 from typing import Any, Callable, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -12,6 +13,7 @@ from urllib3 import Retry
 import core
 from core.exceptions import IntegrationException
 from core.problem_details import INTEGRATION_ERROR
+from core.util.log import LoggerMixin
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemError
 
@@ -157,12 +159,21 @@ class RequestTimedOut(RequestNetworkException, requests.exceptions.Timeout):
     internal_message = "Timeout accessing %s: %s"
 
 
-class HTTP:
+class HTTP(LoggerMixin):
     """A helper for the `requests` module."""
 
     # In case an app version is not present, we can use this version as a fallback
     # for all outgoing http requests without a custom user-agent
     DEFAULT_USER_AGENT_VERSION = "1.x.x"
+
+    DEFAULT_REQUEST_RETRIES = 5
+    DEFAULT_REQUEST_TIMEOUT = 20
+
+    @classmethod
+    def set_quick_failure_settings(cls) -> None:
+        """Ensure any outgoing requests aren't long-running"""
+        cls.DEFAULT_REQUEST_RETRIES = 0
+        cls.DEFAULT_REQUEST_TIMEOUT = 5
 
     @classmethod
     def get_with_timeout(cls, url: str, *args, **kwargs) -> Response:
@@ -219,9 +230,11 @@ class HTTP:
         expected_encoding = kwargs.pop("expected_encoding", "utf-8")
 
         if not "timeout" in kwargs:
-            kwargs["timeout"] = 20
+            kwargs["timeout"] = cls.DEFAULT_REQUEST_TIMEOUT
 
-        max_retry_count: int = int(kwargs.pop("max_retry_count", 5))
+        max_retry_count: int = int(
+            kwargs.pop("max_retry_count", cls.DEFAULT_REQUEST_RETRIES)
+        )
         backoff_factor: float = float(kwargs.pop("backoff_factor", 1.0))
 
         # Unicode data can't be sent over the wire. Convert it
@@ -258,6 +271,7 @@ class HTTP:
                 # arguments, it will still work.
                 args = args + (url,)
 
+            request_start_time = time.time()
             if make_request_with == sessions.Session.request:
                 with sessions.Session() as session:
                     retry_strategy = Retry(
@@ -269,10 +283,14 @@ class HTTP:
 
                     session.mount("http://", adapter)
                     session.mount("https://", adapter)
+                    print(session)
 
                     response = session.request(*args, **kwargs)
             else:
                 response = make_request_with(*args, **kwargs)
+            cls.logger().info(
+                f"Request time for {url} took {time.time() - request_start_time:.2f} seconds"
+            )
 
             if verbose:
                 logging.info(

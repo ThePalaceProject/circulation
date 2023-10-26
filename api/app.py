@@ -28,6 +28,7 @@ from core.model import (
 from core.service.container import Services, container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
+from core.util.http import HTTP
 from scripts import InstanceInitializationScript
 
 
@@ -103,6 +104,7 @@ from api.admin import routes as admin_routes  # noqa
 
 
 def initialize_application() -> PalaceFlask:
+    HTTP.set_quick_failure_settings()
     with app.app_context(), flask_babel.force_locale("en"):
         initialize_database()
 
