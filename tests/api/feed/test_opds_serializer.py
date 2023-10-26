@@ -239,7 +239,7 @@ class TestOPDSSerializer:
         assert len(child) == 1
         assert child[0].text == data.ratings[0].text
 
-        child = element.findall(f"{{{OPDSFeed.ATOM_NS}}}duration")
+        child = element.findall(f"{{{OPDSFeed.DCTERMS_NS}}}duration")
         assert len(child) == 1
         assert child[0].text == "10"
 

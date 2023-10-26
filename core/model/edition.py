@@ -136,6 +136,8 @@ class Edition(Base, EditionConstants):
 
     medium = Column(MEDIUM_ENUM, index=True)
 
+    # The playtime duration of an audiobook (seconds)
+    # https://github.com/readium/webpub-manifest/tree/master/contexts/default#duration-and-number-of-pages
     duration = Column(Float, nullable=True)
 
     cover_id = Column(
