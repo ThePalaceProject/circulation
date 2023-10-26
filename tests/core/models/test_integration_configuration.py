@@ -16,8 +16,11 @@ class TestIntegrationConfigurations:
         library = db.default_library()
         assert library.id is not None
 
+        # No library ID provided
+        assert config.for_library(None) is None
+
         # No library config exists
-        assert config.for_library(library.id) == None
+        assert config.for_library(library.id) is None
 
         # This should create a new config
         libconfig = config.for_library(library.id, create=True)

@@ -515,6 +515,7 @@ class TestExternalIntegration:
         # For most collections, the protocol determines the
         # data source.
         collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        assert collection.data_source is not None
         assert DataSource.OVERDRIVE == collection.data_source.name
 
         # For OPDS Import collections, data source is a setting which

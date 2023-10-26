@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Set
 
 from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSON
@@ -93,7 +93,7 @@ class Contributor(Base):
     COPYRIGHT_HOLDER_ROLE = "Copyright holder"
     TRANSCRIBER_ROLE = "Transcriber"
     DESIGNER_ROLE = "Designer"
-    AUTHOR_ROLES = {PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE}
+    AUTHOR_ROLES: Set[str] = {PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE}
 
     # Map our recognized roles to MARC relators.
     # https://www.loc.gov/marc/relators/relaterm.html

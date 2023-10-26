@@ -56,8 +56,8 @@ class Subject(Base):
     OVERDRIVE = Classifier.OVERDRIVE  # Overdrive's classification system
     BISAC = Classifier.BISAC
     BIC = Classifier.BIC  # BIC Subject Categories
-    TAG = Classifier.TAG  # Folksonomic tags.
-    FREEFORM_AUDIENCE = Classifier.FREEFORM_AUDIENCE
+    TAG: str = Classifier.TAG  # Folksonomic tags.
+    FREEFORM_AUDIENCE: str = Classifier.FREEFORM_AUDIENCE
     NYPL_APPEAL = Classifier.NYPL_APPEAL
 
     # Types with terms that are suitable for search.
@@ -65,7 +65,7 @@ class Subject(Base):
 
     AXIS_360_AUDIENCE = Classifier.AXIS_360_AUDIENCE
     GRADE_LEVEL = Classifier.GRADE_LEVEL
-    AGE_RANGE = Classifier.AGE_RANGE
+    AGE_RANGE: str = Classifier.AGE_RANGE
     LEXILE_SCORE = Classifier.LEXILE_SCORE
     ATOS_SCORE = Classifier.ATOS_SCORE
     INTEREST_LEVEL = Classifier.INTEREST_LEVEL

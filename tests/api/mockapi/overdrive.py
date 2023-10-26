@@ -70,6 +70,7 @@ class MockOverdriveAPI(OverdriveAPI):
         }
         library.collections.append(collection)
         db = DatabaseTransactionFixture
+        assert library.id is not None
         db.set_settings(config.for_library(library.id, create=True), ils_name=ils_name)
         _db.refresh(config)
         return collection
