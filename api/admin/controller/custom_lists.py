@@ -359,7 +359,9 @@ class CustomListsController(
                 query, self._db, list.name or "", url, pagination, url_fn, annotator
             )
             annotator.annotate_feed(feed)
-            return feed.as_response(max_age=0)
+            return feed.as_response(
+                max_age=0, mime_types=flask.request.accept_mimetypes
+            )
 
         elif flask.request.method == "POST":
             ctx: Context = flask.request.context.body  # type: ignore

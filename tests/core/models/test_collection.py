@@ -229,6 +229,32 @@ class TestCollection:
         enki_child.parent = enki
         assert DataSource.ENKI + "+enkichild" == enki_child.unique_account_id
 
+    def test_get_protocol(self, db: DatabaseTransactionFixture):
+        test_collection = db.collection()
+        integration = test_collection.integration_configuration
+        test_collection.integration_configuration = None
+
+        # A collection with no associated ExternalIntegration has no protocol.
+        with pytest.raises(ValueError) as excinfo:
+            getattr(test_collection, "protocol")
+
+        assert "Collection has no integration configuration" in str(excinfo.value)
+
+        integration.protocol = None
+        test_collection.integration_configuration = integration
+
+        # If a collection has an integration that doesn't have a protocol set,
+        # it has no protocol, so we get an exception.
+        with pytest.raises(ValueError) as excinfo:
+            getattr(test_collection, "protocol")
+
+        assert "Collection has integration configuration but no protocol" in str(
+            excinfo.value
+        )
+
+        integration.protocol = "test protocol"
+        assert test_collection.protocol == "test protocol"
+
     def test_change_protocol(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
@@ -269,23 +295,24 @@ class TestCollection:
         bibliotheca = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
 
         # The rote data_source is returned for the obvious collection.
+        assert bibliotheca.data_source is not None
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 
         # The less obvious OPDS collection doesn't have a DataSource.
         assert None == opds.data_source
 
         # Trying to change the Bibliotheca collection's data_source does nothing.
-        bibliotheca.data_source = DataSource.AXIS_360
+        bibliotheca.data_source = DataSource.AXIS_360  # type: ignore[assignment]
         assert isinstance(bibliotheca.data_source, DataSource)
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 
         # Trying to change the opds collection's data_source is fine.
-        opds.data_source = DataSource.PLYMPTON
+        opds.data_source = DataSource.PLYMPTON  # type: ignore[assignment]
         assert isinstance(opds.data_source, DataSource)
         assert DataSource.PLYMPTON == opds.data_source.name
 
         # Resetting it to something else is fine.
-        opds.data_source = DataSource.OA_CONTENT_SERVER
+        opds.data_source = DataSource.OA_CONTENT_SERVER  # type: ignore[assignment]
         assert isinstance(opds.data_source, DataSource)
         assert DataSource.OA_CONTENT_SERVER == opds.data_source.name
 
@@ -520,7 +547,8 @@ class TestCollection:
         # Because this isn't an OPDS collection, the external account
         # ID is not stored, the data source is the default source for
         # the protocol, and no new data source was created.
-        assert None == mirror_collection.external_account_id
+        assert mirror_collection.external_account_id is None
+        assert mirror_collection.data_source is not None
         assert DataSource.OVERDRIVE == mirror_collection.data_source.name
         assert None == new_data_source()
 
@@ -529,6 +557,7 @@ class TestCollection:
         mirror_collection = create(
             db.session, Collection, name=collection.metadata_identifier
         )[0]
+        assert collection.protocol is not None
         mirror_collection.create_external_integration(collection.protocol)
         mirror_collection.create_integration_configuration(collection.protocol)
 
@@ -728,7 +757,7 @@ class TestCollection:
         assert_isbns([i2, i1], updated_isbns)
 
         # That CoverageRecord timestamp is also returned.
-        i1_timestamp = updated_isbns[1][1]
+        i1_timestamp = updated_isbns[1][1]  # type: ignore[index]
         assert isinstance(i1_timestamp, datetime.datetime)
         assert i1_oclc_record.timestamp == i1_timestamp
 
@@ -736,8 +765,8 @@ class TestCollection:
         # then will be returned.
         timestamp = utc_now()
         i1.coverage_records[0].timestamp = utc_now()
-        updated_isbns = test_collection.isbns_updated_since(db.session, timestamp)
-        assert_isbns([i1], updated_isbns)
+        updated_isbns_2 = test_collection.isbns_updated_since(db.session, timestamp)
+        assert_isbns([i1], updated_isbns_2)
 
         # Prepare an ISBN associated with a Work.
         work = db.work(with_license_pool=True)
@@ -745,8 +774,8 @@ class TestCollection:
         i2.coverage_records[0].timestamp = utc_now()
 
         # ISBNs that have a Work will be ignored.
-        updated_isbns = test_collection.isbns_updated_since(db.session, timestamp)
-        assert_isbns([i1], updated_isbns)
+        updated_isbns_3 = test_collection.isbns_updated_since(db.session, timestamp)
+        assert_isbns([i1], updated_isbns_3)
 
     def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture

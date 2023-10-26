@@ -1880,7 +1880,7 @@ class OPDSImportMonitor(
         By default, this URL is stored as a setting on the collection, but
         subclasses may hard-code it.
         """
-        return collection.data_source  # type: ignore[no-any-return]
+        return collection.data_source
 
     def feed_contains_new_data(self, feed: bytes | str) -> bool:
         """Does the given feed contain any entries that haven't been imported

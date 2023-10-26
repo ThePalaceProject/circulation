@@ -1994,7 +1994,9 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        ).as_response(max_age=lane.max_cache_age())
+        ).as_response(
+            max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
+        )
 
     def permalink(self, identifier_type, identifier):
         """Serve an entry for a single book.
@@ -2091,7 +2093,9 @@ class WorkController(CirculationManagerController):
             pagination=None,
             facets=facets,
             search_engine=search_engine,
-        ).as_response(max_age=lane.max_cache_age())
+        ).as_response(
+            max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
+        )
 
     def recommendations(
         self,
@@ -2189,7 +2193,9 @@ class WorkController(CirculationManagerController):
             pagination=pagination,
             annotator=annotator,
             search_engine=search_engine,
-        ).as_response(max_age=lane.max_cache_age())
+        ).as_response(
+            max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
+        )
 
 
 class ProfileController(CirculationManagerController):

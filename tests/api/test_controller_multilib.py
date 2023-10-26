@@ -21,6 +21,7 @@ class TestMultipleLibraries:
                 name=f"{controller_fixture.db.fresh_str()} (for multi-library test)",
             )
             collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
+            collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
             library.collections.append(collection)
             return collection
 

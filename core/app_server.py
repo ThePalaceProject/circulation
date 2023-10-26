@@ -290,7 +290,7 @@ class URNLookupController:
             precomposed_entries=handler.precomposed_entries,
         )
         opds_feed.generate_feed(annotate=False)
-        return opds_feed.as_response()
+        return opds_feed.as_response(mime_types=flask.request.accept_mimetypes)
 
     def process_urns(self, urns, **process_urn_kwargs):
         """Process a number of URNs by instantiating a URNLookupHandler
