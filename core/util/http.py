@@ -167,11 +167,13 @@ class HTTP(LoggerMixin):
     DEFAULT_USER_AGENT_VERSION = "1.x.x"
 
     DEFAULT_REQUEST_RETRIES = 5
+    DEFAULT_REQUEST_TIMEOUT = 20
 
     @classmethod
     def set_quick_failure_settings(cls) -> None:
         """Ensure any outgoing requests aren't long-running"""
         cls.DEFAULT_REQUEST_RETRIES = 0
+        cls.DEFAULT_REQUEST_TIMEOUT = 5
 
     @classmethod
     def get_with_timeout(cls, url: str, *args, **kwargs) -> Response:
@@ -228,7 +230,7 @@ class HTTP(LoggerMixin):
         expected_encoding = kwargs.pop("expected_encoding", "utf-8")
 
         if not "timeout" in kwargs:
-            kwargs["timeout"] = 20
+            kwargs["timeout"] = cls.DEFAULT_REQUEST_TIMEOUT
 
         max_retry_count: int = int(
             kwargs.pop("max_retry_count", cls.DEFAULT_REQUEST_RETRIES)
@@ -281,6 +283,7 @@ class HTTP(LoggerMixin):
 
                     session.mount("http://", adapter)
                     session.mount("https://", adapter)
+                    print(session)
 
                     response = session.request(*args, **kwargs)
             else:
