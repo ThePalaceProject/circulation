@@ -7,7 +7,7 @@ import pytest
 from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.problem_details import INVALID_LOAN_FOR_ODL_NOTIFICATION, NO_ACTIVE_LOAN
-from core.model import Collection, get_one_or_create
+from core.model import Collection
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -18,18 +18,11 @@ class ODLFixture:
         self.library = self.db.default_library()
 
         """Create a mock ODL collection to use in tests."""
-        self.collection, ignore = get_one_or_create(
-            self.db.session,
-            Collection,
-            name="Test ODL Collection",
-            create_method_kwargs=dict(
-                external_account_id="http://odl",
-            ),
+        self.collection, _ = Collection.by_name_and_protocol(
+            self.db.session, "Test ODL Collection", ODLAPI.label()
         )
-        config = self.collection.create_integration_configuration(
-            self.integration_protocol()
-        )
-        config.settings_dict = {
+        self.collection.external_account_id = "http://odl"
+        self.collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://metadata",

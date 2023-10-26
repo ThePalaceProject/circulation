@@ -166,13 +166,10 @@ class DatabaseTransactionFixture:
     def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
         library = self.library("default", "default")
-        collection, ignore = get_one_or_create(
-            self._session, Collection, name="Default Collection"
+        collection, _ = Collection.by_name_and_protocol(
+            self._session, "Default Collection", ExternalIntegration.OPDS_IMPORT
         )
-        config = collection.create_integration_configuration(
-            ExternalIntegration.OPDS_IMPORT
-        )
-        config.for_library(library.id, create=True)
+        collection.integration_configuration.for_library(library.id, create=True)
         if collection not in library.collections:
             library.collections.append(collection)
         return library
@@ -303,11 +300,9 @@ class DatabaseTransactionFixture:
         data_source_name=None,
     ) -> Collection:
         name = name or self.fresh_str()
-        collection, ignore = get_one_or_create(self.session, Collection, name=name)
+        collection, _ = Collection.by_name_and_protocol(self.session, name, protocol)
         collection.external_account_id = external_account_id
-        config = collection.create_integration_configuration(protocol)
-        config.goal = Goals.LICENSE_GOAL
-        config.settings_dict = {
+        collection.integration_configuration.settings_dict = {
             "url": url,
             "username": username,
             "password": password,

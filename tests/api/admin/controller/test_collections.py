@@ -400,8 +400,8 @@ class TestCollectionSettings:
             assert response.status_code == 201
 
         # The collection was created and configured properly.
-        collection = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Collection, name="New Collection"
+        collection = Collection.by_name(
+            settings_ctrl_fixture.ctrl.db.session, name="New Collection"
         )
         assert isinstance(collection, Collection)
         assert collection.id == int(response.response[0])
@@ -461,8 +461,8 @@ class TestCollectionSettings:
             assert response.status_code == 201
 
         # The collection was created and configured properly.
-        child = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Collection, name="Child Collection"
+        child = Collection.by_name(
+            settings_ctrl_fixture.ctrl.db.session, name="Child Collection"
         )
         assert isinstance(child, Collection)
         assert child.id == int(response.response[0])

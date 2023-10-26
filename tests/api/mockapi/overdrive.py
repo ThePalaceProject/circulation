@@ -3,7 +3,7 @@ import json
 from sqlalchemy.orm import Session
 
 from api.overdrive import OverdriveAPI, OverdriveConstants
-from core.model import Library, get_one_or_create
+from core.model import Library
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
@@ -51,16 +51,11 @@ class MockOverdriveAPI(OverdriveAPI):
         ils_name: str = "e",
     ):
         """Create a mock Overdrive collection for use in tests."""
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(external_account_id=library_id),
+        collection, _ = Collection.by_name_and_protocol(
+            _db, name=name, protocol=ExternalIntegration.OVERDRIVE
         )
-        config = collection.create_integration_configuration(
-            ExternalIntegration.OVERDRIVE
-        )
-        config.settings_dict = {
+        collection.external_account_id = library_id
+        collection.integration_configuration.settings_dict = {
             OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
             OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
             OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
@@ -68,8 +63,10 @@ class MockOverdriveAPI(OverdriveAPI):
         library.collections.append(collection)
         db = DatabaseTransactionFixture
         assert library.id is not None
-        db.set_settings(config.for_library(library.id, create=True), ils_name=ils_name)
-        _db.refresh(config)
+        library_config = collection.integration_configuration.for_library(
+            library.id, create=True
+        )
+        db.set_settings(library_config, ils_name=ils_name)
         return collection
 
     def queue_collection_token(self):

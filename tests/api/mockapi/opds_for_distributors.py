@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from api.opds_for_distributors import OPDSForDistributorsAPI
-from core.model import Library, get_one_or_create
+from core.model import Library
 from core.model.collection import Collection
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
@@ -20,21 +20,14 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
         :param _db: Database session.
         :param name: A name for the collection.
         """
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(
-                external_account_id="http://opds",
-            ),
+        collection, _ = Collection.by_name_and_protocol(
+            _db, name=name, protocol=OPDSForDistributorsAPI.label()
         )
-        config = collection.create_integration_configuration(
-            OPDSForDistributorsAPI.label()
-        )
-        config.settings_dict = dict(
+        collection.external_account_id = "http://opds"
+        collection.integration_configuration.settings_dict = dict(
             username="a", password="b", data_source="data_source"
         )
-        config.for_library(library.id, create=True)
+        collection.integration_configuration.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
 

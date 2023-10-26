@@ -971,7 +971,7 @@ class OPDSFeedController(CirculationManagerController):
         """Build or retrieve a crawlable acquisition feed for the
         requested collection.
         """
-        collection = get_one(self._db, Collection, name=collection_name)
+        collection = Collection.by_name(self._db, collection_name)
         if not collection:
             return NO_SUCH_COLLECTION
         title = collection.name

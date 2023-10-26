@@ -12,14 +12,14 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     exists,
+    select,
 )
 from sqlalchemy.orm import Mapped, Query, mapper, relationship
-from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
-from core.model import Base, create, get_one_or_create
+from core.model import Base, create
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.constants import EditionConstants
 from core.model.coverage import CoverageRecord
@@ -51,8 +51,6 @@ class Collection(Base, HasSessionCache):
     __tablename__ = "collections"
     id = Column(Integer, primary_key=True, nullable=False)
 
-    name = Column(Unicode, unique=True, nullable=False, index=True)
-
     DATA_SOURCE_NAME_SETTING = "data_source"
 
     # For use in forms that edit Collections.
@@ -71,9 +69,10 @@ class Collection(Base, HasSessionCache):
     # integration configuration.
     integration_configuration_id = Column(
         Integer,
-        ForeignKey("integration_configurations.id", ondelete="SET NULL"),
+        ForeignKey("integration_configurations.id"),
         unique=True,
         index=True,
+        nullable=False,
     )
     integration_configuration: Mapped[IntegrationConfiguration] = relationship(
         "IntegrationConfiguration",
@@ -190,22 +189,54 @@ class Collection(Base, HasSessionCache):
         """
         name, protocol = cache_key
 
-        qu = cls.by_protocol(_db, protocol)
-        qu = qu.filter(Collection.name == name)
-        try:
-            collection = qu.one()
+        query = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.name == name
+        )
+        integration_or_none = _db.execute(query).scalar_one_or_none()
+        if integration_or_none is None:
+            integration, _ = create(
+                _db,
+                IntegrationConfiguration,
+                protocol=protocol,
+                goal=Goals.LICENSE_GOAL,
+                name=name,
+            )
+        else:
+            integration = integration_or_none
+
+        if integration.goal != Goals.LICENSE_GOAL:
+            raise ValueError(
+                f'Integration "{name}" does not have goal "{Goals.LICENSE_GOAL.name}".'
+            )
+        if integration.protocol != protocol:
+            raise ValueError(
+                f'Integration "{name}" does not use protocol "{protocol}".'
+            )
+
+        if integration.collection is not None:
+            collection = integration.collection
             is_new = False
-        except NoResultFound as e:
-            # Make a new Collection.
-            collection, is_new = get_one_or_create(_db, Collection, name=name)
-            if not is_new and collection.protocol != protocol:
-                # The collection already exists, it just uses a different
-                # protocol than the one we asked about.
-                raise ValueError(
-                    f'Collection "{name}" does not use protocol "{protocol}".'
-                )
-            collection.create_integration_configuration(protocol)
+        else:
+            collection, _ = create(  # type: ignore[unreachable]
+                _db,
+                Collection,
+                integration_configuration=integration,
+            )
+            is_new = True
+
         return collection, is_new
+
+    @classmethod
+    def by_name(cls, _db: Session, name: str) -> Collection | None:
+        """Find a Collection by name."""
+        return _db.execute(
+            select(Collection)
+            .join(IntegrationConfiguration)
+            .where(
+                IntegrationConfiguration.name == name,
+                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+            )
+        ).scalar_one_or_none()
 
     @classmethod
     def by_protocol(cls, _db: Session, protocol: str | None) -> Query[Collection]:
@@ -258,6 +289,16 @@ class Collection(Base, HasSessionCache):
             .filter(Collection.marked_for_deletion == False)
         )
         return qu
+
+    @property
+    def name(self) -> str:
+        """What is the name of this collection?"""
+        if self.integration_configuration is None:
+            raise ValueError("Collection has no integration configuration.")
+        name = self.integration_configuration.name
+        if not name:
+            raise ValueError("Collection has no name.")
+        return name
 
     @hybrid_property
     def protocol(self) -> str:
@@ -402,30 +443,6 @@ class Collection(Base, HasSessionCache):
         :param new_value: New default audience
         """
         self._set_settings(**{self.DEFAULT_AUDIENCE_KEY: str(new_value)})
-
-    def create_integration_configuration(
-        self, protocol: str
-    ) -> IntegrationConfiguration:
-        _db = Session.object_session(self)
-        goal = Goals.LICENSE_GOAL
-        if self.integration_configuration_id:
-            integration = self.integration_configuration
-        else:
-            integration, is_new = create(
-                _db,
-                IntegrationConfiguration,
-                protocol=protocol,
-                goal=goal,
-                name=self.name,
-            )
-        if integration.protocol != protocol:
-            raise ValueError(
-                "Located ExternalIntegration, but its protocol (%s) does not match desired protocol (%s)."
-                % (integration.protocol, protocol)
-            )
-        self.integration_configuration_id = integration.id
-        # Immediately accessing the relationship fills out the data
-        return self.integration_configuration
 
     @hybrid_property
     def data_source(self) -> DataSource | None:

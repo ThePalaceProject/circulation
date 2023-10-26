@@ -1,4 +1,4 @@
-from core.model import Collection, ExternalIntegration, get_one_or_create
+from core.model import Collection, ExternalIntegration
 from tests.fixtures.api_controller import (
     CirculationControllerFixture,
     ControllerFixtureSetupOverrides,
@@ -15,12 +15,11 @@ class TestMultipleLibraries:
             return [controller_fixture.db.library() for x in range(2)]
 
         def make_default_collection(_db, library):
-            collection, ignore = get_one_or_create(
-                controller_fixture.db.session,
-                Collection,
-                name=f"{controller_fixture.db.fresh_str()} (for multi-library test)",
+            collection, _ = Collection.by_name_and_protocol(
+                _db,
+                f"{controller_fixture.db.fresh_str()} (for multi-library test)",
+                ExternalIntegration.OPDS_IMPORT,
             )
-            collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
             library.collections.append(collection)
             return collection
 

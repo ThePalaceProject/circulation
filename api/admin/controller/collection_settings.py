@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from sqlalchemy import select
 
 from api.admin.controller.settings import SettingsController
 from api.admin.problem_details import (
@@ -21,13 +22,7 @@ from api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from api.integration.registry.license_providers import LicenseProvidersRegistry
-from core.model import (
-    Collection,
-    ConfigurationSetting,
-    Library,
-    get_one,
-    get_one_or_create,
-)
+from core.model import Collection, Library, get_one
 from core.model.admin import Admin
 from core.model.integration import IntegrationConfiguration
 from core.util.problem_detail import ProblemDetail, ProblemError
@@ -72,13 +67,18 @@ class CollectionSettingsController(SettingsController):
 
     # GET
     def process_get(self):
-        collections_db = self._db.query(Collection).order_by(Collection.name).all()
-        ConfigurationSetting.cache_warm(self._db)
-        Collection.cache_warm(self._db, lambda: collections_db)
+        collections_db = (
+            self._db.execute(
+                select(Collection)
+                .join(IntegrationConfiguration)
+                .order_by(IntegrationConfiguration.name)
+            )
+            .scalars()
+            .all()
+        )
         protocols = self._get_collection_protocols()
         user = flask.request.admin
         collections = []
-        collection_object: Collection
         for collection_object in collections_db:
             if not user or not user.can_see_collection(collection_object):
                 continue
@@ -176,13 +176,15 @@ class CollectionSettingsController(SettingsController):
             return UNKNOWN_PROTOCOL
 
         if protocol_name and not collection:
-            collection, is_new = get_one_or_create(self._db, Collection, name=name)
-            if not is_new:
+            try:
+                collection, is_new = Collection.by_name_and_protocol(
+                    self._db, name, protocol_name
+                )
+            except ValueError:
                 self._db.rollback()
                 return COLLECTION_NAME_ALREADY_IN_USE
-            collection.create_integration_configuration(protocol_name)
 
-        collection.name = name
+        collection.integration_configuration.name = name
         [protocol_dict] = [p for p in protocols if p.get("name") == protocol_name]
 
         valid = self.validate_parent(protocol_dict, collection)

@@ -1326,7 +1326,7 @@ class TestSearchOrder:
         # Each work has one LicensePool associated with the default
         # collection.
         result.collection1 = transaction.default_collection()
-        result.collection1.name = "Collection 1 - ACB"
+        result.collection1.integration_configuration.name = "Collection 1 - ACB"
         [result.a1] = result.a.license_pools
         [result.b1] = result.b.license_pools
         [result.c1] = result.c.license_pools

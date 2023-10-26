@@ -5,7 +5,8 @@ import pytest
 
 from core.config import Configuration
 from core.external_search import ExternalSearchIndex
-from core.model import create, get_one_or_create
+from core.integration.goals import Goals
+from core.model import get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
@@ -50,10 +51,7 @@ def example_collection_fixture(
 
 
 class TestCollection:
-    def test_by_name_and_protocol(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
+    def test_by_name_and_protocol(self, db: DatabaseTransactionFixture):
         name = "A name"
         protocol = ExternalIntegration.OVERDRIVE
         key = (name, protocol)
@@ -93,7 +91,22 @@ class TestCollection:
             Collection.by_name_and_protocol(
                 db.session, name, ExternalIntegration.BIBLIOTHECA
             )
-        assert 'Collection "A name" does not use protocol "Bibliotheca".' in str(
+        assert 'Integration "A name" does not use protocol "Bibliotheca".' in str(
+            excinfo.value
+        )
+
+        # You'll get an exception if you look up an existing integration
+        # but the goal doesn't match.
+        db.integration_configuration(
+            protocol=protocol, goal=Goals.DISCOVERY_GOAL, name="another name"
+        )
+
+        with pytest.raises(ValueError) as excinfo:
+            Collection.by_name_and_protocol(
+                db.session, "another name", ExternalIntegration.OVERDRIVE
+            )
+
+        assert 'Integration "another name" does not have goal "LICENSE_GOAL".' in str(
             excinfo.value
         )
 
@@ -674,22 +687,3 @@ class TestCollection:
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()
         assert [] == work2.license_pools
-
-
-class TestCollectionForMetadataWrangler:
-    """Tests that requirements to the metadata wrangler's use of Collection
-    are being met by continued development on the Collection class.
-
-    If any of these tests are failing, development will be required on the
-    metadata wrangler to meet the needs of the new Collection class.
-    """
-
-    def test_only_name_is_required(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        """Test that only name is a required field on
-        the Collection class.
-        """
-        db = example_collection_fixture.database_fixture
-        collection = create(db.session, Collection, name="banana")[0]
-        assert True == isinstance(collection, Collection)

@@ -54,12 +54,11 @@ class ScopedHolder:
         """We need to create a test collection that
         uses the scoped session.
         """
-        collection, ignore = create(
+        collection, _ = Collection.by_name_and_protocol(
             session,
-            Collection,
-            name=self.fresh_id() + " (collection for scoped session)",
+            self.fresh_id() + " (collection for scoped session)",
+            ExternalIntegration.OPDS_IMPORT,
         )
-        collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
         library.collections.append(collection)
         return collection
 

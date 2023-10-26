@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from api.bibliotheca import BibliothecaAPI
-from core.model import Library, get_one_or_create
+from core.model import Library
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
@@ -16,22 +16,15 @@ class MockBibliothecaAPI(BibliothecaAPI):
         self, _db: Session, library: Library, name: str = "Test Bibliotheca Collection"
     ) -> Collection:
         """Create a mock Bibliotheca collection for use in tests."""
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(
-                external_account_id="c",
-            ),
+        collection, _ = Collection.by_name_and_protocol(
+            _db, name=name, protocol=ExternalIntegration.BIBLIOTHECA
         )
-        config = collection.create_integration_configuration(
-            ExternalIntegration.BIBLIOTHECA
-        )
-        config.settings_dict = {
+        collection.external_account_id = "c"
+        collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
         }
-        config.for_library(library.id, create=True)
+        collection.integration_configuration.for_library(library.id, create=True)
         library.collections.append(collection)
         return collection
 

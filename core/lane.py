@@ -708,7 +708,7 @@ class Facets(FacetsWithEntryPoint):
                 self.collection_name
                 and self.collection_name != self.COLLECTION_NAME_ALL
             ):
-                collection = get_one(_db, Collection, name=self.collection_name)
+                collection = Collection.by_name(_db, self.collection_name)
                 if collection:
                     filter.collection_ids = [collection.id]
 

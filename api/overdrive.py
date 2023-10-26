@@ -18,6 +18,7 @@ import isbnlib
 from flask_babel import lazy_gettext as _
 from requests import Response
 from requests.structures import CaseInsensitiveDict
+from sqlalchemy import select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.orm.exc import StaleDataError
@@ -76,7 +77,6 @@ from core.model import (
     Patron,
     Representation,
     Subject,
-    get_one_or_create,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import InputScript, Script
@@ -2852,22 +2852,25 @@ class OverdriveAdvantageAccount:
                 "Cannot create a Collection whose parent does not already exist."
             )
         name = parent.name + " / " + self.name
-        child, is_new = get_one_or_create(
-            _db,
-            Collection,
-            parent_id=parent.id,
-            external_account_id=self.library_id,
-            create_method_kwargs=dict(name=name),
-        )
-        if is_new:
-            # Make sure the child has its protocol set appropriately.
-            configuration = child.create_integration_configuration(
-                ExternalIntegration.OVERDRIVE
+        child = _db.execute(
+            select(Collection).where(
+                Collection.parent_id == parent.id,
+                Collection.external_account_id == self.library_id,
             )
+        ).scalar_one_or_none()
 
-        # Set or update the name of the collection to reflect the name of
-        # the library, just in case that name has changed.
-        child.name = name
+        if child is None:
+            # The child doesn't exist yet. Create it.
+            child, _ = Collection.by_name_and_protocol(
+                _db, name, ExternalIntegration.OVERDRIVE
+            )
+            child.parent = parent
+            child.external_account_id = self.library_id
+        else:
+            # Set or update the name of the collection to reflect the name of
+            # the library, just in case that name has changed.
+            child.integration_configuration.name = name
+
         return parent, child
 
 
