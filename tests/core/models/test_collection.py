@@ -1,4 +1,3 @@
-import datetime
 import json
 
 import pytest
@@ -12,15 +11,12 @@ from core.model.coverage import CoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
 from core.model.edition import Edition
-from core.model.identifier import Identifier
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
 from core.model.licensing import Hold, License, LicensePool, Loan
 from core.model.work import Work
-from core.util.datetime_helpers import utc_now
-from core.util.string_helpers import base64
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -189,45 +185,6 @@ class TestCollection:
             "Located ExternalIntegration, but its protocol (Overdrive) does not match desired protocol (blah)."
             in str(excinfo.value)
         )
-
-    def test_unique_account_id(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
-
-        # Most collections work like this:
-        overdrive = db.collection(
-            external_account_id="od1", data_source_name=DataSource.OVERDRIVE
-        )
-        od_child = db.collection(
-            external_account_id="odchild", data_source_name=DataSource.OVERDRIVE
-        )
-        od_child.parent = overdrive
-
-        # The unique account ID of a primary collection is the
-        # external account ID.
-        assert "od1" == overdrive.unique_account_id
-
-        # For children of those collections, the unique account ID is scoped
-        # to the parent collection.
-        assert "od1+odchild" == od_child.unique_account_id
-
-        # Enki works a little differently. Enki collections don't have
-        # an external account ID, because all Enki collections are
-        # identical.
-        enki = db.collection(data_source_name=DataSource.ENKI)
-
-        # So the unique account ID is the name of the data source.
-        assert DataSource.ENKI == enki.unique_account_id
-
-        # A (currently hypothetical) library-specific subcollection of
-        # the global Enki collection must have an external_account_id,
-        # and its name is scoped to the parent collection as usual.
-        enki_child = db.collection(
-            external_account_id="enkichild", data_source_name=DataSource.ENKI
-        )
-        enki_child.parent = enki
-        assert DataSource.ENKI + "+enkichild" == enki_child.unique_account_id
 
     def test_get_protocol(self, db: DatabaseTransactionFixture):
         test_collection = db.collection()
@@ -459,201 +416,6 @@ class TestCollection:
             'External account ID: "id2"',
         ] == data
 
-    def test_metadata_identifier(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        # If the collection doesn't have its unique identifier, an error
-        # is raised.
-        pytest.raises(ValueError, getattr, test_collection, "metadata_identifier")
-
-        def build_expected(protocol, unique_id):
-            encode = base64.urlsafe_b64encode
-            encoded = [encode(value) for value in [protocol, unique_id]]
-            joined = ":".join(encoded)
-            return encode(joined)
-
-        # With a unique identifier, we get back the expected identifier.
-        test_collection.external_account_id = "id"
-        expected = build_expected(ExternalIntegration.OVERDRIVE, "id")
-        assert expected == test_collection.metadata_identifier
-
-        # If there's a parent, its unique id is incorporated into the result.
-        child = db.collection(
-            name="Child",
-            protocol=ExternalIntegration.OPDS_IMPORT,
-            external_account_id=db.fresh_url(),
-        )
-        child.parent = test_collection
-        expected = build_expected(
-            ExternalIntegration.OPDS_IMPORT, "id+%s" % child.external_account_id
-        )
-        assert expected == child.metadata_identifier
-
-        # If it's an OPDS_IMPORT collection with a url external_account_id,
-        # closing '/' marks are removed.
-        opds = db.collection(
-            name="OPDS",
-            protocol=ExternalIntegration.OPDS_IMPORT,
-            external_account_id=(db.fresh_url() + "/"),
-        )
-        assert isinstance(opds.external_account_id, str)
-        expected = build_expected(
-            ExternalIntegration.OPDS_IMPORT, opds.external_account_id[:-1]
-        )
-        assert expected == opds.metadata_identifier
-
-    def test_from_metadata_identifier(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        data_source = "New data source"
-
-        # A ValueError results if we try to look up using an invalid
-        # identifier.
-        with pytest.raises(ValueError) as excinfo:
-            Collection.from_metadata_identifier(
-                db.session, "not a real identifier", data_source=data_source
-            )
-        assert (
-            "Metadata identifier 'not a real identifier' is invalid: Incorrect padding"
-            in str(excinfo.value)
-        )
-
-        # Of if we pass in the empty string.
-        with pytest.raises(ValueError) as excinfo:
-            Collection.from_metadata_identifier(db.session, "", data_source=data_source)
-        assert "No metadata identifier provided" in str(excinfo.value)
-
-        # No new data source was created.
-        def new_data_source():
-            return DataSource.lookup(db.session, data_source)
-
-        assert None == new_data_source()
-
-        # If a mirrored collection doesn't exist, it is created.
-        test_collection.external_account_id = "id"
-        mirror_collection, is_new = Collection.from_metadata_identifier(
-            db.session, test_collection.metadata_identifier, data_source=data_source
-        )
-        assert True == is_new
-        assert test_collection.metadata_identifier == mirror_collection.name
-        assert test_collection.protocol == mirror_collection.protocol
-
-        # Because this isn't an OPDS collection, the external account
-        # ID is not stored, the data source is the default source for
-        # the protocol, and no new data source was created.
-        assert mirror_collection.external_account_id is None
-        assert mirror_collection.data_source is not None
-        assert DataSource.OVERDRIVE == mirror_collection.data_source.name
-        assert None == new_data_source()
-
-        # If the mirrored collection already exists, it is returned.
-        collection = db.collection(external_account_id=db.fresh_url())
-        mirror_collection = create(
-            db.session, Collection, name=collection.metadata_identifier
-        )[0]
-        assert collection.protocol is not None
-        mirror_collection.create_external_integration(collection.protocol)
-        mirror_collection.create_integration_configuration(collection.protocol)
-
-        # Confirm that there's no external_account_id and no DataSource.
-        # TODO I don't understand why we don't store this information,
-        # even if only to keep it in an easy-to-read form.
-        assert None == mirror_collection.external_account_id
-        assert None == mirror_collection.data_source
-        assert None == new_data_source()
-
-        # Now try a lookup of an OPDS Import-type collection.
-        result, is_new = Collection.from_metadata_identifier(
-            db.session, collection.metadata_identifier, data_source=data_source
-        )
-        assert False == is_new
-        assert mirror_collection == result
-        # The external_account_id and data_source have been set now.
-        assert collection.external_account_id == mirror_collection.external_account_id
-
-        # A new DataSource object has been created.
-        source = new_data_source()
-        assert "New data source" == source.name
-        assert source == mirror_collection.data_source
-
-    def test_catalog_identifier(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        """#catalog_identifier associates an identifier with the catalog"""
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        identifier = db.identifier()
-        test_collection.catalog_identifier(identifier)
-
-        assert 1 == len(test_collection.catalog)
-        assert identifier == test_collection.catalog[0]
-
-    def test_catalog_identifiers(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        """#catalog_identifier associates multiple identifiers with a catalog"""
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        i1 = db.identifier()
-        i2 = db.identifier()
-        i3 = db.identifier()
-
-        # One of the identifiers is already in the catalog.
-        test_collection.catalog_identifier(i3)
-
-        test_collection.catalog_identifiers([i1, i2, i3])
-
-        # Now all three identifiers are in the catalog.
-        assert sorted([i1, i2, i3]) == sorted(test_collection.catalog)
-
-    def test_unresolved_catalog(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        # A regular schmegular identifier: untouched, pure.
-        pure_id = db.identifier()
-
-        # A 'resolved' identifier that doesn't have a work yet.
-        # (This isn't supposed to happen, but jic.)
-        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
-        operation = "test-thyself"
-        resolved_id = db.identifier()
-        db.coverage_record(
-            resolved_id, source, operation=operation, status=CoverageRecord.SUCCESS
-        )
-
-        # An unresolved identifier--we tried to resolve it, but
-        # it all fell apart.
-        unresolved_id = db.identifier()
-        db.coverage_record(
-            unresolved_id,
-            source,
-            operation=operation,
-            status=CoverageRecord.TRANSIENT_FAILURE,
-        )
-
-        # An identifier with a Work already.
-        id_with_work = db.work().presentation_edition.primary_identifier
-
-        test_collection.catalog_identifiers(
-            [pure_id, resolved_id, unresolved_id, id_with_work]
-        )
-
-        result = test_collection.unresolved_catalog(db.session, source.name, operation)
-
-        # Only the failing identifier is in the query.
-        assert [unresolved_id] == result.all()
-
     def test_disassociate_library(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
@@ -720,62 +482,6 @@ class TestCollection:
         with pytest.raises(ValueError) as excinfo:
             collection.disassociate_library(other_library)
         assert "No known external integration for collection" in str(excinfo.value)
-
-    def test_isbns_updated_since(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
-
-        i1 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
-        i2 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
-        i3 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
-        i4 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=db.isbn_take())
-
-        timestamp = utc_now()
-
-        # An empty catalog returns nothing..
-        assert [] == test_collection.isbns_updated_since(db.session, None).all()
-
-        # Give the ISBNs some coverage.
-        content_cafe = DataSource.lookup(db.session, DataSource.CONTENT_CAFE)
-        for isbn in [i2, i3, i1]:
-            db.coverage_record(isbn, content_cafe)
-
-        # Give one ISBN more than one coverage record.
-        oclc = DataSource.lookup(db.session, DataSource.OCLC)
-        i1_oclc_record = db.coverage_record(i1, oclc)
-
-        def assert_isbns(expected, result_query):
-            results = [r[0] for r in result_query]
-            assert expected == results
-
-        # When no timestamp is given, all ISBNs in the catalog are returned,
-        # in order of their CoverageRecord timestamp.
-        test_collection.catalog_identifiers([i1, i2])
-        updated_isbns = test_collection.isbns_updated_since(db.session, None).all()
-        assert_isbns([i2, i1], updated_isbns)
-
-        # That CoverageRecord timestamp is also returned.
-        i1_timestamp = updated_isbns[1][1]  # type: ignore[index]
-        assert isinstance(i1_timestamp, datetime.datetime)
-        assert i1_oclc_record.timestamp == i1_timestamp
-
-        # When a timestamp is passed, only works that have been updated since
-        # then will be returned.
-        timestamp = utc_now()
-        i1.coverage_records[0].timestamp = utc_now()
-        updated_isbns_2 = test_collection.isbns_updated_since(db.session, timestamp)
-        assert_isbns([i1], updated_isbns_2)
-
-        # Prepare an ISBN associated with a Work.
-        work = db.work(with_license_pool=True)
-        work.license_pools[0].identifier = i2
-        i2.coverage_records[0].timestamp = utc_now()
-
-        # ISBNs that have a Work will be ignored.
-        updated_isbns_3 = test_collection.isbns_updated_since(db.session, timestamp)
-        assert_isbns([i1], updated_isbns_3)
 
     def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture

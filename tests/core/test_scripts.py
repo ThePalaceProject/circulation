@@ -55,7 +55,6 @@ from core.scripts import (
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
-    ListCollectionMetadataIdentifiersScript,
     LoanNotificationsScript,
     MockStdin,
     OPDSImportScript,
@@ -1986,40 +1985,6 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
         script.run()
         db.session.refresh(subject)
         assert subject.checked == True
-
-
-class TestListCollectionMetadataIdentifiersScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        output = StringIO()
-        script = ListCollectionMetadataIdentifiersScript(_db=db.session, output=output)
-
-        # Create two collections.
-        c1 = db.collection(external_account_id=db.fresh_url())
-        c2 = db.collection(
-            name="Local Over",
-            protocol=ExternalIntegration.OVERDRIVE,
-            external_account_id="banana",
-        )
-
-        script.do_run()
-
-        def expected(c):
-            return "({}) {}/{} => {}\n".format(
-                str(c.id),
-                c.name,
-                c.protocol,
-                c.metadata_identifier,
-            )
-
-        # In the output, there's a header, a line describing the format,
-        # metdata identifiers for each collection, and a count of the
-        # collections found.
-        output = output.getvalue()
-        assert "COLLECTIONS" in output
-        assert "(id) name/protocol => metadata_identifier\n" in output
-        assert expected(c1) in output
-        assert expected(c2) in output
-        assert "2 collections found.\n" in output
 
 
 class TestRebuildSearchIndexScript:

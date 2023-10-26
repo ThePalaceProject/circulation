@@ -1387,25 +1387,6 @@ class CollectionCoverageProviderJob(DatabaseJob):
         provider.finalize_timestampdata(self.progress)
 
 
-class CatalogCoverageProvider(CollectionCoverageProvider):
-    """Most CollectionCoverageProviders provide coverage to Identifiers
-    that are licensed through a given Collection.
-
-    A CatalogCoverageProvider provides coverage to Identifiers that
-    are present in a given Collection's catalog.
-    """
-
-    def items_that_need_coverage(self, identifiers=None, **kwargs):
-        """Find all Identifiers in this Collection's catalog but lacking
-        coverage through this CoverageProvider.
-        """
-        qu = super(CollectionCoverageProvider, self).items_that_need_coverage(
-            identifiers, **kwargs
-        )
-        qu = qu.join(Identifier.collections).filter(Collection.id == self.collection_id)
-        return qu
-
-
 class BibliographicCoverageProvider(CollectionCoverageProvider):
     """Fill in bibliographic metadata for all books in a Collection.
 
