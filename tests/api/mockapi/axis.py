@@ -22,8 +22,8 @@ class MockAxis360API(Axis360API):
             "password": "b",
             "url": "http://axis.test/",
         }
-        collection.integration_configuration.for_library(library.id, create=True)
-        library.collections.append(collection)
+        if library not in collection.libraries:
+            collection.libraries.append(library)
         return collection
 
     def __init__(self, _db, collection, with_token=True, **kwargs):

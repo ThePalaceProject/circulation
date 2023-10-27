@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import select
 
 from core.config import Configuration
 from core.external_search import ExternalSearchIndex
@@ -14,10 +15,7 @@ from core.model.coverage import CoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
 from core.model.edition import Edition
-from core.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
+from core.model.integration import IntegrationLibraryConfiguration
 from core.model.licensing import Hold, License, LicensePool, Loan
 from core.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -266,9 +264,7 @@ class TestCollection:
         test_collection = example_collection_fixture.collection
 
         library = db.default_library()
-        library.collections.append(test_collection)
-        assert isinstance(library.id, int)
-        test_collection.integration_configuration.for_library(library.id, create=True)
+        test_collection.libraries.append(library)
 
         ebook = Edition.BOOK_MEDIUM
         audio = Edition.AUDIO_MEDIUM
@@ -354,12 +350,13 @@ class TestCollection:
         about a Collection.
         """
         db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
 
         library = db.default_library()
         library.name = "The only library"
         library.short_name = "only one"
-        library.collections.append(test_collection)
+
+        test_collection = example_collection_fixture.collection
+        test_collection.libraries.append(library)
 
         test_collection.external_account_id = "id"
         test_collection.integration_configuration.settings_dict = {
@@ -399,7 +396,7 @@ class TestCollection:
             'External account ID: "id2"',
         ] == data
 
-    def test_disassociate_library(
+    def test_disassociate_libraries(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
@@ -411,57 +408,51 @@ class TestCollection:
         other_library = db.library()
         collection.libraries.append(other_library)
 
-        # It has an ExternalIntegration, which has some settings.
+        # It has an integration, which has some settings.
         integration = collection.integration_configuration
-        DatabaseTransactionFixture.set_settings(
-            integration, **{"integration setting": "value2"}
-        )
-        setting2 = integration.for_library(db.default_library().id)
-        assert setting2 is not None
-        DatabaseTransactionFixture.set_settings(
-            setting2, **{"default_library+integration setting": "value2"}
-        )
-        setting3 = integration.for_library(other_library.id, create=True)
-        assert setting3 is not None
-        DatabaseTransactionFixture.set_settings(
-            setting3, **{"other_library+integration setting": "value3"}
-        )
+        integration.settings_dict = {"key": "value"}
+
+        # And it has some library-specific settings.
+        default_library_settings = integration.for_library(db.default_library())
+        assert default_library_settings is not None
+        default_library_settings.settings_dict = {"a": "b"}
+        other_library_settings = integration.for_library(other_library)
+        assert other_library_settings is not None
+        other_library_settings.settings_dict = {"c": "d"}
 
         # Now, disassociate one of the libraries from the collection.
-        collection.disassociate_library(db.default_library())
+        collection.libraries.remove(db.default_library())
 
         # It's gone.
         assert db.default_library() not in collection.libraries
         assert collection not in db.default_library().collections
 
-        # Furthermore, ConfigurationSettings that configure that
-        # Library's relationship to this Collection's
-        # ExternalIntegration have been deleted.
-        all_settings = db.session.query(IntegrationConfiguration).all()
-        all_library_settings = db.session.query(IntegrationLibraryConfiguration).all()
-        assert setting2 not in all_library_settings
+        # The library-specific settings for that library have been deleted.
+        library_config_ids = [
+            l.library_id
+            for l in db.session.execute(
+                select(IntegrationLibraryConfiguration.library_id)
+            )
+        ]
+        assert db.default_library().id not in library_config_ids
 
-        # The other library is unaffected.
+        # But the library-specific settings for the other library are still there.
         assert other_library in collection.libraries
-        assert collection in other_library.collections
-        assert setting3 in all_library_settings
+        assert other_library.id in library_config_ids
+        assert collection.integration_configuration.library_configurations[
+            0
+        ].settings_dict == {"c": "d"}
 
-        # As is the library-independent configuration of this Collection's
-        # ExternalIntegration.
-        assert integration in all_settings
+        # We now disassociate all libraries from the collection.
+        collection.libraries.clear()
 
-        # Calling disassociate_library again is a no-op.
-        collection.disassociate_library(db.default_library())
-        assert db.default_library() not in collection.libraries
+        # All the library-specific settings have been deleted.
+        assert collection.integration_configuration.library_configurations == []
+        assert collection.integration_configuration.libraries == []
+        assert collection.libraries == []
 
-        # If you somehow manage to call disassociate_library on a Collection
-        # that has no associated Integration configuration, an exception is raised.
-        collection.integration_configuration_id = None
-        with pytest.raises(ValueError) as excinfo:
-            collection.disassociate_library(other_library)
-        assert "No known integration library configuration for collection" in str(
-            excinfo.value
-        )
+        # The integration settings are still there.
+        assert collection.integration_configuration.settings_dict == {"key": "value"}
 
     def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture

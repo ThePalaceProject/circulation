@@ -81,6 +81,8 @@ from core.model import (
     DeliveryMechanism,
     Hold,
     Identifier,
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -650,13 +652,27 @@ class CirculationManagerController(BaseCirculationManagerController):
         """
         _db = Session.object_session(library)
         pools = (
-            _db.query(LicensePool)
-            .join(LicensePool.collection)
-            .join(LicensePool.identifier)
-            .join(Collection.libraries)
-            .filter(Identifier.type == identifier_type)
-            .filter(Identifier.identifier == identifier)
-            .filter(Library.id == library.id)
+            _db.scalars(
+                select(LicensePool)
+                .join(Collection, LicensePool.collection_id == Collection.id)
+                .join(Identifier, LicensePool.identifier_id == Identifier.id)
+                .join(
+                    IntegrationConfiguration,
+                    Collection.integration_configuration_id
+                    == IntegrationConfiguration.id,
+                )
+                .join(
+                    IntegrationLibraryConfiguration,
+                    IntegrationConfiguration.id
+                    == IntegrationLibraryConfiguration.parent_id,
+                )
+                .where(
+                    Identifier.type == identifier_type,
+                    Identifier.identifier == identifier,
+                    IntegrationLibraryConfiguration.library_id == library.id,
+                )
+            )
+            .unique()
             .all()
         )
         if not pools:

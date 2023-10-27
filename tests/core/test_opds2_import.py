@@ -97,7 +97,7 @@ def opds2_importer_fixture(
     data.transaction = db
     data.collection = db.collection(protocol=OPDS2API.label())
     data.library = db.default_library()
-    data.library.collections.append(data.collection)
+    data.collection.libraries.append(data.library)
     data.data_source = DataSource.lookup(
         db.session, "OPDS 2.0 Data Source", autocreate=True
     )

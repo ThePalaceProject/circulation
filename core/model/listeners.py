@@ -108,8 +108,6 @@ def _site_configuration_has_changed(_db, cooldown=1):
 # catch most that slip through the cracks.
 @event.listens_for(Collection.children, "append")
 @event.listens_for(Collection.children, "remove")
-@event.listens_for(Collection.libraries, "append")
-@event.listens_for(Collection.libraries, "remove")
 @event.listens_for(ExternalIntegration.settings, "append")
 @event.listens_for(ExternalIntegration.settings, "remove")
 @event.listens_for(Library.integrations, "append")

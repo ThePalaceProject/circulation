@@ -82,8 +82,12 @@ class TestEnkiAPI:
         assert other_library.id is not None
         config = enki_test_fixture.api.integration_configuration()
         assert config is not None
+
+        config.libraries.append(other_library)
+        lib_config = config.for_library(other_library)
+        assert lib_config is not None
         DatabaseTransactionFixture.set_settings(
-            config.for_library(other_library.id, create=True),
+            lib_config,
             **{enki_test_fixture.api.ENKI_LIBRARY_ID_KEY: "other library id"},
         )
         db.session.commit()

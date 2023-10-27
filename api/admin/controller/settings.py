@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, cast
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 import flask
 from flask import Response
@@ -307,14 +307,16 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         library = get_one(self._db, Library, short_name=info_copy.pop("short_name"))
         if not library:
             raise RuntimeError("Could not find the configuration library")
-        config = None
 
         # Validate first
         validated_data = protocol_class.library_settings_class()(**info_copy)
+
         # Attach the configuration
-        config = configuration.for_library(cast(int, library.id), create=True)
-        config.settings_dict = validated_data.dict()
-        return config
+        library_configuration = IntegrationLibraryConfiguration(
+            library=library, settings_dict=validated_data.dict()
+        )
+        configuration.library_configurations.append(library_configuration)
+        return library_configuration
 
     def _set_integration_library(self, integration, library_info, protocol):
         library = get_one(self._db, Library, short_name=library_info.get("short_name"))

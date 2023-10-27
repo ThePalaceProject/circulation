@@ -349,7 +349,7 @@ class CollectionSettingsController(SettingsController):
         short_names = [l.get("short_name") for l in libraries]
         for library in collection.libraries:
             if library.short_name not in short_names:
-                collection.disassociate_library(library)
+                collection.libraries.remove(library)
 
     # DELETE
     def process_delete(self, collection_id):

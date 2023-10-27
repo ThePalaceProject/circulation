@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, TypeVar
 
 from sqlalchemy import (
@@ -14,6 +13,7 @@ from sqlalchemy import (
     exists,
     select,
 )
+from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, mapper, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
@@ -28,10 +28,7 @@ from core.model.edition import Edition
 from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
 from core.model.identifier import Identifier
-from core.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
+from core.model.integration import IntegrationConfiguration
 from core.model.library import Library
 from core.model.licensing import LicensePool, LicensePoolDeliveryMechanism
 from core.model.work import Work
@@ -101,11 +98,9 @@ class Collection(Base, HasSessionCache):
     children: Mapped[List[Collection]] = relationship("Collection", uselist=True)
 
     # A Collection can provide books to many Libraries.
-    libraries: Mapped[List[Library]] = relationship(
-        "Library",
-        secondary=lambda: collections_libraries,
-        backref="collections",
-        uselist=True,
+    # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies
+    libraries: Mapped[List[Library]] = association_proxy(
+        "integration_configuration", "libraries"
     )
 
     # A Collection can include many LicensePools.
@@ -300,6 +295,13 @@ class Collection(Base, HasSessionCache):
             raise ValueError("Collection has no name.")
         return name
 
+    # @property
+    # def libraries(self) -> List[Library]:
+    #     """Return the libraries associated with this collection."""
+    #     if self.integration_configuration is None:
+    #         raise ValueError("Collection has no integration configuration.")
+    #     return self.integration_configuration.libraries
+
     @hybrid_property
     def protocol(self) -> str:
         """What protocol do we need to use to get licenses for this
@@ -384,10 +386,8 @@ class Collection(Base, HasSessionCache):
         collection has it for this number of days.
         """
         key = self.loan_period_key(medium)
-        if library.id is None:
-            return None
 
-        config = self.integration_configuration.for_library(library.id)
+        config = self.integration_configuration.for_library(library)
         if config is None:
             return None
 
@@ -503,33 +503,6 @@ class Collection(Base, HasSessionCache):
 
         yield parent
         yield from parent.parents
-
-    def disassociate_library(self, library: Library) -> None:
-        """Disassociate a Library from this Collection and delete any relevant
-        ConfigurationSettings.
-        """
-        if library is None or library not in self.libraries:
-            # No-op.
-            return
-
-        _db = Session.object_session(self)
-        if self.integration_configuration_id:
-            qu = (
-                _db.query(IntegrationLibraryConfiguration)
-                .filter(IntegrationLibraryConfiguration.library_id == library.id)
-                .filter(
-                    IntegrationLibraryConfiguration.parent_id
-                    == self.integration_configuration_id
-                )
-            )
-            qu.delete()
-        else:
-            raise ValueError(
-                "No known integration library configuration for collection %s"
-                % self.name
-            )
-
-        self.libraries.remove(library)
 
     @property
     def pools_with_no_delivery_mechanisms(self) -> Query[LicensePool]:
@@ -668,8 +641,7 @@ class Collection(Base, HasSessionCache):
         _db = Session.object_session(self)
 
         # Disassociate all libraries from this collection.
-        for library in self.libraries:
-            self.disassociate_library(library)
+        self.libraries.clear()
 
         # Delete all the license pools. This should be the only part
         # of the application where LicensePools are permanently
@@ -690,23 +662,6 @@ class Collection(Base, HasSessionCache):
         # Now delete the Collection itself.
         _db.delete(self)
         _db.commit()
-
-
-collections_libraries: Table = Table(
-    "collections_libraries",
-    Base.metadata,
-    Column(
-        "collection_id",
-        Integer,
-        ForeignKey("collections.id"),
-        index=True,
-        nullable=False,
-    ),
-    Column(
-        "library_id", Integer, ForeignKey("libraries.id"), index=True, nullable=False
-    ),
-    UniqueConstraint("collection_id", "library_id"),
-)
 
 
 collections_identifiers: Table = Table(
@@ -770,19 +725,3 @@ collections_customlists: Table = Table(
     ),
     UniqueConstraint("collection_id", "customlist_id"),
 )
-
-
-class HasExternalIntegrationPerCollection(metaclass=ABCMeta):
-    """Interface allowing to get access to an external integration"""
-
-    @abstractmethod
-    def collection_external_integration(
-        self, collection: Optional[Collection]
-    ) -> ExternalIntegration:
-        """Returns an external integration associated with the collection
-
-        :param collection: Collection
-
-        :return: External integration associated with the collection
-        """
-        raise NotImplementedError()

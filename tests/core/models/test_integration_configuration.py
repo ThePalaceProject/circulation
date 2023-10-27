@@ -1,5 +1,7 @@
+from unittest.mock import MagicMock
+
 from core.integration.goals import Goals
-from core.model import create
+from core.model import Library, create
 from core.model.integration import IntegrationConfiguration
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -19,16 +21,18 @@ class TestIntegrationConfigurations:
         # No library ID provided
         assert config.for_library(None) is None
 
+        # Library has no ID
+        mock_library = MagicMock(spec=Library)
+        mock_library.id = None
+        assert config.for_library(mock_library) is None
+
         # No library config exists
         assert config.for_library(library.id) is None
 
-        # This should create a new config
-        libconfig = config.for_library(library.id, create=True)
-        assert libconfig is not None
-        assert libconfig.library == library
-        assert libconfig.parent == config
-        assert libconfig.settings_dict == {}
+        config.libraries.append(library)
 
-        # The same config is returned henceforth
-        assert config.for_library(library.id) == libconfig
-        assert config.for_library(library.id, create=True) == libconfig
+        # Library config exists
+        libconfig = config.for_library(library.id)
+
+        # The same config is returned for the same library
+        assert config.for_library(library) is libconfig

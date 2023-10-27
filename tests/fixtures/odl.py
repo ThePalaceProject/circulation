@@ -102,8 +102,7 @@ class ODLTestFixture:
             "url": "http://metadata",
             Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
         }
-        collection.integration_configuration.for_library(library.id, create=True)
-        library.collections.append(collection)
+        collection.libraries.append(library)
         return collection
 
     def work(self, collection):

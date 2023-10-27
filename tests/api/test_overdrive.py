@@ -2128,9 +2128,6 @@ class TestOverdriveAPI:
                 OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
             },
         )
-        db.default_collection().integration_configuration.for_library(
-            patron.library.id, create=True
-        )
 
         # Mocked testing credentials
         encoded_auth = base64.b64encode(b"TestingKey:TestingSecret")
@@ -2207,9 +2204,6 @@ class TestOverdriveAPI:
                 OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
                 OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
             },
-        )
-        db.default_collection().integration_configuration.for_library(
-            patron.library.id, create=True
         )
 
         od_api = OverdriveAPI(db.session, db.default_collection())
@@ -2288,7 +2282,8 @@ class TestOverdriveAPICredentials:
         pin = "patron_pin"
 
         # clear out any collections added before we add ours
-        library.collections = []
+        for collection in library.collections:
+            collection.libraries = []
 
         # Distinct credentials for the two OverDrive collections in which our
         # library has membership.

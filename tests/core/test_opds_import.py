@@ -1621,7 +1621,7 @@ class TestOPDSImporter:
                 ExternalIntegration.OPDS_IMPORT,
                 data_source_name="test",
             )
-            library.collections.append(collection)
+            collection.libraries.append(library)
 
             DatabaseTransactionFixture.set_settings(
                 collection.integration_configuration,

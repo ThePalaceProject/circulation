@@ -28,7 +28,7 @@ class ODLFixture:
             "url": "http://metadata",
             Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
         }
-        self.library.collections.append(self.collection)
+        self.collection.libraries.append(self.library)
         self.work = self.db.work(with_license_pool=True, collection=self.collection)
 
         def setup(self, available, concurrency, left=None, expires=None):

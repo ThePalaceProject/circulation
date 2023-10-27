@@ -87,7 +87,8 @@ class TestCollectionSettings:
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
         c3.libraries += [l1, settings_ctrl_fixture.ctrl.db.default_library()]
         assert isinstance(l1.id, int)
-        l1_config = c3.integration_configuration.for_library(l1.id, create=True)
+        l1_config = c3.integration_configuration.for_library(l1.id)
+        assert l1_config is not None
         DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
         # Commit the config changes
         session.commit()

@@ -169,9 +169,7 @@ class DatabaseTransactionFixture:
         collection, _ = Collection.by_name_and_protocol(
             self._session, "Default Collection", ExternalIntegration.OPDS_IMPORT
         )
-        collection.integration_configuration.for_library(library.id, create=True)
-        if collection not in library.collections:
-            library.collections.append(collection)
+        collection.libraries.append(library)
         return library
 
     @staticmethod
@@ -725,8 +723,7 @@ class DatabaseTransactionFixture:
         else:
             libraries = []
 
-        for library in libraries:
-            integration.for_library(library.id, create=True)
+        integration.libraries.extend(libraries)
 
         integration.settings_dict = kwargs
         return integration

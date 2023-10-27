@@ -60,12 +60,11 @@ class MockOverdriveAPI(OverdriveAPI):
             OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
             OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
         }
-        library.collections.append(collection)
+        if library not in collection.libraries:
+            collection.libraries.append(library)
         db = DatabaseTransactionFixture
-        assert library.id is not None
-        library_config = collection.integration_configuration.for_library(
-            library.id, create=True
-        )
+        library_config = collection.integration_configuration.for_library(library.id)
+        assert library_config is not None
         db.set_settings(library_config, ils_name=ils_name)
         return collection
 

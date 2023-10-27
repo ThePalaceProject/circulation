@@ -24,8 +24,8 @@ class MockBibliothecaAPI(BibliothecaAPI):
             "username": "a",
             "password": "b",
         }
-        collection.integration_configuration.for_library(library.id, create=True)
-        library.collections.append(collection)
+        if library not in collection.libraries:
+            collection.libraries.append(library)
         return collection
 
     def __init__(self, _db, collection, *args, **kwargs):

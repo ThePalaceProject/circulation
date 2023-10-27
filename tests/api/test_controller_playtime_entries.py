@@ -241,7 +241,7 @@ class TestPlaytimeEntriesController:
             assert response.detail == "Collection was not found in the Library."
 
             # Identifier not part of collection
-            library.collections.append(collection)
+            collection.libraries.append(library)
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )

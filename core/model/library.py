@@ -10,6 +10,7 @@ from typing import (
     Generator,
     List,
     Optional,
+    Sequence,
     Tuple,
     Type,
     Union,
@@ -26,6 +27,7 @@ from sqlalchemy import (
     Table,
     Unicode,
     UniqueConstraint,
+    select,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, relationship
@@ -36,6 +38,7 @@ from core.configuration.library import LibrarySettings
 from core.entrypoint import EntryPoint
 from core.facets import FacetConstants
 from core.integration.base import integration_settings_load, integration_settings_update
+from core.integration.goals import Goals
 from core.model import Base, get_one
 from core.model.announcements import Announcement
 from core.model.customlist import customlist_sharedlibrary
@@ -189,8 +192,25 @@ class Library(Base, HasSessionCache):
         uselist=False,
     )
 
-    # Typing specific
-    collections: List[Collection]
+    @property
+    def collections(self) -> Sequence[Collection]:
+        """Get the collections for this library"""
+        from core.model import (
+            Collection,
+            IntegrationConfiguration,
+            IntegrationLibraryConfiguration,
+        )
+
+        _db = Session.object_session(self)
+        return _db.scalars(
+            select(Collection)
+            .join(IntegrationConfiguration)
+            .join(IntegrationLibraryConfiguration)
+            .where(
+                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                IntegrationLibraryConfiguration.library_id == self.id,
+            )
+        ).all()
 
     # Cache of the libraries loaded settings object
     _settings: Optional[LibrarySettings]
