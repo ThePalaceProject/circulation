@@ -1272,8 +1272,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
         if protocol:
             config.protocol = protocol
         if args.external_account_id:
-            collection.external_account_id = args.external_account_id
-
+            settings["external_account_id"] = args.external_account_id
         if args.url:
             settings["url"] = args.url
         if args.username:

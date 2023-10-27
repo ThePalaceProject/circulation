@@ -16,11 +16,11 @@ class MockAxis360API(Axis360API):
         collection, _ = Collection.by_name_and_protocol(
             _db, name, ExternalIntegration.AXIS_360
         )
-        collection.external_account_id = "c"
         collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://axis.test/",
+            "external_account_id": "c",
         }
         if library not in collection.libraries:
             collection.libraries.append(library)

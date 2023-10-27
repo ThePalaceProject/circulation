@@ -19,10 +19,10 @@ class MockBibliothecaAPI(BibliothecaAPI):
         collection, _ = Collection.by_name_and_protocol(
             _db, name=name, protocol=ExternalIntegration.BIBLIOTHECA
         )
-        collection.external_account_id = "c"
         collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
+            "external_account_id": "c",
         }
         if library not in collection.libraries:
             collection.libraries.append(library)

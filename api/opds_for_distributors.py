@@ -106,7 +106,7 @@ class OPDSForDistributorsAPI(
         self.data_source_name = settings.data_source
         self.username = settings.username
         self.password = settings.password
-        self.feed_url = collection.external_account_id
+        self.feed_url = settings.external_account_id
         self.auth_url: Optional[str] = None
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:

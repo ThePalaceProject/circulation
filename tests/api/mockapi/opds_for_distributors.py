@@ -23,9 +23,11 @@ class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
         collection, _ = Collection.by_name_and_protocol(
             _db, name=name, protocol=OPDSForDistributorsAPI.label()
         )
-        collection.external_account_id = "http://opds"
         collection.integration_configuration.settings_dict = dict(
-            username="a", password="b", data_source="data_source"
+            username="a",
+            password="b",
+            data_source="data_source",
+            external_account_id="http://opds",
         )
         if library not in collection.libraries:
             collection.libraries.append(library)

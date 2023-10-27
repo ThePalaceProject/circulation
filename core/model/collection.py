@@ -8,7 +8,6 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Table,
-    Unicode,
     UniqueConstraint,
     exists,
     select,
@@ -50,14 +49,6 @@ class Collection(Base, HasSessionCache):
 
     DATA_SOURCE_NAME_SETTING = "data_source"
 
-    # For use in forms that edit Collections.
-    EXTERNAL_ACCOUNT_ID_KEY = "external_account_id"
-
-    # How does the provider of this collection distinguish it from
-    # other collections it provides? On the other side this is usually
-    # called a "library ID".
-    external_account_id = Column(Unicode, nullable=True)
-
     # How do we connect to the provider of this collection? Any url,
     # authentication information, or additional configuration goes
     # into the external integration, as does the 'protocol', which
@@ -85,17 +76,21 @@ class Collection(Base, HasSessionCache):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
-    parent: Collection = relationship("Collection", remote_side=[id])
+    parent: Collection = relationship(
+        "Collection", remote_side=[id], back_populates="children"
+    )
+
+    # A collection may have many child collections. For example,
+    # An Overdrive collection may have many children corresponding
+    # to Overdrive Advantage collections.
+    children: Mapped[List[Collection]] = relationship(
+        "Collection", back_populates="parent", uselist=True
+    )
 
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
     # useful for deleting large collections which can timeout when deleting.
     marked_for_deletion = Column(Boolean, default=False)
-
-    # A collection may have many child collections. For example,
-    # An Overdrive collection may have many children corresponding
-    # to Overdrive Advantage collections.
-    children: Mapped[List[Collection]] = relationship("Collection", uselist=True)
 
     # A Collection can provide books to many Libraries.
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies
@@ -534,8 +529,6 @@ class Collection(Base, HasSessionCache):
             lines.append('Protocol: "%s"' % integration.protocol)
         for library in self.libraries:
             lines.append('Used by library: "%s"' % library.short_name)
-        if self.external_account_id:
-            lines.append('External account ID: "%s"' % self.external_account_id)
         for name in sorted(integration.settings_dict):
             value = integration.settings_dict[name]
             if (

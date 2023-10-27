@@ -21,11 +21,11 @@ class ODLFixture:
         self.collection, _ = Collection.by_name_and_protocol(
             self.db.session, "Test ODL Collection", ODLAPI.label()
         )
-        self.collection.external_account_id = "http://odl"
         self.collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://metadata",
+            "external_integration_id": "http://odl",
             Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
         }
         self.collection.libraries.append(self.library)

@@ -67,21 +67,19 @@ class TestCollectionSettings:
         c2 = settings_ctrl_fixture.ctrl.db.collection(
             name="Collection 2",
             protocol=ExternalIntegration.OVERDRIVE,
-        )
-
-        c2.external_account_id = "1234"
-        DatabaseTransactionFixture.set_settings(
-            c2.integration_configuration,
-            overdrive_client_secret="b",
-            overdrive_client_key="user",
-            overdrive_website_id="100",
+            external_account_id="1234",
+            settings=dict(
+                overdrive_client_secret="b",
+                overdrive_client_key="user",
+                overdrive_website_id="100",
+            ),
         )
 
         c3 = settings_ctrl_fixture.ctrl.db.collection(
             name="Collection 3",
             protocol=ExternalIntegration.OVERDRIVE,
+            external_account_id="5678",
         )
-        c3.external_account_id = "5678"
         c3.parent = c2
 
         l1 = settings_ctrl_fixture.ctrl.db.library(short_name="L1")
@@ -133,9 +131,9 @@ class TestCollectionSettings:
             settings2 = coll2.get("settings", {})
             settings3 = coll3.get("settings", {})
 
-            assert c1.external_account_id == settings1.get("external_account_id")
-            assert c2.external_account_id == settings2.get("external_account_id")
-            assert c3.external_account_id == settings3.get("external_account_id")
+            assert settings1.get("external_account_id") is None
+            assert settings2.get("external_account_id") == "1234"
+            assert settings3.get("external_account_id") == "5678"
 
             assert c2.integration_configuration.settings_dict[
                 "overdrive_client_secret"
@@ -407,7 +405,10 @@ class TestCollectionSettings:
         assert isinstance(collection, Collection)
         assert collection.id == int(response.response[0])
         assert "New Collection" == collection.name
-        assert "acctid" == collection.external_account_id
+        assert (
+            "acctid"
+            == collection.integration_configuration.settings_dict["external_account_id"]
+        )
         assert (
             "username"
             == collection.integration_configuration.settings_dict[
@@ -468,7 +469,10 @@ class TestCollectionSettings:
         assert isinstance(child, Collection)
         assert child.id == int(response.response[0])
         assert "Child Collection" == child.name
-        assert "child-acctid" == child.external_account_id
+        assert (
+            "child-acctid"
+            == child.integration_configuration.settings_dict["external_account_id"]
+        )
 
         # The settings that are inherited from the parent weren't set.
         assert "username" not in child.integration_configuration.settings_dict
@@ -609,7 +613,7 @@ class TestCollectionSettings:
                     ("id", str(collection2.id)),
                     ("name", "Collection 2"),
                     ("protocol", ExternalIntegration.ODL),
-                    ("external_account_id", "1234"),
+                    ("external_account_id", "http://test.com/feed"),
                     ("username", "user"),
                     ("password", "password"),
                     ("data_source", "datasource"),

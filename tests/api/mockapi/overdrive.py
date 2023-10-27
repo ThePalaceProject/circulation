@@ -54,11 +54,11 @@ class MockOverdriveAPI(OverdriveAPI):
         collection, _ = Collection.by_name_and_protocol(
             _db, name=name, protocol=ExternalIntegration.OVERDRIVE
         )
-        collection.external_account_id = library_id
         collection.integration_configuration.settings_dict = {
             OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
             OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
             OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
+            "external_account_id": library_id,
         }
         if library not in collection.libraries:
             collection.libraries.append(library)

@@ -19,11 +19,18 @@ class TestOPDS2Validation(OPDS2Test):
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        db.default_collection().protocol = ExternalIntegration.OPDS2_IMPORT
-        db.default_collection().data_source = DataSource.FEEDBOOKS  # type: ignore[assignment]
+        collection = db.collection(
+            protocol=ExternalIntegration.OPDS2_IMPORT,
+            data_source_name=DataSource.FEEDBOOKS,
+            settings={
+                "username": "username",
+                "password": "password",
+                "external_account_id": "account_id",
+            },
+        )
         validator = OPDS2SchemaValidation(
             db.session,
-            collection=db.default_collection(),
+            collection=collection,
             import_class=OPDS2Importer,
             parser=RWPMManifestParser(OPDS2FeedParserFactory()),
         )
@@ -38,15 +45,18 @@ class TestODL2Validation(OPDS2Test):
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        db.default_collection().integration_configuration.settings_dict = {
-            "username": "username",
-            "password": "password",
-        }
-        db.default_collection().protocol = ExternalIntegration.ODL2
-        db.default_collection().data_source = DataSource.FEEDBOOKS  # type: ignore[assignment]
+        collection = db.collection(
+            protocol=ExternalIntegration.ODL2,
+            data_source_name=DataSource.FEEDBOOKS,
+            settings={
+                "username": "username",
+                "password": "password",
+                "external_account_id": "account_id",
+            },
+        )
         validator = ODL2SchemaValidation(
             db.session,
-            collection=db.default_collection(),
+            collection=collection,
             import_class=ODL2Importer,
             parser=RWPMManifestParser(ODLFeedParserFactory()),
         )

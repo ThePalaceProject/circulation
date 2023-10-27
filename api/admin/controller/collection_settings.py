@@ -90,7 +90,6 @@ class CollectionSettingsController(SettingsController):
                 collection_dict[
                     "settings"
                 ] = collection_object.integration_configuration.settings_dict
-                self.load_settings(collection_object, collection_dict["settings"])
             collection_dict["self_test_results"] = self._get_prior_test_results(
                 collection_object
             )
@@ -135,13 +134,6 @@ class CollectionSettingsController(SettingsController):
             libraries.append(library_info)
 
         return libraries
-
-    def load_settings(self, collection_object, collection_settings):
-        """Compile the information about the collection that corresponds to the settings
-        externally imposed by the collection's protocol."""
-
-        settings = collection_settings
-        settings["external_account_id"] = collection_object.external_account_id
 
     def find_protocol_class(self, collection_object):
         """Figure out which class this collection's protocol belongs to, from the list
@@ -292,12 +284,7 @@ class CollectionSettingsController(SettingsController):
         for setting in settings:
             key = setting["key"]
             value = self._extract_form_setting_value(setting, flask.request.form)
-            if key == "external_account_id":
-                error = self.validate_external_account_id_setting(value, setting)
-                if error:
-                    return error
-                collection.external_account_id = value
-            elif value is not None:
+            if value is not None:
                 # Only if the key was present in the request should we add it
                 collection_settings[key] = value
             else:

@@ -38,7 +38,7 @@ class CollectionSelfTestsController(SelfTestsController):
             name=collection.name,
             protocol=collection.protocol,
             parent_id=collection.parent_id,
-            settings=dict(external_account_id=collection.external_account_id),
+            settings=collection.integration_configuration.settings_dict,
         )
 
     def _find_protocol_class(self, collection):

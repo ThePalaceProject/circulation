@@ -78,7 +78,7 @@ class ODLAPIConstants:
 
 
 class ODLSettings(OPDSImporterSettings):
-    external_account_id: Optional[HttpUrl] = FormField(
+    external_account_id: HttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("ODL feed URL"),
             required=True,

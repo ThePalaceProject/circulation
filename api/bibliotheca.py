@@ -93,7 +93,7 @@ class BibliothecaSettings(BaseSettings):
             required=True,
         )
     )
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
@@ -169,7 +169,7 @@ class BibliothecaAPI(
         self.version = self.DEFAULT_VERSION
         self.account_id = settings.username
         self.account_key = settings.password
-        self.library_id = collection.external_account_id
+        self.library_id = settings.external_account_id
         self.base_url = self.DEFAULT_BASE_URL
 
         if not self.account_id or not self.account_key or not self.library_id:

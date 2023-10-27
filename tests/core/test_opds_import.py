@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 from functools import partial
 from io import StringIO
@@ -22,6 +24,7 @@ from core.config import IntegrationException
 from core.coverage import CoverageFailure
 from core.metadata_layer import CirculationData, LinkData, Metadata
 from core.model import (
+    Collection,
     Contributor,
     CoverageRecord,
     DataSource,
@@ -1773,6 +1776,25 @@ class TestCombine:
         )
 
 
+class OPDSImportMonitorFixture:
+    def collection(self, feed_url: str | None = None) -> Collection:
+        feed_url = feed_url or "http://fake.opds/"
+        settings = {"external_account_id": feed_url, "data_source": "OPDS"}
+        return self.db.collection(
+            protocol=ExternalIntegration.OPDS_IMPORT, settings=settings
+        )
+
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+
+
+@pytest.fixture()
+def opds_import_monitor_fixture(
+    db: DatabaseTransactionFixture,
+) -> OPDSImportMonitorFixture:
+    return OPDSImportMonitorFixture(db)
+
+
 class TestOPDSImportMonitor:
     def test_constructor(self, db: DatabaseTransactionFixture):
         session = db.session
@@ -1783,49 +1805,45 @@ class TestOPDSImportMonitor:
             "OPDSImportMonitor can only be run in the context of a Collection."
             in str(excinfo.value)
         )
-
-        db.default_collection().integration_configuration.protocol = (
-            ExternalIntegration.OVERDRIVE
-        )
+        c1 = db.collection(protocol=ExternalIntegration.OVERDRIVE)
         with pytest.raises(ValueError) as excinfo:
-            OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
+            OPDSImportMonitor(session, c1, OPDSImporter)
         assert (
-            "Collection Default Collection is configured for protocol Overdrive, not OPDS Import."
+            f"Collection {c1.name} is configured for protocol Overdrive, not OPDS Import."
             in str(excinfo.value)
         )
 
-        db.default_collection().integration_configuration.protocol = (
-            ExternalIntegration.OPDS_IMPORT
-        )
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration, "data_source", None
+        c2 = db.collection(
+            protocol=ExternalIntegration.OPDS_IMPORT, settings={"data_source": None}
         )
         with pytest.raises(ValueError) as excinfo:
-            OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
-        assert "Collection Default Collection has no associated data source." in str(
+            OPDSImportMonitor(session, c2, OPDSImporter)
+        assert f"Collection {c2.name} has no associated data source." in str(
             excinfo.value
         )
 
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration, "data_source", "OPDS"
+        c3 = db.collection(
+            protocol=ExternalIntegration.OPDS_IMPORT,
+            settings={
+                "data_source": "OPDS",
+                "external_account_id": "https://opds.import.com/feed?size=100",
+            },
         )
-        db.default_collection().external_account_id = (
-            "https://opds.import.com/feed?size=100"
-        )
-        monitor = OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
+        monitor = OPDSImportMonitor(session, c3, OPDSImporter)
         assert monitor._feed_base_url == "https://opds.import.com/"
 
-    def test_get(self, db: DatabaseTransactionFixture):
+    def test_get(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
         session = db.session
 
         ## Test whether relative urls work
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration, "data_source", "OPDS"
+        collection = db.collection(
+            external_account_id="https://opds.import.com:9999/feed",
+            data_source_name="OPDS",
         )
-        db.default_collection().external_account_id = (
-            "https://opds.import.com:9999/feed"
-        )
-        monitor = OPDSImportMonitor(session, db.default_collection(), OPDSImporter)
+        monitor = OPDSImportMonitor(session, collection, OPDSImporter)
 
         with patch("core.opds_import.HTTP.get_with_timeout") as mock_get:
             monitor._get("/absolute/path", {})
@@ -1839,12 +1857,10 @@ class TestOPDSImportMonitor:
                 "https://opds.import.com:9999/relative/path",
             )
 
-    def test__run_self_tests(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
-        )
+    def test__run_self_tests(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
         """Verify the self-tests of an OPDS collection."""
 
         class MockImporter(OPDSImporter):
@@ -1861,9 +1877,11 @@ class TestOPDSImportMonitor:
                 return ([], "some content")
 
         feed_url = db.fresh_url()
-        db.default_collection().external_account_id = feed_url
-        monitor = Mock(session, db.default_collection(), import_class=MockImporter)
-        [first_page, found_content] = monitor._run_self_tests(session)
+        collection = db.collection(
+            external_account_id=feed_url, data_source_name="OPDS"
+        )
+        monitor = Mock(db.session, collection, import_class=MockImporter)
+        [first_page, found_content] = monitor._run_self_tests(db.session)
         expect = "Retrieve the first page of the OPDS feed (%s)" % feed_url
         assert expect == first_page.name
         assert True == first_page.success
@@ -1882,29 +1900,25 @@ class TestOPDSImportMonitor:
         ) == monitor.importer.assert_importable_content_called_with  # type: ignore[attr-defined]
         assert "looks good" == found_content.result
 
-    def test_hook_methods(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
-        )
+    def test_hook_methods(self, db: DatabaseTransactionFixture):
         """By default, the OPDS URL and data source used by the importer
         come from the collection configuration.
         """
+        collection = db.collection(
+            external_account_id="http://url/", data_source_name="OPDS"
+        )
         monitor = OPDSImportMonitor(
-            session,
-            db.default_collection(),
+            db.session,
+            collection,
             import_class=OPDSImporter,
         )
-        assert db.default_collection().external_account_id == monitor.opds_url(
-            db.default_collection()
-        )
 
-        assert db.default_collection().data_source == monitor.data_source(
-            db.default_collection()
-        )
+        assert collection.data_source == monitor.data_source(collection)
 
-    def test_feed_contains_new_data(self, opds_importer_fixture: OPDSImporterFixture):
+    def test_feed_contains_new_data(
+        self,
+        opds_importer_fixture: OPDSImporterFixture,
+    ):
         data, db, session = (
             opds_importer_fixture,
             opds_importer_fixture.db,
@@ -1917,21 +1931,25 @@ class TestOPDSImportMonitor:
             def _get(self, url, headers):
                 return 200, {"content-type": AtomFeed.ATOM_TYPE}, feed
 
+        data_source_name = "OPDS"
+        collection = db.collection(
+            external_account_id="http://url/", data_source_name=data_source_name
+        )
         monitor = OPDSImportMonitor(
             session,
-            db.default_collection(),
+            collection,
             import_class=OPDSImporter,
         )
         timestamp = monitor.timestamp()
 
         # Nothing has been imported yet, so all data is new.
-        assert True == monitor.feed_contains_new_data(feed)
-        assert None == timestamp.start
+        assert monitor.feed_contains_new_data(feed) is True
+        assert timestamp.start is None
 
         # Now import the editions.
         monitor = MockOPDSImportMonitor(
             session,
-            collection=db.default_collection(),
+            collection=collection,
             import_class=OPDSImporter,
         )
         monitor.run()
@@ -1941,10 +1959,10 @@ class TestOPDSImportMonitor:
 
         # The timestamp has been updated, although unlike most
         # Monitors the timestamp is purely informational.
-        assert timestamp.finish != None
+        assert timestamp.finish is not None
 
         editions = session.query(Edition).all()
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        data_source = DataSource.lookup(session, data_source_name)
 
         # If there are CoverageRecords that record work are after the updated
         # dates, there's nothing new.
@@ -1952,7 +1970,7 @@ class TestOPDSImportMonitor:
             editions[0],
             data_source,
             CoverageRecord.IMPORT_OPERATION,
-            collection=db.default_collection(),
+            collection=collection,
         )
         record.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
 
@@ -1960,22 +1978,22 @@ class TestOPDSImportMonitor:
             editions[1],
             data_source,
             CoverageRecord.IMPORT_OPERATION,
-            collection=db.default_collection(),
+            collection=collection,
         )
         record2.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
 
-        assert False == monitor.feed_contains_new_data(feed)
+        assert monitor.feed_contains_new_data(feed) is False
 
         # If the monitor is set up to force reimport, it doesn't
         # matter that there's nothing new--we act as though there is.
         monitor.force_reimport = True
-        assert True == monitor.feed_contains_new_data(feed)
+        assert monitor.feed_contains_new_data(feed) is True
         monitor.force_reimport = False
 
         # If an entry was updated after the date given in that entry's
         # CoverageRecord, there's new data.
         record2.timestamp = datetime_utc(1970, 1, 1, 1, 1, 1)
-        assert True == monitor.feed_contains_new_data(feed)
+        assert monitor.feed_contains_new_data(feed) is True
 
         # If a CoverageRecord is a transient failure, we try again
         # regardless of whether it's been updated.
@@ -1983,16 +2001,16 @@ class TestOPDSImportMonitor:
             r.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
             r.exception = "Failure!"
             r.status = CoverageRecord.TRANSIENT_FAILURE
-        assert True == monitor.feed_contains_new_data(feed)
+        assert monitor.feed_contains_new_data(feed) is True
 
         # If a CoverageRecord is a persistent failure, we don't try again...
         for r in [record, record2]:
             r.status = CoverageRecord.PERSISTENT_FAILURE
-        assert False == monitor.feed_contains_new_data(feed)
+        assert monitor.feed_contains_new_data(feed) is False
 
         # ...unless the feed updates.
         record.timestamp = datetime_utc(1970, 1, 1, 1, 1, 1)
-        assert True == monitor.feed_contains_new_data(feed)
+        assert monitor.feed_contains_new_data(feed) is True
 
     def test_follow_one_link(self, opds_importer_fixture: OPDSImporterFixture):
         data, db, session = (
@@ -2000,10 +2018,13 @@ class TestOPDSImportMonitor:
             opds_importer_fixture.db,
             opds_importer_fixture.db.session,
         )
-
+        data_source_name = "OPDS"
+        collection = db.collection(
+            external_account_id="http://url/", data_source_name=data_source_name
+        )
         monitor = OPDSImportMonitor(
             session,
-            collection=db.default_collection(),
+            collection=collection,
             import_class=OPDSImporter,
         )
         feed = data.content_server_mini_feed
@@ -2026,14 +2047,14 @@ class TestOPDSImportMonitor:
         assert 2 == session.query(Edition).count()
 
         editions = session.query(Edition).all()
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        data_source = DataSource.lookup(session, data_source_name)
 
         for edition in editions:
             record, ignore = CoverageRecord.add_for(
                 edition,
                 data_source,
                 CoverageRecord.IMPORT_OPERATION,
-                collection=db.default_collection(),
+                collection=collection,
             )
             record.timestamp = datetime_utc(2016, 1, 1, 1, 1, 1)
 
@@ -2072,14 +2093,17 @@ class TestOPDSImportMonitor:
             opds_importer_fixture.db.session,
         )
         # Check coverage records are created.
-
+        data_source_name = "OPDS"
+        collection = db.collection(
+            external_account_id="http://root-url/index.xml",
+            data_source_name=data_source_name,
+        )
         monitor = OPDSImportMonitor(
             session,
-            collection=db.default_collection(),
+            collection=collection,
             import_class=DoomedOPDSImporter,
         )
-        db.default_collection().external_account_id = "http://root-url/index.xml"
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        data_source = DataSource.lookup(session, data_source_name)
 
         feed = data.content_server_mini_feed
 
@@ -2100,10 +2124,10 @@ class TestOPDSImportMonitor:
             editions[0].primary_identifier,
             data_source,
             operation=CoverageRecord.IMPORT_OPERATION,
-            collection=db.default_collection(),
+            collection=collection,
         )
         assert CoverageRecord.SUCCESS == record.status
-        assert None == record.exception
+        assert record.exception is None
 
         # The edition's primary identifier has some cover links whose
         # relative URL have been resolved relative to the Collection's
@@ -2136,7 +2160,7 @@ class TestOPDSImportMonitor:
             identifier,
             data_source,
             operation=CoverageRecord.IMPORT_OPERATION,
-            collection=db.default_collection(),
+            collection=collection,
         )
         assert "Utter failure!" in failure.exception
 
@@ -2144,13 +2168,7 @@ class TestOPDSImportMonitor:
         # import_one_feed
         assert 2 == len(failures)
 
-    def test_run_once(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
-        )
-
+    def test_run_once(self, db: DatabaseTransactionFixture):
         class MockOPDSImportMonitor(OPDSImportMonitor):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -2168,9 +2186,14 @@ class TestOPDSImportMonitor:
                 self.imports.append(feed)
                 return [object(), object()], {"identifier": "Failure"}
 
+        data_source_name = "OPDS"
+        collection = db.collection(
+            external_account_id="http://url/", data_source_name=data_source_name
+        )
+
         monitor = MockOPDSImportMonitor(
-            session,
-            collection=db.default_collection(),
+            db.session,
+            collection=collection,
             import_class=OPDSImporter,
         )
 
@@ -2188,20 +2211,19 @@ class TestOPDSImportMonitor:
 
         # The TimestampData returned by run_once does not include any
         # timing information; that's provided by run().
-        assert None == progress.start
-        assert None == progress.finish
+        assert progress.start is None
+        assert progress.finish is None
 
-    def test_update_headers(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
+    def test_update_headers(self, db: DatabaseTransactionFixture):
+        data_source_name = "OPDS"
+        collection = db.collection(
+            external_account_id="http://url/", data_source_name=data_source_name
         )
 
         # Test the _update_headers helper method.
         monitor = OPDSImportMonitor(
-            session,
-            collection=db.default_collection(),
+            db.session,
+            collection=collection,
             import_class=OPDSImporter,
         )
 
@@ -2249,16 +2271,17 @@ class TestOPDSImportMonitor:
         feed = data.content_server_mini_feed
         feed_url = "https://example.com/feed.opds"
 
-        # After we overrode the value of configuration setting we can instantiate OPDSImportMonitor.
-        # It'll load new "Max retry count"'s value from the database.
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            "connection_max_retry_count",
-            retry_count,
+        data_source_name = "OPDS"
+        collection = db.collection(
+            external_account_id="http://url/",
+            data_source_name=data_source_name,
+            settings={"connection_max_retry_count": retry_count},
         )
+
+        # The importer takes its retry count from the collection settings.
         monitor = OPDSImportMonitor(
             session,
-            collection=db.default_collection(),
+            collection=collection,
             import_class=OPDSImporter,
         )
 

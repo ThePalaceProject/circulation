@@ -114,7 +114,7 @@ class Axis360Settings(BaseSettings):
     password: str = FormField(
         form=ConfigurationFormItem(label=_("Password"), required=True)
     )
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
@@ -219,8 +219,8 @@ class Axis360API(
             )
 
         super().__init__(_db, collection)
-        self.library_id = collection.external_account_id or ""
         settings = self.settings
+        self.library_id = settings.external_account_id
         self.username = settings.username
         self.password = settings.password
 

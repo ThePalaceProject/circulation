@@ -8,7 +8,7 @@ import tempfile
 import time
 import uuid
 from textwrap import dedent
-from typing import Generator, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
 
 import pytest
 import sqlalchemy
@@ -296,15 +296,20 @@ class DatabaseTransactionFixture:
         username=None,
         password=None,
         data_source_name=None,
+        settings: Dict[str, Any] | None = None,
     ) -> Collection:
         name = name or self.fresh_str()
         collection, _ = Collection.by_name_and_protocol(self.session, name, protocol)
-        collection.external_account_id = external_account_id
-        collection.integration_configuration.settings_dict = {
-            "url": url,
-            "username": username,
-            "password": password,
-        }
+        settings = settings or {}
+        if url:
+            settings["url"] = url
+        if username:
+            settings["username"] = username
+        if password:
+            settings["password"] = password
+        if external_account_id:
+            settings["external_account_id"] = external_account_id
+        collection.integration_configuration.settings_dict = settings
 
         if data_source_name:
             collection.data_source = data_source_name

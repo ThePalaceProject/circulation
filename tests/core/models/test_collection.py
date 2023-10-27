@@ -358,12 +358,12 @@ class TestCollection:
         test_collection = example_collection_fixture.collection
         test_collection.libraries.append(library)
 
-        test_collection.external_account_id = "id"
         test_collection.integration_configuration.settings_dict = {
             "url": "url",
             "username": "username",
             "password": "password",
             "setting": "value",
+            "external_account_id": "id",
         }
 
         data = test_collection.explain()
@@ -371,7 +371,7 @@ class TestCollection:
             'Name: "test collection"',
             'Protocol: "Overdrive"',
             'Used by library: "only one"',
-            'External account ID: "id"',
+            'Setting "external_account_id": "id"',
             'Setting "setting": "value"',
             'Setting "url": "url"',
             'Setting "username": "username"',
@@ -393,7 +393,7 @@ class TestCollection:
             'Name: "Child"',
             "Parent: test collection",
             'Protocol: "Overdrive"',
-            'External account ID: "id2"',
+            'Setting "external_account_id": "id2"',
         ] == data
 
     def test_disassociate_libraries(

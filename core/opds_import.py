@@ -22,6 +22,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    cast,
     overload,
 )
 from urllib.parse import urljoin, urlparse
@@ -117,7 +118,7 @@ class OPDSImporterSettings(
 ):
     _NO_DEFAULT_AUDIENCE = ""
 
-    external_account_id: Optional[HttpUrl] = FormField(
+    external_account_id: HttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("URL"),
             required=True,
@@ -1776,15 +1777,13 @@ class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
                 "Collection %s has no associated data source." % collection.name
             )
 
-        feed_url = self.opds_url(collection)
-        self.feed_url = "" if feed_url is None else feed_url
-
         self.force_reimport = force_reimport
 
         self.importer = import_class(_db, collection=collection, **import_class_kwargs)
         settings = self.importer.settings
         self.username = settings.username
         self.password = settings.password
+        self.feed_url = settings.external_account_id
 
         self.custom_accept_header = settings.custom_accept_header
         self._max_retry_count = settings.max_retry_count
@@ -1858,14 +1857,6 @@ class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
             headers["Accept"] = self._get_accept_header()
 
         return headers
-
-    def opds_url(self, collection: Collection) -> Optional[str]:
-        """Returns the OPDS import URL for the given collection.
-
-        By default, this URL is stored as the external account ID, but
-        subclasses may override this.
-        """
-        return collection.external_account_id
 
     def data_source(self, collection: Collection) -> Optional[DataSource]:
         """Returns the data source name for the given collection.
@@ -2022,7 +2013,7 @@ class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
         # Because we are importing into a Collection, we will immediately
         # mark a book as presentation-ready if possible.
         imported_editions, pools, works, failures = self.importer.import_from_feed(
-            feed, feed_url=self.opds_url(self.collection)
+            feed, feed_url=self.feed_url
         )
 
         # Create CoverageRecords for the successful imports.
@@ -2046,7 +2037,7 @@ class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
 
     def _get_feeds(self) -> Iterable[Tuple[str, bytes]]:
         feeds = []
-        queue = [self.feed_url]
+        queue = [cast(str, self.feed_url)]
         seen_links = set()
 
         # First, follow the feed's next links until we reach a page with

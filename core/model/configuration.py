@@ -41,10 +41,6 @@ class ExternalIntegration(Base):
     # to this are defined in the circulation manager.
     PATRON_AUTH_GOAL = "patron_auth"
 
-    # These integrations are associated with external services such
-    # as Overdrive which provide access to books.
-    LICENSE_GOAL = "licenses"
-
     # These integrations are associated with external services such as
     # the metadata wrangler, which provide information about books,
     # but not the books themselves.

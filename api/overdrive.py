@@ -19,7 +19,6 @@ from flask_babel import lazy_gettext as _
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy import select
-from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -40,7 +39,11 @@ from core.analytics import Analytics
 from core.config import CannotLoadConfiguration, Configuration
 from core.connection_config import ConnectionSetting
 from core.coverage import BibliographicCoverageProvider
-from core.integration.base import HasChildIntegrationConfiguration
+from core.integration.base import (
+    HasChildIntegrationConfiguration,
+    integration_settings_update,
+)
+from core.integration.goals import Goals
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -70,6 +73,7 @@ from core.model import (
     ExternalIntegration,
     Hyperlink,
     Identifier,
+    IntegrationConfiguration,
     LicensePool,
     LicensePoolDeliveryMechanism,
     Measurement,
@@ -368,7 +372,14 @@ class OverdriveAPI(
                 % collection.protocol
             )
 
-        _library_id = collection.external_account_id
+        # Initialize configuration information.
+        self._integration_configuration_id = cast(
+            int, collection.integration_configuration.id
+        )
+
+        _library_id = collection.integration_configuration.settings_dict.get(
+            "external_account_id"
+        )
         if not _library_id:
             raise ValueError(
                 "Collection %s must have an external account ID" % collection.id
@@ -376,7 +387,6 @@ class OverdriveAPI(
         else:
             self._library_id = _library_id
 
-        self._db = _db
         if collection.id is None:
             raise ValueError(
                 "Collection passed into OverdriveAPI must have an ID, but %s does not"
@@ -384,15 +394,15 @@ class OverdriveAPI(
             )
         self._collection_id = collection.id
 
-        # Initialize configuration information.
-        self._integration_configuration_id = cast(
-            int, collection.integration_configuration.id
-        )
         self._configuration = OverdriveData()
 
         if collection.parent:
             # This is an Overdrive Advantage account.
-            self.parent_library_id = collection.parent.external_account_id
+            self.parent_library_id = (
+                collection.parent.integration_configuration.settings_dict.get(
+                    "external_account_id"
+                )
+            )
 
             # We're going to inherit all of the Overdrive credentials
             # from the parent (the main Overdrive account), except for the
@@ -2840,22 +2850,33 @@ class OverdriveAdvantageAccount:
             collection, Overdrive Advantage collection)
         """
         # First find the parent Collection.
-        try:
-            parent = (
-                Collection.by_protocol(_db, ExternalIntegration.OVERDRIVE)
-                .filter(Collection.external_account_id == self.parent_library_id)
-                .one()
+        parent = _db.execute(
+            select(Collection)
+            .join(IntegrationConfiguration)
+            .where(
+                IntegrationConfiguration.protocol == ExternalIntegration.OVERDRIVE,
+                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                IntegrationConfiguration.settings_dict.contains(
+                    {"external_account_id": self.parent_library_id}
+                ),
             )
-        except NoResultFound as e:
+        ).scalar_one_or_none()
+        if parent is None:
             # Without the parent's credentials we can't access the child.
             raise ValueError(
                 "Cannot create a Collection whose parent does not already exist."
             )
         name = parent.name + " / " + self.name
         child = _db.execute(
-            select(Collection).where(
+            select(Collection)
+            .join(IntegrationConfiguration)
+            .where(
                 Collection.parent_id == parent.id,
-                Collection.external_account_id == self.library_id,
+                IntegrationConfiguration.protocol == ExternalIntegration.OVERDRIVE,
+                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                IntegrationConfiguration.settings_dict.contains(
+                    {"external_account_id" == self.library_id}
+                ),
             )
         ).scalar_one_or_none()
 
@@ -2865,7 +2886,12 @@ class OverdriveAdvantageAccount:
                 _db, name, ExternalIntegration.OVERDRIVE
             )
             child.parent = parent
-            child.external_account_id = self.library_id
+            child_settings = OverdriveChildSettings.construct(
+                external_account_id=self.library_id
+            )
+            integration_settings_update(
+                OverdriveChildSettings, child.integration_configuration, child_settings
+            )
         else:
             # Set or update the name of the collection to reflect the name of
             # the library, just in case that name has changed.
@@ -2975,12 +3001,15 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
                         Collection.parent_id == collection.id
                     )
                     already_configured_aa_libraries = [
-                        e.external_account_id for e in existing_child_collections
+                        e.integration_configuration.settings_dict["external_account_id"]
+                        for e in existing_child_collections
                     ]
                     self._data.append(
                         [
                             collection.name,
-                            collection.external_account_id,
+                            collection.integration_configuration.settings_dict[
+                                "external_account_id"
+                            ],
                             client_key,
                             client_secret,
                             library_token,
