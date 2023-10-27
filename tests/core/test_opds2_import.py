@@ -169,6 +169,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert "eng" == moby_dick_edition.language
         assert EditionConstants.BOOK_MEDIUM == moby_dick_edition.medium
         assert "Herman Melville" == moby_dick_edition.author
+        assert moby_dick_edition.duration == 100.2
 
         assert 1 == len(moby_dick_edition.author_contributors)
         [moby_dick_author] = moby_dick_edition.author_contributors

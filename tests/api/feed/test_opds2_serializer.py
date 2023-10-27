@@ -82,6 +82,7 @@ class TestOPDS2Serializer:
                 Acquisition(href="http://acquisition", rel="acquisition-rel")
             ],
             other_links=[Link(href="http://link", rel="rel")],
+            duration=10,
         )
 
         serializer = OPDS2Serializer()
@@ -92,6 +93,7 @@ class TestOPDS2Serializer:
         assert metadata["@type"] == data.additionalType
         assert metadata["title"] == data.title.text
         assert metadata["sortAs"] == data.sort_title.text
+        assert metadata["duration"] == data.duration
         assert metadata["subtitle"] == data.subtitle.text
         assert metadata["identifier"] == data.identifier
         assert metadata["language"] == data.language.text

@@ -416,6 +416,7 @@ class TestAnnotator:
         edition.publisher = "publisher"
         edition.imprint = "imprint"
         edition.issued = utc_now().date()
+        edition.duration = 10
 
         # datetime for > today
         pool.availability_time = (utc_now() + timedelta(days=1)).date()
@@ -447,6 +448,7 @@ class TestAnnotator:
         assert data.summary and data.summary.get("type") == "html"
         assert data.publisher == FeedEntryType(text="publisher")
         assert data.issued == edition.issued
+        assert data.duration == edition.duration
 
         # Missing values
         assert data.language == None
