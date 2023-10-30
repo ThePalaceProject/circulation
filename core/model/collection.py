@@ -262,7 +262,7 @@ class Collection(Base, HasSessionCache):
             raise ValueError("Collection has no name.")
         return name
 
-    @hybrid_property
+    @property
     def protocol(self) -> str:
         """What protocol do we need to use to get licenses for this
         collection?
