@@ -132,25 +132,6 @@ class TestCollection:
         c1.marked_for_deletion = True
         assert [test_collection] == Collection.by_protocol(db.session, overdrive).all()
 
-    def test_by_datasource(self, example_collection_fixture: ExampleCollectionFixture):
-        """Collections can be found by their associated DataSource"""
-        db = example_collection_fixture.database_fixture
-        c1 = db.collection(data_source_name=DataSource.GUTENBERG)
-        c2 = db.collection(data_source_name=DataSource.OVERDRIVE)
-
-        # Using the DataSource name
-        assert {c1} == set(
-            Collection.by_datasource(db.session, DataSource.GUTENBERG).all()
-        )
-
-        # Using the DataSource itself
-        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
-        assert {c2} == set(Collection.by_datasource(db.session, overdrive).all())
-
-        # A collection marked for deletion is filtered out.
-        c2.marked_for_deletion = True
-        assert 0 == Collection.by_datasource(db.session, overdrive).count()
-
     def test_parents(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
 

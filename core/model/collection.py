@@ -252,34 +252,6 @@ class Collection(Base, HasSessionCache):
 
         return qu
 
-    @classmethod
-    def by_datasource(
-        cls, _db: Session, data_source: DataSource | str
-    ) -> Query[Collection]:
-        """Query collections that are associated with the given DataSource.
-
-        Collections marked for deletion are not included.
-        """
-        data_source_name = (
-            data_source.name if isinstance(data_source, DataSource) else data_source
-        )
-
-        qu = (
-            _db.query(cls)
-            .join(
-                IntegrationConfiguration,
-                cls.integration_configuration_id == IntegrationConfiguration.id,
-            )
-            .filter(
-                IntegrationConfiguration.settings_dict[
-                    Collection.DATA_SOURCE_NAME_SETTING
-                ].astext
-                == data_source_name
-            )
-            .filter(Collection.marked_for_deletion == False)
-        )
-        return qu
-
     @property
     def name(self) -> str:
         """What is the name of this collection?"""
@@ -289,13 +261,6 @@ class Collection(Base, HasSessionCache):
         if not name:
             raise ValueError("Collection has no name.")
         return name
-
-    # @property
-    # def libraries(self) -> List[Library]:
-    #     """Return the libraries associated with this collection."""
-    #     if self.integration_configuration is None:
-    #         raise ValueError("Collection has no integration configuration.")
-    #     return self.integration_configuration.libraries
 
     @hybrid_property
     def protocol(self) -> str:
