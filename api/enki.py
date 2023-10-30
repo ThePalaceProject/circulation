@@ -798,7 +798,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             api = api_class
         self.api = api
         self.collection_id = collection.id
-        self.analytics = analytics or Analytics(_db)
+        self.analytics = analytics or Analytics()
 
     @property
     def collection(self) -> Collection | None:

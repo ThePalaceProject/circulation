@@ -2,10 +2,10 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
 from core.model import CirculationEvent, ExternalIntegration, create, get_one
-from core.service.container import Services
+from core.util.log import LoggerMixin
 
 
-class LocalAnalyticsProvider:
+class LocalAnalyticsProvider(LoggerMixin):
     NAME = _("Local Analytics")
 
     DESCRIPTION = _("Store analytics events in the 'circulationevents' database table.")
@@ -21,38 +21,10 @@ class LocalAnalyticsProvider:
     LOCATION_SOURCE_NEIGHBORHOOD = "neighborhood"
 
     # Analytics events have no 'location'.
-    LOCATION_SOURCE_DISABLED = ""
+    LOCATION_SOURCE_DISABLED = None
 
-    SETTINGS = [
-        {
-            "key": LOCATION_SOURCE,
-            "label": _("Geographic location of events"),
-            "description": _(
-                "Local analytics events may have a geographic location associated with them. How should the location be determined?<p>Note: to use the patron's neighborhood as the event location, you must also tell your patron authentication mechanism how to <i>gather</i> a patron's neighborhood information."
-            ),
-            "default": LOCATION_SOURCE_DISABLED,
-            "type": "select",
-            "options": [
-                {"key": LOCATION_SOURCE_DISABLED, "label": _("Disable this feature.")},
-                {
-                    "key": LOCATION_SOURCE_NEIGHBORHOOD,
-                    "label": _("Use the patron's neighborhood as the event location."),
-                },
-            ],
-        },
-    ]
-
-    def __init__(self, integration, services: Services, library=None):
-        self.integration_id = integration.id
-        self.location_source = (
-            integration.setting(self.LOCATION_SOURCE).value
-            or self.LOCATION_SOURCE_DISABLED
-        )
-        self.services = services
-        if library:
-            self.library_id = library.id
-        else:
-            self.library_id = None
+    def __init__(self, config):
+        self.location_source = config.location_source
 
     def collect_event(
         self,
@@ -70,8 +42,6 @@ class LocalAnalyticsProvider:
             _db = Session.object_session(library)
         else:
             _db = Session.object_session(license_pool)
-        if library and self.library_id and library.id != self.library_id:
-            return
 
         neighborhood = None
         if self.location_source == self.LOCATION_SOURCE_NEIGHBORHOOD:

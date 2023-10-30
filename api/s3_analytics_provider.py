@@ -5,12 +5,10 @@ import string
 from typing import Dict, Optional
 
 from flask_babel import lazy_gettext as _
-from sqlalchemy.orm import Session
 
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import Library, LicensePool, MediaTypes
-from core.service.container import Services
 from core.service.storage.s3 import S3Service
 
 
@@ -20,15 +18,9 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     NAME = _("S3 Analytics")
     DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
-    SETTINGS = LocalAnalyticsProvider.SETTINGS
-
-    def __init__(
-        self,
-        integration,
-        services: Services,
-        library=None,
-    ):
-        super().__init__(integration, services, library)
+    def __init__(self, storage, config):
+        self.storage_provider = storage
+        super().__init__(config)
 
     @staticmethod
     def _create_event_object(
@@ -177,12 +169,6 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         if not library and not license_pool:
             raise ValueError("Either library or license_pool must be provided.")
-        if library:
-            _db = Session.object_session(library)
-        else:
-            _db = Session.object_session(license_pool)
-        if library and self.library_id and library.id != self.library_id:
-            return
 
         neighborhood = None
         if self.location_source == self.LOCATION_SOURCE_NEIGHBORHOOD:
@@ -196,6 +182,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             default=str,
             ensure_ascii=True,
         )
+
         storage = self._get_storage()
         analytics_file_key = self._get_file_key(library, license_pool, event_type, time)
 
@@ -242,7 +229,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :return: StorageServiceBase object
         """
-        s3_storage_service = self.services.storage.analytics()
+        s3_storage_service = self.storage_provider.analytics()
         if s3_storage_service is None:
             raise CannotLoadConfiguration(
                 "No storage service is configured with an analytics bucket."

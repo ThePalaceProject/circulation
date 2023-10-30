@@ -1979,7 +1979,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
         """Constructor."""
         super().__init__(_db, collection)
         self.api = api_class(_db, collection)
-        self.analytics = analytics_class(_db)
+        self.analytics = analytics_class()
 
     def recently_changed_ids(self, start, cutoff):
         return self.api.recently_changed_ids(start, cutoff)

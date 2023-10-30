@@ -17,13 +17,7 @@ from api.admin.problem_details import (
 )
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import (
-    AdminRole,
-    ConfigurationSetting,
-    ExternalIntegration,
-    create,
-    get_one,
-)
+from core.model import AdminRole, ExternalIntegration, create, get_one
 from tests.fixtures.api_admin import SettingsControllerFixture
 
 
@@ -231,109 +225,6 @@ class TestAnalyticsServices:
                 AdminNotAuthorized,
                 settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services,
             )
-
-    def test_analytics_services_post_create(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        library = settings_ctrl_fixture.ctrl.db.library(
-            name="Library",
-            short_name="L",
-        )
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                [
-                    ("name", "S3 analytics name"),
-                    ("protocol", S3AnalyticsProvider.__module__),
-                    (
-                        "location_source",
-                        S3AnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD,
-                    ),
-                ]
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
-            )
-            assert response.status_code == 201
-
-        service = get_one(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=S3AnalyticsProvider.__module__,
-        )
-        assert isinstance(service, ExternalIntegration)
-        assert service.id == int(response.get_data())
-        assert S3AnalyticsProvider.__module__ == service.protocol
-        assert (
-            "neighborhood"
-            == ConfigurationSetting.for_externalintegration(
-                S3AnalyticsProvider.LOCATION_SOURCE,
-                service,
-            ).value
-        )
-
-        local_analytics_default = get_one(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=LocalAnalyticsProvider.__module__,
-        )
-        settings_ctrl_fixture.ctrl.db.session.delete(local_analytics_default)
-
-        # Creating a local analytics service doesn't require a URL.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                [
-                    ("name", "local analytics name"),
-                    ("protocol", LocalAnalyticsProvider.__module__),
-                    (
-                        "libraries",
-                        json.dumps([{"short_name": "L", "tracking_id": "trackingid"}]),
-                    ),
-                ]
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
-            )
-            assert response.status_code == 201
-
-    def test_analytics_services_post_edit(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        s3_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=S3AnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
-                [
-                    ("id", str(s3_service.id)),
-                    ("name", "some other analytics name"),
-                    ("protocol", S3AnalyticsProvider.__module__),
-                    (
-                        S3AnalyticsProvider.LOCATION_SOURCE,
-                        S3AnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD,
-                    ),
-                ]
-            )
-            response = (
-                settings_ctrl_fixture.manager.admin_analytics_services_controller.process_analytics_services()
-            )
-            assert response.status_code == 200
-
-        assert s3_service.id == int(response.get_data())
-        assert s3_service.name == "some other analytics name"
-        assert S3AnalyticsProvider.__module__ == s3_service.protocol
-        assert (
-            S3AnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
-            == ConfigurationSetting.for_externalintegration(
-                S3AnalyticsProvider.LOCATION_SOURCE,
-                s3_service,
-            ).value
-        )
 
     def test_check_name_unique(self, settings_ctrl_fixture: SettingsControllerFixture):
         kwargs = dict(

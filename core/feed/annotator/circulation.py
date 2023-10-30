@@ -927,7 +927,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 )
             )
 
-        if Analytics.is_configured(self.library):
+        if Analytics().is_configured():
             entry.computed.other_links.append(
                 Link(
                     rel="http://librarysimplified.org/terms/rel/analytics/open-book",

@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 import core.lane
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
-from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import Configuration
 from core.configuration.library import LibrarySettings
@@ -197,9 +196,6 @@ class DatabaseTransactionFixture:
         # test, whether in the session that was just closed or some
         # other session.
         self._transaction.rollback()
-
-        # Reset the Analytics singleton between tests.
-        Analytics._reset_singleton_instance()
 
         Configuration.SITE_CONFIGURATION_LAST_UPDATE = None
         Configuration.LAST_CHECKED_FOR_SITE_CONFIGURATION_UPDATE = None

@@ -94,7 +94,7 @@ class ReplacementPolicy:
             links=True,
             rights=True,
             formats=True,
-            analytics=Analytics(_db),
+            analytics=Analytics(),
             **args,
         )
 
@@ -936,7 +936,7 @@ class CirculationData:
         if replace is None:
             replace = ReplacementPolicy()
 
-        analytics = replace.analytics or Analytics(_db)
+        analytics = replace.analytics or Analytics()
 
         pool = None
         if collection:

@@ -215,7 +215,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
 
         self.username = settings.username
         self.password = settings.password
-        self.analytics = Analytics(_db)
+        self.analytics = Analytics()
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()

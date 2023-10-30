@@ -1312,7 +1312,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
         :param analytics: An optional Analytics object.
         :type analytics: Optional[Analytics]
         """
-        self.analytics = analytics or Analytics(_db)
+        self.analytics = analytics or Analytics()
         super().__init__(_db, collection)
         if isinstance(api_class, BibliothecaAPI):
             # We were given an actual API object. Just use it.

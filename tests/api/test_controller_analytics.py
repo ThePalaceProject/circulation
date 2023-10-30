@@ -4,7 +4,7 @@ import pytest
 from api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
 from core.analytics import Analytics
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, create, get_one
+from core.model import CirculationEvent, get_one
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -24,20 +24,14 @@ def analytics_fixture(db: DatabaseTransactionFixture):
 class TestAnalyticsController:
     def test_track_event(self, analytics_fixture: AnalyticsFixture):
         db = analytics_fixture.db
-
-        integration, ignore = create(
-            db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
-        )
-        integration.setting(
-            LocalAnalyticsProvider.LOCATION_SOURCE
-        ).value = LocalAnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
-
         # The Analytics singleton will have already been instantiated,
         # so here we simulate a reload of its configuration with `refresh`.
-        analytics_fixture.manager.analytics = Analytics(db.session, refresh=True)
+        analytics_fixture.manager.analytics = Analytics(
+            config=dict(
+                local_analytics_enabled=True,
+                location_source=LocalAnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD,
+            )
+        )
 
         with analytics_fixture.request_context_with_library("/"):
             response = analytics_fixture.manager.analytics_controller.track_event(

@@ -155,7 +155,6 @@ def run(url=None):
 
     # Setup database by initializing it or running migrations
     InstanceInitializationScript().run()
-
     initialize_application()
     logging.info("Starting app on %s:%s", host, port)
 

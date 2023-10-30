@@ -1,7 +1,7 @@
 import datetime
 from collections import defaultdict
 from typing import List
-from unittest.mock import create_autospec
+from unittest.mock import create_autospec, patch
 
 import dateutil
 import feedparser
@@ -13,7 +13,6 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
 from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
-from core.analytics import Analytics
 from core.classifier import (  # type: ignore[attr-defined]
     Classifier,
     Fantasy,
@@ -603,11 +602,13 @@ class TestLibraryAnnotator:
 
         # If analytics are configured, a link is added to
         # create an 'open_book' analytics event for this title.
-        Analytics.GLOBAL_ENABLED = True
-        work_entry = WorkEntry(
-            work=work, license_pool=None, edition=edition, identifier=identifier
-        )
-        annotator.annotate_work_entry(work_entry)
+        with patch("core.feed.annotator.circulation.Analytics") as mock_analytics:
+            mock_analytics().is_configured.return_value = True
+            work_entry = WorkEntry(
+                work=work, license_pool=None, edition=edition, identifier=identifier
+            )
+            annotator.annotate_work_entry(work_entry)
+
         assert work_entry.computed is not None
         [analytics_link] = [
             x.href for x in work_entry.computed.other_links if x.rel == open_book_rel

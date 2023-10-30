@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, create, get_one
+from core.model import CirculationEvent, ExternalIntegration, get_one
+from core.service.analytics.configuration import AnalyticsConfiguration
 from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
@@ -62,16 +63,8 @@ class LocalAnalyticsProviderFixture:
         mock_services_fixture: MockServicesFixture,
     ):
         self.transaction = transaction
-        self.integration, ignore = create(
-            transaction.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
-        )
         self.services = mock_services_fixture.services
-        self.la = LocalAnalyticsProvider(
-            self.integration, self.services, transaction.default_library()
-        )
+        self.la = LocalAnalyticsProvider(AnalyticsConfiguration(location_source=None))
 
 
 @pytest.fixture()
@@ -120,36 +113,6 @@ class TestLocalAnalyticsProvider:
         assert CirculationEvent.DISTRIBUTOR_CHECKIN == event.type
         assert now == event.start
 
-        # The LocalAnalyticsProvider will not handle an event intended
-        # for a different library.
-        now = utc_now()
-        data.la.collect_event(
-            library2,
-            lp,
-            CirculationEvent.DISTRIBUTOR_CHECKIN,
-            now,
-            old_value=None,
-            new_value=None,
-        )
-        assert 1 == qu.count()
-
-        # It's possible to instantiate the LocalAnalyticsProvider
-        # without a library.
-        la = LocalAnalyticsProvider(data.integration, data.services)
-
-        # In that case, it will process events for any library.
-        for library in [database.default_library(), library2]:
-            now = utc_now()
-            la.collect_event(
-                library,
-                lp,
-                CirculationEvent.DISTRIBUTOR_CHECKIN,
-                now,
-                old_value=None,
-                new_value=None,
-            )
-        assert 3 == qu.count()
-
     def test_collect_with_missing_information(
         self, local_analytics_provider_fixture: LocalAnalyticsProviderFixture
     ):
@@ -191,12 +154,11 @@ class TestLocalAnalyticsProvider:
 
         # Create another LocalAnalytics object that uses the patron
         # neighborhood as the event location.
-
-        p = LocalAnalyticsProvider
-        data.integration.setting(
-            p.LOCATION_SOURCE
-        ).value = p.LOCATION_SOURCE_NEIGHBORHOOD
-        la = p(data.integration, data.services, database.default_library())
+        la = LocalAnalyticsProvider(
+            AnalyticsConfiguration(
+                location_source=LocalAnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
+            )
+        )
 
         event, is_new = la.collect_event(
             database.default_library(),

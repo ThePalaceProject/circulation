@@ -260,7 +260,7 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        self.analytics = Analytics(self._db, refresh=True)
+        self.analytics = Analytics()
 
         with elapsed_time_logging(
             log_method=self.log.debug,
@@ -391,7 +391,7 @@ class CirculationManager:
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
-        return CirculationAPI(self._db, library, analytics)
+        return CirculationAPI(self._db, library)
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.
