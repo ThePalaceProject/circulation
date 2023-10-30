@@ -1741,7 +1741,7 @@ class TestBibliothecaEventMonitor:
             db.session,
             bibliotheca_fixture.collection,
             api_class=api,
-            analytics=analytics,
+            analytics=analytics,  # type: ignore [arg-type]
         )
 
         now = utc_now()

@@ -918,7 +918,7 @@ class CirculationData:
         _db,
         collection,
         replace=None,
-        analytics: Analytics = Provide[Services.analytics.analytics],
+        analytics=Provide[Services.analytics.analytics],
     ):
         """Update the title with this CirculationData's information.
 
