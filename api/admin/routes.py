@@ -484,20 +484,17 @@ def metadata_service_self_tests(identifier):
     )
 
 
-@app.route("/admin/analytics_services", methods=["GET", "POST"])
+@app.route("/admin/analytics_services", methods=["GET"])
 @returns_json_or_response_or_problem_detail
 @requires_admin
 @requires_csrf_token
 def analytics_services():
-    return app.manager.admin_analytics_services_controller.process_analytics_services()
-
-
-@app.route("/admin/analytics_service/<service_id>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def analytics_service(service_id):
-    return app.manager.admin_analytics_services_controller.process_delete(service_id)
+    return ProblemDetail(
+        "http://librarysimplified.org/terms/problem/not-found-on-remote",
+        status_code=404,
+        title="Analytics has moved!",
+        detail="Analytics is no longer configurable via the Admin UI",
+    )
 
 
 @app.route("/admin/search_services", methods=["GET", "POST"])

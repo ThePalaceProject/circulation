@@ -111,7 +111,6 @@ if TYPE_CHECKING:
     from werkzeug import Response as wkResponse
 
     from api.admin.controller.admin_search import AdminSearchController
-    from api.admin.controller.analytics_services import AnalyticsServicesController
     from api.admin.controller.announcement_service import AnnouncementSettings
     from api.admin.controller.catalog_services import CatalogServicesController
     from api.admin.controller.collection_self_tests import CollectionSelfTestsController
@@ -190,7 +189,6 @@ class CirculationManager:
     admin_self_tests_controller: SelfTestsController
     admin_discovery_services_controller: DiscoveryServicesController
     admin_discovery_service_library_registrations_controller: DiscoveryServiceLibraryRegistrationsController
-    admin_analytics_services_controller: AnalyticsServicesController
     admin_metadata_services_controller: MetadataServicesController
     admin_metadata_service_self_tests_controller: MetadataServiceSelfTestsController
     admin_patron_auth_services_controller: PatronAuthServicesController

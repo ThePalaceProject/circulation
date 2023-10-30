@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 def setup_admin_controllers(manager: CirculationManager):
     """Set up all the controllers that will be used by the admin parts of the web app."""
     from api.admin.controller.admin_search import AdminSearchController
-    from api.admin.controller.analytics_services import AnalyticsServicesController
     from api.admin.controller.announcement_service import AnnouncementSettings
     from api.admin.controller.catalog_services import CatalogServicesController
     from api.admin.controller.collection_self_tests import CollectionSelfTestsController
@@ -71,7 +70,6 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_discovery_service_library_registrations_controller = (
         DiscoveryServiceLibraryRegistrationsController(manager)
     )
-    manager.admin_analytics_services_controller = AnalyticsServicesController(manager)
     manager.admin_metadata_services_controller = MetadataServicesController(manager)
     manager.admin_metadata_service_self_tests_controller = (
         MetadataServiceSelfTestsController(manager)
