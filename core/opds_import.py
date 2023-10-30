@@ -705,9 +705,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         """
         super().__init__(_db, collection, data_source_name)
 
-        self.primary_identifier_source = None
-        if collection:
-            self.primary_identifier_source = collection.primary_identifier_source
+        self.primary_identifier_source = self.settings.primary_identifier_source
 
         # In general, we are cautious when mirroring resources so that
         # we don't, e.g. accidentally get our IP banned from

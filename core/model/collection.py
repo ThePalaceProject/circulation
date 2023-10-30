@@ -289,23 +289,6 @@ class Collection(Base, HasSessionCache):
         for child in self.children:
             child.protocol = new_protocol
 
-    @hybrid_property
-    def primary_identifier_source(self) -> str | None:
-        """Identify if should try to use another identifier than <id>"""
-        return self.integration_configuration.settings_dict.get(
-            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
-        )
-
-    @primary_identifier_source.setter
-    def primary_identifier_source(self, new_primary_identifier_source: str) -> None:
-        """Modify the primary identifier source in use by this Collection."""
-        self.integration_configuration.settings_dict = (
-            self.integration_configuration.settings_dict.copy()
-        )
-        self.integration_configuration.settings_dict[
-            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
-        ] = new_primary_identifier_source
-
     # For collections that can control the duration of the loans they
     # create, the durations are stored in these settings and new loans are
     # expected to be created using these settings. For collections

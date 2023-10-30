@@ -244,9 +244,11 @@ class TestOPDSImporter:
             opds_importer_fixture.db.session,
         )
 
-        collection_to_test = db.default_collection()
-        collection_to_test.primary_identifier_source = (
-            ExternalIntegration.DCTERMS_IDENTIFIER
+        collection_to_test = db.collection(
+            settings={
+                "primary_identifier_source": ExternalIntegration.DCTERMS_IDENTIFIER,
+            },
+            data_source_name="OPDS",
         )
         importer = opds_importer_fixture.importer(collection=collection_to_test)
 
@@ -292,7 +294,6 @@ class TestOPDSImporter:
         )
 
         collection_to_test = db.default_collection()
-        collection_to_test.primary_identifier_source = None
         importer = opds_importer_fixture.importer(collection=collection_to_test)
 
         metadata, failures = importer.extract_feed_data(
