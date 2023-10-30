@@ -2,13 +2,12 @@ import json
 
 from sqlalchemy.orm import Session
 
-from api.overdrive import OverdriveAPI, OverdriveConstants
+from api.overdrive import OverdriveAPI, OverdriveLibrarySettings, OverdriveSettings
 from core.model import Library
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockOverdriveResponse:
@@ -54,18 +53,21 @@ class MockOverdriveAPI(OverdriveAPI):
         collection, _ = Collection.by_name_and_protocol(
             _db, name=name, protocol=ExternalIntegration.OVERDRIVE
         )
-        collection.integration_configuration.settings_dict = {
-            OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
-            OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
-            OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
-            "external_account_id": library_id,
-        }
+        settings = OverdriveSettings(
+            external_account_id=library_id,
+            overdrive_website_id=website_id,
+            overdrive_client_key=client_key,
+            overdrive_client_secret=client_secret,
+        )
+        OverdriveAPI.settings_update(collection.integration_configuration, settings)
         if library not in collection.libraries:
             collection.libraries.append(library)
-        db = DatabaseTransactionFixture
+        library_settings = OverdriveLibrarySettings(
+            ils_name=ils_name,
+        )
         library_config = collection.integration_configuration.for_library(library.id)
         assert library_config is not None
-        db.set_settings(library_config, ils_name=ils_name)
+        OverdriveAPI.library_settings_update(library_config, library_settings)
         return collection
 
     def queue_collection_token(self):

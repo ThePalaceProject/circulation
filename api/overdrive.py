@@ -9,7 +9,7 @@ import re
 import time
 import urllib.parse
 from threading import RLock
-from typing import Any, Dict, List, Set, Tuple, Union, cast
+from typing import Any, Dict, List, Set, Tuple, Union
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import dateutil
@@ -91,19 +91,6 @@ from core.util.string_helpers import base64
 
 
 class OverdriveConstants:
-    OVERDRIVE_CLIENT_KEY = "overdrive_client_key"
-    OVERDRIVE_CLIENT_SECRET = "overdrive_client_secret"
-    OVERDRIVE_SERVER_NICKNAME = "overdrive_server_nickname"
-    OVERDRIVE_WEBSITE_ID = "overdrive_website_id"
-
-    # Note that the library ID is not included here because it is not Overdrive-specific
-    OVERDRIVE_CONFIGURATION_KEYS = {
-        OVERDRIVE_CLIENT_KEY,
-        OVERDRIVE_CLIENT_SECRET,
-        OVERDRIVE_SERVER_NICKNAME,
-        OVERDRIVE_WEBSITE_ID,
-    }
-
     PRODUCTION_SERVERS = "production"
     TESTING_SERVERS = "testing"
 
@@ -209,10 +196,10 @@ class OverdriveChildSettings(BaseSettings):
 
 
 class OverdriveAPI(
-    PatronActivityCirculationAPI,
+    PatronActivityCirculationAPI[OverdriveSettings, OverdriveLibrarySettings],
     CirculationInternalFormatsMixin,
     HasCollectionSelfTests,
-    HasChildIntegrationConfiguration,
+    HasChildIntegrationConfiguration[OverdriveSettings, OverdriveChildSettings],
     OverdriveConstants,
 ):
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
@@ -372,67 +359,40 @@ class OverdriveAPI(
                 % collection.protocol
             )
 
-        # Initialize configuration information.
-        self._integration_configuration_id = cast(
-            int, collection.integration_configuration.id
-        )
-
-        _library_id = collection.integration_configuration.settings_dict.get(
-            "external_account_id"
-        )
-        if not _library_id:
-            raise ValueError(
-                "Collection %s must have an external account ID" % collection.id
-            )
-        else:
-            self._library_id = _library_id
-
-        if collection.id is None:
-            raise ValueError(
-                "Collection passed into OverdriveAPI must have an ID, but %s does not"
-                % collection.name
-            )
-        self._collection_id = collection.id
-
-        self._configuration = OverdriveData()
-
         if collection.parent:
             # This is an Overdrive Advantage account.
-            self.parent_library_id = (
-                collection.parent.integration_configuration.settings_dict.get(
-                    "external_account_id"
-                )
+            parent_settings = self.settings_load(
+                collection.parent.integration_configuration
             )
+            self.parent_library_id = parent_settings.external_account_id
 
             # We're going to inherit all of the Overdrive credentials
             # from the parent (the main Overdrive account), except for the
             # library ID, which we already set.
-            parent_integration = collection.parent.integration_configuration
-            parent_config = self.settings_load(parent_integration)
-            for key in OverdriveConstants.OVERDRIVE_CONFIGURATION_KEYS:
-                parent_value = getattr(parent_config, key, None)
-                setattr(self._configuration, key, parent_value)
+            self._settings = self.settings_load(
+                collection.integration_configuration,
+                collection.parent.integration_configuration,
+            )
         else:
             self.parent_library_id = None
+            self._settings = self.settings_load(collection.integration_configuration)
 
-        # Self settings should override parent settings where available
-        settings = collection.integration_configuration.settings_dict
-        for name, schema in self.settings_class().schema()["properties"].items():
-            if name in settings or not hasattr(self._configuration, name):
-                setattr(
-                    self._configuration, name, settings.get(name, schema.get("default"))
-                )
+        self._library_id = self._settings.external_account_id
+        if not self._library_id:
+            raise ValueError(
+                "Collection %s must have an external account ID" % collection.id
+            )
 
-        if not self._configuration.overdrive_client_key:
+        if not self._settings.overdrive_client_key:
             raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not self._configuration.overdrive_client_secret:
+        if not self._settings.overdrive_client_secret:
             raise CannotLoadConfiguration(
                 "Overdrive client password/secret is not configured"
             )
-        if not self._configuration.overdrive_website_id:
+        if not self._settings.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
-        self._server_nickname = self._configuration.overdrive_server_nickname
+        self._server_nickname = self._settings.overdrive_server_nickname
 
         self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 
@@ -446,9 +406,9 @@ class OverdriveAPI(
             OverdriveBibliographicCoverageProvider(collection, api_class=self)
         )
 
-    def configuration(self):
-        """Overdrive has a different implementation for configuration"""
-        return self._configuration
+    @property
+    def settings(self) -> OverdriveSettings:
+        return self._settings
 
     def _determine_hosts(self, *, server_nickname: str) -> Dict[str, str]:
         # Figure out which hostnames we'll be using when constructing
@@ -499,10 +459,6 @@ class OverdriveAPI(
         return self._collection_token
 
     @property
-    def collection(self) -> Optional[Collection]:
-        return Collection.by_id(self._db, id=self._collection_id)
-
-    @property
     def source(self):
         return DataSource.lookup(self._db, DataSource.OVERDRIVE)
 
@@ -511,7 +467,7 @@ class OverdriveAPI(
         config = self.integration_configuration().for_library(library.id)
         if not config:
             return self.ILS_NAME_DEFAULT
-        return config.settings_dict.get(self.ILS_NAME_KEY, self.ILS_NAME_DEFAULT)
+        return self.library_settings_load(config).ils_name
 
     @property
     def advantage_library_id(self):
@@ -824,25 +780,25 @@ class OverdriveAPI(
     def _do_get(self, url: str, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
+        kwargs["max_retry_count"] = self.settings.max_retry_count
         kwargs["timeout"] = 120
         return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _do_post(self, url: str, payload, headers, **kwargs) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
-        kwargs["max_retry_count"] = int(self._configuration.max_retry_count)
+        kwargs["max_retry_count"] = self.settings.max_retry_count
         kwargs["timeout"] = 120
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
     def website_id(self) -> bytes:
-        return self._configuration.overdrive_website_id.encode("utf-8")
+        return self.settings.overdrive_website_id.encode("utf-8")
 
     def client_key(self) -> bytes:
-        return self._configuration.overdrive_client_key.encode("utf-8")
+        return self.settings.overdrive_client_key.encode("utf-8")
 
     def client_secret(self) -> bytes:
-        return self._configuration.overdrive_client_secret.encode("utf-8")
+        return self.settings.overdrive_client_secret.encode("utf-8")
 
     def library_id(self) -> str:
         return self._library_id
@@ -972,7 +928,7 @@ class OverdriveAPI(
         its own Patron Authentication.
         """
         return "websiteid:{} authorizationname:{}".format(
-            self._configuration.overdrive_website_id,
+            self.settings.overdrive_website_id,
             self.ils_name(library),
         )
 
@@ -2986,11 +2942,11 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
         query: Query = Collection.by_protocol(
             self._db, protocol=ExternalIntegration.OVERDRIVE
         )
-        for c in query.filter(Collection.parent_id == None):
-            collection: Collection = c
+        for collection in query.filter(Collection.parent_id == None):
             api = self._create_overdrive_api(collection=collection)
             client_key = api.client_key().decode()
             client_secret = api.client_secret().decode()
+            library_id = api.library_id()
 
             try:
                 library_token = api.collection_token
@@ -3001,15 +2957,15 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
                         Collection.parent_id == collection.id
                     )
                     already_configured_aa_libraries = [
-                        e.integration_configuration.settings_dict["external_account_id"]
+                        OverdriveAPI.child_settings_load(
+                            e.integration_configuration
+                        ).external_account_id
                         for e in existing_child_collections
                     ]
                     self._data.append(
                         [
                             collection.name,
-                            collection.integration_configuration.settings_dict[
-                                "external_account_id"
-                            ],
+                            library_id,
                             client_key,
                             client_secret,
                             library_token,
@@ -3021,7 +2977,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
                     )
             except Exception as e:
                 logging.error(
-                    f"Could not connect to collection {c.name}: reason: {str(e)}."
+                    f"Could not connect to collection {collection.name}: reason: {str(e)}."
                 )
 
         file_path = parsed.output_file_path[0]

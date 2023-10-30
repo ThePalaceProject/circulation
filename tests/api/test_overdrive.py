@@ -8,7 +8,7 @@ import os
 import random
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Dict
-from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from requests import Response
@@ -3914,19 +3914,25 @@ class TestGenerateOverdriveAdvantageAccountList:
         client_secret = "cs"
         library_token = "lt"
 
-        parent: Collection = db.collection(
+        library = db.library()
+        parent: Collection = MockOverdriveAPI.mock_collection(
+            db.session,
+            library,
             name=parent_library_name,
-            protocol=ExternalIntegration.OVERDRIVE,
-            external_account_id=parent_od_library_id,
+            library_id=parent_od_library_id,
+            client_key=client_key,
+            client_secret=client_secret,
         )
-        child1: Collection = db.collection(
+        child1: Collection = MockOverdriveAPI.mock_collection(
+            db.session,
+            library,
             name=child1_library_name,
-            protocol=ExternalIntegration.OVERDRIVE,
-            external_account_id=child1_advantage_library_id,
+            library_id=child1_advantage_library_id,
         )
         child1.parent = parent
-        overdrive_api = MagicMock()
-        overdrive_api.get_advantage_accounts.return_value = [
+        overdrive_api = MockOverdriveAPI(db.session, parent)
+        mock_get_advantage_accounts = MagicMock()
+        mock_get_advantage_accounts.return_value = [
             OverdriveAdvantageAccount(
                 parent_od_library_id,
                 child1_advantage_library_id,
@@ -3940,10 +3946,8 @@ class TestGenerateOverdriveAdvantageAccountList:
                 child2_token,
             ),
         ]
-
-        overdrive_api.client_key.return_value = bytes(client_key, "utf-8")
-        overdrive_api.client_secret.return_value = bytes(client_secret, "utf-8")
-        type(overdrive_api).collection_token = PropertyMock(return_value=library_token)
+        overdrive_api.get_advantage_accounts = mock_get_advantage_accounts
+        overdrive_api._collection_token = library_token
 
         with patch(
             "api.overdrive.GenerateOverdriveAdvantageAccountList._create_overdrive_api"
@@ -3998,6 +4002,4 @@ class TestGenerateOverdriveAdvantageAccountList:
 
             os.remove(output_file_path)
             assert last_index == 2
-            overdrive_api.client_key.assert_called_once()
-            overdrive_api.client_secret.assert_called_once()
             overdrive_api.get_advantage_accounts.assert_called_once()
