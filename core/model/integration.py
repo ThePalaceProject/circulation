@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy import ForeignKey, Integer, Unicode, select
+from sqlalchemy import ForeignKey, Index, Integer, Unicode, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, Session, relationship
@@ -55,6 +55,14 @@ class IntegrationConfiguration(Base):
     # store configuration data that is not user supplied for a particular
     # integration.
     context: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index(
+            "ix_integration_configurations_settings_dict",
+            settings_dict,
+            postgresql_using="gin",
+        ),
+    )
 
     def context_update(self, new_context: Dict[str, Any]) -> None:
         """Update the context for this integration"""
