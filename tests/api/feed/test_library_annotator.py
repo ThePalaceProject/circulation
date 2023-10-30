@@ -40,6 +40,8 @@ from core.model import (
     Work,
 )
 from core.opds_import import OPDSXMLParser
+from core.service.analytics.configuration import AnalyticsConfiguration
+from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
@@ -602,8 +604,11 @@ class TestLibraryAnnotator:
 
         # If analytics are configured, a link is added to
         # create an 'open_book' analytics event for this title.
-        with patch("core.feed.annotator.circulation.Analytics") as mock_analytics:
-            mock_analytics().is_configured.return_value = True
+        with patch.object(
+            container_instance().analytics.analytics(),
+            "config",
+            AnalyticsConfiguration(local_analytics_enabled=True),
+        ):
             work_entry = WorkEntry(
                 work=work, license_pool=None, edition=edition, identifier=identifier
             )

@@ -6,6 +6,7 @@ import logging
 import time
 from typing import Any, Callable, Generator, Mapping, Tuple, cast
 
+from dependency_injector.wiring import Provide
 from flask_babel import lazy_gettext as _
 from pydantic import HttpUrl
 from requests import Response as RequestsResponse
@@ -55,6 +56,7 @@ from core.model import (
 )
 from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
+from core.service.container import Services
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from core.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
 
@@ -787,7 +789,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
         _db: Session,
         collection: Collection,
         api_class: EnkiAPI | Callable[..., EnkiAPI] = EnkiAPI,
-        analytics: Optional[Analytics] = None,
+        analytics: Analytics = Provide[Services.analytics.analytics],
     ):
         """Constructor."""
         super().__init__(_db, collection)
@@ -798,7 +800,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             api = api_class
         self.api = api
         self.collection_id = collection.id
-        self.analytics = analytics or Analytics()
+        self.analytics = analytics
 
     @property
     def collection(self) -> Collection | None:

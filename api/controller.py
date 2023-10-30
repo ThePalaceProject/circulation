@@ -51,7 +51,6 @@ from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.problem_details import *
 from api.saml.controller import SAMLController
-from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
@@ -98,7 +97,7 @@ from core.model.devicetokens import (
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
-from core.service.container import Services
+from core.service.container import Services, container_instance
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -258,7 +257,7 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        self.analytics = Analytics()
+        self.analytics = container_instance().analytics.analytics()
 
         with elapsed_time_logging(
             log_method=self.log.debug,

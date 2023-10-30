@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-from dependency_injector.wiring import Provide, inject
+from typing import TYPE_CHECKING, Any, Optional
 
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.service.analytics.configuration import AnalyticsConfiguration
-from core.service.container import Services
 
 # from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
@@ -20,14 +17,13 @@ if TYPE_CHECKING:
 class Analytics(LoggerMixin):
     """Dispatches methods for analytics providers."""
 
-    @inject
     def __init__(
         self,
-        config: dict = Provide[Services.config.analytics],
-        storage: Any = Provide[Services.storage],
+        config: Optional[dict] = None,
+        storage: Any = None,
     ) -> None:
         self.providers = []
-        self.config = AnalyticsConfiguration(**config)
+        self.config = AnalyticsConfiguration(**(config if config is not None else {}))
         if self.config.local_analytics_enabled:
             self.providers.append(LocalAnalyticsProvider(self.config))
 

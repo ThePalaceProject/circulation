@@ -18,7 +18,6 @@ from api.circulation import BaseCirculationAPI, CirculationAPI
 from api.config import Configuration
 from api.lanes import DynamicLane
 from api.novelist import NoveListAPI
-from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.entrypoint import EverythingEntryPoint
@@ -51,6 +50,7 @@ from core.model.licensing import (
 )
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
+from core.service.container import container_instance
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
 
@@ -927,7 +927,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 )
             )
 
-        if Analytics().is_configured():
+        if container_instance().analytics.analytics().is_configured():
             entry.computed.other_links.append(
                 Link(
                     rel="http://librarysimplified.org/terms/rel/analytics/open-book",

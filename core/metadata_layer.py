@@ -13,6 +13,7 @@ from collections import defaultdict
 from typing import List, Optional
 
 from dateutil.parser import parse
+from dependency_injector.wiring import Provide, inject
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
@@ -42,6 +43,7 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.licensing import LicenseFunctions, LicenseStatus
+from core.service.container import Services
 from core.util import LanguageCodes
 from core.util.datetime_helpers import to_utc, utc_now
 from core.util.median import median
@@ -80,7 +82,10 @@ class ReplacementPolicy:
         )
 
     @classmethod
-    def from_license_source(cls, _db, **args):
+    @inject
+    def from_license_source(
+        cls, _db, analytics: Analytics = Provide[Services.analytics.analytics], **args
+    ):
         """When gathering data from the license source, overwrite all old data
         from this source with new data from the same source. Also
         overwrite an old rights status with an updated status and update
@@ -94,7 +99,7 @@ class ReplacementPolicy:
             links=True,
             rights=True,
             formats=True,
-            analytics=Analytics(),
+            analytics=analytics,
             **args,
         )
 
@@ -907,7 +912,14 @@ class CirculationData:
             # We still haven't determined rights, so it's unknown.
             self.default_rights_uri = RightsStatus.UNKNOWN
 
-    def apply(self, _db, collection, replace=None):
+    @inject
+    def apply(
+        self,
+        _db,
+        collection,
+        replace=None,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
         """Update the title with this CirculationData's information.
 
         :param collection: A Collection representing actual copies of
@@ -936,7 +948,7 @@ class CirculationData:
         if replace is None:
             replace = ReplacementPolicy()
 
-        analytics = replace.analytics or Analytics()
+        analytics = replace.analytics or analytics
 
         pool = None
         if collection:

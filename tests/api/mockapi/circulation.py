@@ -200,4 +200,4 @@ class MockCirculationManager(CirculationManager):
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
-        return MockCirculationAPI(self._db, library, analytics)
+        return MockCirculationAPI(self._db, library, analytics=analytics)
