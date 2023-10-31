@@ -67,6 +67,7 @@ disallow_untyped_defs = true
 module = [
     "api.admin.announcement_list_validator",
     "api.admin.config",
+    "api.admin.controller.collection_settings",
     "api.admin.controller.discovery_service_library_registrations",
     "api.admin.controller.discovery_services",
     "api.admin.controller.integration_settings",
