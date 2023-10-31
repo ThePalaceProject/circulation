@@ -208,9 +208,16 @@ class CirculationManager:
     admin_view_controller: ViewController
     admin_quicksight_controller: QuickSightController
 
-    def __init__(self, _db, services: Services):
+    @inject
+    def __init__(
+        self,
+        _db,
+        services: Services,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
         self._db = _db
         self.services = services
+        self.analytics = analytics
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
@@ -250,10 +257,7 @@ class CirculationManager:
             self.site_configuration_last_update = last_update
 
     @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
-    @inject
-    def load_settings(
-        self, analytics: Analytics = Provide[Services.analytics.analytics]
-    ):
+    def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.
 
@@ -262,8 +266,6 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        self.analytics = analytics
-
         with elapsed_time_logging(
             log_method=self.log.debug,
             skip_start=True,

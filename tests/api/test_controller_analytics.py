@@ -32,15 +32,7 @@ class TestAnalyticsController:
             assert 400 == response.status_code
             assert INVALID_ANALYTICS_EVENT_TYPE.uri == response.uri
 
-        # If there is no active patron, or if the patron has no
-        # associated neighborhood, the CirculationEvent is created
-        # with no location.
         patron = db.patron()
-
-        # If the patron has an associated neighborhood, and the
-        # analytics controller is set up to use patron neighborhood as
-        # event location, then the CirculationEvent is created with
-        # that neighborhood as its location.
         patron.neighborhood = "Mars Grid 4810579"
         with analytics_fixture.request_context_with_library("/"):
             flask.request.patron = patron  # type: ignore
@@ -58,5 +50,7 @@ class TestAnalyticsController:
                 license_pool=analytics_fixture.lp,
             )
             assert circulation_event is not None
-            assert patron.neighborhood == circulation_event.location
+            assert (
+                circulation_event.location == None
+            )  # We no longer use the location source
             db.session.delete(circulation_event)

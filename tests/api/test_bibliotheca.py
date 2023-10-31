@@ -4,7 +4,16 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, ClassVar, Optional, Protocol, Type, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Literal,
+    Optional,
+    Protocol,
+    Type,
+    cast,
+    runtime_checkable,
+)
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
@@ -41,6 +50,7 @@ from api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from api.web_publication_manifest import FindawayManifest
+from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import ReplacementPolicy, TimestampData
@@ -1178,7 +1188,21 @@ class TestBibliothecaPurchaseMonitor:
         ],
     )
     def test_optional_iso_date_valid_dates(
-        self, specified_default_start, expected_default_start, default_monitor
+        self,
+        specified_default_start: datetime
+        | Literal[
+            "2011",
+            "2011-10",
+            "2011-10-05",
+            "2011-10-05T15",
+            "2011-10-05T15:27",
+            "2011-10-05T15:27:33",
+            "2011-10-05 15:27:33",
+            "2011-10-05T15:27:33.123456",
+        ]
+        | None,
+        expected_default_start: datetime | None,
+        default_monitor: BibliothecaPurchaseMonitor,
     ):
         # ISO 8601 strings, `datetime`s, or None are valid.
         actual_default_start = default_monitor._optional_iso_date(
@@ -1190,8 +1214,8 @@ class TestBibliothecaPurchaseMonitor:
 
     def test_monitor_intrinsic_start_time(
         self,
-        default_monitor,
-        initialized_monitor,
+        default_monitor: BibliothecaPurchaseMonitor,
+        initialized_monitor: BibliothecaPurchaseMonitor,
         bibliotheca_fixture: BibliothecaAPITestFixture,
     ):
         db = bibliotheca_fixture.db
@@ -1234,9 +1258,10 @@ class TestBibliothecaPurchaseMonitor:
     )
     def test_specified_start_trumps_intrinsic_default_start(
         self,
-        specified_default_start,
-        override_timestamp,
-        expected_start,
+        specified_default_start: Literal["2011-10-05T15:27", "2011-10-05T15:27:33"]
+        | None,
+        override_timestamp: bool,
+        expected_start: datetime | None,
         bibliotheca_fixture: BibliothecaAPITestFixture,
     ):
         db = bibliotheca_fixture.db
@@ -1312,9 +1337,10 @@ class TestBibliothecaPurchaseMonitor:
     )
     def test_specified_start_can_override_timestamp(
         self,
-        specified_default_start,
-        override_timestamp,
-        expected_start,
+        specified_default_start: Literal["2011-10-05T15:27", "2011-10-05T15:27:33"]
+        | None,
+        override_timestamp: bool,
+        expected_start: datetime | None,
         bibliotheca_fixture: BibliothecaAPITestFixture,
     ):
         monitor = BibliothecaPurchaseMonitor(
@@ -1349,11 +1375,15 @@ class TestBibliothecaPurchaseMonitor:
         assert progress.start == expected_actual_start_time
 
     @pytest.mark.parametrize("input", [("invalid"), ("2020/10"), (["2020-10-05"])])
-    def test_optional_iso_date_invalid_dates(self, input, default_monitor):
+    def test_optional_iso_date_invalid_dates(
+        self,
+        input: list[str] | Literal["invalid", "2020/10"],
+        default_monitor: BibliothecaPurchaseMonitor,
+    ):
         with pytest.raises(ValueError) as excinfo:
             default_monitor._optional_iso_date(input)
 
-    def test_catch_up_from(self, default_monitor):
+    def test_catch_up_from(self, default_monitor: BibliothecaPurchaseMonitor):
         # catch_up_from() slices up its given timespan, calls
         # purchases() to find purchases for each slice, processes each
         # purchase using process_record(), and sets a checkpoint for each
@@ -1425,7 +1455,7 @@ class TestBibliothecaPurchaseMonitor:
             progress, start, full_slice[0], "MARC records processed: 1"
         )
 
-    def test__checkpoint(self, default_monitor):
+    def test__checkpoint(self, default_monitor: BibliothecaPurchaseMonitor):
         # The _checkpoint method allows the BibliothecaPurchaseMonitor
         # to preserve its progress in case of a crash.
 
@@ -1452,7 +1482,7 @@ class TestBibliothecaPurchaseMonitor:
         assert timestamp_obj.start == BibliothecaPurchaseMonitor.DEFAULT_START_TIME
         assert timestamp_obj.finish == finish
 
-    def test_purchases(self, default_monitor):
+    def test_purchases(self, default_monitor: BibliothecaPurchaseMonitor):
         # The purchases() method calls marc_request repeatedly, handling
         # pagination.
 
@@ -1475,7 +1505,10 @@ class TestBibliothecaPurchaseMonitor:
         assert ([1] * 50) + ([2] * 50) + ([3] * 49) == records
 
     def test_process_record(
-        self, default_monitor, caplog, bibliotheca_fixture: BibliothecaAPITestFixture
+        self,
+        default_monitor: BibliothecaPurchaseMonitor,
+        caplog: pytest.LogCaptureFixture,
+        bibliotheca_fixture: BibliothecaAPITestFixture,
     ):
         # process_record may create a LicensePool, trigger the
         # bibliographic coverage provider, and/or issue a "license
@@ -1483,7 +1516,7 @@ class TestBibliothecaPurchaseMonitor:
         # MARC record.
         purchase_time = utc_now()
         analytics = MockAnalyticsProvider()
-        default_monitor.analytics = analytics
+        default_monitor.analytics = cast(Analytics, analytics)
         ensure_coverage = MagicMock()
         default_monitor.bibliographic_coverage_provider.ensure_coverage = (
             ensure_coverage
@@ -1548,7 +1581,9 @@ class TestBibliothecaPurchaseMonitor:
         assert analytics.count == 0
 
     def test_end_to_end(
-        self, default_monitor, bibliotheca_fixture: BibliothecaAPITestFixture
+        self,
+        default_monitor: BibliothecaPurchaseMonitor,
+        bibliotheca_fixture: BibliothecaAPITestFixture,
     ):
         # Limited end-to-end test of the BibliothecaPurchaseMonitor.
 
@@ -1564,10 +1599,10 @@ class TestBibliothecaPurchaseMonitor:
         # book, and one to the metadata endpoint for information about
         # that book.
         api = default_monitor.api
-        api.queue_response(
+        api.queue_response(  # type: ignore [attr-defined]
             200, content=bibliotheca_fixture.files.sample_data("marc_records_one.xml")
         )
-        api.queue_response(
+        api.queue_response(  # type: ignore [attr-defined]
             200,
             content=bibliotheca_fixture.files.sample_data("item_metadata_single.xml"),
         )
@@ -1592,7 +1627,7 @@ class TestBibliothecaPurchaseMonitor:
         # An analytics event was issued to commemorate the addition of
         # the book to the collection.
         # No more DISTRIBUTOR events
-        assert default_monitor.analytics.count == 0
+        assert default_monitor.analytics.count == 0  # type: ignore [attr-defined]
 
         # The timestamp has been updated; the next time the monitor
         # runs it will ask for purchases that haven't happened yet.
@@ -1741,7 +1776,7 @@ class TestBibliothecaEventMonitor:
             db.session,
             bibliotheca_fixture.collection,
             api_class=api,
-            analytics=analytics,  # type: ignore [arg-type]
+            analytics=cast(Analytics, analytics),
         )
 
         now = utc_now()
