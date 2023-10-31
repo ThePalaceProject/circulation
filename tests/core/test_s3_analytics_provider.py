@@ -26,7 +26,8 @@ class S3AnalyticsFixture:
         self.services = services_fixture.services
         self.analytics_storage = services_fixture.storage.analytics
         self.analytics_provider = S3AnalyticsProvider(
-            self.services.storage, AnalyticsConfiguration(location_source=None)
+            services_fixture.services.storage.analytics(),
+            AnalyticsConfiguration(location_source=None),
         )
 
 
@@ -58,7 +59,7 @@ class TestS3AnalyticsProvider:
         s3_analytics_fixture.services.storage.analytics.override(None)
 
         provider = S3AnalyticsProvider(
-            s3_analytics_fixture.services.storage, AnalyticsConfiguration()
+            s3_analytics_fixture.services.storage.analytics(), AnalyticsConfiguration()
         )
 
         # Act, Assert

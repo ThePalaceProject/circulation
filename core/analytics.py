@@ -9,9 +9,7 @@ from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
 
 if TYPE_CHECKING:
-    from dependency_injector.providers import Container
-
-    from core.service.storage.container import Storage
+    from core.service.storage.s3 import S3Service
 
 
 class Analytics(LoggerMixin):
@@ -20,7 +18,7 @@ class Analytics(LoggerMixin):
     def __init__(
         self,
         config: Optional[dict] = None,
-        storage: Optional[Container[Storage]] = None,
+        s3_service: Optional[S3Service] = None,
     ) -> None:
         self.providers = []
         self.config = AnalyticsConfiguration.from_values(
@@ -30,8 +28,8 @@ class Analytics(LoggerMixin):
             self.providers.append(LocalAnalyticsProvider(self.config))
 
         if self.config.s3_analytics_enabled:
-            if storage is not None and storage.analytics() is not None:
-                self.providers.append(S3AnalyticsProvider(storage, self.config))
+            if s3_service is not None:
+                self.providers.append(S3AnalyticsProvider(s3_service, self.config))
             else:
                 self.log.info(
                     "S3 analytics is not configured: No analytics bucket was specified."

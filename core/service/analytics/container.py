@@ -11,5 +11,5 @@ class AnalyticsContainer(DeclarativeContainer):
     analytics = providers.Singleton(
         Analytics,
         config=config,
-        storage=storage,
+        storage_client=storage.analytics,
     )

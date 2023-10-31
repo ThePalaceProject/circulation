@@ -14,9 +14,6 @@ from core.model import Library, LicensePool, MediaTypes
 from core.service.analytics.configuration import AnalyticsConfiguration
 
 if TYPE_CHECKING:
-    from dependency_injector.providers import Container
-
-    from core.service.storage.container import Storage
     from core.service.storage.s3 import S3Service
 
 
@@ -26,8 +23,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     NAME = _("S3 Analytics")
     DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
-    def __init__(self, storage: Container[Storage], config: AnalyticsConfiguration):
-        self.storage_provider = storage
+    def __init__(self, s3_service: Optional[S3Service], config: AnalyticsConfiguration):
+        self.s3_service = s3_service
         super().__init__(config)
 
     @staticmethod
@@ -237,13 +234,12 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :return: StorageServiceBase object
         """
-        s3_storage_service = self.storage_provider.analytics()
-        if s3_storage_service is None:
+        if self.s3_service is None:
             raise CannotLoadConfiguration(
                 "No storage service is configured with an analytics bucket."
             )
 
-        return s3_storage_service
+        return self.s3_service
 
 
 Provider = S3AnalyticsProvider
