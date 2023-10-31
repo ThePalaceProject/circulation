@@ -46,6 +46,7 @@ def create_container() -> Services:
             "api.axis",
             "api.bibliotheca",
             "api.enki",
+            "api.controller",
         ]
     )
     return container

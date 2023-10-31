@@ -13,6 +13,7 @@ from wsgiref.handlers import format_date_time
 import flask
 import pytz
 from attr import define
+from dependency_injector.wiring import Provide, inject
 from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
@@ -51,6 +52,7 @@ from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.problem_details import *
 from api.saml.controller import SAMLController
+from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
@@ -97,7 +99,7 @@ from core.model.devicetokens import (
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
-from core.service.container import Services, container_instance
+from core.service.container import Services
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -248,7 +250,10 @@ class CirculationManager:
             self.site_configuration_last_update = last_update
 
     @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
-    def load_settings(self):
+    @inject
+    def load_settings(
+        self, analytics: Analytics = Provide[Services.analytics.analytics]
+    ):
         """Load all necessary configuration settings and external
         integrations from the database.
 
@@ -257,7 +262,7 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        self.analytics = container_instance().analytics.analytics()
+        self.analytics = analytics
 
         with elapsed_time_logging(
             log_method=self.log.debug,
@@ -388,7 +393,7 @@ class CirculationManager:
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
-        return CirculationAPI(self._db, library)
+        return CirculationAPI(self._db, library, analytics=analytics)
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.
