@@ -1,4 +1,3 @@
-from flask_babel import lazy_gettext as _
 from sqlalchemy.orm.session import Session
 
 from core.model import CirculationEvent
@@ -6,10 +5,6 @@ from core.util.log import LoggerMixin
 
 
 class LocalAnalyticsProvider(LoggerMixin):
-    NAME = _("Local Analytics")
-
-    DESCRIPTION = _("Store analytics events in the 'circulationevents' database table.")
-
     # A given site can only have one analytics provider.
     CARDINALITY = 1
 
@@ -39,7 +34,3 @@ class LocalAnalyticsProvider(LoggerMixin):
             start=time,
             library=library,
         )
-
-
-# The Analytics class looks for the name "Provider".
-Provider = LocalAnalyticsProvider

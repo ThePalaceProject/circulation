@@ -6,8 +6,6 @@ import random
 import string
 from typing import TYPE_CHECKING, Dict, Optional
 
-from flask_babel import lazy_gettext as _
-
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import Library, LicensePool, MediaTypes
@@ -18,9 +16,6 @@ if TYPE_CHECKING:
 
 class S3AnalyticsProvider(LocalAnalyticsProvider):
     """Analytics provider storing data in a S3 bucket."""
-
-    NAME = _("S3 Analytics")
-    DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
     def __init__(self, s3_service: Optional[S3Service]):
         self.s3_service = s3_service
@@ -234,6 +229,3 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             )
 
         return self.s3_service
-
-
-Provider = S3AnalyticsProvider
