@@ -1,15 +1,23 @@
+from __future__ import annotations
+
 import datetime
 import json
 import random
 import string
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from flask_babel import lazy_gettext as _
 
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import Library, LicensePool, MediaTypes
-from core.service.storage.s3 import S3Service
+from core.service.analytics.configuration import AnalyticsConfiguration
+
+if TYPE_CHECKING:
+    from dependency_injector.providers import Container
+
+    from core.service.storage.container import Storage
+    from core.service.storage.s3 import S3Service
 
 
 class S3AnalyticsProvider(LocalAnalyticsProvider):
@@ -18,7 +26,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     NAME = _("S3 Analytics")
     DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
-    def __init__(self, storage, config):
+    def __init__(self, storage: Container[Storage], config: AnalyticsConfiguration):
         self.storage_provider = storage
         super().__init__(config)
 
@@ -138,7 +146,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         time,
         old_value=None,
         new_value=None,
-        **kwargs
+        **kwargs,
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
 

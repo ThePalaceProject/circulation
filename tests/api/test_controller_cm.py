@@ -35,8 +35,8 @@ class TestCirculationManager:
         # Certain fields of the CirculationManager have certain values
         # which are about to be reloaded.
         manager._external_search = object()
-        manager.auth = object()
-        manager.patron_web_domains = object()
+        manager.auth = object()  # type: ignore [assignment]
+        manager.patron_web_domains = object()  # type: ignore [assignment]
 
         # But some fields are _not_ about to be reloaded
         index_controller = manager.index_controller

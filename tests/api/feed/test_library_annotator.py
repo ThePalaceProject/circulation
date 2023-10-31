@@ -577,7 +577,15 @@ class TestLibraryAnnotator:
         work_entry = WorkEntry(
             work=work, license_pool=None, edition=edition, identifier=identifier
         )
-        annotator.annotate_work_entry(work_entry)
+
+        with patch.object(
+            container_instance().analytics.analytics(),
+            "config",
+            AnalyticsConfiguration(
+                local_analytics_enabled=False, s3_analytics_enabled=False
+            ),
+        ):
+            annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         links = {
             x.rel

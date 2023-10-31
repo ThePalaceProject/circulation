@@ -613,9 +613,8 @@ class Axis360API(
         :param availability: A CirculationData object containing
             availability data about this title.
         """
-        analytics = analytics
         license_pool, new_license_pool = availability.license_pool(
-            self._db, self.collection, analytics
+            self._db, self.collection
         )
         edition, new_edition = bibliographic.edition(self._db)
         license_pool.edition = edition

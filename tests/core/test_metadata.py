@@ -5,7 +5,6 @@ from copy import deepcopy
 
 import pytest
 
-from core.analytics import Analytics
 from core.classifier import NO_NUMBER, NO_VALUE
 from core.metadata_layer import (
     CirculationData,
@@ -1079,72 +1078,6 @@ class TestMetadata:
         filtered_links = sorted(metadata.links, key=lambda x: x.rel)
 
         assert [link2, link5, link4, link3] == filtered_links
-
-
-class TestCirculationData:
-    def test_apply_propagates_analytics(self, db: DatabaseTransactionFixture):
-        # Verify that an Analytics object is always passed into
-        # license_pool() and update_availability(), even if none is
-        # provided in the ReplacementPolicy.
-        #
-        # NOTE: this test was written to verify a bug fix; it's not a
-        # comprehensive test of CirculationData.apply().
-        source = DataSource.lookup(db.session, DataSource.GUTENBERG)
-        identifier = db.identifier()
-        collection = db.default_collection()
-
-        class MockLicensePool:
-            # A LicensePool-like object that tracks how its
-            # update_availability() method was called.
-            delivery_mechanisms: list = []
-            licenses: list = []
-            work = None
-
-            def calculate_work(self):
-                return None, False
-
-            def update_availability(self, **kwargs):
-                self.update_availability_called_with = kwargs
-
-        pool = MockLicensePool()
-
-        class MockCirculationData(CirculationData):
-            # A CirculationData-like object that always says
-            # update_availability ought to be called on a
-            # specific MockLicensePool.
-            def license_pool(self, _db, collection, analytics):
-                self.license_pool_called_with = (_db, collection, analytics)
-                return pool, False
-
-            def _availability_needs_update(self, *args):
-                # Force update_availability to be called.
-                return True
-
-        # First try with no particular ReplacementPolicy.
-        data = MockCirculationData(source, identifier)
-        data.apply(db.session, collection)
-
-        # A generic Analytics object was created and passed in to
-        # MockCirculationData.license_pool().
-        analytics1 = data.license_pool_called_with[-1]
-        assert isinstance(analytics1, Analytics)
-
-        # Then, the same Analytics object was passed into the
-        # update_availability() method of the MockLicensePool returned
-        # by license_pool()
-        analytics2 = pool.update_availability_called_with["analytics"]
-        assert analytics1 == analytics2
-
-        # Now try with a ReplacementPolicy that mentions a specific
-        # analytics object.
-        analytics = object()
-        policy = ReplacementPolicy(analytics=analytics)
-        data.apply(db.session, collection, replace=policy)
-
-        # That object was used instead of a generic Analytics object in
-        # both cases.
-        assert analytics == data.license_pool_called_with[-1]
-        assert analytics == pool.update_availability_called_with["analytics"]
 
 
 class TestTimestampData:

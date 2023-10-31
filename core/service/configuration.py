@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import Any, Type, TypeVar
 
 from pydantic import BaseSettings, ValidationError
 
 from core.config import CannotLoadConfiguration
+
+T = TypeVar("T", bound="ServiceConfiguration")
 
 
 class ServiceConfiguration(BaseSettings):
@@ -50,3 +54,18 @@ class ServiceConfiguration(BaseSettings):
                 env_var_name = f"{self.__config__.env_prefix}{error_location}"
                 error_log_message += f"\n  {env_var_name}:  {error['msg']}"
             raise CannotLoadConfiguration(error_log_message) from error_exception
+
+    @classmethod
+    def from_values(cls: Type[T], **values: Any) -> T:
+        """
+        Construct a configuration using the `values` and defaults as priority,
+        other sources will be used as per their priority
+        """
+        schema = cls.schema()
+        all_values = {}
+        for key, value_schema in schema["properties"].items():
+            if key in values:
+                all_values[key] = values[key]
+            elif "default" in value_schema:
+                all_values[key] = value_schema["default"]
+        return cls(**all_values)

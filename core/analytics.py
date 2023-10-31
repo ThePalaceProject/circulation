@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.service.analytics.configuration import AnalyticsConfiguration
-
-# from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
 
 if TYPE_CHECKING:
-    pass
+    from dependency_injector.providers import Container
+
+    from core.service.storage.container import Storage
 
 
 class Analytics(LoggerMixin):
@@ -20,10 +20,12 @@ class Analytics(LoggerMixin):
     def __init__(
         self,
         config: Optional[dict] = None,
-        storage: Any = None,
+        storage: Optional[Container[Storage]] = None,
     ) -> None:
         self.providers = []
-        self.config = AnalyticsConfiguration(**(config if config is not None else {}))
+        self.config = AnalyticsConfiguration.from_values(
+            **(config if config is not None else {})
+        )
         if self.config.local_analytics_enabled:
             self.providers.append(LocalAnalyticsProvider(self.config))
 

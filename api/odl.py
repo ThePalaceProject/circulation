@@ -728,7 +728,6 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
     def update_licensepool(self, licensepool: LicensePool) -> None:
         # Update the pool and the next holds in the queue when a license is reserved.
         licensepool.update_availability_from_licenses(
-            analytics=self.analytics,
             as_of=utc_now(),
         )
         holds = licensepool.get_active_holds()

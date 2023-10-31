@@ -14,6 +14,7 @@ MOCK_PROTOCOL = "..mock_analytics_provider"
 class TestAnalytics:
     def test_is_configured(self):
         analytics = Analytics(config={})
+        print(analytics.config)
         assert analytics.is_configured() == False
 
         analytics = Analytics(config=dict(local_analytics_enabled=True))

@@ -850,14 +850,11 @@ class CirculationData:
             self.primary_identifier_obj = obj
         return self.primary_identifier_obj
 
-    def license_pool(self, _db, collection, analytics=None):
+    def license_pool(self, _db, collection):
         """Find or create a LicensePool object for this CirculationData.
 
         :param collection: The LicensePool object will be associated with
             the given Collection.
-
-        :param analytics: If the LicensePool is newly created, the event
-            will be tracked with this.
         """
         if not collection:
             raise ValueError("Cannot find license pool: no collection provided.")
@@ -918,7 +915,6 @@ class CirculationData:
         _db,
         collection,
         replace=None,
-        analytics=Provide[Services.analytics.analytics],
     ):
         """Update the title with this CirculationData's information.
 
@@ -948,11 +944,9 @@ class CirculationData:
         if replace is None:
             replace = ReplacementPolicy()
 
-        analytics = replace.analytics or analytics
-
         pool = None
         if collection:
-            pool, ignore = self.license_pool(_db, collection, analytics)
+            pool, ignore = self.license_pool(_db, collection)
 
         data_source = self.data_source(_db)
         identifier = self.primary_identifier(_db)
@@ -1041,7 +1035,6 @@ class CirculationData:
                             f"License {license.identifier} has been removed from feed."
                         )
                 changed_availability = pool.update_availability_from_licenses(
-                    analytics=analytics,
                     as_of=self.last_checked,
                 )
             else:
@@ -1051,7 +1044,6 @@ class CirculationData:
                     new_licenses_available=self.licenses_available,
                     new_licenses_reserved=self.licenses_reserved,
                     new_patrons_in_hold_queue=self.patrons_in_hold_queue,
-                    analytics=analytics,
                     as_of=self.last_checked,
                 )
 

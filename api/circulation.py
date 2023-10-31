@@ -10,7 +10,6 @@ from types import TracebackType
 from typing import Any, Dict, Iterable, List, Literal, Tuple, Type, TypeVar
 
 import flask
-from dependency_injector.wiring import inject
 from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
@@ -736,7 +735,6 @@ class CirculationAPI:
     'borrow'.
     """
 
-    @inject
     def __init__(
         self,
         db: Session,

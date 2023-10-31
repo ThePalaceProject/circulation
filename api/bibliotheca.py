@@ -1270,7 +1270,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
                 continue
             if pool.licenses_owned > 0:
                 self.log.warn("Removing %s from circulation.", identifier.identifier)
-            pool.update_availability(0, 0, 0, 0, self.analytics, as_of=now)
+            pool.update_availability(0, 0, 0, 0, as_of=now)
 
     def _process_metadata(
         self,

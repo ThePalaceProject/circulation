@@ -111,9 +111,9 @@ class TestLoanController:
         class MockLibraryAuthenticator:
             identifies_individuals = False
 
-        loan_fixture.manager.auth.library_authenticators[
-            loan_fixture.db.default_library().short_name
-        ] = MockLibraryAuthenticator()
+        short_name = loan_fixture.db.default_library().short_name
+        assert short_name is not None
+        loan_fixture.manager.auth.library_authenticators[short_name] = MockLibraryAuthenticator()  # type: ignore [assignment]
 
         def mock_can_fulfill_without_loan(patron, pool, lpdm):
             self.called_with = (patron, pool, lpdm)
