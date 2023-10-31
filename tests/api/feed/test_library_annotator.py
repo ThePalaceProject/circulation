@@ -40,7 +40,6 @@ from core.model import (
     Work,
 )
 from core.opds_import import OPDSXMLParser
-from core.service.analytics.configuration import AnalyticsConfiguration
 from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
@@ -580,10 +579,8 @@ class TestLibraryAnnotator:
 
         with patch.object(
             container_instance().analytics.analytics(),
-            "config",
-            AnalyticsConfiguration(
-                local_analytics_enabled=False, s3_analytics_enabled=False
-            ),
+            "is_configured",
+            lambda: False,
         ):
             annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
@@ -612,15 +609,10 @@ class TestLibraryAnnotator:
 
         # If analytics are configured, a link is added to
         # create an 'open_book' analytics event for this title.
-        with patch.object(
-            container_instance().analytics.analytics(),
-            "config",
-            AnalyticsConfiguration(local_analytics_enabled=True),
-        ):
-            work_entry = WorkEntry(
-                work=work, license_pool=None, edition=edition, identifier=identifier
-            )
-            annotator.annotate_work_entry(work_entry)
+        work_entry = WorkEntry(
+            work=work, license_pool=None, edition=edition, identifier=identifier
+        )
+        annotator.annotate_work_entry(work_entry)
 
         assert work_entry.computed is not None
         [analytics_link] = [

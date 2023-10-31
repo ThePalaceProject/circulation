@@ -5,51 +5,12 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration, get_one
-from core.service.analytics.configuration import AnalyticsConfiguration
+from core.model import CirculationEvent, ExternalIntegration
 from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.services import MockServicesFixture
-
-
-class TestInitializeLocalAnalyticsProvider:
-    def test_initialize(self, db: DatabaseTransactionFixture):
-        session = db.session
-
-        local_analytics = get_one(
-            session,
-            ExternalIntegration,
-            protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-
-        # There shouldn't exist a local analytics service.
-        assert local_analytics is None
-
-        # So when the Local Analytics provider is initialized, it will
-        # create one with the default name of "Local Analytics".
-        local_analytics = LocalAnalyticsProvider.initialize(session)
-
-        assert isinstance(local_analytics, ExternalIntegration)
-        assert local_analytics.name == LocalAnalyticsProvider.NAME
-
-        # When an analytics provider is initialized, retrieving a
-        # local analytics service should return the same one.
-        local_analytics = LocalAnalyticsProvider.initialize(session)
-
-        local_analytics_2 = get_one(
-            session,
-            ExternalIntegration,
-            protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-
-        assert isinstance(local_analytics, ExternalIntegration)
-        assert isinstance(local_analytics_2, ExternalIntegration)
-        assert local_analytics_2.id == local_analytics.id
-        assert local_analytics_2.name == local_analytics.name
 
 
 class LocalAnalyticsProviderFixture:
@@ -64,7 +25,7 @@ class LocalAnalyticsProviderFixture:
     ):
         self.transaction = transaction
         self.services = mock_services_fixture.services
-        self.la = LocalAnalyticsProvider(AnalyticsConfiguration(location_source=None))
+        self.la = LocalAnalyticsProvider()
 
 
 @pytest.fixture()
@@ -131,53 +92,3 @@ class TestLocalAnalyticsProvider:
         with pytest.raises(ValueError) as excinfo:
             data.la.collect_event(None, None, "event", now)
         assert "Either library or license_pool must be provided." in str(excinfo.value)
-
-    def test_neighborhood_is_location(
-        self, local_analytics_provider_fixture: LocalAnalyticsProviderFixture
-    ):
-        # If a 'neighborhood' argument is provided, its value
-        # is used as CirculationEvent.location.
-        data = local_analytics_provider_fixture
-        database = local_analytics_provider_fixture.transaction
-
-        # The default LocalAnalytics object doesn't have a location
-        # gathering policy, and the default is to ignore location.
-        event, is_new = data.la.collect_event(
-            database.default_library(),
-            None,
-            "event",
-            utc_now(),
-            neighborhood="Gormenghast",
-        )
-        assert is_new is True
-        assert event.location is None
-
-        # Create another LocalAnalytics object that uses the patron
-        # neighborhood as the event location.
-        la = LocalAnalyticsProvider(
-            AnalyticsConfiguration(
-                location_source=LocalAnalyticsProvider.LOCATION_SOURCE_NEIGHBORHOOD
-            )
-        )
-
-        event, is_new = la.collect_event(
-            database.default_library(),
-            None,
-            "event",
-            utc_now(),
-            neighborhood="Gormenghast",
-        )
-        assert is_new is True
-        assert "Gormenghast" == event.location
-
-        # If no neighborhood is available, the event ends up with no location
-        # anyway.
-        event2, is_new = la.collect_event(
-            database.default_library(),
-            None,
-            "event",
-            utc_now(),
-        )
-        assert event2 != event
-        assert is_new is True
-        assert event2.location is None

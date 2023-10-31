@@ -8,8 +8,8 @@ class AnalyticsContainer(DeclarativeContainer):
     config = providers.Configuration()
     storage = providers.DependenciesContainer()
 
-    analytics = providers.Singleton(
+    analytics: providers.Provider[Analytics] = providers.Singleton(
         Analytics,
-        config=config,
-        storage_client=storage.analytics,
+        s3_analytics_enabled=config.s3_analytics_enabled,
+        s3_service=storage.analytics,
     )

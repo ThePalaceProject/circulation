@@ -11,7 +11,6 @@ from flask_babel import lazy_gettext as _
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import Library, LicensePool, MediaTypes
-from core.service.analytics.configuration import AnalyticsConfiguration
 
 if TYPE_CHECKING:
     from core.service.storage.s3 import S3Service
@@ -23,9 +22,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     NAME = _("S3 Analytics")
     DESCRIPTION = _("Store analytics events in a S3 bucket.")
 
-    def __init__(self, s3_service: Optional[S3Service], config: AnalyticsConfiguration):
+    def __init__(self, s3_service: Optional[S3Service]):
         self.s3_service = s3_service
-        super().__init__(config)
 
     @staticmethod
     def _create_event_object(
@@ -35,7 +33,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         time: datetime.datetime,
         old_value,
         new_value,
-        neighborhood: str,
+        neighborhood: Optional[str] = None,
     ) -> Dict:
         """Create a Python dict containing required information about the event.
 
@@ -175,12 +173,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         if not library and not license_pool:
             raise ValueError("Either library or license_pool must be provided.")
 
-        neighborhood = None
-        if self.location_source == self.LOCATION_SOURCE_NEIGHBORHOOD:
-            neighborhood = kwargs.pop("neighborhood", None)
-
         event = self._create_event_object(
-            library, license_pool, event_type, time, old_value, new_value, neighborhood
+            library, license_pool, event_type, time, old_value, new_value
         )
         content = json.dumps(
             event,

@@ -11,7 +11,6 @@ from api.s3_analytics_provider import S3AnalyticsProvider
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.model import CirculationEvent, DataSource, MediaTypes
-from core.service.analytics.configuration import AnalyticsConfiguration
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
@@ -27,7 +26,6 @@ class S3AnalyticsFixture:
         self.analytics_storage = services_fixture.storage.analytics
         self.analytics_provider = S3AnalyticsProvider(
             services_fixture.services.storage.analytics(),
-            AnalyticsConfiguration(location_source=None),
         )
 
 
@@ -59,7 +57,7 @@ class TestS3AnalyticsProvider:
         s3_analytics_fixture.services.storage.analytics.override(None)
 
         provider = S3AnalyticsProvider(
-            s3_analytics_fixture.services.storage.analytics(), AnalyticsConfiguration()
+            s3_analytics_fixture.services.storage.analytics()
         )
 
         # Act, Assert

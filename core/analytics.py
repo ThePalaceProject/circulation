@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Optional
 
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.service.analytics.configuration import AnalyticsConfiguration
 from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
 
@@ -17,19 +16,14 @@ class Analytics(LoggerMixin):
 
     def __init__(
         self,
-        config: Optional[dict] = None,
+        s3_analytics_enabled: bool = False,
         s3_service: Optional[S3Service] = None,
     ) -> None:
-        self.providers = []
-        self.config = AnalyticsConfiguration.from_values(
-            **(config if config is not None else {})
-        )
-        if self.config.local_analytics_enabled:
-            self.providers.append(LocalAnalyticsProvider(self.config))
+        self.providers = [LocalAnalyticsProvider()]
 
-        if self.config.s3_analytics_enabled:
+        if s3_analytics_enabled:
             if s3_service is not None:
-                self.providers.append(S3AnalyticsProvider(s3_service, self.config))
+                self.providers.append(S3AnalyticsProvider(s3_service))
             else:
                 self.log.info(
                     "S3 analytics is not configured: No analytics bucket was specified."
@@ -43,4 +37,4 @@ class Analytics(LoggerMixin):
             provider.collect_event(library, license_pool, event_type, time, **kwargs)
 
     def is_configured(self):
-        return self.config.local_analytics_enabled or self.config.s3_analytics_enabled
+        return len(self.providers) > 0
