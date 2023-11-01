@@ -3,7 +3,6 @@ from __future__ import annotations
 import random
 from functools import partial
 from io import StringIO
-from typing import Optional
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -20,9 +19,8 @@ from api.saml.metadata.model import (
     SAMLNameIDFormat,
     SAMLSubject,
 )
-from core.config import IntegrationException
 from core.coverage import CoverageFailure
-from core.metadata_layer import CirculationData, LinkData, Metadata
+from core.metadata_layer import LinkData
 from core.model import (
     Collection,
     Contributor,
@@ -1370,185 +1368,6 @@ class TestOPDSImporter:
         assert lp.work == work
         assert lp2.work == work
 
-    def test_assert_importable_content(self, db: DatabaseTransactionFixture):
-        session = db.session
-
-        class Mock(OPDSImporter):
-            """An importer that may or may not be able to find
-            real open-access content.
-            """
-
-            # Set this variable to control whether any open-access links
-            # are "found" in the OPDS feed.
-            open_access_links: Optional[list] = None
-
-            extract_feed_data_called_with = None
-            _is_open_access_link_called_with = []
-
-            def extract_feed_data(self, feed, feed_url):
-                # There's no need to return realistic metadata,
-                # since _open_access_links is also mocked.
-                self.extract_feed_data_called_with = (feed, feed_url)
-                return {"some": "metadata"}, {}
-
-            def _open_access_links(self, metadatas):
-                self._open_access_links_called_with = metadatas
-                yield from self.open_access_links
-
-            def _is_open_access_link(self, url, type):
-                self._is_open_access_link_called_with.append((url, type))
-                return False
-
-        class NoLinks(Mock):
-            "Simulate an OPDS feed that contains no open-access links."
-            open_access_links = []
-
-        # We won't be making any HTTP requests, even simulated ones.
-        do_get = MagicMock()
-
-        # Here, there are no links at all.
-        importer = NoLinks(session, db.default_collection(), do_get)
-        with pytest.raises(IntegrationException) as excinfo:
-            importer.assert_importable_content("feed", "url")
-        assert "No open-access links were found in the OPDS feed." in str(excinfo.value)
-
-        # We extracted 'metadata' from the feed and URL.
-        assert ("feed", "url") == importer.extract_feed_data_called_with
-
-        # But there were no open-access links in the 'metadata',
-        # so we had nothing to check.
-        assert [] == importer._is_open_access_link_called_with
-
-        oa = Hyperlink.OPEN_ACCESS_DOWNLOAD
-
-        class BadLinks(Mock):
-            """Simulate an OPDS feed that contains open-access links that
-            don't actually work, because _is_open_access always returns False
-            """
-
-            open_access_links = [
-                LinkData(href="url1", rel=oa, media_type="text/html"),
-                LinkData(href="url2", rel=oa, media_type="application/json"),
-                LinkData(
-                    href="I won't be tested", rel=oa, media_type="application/json"
-                ),
-            ]
-
-        bad_links_importer = BadLinks(session, db.default_collection(), do_get)
-        with pytest.raises(IntegrationException) as excinfo:
-            bad_links_importer.assert_importable_content(
-                "feed", "url", max_get_attempts=2
-            )
-        assert (
-            "Was unable to GET supposedly open-access content such as url2 (tried 2 times)"
-            in str(excinfo.value)
-        )
-
-        # We called _is_open_access_link on the first and second links
-        # found in the 'metadata', but failed both times.
-        #
-        # We didn't bother with the third link because max_get_attempts was
-        # set to 2.
-        try1, try2 = bad_links_importer._is_open_access_link_called_with
-        assert ("url1", "text/html") == try1
-        assert ("url2", "application/json") == try2
-
-        class GoodLink(Mock):
-            """Simulate an OPDS feed that contains two bad open-access links
-            and one good one.
-            """
-
-            _is_open_access_link_called_with = []
-            open_access_links = [
-                LinkData(href="bad", rel=oa, media_type="text/html"),
-                LinkData(href="good", rel=oa, media_type="application/json"),
-                LinkData(href="also bad", rel=oa, media_type="text/html"),
-            ]
-
-            def _is_open_access_link(self, url, type):
-                self._is_open_access_link_called_with.append((url, type))
-                if url == "bad":
-                    return False
-                return "this is a book"
-
-        good_link_importer = GoodLink(session, db.default_collection(), do_get)
-        result = good_link_importer.assert_importable_content(
-            "feed", "url", max_get_attempts=5
-        )
-        assert True == result
-
-        # The first link didn't work, but the second one did,
-        # so we didn't try the third one.
-        try1, try2 = good_link_importer._is_open_access_link_called_with
-        assert ("bad", "text/html") == try1
-        assert ("good", "application/json") == try2
-
-    def test__open_access_links(self, db: DatabaseTransactionFixture):
-        session = db.session
-
-        """Test our ability to find open-access links in Metadata objects."""
-        m = OPDSImporter._open_access_links
-
-        # No Metadata objects, no links.
-        assert [] == list(m([]))
-
-        # This Metadata has no associated CirculationData and will be
-        # ignored.
-        no_circulation = Metadata(DataSource.GUTENBERG)
-
-        # This CirculationData has no open-access links, so it will be
-        # ignored.
-        circulation = CirculationData(DataSource.GUTENBERG, db.identifier())
-        no_open_access_links = Metadata(DataSource.GUTENBERG, circulation=circulation)
-
-        # This has three links, but only the open-access links
-        # will be returned.
-        circulation = CirculationData(DataSource.GUTENBERG, db.identifier())
-        oa = Hyperlink.OPEN_ACCESS_DOWNLOAD
-        for rel in [oa, Hyperlink.IMAGE, oa]:
-            circulation.links.append(LinkData(href=db.fresh_url(), rel=rel))
-        two_open_access_links = Metadata(DataSource.GUTENBERG, circulation=circulation)
-
-        oa_only = [x for x in circulation.links if x.rel == oa]
-        assert oa_only == list(
-            m([no_circulation, two_open_access_links, no_open_access_links])
-        )
-
-    def test__is_open_access_link(
-        self, db: DatabaseTransactionFixture, opds_importer_fixture: OPDSImporterFixture
-    ):
-        session = db.session
-        http = DummyHTTPClient()
-
-        # We only check that the response entity-body isn't tiny. 11
-        # kilobytes of data is enough.
-        enough_content = "a" * (1024 * 11)
-
-        # Set up an HTTP response that looks enough like a book
-        # to convince _is_open_access_link.
-        http.queue_response(200, content=enough_content)
-        monitor = opds_importer_fixture.importer(http_get=http.do_get)
-
-        url = db.fresh_url()
-        type = "text/html"
-        assert "Found a book-like thing at %s" % url == monitor._is_open_access_link(
-            url, type
-        )
-
-        # We made a GET request to the appropriate URL.
-        assert url == http.requests.pop()
-
-        # This HTTP response looks OK but it's not big enough to be
-        # any kind of book.
-        http.queue_response(200, content="not enough content")
-        monitor = opds_importer_fixture.importer(http_get=http.do_get)
-        assert False == monitor._is_open_access_link(url, None)
-
-        # This HTTP response is clearly an error page.
-        http.queue_response(404, content=enough_content)
-        monitor = opds_importer_fixture.importer(http_get=http.do_get)
-        assert False == monitor._is_open_access_link(url, None)
-
     def test_import_open_access_audiobook(
         self, opds_importer_fixture: OPDSImporterFixture
     ):
@@ -1857,49 +1676,6 @@ class TestOPDSImportMonitor:
             assert mock_get.call_args[0] == (
                 "https://opds.import.com:9999/relative/path",
             )
-
-    def test__run_self_tests(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """Verify the self-tests of an OPDS collection."""
-
-        class MockImporter(OPDSImporter):
-            def assert_importable_content(self, content, url):
-                self.assert_importable_content_called_with = (content, url)
-                return "looks good"
-
-        class Mock(OPDSImportMonitor):
-            follow_one_link_called_with = []
-
-            # First we will get the first page of the OPDS feed.
-            def follow_one_link(self, url):
-                self.follow_one_link_called_with.append(url)
-                return ([], "some content")
-
-        feed_url = db.fresh_url()
-        collection = db.collection(
-            external_account_id=feed_url, data_source_name="OPDS"
-        )
-        monitor = Mock(db.session, collection, import_class=MockImporter)
-        [first_page, found_content] = monitor._run_self_tests(db.session)
-        expect = "Retrieve the first page of the OPDS feed (%s)" % feed_url
-        assert expect == first_page.name
-        assert True == first_page.success
-        assert ([], "some content") == first_page.result
-
-        # follow_one_link was called once.
-        [link] = monitor.follow_one_link_called_with
-        assert monitor.feed_url == link
-
-        # Then, assert_importable_content was called on the importer.
-        assert "Checking for importable content" == found_content.name
-        assert True == found_content.success
-        assert (
-            "some content",
-            feed_url,
-        ) == monitor.importer.assert_importable_content_called_with  # type: ignore[attr-defined]
-        assert "looks good" == found_content.result
 
     def test_hook_methods(self, db: DatabaseTransactionFixture):
         """By default, the OPDS URL and data source used by the importer

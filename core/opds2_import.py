@@ -10,7 +10,6 @@ from typing import (
     Dict,
     Iterable,
     List,
-    Literal,
     Optional,
     Tuple,
     Type,
@@ -306,11 +305,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         super().__init__(db, collection, data_source_name, http_get)
         self._parser = parser
         self.ignored_identifier_types = self.settings.ignored_identifier_types
-
-    def assert_importable_content(
-        self, feed: str, feed_url: str, max_get_attempts: int = 5
-    ) -> Literal[True]:
-        raise NotImplementedError("OPDS2Importer does not support this method")
 
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.

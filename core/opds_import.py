@@ -16,7 +16,6 @@ from typing import (
     Generic,
     Iterable,
     List,
-    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -39,9 +38,7 @@ from sqlalchemy.orm.session import Session
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
 from api.saml.credential import SAMLCredentialManager
-from api.selftest import HasCollectionSelfTests
 from core.classifier import Classifier
-from core.config import IntegrationException
 from core.connection_config import ConnectionSetting
 from core.coverage import CoverageFailure
 from core.integration.base import integration_settings_load
@@ -86,7 +83,6 @@ from core.saml.wayfless import (
     SAMLWAYFlessFulfillmentError,
     SAMLWAYFlessSetttings,
 )
-from core.selftest import SelfTestResult
 from core.util.datetime_helpers import datetime_utc, to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.log import LoggerMixin
@@ -421,12 +417,6 @@ class BaseOPDSImporter(
     def extract_next_links(self, feed: str | bytes) -> List[str]:
         ...
 
-    @abstractmethod
-    def assert_importable_content(
-        self, feed: str, feed_url: str, max_get_attempts: int = 5
-    ) -> Literal[True]:
-        ...
-
     @overload
     def parse_identifier(self, identifier: str) -> Identifier:
         ...
@@ -711,83 +701,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         # we don't, e.g. accidentally get our IP banned from
         # gutenberg.org.
         self.http_get = http_get or Representation.cautious_http_get
-
-    def assert_importable_content(
-        self, feed: str, feed_url: str, max_get_attempts: int = 5
-    ) -> Literal[True]:
-        """Raise an exception if the given feed contains nothing that can,
-        even theoretically, be turned into a LicensePool.
-
-        By default, this means the feed must link to open-access content
-        that can actually be retrieved.
-        """
-        metadata, failures = self.extract_feed_data(feed, feed_url)
-        get_attempts = 0
-
-        # Find an open-access link, and try to GET it just to make
-        # sure OPDS feed isn't hiding non-open-access stuff behind an
-        # open-access link.
-        #
-        # To avoid taking forever or antagonizing API providers, we'll
-        # give up after `max_get_attempts` failures.
-        for link in self._open_access_links(list(metadata.values())):
-            url = link.href
-            success = self._is_open_access_link(url, link.media_type)
-            if success:
-                return True
-            get_attempts += 1
-            if get_attempts >= max_get_attempts:
-                error = (
-                    "Was unable to GET supposedly open-access content such as %s (tried %s times)"
-                    % (url, get_attempts)
-                )
-                explanation = "This might be an OPDS For Distributors feed, or it might require different authentication credentials."
-                raise IntegrationException(error, explanation)
-
-        raise IntegrationException(
-            "No open-access links were found in the OPDS feed.",
-            "This might be an OPDS for Distributors feed.",
-        )
-
-    @classmethod
-    def _open_access_links(
-        cls, metadatas: List[Metadata]
-    ) -> Generator[LinkData, None, None]:
-        """Find all open-access links in a list of Metadata objects.
-
-        :param metadatas: A list of Metadata objects.
-        :yield: A sequence of `LinkData` objects.
-        """
-        for item in metadatas:
-            if not item.circulation:
-                continue
-            for link in item.circulation.links:
-                if link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD:
-                    yield link
-
-    def _is_open_access_link(
-        self, url: str, type: Optional[str]
-    ) -> str | Literal[False]:
-        """Is `url` really an open-access link?
-
-        That is, can we make a normal GET request and get something
-        that looks like a book?
-        """
-        headers = {}
-        if type:
-            headers["Accept"] = type
-        status, headers, body = self.http_get(url, headers=headers)
-        if status == 200 and len(body) > 1024 * 10:
-            # We could also check the media types, but this is good
-            # enough for now.
-            return "Found a book-like thing at %s" % url
-        self.log.error(
-            "Supposedly open-access link %s didn't give us a book. Status=%s, body length=%s",
-            url,
-            status,
-            len(body),
-        )
-        return False
 
     def extract_next_links(self, feed: str | bytes | FeedParserDict) -> List[str]:
         if isinstance(feed, (bytes, str)):
@@ -1735,7 +1648,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         return series_name, series_position
 
 
-class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
+class OPDSImportMonitor(CollectionMonitor):
     """Periodically monitor a Collection's OPDS archive feed and import
     every title it mentions.
     """
@@ -1789,29 +1702,6 @@ class OPDSImportMonitor(CollectionMonitor, HasCollectionSelfTests):
         parsed_url = urlparse(self.feed_url)
         self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"
         super().__init__(_db, collection)
-
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
-        """Retrieve the first page of the OPDS feed"""
-        first_page = self.run_test(
-            "Retrieve the first page of the OPDS feed (%s)" % self.feed_url,
-            self.follow_one_link,
-            self.feed_url,
-        )
-        yield first_page
-        if not first_page.result:
-            return
-
-        # We got a page, but does it have anything the importer can
-        # turn into a Work?
-        #
-        # By default, this means it must contain an open-access link.
-        next_links, content = first_page.result
-        yield self.run_test(
-            "Checking for importable content",
-            self.importer.assert_importable_content,
-            content,
-            self.feed_url,
-        )
 
     def _get(
         self, url: str, headers: Dict[str, str]
