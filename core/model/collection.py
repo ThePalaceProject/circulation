@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Table,
+    Unicode,
     UniqueConstraint,
     exists,
     select,
@@ -47,7 +48,25 @@ class Collection(Base, HasSessionCache):
     __tablename__ = "collections"
     id = Column(Integer, primary_key=True, nullable=False)
 
+    # TODO: This should no longer be used. And will be removed in the next release.
+    #  Collections store their configurations in integration configurations now.
+    #  This is only left here in case there needs to be a rollback to the current
+    #  release.
+    _name_deprecated = Column("name", Unicode)
+
     DATA_SOURCE_NAME_SETTING = "data_source"
+
+    # TODO: This should no longer be used. And will be removed in the next release.
+    #  Collections store their configurations in integration configurations now.
+    #  This is only left here in case there needs to be a rollback to the current
+    #  release.
+    _external_account_id_deprecated = Column("external_account_id", Unicode)
+
+    # TODO: This should no longer be used. And will be removed in the next release.
+    #  Collections store their configurations in integration configurations now.
+    #  This is only left here in case there needs to be a rollback to the current
+    #  release.
+    _external_integration_id_deprecated = Column("external_integration_id", Integer)
 
     # How do we connect to the provider of this collection? Any url,
     # authentication information, or additional configuration goes
@@ -603,6 +622,22 @@ class Collection(Base, HasSessionCache):
         # Now delete the Collection itself.
         _db.delete(self)
         _db.commit()
+
+
+# TODO: This should no longer be used. And will be removed in the next release.
+#  Collections store their configurations in integration configurations now.
+#  This is only left here in case there needs to be a rollback to the current
+#  release.
+_collections_libraries_deprecated: Table = Table(
+    "collections_libraries",
+    Base.metadata,
+    Column(
+        "collection_id",
+        Integer,
+    ),
+    Column("library_id", Integer),
+    UniqueConstraint("collection_id", "library_id"),
+)
 
 
 collections_identifiers: Table = Table(
