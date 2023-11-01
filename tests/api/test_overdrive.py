@@ -3598,6 +3598,16 @@ class TestOverdriveRepresentationExtractor:
             MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE == manifest.content_type
         )
         assert "application/x-od-media" == legacy.content_type
+        assert (
+            metadata.duration == 10 * 3600 + 9 * 60 + 1
+        )  # The last formats' duration attribute
+
+        # The last format will be invalid, so only the first format should work
+        info["formats"][1]["duration"] = "10:09"  # Invalid format
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        assert (
+            metadata.duration == 10 * 3600 + 9 * 60 + 0
+        )  # The first formats' duration attribute
 
     def test_book_info_with_sample(self, overdrive_api_fixture: OverdriveAPIFixture):
         # This book has two samples; one available as a direct download and

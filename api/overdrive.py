@@ -82,6 +82,7 @@ from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMoni
 from core.scripts import InputScript, Script
 from core.util.datetime_helpers import strptime_utc, utc_now
 from core.util.http import HTTP, BadResponseException
+from core.util.log import LoggerMixin
 from core.util.string_helpers import base64
 
 
@@ -2159,10 +2160,8 @@ class OverdriveData:
     max_retry_count: int = 0
 
 
-class OverdriveRepresentationExtractor:
+class OverdriveRepresentationExtractor(LoggerMixin):
     """Extract useful information from Overdrive's JSON representations."""
-
-    log = logging.getLogger("Overdrive representation extractor")
 
     def __init__(self, api):
         """Constructor.
@@ -2183,7 +2182,7 @@ class OverdriveRepresentationExtractor:
         products = book_list["products"]
         for product in products:
             if not "id" in product:
-                cls.log.warning("No ID found in %r", product)
+                cls.logger().warning("No ID found in %r", product)
                 continue
             book_id = product["id"]
             data = dict(
@@ -2344,7 +2343,7 @@ class OverdriveRepresentationExtractor:
         processed = []
         for x in roles:
             if x not in cls.overdrive_role_to_simplified_role:
-                cls.log.error("Could not process role %s for %s", x, id)
+                cls.logger().error("Could not process role %s for %s", x, id)
             else:
                 processed.append(cls.overdrive_role_to_simplified_role[x])
         return processed
@@ -2488,6 +2487,8 @@ class OverdriveRepresentationExtractor:
         # Otherwise we'll probably give it a fraction of this weight.
         trusted_weight = Classification.TRUSTED_DISTRIBUTOR_WEIGHT
 
+        duration: Optional[int] = None
+
         if include_bibliographic:
             title = book.get("title", None)
             sort_title = book.get("sortTitle")
@@ -2563,7 +2564,7 @@ class OverdriveRepresentationExtractor:
                 overdrive_medium
                 and overdrive_medium not in cls.overdrive_medium_to_simplified_medium
             ):
-                cls.log.error(
+                cls.logger().error(
                     "Could not process medium %s for %s", overdrive_medium, overdrive_id
                 )
 
@@ -2607,6 +2608,18 @@ class OverdriveRepresentationExtractor:
             links = []
             sample_hrefs = set()
             for format in book.get("formats", []):
+                duration_str: Optional[str] = format.get("duration")
+                if duration_str is not None:
+                    # Using this method only the last valid duration attribute is captured
+                    # If there are multiple formats with different durations, the edition will ignore the rest
+                    try:
+                        hrs, mins, secs = duration_str.split(":")
+                        duration = (int(hrs) * 3600) + (int(mins) * 60) + int(secs)
+                    except Exception as ex:
+                        cls.logger().error(
+                            f"Duration ({duration_str}) could not be parsed: {ex}"
+                        )
+
                 for new_id in format.get("identifiers", []):
                     t = new_id["type"]
                     v = new_id["value"]
@@ -2625,7 +2638,7 @@ class OverdriveRepresentationExtractor:
                             # books appear to have the same ISBN. ISBNs
                             # which fail check digit checks or are invalid
                             # also can occur. Log them for review.
-                            cls.log.info("Bad ISBN value provided: %s", orig_v)
+                            cls.logger().info("Bad ISBN value provided: %s", orig_v)
                             continue
                     elif t == "DOI":
                         type_key = Identifier.DOI
@@ -2654,7 +2667,7 @@ class OverdriveRepresentationExtractor:
                         )
                         if not content_type:
                             # Unusable by us.
-                            cls.log.warning(
+                            cls.logger().warning(
                                 f"Did not find a sample format mapping for '{overdrive_format_name}': {href}"
                             )
                             continue
@@ -2746,6 +2759,7 @@ class OverdriveRepresentationExtractor:
                 contributors=contributors,
                 measurements=measurements,
                 links=links,
+                duration=duration,
             )
         else:
             metadata = Metadata(
@@ -2762,7 +2776,7 @@ class OverdriveRepresentationExtractor:
                     for content_type, drm_scheme in internal_formats:
                         formats.append(FormatData(content_type, drm_scheme))
                 elif format_id not in cls.ignorable_overdrive_formats:
-                    cls.log.error(
+                    cls.logger().error(
                         "Could not process Overdrive format %s for %s",
                         format_id,
                         overdrive_id,
