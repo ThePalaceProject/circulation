@@ -345,7 +345,11 @@ class SIPClient(Constants):
             # We're implicitly logged in.
             self.must_log_in = False
         self.login_password = login_password
-        self.dialect_config = dialect.config
+
+        if isinstance(dialect, str):
+            self.dialect_config = Dialect(dialect).config
+        else:
+            self.dialect_config = dialect.config
 
     def login(self):
         """Log in to the SIP server if required."""
@@ -372,7 +376,7 @@ class SIPClient(Constants):
 
     def end_session(self, *args, **kwargs):
         """Send end session message."""
-        if self.dialect_config.sendEndSession:
+        if self.dialect_config.send_end_session:
             return self.make_request(
                 self.end_session_message,
                 self.end_session_response_parser,
@@ -554,6 +558,7 @@ class SIPClient(Constants):
         patron password: AD, variable length, optional
         """
         code = "35"
+
         timestamp = self.now()
 
         message = (
@@ -842,8 +847,10 @@ class SIPClient(Constants):
 
     def now(self):
         """Return the current time, formatted as SIP expects it."""
+        tz_spaces = self.dialect_config.tz_spaces
         now = utc_now()
-        return datetime.datetime.strftime(now, "%Y%m%d0000%H%M%S")
+        zzzz = " " * 4 if tz_spaces else "0" * 4
+        return datetime.datetime.strftime(now, f"%Y%m%d{zzzz}%H%M%S")
 
     def summary(
         self,

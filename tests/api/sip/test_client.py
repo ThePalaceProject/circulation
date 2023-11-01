@@ -714,6 +714,7 @@ class TestClientDialects:
             (Dialect.GENERIC_ILS, 1, 1),
             # AG VERSO ILS shouldn't end_session message
             (Dialect.AG_VERSO, 0, 0),
+            (Dialect.TZ_SPACES, 1, 1),
         ],
     )
     def test_dialect(
