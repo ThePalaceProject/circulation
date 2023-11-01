@@ -338,7 +338,7 @@ class APIAwareFulfillmentInfo(FulfillmentInfo, ABC):
 
     def __init__(
         self,
-        api: BaseCirculationAPI[BaseSettings, BaseSettings],
+        api: CirculationApiType,
         data_source_name: Optional[str],
         identifier_type: Optional[str],
         identifier: Optional[str],
@@ -723,6 +723,9 @@ class BaseCirculationAPI(
         ...
 
 
+CirculationApiType = BaseCirculationAPI[BaseSettings, BaseSettings]
+
+
 class PatronActivityCirculationAPI(
     BaseCirculationAPI[SettingsType, LibrarySettingsType], ABC
 ):
@@ -750,9 +753,7 @@ class CirculationAPI:
         db: Session,
         library: Library,
         analytics: Optional[Analytics] = None,
-        registry: Optional[
-            IntegrationRegistry[BaseCirculationAPI[BaseSettings, BaseSettings]]
-        ] = None,
+        registry: Optional[IntegrationRegistry[CirculationApiType]] = None,
     ):
         """Constructor.
 
@@ -816,7 +817,7 @@ class CirculationAPI:
 
     def api_for_license_pool(
         self, licensepool: LicensePool
-    ) -> Optional[BaseCirculationAPI[BaseSettings, BaseSettings]]:
+    ) -> Optional[CirculationApiType]:
         """Find the API to use for the given license pool."""
         return self.api_for_collection.get(licensepool.collection.id)
 

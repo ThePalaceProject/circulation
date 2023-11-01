@@ -373,9 +373,6 @@ class HasSelfTests(BaseHasSelfTests, ABC):
 
 
 class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
-    # Typing specific
-    collection: Any
-
     def store_self_test_results(
         self, _db: Session, value: Dict[str, Any], results: List[SelfTestResult]
     ) -> None:

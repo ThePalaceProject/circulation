@@ -1,63 +1,41 @@
-from flask_babel import lazy_gettext as _
+from __future__ import annotations
 
-from api.admin.controller.self_tests import SelfTestsController
-from api.admin.problem_details import *
+from typing import Any, Dict, Optional
+
+from flask import Response
+from sqlalchemy.orm import Session
+
+from api.admin.controller.self_tests import IntegrationSelfTestsController
+from api.circulation import CirculationApiType
 from api.integration.registry.license_providers import LicenseProvidersRegistry
-from api.selftest import HasCollectionSelfTests
-from core.model import Collection
-from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.integration.registry import IntegrationRegistry
+from core.model import IntegrationConfiguration
+from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.util.problem_detail import ProblemDetail
 
 
-class CollectionSelfTestsController(SelfTestsController):
-    def __init__(self, manager):
-        super().__init__(manager)
-        self.type = _("collection")
-        self.registry = LicenseProvidersRegistry()
-        self.protocols = self._get_collection_protocols(self.registry.integrations)
+class CollectionSelfTestsController(IntegrationSelfTestsController[CirculationApiType]):
+    def __init__(
+        self,
+        db: Session,
+        registry: Optional[IntegrationRegistry[CirculationApiType]] = None,
+    ):
+        registry = registry or LicenseProvidersRegistry()
+        super().__init__(db, registry)
 
-    def process_collection_self_tests(self, identifier):
-        return self._manage_self_tests(identifier)
+    def process_collection_self_tests(
+        self, identifier: Optional[int]
+    ) -> Response | ProblemDetail:
+        return self.process_self_tests(identifier)
 
-    def look_up_by_id(self, identifier):
-        """Find the collection to display self test results or run self tests for;
-        display an error message if a collection with this ID turns out not to exist"""
+    def run_self_tests(
+        self, integration: IntegrationConfiguration
+    ) -> Optional[Dict[str, Any]]:
+        protocol_class = self.get_protocol_class(integration)
+        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+            test_result, _ = protocol_class.run_self_tests(
+                self.db, protocol_class, self.db, integration.collection
+            )
+            return test_result
 
-        collection = Collection.by_id(self._db, identifier)
-        if not collection:
-            return NO_SUCH_COLLECTION
-
-        self.protocol_class = self._find_protocol_class(collection)
-        return collection
-
-    def get_info(self, collection):
-        """Compile information about this collection, including the results from the last time, if ever,
-        that the self tests were run."""
-
-        return dict(
-            id=collection.id,
-            name=collection.name,
-            protocol=collection.protocol,
-            parent_id=collection.parent_id,
-            settings=collection.integration_configuration.settings_dict,
-        )
-
-    def _find_protocol_class(self, collection):
-        """Figure out which protocol is providing books to this collection"""
-        return self.registry.get(collection.protocol)
-
-    def run_tests(self, collection):
-        collection_protocol = collection.protocol or None
-
-        if self.protocol_class:
-            value = None
-            if collection_protocol == OPDSImportMonitor.PROTOCOL:
-                self.protocol_class = OPDSImportMonitor
-                value, results = self.protocol_class.run_self_tests(
-                    self._db, self.protocol_class, self._db, collection, OPDSImporter
-                )
-            elif issubclass(self.protocol_class, HasCollectionSelfTests):
-                value, results = self.protocol_class.run_self_tests(
-                    self._db, self.protocol_class, self._db, collection
-                )
-
-            return value
+        return None

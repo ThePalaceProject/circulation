@@ -16,11 +16,10 @@ from api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
-from api.circulation import BaseCirculationAPI
+from api.circulation import CirculationApiType
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.registry import IntegrationRegistry
-from core.integration.settings import BaseSettings
 from core.model import (
     Collection,
     IntegrationConfiguration,
@@ -32,13 +31,11 @@ from core.model import (
 )
 from core.util.problem_detail import ProblemDetail, ProblemError
 
-CirculationAPIType = BaseCirculationAPI[BaseSettings, BaseSettings]
-
 
 class CollectionSettingsController(
-    IntegrationSettingsController[CirculationAPIType], AdminPermissionsControllerMixin
+    IntegrationSettingsController[CirculationApiType], AdminPermissionsControllerMixin
 ):
-    def default_registry(self) -> IntegrationRegistry[CirculationAPIType]:
+    def default_registry(self) -> IntegrationRegistry[CirculationApiType]:
         return LicenseProvidersRegistry()
 
     def configured_service_info(
