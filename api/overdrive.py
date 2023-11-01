@@ -15,6 +15,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 import dateutil
 import flask
 import isbnlib
+from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -80,6 +81,7 @@ from core.model import (
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import InputScript, Script
+from core.service.container import Services
 from core.util.datetime_helpers import strptime_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.string_helpers import base64
@@ -1973,13 +1975,18 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     PROTOCOL = ExternalIntegration.OVERDRIVE
     OVERLAP = datetime.timedelta(minutes=1)
 
+    @inject
     def __init__(
-        self, _db, collection, api_class=OverdriveAPI, analytics_class=Analytics
+        self,
+        _db,
+        collection,
+        api_class=OverdriveAPI,
+        analytics: Analytics = Provide[Services.analytics.analytics],
     ):
         """Constructor."""
         super().__init__(_db, collection)
         self.api = api_class(_db, collection)
-        self.analytics = analytics_class()
+        self.analytics = analytics
 
     def recently_changed_ids(self, start, cutoff):
         return self.api.recently_changed_ids(start, cutoff)

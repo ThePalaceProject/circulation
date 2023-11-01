@@ -47,6 +47,7 @@ def create_container() -> Services:
             "api.bibliotheca",
             "api.enki",
             "api.controller",
+            "api.overdrive",
             "core.feed.annotator.circulation",
         ]
     )

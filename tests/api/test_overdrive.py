@@ -2969,7 +2969,7 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,
-            analytics_class=MockAnalytics,
+            analytics=MockAnalytics(),
         )
         api = monitor.api
 
@@ -3075,7 +3075,7 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,
-            analytics_class=MockAnalytics,
+            analytics=MockAnalytics(),
         )
         api = monitor.api
 
@@ -3134,7 +3134,7 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,
-            analytics_class=MockAnalytics,
+            analytics=MockAnalytics(),
         )
         api = monitor.api
 
