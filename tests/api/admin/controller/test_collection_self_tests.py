@@ -17,14 +17,6 @@ from tests.api.mockapi.axis import MockAxis360API
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class CollectionSelfTestsControllerFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-
-    def controller(self) -> CollectionSelfTestsController:
-        return CollectionSelfTestsController(self.db.session)
-
-
 @pytest.fixture
 def controller(db: DatabaseTransactionFixture) -> CollectionSelfTestsController:
     return CollectionSelfTestsController(db.session)
@@ -112,6 +104,17 @@ class TestCollectionSelfTests:
             controller.self_tests_process_post(collection.integration_configuration.id)
 
         assert excinfo.value.problem_detail == FAILED_TO_RUN_SELF_TESTS
+
+    def test_collection_self_tests_run_self_tests_unsupported_collection(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        registry = LicenseProvidersRegistry()
+        registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
+        collection = db.collection(protocol="mock_api")
+        controller = CollectionSelfTestsController(db.session, registry)
+        response = controller.run_self_tests(collection.integration_configuration)
+        assert response is None
 
     def test_collection_self_tests_post(
         self,
