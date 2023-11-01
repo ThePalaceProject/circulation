@@ -31,6 +31,7 @@ from api.overdrive import (
     OverdriveRepresentationExtractor,
     RecentOverdriveCollectionMonitor,
 )
+from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
 from core.integration.goals import Goals
@@ -2941,7 +2942,7 @@ class TestOverdriveCirculationMonitor:
                 self.update_licensepool_calls.append((book_id, pool))
                 return pool, is_new, is_changed
 
-        class MockAnalytics:
+        class MockAnalytics(Analytics):
             def __init__(self):
                 self.events = []
 
@@ -3064,7 +3065,7 @@ class TestOverdriveCirculationMonitor:
                 self.update_licensepool_calls.append((book_id, pool))
                 return pool, is_new, is_changed
 
-        class MockAnalytics:
+        class MockAnalytics(Analytics):
             def __init__(self):
                 self.events = []
 
@@ -3123,7 +3124,7 @@ class TestOverdriveCirculationMonitor:
                 self.tries[str(book_id)] = current_count
                 raise StaleDataError("Ouch!")
 
-        class MockAnalytics:
+        class MockAnalytics(Analytics):
             def __init__(self):
                 self.events = []
 
