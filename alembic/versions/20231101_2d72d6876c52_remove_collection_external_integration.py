@@ -93,7 +93,7 @@ def upgrade() -> None:
     rows = conn.execute(
         "SELECT ic.id as integration_id, ic.settings, ic.protocol, ic.goal, c.external_account_id FROM collections c "
         "JOIN integration_configurations ic ON c.integration_configuration_id = ic.id"
-    )
+    ).all()
 
     registry = LicenseProvidersRegistry()
     for row in rows:
