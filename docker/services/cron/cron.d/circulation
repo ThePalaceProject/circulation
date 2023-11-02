@@ -42,7 +42,7 @@ HOME=/var/www/circulation
 0 0 * * 0 root core/bin/run -d 60 novelist_update >> /var/log/cron.log 2>&1
 
 # Generate MARC files for libraries that have a MARC exporter configured.
-0 1 * * * root core/bin/run cache_marc_files >> /var/log/cron.log 2>&1
+0 3 * * * root core/bin/run cache_marc_files >> /var/log/cron.log 2>&1
 
 # The remaining scripts keep the circulation manager in sync with
 # specific types of collections.
