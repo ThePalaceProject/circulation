@@ -8,6 +8,7 @@ from api.admin.problem_details import (
     FAILED_TO_RUN_SELF_TESTS,
     MISSING_IDENTIFIER,
     MISSING_SERVICE,
+    UNKNOWN_PROTOCOL,
 )
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests
@@ -38,6 +39,34 @@ class TestCollectionSelfTests:
         with pytest.raises(ProblemError) as excinfo:
             controller.self_tests_process_get(-1)
         assert excinfo.value.problem_detail == MISSING_SERVICE
+
+    def test_collection_self_tests_with_unknown_protocol(
+        self, db: DatabaseTransactionFixture, controller: CollectionSelfTestsController
+    ):
+        collection = db.collection(protocol="test")
+        assert collection.integration_configuration.id is not None
+        with pytest.raises(ProblemError) as excinfo:
+            controller.self_tests_process_get(collection.integration_configuration.id)
+        assert excinfo.value.problem_detail == UNKNOWN_PROTOCOL
+
+    def test_collection_self_tests_with_unsupported_protocol(
+        self, db: DatabaseTransactionFixture, controller: CollectionSelfTestsController
+    ):
+        registry = LicenseProvidersRegistry()
+        registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
+        collection = db.collection(protocol="mock_api")
+        controller = CollectionSelfTestsController(db.session, registry)
+        assert collection.integration_configuration.id is not None
+        result = controller.self_tests_process_get(
+            collection.integration_configuration.id
+        )
+
+        assert result.status_code == 200
+        assert isinstance(result.json, dict)
+        assert result.json["self_test_results"]["self_test_results"] == {
+            "disabled": True,
+            "exception": "Self tests are not supported for this integration.",
+        }
 
     def test_collection_self_tests_test_get(
         self,
