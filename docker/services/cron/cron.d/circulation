@@ -106,7 +106,7 @@ HOME=/var/www/circulation
 
 # Notifications
 #
-10 */2 * * * root core/bin/run loan_notifications >> /var/log/cron.log 2>&1
+10 3 * * * root core/bin/run loan_notifications >> /var/log/cron.log 2>&1
 15 */2 * * * root core/bin/run hold_notifications >> /var/log/cron.log 2>&1
 0 1 * * * root core/bin/run patron_activity_sync_notifications >> /var/log/cron.log 2>&1
 
