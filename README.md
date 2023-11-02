@@ -254,7 +254,9 @@ for the respective "dashboard name".
 
 #### Analytics
 
-To enabled S3 based analytics add `PALACE_S3_ANALYTICS_ENABLED=true` else do not add the environment variable at all.
+Local analytics are enabled by default. S3 analytics can be enabled via the following environment variable:
+
+- PALACE_S3_ANALYTICS_ENABLED: A boolean value to disable or enable s3 analytics. The default is false.
 
 #### Email
 

@@ -5,9 +5,6 @@ from core.util.log import LoggerMixin
 
 
 class LocalAnalyticsProvider(LoggerMixin):
-    # A given site can only have one analytics provider.
-    CARDINALITY = 1
-
     def collect_event(
         self,
         library,

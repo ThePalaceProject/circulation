@@ -909,7 +909,6 @@ class CirculationData:
             # We still haven't determined rights, so it's unknown.
             self.default_rights_uri = RightsStatus.UNKNOWN
 
-    @inject
     def apply(
         self,
         _db,

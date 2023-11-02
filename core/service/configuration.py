@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseSettings, ValidationError
 
 from core.config import CannotLoadConfiguration
-
-T = TypeVar("T", bound="ServiceConfiguration")
 
 
 class ServiceConfiguration(BaseSettings):

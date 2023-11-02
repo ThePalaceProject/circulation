@@ -7,7 +7,6 @@ from io import BytesIO, StringIO
 from typing import (
     TYPE_CHECKING,
     ClassVar,
-    Literal,
     Optional,
     Protocol,
     Type,
@@ -1189,18 +1188,7 @@ class TestBibliothecaPurchaseMonitor:
     )
     def test_optional_iso_date_valid_dates(
         self,
-        specified_default_start: datetime
-        | Literal[
-            "2011",
-            "2011-10",
-            "2011-10-05",
-            "2011-10-05T15",
-            "2011-10-05T15:27",
-            "2011-10-05T15:27:33",
-            "2011-10-05 15:27:33",
-            "2011-10-05T15:27:33.123456",
-        ]
-        | None,
+        specified_default_start: datetime | str | None,
         expected_default_start: datetime | None,
         default_monitor: BibliothecaPurchaseMonitor,
     ):
@@ -1258,8 +1246,7 @@ class TestBibliothecaPurchaseMonitor:
     )
     def test_specified_start_trumps_intrinsic_default_start(
         self,
-        specified_default_start: Literal["2011-10-05T15:27", "2011-10-05T15:27:33"]
-        | None,
+        specified_default_start: str | None,
         override_timestamp: bool,
         expected_start: datetime | None,
         bibliotheca_fixture: BibliothecaAPITestFixture,
@@ -1337,8 +1324,7 @@ class TestBibliothecaPurchaseMonitor:
     )
     def test_specified_start_can_override_timestamp(
         self,
-        specified_default_start: Literal["2011-10-05T15:27", "2011-10-05T15:27:33"]
-        | None,
+        specified_default_start: str | None,
         override_timestamp: bool,
         expected_start: datetime | None,
         bibliotheca_fixture: BibliothecaAPITestFixture,
@@ -1377,7 +1363,7 @@ class TestBibliothecaPurchaseMonitor:
     @pytest.mark.parametrize("input", [("invalid"), ("2020/10"), (["2020-10-05"])])
     def test_optional_iso_date_invalid_dates(
         self,
-        input: list[str] | Literal["invalid", "2020/10"],
+        input: list[str] | str,
         default_monitor: BibliothecaPurchaseMonitor,
     ):
         with pytest.raises(ValueError) as excinfo:
