@@ -676,7 +676,7 @@ class TestOPDSFeedController:
             def setup_search(self):
                 raise Exception("doomed!")
 
-        circulation = BadSearch(circulation_fixture.db.session, MagicMock())
+        circulation = BadSearch(circulation_fixture.db.session)
 
         # An attempt to call FeedController.search() will return a
         # problem detail.

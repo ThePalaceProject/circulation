@@ -77,7 +77,7 @@ def initialize_circulation_manager(container: Services):
     else:
         if getattr(app, "manager", None) is None:
             try:
-                app.manager = CirculationManager(app._db, container)
+                app.manager = CirculationManager(app._db)
             except Exception:
                 logging.exception("Error instantiating circulation manager!")
                 raise
