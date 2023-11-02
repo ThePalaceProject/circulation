@@ -5,7 +5,6 @@ Revises: cc084e35e037
 Create Date: 2023-11-01 22:42:06.754873+00:00
 
 """
-import json
 import logging
 
 import sqlalchemy as sa
@@ -47,7 +46,7 @@ def upgrade() -> None:
         )
         conn.execute(
             "UPDATE integration_configurations SET name = (%s) WHERE id = (%s)",
-            (row.collection_name, row.collection_name),
+            (row.collection_name, row.integration_id),
         )
 
     op.alter_column("collections", "name", existing_type=sa.VARCHAR(), nullable=True)
@@ -97,7 +96,9 @@ def upgrade() -> None:
 
     registry = LicenseProvidersRegistry()
     for row in rows:
-        settings_dict = json.loads(row.settings)
+        if row.external_account_id is None:
+            continue
+        settings_dict = row.settings.copy()
         settings_dict["external_account_id"] = row.external_account_id
         impl_class = registry.get(row.protocol)
         if impl_class is None:
@@ -106,7 +107,7 @@ def upgrade() -> None:
             )
         settings_obj = impl_class.settings_class()(**settings_dict)
         new_settings_dict = settings_obj.dict()
-        if settings_dict != new_settings_dict:
+        if row.settings != new_settings_dict:
             new_settings = json_serializer(new_settings_dict)
             log.info(
                 f"Updating settings for integration {row.integration_id} from {row.settings} to {new_settings}."
