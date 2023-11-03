@@ -528,7 +528,8 @@ class TestExternalIntegration:
             external_account_id="http://url.com/feed", data_source="New Data Source"
         )
         OPDSAPI.settings_update(opds_collection.integration_configuration, settings)
-        assert opds_collection.data_source.name == "New Data Source"
+        assert isinstance(opds_collection.data_source, DataSource)
+        assert opds_collection.data_source.name == "New Data Source"  # type: ignore[unreachable]
 
     def test_set_key_value_pair(
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
