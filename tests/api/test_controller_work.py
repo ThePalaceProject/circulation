@@ -844,6 +844,7 @@ class TestWorkController:
         assert result == NOT_FOUND_ON_REMOTE
 
     def test_series(self, work_fixture: WorkFixture):
+        work_fixture.collection.data_source = None
         # Test the ability of the series() method to generate an OPDS
         # feed representing all the books in a given series, subject
         # to an optional language and audience restriction.

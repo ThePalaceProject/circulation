@@ -3,9 +3,9 @@ from sqlalchemy.exc import IntegrityError
 
 from core.config import CannotLoadConfiguration, Configuration
 from core.model import create, get_one
-from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.datasource import DataSource
+from core.opds_import import OPDSAPI
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -516,18 +516,19 @@ class TestExternalIntegration:
         # data source.
         collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
         assert collection.data_source is not None
-        assert DataSource.OVERDRIVE == collection.data_source.name
+        assert collection.data_source.name == DataSource.OVERDRIVE
 
         # For OPDS Import collections, data source is a setting which
         # might not be present.
-        assert None == db.default_collection().data_source
+        opds_collection = db.collection(protocol=ExternalIntegration.OPDS_IMPORT)
+        assert opds_collection.data_source is None
 
         # data source will be automatically created if necessary.
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: "New Data Source"}
+        settings = OPDSAPI.settings_class()(
+            external_account_id="http://url.com/feed", data_source="New Data Source"
         )
-        assert "New Data Source" == db.default_collection().data_source.name
+        OPDSAPI.settings_update(opds_collection.integration_configuration, settings)
+        assert opds_collection.data_source.name == "New Data Source"
 
     def test_set_key_value_pair(
         self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
