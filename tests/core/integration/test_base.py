@@ -1,11 +1,15 @@
+import datetime
+from enum import Enum
 from functools import partial
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from core.integration.base import integration_settings_load, integration_settings_update
+from core.integration.goals import Goals
 from core.integration.settings import BaseSettings
 from core.model import IntegrationConfiguration
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class BaseFixture:
@@ -31,10 +35,40 @@ def base_fixture():
 
 def test_integration_settings_load(base_fixture: BaseFixture) -> None:
     return_value: BaseSettings = base_fixture.load()
-    base_fixture.mock_settings_cls.construct.assert_called_once_with(
-        test="test", number=123
+    base_fixture.mock_settings_cls.assert_called_once_with(test="test", number=123)
+    assert return_value is base_fixture.mock_settings_cls.return_value
+
+
+def test_integration_settings_roundtrip(db: DatabaseTransactionFixture) -> None:
+    class TestEnum(Enum):
+        FOO = "foo"
+        BAR = "bar"
+
+    class TestSettings(BaseSettings):
+        test: str
+        number: int
+        enum: TestEnum
+        date: datetime.date
+
+    # Create a settings object and save it to the database
+    settings = TestSettings(
+        test="test", number=123, enum=TestEnum.FOO, date=datetime.date.today()
     )
-    assert return_value is base_fixture.mock_settings_cls.construct.return_value
+    integration = db.integration_configuration(protocol="test", goal=Goals.LICENSE_GOAL)
+    integration_settings_update(TestSettings, integration, settings)
+    settings_dict = integration.settings_dict.copy()
+
+    # Expire this object in the session, so that we can be sure that the integration data
+    # gets round-tripped from the database, which includes a JSON serialization step.
+    db.session.flush()
+    db.session.expire(integration)
+
+    # Load the settings from the database and check that the settings_dict is different
+    # due to the JSON serialization, but that once we load the settings object, it is
+    # equal to the original settings object.
+    assert integration.settings_dict != settings_dict
+    settings_roundtripped = integration_settings_load(TestSettings, integration)
+    assert settings_roundtripped == settings
 
 
 def test_integration_settings_update_no_merge(base_fixture: BaseFixture) -> None:
