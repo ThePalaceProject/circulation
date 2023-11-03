@@ -71,6 +71,7 @@ def work_fixture(db: DatabaseTransactionFixture):
 class TestWorkController:
     def test_contributor(self, work_fixture: WorkFixture):
         m = work_fixture.manager.work_controller.contributor
+        work_fixture.collection.data_source = None
 
         # Find a real Contributor put in the system through the setup
         # process.

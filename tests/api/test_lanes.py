@@ -1163,7 +1163,7 @@ class TestJackpotWorkList:
         ] = available_now
 
         assert (
-            "License source {[Unknown]} - Medium {Book} - Collection name {%s}"
+            "License source {OPDS} - Medium {Book} - Collection name {%s}"
             % db.default_collection().name
             == default_ebooks.display_name
         )
@@ -1171,7 +1171,7 @@ class TestJackpotWorkList:
         assert [Edition.BOOK_MEDIUM] == default_ebooks.media
 
         assert (
-            "License source {[Unknown]} - Medium {Audio} - Collection name {%s}"
+            "License source {OPDS} - Medium {Audio} - Collection name {%s}"
             % db.default_collection().name
             == default_audio.display_name
         )
