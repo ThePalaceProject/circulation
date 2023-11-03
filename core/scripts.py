@@ -2778,6 +2778,8 @@ class LoanNotificationsScript(Script):
                 processed_loans += 1
                 self.process_loan(loan)
             last_loan_id = loan.id
+            # Commit every batch
+            self._db.commit()
 
         self.log.info(
             f"Loan Notifications Job ended: {processed_loans} loans processed"
