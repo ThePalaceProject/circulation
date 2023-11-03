@@ -134,10 +134,10 @@ class OPDSImporterSettings(
                 "assume the books have this target audience."
             ),
             type=ConfigurationFormItemType.SELECT,
-            format="narrow",
-            options={_NO_DEFAULT_AUDIENCE: _("No default audience")}.update(
-                {audience: audience for audience in sorted(Classifier.AUDIENCES)}
-            ),
+            options={
+                **{_NO_DEFAULT_AUDIENCE: _("No default audience")},
+                **{audience: audience for audience in sorted(Classifier.AUDIENCES)},
+            },
             required=False,
         ),
     )

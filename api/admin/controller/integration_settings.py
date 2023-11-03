@@ -64,7 +64,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     @memoize(ttls=1800)
     def _cached_protocols(self) -> Dict[str, Dict[str, Any]]:
         """Cached result for integration implementations"""
-        protocols = {}
+        protocols = []
         for name, api in self.registry:
             protocol = {
                 "name": name,
@@ -81,8 +81,9 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                     "child_settings"
                 ] = api.child_settings_class().configuration_form(self._db)
             protocol.update(api.protocol_details(self._db))
-            protocols[name] = protocol
-        return protocols
+            protocols.append((name, protocol))
+        protocols.sort(key=lambda x: x[0])
+        return dict(protocols)
 
     @property
     def protocols(self) -> Dict[str, Dict[str, Any]]:

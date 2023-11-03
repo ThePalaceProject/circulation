@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from core.model.patron import Hold, Loan, Patron
 
 
-class ODL2Settings(OPDS2ImporterSettings, ODLSettings):
+class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
     skipped_license_formats: List[str] = FormField(
         default=["text/html"],
         alias="odl2_skipped_license_formats",
