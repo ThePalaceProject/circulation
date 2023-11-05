@@ -76,9 +76,9 @@ from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import RunCollectionMonitorScript
 from core.service.container import Services
+from core.util import base64
 from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
 from core.util.http import HTTP
-from core.util.string_helpers import base64
 from core.util.xmlparser import XMLParser, XMLProcessor
 
 

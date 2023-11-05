@@ -82,10 +82,10 @@ from core.model import (
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import InputScript, Script
 from core.service.container import Services
+from core.util import base64
 from core.util.datetime_helpers import strptime_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.log import LoggerMixin
-from core.util.string_helpers import base64
 
 
 class OverdriveConstants:

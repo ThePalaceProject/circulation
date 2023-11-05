@@ -35,7 +35,7 @@ from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from core.util.string_helpers import base64
+from core.util import base64
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
 
