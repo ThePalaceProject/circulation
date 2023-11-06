@@ -46,12 +46,13 @@ class MockSocket:
 class MockSocketFixture:
     def __init__(self, monkeypatch: MonkeyPatch):
         self.monkeypatch = monkeypatch
+        self.mock = MockSocket()
+        # Patch the socket method so that we don't create a real network socket.
+        self.monkeypatch.setattr("socket.socket", lambda x, y: self.mock)
 
 
 @pytest.fixture(scope="function")
 def mock_socket(monkeypatch: MonkeyPatch) -> MockSocketFixture:
-    # Patch the socket method so that we don't create a real network socket.
-    monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
     return MockSocketFixture(monkeypatch)
 
 
@@ -306,6 +307,21 @@ class TestSIPClient:
         # Check that the right things were passed to wrap_socket
         wrap_called = self.context_with_verification.wrap_socket.call_args
         assert wrap_called.kwargs["server_hostname"] == target_server
+
+    def test_send(self, mock_socket: MockSocketFixture):
+        target_server = object()
+        sip = SIPClient(target_server, 999)
+        sip.connect()
+
+        mock_socket.mock.sendall = MagicMock()
+
+        # Send a message and make sure it's queued up.
+        sip.send("abcd")
+
+        # Make sure we called sendall on the socket.
+        mock_socket.mock.sendall.assert_called_once_with(
+            ("abcd" + SIPClient.TERMINATOR_CHAR).encode(SIPClient.DEFAULT_ENCODING)
+        )
 
     def test_read_message(self):
         target_server = object()
