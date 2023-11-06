@@ -465,7 +465,7 @@ class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
         self.patron = db.patron()
         self.collection: Collection = db.collection(
-            protocol=ExternalIntegration.OPDS2_IMPORT
+            protocol=ExternalIntegration.OPDS2_IMPORT, data_source_name="test"
         )
         self.integration = self.collection.create_external_integration(
             ExternalIntegration.OPDS2_IMPORT

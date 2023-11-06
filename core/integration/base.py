@@ -26,9 +26,9 @@ def integration_settings_load(
     """
     Load the settings object for an integration from the database.
 
-    These settings ARE NOT validated when loaded from the database. It is assumed that
-    the settings have already been validated when they were saved to the database. This
-    speeds up the loading of the settings from the database.
+    The settings are validated when loaded from the database, this is done rather
+    than using construct() because there are some types that need to get type converted
+    when round tripping from the database (such as enum) and construct() doesn't do that.
 
     :param settings_cls: The settings class that the settings should be loaded into.
     :param integration: The integration to load the settings from. This should be a
@@ -37,7 +37,7 @@ def integration_settings_load(
     :return: An instance of the settings class loaded with the settings from the database.
     """
     settings_dict = integration.settings_dict
-    return settings_cls.construct(**settings_dict)
+    return settings_cls(**settings_dict)
 
 
 def integration_settings_update(
