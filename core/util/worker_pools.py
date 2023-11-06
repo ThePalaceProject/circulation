@@ -1,6 +1,19 @@
-import logging
+from __future__ import annotations
+
+import sys
 from queue import Queue
 from threading import Thread
+from types import TracebackType
+from typing import Any, Callable, Literal, Optional, Type
+
+from sqlalchemy.orm import Session
+
+from core.util.log import LoggerMixin
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 # Much of the work in this file is based on
 # https://github.com/shazow/workerpool, with
@@ -10,24 +23,19 @@ from threading import Thread
 # (or instead of) multithreading.
 
 
-class Worker(Thread):
+class Worker(Thread, LoggerMixin):
     """A Thread that performs jobs"""
 
     @classmethod
-    def factory(cls, worker_pool):
+    def factory(cls, worker_pool: Pool) -> Self:
         return cls(worker_pool)
 
-    def __init__(self, jobs):
+    def __init__(self, jobs: Pool):
         super().__init__()
         self.daemon = True
         self.jobs = jobs
-        self._log = logging.getLogger(self.name)
 
-    @property
-    def log(self):
-        return self._log
-
-    def run(self):
+    def run(self) -> None:
         while True:
             try:
                 self.do_job()
@@ -37,7 +45,7 @@ class Worker(Thread):
             finally:
                 self.jobs.task_done()
 
-    def do_job(self, *args, **kwargs):
+    def do_job(self, *args: Any, **kwargs: Any) -> None:
         job = self.jobs.get()
         if callable(job):
             job(*args, **kwargs)
@@ -52,24 +60,24 @@ class DatabaseWorker(Worker):
     """A worker Thread that performs jobs with a database session"""
 
     @classmethod
-    def factory(cls, worker_pool, _db):
+    def factory(cls, worker_pool: Pool, _db: Session) -> Self:  # type: ignore[override]
         return cls(worker_pool, _db)
 
-    def __init__(self, jobs, _db):
+    def __init__(self, jobs: Pool, _db: Session):
         super().__init__(jobs)
         self._db = _db
 
-    def do_job(self):
+    def do_job(self) -> None:
         super().do_job(self._db)
 
 
-class Pool:
+class Pool(LoggerMixin):
     """A pool of Worker threads and a job queue to keep them busy."""
 
-    log = logging.getLogger(__name__)
-
-    def __init__(self, size, worker_factory=None):
-        self.jobs = Queue()
+    def __init__(
+        self, size: int, worker_factory: Callable[..., Worker] | None = None
+    ) -> None:
+        self.jobs: Queue[Job] = Queue()
 
         self.size = size
         self.workers = list()
@@ -85,18 +93,18 @@ class Pool:
             w.start()
 
     @property
-    def success_rate(self):
+    def success_rate(self) -> float:
         if self.job_total <= 0 or self.error_count <= 0:
             return float(1)
         return self.error_count / float(self.job_total)
 
-    def create_worker(self):
+    def create_worker(self) -> Worker:
         return self.worker_factory(self)
 
-    def inc_error(self):
+    def inc_error(self) -> None:
         self.error_count += 1
 
-    def restart(self):
+    def restart(self) -> Self:
         for w in self.workers:
             if not w.is_alive():
                 w.start()
@@ -104,24 +112,29 @@ class Pool:
 
     __enter__ = restart
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(
+        self,
+        type: Optional[Type[BaseException]],
+        value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> Literal[False]:
         self.join()
-        if type:
-            self.log.error("Error with %r: %r", self, value, exc_info=traceback)
+        if value is not None:
+            self.log.error("Error with %r: %r", self, value, exc_info=value)
             raise value
-        return
+        return False
 
-    def get(self):
+    def get(self) -> Job:
         return self.jobs.get()
 
-    def put(self, job):
+    def put(self, job: Job) -> None:
         self.job_total += 1
         return self.jobs.put(job)
 
-    def task_done(self):
+    def task_done(self) -> None:
         return self.jobs.task_done()
 
-    def join(self):
+    def join(self) -> None:
         self.jobs.join()
         self.log.info(
             "%d/%d job errors occurred. %.2f%% success rate.",
@@ -134,13 +147,20 @@ class Pool:
 class DatabasePool(Pool):
     """A pool of DatabaseWorker threads and a job queue to keep them busy."""
 
-    def __init__(self, size, session_factory, worker_factory=None):
+    def __init__(
+        self,
+        size: int,
+        session_factory: Callable[[], Session],
+        worker_factory: Callable[..., DatabaseWorker] | None = None,
+    ):
         self.session_factory = session_factory
 
-        self.worker_factory = worker_factory or DatabaseWorker.factory
+        self.worker_factory: Callable[..., DatabaseWorker] = (
+            worker_factory or DatabaseWorker.factory
+        )
         super().__init__(size, worker_factory=self.worker_factory)
 
-    def create_worker(self):
+    def create_worker(self) -> DatabaseWorker:
         worker_session = self.session_factory()
         return self.worker_factory(self, worker_session)
 
@@ -150,17 +170,17 @@ class Job:
     For use with Worker.
     """
 
-    def rollback(self, *args, **kwargs):
+    def rollback(self, *args: Any, **kwargs: Any) -> None:
         """Cleans up the task if it errors"""
 
-    def finalize(self, *args, **kwargs):
+    def finalize(self, *args: Any, **kwargs: Any) -> None:
         """Finalizes the task if it is successful"""
 
-    def do_run(self):
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
         """Does the work"""
         raise NotImplementedError()
 
-    def run(self, *args, **kwargs):
+    def run(self, *args: Any, **kwargs: Any) -> None:
         try:
             self.do_run(*args, **kwargs)
         except Exception:
@@ -171,11 +191,8 @@ class Job:
 
 
 class DatabaseJob(Job):
-    def rollback(self, _db):
+    def rollback(self, _db: Session) -> None:
         _db.rollback()
 
-    def finalize(self, _db):
+    def finalize(self, _db: Session) -> None:
         _db.commit()
-
-    def do_run(self):
-        raise NotImplementedError()
