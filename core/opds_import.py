@@ -32,7 +32,7 @@ import feedparser
 from feedparser import FeedParserDict
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from pydantic import HttpUrl
+from pydantic import AnyHttpUrl
 from sqlalchemy.orm.session import Session
 
 from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
@@ -114,7 +114,7 @@ class OPDSImporterSettings(
 ):
     _NO_DEFAULT_AUDIENCE = ""
 
-    external_account_id: HttpUrl = FormField(
+    external_account_id: AnyHttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("URL"),
             required=True,
