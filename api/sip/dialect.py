@@ -13,7 +13,7 @@ class DialectConfig:
 class Dialect(Enum):
     GENERIC_ILS = "GenericILS"
     AG_VERSO = "AutoGraphicsVerso"
-    TZ_SPACES = "TZSpaces"
+    FOLIO = "TZSpaces"
 
     @property
     def config(self) -> DialectConfig:
@@ -22,7 +22,7 @@ class Dialect(Enum):
             return DialectConfig(send_end_session=True, tz_spaces=False)
         elif self == Dialect.AG_VERSO:
             return DialectConfig(send_end_session=False, tz_spaces=False)
-        elif self == Dialect.TZ_SPACES:
+        elif self == Dialect.FOLIO:
             return DialectConfig(send_end_session=True, tz_spaces=True)
         else:
             raise NotImplementedError(f"Unknown dialect: {self}")

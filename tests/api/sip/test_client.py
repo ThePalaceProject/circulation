@@ -708,13 +708,13 @@ class TestPatronResponse:
 
 class TestClientDialects:
     @pytest.mark.parametrize(
-        "dialect,expected_read_count,expected_write_count",
+        "dialect,expected_read_count,expected_write_count,expected_tz_spaces",
         [
             # Generic ILS should send end_session message
-            (Dialect.GENERIC_ILS, 1, 1),
+            (Dialect.GENERIC_ILS, 1, 1, False),
             # AG VERSO ILS shouldn't end_session message
-            (Dialect.AG_VERSO, 0, 0),
-            (Dialect.TZ_SPACES, 1, 1),
+            (Dialect.AG_VERSO, 0, 0, False),
+            (Dialect.FOLIO, 1, 1, True),
         ],
     )
     def test_dialect(
@@ -723,6 +723,7 @@ class TestClientDialects:
         dialect,
         expected_read_count,
         expected_write_count,
+        expected_tz_spaces,
     ):
         sip = sip_client_factory(dialect=dialect)
         sip.queue_response("36Y201610210000142637AO3|AA25891000331441|AF|AG")
@@ -730,3 +731,9 @@ class TestClientDialects:
         assert sip.dialect_config == dialect.config
         assert sip.read_count == expected_read_count
         assert sip.write_count == expected_write_count
+        assert sip.dialect_config.tz_spaces == expected_tz_spaces
+
+        # verify timestamp format aligns with the expected tz spaces dialect
+        ts = sip.now()
+        tz_element = ts[8:12]
+        assert tz_element == ("    " if expected_tz_spaces else "0000")

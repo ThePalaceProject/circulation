@@ -345,11 +345,7 @@ class SIPClient(Constants):
             # We're implicitly logged in.
             self.must_log_in = False
         self.login_password = login_password
-
-        if isinstance(dialect, str):
-            self.dialect_config = Dialect(dialect).config
-        else:
-            self.dialect_config = dialect.config
+        self.dialect_config = dialect.config
 
     def login(self):
         """Log in to the SIP server if required."""
@@ -558,7 +554,6 @@ class SIPClient(Constants):
         patron password: AD, variable length, optional
         """
         code = "35"
-
         timestamp = self.now()
 
         message = (
