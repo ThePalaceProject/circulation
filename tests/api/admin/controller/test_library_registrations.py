@@ -37,7 +37,7 @@ class TestLibraryRegistration:
 
         # Here's a discovery service.
         discovery_service = create_integration_configuration.discovery_service(
-            url="http://service-url/"
+            url="http://service-url.com/"
         )
 
         # We successfully registered this library with the service.
@@ -89,7 +89,7 @@ class TestLibraryRegistration:
         # registration link.
         root_catalog = dict(links=[dict(href="http://register-here/", rel="register")])
         requests_mock.get(
-            "http://service-url/",
+            "http://service-url.com/",
             json=root_catalog,
             headers={"Content-Type": OpdsRegistrationService.OPDS_2_TYPE},
         )
@@ -137,7 +137,7 @@ class TestLibraryRegistration:
             # happened.  The target of the first request is the URL to
             # the discovery service's main catalog. The second request
             # is to the "register" link found in that catalog.
-            assert ["service-url", "register-here"] == [
+            assert ["service-url.com", "register-here"] == [
                 r.hostname for r in requests_mock.request_history
             ]
 
@@ -174,7 +174,7 @@ class TestLibraryRegistration:
             # there will be no second request.
             requests_mock.reset()
             requests_mock.get(
-                "http://service-url/",
+                "http://service-url.com/",
                 json=REMOTE_INTEGRATION_FAILED.response[0],
                 status_code=502,
             )
@@ -239,7 +239,7 @@ class TestLibraryRegistration:
 
         # Create an IntegrationConfiguration to avoid that problem in future tests.
         discovery_service = create_integration_configuration.discovery_service(
-            url="http://register-here/"
+            url="http://register-here.com/"
         )
 
         # We might not get a library short name.

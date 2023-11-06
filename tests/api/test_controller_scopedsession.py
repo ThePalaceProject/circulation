@@ -13,6 +13,7 @@ from core.model import (
     Library,
     create,
 )
+from core.opds_import import OPDSAPI
 from tests.fixtures.api_controller import (
     ControllerFixture,
     ControllerFixtureSetupOverrides,
@@ -60,7 +61,13 @@ class ScopedHolder:
             name=self.fresh_id() + " (collection for scoped session)",
         )
         collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
-        collection.create_integration_configuration(ExternalIntegration.OPDS_IMPORT)
+        integration = collection.create_integration_configuration(
+            ExternalIntegration.OPDS_IMPORT
+        )
+        settings = OPDSAPI.settings_class()(
+            external_account_id="http://url.com", data_source="OPDS"
+        )
+        OPDSAPI.settings_update(integration, settings)
         library.collections.append(collection)
         return collection
 

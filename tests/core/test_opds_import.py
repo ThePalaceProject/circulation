@@ -1368,6 +1368,9 @@ class TestOPDSImporter:
 
     def test_assert_importable_content(self, db: DatabaseTransactionFixture):
         session = db.session
+        collection = db.collection(
+            protocol=ExternalIntegration.OPDS_IMPORT, data_source_name="OPDS"
+        )
 
         class Mock(OPDSImporter):
             """An importer that may or may not be able to find
@@ -1403,7 +1406,7 @@ class TestOPDSImporter:
         do_get = MagicMock()
 
         # Here, there are no links at all.
-        importer = NoLinks(session, db.default_collection(), do_get)
+        importer = NoLinks(session, collection, do_get)
         with pytest.raises(IntegrationException) as excinfo:
             importer.assert_importable_content("feed", "url")
         assert "No open-access links were found in the OPDS feed." in str(excinfo.value)
@@ -1430,7 +1433,7 @@ class TestOPDSImporter:
                 ),
             ]
 
-        bad_links_importer = BadLinks(session, db.default_collection(), do_get)
+        bad_links_importer = BadLinks(session, collection, do_get)
         with pytest.raises(IntegrationException) as excinfo:
             bad_links_importer.assert_importable_content(
                 "feed", "url", max_get_attempts=2
@@ -1467,7 +1470,7 @@ class TestOPDSImporter:
                     return False
                 return "this is a book"
 
-        good_link_importer = GoodLink(session, db.default_collection(), do_get)
+        good_link_importer = GoodLink(session, collection, do_get)
         result = good_link_importer.assert_importable_content(
             "feed", "url", max_get_attempts=5
         )
@@ -2303,7 +2306,9 @@ class OPDSAPIFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.session = db.session
-        self.collection = db.collection(protocol=OPDSAPI.label())
+        self.collection = db.collection(
+            protocol=OPDSAPI.label(), data_source_name="OPDS"
+        )
         self.api = OPDSAPI(self.session, self.collection)
 
         self.mock_patron = MagicMock()

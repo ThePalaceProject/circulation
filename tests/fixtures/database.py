@@ -165,17 +165,12 @@ class DatabaseTransactionFixture:
     def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
         library = self.library("default", "default")
-        collection, ignore = get_one_or_create(
-            self._session, Collection, name="Default Collection"
+        collection = self.collection(
+            "Default Collection",
+            protocol=ExternalIntegration.OPDS_IMPORT,
+            data_source_name="OPDS",
         )
-        integration = collection.create_external_integration(
-            ExternalIntegration.OPDS_IMPORT
-        )
-        integration.goal = ExternalIntegration.LICENSE_GOAL
-        config = collection.create_integration_configuration(
-            ExternalIntegration.OPDS_IMPORT
-        )
-        config.for_library(library.id, create=True)
+        collection.integration_configuration.for_library(library.id, create=True)
         if collection not in library.collections:
             library.collections.append(collection)
         return library
