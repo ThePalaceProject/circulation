@@ -29,6 +29,7 @@ from typing import (
 from urllib.parse import urlparse
 
 import certifi
+from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from lxml.etree import _Element
@@ -89,6 +90,7 @@ from core.model import (
     Subject,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
+from core.service.container import Services
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import HTTP, RequestNetworkException
@@ -596,11 +598,12 @@ class Axis360API(
         for removed_identifier in remainder:
             self._reap(removed_identifier)
 
+    @inject
     def update_book(
         self,
         bibliographic: Metadata,
         availability: CirculationData,
-        analytics: Optional[Analytics] = None,
+        analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> Tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
         and availability data from the Axis 360 API.
@@ -610,9 +613,8 @@ class Axis360API(
         :param availability: A CirculationData object containing
             availability data about this title.
         """
-        analytics = analytics or Analytics(self._db)
         license_pool, new_license_pool = availability.license_pool(
-            self._db, self.collection, analytics
+            self._db, self.collection
         )
         edition, new_edition = bibliographic.edition(self._db)
         license_pool.edition = edition

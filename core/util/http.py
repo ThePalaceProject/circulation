@@ -283,7 +283,6 @@ class HTTP(LoggerMixin):
 
                     session.mount("http://", adapter)
                     session.mount("https://", adapter)
-                    print(session)
 
                     response = session.request(*args, **kwargs)
             else:

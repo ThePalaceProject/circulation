@@ -1,7 +1,7 @@
 import datetime
 from collections import defaultdict
 from typing import List
-from unittest.mock import create_autospec
+from unittest.mock import create_autospec, patch
 
 import dateutil
 import feedparser
@@ -13,7 +13,6 @@ from api.adobe_vendor_id import AuthdataUtility
 from api.circulation import BaseCirculationAPI, CirculationAPI, FulfillmentInfo
 from api.lanes import ContributorLane
 from api.novelist import NoveListAPI
-from core.analytics import Analytics
 from core.classifier import (  # type: ignore[attr-defined]
     Classifier,
     Fantasy,
@@ -41,6 +40,7 @@ from core.model import (
     Work,
 )
 from core.opds_import import OPDSXMLParser
+from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed
@@ -576,7 +576,13 @@ class TestLibraryAnnotator:
         work_entry = WorkEntry(
             work=work, license_pool=None, edition=edition, identifier=identifier
         )
-        annotator.annotate_work_entry(work_entry)
+
+        with patch.object(
+            container_instance().analytics.analytics(),
+            "is_configured",
+            lambda: False,
+        ):
+            annotator.annotate_work_entry(work_entry)
         assert work_entry.computed is not None
         links = {
             x.rel
@@ -603,11 +609,11 @@ class TestLibraryAnnotator:
 
         # If analytics are configured, a link is added to
         # create an 'open_book' analytics event for this title.
-        Analytics.GLOBAL_ENABLED = True
         work_entry = WorkEntry(
             work=work, license_pool=None, edition=edition, identifier=identifier
         )
         annotator.annotate_work_entry(work_entry)
+
         assert work_entry.computed is not None
         [analytics_link] = [
             x.href for x in work_entry.computed.other_links if x.rel == open_book_rel

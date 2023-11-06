@@ -29,7 +29,6 @@ from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     # Only import for type checking, since it creates an import cycle
-    from core.analytics import Analytics
     from core.model import (  # noqa: autoflake
         Collection,
         DataSource,
@@ -667,14 +666,11 @@ class LicensePool(Base):
 
     def update_availability_from_licenses(
         self,
-        analytics: Analytics | None = None,
         as_of: datetime.datetime | None = None,
     ):
         """
         Update the LicensePool with new availability information, based on the
         licenses and holds that are associated with it.
-
-        Log the implied changes with the analytics provider.
         """
         _db = Session.object_session(self)
 
@@ -704,7 +700,6 @@ class LicensePool(Base):
             licenses_available,
             licenses_reserved,
             patrons_in_hold_queue,
-            analytics=analytics,
             as_of=as_of,
         )
 
@@ -730,7 +725,6 @@ class LicensePool(Base):
         new_licenses_available,
         new_licenses_reserved,
         new_patrons_in_hold_queue,
-        analytics=None,
         as_of=None,
     ):
         """Update the LicensePool with new availability information.
@@ -881,7 +875,6 @@ class LicensePool(Base):
                 new_licenses_available,
                 new_licenses_reserved,
                 new_patrons_in_hold_queue,
-                analytics=analytics,
                 as_of=event_date,
             )
 

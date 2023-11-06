@@ -10,8 +10,7 @@ from api.admin.config import Configuration as AdminClientConfig
 from api.admin.controller.base import AdminController
 from api.admin.templates import admin as admin_template
 from api.config import Configuration
-from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import ConfigurationSetting, ExternalIntegration, Library, get_one
+from core.model import ConfigurationSetting, Library
 from core.util.problem_detail import ProblemDetail
 
 
@@ -80,13 +79,8 @@ class ViewController(AdminController):
             or Configuration.DEFAULT_TOS_TEXT
         )
 
-        local_analytics = get_one(
-            self._db,
-            ExternalIntegration,
-            protocol=LocalAnalyticsProvider.__module__,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-        )
-        show_circ_events_download = local_analytics != None
+        # We always have local_analytics
+        show_circ_events_download = True
 
         response = Response(
             flask.render_template_string(

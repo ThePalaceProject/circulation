@@ -18,7 +18,6 @@ from api.util.profilers import (
 )
 from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
-from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import (
     LOCK_ID_APP_INIT,
     ConfigurationSetting,
@@ -68,9 +67,6 @@ def initialize_admin(_db=None):
     _db = _db or app._db
     # The secret key is used for signing cookies for admin login
     app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
-    # Create a default Local Analytics service if one does not
-    # already exist.
-    LocalAnalyticsProvider.initialize(_db)
 
 
 def initialize_circulation_manager(container: Services):
@@ -81,7 +77,7 @@ def initialize_circulation_manager(container: Services):
     else:
         if getattr(app, "manager", None) is None:
             try:
-                app.manager = CirculationManager(app._db, container)
+                app.manager = CirculationManager(app._db)
             except Exception:
                 logging.exception("Error instantiating circulation manager!")
                 raise
@@ -155,7 +151,6 @@ def run(url=None):
 
     # Setup database by initializing it or running migrations
     InstanceInitializationScript().run()
-
     initialize_application()
     logging.info("Starting app on %s:%s", host, port)
 

@@ -8,6 +8,7 @@ from abc import ABC
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar
 
 import dateutil
+from dependency_injector.wiring import Provide, inject
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml.etree import Element
@@ -27,7 +28,6 @@ from api.circulation import (
 from api.circulation_exceptions import *
 from api.lcp.hash import Hasher, HasherFactory, HashingAlgorithm
 from core import util
-from core.analytics import Analytics
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -67,6 +67,7 @@ from core.opds_import import (
     OPDSImportMonitor,
     OPDSXMLParser,
 )
+from core.service.container import Services
 from core.util.datetime_helpers import to_utc, utc_now
 from core.util.http import HTTP, BadResponseException
 from core.util.string_helpers import base64
@@ -200,7 +201,13 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         EXPIRED_STATUS,
     ]
 
-    def __init__(self, _db: Session, collection: Collection) -> None:
+    @inject
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        analytics: Any = Provide[Services.analytics.analytics],
+    ) -> None:
         super().__init__(_db, collection)
         if collection.protocol != self.label():
             raise ValueError(
@@ -215,7 +222,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
 
         self.username = settings.username
         self.password = settings.password
-        self.analytics = Analytics(_db)
+        self.analytics = analytics
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
@@ -721,7 +728,6 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
     def update_licensepool(self, licensepool: LicensePool) -> None:
         # Update the pool and the next holds in the queue when a license is reserved.
         licensepool.update_availability_from_licenses(
-            analytics=self.analytics,
             as_of=utc_now(),
         )
         holds = licensepool.get_active_holds()
