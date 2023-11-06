@@ -120,6 +120,7 @@ class SIP2Settings(BasicAuthProviderSettings):
             options={
                 Sip2Dialect.GENERIC_ILS: "Generic ILS",
                 Sip2Dialect.AG_VERSO: "Auto-Graphics VERSO",
+                Sip2Dialect.FOLIO: "Folio",
             },
             required=True,
         ),
