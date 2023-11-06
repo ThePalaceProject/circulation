@@ -4,7 +4,7 @@ import ssl
 import tempfile
 from functools import partial
 from typing import Callable, List, Optional
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -38,6 +38,9 @@ class MockSocket:
         block = self.data[:size]
         self.data = self.data[size:]
         return block
+
+    def sendall(self, data):
+        self.data += data
 
 
 class MockSocketFixture:
@@ -338,6 +341,14 @@ class TestSIPClient:
             conn.queue_data("no newline")
             with pytest.raises(IOError, match="No data read from socket."):
                 sip.read_message()
+
+            # IOError if we exceed the timeout, even if we're in the
+            # middle of reading a message.
+            with patch("api.sip.client.time") as mock_time:
+                mock_time.time.side_effect = [0, 10]
+                with pytest.raises(IOError, match="Timeout reading from socket."):
+                    sip.read_message()
+
         finally:
             # Un-mock the socket.socket function
             socket.socket = old_socket

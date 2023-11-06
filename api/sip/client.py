@@ -31,6 +31,7 @@ import re
 import socket
 import ssl
 import tempfile
+import time
 from enum import Enum
 from typing import Callable, Optional
 
@@ -891,16 +892,19 @@ class SIPClient(Constants):
 
         This method exists only to be subclassed by MockSIPClient.
         """
-        self.connection.send(data)
+        self.connection.sendall(data)
 
     def read_message(self, max_size=1024 * 1024):
         """Read a SIP2 message from the socket connection.
 
         A SIP2 message ends with a \\r character.
         """
+        start_time = time.time()
         done = False
         data = b""
         while not done:
+            if time.time() - start_time > self.TIMEOUT:
+                raise OSError("Timeout reading from socket.")
             tmp = self.connection.recv(4096)
             data = data + tmp
             if not tmp:
